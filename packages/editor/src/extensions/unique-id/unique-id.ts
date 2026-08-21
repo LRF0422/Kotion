@@ -18,7 +18,7 @@ export interface UniqueIDOptions {
 export const UniqueID = Extension.create<UniqueIDOptions>({
   name: "uniqueID",
   // Must run before other extensions that depend on the id attribute being
-  // present (BlockRank priority 900, DirtyTracker priority 50).
+  // present (BlockRank priority 900, OpTracker priority 50).
   priority: 10000,
 
   addOptions() {

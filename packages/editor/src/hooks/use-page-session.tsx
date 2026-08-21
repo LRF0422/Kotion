@@ -120,8 +120,8 @@ export interface UsePageSessionReturn {
  * Holds a page's write lease for exactly one client.
  *
  * The transport is injected rather than imported so this stays in the editor
- * package alongside the tracker it gates, the same way {@link useIncrementalSave}
- * takes its `onSave`.
+ * package alongside the tracker it gates, the same way the writer hook takes its
+ * callbacks.
  *
  * The heartbeat is doing three jobs at once, which is why it is worth having at
  * all: it renews the lease, it tells a demoted host to stop writing, and it

@@ -13,7 +13,6 @@ import React from 'react'
 import { LayoutGrid } from '@kn/icon'
 import "@kn/ui/globals.css"
 import { spaceService } from './service/space-service'
-import { BlockVersionsExtension } from './extensions/block-versions'
 import { mainDockPanels } from './dock'
 // export * from "./service"
 // @ts-ignore
@@ -116,7 +115,6 @@ export const DefaultPluginInstance = new DefaultPlugin({
       ],
     },
   ],
-  editorExtension: [BlockVersionsExtension],
   dockPanels: mainDockPanels,
   services: {
     spaceService: spaceService

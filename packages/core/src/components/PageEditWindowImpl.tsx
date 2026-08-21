@@ -25,7 +25,8 @@
  *   just gets clipped). Open/close reuse the dialog-in/out keyframes.
  * - Multiple windows can be open at once: they cascade on open, and any
  *   pointerdown inside a window raises it above its siblings (click-to-focus).
- * - Auto-saves via useIncrementalSave; a pending save is flushed on close.
+ * - Auto-saves via the shared op-save session hook; a pending write is flushed
+ *   before the lease is released on close.
  * - `onPageMutated` (see the bridge props) lets callers drop their own page
  *   caches when the window loads or persists content.
  */
@@ -36,9 +37,17 @@ import {
     CollaborationEditor,
     TiptapCollabProvider,
     Doc as YDoc,
-    useIncrementalSave,
+    chooseSeed,
+    toRev,
+    useHostPresence,
+    usePageSave,
+    keepaliveSend,
+    toSessionState,
+    HOST_AWARENESS_FIELD,
+    HOST_AWARENESS_HOST,
     type Editor,
-    type IncrementalPayload,
+    type PageSaveEndpoints,
+    type BlockStoreRead,
 } from "@kn/editor";
 import {
     useApi,
@@ -56,11 +65,36 @@ import {
 import { ArrowUpRight, Check, CloudOff, FileText, LoaderCircle, Maximize2, Minus, Pencil, X } from "@kn/icon";
 import { cn, Button, FlatEmoji } from "@kn/ui";
 
-/** Incremental save endpoint — same contract as the main PageEditor. */
-const PATCH_PAGE_BLOCKS: API = {
-    url: '/knowledge-wiki/space/page/:id/blocks',
-    method: 'PATCH',
-    name: 'Patch Page Blocks',
+/** Op-based save endpoints — same contract as the main PageEditor's session writer. */
+const PAGE_DOC: API = {
+    url: '/knowledge-wiki/page/:id/doc',
+    method: 'GET',
+    name: 'Read page document',
+};
+const PAGE_APPLY_OPS: API = {
+    url: '/knowledge-wiki/page/:id/ops',
+    method: 'POST',
+    name: 'Apply page ops',
+};
+const PAGE_RECONCILE: API = {
+    url: '/knowledge-wiki/page/:id/reconcile',
+    method: 'POST',
+    name: 'Reconcile page',
+};
+const PAGE_SESSION_CLAIM: API = {
+    url: '/knowledge-wiki/page/:id/session/claim',
+    method: 'POST',
+    name: 'Claim page session',
+};
+const PAGE_SESSION_HEARTBEAT: API = {
+    url: '/knowledge-wiki/page/:id/session/heartbeat',
+    method: 'POST',
+    name: 'Heartbeat page session',
+};
+const PAGE_SESSION_RELEASE: API = {
+    url: '/knowledge-wiki/page/:id/session',
+    method: 'DELETE',
+    name: 'Release page session',
 };
 
 /** The page fields this window needs (matches spaceService.getPage's shape). */
@@ -90,6 +124,8 @@ const MESSAGES = {
         statusSaved: 'Saved',
         statusSaveFailed: 'Save failed',
         statusEditing: 'Editing',
+        statusSavedByHost: 'Saved by host',
+        statusReadOnly: 'Read-only',
         minimize: 'Minimize',
         restore: 'Restore',
     },
@@ -103,6 +139,8 @@ const MESSAGES = {
         statusSaved: '已保存',
         statusSaveFailed: '保存失败',
         statusEditing: '编辑中',
+        statusSavedByHost: '已由主机保存',
+        statusReadOnly: '只读',
         minimize: '缩小',
         restore: '还原',
     },
@@ -222,6 +260,7 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, on
     // mirroring the main PageEditor's fallback.
     const [syncTimedOut, setSyncTimedOut] = useState(false);
     const [provider, setProvider] = useState<TiptapCollabProvider | undefined>(undefined);
+    const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
     const [minimized, setMinimized] = useState(false);
     // Live emoji from the editor's title node (see the sync effect below).
     const [docIcon, setDocIcon] = useState<string | null>(null);
@@ -414,7 +453,19 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, on
             name: `page:${pageId}`,
             token: getAccessToken() || '',
             document: doc,
-            onSynced: () => setSynced(true),
+            onSynced: () => {
+                setSynced(true)
+                setConnectionStatus('connected')
+            },
+            onStatus: (status: any) => {
+                if (status.status === 'connected') {
+                    setConnectionStatus('connected')
+                } else if (status.status === 'disconnected') {
+                    setConnectionStatus('disconnected')
+                } else {
+                    setConnectionStatus('connecting')
+                }
+            },
         });
         setProvider(collabProvider);
         return () => {
@@ -430,35 +481,96 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, on
         return () => clearTimeout(timer);
     }, [pageId]);
 
-    // ---- Incremental auto-save (same PATCH contract as the main PageEditor) ----
-    const handleSave = useCallback(async (payload: IncrementalPayload) => {
-        const res = await useApi(PATCH_PAGE_BLOCKS, { id: pageId }, {
-            pageId,
-            changes: payload.changes.map(c => ({
-                blockId: c.blockId,
-                action: c.action,
-                type: c.type,
-                content: c.action === 'upsert'
-                    ? JSON.stringify({ type: c.type, attrs: c.attrs, content: c.content })
-                    : undefined,
-                prevVersion: c.prevVersion,
-            })),
-        });
-        const data = (res as any)?.data;
-        if (data?.blockVersions) {
-            const tracker = (editorInstance?.storage as any)?.dirtyTracker;
-            tracker?.applyServerVersions?.(data.blockVersions);
+    // ---- Content pre-processing (unescape like the main PageEditor) ----
+    const parsedContent = useMemo(() => {
+        if (!page?.content) return undefined;
+        try {
+            return JSON.parse((page.content as string).replaceAll("&lt;", "<").replaceAll("&gt;", ">"));
+        } catch {
+            return undefined;
         }
-        // Callers may cache page content (e.g. hover previews) — let them
-        // drop it so they show fresh text.
-        onPageMutatedRef.current?.(pageId);
-    }, [pageId, editorInstance]);
+    }, [page?.content]);
 
-    const { saving, dirty, error: saveError, saveNow } = useIncrementalSave({
+    // ---- Seed content: read from the block store, which is the authority ----
+    // `undefined` while the read is in flight, `null` once it has failed.
+    const [blockDoc, setBlockDoc] = useState<BlockStoreRead | null | undefined>(undefined)
+
+    useEffect(() => {
+        setBlockDoc(undefined)
+        let cancelled = false
+        useApi(PAGE_DOC, { id: pageId })
+            .then((res: any) => {
+                if (cancelled) return
+                const data = res?.data
+                setBlockDoc({ doc: data?.doc ?? null, rev: toRev(data?.rev) })
+            })
+            .catch(() => {
+                if (cancelled) return
+                setBlockDoc(null)
+            })
+        return () => { cancelled = true }
+    }, [pageId])
+
+    // `null` means "not decided yet", holding the editor back from mounting so
+    // the first reconcile cannot persist an unseeded document (see the main
+    // PageEditor for the reasoning).
+    const seed = useMemo(
+        () => (page ? chooseSeed(blockDoc, parsedContent) : null),
+        [blockDoc, page, parsedContent],
+    )
+
+    // ---- Op-based auto-save, same session model as the main PageEditor ----
+    const clientId = useMemo(
+        () => `${userInfo?.id ?? 'anon'}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [pageId],
+    )
+
+    const { hostPresent, hostSeen } = useHostPresence(provider?.awareness as any)
+
+    const endpoints = useMemo<PageSaveEndpoints>(() => ({
+        claim: async (pid: string, cid: string) => toSessionState((await useApi(PAGE_SESSION_CLAIM, { id: pid }, { clientId: cid }) as any)?.data),
+        heartbeat: async (pid: string, cid: string) => toSessionState((await useApi(PAGE_SESSION_HEARTBEAT, { id: pid }, { clientId: cid }) as any)?.data),
+        release: (pid: string, cid: string) => {
+            void keepaliveSend(PAGE_SESSION_RELEASE.url, 'DELETE', pid, { clientId: cid })
+        },
+        applyOps: async (pid: string, req: any) => {
+            const res: any = await useApi(PAGE_APPLY_OPS, { id: pid }, req)
+            return res?.data ?? {}
+        },
+        reconcile: async (pid: string, req: any) => {
+            const res: any = await useApi(PAGE_RECONCILE, { id: pid }, req)
+            return res?.data ?? {}
+        },
+        fetchDoc: async (pid: string) => {
+            const res: any = await useApi(PAGE_DOC, { id: pid })
+            const data = res?.data
+            return { doc: data?.doc ?? null, rev: toRev(data?.rev) }
+        },
+        flush: (pid: string, req: any) => keepaliveSend(PAGE_APPLY_OPS.url, 'POST', pid, req),
+    }), [])
+
+    const { saving, dirty, error: saveError, session, flushNow } = usePageSave({
         editor: editorInstance,
-        enabled: !!page && contentReady,
-        onSave: handleSave,
-    });
+        pageId,
+        enabled: !!page && contentReady && !!seed?.trusted,
+        clientId,
+        presence: { connected: connectionStatus === 'connected', hostPresent, hostSeen },
+        reconcileOnly: syncTimedOut && !synced,
+        endpoints,
+        onSaved: () => onPageMutatedRef.current?.(pageId),
+    })
+
+    // Declare the session role in awareness (same field/value as the main
+    // PageEditor, so the two cannot drift).
+    useEffect(() => {
+        const awareness = provider?.awareness
+        if (!awareness) return
+        awareness.setLocalStateField(
+            HOST_AWARENESS_FIELD,
+            session.isHost ? HOST_AWARENESS_HOST : 'collaborator',
+        )
+    }, [provider, session.isHost])
 
     // ---- Collaboration user identity ----
     const collaborationUser = useMemo(() => {
@@ -471,23 +583,13 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, on
         return { name: userInfo?.name || 'Anonymous', color: colors[hash % colors.length], id: userInfo?.id };
     }, [userInfo?.id, userInfo?.name]);
 
-    // ---- Content pre-processing (unescape like the main PageEditor) ----
-    const parsedContent = useMemo(() => {
-        if (!page?.content) return undefined;
-        try {
-            return JSON.parse((page.content as string).replaceAll("&lt;", "<").replaceAll("&gt;", ">"));
-        } catch {
-            return undefined;
-        }
-    }, [page?.content]);
-
     // ---- Close / navigate ----
-    // Flush pending edits. The payload is captured synchronously inside saveNow
-    // (before its first await), so unmounting right after is safe.
+    // Flush anything still owed (the session's own unmount close does the
+    // authoritative flush-then-release; this just gets it out earlier).
     const flushAndNotify = useCallback(() => {
-        if (dirty) { saveNow().catch(() => { /* stays dirty server-side; nothing to do */ }); }
+        void flushNow?.()
         onPageMutatedRef.current?.(pageId);
-    }, [dirty, saveNow, pageId]);
+    }, [flushNow, pageId]);
 
     // The parent owns our mount, so the exit animation runs here and onClose
     // fires once it finishes.
@@ -576,9 +678,13 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, on
         ? { icon: <LoaderCircle className="h-3 w-3 animate-spin" />, text: t('statusSaving'), className: 'text-muted-foreground' }
         : saveError
             ? { icon: <CloudOff className="h-3 w-3" />, text: t('statusSaveFailed'), className: 'text-destructive' }
-            : dirty
-                ? { icon: <Pencil className="h-3 w-3" />, text: t('statusEditing'), className: 'text-muted-foreground' }
-                : { icon: <Check className="h-3 w-3" />, text: t('statusSaved'), className: 'text-muted-foreground' };
+            : seed && !seed.trusted
+                ? { icon: <CloudOff className="h-3 w-3" />, text: t('statusReadOnly'), className: 'text-muted-foreground' }
+                : session.alive && !session.isHost
+                    ? { icon: <Check className="h-3 w-3" />, text: t('statusSavedByHost'), className: 'text-muted-foreground' }
+                    : dirty
+                        ? { icon: <Pencil className="h-3 w-3" />, text: t('statusEditing'), className: 'text-muted-foreground' }
+                        : { icon: <Check className="h-3 w-3" />, text: t('statusSaved'), className: 'text-muted-foreground' };
 
     // Prefer the doc's emoji; the page metadata copy covers the window's first
     // frames, before the editor is content-ready.
@@ -684,7 +790,7 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, on
                         <CloudOff className="h-4 w-4" />
                         {t('loadPageFailed')}
                     </div>
-                ) : page && (synced || syncTimedOut) ? (
+                ) : page && seed && (synced || syncTimedOut) ? (
                     <CollaborationEditor
                         pageInfo={page}
                         ref={(ed: Editor | null) => setEditorInstance(ed)}
@@ -697,7 +803,7 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, on
                         toc={false}
                         withTitle={true}
                         width="w-full"
-                        content={parsedContent}
+                        content={seed.doc as any}
                         onContentReady={() => setContentReady(true)}
                     />
                 ) : (

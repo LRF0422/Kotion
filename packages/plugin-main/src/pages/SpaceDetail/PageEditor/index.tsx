@@ -9,12 +9,12 @@ import {
     AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@kn/ui";
 import {
-    CollaborationEditor, exportToPDF, useOpSave, usePageSession, useHostPresence,
+    CollaborationEditor, exportToPDF, usePageSave, keepaliveSend, toSessionState, useHostPresence,
     HOST_AWARENESS_FIELD, HOST_AWARENESS_HOST, TiptapCollabProvider, chooseSeed, toRev,
 } from "@kn/editor";
-import type { ApplyOpsRequest, ApplyOpsResult, BlockStoreRead, PageDocResult, PageSessionState, ReconcileRequest } from "@kn/editor";
+import type { ApplyOpsRequest, BlockStoreRead, PageSaveEndpoints, ReconcileRequest } from "@kn/editor";
 import { event, ON_PAGE_REFRESH, ON_FAVORITE_CHANGE } from "../../../event";
-import { useApi, useService, deepEqual, useUploadFile, parseMarkdownToNodes, useTranslation, request, getBearerHeader, getAccessToken, getAppEnv } from "@kn/common";
+import { useApi, useService, deepEqual, useUploadFile, parseMarkdownToNodes, useTranslation, getAccessToken, getAppEnv } from "@kn/common";
 import { useNavigator, usePageTabs } from "@kn/common";
 import { setPageBridge, clearPageBridge, type PageBridge } from "@kn/common";
 import { setActiveEditor, clearActiveEditor } from "@kn/common";
@@ -84,190 +84,6 @@ const getStatusDisplay = (
     }
     return { text: 'Saved', icon: <Check className="h-3 w-3 text-muted-foreground" />, className: 'text-muted-foreground' };
 };
-
-// Custom hook: wraps useOpSave and usePageSession with the actual endpoints.
-// The page is persisted by exactly one client — the session host — which submits
-// ops rather than block state.
-function usePageSave(
-    editor: Editor | null,
-    pageId: string | null,
-    enabled: boolean,
-    clientId: string,
-    // How the realtime layer sees the room. Feeds host-departure detection; see
-    // `usePageSession`, which treats it as a hint and never as a verdict.
-    presence: { connected: boolean; hostPresent: boolean; hostSeen: boolean },
-    // Forces every write through reconcile. Set when the collaboration server
-    // never synced, so this client's anchors cannot be trusted.
-    reconcileOnly: boolean,
-    onSaved?: () => void,
-) {
-    // Throttle ON_PAGE_REFRESH emissions caused by rapid title typing
-    const titleRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-    const onSavedRef = useRef(onSaved)
-    onSavedRef.current = onSaved
-
-    useEffect(() => {
-        return () => {
-            if (titleRefreshTimerRef.current) {
-                clearTimeout(titleRefreshTimerRef.current)
-                titleRefreshTimerRef.current = null
-            }
-        }
-    }, [])
-
-    const noteSaved = useCallback((titleChanged: boolean) => {
-        if (titleChanged) {
-            if (titleRefreshTimerRef.current) {
-                clearTimeout(titleRefreshTimerRef.current)
-            }
-            titleRefreshTimerRef.current = setTimeout(() => {
-                event.emit(ON_PAGE_REFRESH)
-                titleRefreshTimerRef.current = null
-            }, 400)
-        }
-        onSavedRef.current?.()
-    }, [])
-
-    // ---- Session: who is allowed to write this page ----
-
-    const handleClaim = useCallback(async (cid: string): Promise<PageSessionState> => {
-        const res: any = await useApi(APIS.PAGE_SESSION_CLAIM, { id: pageId! }, { clientId: cid })
-        return toSessionState(res?.data)
-    }, [pageId])
-
-    const handleHeartbeat = useCallback(async (cid: string): Promise<PageSessionState> => {
-        const res: any = await useApi(APIS.PAGE_SESSION_HEARTBEAT, { id: pageId! }, { clientId: cid })
-        return toSessionState(res?.data)
-    }, [pageId])
-
-    // Sent from `pagehide` as well as unmount, so it has to survive the page
-    // being dismissed — hence keepalive rather than the normal request path.
-    const handleRelease = useCallback((cid: string) => {
-        if (!pageId) return
-        void keepaliveSend(APIS.PAGE_SESSION_RELEASE.url, 'DELETE', pageId, { clientId: cid })
-    }, [pageId])
-
-    // The final save has to land before the lease goes back, or the server
-    // refuses it as coming from a non-host — the last thing the user typed,
-    // rejected on the way out. Held in a ref because the writer is built below
-    // this point: it needs the session's answer to know whether it may write at
-    // all.
-    const flushNowRef = useRef<(() => Promise<unknown> | null) | null>(null)
-    const handleBeforeRelease = useCallback(() => flushNowRef.current?.() ?? null, [])
-
-    const session = usePageSession({
-        enabled,
-        clientId,
-        onClaim: handleClaim,
-        onHeartbeat: handleHeartbeat,
-        onRelease: handleRelease,
-        onBeforeRelease: handleBeforeRelease,
-        connected: presence.connected,
-        hostPresent: presence.hostPresent,
-        hostSeen: presence.hostSeen,
-    })
-
-    // ---- Writing ----
-
-    const handleApplyOps = useCallback(async (req: ApplyOpsRequest): Promise<ApplyOpsResult> => {
-        if (!pageId) throw new Error('No pageId')
-        const res: any = await useApi(APIS.PAGE_APPLY_OPS, { id: pageId }, req)
-        const data: ApplyOpsResult = res?.data ?? {}
-        // The title lives in a block like any other, so a title edit is just an
-        // op whose node happens to be of type `title`.
-        noteSaved(req.ops.some(op => (op.node as any)?.type === 'title'))
-        return data
-    }, [pageId, noteSaved])
-
-    const handleReconcile = useCallback(async (req: ReconcileRequest): Promise<ApplyOpsResult> => {
-        if (!pageId) throw new Error('No pageId')
-        const res: any = await useApi(APIS.PAGE_RECONCILE, { id: pageId }, req)
-        const data: ApplyOpsResult = res?.data ?? {}
-        // A reconcile always carries the title, so "did the title change" is only
-        // answerable by whether the server found anything to do at all. The first
-        // write of every session is a reconcile, and on an aligned page it applies
-        // nothing — which is exactly when we must not refresh the tree.
-        noteSaved((data.opsApplied ?? 0) > 0)
-        return data
-    }, [pageId, noteSaved])
-
-    // Read the page straight from the block table, for the host to fold a
-    // write it did not make back into its own document. Deliberately not
-    // `noteSaved`: nothing was saved here, and refreshing the tree on a read
-    // would put a spinner on the sidebar every heartbeat.
-    const handleFetchDoc = useCallback(async (): Promise<PageDocResult> => {
-        if (!pageId) throw new Error('No pageId')
-        const res: any = await useApi(APIS.PAGE_DOC, { id: pageId })
-        const data = res?.data
-        return {
-            doc: data?.doc ?? null,
-            rev: toRev(data?.rev),
-        }
-    }, [pageId])
-
-    const handleFlush = useCallback((req: ApplyOpsRequest) => {
-        if (!pageId) return
-        // Returned rather than discarded so the closing session can wait for it.
-        return keepaliveSend(APIS.PAGE_APPLY_OPS.url, 'POST', pageId, req)
-    }, [pageId])
-
-    const save = useOpSave({
-        editor,
-        // Only the host writes. A collaborator's OpTracker stays switched off, so
-        // it accumulates nothing and cannot write even by accident.
-        enabled: enabled && session.isHost,
-        clientId,
-        onApplyOps: handleApplyOps,
-        onReconcile: handleReconcile,
-        onFlush: handleFlush,
-        serverRev: session.serverRev,
-        onFetchDoc: handleFetchDoc,
-        reconcileOnly,
-    })
-    flushNowRef.current = save.flushNow
-
-    return { ...save, session }
-}
-
-/** Read a `PageSessionVO` off the response envelope, defaulting to "no session". */
-function toSessionState(data: any): PageSessionState {
-    const role = data?.role
-    return {
-        role: role === 'HOST' || role === 'COLLABORATOR' ? role : 'NONE',
-        alive: !!data?.alive,
-        hostUserId: data?.hostUserId ?? null,
-        hostName: data?.hostName ?? null,
-        hostSelf: !!data?.hostSelf,
-        rev: toRev(data?.rev),
-    }
-}
-
-/**
- * Fire-and-forget request that survives the page being dismissed.
- *
- * `pagehide` kills normal async requests, so the last save of a session and the
- * lease release both have to go out this way. Bodies are capped around 64KB;
- * oversized ones fall back to a normal request, which is a genuine best effort
- * rather than a guarantee.
- */
-function keepaliveSend(template: string, method: string, pageId: string, body: unknown): Promise<unknown> {
-    const payload = JSON.stringify(body)
-    const base = (request as any)?.defaults?.baseURL ?? '/api'
-    const url = base + template.replace(':id', pageId)
-    if (payload.length > 60_000) {
-        return fetch(url, {
-            method,
-            headers: { 'Content-Type': 'application/json', ...getBearerHeader() },
-            body: payload,
-        }).catch(() => { /* best effort — page is going away */ })
-    }
-    return fetch(url, {
-        method,
-        keepalive: true,
-        headers: { 'Content-Type': 'application/json', ...getBearerHeader() },
-        body: payload,
-    }).catch(() => { /* best effort — page is going away */ })
-}
 
 export interface PageEditorProps {
     /** Explicit page id (tab mode). Falls back to the route `:pageId`. */
@@ -680,7 +496,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
     }, [])
 
 
-    // Incremental auto-save via new hook (PATCH blocks only, no ON_PAGE_REFRESH)
+    // Op-based auto-save via the shared page-save hook.
     // After each successful save, mirror the backend's update stamp locally so
     // the PageHeader metadata row shows a fresh "updated at" without a reload.
     const handleSaved = useCallback(() => {
@@ -695,28 +511,75 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         } : prev)
     }, [userInfo?.id, userInfo?.name])
 
+    // Throttle ON_PAGE_REFRESH emissions caused by rapid title typing.
+    const titleRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    useEffect(() => {
+        return () => {
+            if (titleRefreshTimerRef.current) {
+                clearTimeout(titleRefreshTimerRef.current)
+                titleRefreshTimerRef.current = null
+            }
+        }
+    }, [])
+
+    const notifySaved = useCallback(({ titleChanged }: { titleChanged: boolean }) => {
+        if (titleChanged) {
+            if (titleRefreshTimerRef.current) {
+                clearTimeout(titleRefreshTimerRef.current)
+            }
+            titleRefreshTimerRef.current = setTimeout(() => {
+                event.emit(ON_PAGE_REFRESH)
+                titleRefreshTimerRef.current = null
+            }, 400)
+        }
+        handleSaved()
+    }, [handleSaved])
+
     // Watch awareness for the host's presence. This is the fast half of noticing
     // a host leaving; the server still decides whether the session is over.
     const { hostPresent, hostSeen } = useHostPresence(provider?.awareness as any)
 
-    const { saving, dirty, error: saveError, progress: saveProgress, behindServer, session, saveNow } = usePageSave(
-        editor.current,
-        pageId || null,
+    const endpoints = useMemo<PageSaveEndpoints>(() => ({
+        claim: async (pid: string, cid: string) => toSessionState((await useApi(APIS.PAGE_SESSION_CLAIM, { id: pid }, { clientId: cid }) as any)?.data),
+        heartbeat: async (pid: string, cid: string) => toSessionState((await useApi(APIS.PAGE_SESSION_HEARTBEAT, { id: pid }, { clientId: cid }) as any)?.data),
+        release: (pid: string, cid: string) => {
+            void keepaliveSend(APIS.PAGE_SESSION_RELEASE.url, 'DELETE', pid, { clientId: cid })
+        },
+        applyOps: async (pid: string, req: ApplyOpsRequest) => {
+            const res: any = await useApi(APIS.PAGE_APPLY_OPS, { id: pid }, req)
+            return res?.data ?? {}
+        },
+        reconcile: async (pid: string, req: ReconcileRequest) => {
+            const res: any = await useApi(APIS.PAGE_RECONCILE, { id: pid }, req)
+            return res?.data ?? {}
+        },
+        fetchDoc: async (pid: string) => {
+            const res: any = await useApi(APIS.PAGE_DOC, { id: pid })
+            const data = res?.data
+            return { doc: data?.doc ?? null, rev: toRev(data?.rev) }
+        },
+        flush: (pid: string, req: ApplyOpsRequest) => keepaliveSend(APIS.PAGE_APPLY_OPS.url, 'POST', pid, req),
+    }), [])
+
+    const { saving, dirty, error: saveError, progress: saveProgress, behindServer, session, saveNow } = usePageSave({
+        editor: editor.current,
+        pageId: pageId || null,
         // NOT gated on `active`: backgrounded tabs must keep auto-saving.
         // `seed.trusted` is part of the gate rather than a warning: the one thing
         // worse than not saving is saving content we could not verify.
-        !!page && !!pageId && editorContentReady && !!seed?.trusted,
+        enabled: !!page && !!pageId && editorContentReady && !!seed?.trusted,
         clientId,
-        {
+        presence: {
             connected: connectionStatus === 'connected',
             hostPresent,
             hostSeen,
         },
         // Sync never completed, so this client cannot claim its document matches
         // the server's; only a whole-document reconcile is safe from here.
-        syncTimedOut && !syncStatus,
-        handleSaved
-    )
+        reconcileOnly: syncTimedOut && !syncStatus,
+        endpoints,
+        onSaved: notifySaved,
+    })
 
     // Declare the host role in awareness. Hocuspocus drops an awareness entry the
     // moment its connection goes, so this is what lets collaborators notice the

@@ -131,7 +131,7 @@ export const PageLinkPicker = forwardRef<LinkSuggestionListHandle, PickerProps>(
                 setPreviewPageId(null);
                 return;
             }
-            const timer = setTimeout(() => setPreviewPageId(page.id), 250);
+            const timer = setTimeout(() => setPreviewPageId(String(page.id)), 250);
             return () => clearTimeout(timer);
         }, [pages, selectedIndex]);
 

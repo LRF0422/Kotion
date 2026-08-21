@@ -16,8 +16,7 @@ import { FileService, useOptionalService, useTranslation } from "@kn/common";
  * 退回为原生 ProseMirror 文本块，从根上消除该问题。
  *
  * 封面/图标仍存储在 title 节点的 attrs 上：本组件通过 editor 事务读写它们，因此
- * 既有的“DirtyTracker → PATCH → 后端 syncPageTitleFromPatch（标题/图标入库）”
- * 同步链保持不变，协作（Yjs）也照常同步。
+ * 既有的 op-save 同步链（title 节点的 replace op 入库）保持不变，协作（Yjs）也照常同步。
  */
 
 interface CoverConfig {

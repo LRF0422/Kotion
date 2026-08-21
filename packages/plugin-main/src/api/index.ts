@@ -1,19 +1,5 @@
 import { API } from "@kn/common";
 
-/**
- * Response from the PATCH /page/:id/blocks incremental save endpoint.
- * Reports statistics about what was actually changed on the backend.
- */
-export interface PatchResultResponse {
-    created: number
-    updated: number
-    deleted: number
-    skipped: number
-    conflictBlockIds: string[]
-    /** Block versions after patch (blockId -> new version number) */
-    blockVersions: Record<string, number>
-}
-
 export const APIS = {
     QUERY_SPACE: {
         url: '/knowledge-wiki/space/list',
@@ -78,16 +64,6 @@ export const APIS = {
     } as API,
     CREATE_OR_SAVE_PAGE: {
         url: '/knowledge-wiki/space/page',
-        method: 'POST'
-    } as API,
-    /** Incremental save — send only changed blocks instead of the full page */
-    PATCH_PAGE_BLOCKS: {
-        url: '/knowledge-wiki/space/page/:id/blocks',
-        method: 'PATCH'
-    } as API,
-    /** Bulk replace — first import/paste of a huge doc; one request, chunked server-side */
-    BULK_PATCH_PAGE_BLOCKS: {
-        url: '/knowledge-wiki/space/page/:id/blocks/bulk',
         method: 'POST'
     } as API,
     /**
@@ -200,10 +176,6 @@ export const APIS = {
     } as API,
     GET_BLOCK_INFO: {
         url: '/knowledge-wiki/space/page/block/detail/:id',
-        method: 'GET'
-    } as API,
-    GET_BLOCK_VERSIONS: {
-        url: '/knowledge-wiki/space/page/block/:blockId/versions',
         method: 'GET'
     } as API,
     /** Full-text search over block contents within a space or page */

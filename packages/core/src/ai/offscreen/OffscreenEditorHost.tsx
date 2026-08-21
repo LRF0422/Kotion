@@ -14,9 +14,17 @@ import {
     CollaborationEditor,
     TiptapCollabProvider,
     Doc as YDoc,
-    useIncrementalSave,
+    chooseSeed,
+    toRev,
+    useHostPresence,
+    usePageSave,
+    keepaliveSend,
+    toSessionState,
+    HOST_AWARENESS_FIELD,
+    HOST_AWARENESS_HOST,
     type Editor,
-    type IncrementalPayload,
+    type PageSaveEndpoints,
+    type BlockStoreRead,
 } from "@kn/editor"
 import { useApi, useSelector, getAccessToken, getAppEnv, type GlobalState } from "@kn/common"
 
@@ -48,6 +56,7 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
     // unreachable), mirroring PageEditWindow's fallback.
     const [syncTimedOut, setSyncTimedOut] = useState(false)
     const [provider, setProvider] = useState<TiptapCollabProvider | undefined>(undefined)
+    const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting')
 
     // ---- Load the target page (always fresh: editing needs latest content) ----
     useEffect(() => {
@@ -76,7 +85,19 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
             name: `page:${pageId}`,
             token: getAccessToken() || '',
             document: doc,
-            onSynced: () => setSynced(true),
+            onSynced: () => {
+                setSynced(true)
+                setConnectionStatus('connected')
+            },
+            onStatus: (status: any) => {
+                if (status.status === 'connected') {
+                    setConnectionStatus('connected')
+                } else if (status.status === 'disconnected') {
+                    setConnectionStatus('disconnected')
+                } else {
+                    setConnectionStatus('connecting')
+                }
+            },
         })
         setProvider(collabProvider)
         return () => {
@@ -92,64 +113,6 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
         return () => clearTimeout(timer)
     }, [pageId])
 
-    // ---- Incremental auto-save (same PATCH contract as the main PageEditor) ----
-    const handleSave = useCallback(async (payload: IncrementalPayload) => {
-        const res = await useApi(OFFSCREEN_APIS.PATCH_PAGE_BLOCKS, { id: pageId }, {
-            pageId,
-            changes: payload.changes.map(c => ({
-                blockId: c.blockId,
-                action: c.action,
-                type: c.type,
-                content: c.action === 'upsert'
-                    ? JSON.stringify({ type: c.type, attrs: c.attrs, content: c.content })
-                    : undefined,
-                prevVersion: c.prevVersion,
-            })),
-        })
-        const data = (res as any)?.data
-        if (data?.blockVersions) {
-            const tracker = (editorInstance?.storage as any)?.dirtyTracker
-            tracker?.applyServerVersions?.(data.blockVersions)
-        }
-    }, [pageId, editorInstance])
-
-    const { dirty, saveNow } = useIncrementalSave({
-        editor: editorInstance,
-        enabled: !!page && contentReady,
-        onSave: handleSave,
-    })
-
-    // Latest save state behind stable refs — the flush closure handed to the
-    // manager must survive re-renders.
-    const saveNowRef = useRef(saveNow)
-    saveNowRef.current = saveNow
-    const dirtyRef = useRef(dirty)
-    dirtyRef.current = dirty
-
-    // ---- Report readiness to the manager (once) ----
-    const readyReportedRef = useRef(false)
-    useEffect(() => {
-        if (readyReportedRef.current) return
-        if (editorInstance && contentReady && (synced || syncTimedOut)) {
-            readyReportedRef.current = true
-            offscreenSessionManager.markReady(pageId, {
-                editor: editorInstance,
-                title: page?.title,
-                flush: async () => {
-                    if (dirtyRef.current) await saveNowRef.current()
-                },
-            })
-        }
-    }, [editorInstance, contentReady, synced, syncTimedOut, pageId, page?.title])
-
-    // Unmount safety net: the manager flushes before dropping a session, but
-    // an eviction/teardown race could still leave a dirty tracker behind.
-    useEffect(() => () => {
-        if (dirtyRef.current) {
-            void saveNowRef.current().catch(() => { /* best effort */ })
-        }
-    }, [])
-
     // ---- Content pre-processing (unescape like the main PageEditor) ----
     const parsedContent = useMemo(() => {
         if (!page?.content) return undefined
@@ -160,6 +123,125 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
         }
     }, [page?.content])
 
+    // ---- Seed content: read from the block store, which is the authority ----
+    // `undefined` while the read is in flight, `null` once it has failed.
+    const [blockDoc, setBlockDoc] = useState<BlockStoreRead | null | undefined>(undefined)
+
+    useEffect(() => {
+        setBlockDoc(undefined)
+        let cancelled = false
+        useApi(OFFSCREEN_APIS.PAGE_DOC, { id: pageId })
+            .then((res: any) => {
+                if (cancelled) return
+                const data = res?.data
+                setBlockDoc({ doc: data?.doc ?? null, rev: toRev(data?.rev) })
+            })
+            .catch(() => {
+                if (cancelled) return
+                setBlockDoc(null)
+            })
+        return () => { cancelled = true }
+    }, [pageId])
+
+    const seed = useMemo(
+        () => (page ? chooseSeed(blockDoc, parsedContent) : null),
+        [blockDoc, page, parsedContent],
+    )
+
+    // An untrusted seed means the block store could not be read: an AI edit made
+    // against the legacy fallback would overwrite content we could not verify.
+    // Fail the session loudly instead of mounting a read-only editor.
+    const seedErrorReportedRef = useRef(false)
+    useEffect(() => {
+        if (!seed || seed.trusted || seedErrorReportedRef.current) return
+        seedErrorReportedRef.current = true
+        offscreenSessionManager.markError(
+            pageId,
+            new Error('Page content unavailable: block store read failed'),
+        )
+    }, [seed, pageId])
+
+    // ---- Op-based auto-save, same session model as the main PageEditor ----
+    const clientId = useMemo(
+        () => `${userInfo?.id ?? 'anon'}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [pageId],
+    )
+
+    const { hostPresent, hostSeen } = useHostPresence(provider?.awareness as any)
+
+    const endpoints = useMemo<PageSaveEndpoints>(() => ({
+        claim: async (pid: string, cid: string) => toSessionState((await useApi(OFFSCREEN_APIS.PAGE_SESSION_CLAIM, { id: pid }, { clientId: cid }) as any)?.data),
+        heartbeat: async (pid: string, cid: string) => toSessionState((await useApi(OFFSCREEN_APIS.PAGE_SESSION_HEARTBEAT, { id: pid }, { clientId: cid }) as any)?.data),
+        release: (pid: string, cid: string) => {
+            void keepaliveSend(OFFSCREEN_APIS.PAGE_SESSION_RELEASE.url, 'DELETE', pid, { clientId: cid })
+        },
+        applyOps: async (pid: string, req: any) => {
+            const res: any = await useApi(OFFSCREEN_APIS.PAGE_APPLY_OPS, { id: pid }, req)
+            return res?.data ?? {}
+        },
+        reconcile: async (pid: string, req: any) => {
+            const res: any = await useApi(OFFSCREEN_APIS.PAGE_RECONCILE, { id: pid }, req)
+            return res?.data ?? {}
+        },
+        fetchDoc: async (pid: string) => {
+            const res: any = await useApi(OFFSCREEN_APIS.PAGE_DOC, { id: pid })
+            const data = res?.data
+            return { doc: data?.doc ?? null, rev: toRev(data?.rev) }
+        },
+        flush: (pid: string, req: any) => keepaliveSend(OFFSCREEN_APIS.PAGE_APPLY_OPS.url, 'POST', pid, req),
+    }), [])
+
+    const { session, flushNow } = usePageSave({
+        editor: editorInstance,
+        pageId,
+        enabled: !!page && contentReady && !!seed?.trusted,
+        clientId,
+        presence: { connected: connectionStatus === 'connected', hostPresent, hostSeen },
+        reconcileOnly: syncTimedOut && !synced,
+        endpoints,
+    })
+
+    // Declare the session role in awareness (same field/value as the main
+    // PageEditor, so the two cannot drift).
+    useEffect(() => {
+        const awareness = provider?.awareness
+        if (!awareness) return
+        awareness.setLocalStateField(
+            HOST_AWARENESS_FIELD,
+            session.isHost ? HOST_AWARENESS_HOST : 'collaborator',
+        )
+    }, [provider, session.isHost])
+
+    // Latest flush behind a stable ref — the closure handed to the manager must
+    // survive re-renders.
+    const flushNowRef = useRef(flushNow)
+    flushNowRef.current = flushNow
+
+    // ---- Report readiness to the manager (once) ----
+    const readyReportedRef = useRef(false)
+    useEffect(() => {
+        if (readyReportedRef.current) return
+        if (editorInstance && contentReady && seed && (synced || syncTimedOut)) {
+            readyReportedRef.current = true
+            offscreenSessionManager.markReady(pageId, {
+                editor: editorInstance,
+                title: page?.title,
+                flush: async () => {
+                    await flushNowRef.current?.()
+                },
+            })
+        }
+    }, [editorInstance, contentReady, seed, synced, syncTimedOut, pageId, page?.title])
+
+    // Unmount safety net: the manager flushes before dropping a session, but
+    // an eviction/teardown race could still leave unsaved ops behind. The
+    // session's own close is the authoritative flush-then-release; this is the
+    // idempotent second line (see `flushedRef` in the writer).
+    useEffect(() => () => {
+        void flushNowRef.current?.()
+    }, [])
+
     // ---- Collaboration user identity ----
     const collaborationUser = useMemo(() => {
         const id = userInfo?.id || userInfo?.name || 'anonymous'
@@ -167,7 +249,7 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
         return { name: userInfo?.name || 'Anonymous', color: CURSOR_COLORS[hash % CURSOR_COLORS.length], id: userInfo?.id }
     }, [userInfo?.id, userInfo?.name])
 
-    if (!page || !(synced || syncTimedOut)) return null
+    if (!page || !seed || !(synced || syncTimedOut)) return null
 
     return (
         <div style={{ width: 800, height: 600, overflow: 'hidden' }}>
@@ -182,7 +264,7 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
                 toc={false}
                 withTitle={true}
                 width="w-full"
-                content={parsedContent}
+                content={seed.doc as any}
                 onContentReady={() => setContentReady(true)}
             />
         </div>

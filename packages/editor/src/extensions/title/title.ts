@@ -26,8 +26,8 @@ export const Title = Node.create({
 				default: null
 			},
 			// 宽窄模式：true = 全宽（铺满编辑区），null/false = 默认阅读宽度（900px）。
-			// 与 icon/cover 一样存在 title 节点 attrs 上，复用既有的
-			// DirtyTracker → PATCH → 后端 同步链，并通过 Yjs 在协作端同步。
+			// 与 icon/cover 一样存在 title 节点 attrs 上，随 op-save 同步链
+			// 入库，并通过 Yjs 在协作端同步。
 			fullWidth: {
 				default: null
 			},
