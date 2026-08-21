@@ -126,25 +126,50 @@ export function usePageSave(options: UsePageSaveOptions): UsePageSaveReturn {
 
     // ---- Writing ----
 
+    // Per-op verdicts the server returned. A request can succeed with parts of
+    // its batch `stale` or `rejected` — the baseline this client trusted no
+    // longer matches the database, so the next write must be a whole-document
+    // reconcile rather than another op batch. Throwing puts the writer on its
+    // retry path, which re-reads the tracker and finds the reconcile armed.
+    const assertApplied = useCallback((data: ApplyOpsResult, editor: Editor | null) => {
+        const problems = (data?.results ?? []).filter(v => v?.status !== 'applied')
+        if (problems.length === 0) return
+        console.warn(
+            '[usePageSave] ops not fully applied:',
+            JSON.stringify(problems.map(v => ({ op: v.op, blockId: v.blockId, status: v.status, reason: v.reason }))),
+        )
+        const tracker = (editor?.storage as any)?.opTracker
+        tracker?.requireReconcile?.()
+        const error = new Error(`${problems.length} op(s) ${problems.map(v => v.status).join(',')}: ${problems.map(v => v.reason ?? '').join(',')}`)
+        // The writer recognises this flag: it must drop the pending batch — the
+        // server just told us the baseline behind it is wrong — and let the next
+        // write reconcile the whole document instead of resending stale ops.
+        ;(error as any).staleOps = true
+        throw error
+    }, [])
+
     const handleApplyOps = useCallback(async (req: ApplyOpsRequest): Promise<ApplyOpsResult> => {
         if (!pageId) throw new Error('No pageId')
         const data = await endpointsRef.current.applyOps(pageId, req)
+        assertApplied(data, editor)
         // The title lives in a block like any other, so a title edit is just an
-        // op whose node happens to be of type `title`.
+        // op whose node happens to be of type `title`. Only claim "saved" when
+        // the batch actually landed — a stale title op must not refresh the tree.
         noteSaved(req.ops.some(op => (op.node as any)?.type === 'title'))
         return data
-    }, [pageId, noteSaved])
+    }, [pageId, noteSaved, assertApplied, editor])
 
     const handleReconcile = useCallback(async (req: ReconcileRequest): Promise<ApplyOpsResult> => {
         if (!pageId) throw new Error('No pageId')
         const data = await endpointsRef.current.reconcile(pageId, req)
+        assertApplied(data, editor)
         // A reconcile always carries the title, so "did the title change" is only
         // answerable by whether the server found anything to do at all. The first
         // write of every session is a reconcile, and on an aligned page it applies
         // nothing — which is exactly when callers must not refresh the page tree.
         noteSaved((data.opsApplied ?? 0) > 0)
         return data
-    }, [pageId, noteSaved])
+    }, [pageId, noteSaved, assertApplied, editor])
 
     // Read the page straight from the block table, for the host to fold a
     // write it did not make back into its own document. Deliberately not

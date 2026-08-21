@@ -23,12 +23,28 @@ export interface ReconcileRequest {
   doc: JSONContent
 }
 
+/** Per-op verdict as the server reports it; mirrors `OpResultVO`. */
+export interface OpVerdict {
+  op?: string
+  blockId?: string
+  /** `applied` | `stale` | `rejected`. */
+  status?: string
+  /** Machine-readable cause for `stale` / `rejected`. */
+  reason?: string
+}
+
 /** What both endpoints answer with; mirrors `ApplyOpsVO`. */
 export interface ApplyOpsResult {
   /** A rev as it arrives: this backend spells 64-bit integers as JSON strings. */
   rev?: number | string | null
   opsApplied?: number
   replayed?: boolean
+  /**
+   * Per-op verdicts. A `stale` or `rejected` entry means that part of the
+   * batch did NOT land even though the request succeeded — the writer must not
+   * treat its baseline as confirmed in that case.
+   */
+  results?: OpVerdict[]
 }
 
 /** What `GET /page/{id}/doc` answers with; mirrors `PageDocVO`. */
@@ -459,6 +475,17 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
     } catch (err) {
       failed = true
       const e = err instanceof Error ? err : new Error(String(err))
+      if ((err as any)?.staleOps) {
+        // The server marked part of this batch stale: the baseline the batch was
+        // derived from no longer describes the database. Resending it — which is
+        // what the retry path below would do, same idempotency key and all —
+        // would hit the same wall. Drop it and let the next attempt reconcile
+        // the whole document instead.
+        console.warn('[useOpSave] stale ops detected; dropping pending batch and reconciling')
+        pendingRef.current = null
+        retryCountRef.current = 0
+        tracker.requireReconcile()
+      }
       setError(e)
       console.error('[useOpSave] write failed:', e)
     } finally {

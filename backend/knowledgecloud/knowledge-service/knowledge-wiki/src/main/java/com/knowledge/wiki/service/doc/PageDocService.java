@@ -1,6 +1,7 @@
 package com.knowledge.wiki.service.doc;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -10,6 +11,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.knowledge.core.common.base.Icon;
+import com.knowledge.core.common.base.IconType;
 import com.knowledge.wiki.service.entity.Page;
 import com.knowledge.wiki.service.entity.PageCheckpoint;
 import com.knowledge.wiki.service.entity.PageHead;
@@ -96,22 +99,112 @@ public class PageDocService {
     }
 
     /**
-     * Mirror the title block's text onto {@code wiki_page.title}.
+     * Mirror the title block onto {@code wiki_page}: text, icon and tags.
      * <p>
-     * The title block is the authority; this copy exists because the page tree,
-     * search results and breadcrumbs all read the column. Without the mirror,
-     * renaming a page would stop being visible anywhere outside the editor.
+     * The title block is the authority; these copies exist because the page tree,
+     * search results, breadcrumbs, favourites and the space graph all read the
+     * page row rather than the block store. Without the mirror, a title edit
+     * would stop being visible anywhere outside the editor — which is exactly
+     * what happened to icon/tag edits when the op path only mirrored the text.
+     * </p>
+     * <p>
+     * Called only when a batch actually touched the title block (a batch that did
+     * not leaves {@code titleNode} null), so every update here corresponds to a
+     * real change and no dirty-checking is needed. Best-effort: a mirror failure
+     * must never fail the save it mirrors.
      * </p>
      */
-    public void syncPageTitle(Long pageId, String titleText) {
-        if (titleText == null) {
+    public void syncPageTitleMeta(Long pageId, String titleText, Map<String, Object> titleNode) {
+        if (titleNode == null) {
             return;
         }
-        String title = StrUtil.blankToDefault(titleText.trim(), Page.UNTITLE);
-        pageService.lambdaUpdate()
-                .eq(Page::getId, pageId)
-                .set(Page::getTitle, title)
-                .update();
+        Map<String, Object> attrs = attrsOf(titleNode);
+        String title = titleText == null ? null : StrUtil.blankToDefault(titleText.trim(), Page.UNTITLE);
+        boolean hasIcon = attrs != null && attrs.containsKey("icon");
+        boolean hasTags = attrs != null && attrs.containsKey("tags");
+        Icon icon = hasIcon ? parseIcon(attrs.get("icon")) : null;
+        List<String> tags = hasTags ? parseTags(attrs.get("tags")) : null;
+
+        try {
+            if (title != null) {
+                pageService.lambdaUpdate()
+                        .eq(Page::getId, pageId)
+                        .set(Page::getTitle, title)
+                        .update();
+            }
+            if (hasIcon) {
+                // Icon maps to a JSON column via JacksonTypeHandler (@TableField on
+                // Page.icon). lambdaUpdate().set() does NOT pick up that handler
+                // automatically, so it must be named explicitly here or the Icon
+                // object would be bound as a raw parameter and fail to persist.
+                if (icon != null) {
+                    pageService.lambdaUpdate()
+                            .eq(Page::getId, pageId)
+                            .set(Page::getIcon, icon,
+                                    "typeHandler=com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler")
+                            .update();
+                } else {
+                    // Icon removed: MP's update strategy silently drops null sets,
+                    // so clearing the JSON column has to be spelled out.
+                    pageService.lambdaUpdate()
+                            .eq(Page::getId, pageId)
+                            .setSql("icon = NULL")
+                            .update();
+                }
+            }
+            if (hasTags) {
+                // Same JSON-column caveat as icon: name the type handler explicitly.
+                pageService.lambdaUpdate()
+                        .eq(Page::getId, pageId)
+                        .set(Page::getTags, tags,
+                                "typeHandler=com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler")
+                        .update();
+            }
+        } catch (Exception e) {
+            // Title/icon/tags sync is best-effort; never fail the save because of it.
+            log.warn("syncPageTitleMeta: failed to mirror title/icon/tags onto wiki_page pageId={}: {}",
+                    pageId, e.getMessage());
+        }
+    }
+
+    /** Read the icon object off {@code attrs.icon}, tolerating any shape drift. */
+    private Icon parseIcon(Object value) {
+        if (!(value instanceof Map)) {
+            return null;
+        }
+        Map<?, ?> map = (Map<?, ?>) value;
+        Icon icon = new Icon();
+        Object iconValue = map.get("icon");
+        icon.setIcon(iconValue instanceof String ? (String) iconValue : null);
+        Object typeValue = map.get("type");
+        if (typeValue instanceof String) {
+            try {
+                icon.setType(IconType.valueOf((String) typeValue));
+            } catch (IllegalArgumentException ignored) {
+                // Unknown type: leave it null rather than fail the mirror.
+            }
+        }
+        return icon;
+    }
+
+    /** Read the tag list off {@code attrs.tags}; blank entries are dropped. */
+    private List<String> parseTags(Object value) {
+        List<String> tags = new ArrayList<>();
+        if (!(value instanceof List)) {
+            return tags;
+        }
+        for (Object item : (List<?>) value) {
+            if (item instanceof String && StrUtil.isNotBlank((String) item)) {
+                tags.add(((String) item).trim());
+            }
+        }
+        return tags;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> attrsOf(Map<String, Object> node) {
+        Object attrs = node.get("attrs");
+        return attrs instanceof Map ? (Map<String, Object>) attrs : null;
     }
 
     /**

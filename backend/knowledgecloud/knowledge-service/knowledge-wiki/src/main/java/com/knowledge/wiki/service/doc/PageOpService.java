@@ -183,7 +183,7 @@ public class PageOpService {
         flush(state);
         bumpHead(head, newRev, actor);
         writeJournal(pageId, newRev, actor, idempotencyKey, state.journal);
-        pageDocService.syncPageTitle(pageId, state.titleText);
+        pageDocService.syncPageTitleMeta(pageId, state.titleText, state.titleNode);
 
         if (newRev % CHECKPOINT_OP_INTERVAL == 0) {
             pageDocService.writeCheckpoint(pageId, newRev, actor, PageCheckpoint.KIND_AUTO, null);
@@ -800,6 +800,12 @@ public class PageOpService {
         /** Text of the title block, when this batch touched it. */
         private String titleText;
 
+        /**
+         * The title block's node JSON, when this batch touched it. Kept whole so
+         * the page-row mirror can also sync icon and tags, not just the text.
+         */
+        private Map<String, Object> titleNode;
+
         BatchState(Long pageId, long newRev, Long baseRev, long headRev, PageBlockIndex index) {
             this.pageId = pageId;
             this.newRev = newRev;
@@ -841,6 +847,7 @@ public class PageOpService {
         void noteTitle(BlockDocCodec.FlatBlock flat) {
             if (BlockDocCodec.TYPE_TITLE.equals(flat.getType())) {
                 titleText = flat.getText();
+                titleNode = flat.getNode();
             }
         }
     }
