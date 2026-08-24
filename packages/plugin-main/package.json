@@ -10,6 +10,7 @@
   },
   "scripts": {
     "build": "rollup -c",
+    "check:template-cover": "tsc src/pages/SpaceDetail/TemplateCreator/template-cover.check.ts --outDir .tmp-check --module commonjs --target ES2020 --skipLibCheck && node .tmp-check/template-cover.check.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {

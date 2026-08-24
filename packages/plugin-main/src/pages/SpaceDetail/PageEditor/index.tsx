@@ -38,6 +38,7 @@ import { toast } from "@kn/ui";
 import { SharePanel } from "../../components/SharePanel";
 import { PageBreadcrumb } from "../../../components/PageBreadcrumb";
 import { TemplateCreator } from "../TemplateCreator";
+import { readTemplateCoverContent } from "../TemplateCreator/template-cover";
 import { PageVersionHistory } from "./PageVersionHistory";
 import { PresentationMode } from "./PresentationMode";
 import { resolveUserBrief } from "../../../utils/userBrief";
@@ -582,6 +583,10 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         onSaved: notifySaved,
     })
     const { saving, dirty, error: saveError, progress: saveProgress, behindServer, session, saveNow } = pageSave
+    const getTemplateCoverContent = useCallback(
+        () => readTemplateCoverContent(editor.current, page?.title),
+        [page?.title],
+    )
     const adoptRev = (pageSave as typeof pageSave & {
         adoptRev: (rev: number | string | null | undefined) => void
     }).adoptRev
@@ -975,7 +980,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                         </DropdownMenuGroup>
                         <DropdownMenuSeparator />
                         <DropdownMenuGroup>
-                            <TemplateCreator mode="page" pageId={pageId!} defaultName={page?.title} beforeSave={saveNow} className="flex flex-row items-center gap-2 w-full relative select-none rounded-sm px-2 py-1.5 text-sm outline-none cursor-default hover:bg-accent hover:text-accent-foreground">
+                            <TemplateCreator mode="page" pageId={pageId!} defaultName={page?.title} beforeSave={saveNow} getCoverContent={getTemplateCoverContent} className="flex flex-row items-center gap-2 w-full relative select-none rounded-sm px-2 py-1.5 text-sm outline-none cursor-default hover:bg-accent hover:text-accent-foreground">
                                 <BookTemplate className="h-4 w-4" />
                                 <span>{t('editor.saveAsTemplate', 'Save as template')}</span>
                             </TemplateCreator>

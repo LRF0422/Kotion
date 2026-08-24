@@ -186,7 +186,7 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
     const blankTile = onCreateBlank ? (
         <button
             type="button"
-            className="flex h-[212px] flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-muted-foreground/30 px-4 text-center transition-colors hover:border-primary/50 hover:bg-muted/40"
+            className="flex h-[212px] w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-muted-foreground/30 px-4 text-center transition-colors hover:border-primary/50 hover:bg-muted/40"
             onClick={() => {
                 onCreateBlank();
                 onOpenChange(false);

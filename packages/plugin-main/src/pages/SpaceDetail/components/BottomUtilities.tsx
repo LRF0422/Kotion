@@ -1,9 +1,10 @@
 import React from 'react'
 import { Button, Badge, cn } from '@kn/ui'
 import { LayoutTemplate, Network, Settings, Trash2, Undo2, CircleArrowUp, FileDown, FileUp, Users } from '@kn/icon'
-import { useTranslation } from '@kn/common'
+import { useActiveEditor, useTranslation } from '@kn/common'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@kn/ui'
 import { TemplateCreator } from '../TemplateCreator'
+import { readTemplateCoverContent } from '../TemplateCreator/template-cover'
 import { PageItemIcon } from './PageItemIcon'
 
 interface TrashItem {
@@ -44,6 +45,11 @@ export const BottomUtilities: React.FC<BottomUtilitiesProps> = ({
     className,
 }) => {
     const { t } = useTranslation()
+    const { editor, pageId: editorPageId } = useActiveEditor()
+    const getTemplateCoverContent = React.useCallback(() => {
+        if (!pageId || editorPageId !== pageId) return {}
+        return readTemplateCoverContent(editor)
+    }, [editor, editorPageId, pageId])
 
     return (
         <div className={cn("border-t pt-1 mt-auto space-y-0.5 px-1 pb-2 flex-shrink-0", className)}>
@@ -159,7 +165,7 @@ export const BottomUtilities: React.FC<BottomUtilitiesProps> = ({
 
             {/* Save as Template */}
             {pageId && (
-                <TemplateCreator mode="page" pageId={pageId} className="flex items-center gap-2 w-full py-1.5 px-3 rounded-md text-xs sm:text-sm hover:bg-muted transition-colors">
+                <TemplateCreator mode="page" pageId={pageId} getCoverContent={getTemplateCoverContent} className="flex items-center gap-2 w-full py-1.5 px-3 rounded-md text-xs sm:text-sm hover:bg-muted transition-colors">
                     <CircleArrowUp className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                     <span className="flex-1 text-left">{t('template.saveAsTemplate') || 'Save as Template'}</span>
                 </TemplateCreator>

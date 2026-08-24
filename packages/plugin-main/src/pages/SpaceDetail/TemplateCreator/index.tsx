@@ -1,13 +1,14 @@
-import { useSelector } from "@kn/common";
-import { GlobalState, useApi, useUploadFile, useTranslation } from "@kn/common";
+import { GlobalState, logger, useApi, useSelector, useTranslation, useUploadFile } from "@kn/common";
+import { LoaderCircle } from "@kn/icon";
 import {
     AlertDialog, AlertDialogAction, AlertDialogCancel,
     AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
     AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger, Avatar, Controller, Field,
     FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet, FileUploader, Input, ScrollArea, Textarea, cn, toast, useForm, z, zodResolver
 } from "@kn/ui";
-import React, { PropsWithChildren, useState, useMemo } from "react";
+import React, { PropsWithChildren, useMemo, useRef, useState } from "react";
 import { APIS } from "../../../api";
+import { getUploadedCoverNames, resolveTemplateCover, type TemplateCoverContent } from "./template-cover";
 
 
 type PageMode = {
@@ -15,6 +16,7 @@ type PageMode = {
     pageId: string
     defaultName?: string
     beforeSave?: () => Promise<void>
+    getCoverContent?: () => TemplateCoverContent
 }
 
 type SpaceMode = {
@@ -36,12 +38,22 @@ const formSchema = z.object({
     })).optional().default([]),
 })
 
+type FormValues = z.infer<typeof formSchema>
+
+const toCoverArray = (cover: unknown): string[] =>
+    Array.isArray(cover) ? cover as string[] : (cover ? [cover as string] : [])
+
 export const TemplateCreator: React.FC<TemplateCreatorProps> = (props) => {
     const { className } = props
     const { t } = useTranslation()
     const { userInfo } = useSelector((state: GlobalState) => state)
     const { usePath, uploadFile } = useUploadFile()
     const [open, setOpen] = useState(false)
+    const [coverFiles, setCoverFiles] = useState<File[]>([])
+    const coverFilesRef = useRef<File[]>([])
+    const initialCoverRef = useRef<string[]>([])
+    const uploadedCoverByFileRef = useRef(new Map<File, string>())
+    const [manualCoverUploading, setManualCoverUploading] = useState(false)
 
     // Localize the validation message (schema literals can't call t()).
     const localizedSchema = useMemo(
@@ -49,37 +61,55 @@ export const TemplateCreator: React.FC<TemplateCreatorProps> = (props) => {
         [t]
     )
 
-    // The backend stores cover as a single string, but the form schema expects
-    // string[] — coerce so zod validation doesn't reject a space's existing cover.
-    const toCoverArray = (cover: unknown): string[] =>
-        Array.isArray(cover) ? cover as string[] : (cover ? [cover as string] : [])
-
-    const defaultValues = props.mode === 'space'
-        ? {
-            name: props.space.name || '',
-            description: props.space.description || '',
-            cover: toCoverArray(props.space.cover),
-            categories: props.space.categories || [],
+    const getInitialValues = (): FormValues => {
+        if (props.mode === 'space') {
+            return {
+                name: props.space.name || '',
+                description: props.space.description || '',
+                cover: toCoverArray(props.space.cover),
+                categories: props.space.categories || [],
+            }
         }
-        : {
-            name: props.defaultName || '',
+
+        const content = props.getCoverContent?.()
+        return {
+            name: content?.title || props.defaultName || '',
             description: '',
             cover: [],
             categories: [],
         }
+    }
 
-    const form = useForm<z.infer<typeof formSchema>>({
+    const form = useForm<FormValues>({
         resolver: zodResolver(localizedSchema),
-        defaultValues
+        defaultValues: getInitialValues()
     })
+    const busy = manualCoverUploading || form.formState.isSubmitting
 
-    const onSubmit = async (values: z.infer<typeof formSchema>) => {
-        // Send both `title` and `name`: the form collects `name`, but the
-        // template list reads `title`. Carrying both avoids a "saved but no
-        // title in the list" mismatch regardless of which the backend stores.
-        const payload = { ...values, title: values.name, name: values.name }
+    const resetManualCoverSelection = () => {
+        coverFilesRef.current = []
+        uploadedCoverByFileRef.current.clear()
+        setCoverFiles([])
+    }
+
+    const handleOpenChange = (nextOpen: boolean) => {
+        if (!nextOpen && busy) return
+        if (nextOpen) {
+            const initialValues = getInitialValues()
+            initialCoverRef.current = initialValues.cover
+            form.reset(initialValues)
+            resetManualCoverSelection()
+        }
+        setOpen(nextOpen)
+    }
+
+    const onSubmit = async (values: FormValues) => {
+        if (manualCoverUploading) return
+
+        let usedFallbackCover = false
         try {
             if (props.mode === 'space') {
+                const payload = { ...values, title: values.name, name: values.name }
                 await useApi(APIS.SAVE_SPACE_AS_TEMPLATE, null, {
                     ...payload,
                     // Backend TemplateDTO reads `screenShot` for the cover images.
@@ -88,18 +118,40 @@ export const TemplateCreator: React.FC<TemplateCreatorProps> = (props) => {
                 })
             } else {
                 await props.beforeSave?.()
-                await useApi(APIS.SAVE_AS_TEMPLATE, { id: props.pageId }, payload)
+                const content = props.getCoverContent?.() ?? {}
+                const coverResult = await resolveTemplateCover({
+                    existingCover: values.cover,
+                    title: values.name.trim() || content.title || t('template.untitled'),
+                    summary: content.summary?.trim() || values.description?.trim() || t('template.coverEmptySummary'),
+                    fileNameSeed: props.pageId,
+                }, { uploadFile })
+
+                if (coverResult.source === 'generated') {
+                    form.setValue('cover', coverResult.cover, { shouldDirty: false })
+                } else if (coverResult.source === 'fallback') {
+                    usedFallbackCover = true
+                    logger.warn('[TemplateCreator] automatic cover generation failed', coverResult.error)
+                }
+
+                await useApi(APIS.SAVE_AS_TEMPLATE, { id: props.pageId }, {
+                    ...values,
+                    title: values.name,
+                    name: values.name,
+                    cover: coverResult.cover,
+                })
             }
-            toast.success(t('template.saveSuccess'))
+
+            toast.success(t(usedFallbackCover ? 'template.coverFallbackSaved' : 'template.saveSuccess'))
             setOpen(false)
-            form.reset(defaultValues)
+            resetManualCoverSelection()
+            form.reset(getInitialValues())
         } catch (error) {
-            console.error("Failed to save template:", error)
+            logger.error('[TemplateCreator] failed to save template', error)
             toast.error(t('template.saveFailed'))
         }
     }
 
-    return <AlertDialog open={open} onOpenChange={setOpen}>
+    return <AlertDialog open={open} onOpenChange={handleOpenChange}>
         <AlertDialogTrigger className={className}>{props.children}</AlertDialogTrigger>
         <AlertDialogContent className={cn("max-w-none w-[80%] max-h-[90%] 3xl:w-[60%]")}>
             <AlertDialogHeader>
@@ -128,7 +180,7 @@ export const TemplateCreator: React.FC<TemplateCreatorProps> = (props) => {
                                         render={({ field, fieldState }) => (
                                             <Field>
                                                 <FieldLabel>{t('template.nameLabel')} *</FieldLabel>
-                                                <Input {...field} placeholder={t('template.namePlaceholder')} />
+                                                <Input {...field} placeholder={t('template.namePlaceholder')} disabled={busy} />
                                                 {fieldState.error && (
                                                     <p className="text-sm text-destructive">{fieldState.error.message}</p>
                                                 )}
@@ -141,15 +193,69 @@ export const TemplateCreator: React.FC<TemplateCreatorProps> = (props) => {
                                         render={({ field }) => (
                                             <Field>
                                                 <FieldLabel>{t('template.cover')}</FieldLabel>
-                                                <FileUploader multiple maxFileCount={5} onUpload={(files) => {
-                                                    return Promise.all(files.map(it => {
-                                                        return uploadFile(it).then(res => {
-                                                            return usePath(res.name)
-                                                        })
-                                                    })).then(res => {
-                                                        field.onChange(res)
-                                                    })
-                                                }} />
+                                                <FileUploader
+                                                    value={coverFiles}
+                                                    multiple={props.mode === 'space'}
+                                                    maxFileCount={props.mode === 'page' ? 1 : 5}
+                                                    disabled={busy}
+                                                    onValueChange={(files) => {
+                                                        coverFilesRef.current = files
+                                                        setCoverFiles(files)
+                                                        const uploadedNames = getUploadedCoverNames(
+                                                            files,
+                                                            uploadedCoverByFileRef.current,
+                                                        )
+                                                        if (uploadedNames.length > 0) {
+                                                            field.onChange(uploadedNames)
+                                                        } else if (files.length === 0) {
+                                                            field.onChange(props.mode === 'space' ? initialCoverRef.current : [])
+                                                        }
+                                                    }}
+                                                    onUpload={async (files) => {
+                                                        const pendingFiles = files.filter(file =>
+                                                            !uploadedCoverByFileRef.current.has(file)
+                                                        )
+                                                        if (pendingFiles.length === 0) return
+
+                                                        setManualCoverUploading(true)
+                                                        try {
+                                                            const results = await Promise.allSettled(pendingFiles.map(uploadFile))
+                                                            results.forEach((result, index) => {
+                                                                if (result.status === 'fulfilled') {
+                                                                    uploadedCoverByFileRef.current.set(
+                                                                        pendingFiles[index],
+                                                                        result.value.name,
+                                                                    )
+                                                                }
+                                                            })
+
+                                                            const selectedFiles = coverFilesRef.current.filter(file =>
+                                                                uploadedCoverByFileRef.current.has(file)
+                                                            )
+                                                            coverFilesRef.current = selectedFiles
+                                                            setCoverFiles(selectedFiles)
+                                                            const selectedNames = getUploadedCoverNames(
+                                                                selectedFiles,
+                                                                uploadedCoverByFileRef.current,
+                                                            )
+                                                            field.onChange(
+                                                                selectedNames.length > 0
+                                                                    ? selectedNames
+                                                                    : props.mode === 'space'
+                                                                        ? initialCoverRef.current
+                                                                        : []
+                                                            )
+
+                                                            const failedUpload = results.find(result => result.status === 'rejected')
+                                                            if (failedUpload?.status === 'rejected') throw failedUpload.reason
+                                                        } finally {
+                                                            setManualCoverUploading(false)
+                                                        }
+                                                    }}
+                                                />
+                                                {props.mode === 'page' && (
+                                                    <FieldDescription>{t('template.coverAutoHint')}</FieldDescription>
+                                                )}
                                             </Field>
                                         )}
                                     />
@@ -159,7 +265,7 @@ export const TemplateCreator: React.FC<TemplateCreatorProps> = (props) => {
                                         render={({ field }) => (
                                             <Field>
                                                 <FieldLabel>{t('template.description')}</FieldLabel>
-                                                <Textarea {...field} placeholder={t('template.descPlaceholder')} />
+                                                <Textarea {...field} placeholder={t('template.descPlaceholder')} disabled={busy} />
                                             </Field>
                                         )}
                                     />
@@ -170,12 +276,16 @@ export const TemplateCreator: React.FC<TemplateCreatorProps> = (props) => {
                     </form>
                 </ScrollArea>
                 <AlertDialogFooter>
-                    <AlertDialogCancel>{t('template.cancel')}</AlertDialogCancel>
-                    <AlertDialogAction onClick={(e) => {
-                        e.preventDefault()
-                        form.handleSubmit(onSubmit)()
-                    }}>
-                        {t('template.confirm')}
+                    <AlertDialogCancel disabled={busy}>{t('template.cancel')}</AlertDialogCancel>
+                    <AlertDialogAction
+                        disabled={busy}
+                        onClick={(event) => {
+                            event.preventDefault()
+                            form.handleSubmit(onSubmit)()
+                        }}
+                    >
+                        {form.formState.isSubmitting && <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />}
+                        {t(form.formState.isSubmitting ? 'template.saving' : 'template.confirm')}
                     </AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogHeader>
