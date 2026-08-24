@@ -239,6 +239,9 @@ public class PageVersionServiceImpl extends AbstractVersionService<Page, PageVer
     @Override
     @Transactional(rollbackFor = Exception.class)
     public PageVersion rollbackToVersion(Long pageId, Long targetVersionId, String changeSummary) {
+        if (legacyWritesRetired()) {
+            throw WikiException.PAGE_WRITE_API_RETIRED.newException("请使用 PageDoc restore 恢复页面");
+        }
         // Validate target version
         PageVersion targetVersion = this.getById(targetVersionId);
         if (targetVersion == null) {
@@ -544,6 +547,10 @@ public class PageVersionServiceImpl extends AbstractVersionService<Page, PageVer
         return this.lambdaQuery()
                 .eq(PageVersion::getSubjectId, pageId)
                 .count().intValue();
+    }
+
+    private boolean legacyWritesRetired() {
+        return true;
     }
 
     /**

@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Set;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -249,6 +250,19 @@ public final class BlockDocCodec {
         }
         try {
             return JSON.readValue(json, Map.class);
+        } catch (JsonProcessingException e) {
+            return null;
+        }
+    }
+
+    /** Parse a journal's normalised op array without weakening it to raw maps. */
+    public static List<Map<String, Object>> readJsonList(String json) {
+        if (StrUtil.isBlank(json)) {
+            return null;
+        }
+        try {
+            return JSON.readValue(json, new TypeReference<List<Map<String, Object>>>() {
+            });
         } catch (JsonProcessingException e) {
             return null;
         }

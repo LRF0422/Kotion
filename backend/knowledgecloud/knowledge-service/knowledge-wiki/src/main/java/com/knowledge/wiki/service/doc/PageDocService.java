@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.baomidou.mybatisplus.extension.conditions.update.LambdaUpdateChainWrapper;
 import com.knowledge.core.common.base.Icon;
 import com.knowledge.core.common.base.IconType;
 import com.knowledge.wiki.service.entity.Page;
@@ -62,13 +63,25 @@ public class PageDocService {
      * until the backfill or a first save reaches it.
      * </p>
      */
+    @Transactional(readOnly = true)
     public PageDocVO readDoc(Long pageId) {
+        PageHead head = pageHeadMapper.selectById(pageId);
+        if (head == null) {
+            // An absent head means migration has not happened; it is not a valid
+            // empty page. Failing closed prevents a client from reconciling an empty
+            // document and making the backfill skip the real legacy content later.
+            throw com.knowledge.wiki.service.exception.WikiException.PAGE_DOC_NOT_INITIALIZED.newException();
+        }
         List<WikiBlock> rows = loadBlocks(pageId);
         PageDocVO vo = new PageDocVO();
         vo.setDoc(BlockDocCodec.assemble(rows));
-        vo.setRev(readRev(pageId));
+        vo.setRev(head.getRev() == null ? 0L : head.getRev());
         vo.setBlockCount(rows.size());
         return vo;
+    }
+
+    public boolean isInitialized(Long pageId) {
+        return pageId != null && pageHeadMapper.selectById(pageId) != null;
     }
 
     /** Current rev, 0 when the page has never been written under this model. */
@@ -99,71 +112,49 @@ public class PageDocService {
     }
 
     /**
-     * Mirror the title block onto {@code wiki_page}: text, icon and tags.
-     * <p>
-     * The title block is the authority; these copies exist because the page tree,
-     * search results, breadcrumbs, favourites and the space graph all read the
-     * page row rather than the block store. Without the mirror, a title edit
-     * would stop being visible anywhere outside the editor — which is exactly
-     * what happened to icon/tag edits when the op path only mirrored the text.
-     * </p>
-     * <p>
-     * Called only when a batch actually touched the title block (a batch that did
-     * not leaves {@code titleNode} null), so every update here corresponds to a
-     * real change and no dirty-checking is needed. Best-effort: a mirror failure
-     * must never fail the save it mirrors.
-     * </p>
+     * Touch the page update stamp and, when the title block changed, mirror its
+     * title/icon/tags onto {@code wiki_page} in the document write transaction.
+     * A failed mirror fails the whole write: current blocks, journal, head and page
+     * metadata must never describe different successful saves.
      */
-    public void syncPageTitleMeta(Long pageId, String titleText, Map<String, Object> titleNode) {
-        if (titleNode == null) {
-            return;
-        }
-        Map<String, Object> attrs = attrsOf(titleNode);
-        String title = titleText == null ? null : StrUtil.blankToDefault(titleText.trim(), Page.UNTITLE);
-        boolean hasIcon = attrs != null && attrs.containsKey("icon");
-        boolean hasTags = attrs != null && attrs.containsKey("tags");
-        Icon icon = hasIcon ? parseIcon(attrs.get("icon")) : null;
-        List<String> tags = hasTags ? parseTags(attrs.get("tags")) : null;
+    public void syncPageMeta(Long pageId, Long actor, boolean titleTouched, String titleText,
+            Map<String, Object> titleNode) {
+        LambdaUpdateChainWrapper<Page> update = pageService.lambdaUpdate()
+                .eq(Page::getId, pageId)
+                .set(Page::getUpdateTime, LocalDateTime.now())
+                .set(Page::getUpdateUser, actor);
 
-        try {
-            if (title != null) {
-                pageService.lambdaUpdate()
-                        .eq(Page::getId, pageId)
-                        .set(Page::getTitle, title)
-                        .update();
-            }
-            if (hasIcon) {
-                // Icon maps to a JSON column via JacksonTypeHandler (@TableField on
-                // Page.icon). lambdaUpdate().set() does NOT pick up that handler
-                // automatically, so it must be named explicitly here or the Icon
-                // object would be bound as a raw parameter and fail to persist.
-                if (icon != null) {
-                    pageService.lambdaUpdate()
-                            .eq(Page::getId, pageId)
-                            .set(Page::getIcon, icon,
-                                    "typeHandler=com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler")
-                            .update();
-                } else {
-                    // Icon removed: MP's update strategy silently drops null sets,
-                    // so clearing the JSON column has to be spelled out.
-                    pageService.lambdaUpdate()
-                            .eq(Page::getId, pageId)
-                            .setSql("icon = NULL")
-                            .update();
+        if (titleTouched) {
+            String title = StrUtil.blankToDefault(titleText == null ? null : titleText.trim(), Page.UNTITLE);
+            update.set(Page::getTitle, title);
+
+            if (titleNode == null) {
+                // Deleting the title resets all page-row title metadata.
+                update.setSql("icon = NULL")
+                        .set(Page::getTags, new ArrayList<String>(),
+                                "typeHandler=com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler");
+            } else {
+                Map<String, Object> attrs = attrsOf(titleNode);
+                boolean hasIcon = attrs != null && attrs.containsKey("icon");
+                boolean hasTags = attrs != null && attrs.containsKey("tags");
+                if (hasIcon) {
+                    Icon icon = parseIcon(attrs.get("icon"));
+                    if (icon == null) {
+                        update.setSql("icon = NULL");
+                    } else {
+                        update.set(Page::getIcon, icon,
+                                "typeHandler=com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler");
+                    }
+                }
+                if (hasTags) {
+                    update.set(Page::getTags, parseTags(attrs.get("tags")),
+                            "typeHandler=com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler");
                 }
             }
-            if (hasTags) {
-                // Same JSON-column caveat as icon: name the type handler explicitly.
-                pageService.lambdaUpdate()
-                        .eq(Page::getId, pageId)
-                        .set(Page::getTags, tags,
-                                "typeHandler=com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler")
-                        .update();
-            }
-        } catch (Exception e) {
-            // Title/icon/tags sync is best-effort; never fail the save because of it.
-            log.warn("syncPageTitleMeta: failed to mirror title/icon/tags onto wiki_page pageId={}: {}",
-                    pageId, e.getMessage());
+        }
+
+        if (!update.update()) {
+            throw com.knowledge.wiki.service.exception.WikiException.PAGE_NOT_FOUND.newException();
         }
     }
 
@@ -178,10 +169,20 @@ public class PageDocService {
         icon.setIcon(iconValue instanceof String ? (String) iconValue : null);
         Object typeValue = map.get("type");
         if (typeValue instanceof String) {
-            try {
-                icon.setType(IconType.valueOf((String) typeValue));
-            } catch (IllegalArgumentException ignored) {
-                // Unknown type: leave it null rather than fail the mirror.
+            String type = (String) typeValue;
+            if ("IMAGE".equals(type)) {
+                // The shared backend enum keeps its historical PICTIRE spelling.
+                icon.setType(IconType.PICTIRE);
+            } else if ("DATE".equals(type)) {
+                // wiki_page has no date-config column; retain the fallback calendar
+                // glyph as an emoji while the full DATE config remains in PageDoc.
+                icon.setType(IconType.EMOJI);
+            } else {
+                try {
+                    icon.setType(IconType.valueOf(type));
+                } catch (IllegalArgumentException ignored) {
+                    // Unknown type: leave it null rather than fail the mirror.
+                }
             }
         }
         return icon;
@@ -216,7 +217,22 @@ public class PageDocService {
      * </p>
      */
     @Transactional(rollbackFor = Exception.class)
-    public Long writeCheckpoint(Long pageId, long rev, Long actor, String kind, String label) {
+    public PageCheckpoint writeCheckpoint(Long pageId, long rev, Long actor, String kind, String label) {
+        return writeCheckpoint(pageId, rev, actor, kind, label, null);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public PageCheckpoint writeCheckpoint(Long pageId, long rev, Long actor, String kind, String label,
+            Long sourceRev) {
+        if (readRev(pageId) != rev) {
+            throw com.knowledge.wiki.service.exception.WikiException.INVALID_PARAMETER
+                    .newException("只能为当前 rev 创建检查点");
+        }
+        PageCheckpoint existing = pageCheckpointMapper.selectByPageAndRev(pageId, rev);
+        if (existing != null) {
+            return updateCheckpointMetadata(existing, actor, kind, label, sourceRev);
+        }
+
         List<WikiBlock> rows = loadBlocks(pageId);
         Map<String, Object> doc = BlockDocCodec.assemble(rows);
 
@@ -224,21 +240,38 @@ public class PageDocService {
         checkpoint.setPageId(pageId);
         checkpoint.setRev(rev);
         checkpoint.setKind(kind);
-        checkpoint.setLabel(label);
+        checkpoint.setLabel(StrUtil.emptyToNull(label));
         checkpoint.setDoc(ZipUtil.gzip(BlockDocCodec.writeJson(doc), CHECKPOINT_CHARSET));
         checkpoint.setBlockCount(rows.size());
         checkpoint.setActor(actor);
+        checkpoint.setSourceRev(sourceRev);
         checkpoint.setCreatedAt(LocalDateTime.now());
         try {
             pageCheckpointMapper.insert(checkpoint);
+            return checkpoint;
         } catch (DuplicateKeyException e) {
-            // One checkpoint per rev. A second attempt at the same rev — an explicit
-            // save landing on an automatic cadence boundary, say — is a no-op, not a
-            // failure that should roll back the write it belongs to.
-            log.debug("writeCheckpoint: pageId={} rev={} already checkpointed", pageId, rev);
-            return null;
+            // A cadence checkpoint and an explicit checkpoint can race at the same
+            // rev. Re-read the winner and promote its metadata when appropriate.
+            existing = pageCheckpointMapper.selectByPageAndRev(pageId, rev);
+            if (existing == null) {
+                throw e;
+            }
+            return updateCheckpointMetadata(existing, actor, kind, label, sourceRev);
         }
-        return checkpoint.getId();
+    }
+
+    private PageCheckpoint updateCheckpointMetadata(PageCheckpoint existing, Long actor, String kind, String label,
+            Long sourceRev) {
+        // V10 deliberately allows one materialisation per rev. A later explicit
+        // command promotes that same snapshot's presentation metadata (AUTO -> USER
+        // or AUTO -> RESTORE) instead of duplicating the blob.
+        existing.setKind(kind);
+        existing.setLabel(StrUtil.emptyToNull(label));
+        existing.setActor(actor);
+        existing.setSourceRev(sourceRev);
+        existing.setCreatedAt(LocalDateTime.now());
+        pageCheckpointMapper.updateMetadata(existing);
+        return existing;
     }
 
     /** The document stored in a checkpoint. */

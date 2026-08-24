@@ -1,7 +1,7 @@
 /**
  * TemplatePreview — read-only editor rendering of a template's page content.
  *
- * A template is just a page, so its content is fetched via GET_PAGE_CONTENT
+ * A template is just a page, so its content is fetched from PAGE_DOC
  * and rendered with a real read-only Tiptap editor — matching actual page
  * rendering (headings, lists, code blocks, embeds…) instead of a plain-text
  * excerpt. Follows the same pattern as PagePreviewCard's PreviewBody.
@@ -33,18 +33,13 @@ interface CoverConfig {
  * node (no title schema) — but its attrs carry the page cover, so it's
  * read first.
  */
-const parsePage = (raw?: string): { body: Content | null; cover: CoverConfig | null } => {
-    if (!raw) return { body: null, cover: null };
-    try {
-        const doc = JSON.parse(raw.replaceAll("&lt;", "<").replaceAll("&gt;", ">"));
-        const nodes: any[] = Array.isArray(doc?.content) ? doc.content : [];
-        const title = nodes.find((n) => n?.type === "title");
-        const cover = title?.attrs?.cover?.url ? (title.attrs.cover as CoverConfig) : null;
-        const body = nodes.filter((n) => n?.type !== "title");
-        return { body: body.length > 0 ? { type: "doc", content: body } : null, cover };
-    } catch {
-        return { body: null, cover: null };
-    }
+const parsePage = (doc?: Content | null): { body: Content | null; cover: CoverConfig | null } => {
+    if (!doc || typeof doc !== "object" || Array.isArray(doc)) return { body: null, cover: null };
+    const nodes: any[] = Array.isArray((doc as any)?.content) ? (doc as any).content : [];
+    const title = nodes.find((n) => n?.type === "title");
+    const cover = title?.attrs?.cover?.url ? (title.attrs.cover as CoverConfig) : null;
+    const body = nodes.filter((n) => n?.type !== "title");
+    return { body: body.length > 0 ? { type: "doc", content: body } : null, cover };
 };
 
 /** Read-only Tiptap instance rendering the page body at preview scale. */
@@ -91,7 +86,7 @@ export interface TemplatePreviewProps {
 
 export const TemplatePreview: React.FC<TemplatePreviewProps> = ({ templateId, className }) => {
     const { t } = useTranslation();
-    const [content, setContent] = useState<string | null>(null);
+    const [content, setContent] = useState<Content | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(false);
 
@@ -99,11 +94,11 @@ export const TemplatePreview: React.FC<TemplatePreviewProps> = ({ templateId, cl
         let cancelled = false;
         setLoading(true);
         setError(false);
-        useApi(APIS.GET_PAGE_CONTENT, { id: templateId })
+        useApi(APIS.PAGE_DOC, { id: templateId })
             .then((res) => {
                 if (cancelled) return;
                 const data = res?.data;
-                setContent(data?.content ?? null);
+                setContent(data?.doc ?? null);
             })
             .catch(() => {
                 if (!cancelled) setError(true);
@@ -116,7 +111,7 @@ export const TemplatePreview: React.FC<TemplatePreviewProps> = ({ templateId, cl
         };
     }, [templateId]);
 
-    const { body } = useMemo(() => parsePage(content ?? undefined), [content]);
+    const { body } = useMemo(() => parsePage(content), [content]);
 
     return (
         <div className={className}>

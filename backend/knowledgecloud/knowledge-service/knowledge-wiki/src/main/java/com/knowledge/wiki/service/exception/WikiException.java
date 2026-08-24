@@ -33,6 +33,9 @@ public enum WikiException implements BusinessExceptionAssert {
     VERSION_NOT_FOUND(3011, "版本不存在"),
     CONTENT_PARSE_ERROR(3012, "内容解析失败"),
     PAGE_CIRCULAR_MOVE(3013, "不能将页面移动到自身或其子页面下"),
+    PAGE_WRITE_API_RETIRED(3014, "旧页面写入接口已停用，请升级客户端"),
+    PAGE_DOC_NOT_INITIALIZED(3015, "页面尚未迁移到新文档存储"),
+    PAGE_REVISION_CONFLICT(3016, "页面已被其他写入更新，请同步后重试"),
 
     // Collaboration related (4000-4999)
     INVITATION_NOT_FOUND(4001, "邀请不存在"),

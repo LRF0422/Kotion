@@ -23,13 +23,15 @@ import com.knowledge.wiki.service.entity.WikiBlock;
 public interface BlockBackfillMapper extends BaseMapper<WikiBlock> {
 
     /**
-     * Every page that has legacy block rows, lowest page id first.
-     * <p>
-     * The logical-delete filter is spelled out because MyBatis-Plus only appends
-     * it to statements it generates itself, and this one is hand-written.
-     * </p>
+     * Every live page, lowest page id first. Pages without legacy rows still need
+     * an explicit rev-0 head so an absent head can no longer be mistaken for a
+     * deliberately empty document.
      */
-    @Select("SELECT DISTINCT page_id FROM wiki_page_block WHERE is_deleted = 0 AND page_id IS NOT NULL ORDER BY page_id")
-    List<Long> selectLegacyPageIds();
+    @Select("SELECT id FROM wiki_page WHERE is_deleted = 0 ORDER BY id")
+    List<Long> selectPageIds();
+
+    @Select("SELECT COUNT(*) FROM wiki_page p LEFT JOIN wiki_page_head h ON h.page_id = p.id "
+            + "WHERE p.is_deleted = 0 AND h.page_id IS NULL")
+    long countPagesWithoutHead();
 
 }

@@ -518,16 +518,27 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "exportMarkdownFailed": "导出 Markdown 失败",
           "version": {
             "current": "当前",
-            "draft": "草稿",
-            "empty": "暂无版本",
+            "empty": "暂无历史记录",
             "restore": "恢复",
             "cancel": "取消",
             "loadFailed": "加载版本历史失败",
-            "restoreSuccess": "已恢复到版本 {{version}}",
-            "restoreFailed": "恢复版本失败",
+            "checkpointSuccess": "检查点已创建",
+            "checkpointFailed": "创建检查点失败",
+            "checkpointSaveFailed": "保存失败，未创建检查点",
+            "restoreSuccess": "已恢复到修订 r{{version}}",
+            "restoreFailed": "恢复修订失败",
+            "restoreSaveFailed": "保存失败，已取消恢复",
             "refreshFailed": "服务端已恢复，请刷新页面查看",
-            "confirmTitle": "恢复到此版本？",
-            "confirmDesc": "页面将恢复到版本 {{version}}。此操作会创建一个新版本，当前内容仍保留在历史记录中，不会丢失。"
+            "restoredFrom": "从 r{{rev}} 恢复",
+            "confirmTitle": "恢复到此修订？",
+            "confirmDesc": "页面将恢复到修订 r{{version}}。此操作会创建一个新修订，当前内容仍保留在历史记录中，不会丢失。",
+            "kind": {
+              "user": "手动保存",
+              "auto": "自动检查点",
+              "restore": "恢复",
+              "import": "导入",
+              "unknown": "检查点"
+            }
           }
         },
         "template": {
@@ -1109,16 +1120,27 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "exportMarkdownFailed": "Failed to export as Markdown",
           "version": {
             "current": "Current",
-            "draft": "Draft",
-            "empty": "No versions yet",
+            "empty": "No history yet",
             "restore": "Restore",
             "cancel": "Cancel",
             "loadFailed": "Failed to load version history",
-            "restoreSuccess": "Restored to version {{version}}",
-            "restoreFailed": "Failed to restore version",
+            "checkpointSuccess": "Checkpoint created",
+            "checkpointFailed": "Failed to create checkpoint",
+            "checkpointSaveFailed": "Save failed — checkpoint was not created",
+            "restoreSuccess": "Restored to revision r{{version}}",
+            "restoreFailed": "Failed to restore revision",
+            "restoreSaveFailed": "Save failed — restore was cancelled",
             "refreshFailed": "Restored on server — reload the page to see it",
-            "confirmTitle": "Restore this version?",
-            "confirmDesc": "The page will be restored to version {{version}}. This creates a new version — the current content is kept in history and nothing is lost."
+            "restoredFrom": "Restored from r{{rev}}",
+            "confirmTitle": "Restore this revision?",
+            "confirmDesc": "The page will be restored to revision r{{version}}. This creates a new revision — the current content is kept in history and nothing is lost.",
+            "kind": {
+              "user": "Manual save",
+              "auto": "Automatic checkpoint",
+              "restore": "Restore",
+              "import": "Import",
+              "unknown": "Checkpoint"
+            }
           }
         },
         "template": {

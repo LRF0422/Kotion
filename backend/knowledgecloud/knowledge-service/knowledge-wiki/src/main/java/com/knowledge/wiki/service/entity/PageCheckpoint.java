@@ -66,6 +66,9 @@ public class PageCheckpoint {
 
     private Long actor;
 
+    /** Original revision selected by a forward restore checkpoint. */
+    private Long sourceRev;
+
     private LocalDateTime createdAt;
 
 }

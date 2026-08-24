@@ -14,6 +14,7 @@ type PageMode = {
     mode: 'page'
     pageId: string
     defaultName?: string
+    beforeSave?: () => Promise<void>
 }
 
 type SpaceMode = {
@@ -86,6 +87,7 @@ export const TemplateCreator: React.FC<TemplateCreatorProps> = (props) => {
                     spaceId: props.space.id,
                 })
             } else {
+                await props.beforeSave?.()
                 await useApi(APIS.SAVE_AS_TEMPLATE, { id: props.pageId }, payload)
             }
             toast.success(t('template.saveSuccess'))

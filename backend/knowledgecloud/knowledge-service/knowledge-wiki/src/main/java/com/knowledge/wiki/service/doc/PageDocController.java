@@ -1,5 +1,7 @@
 package com.knowledge.wiki.service.doc;
 
+import javax.validation.Valid;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -7,6 +9,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.knowledge.core.secure.utils.SecurityContextUtil;
@@ -14,11 +17,16 @@ import com.knowledge.core.tool.api.R;
 import com.knowledge.wiki.service.collab.CollabSessionService;
 import com.knowledge.wiki.service.entity.Page;
 import com.knowledge.wiki.service.entity.dto.ApplyOpsDTO;
+import com.knowledge.wiki.service.entity.dto.CreatePageCheckpointDTO;
 import com.knowledge.wiki.service.entity.dto.ReconcileDTO;
+import com.knowledge.wiki.service.entity.dto.RestorePageDocDTO;
 import com.knowledge.wiki.service.entity.dto.SessionClaimDTO;
 import com.knowledge.wiki.service.entity.vo.ApplyOpsVO;
+import com.knowledge.wiki.service.entity.vo.PageDocHistoryListVO;
+import com.knowledge.wiki.service.entity.vo.PageDocHistoryVO;
 import com.knowledge.wiki.service.entity.vo.PageDocVO;
 import com.knowledge.wiki.service.entity.vo.PageSessionVO;
+import com.knowledge.wiki.service.entity.vo.RestorePageDocVO;
 import com.knowledge.wiki.service.exception.WikiException;
 import com.knowledge.wiki.service.service.IPageService;
 import com.knowledge.wiki.service.service.IPermissionService;
@@ -62,6 +70,9 @@ public class PageDocController {
     private PageOpService pageOpService;
 
     @Autowired
+    private PageDocCommandService pageDocCommandService;
+
+    @Autowired
     private IPageService pageService;
 
     @Autowired
@@ -75,6 +86,42 @@ public class PageDocController {
     public R<PageDocVO> readDoc(@PathVariable("pageId") Long pageId) {
         checkPage(pageId, IPermissionService.PERMISSION_READ);
         return R.data(pageDocService.readDoc(pageId));
+    }
+
+    @PostMapping({ "/{pageId}/checkpoint", "/{pageId}/checkpoints" })
+    @ApiOperation("创建用户命名的文档检查点")
+    public R<PageDocHistoryVO> checkpoint(@PathVariable("pageId") Long pageId,
+            @Valid @RequestBody CreatePageCheckpointDTO request) {
+        checkPage(pageId, IPermissionService.PERMISSION_WRITE);
+        requireSessionHost(pageId, request.getClientId());
+        return R.data(pageDocCommandService.createUserCheckpoint(pageId, SecurityContextUtil.getUserId(),
+                request.getLabel()));
+    }
+
+    @GetMapping("/{pageId}/history")
+    @ApiOperation("读取文档 rev 历史")
+    public R<PageDocHistoryListVO> history(@PathVariable("pageId") Long pageId,
+            @RequestParam(value = "beforeRev", required = false) Long beforeRev,
+            @RequestParam(value = "limit", required = false) Integer limit) {
+        checkPage(pageId, IPermissionService.PERMISSION_READ);
+        return R.data(pageDocCommandService.listHistory(pageId, beforeRev, limit));
+    }
+
+    @GetMapping({ "/{pageId}/history/{rev}/doc", "/{pageId}/history-doc/{rev}" })
+    @ApiOperation("物化指定 rev 的文档")
+    public R<PageDocVO> historyDoc(@PathVariable("pageId") Long pageId, @PathVariable("rev") Long rev) {
+        checkPage(pageId, IPermissionService.PERMISSION_READ);
+        return R.data(pageDocCommandService.materializeAtRev(pageId, rev));
+    }
+
+    @PostMapping("/{pageId}/restore")
+    @ApiOperation("将历史 rev 以前向写入方式恢复为当前文档")
+    public R<RestorePageDocVO> restore(@PathVariable("pageId") Long pageId,
+            @Valid @RequestBody RestorePageDocDTO request) {
+        checkPage(pageId, IPermissionService.PERMISSION_WRITE);
+        requireSessionHost(pageId, request.getClientId());
+        return R.data(pageDocCommandService.restore(pageId, request.getTargetRev(), SecurityContextUtil.getUserId(),
+                request.getLabel()));
     }
 
     /**

@@ -62,6 +62,7 @@ export interface UsePageSaveReturn {
     catchingUp: boolean
     session: UsePageSessionReturn
     saveNow: () => Promise<void>
+    adoptRev: (rev: number | string | null | undefined) => void
     flushNow: () => Promise<unknown> | null
 }
 

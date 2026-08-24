@@ -281,20 +281,6 @@ export const Home: React.FC = () => {
                 spaceId,
                 parentId: "0",
                 title: "Untitled",
-                content: JSON.stringify({
-                    type: "doc",
-                    content: [
-                        {
-                            type: "title",
-                            content: [
-                                {
-                                    type: "heading",
-                                    content: [{ type: "text", text: "Untitled" }],
-                                },
-                            ],
-                        },
-                    ],
-                }),
             })
             navigator.go({ to: `/space-detail/${spaceId}/page/edit/${res.data.id}` })
         } catch (err) {
@@ -679,6 +665,8 @@ export const Home: React.FC = () => {
                                                 <PagePreviewCard
                                                     key={page.id}
                                                     pageId={page.id}
+                                                    title={page.title}
+                                                    spaceName={page.spaceName}
                                                     icon={page.icon}
                                                     disabled={isMobile}
                                                     onOpenPage={() => navigator.go({ to: `/space-detail/${page.spaceId}/page/edit/${page.id}` })}
@@ -775,6 +763,8 @@ export const Home: React.FC = () => {
                                                 <PagePreviewCard
                                                     key={data.id}
                                                     pageId={data.id}
+                                                    title={data.title}
+                                                    spaceName={data.spaceName}
                                                     icon={data.icon}
                                                     disabled={isMobile}
                                                     onOpenPage={() => navigator.go({ to: `/space-detail/${data.spaceId}/page/edit/${data.id}` })}

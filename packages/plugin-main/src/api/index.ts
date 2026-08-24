@@ -66,16 +66,6 @@ export const APIS = {
         url: '/knowledge-wiki/space/page',
         method: 'POST'
     } as API,
-    /**
-     * Seal the current editing session's version as an explicit restore point.
-     * Autosaves merge into one version per session, so only a deliberate save
-     * cuts a version.
-     */
-    CHECKPOINT_PAGE_VERSION: {
-        url: '/knowledge-wiki/space/page/:id/checkpoint',
-        method: 'POST'
-    } as API,
-
     // ---- Block-authority page storage (op-based save) --------------------
     // These sit under /page rather than /space/page: the block store is
     // addressed by page id alone and has no space in its path.
@@ -84,6 +74,26 @@ export const APIS = {
     PAGE_DOC: {
         url: '/knowledge-wiki/page/:id/doc',
         method: 'GET'
+    } as API,
+    /** Materialize the current rev as a deliberate restore point. */
+    PAGE_CREATE_CHECKPOINT: {
+        url: '/knowledge-wiki/page/:id/checkpoints',
+        method: 'POST'
+    } as API,
+    /** List the page's checkpoint-backed document history. */
+    PAGE_HISTORY: {
+        url: '/knowledge-wiki/page/:id/history',
+        method: 'GET'
+    } as API,
+    /** Read the document represented by one historical rev. */
+    PAGE_HISTORY_DOC: {
+        url: '/knowledge-wiki/page/:id/history/:rev/doc',
+        method: 'GET'
+    } as API,
+    /** Restore a historical rev forward into a new current document rev. */
+    PAGE_RESTORE: {
+        url: '/knowledge-wiki/page/:id/restore',
+        method: 'POST'
     } as API,
     /** Submit a batch of ops. Accepted from the session host only. */
     PAGE_APPLY_OPS: {
@@ -272,41 +282,6 @@ export const APIS = {
         method: 'GET'
     } as API,
     // ==================== Page Lifecycle APIs ====================
-    /** Get paginated version history for a page */
-    GET_PAGE_VERSIONS: {
-        url: '/knowledge-wiki/space/page/:pageId/versions',
-        method: 'GET'
-    } as API,
-    /** Get all versions of a page (non-paginated) */
-    GET_ALL_PAGE_VERSIONS: {
-        url: '/knowledge-wiki/space/page/:pageId/versions/all',
-        method: 'GET'
-    } as API,
-    /** Get specific version content */
-    GET_PAGE_VERSION: {
-        url: '/knowledge-wiki/space/page/version/:versionId',
-        method: 'GET'
-    } as API,
-    /** Rollback page to a specific version */
-    ROLLBACK_PAGE_VERSION: {
-        url: '/knowledge-wiki/space/page/:pageId/rollback',
-        method: 'POST'
-    } as API,
-    /** Compare two page versions */
-    COMPARE_PAGE_VERSIONS: {
-        url: '/knowledge-wiki/space/page/versions/compare',
-        method: 'POST'
-    } as API,
-    /** Delete draft version */
-    DELETE_DRAFT_VERSION: {
-        url: '/knowledge-wiki/space/page/:pageId/draft',
-        method: 'DELETE'
-    } as API,
-    /** Get version count for a page */
-    GET_PAGE_VERSION_COUNT: {
-        url: '/knowledge-wiki/space/page/:pageId/versions/count',
-        method: 'GET'
-    } as API,
     /** Cross-space page relation graph (nodes = pages, edges = backlinks) */
     GET_SPACE_GRAPH: {
         url: '/knowledge-wiki/space/graph',

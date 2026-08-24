@@ -2,6 +2,7 @@ package com.knowledge.wiki.service.controller;
 
 import java.util.List;
 
+import javax.servlet.http.HttpServletResponse;
 import javax.validation.Valid;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,14 +40,14 @@ import com.knowledge.wiki.service.entity.dto.UpdateBlockDTO;
 import com.knowledge.wiki.service.entity.vo.PageBlockDetailVO;
 import com.knowledge.wiki.service.entity.dto.UpdatePermissionRequestDTO;
 import com.knowledge.wiki.service.entity.vo.PageBlockVO;
-import com.knowledge.wiki.service.entity.vo.PageContentVO;
+import com.knowledge.wiki.service.entity.vo.WikiBlockVO;
 import com.knowledge.wiki.service.entity.vo.PageVO;
 import com.knowledge.wiki.service.entity.vo.SpaceVO;
 import com.knowledge.wiki.service.entity.vo.InvitedPageVO;
 import com.knowledge.wiki.service.entity.vo.BacklinkVO;
 import com.knowledge.wiki.service.entity.vo.SpaceGraphVO;
 import com.knowledge.wiki.service.entity.vo.BlockVersionVO;
-import com.knowledge.wiki.service.entity.PageContent;
+import com.knowledge.wiki.service.exception.WikiException;
 
 import cn.hutool.core.lang.tree.Tree;
 
@@ -181,7 +182,10 @@ public class SpaceController {
     }
 
     @PostMapping("/page")
-    public R<PageVO> createPage(@Valid @RequestBody PageDTO dto) {
+    public R<PageVO> createPage(@Valid @RequestBody PageDTO dto, HttpServletResponse response) {
+        if (dto.getId() != null) {
+            return retired(response, "/knowledge-wiki/page/" + dto.getId() + "/ops");
+        }
         return R.data(spaceApplication.createPage(dto));
     }
 
@@ -207,7 +211,7 @@ public class SpaceController {
     }
 
     @GetMapping("/page/blocks")
-    public R<IPage<PageContentVO>> queryBlocks(QueryPageBlockDTO dto) {
+    public R<IPage<WikiBlockVO>> queryBlocks(QueryPageBlockDTO dto) {
         return R.data(spaceApplication.queryPageBlock(dto));
     }
 
@@ -231,10 +235,8 @@ public class SpaceController {
      */
     @PutMapping("/page/block/{blockId}")
     public R<?> updateBlock(@PathVariable("blockId") String blockId,
-            @Valid @RequestBody UpdateBlockDTO dto) {
-        dto.setBlockId(blockId);
-        spaceApplication.updateBlock(dto);
-        return R.success();
+            @Valid @RequestBody UpdateBlockDTO dto, HttpServletResponse response) {
+        return retired(response, "/knowledge-wiki/page/{pageId}/ops");
     }
 
     /**
@@ -243,10 +245,8 @@ public class SpaceController {
      */
     @PatchMapping("/page/{pageId}/blocks")
     public R<PatchResultDTO> patchPageBlocks(@PathVariable("pageId") Long pageId,
-            @Valid @RequestBody PatchPageBlocksDTO dto) {
-        dto.setPageId(pageId);
-        PatchResultDTO result = spaceApplication.patchPageBlocks(dto);
-        return R.data(result);
+            @Valid @RequestBody PatchPageBlocksDTO dto, HttpServletResponse response) {
+        return retired(response, "/knowledge-wiki/page/" + pageId + "/ops");
     }
 
     /**
@@ -255,10 +255,8 @@ public class SpaceController {
      */
     @PostMapping("/page/{pageId}/blocks/bulk")
     public R<PatchResultDTO> bulkReplacePageBlocks(@PathVariable("pageId") Long pageId,
-            @Valid @RequestBody PatchPageBlocksDTO dto) {
-        dto.setPageId(pageId);
-        PatchResultDTO result = spaceApplication.bulkReplacePageBlocks(dto);
-        return R.data(result);
+            @Valid @RequestBody PatchPageBlocksDTO dto, HttpServletResponse response) {
+        return retired(response, "/knowledge-wiki/page/" + pageId + "/reconcile");
     }
 
     /**
@@ -266,9 +264,8 @@ public class SpaceController {
      * POST /knowledge-wiki/space/page/{pageId}/checkpoint
      */
     @PostMapping("/page/{pageId}/checkpoint")
-    public R<Boolean> sealPageVersion(@PathVariable("pageId") Long pageId) {
-        spaceApplication.sealPageVersion(pageId);
-        return R.data(Boolean.TRUE);
+    public R<Boolean> sealPageVersion(@PathVariable("pageId") Long pageId, HttpServletResponse response) {
+        return retired(response, "/knowledge-wiki/page/" + pageId + "/checkpoints");
     }
 
     /**
@@ -364,9 +361,8 @@ public class SpaceController {
     }
 
     @GetMapping("/page/block/refresh")
-    public R<?> refreshBlock() {
-        spaceApplication.refreshBlock();
-        return R.success();
+    public R<?> refreshBlock(HttpServletResponse response) {
+        return retired(response, "/knowledge-wiki/space/page/search/reindex");
     }
 
     // ==================== Collaboration API Endpoints ====================
@@ -475,9 +471,9 @@ public class SpaceController {
     @GetMapping("/page/{pageId}/versions")
     public R<IPage<com.knowledge.wiki.service.entity.PageVersion>> getPageVersionHistory(
             @PathVariable("pageId") Long pageId,
-            com.knowledge.wiki.service.entity.dto.QueryPageVersionDTO dto) {
-        dto.setPageId(pageId);
-        return R.data(spaceApplication.getPageVersionHistory(dto));
+            com.knowledge.wiki.service.entity.dto.QueryPageVersionDTO dto,
+            HttpServletResponse response) {
+        return retired(response, "/knowledge-wiki/page/" + pageId + "/history");
     }
 
     /**
@@ -486,8 +482,8 @@ public class SpaceController {
      */
     @GetMapping("/page/{pageId}/versions/all")
     public R<List<com.knowledge.wiki.service.entity.PageVersion>> getAllPageVersions(
-            @PathVariable("pageId") Long pageId) {
-        return R.data(spaceApplication.getPageVersions(pageId));
+            @PathVariable("pageId") Long pageId, HttpServletResponse response) {
+        return retired(response, "/knowledge-wiki/page/" + pageId + "/history");
     }
 
     /**
@@ -496,8 +492,8 @@ public class SpaceController {
      */
     @GetMapping("/page/version/{versionId}")
     public R<com.knowledge.wiki.service.entity.PageVersion> getPageVersion(
-            @PathVariable("versionId") Long versionId) {
-        return R.data(spaceApplication.getPageVersion(versionId));
+            @PathVariable("versionId") Long versionId, HttpServletResponse response) {
+        return retired(response, "/knowledge-wiki/page/{pageId}/history/{rev}/doc");
     }
 
     /**
@@ -506,10 +502,9 @@ public class SpaceController {
      */
     @PostMapping("/page/versions/compare")
     public R<String> compareVersions(
-            @Valid @RequestBody com.knowledge.wiki.service.entity.dto.CompareVersionDTO dto) {
-        return R.data(spaceApplication.compareVersions(
-                dto.getSourceVersionId(),
-                dto.getTargetVersionId()));
+            @Valid @RequestBody com.knowledge.wiki.service.entity.dto.CompareVersionDTO dto,
+            HttpServletResponse response) {
+        return retired(response, "/knowledge-wiki/page/{pageId}/history/{rev}/doc");
     }
 
     /**
@@ -520,11 +515,9 @@ public class SpaceController {
     @PostMapping("/page/{pageId}/rollback")
     public R<com.knowledge.wiki.service.entity.PageVersion> rollbackPageVersion(
             @PathVariable("pageId") Long pageId,
-            @RequestBody com.knowledge.wiki.service.entity.dto.RollbackVersionDTO dto) {
-        return R.data(spaceApplication.rollbackPageVersion(
-                pageId,
-                dto.getTargetVersionId(),
-                dto.getChangeSummary()));
+            @RequestBody com.knowledge.wiki.service.entity.dto.RollbackVersionDTO dto,
+            HttpServletResponse response) {
+        return retired(response, "/knowledge-wiki/page/" + pageId + "/restore");
     }
 
     /**
@@ -532,9 +525,8 @@ public class SpaceController {
      * DELETE /knowledge-wiki/space/page/:pageId/draft
      */
     @DeleteMapping("/page/{pageId}/draft")
-    public R<?> deleteDraft(@PathVariable("pageId") Long pageId) {
-        spaceApplication.deleteDraft(pageId);
-        return R.success();
+    public R<?> deleteDraft(@PathVariable("pageId") Long pageId, HttpServletResponse response) {
+        return retired(response, "/knowledge-wiki/page/" + pageId + "/history");
     }
 
     /**
@@ -542,8 +534,8 @@ public class SpaceController {
      * GET /knowledge-wiki/space/page/:pageId/versions/count
      */
     @GetMapping("/page/{pageId}/versions/count")
-    public R<Integer> getVersionCount(@PathVariable("pageId") Long pageId) {
-        return R.data(spaceApplication.getVersionCount(pageId));
+    public R<Integer> getVersionCount(@PathVariable("pageId") Long pageId, HttpServletResponse response) {
+        return retired(response, "/knowledge-wiki/page/" + pageId + "/history");
     }
 
     // ==================== Block Version API ====================
@@ -553,8 +545,9 @@ public class SpaceController {
      * GET /knowledge-wiki/space/page/block/{blockId}/versions
      */
     @GetMapping("/page/block/{blockId}/versions")
-    public R<List<BlockVersionVO>> getBlockHistory(@PathVariable("blockId") String blockId) {
-        return R.data(spaceApplication.getBlockHistory(blockId));
+    public R<List<BlockVersionVO>> getBlockHistory(@PathVariable("blockId") String blockId,
+            HttpServletResponse response) {
+        return retired(response, "/knowledge-wiki/page/{pageId}/history");
     }
 
     /**
@@ -562,8 +555,9 @@ public class SpaceController {
      * GET /knowledge-wiki/space/page/version/{versionId}/blocks
      */
     @GetMapping("/page/version/{versionId}/blocks")
-    public R<List<BlockVersionVO>> getBlocksAtPageVersion(@PathVariable("versionId") Long versionId) {
-        return R.data(spaceApplication.getBlocksAtPageVersion(versionId));
+    public R<List<BlockVersionVO>> getBlocksAtPageVersion(@PathVariable("versionId") Long versionId,
+            HttpServletResponse response) {
+        return retired(response, "/knowledge-wiki/page/{pageId}/history/{rev}/doc");
     }
 
     /**
@@ -573,8 +567,8 @@ public class SpaceController {
      */
     @GetMapping("/page/block/versions")
     public R<IPage<BlockVersionVO>> getBlockVersionHistory(
-            QueryBlockVersionDTO dto) {
-        return R.data(spaceApplication.getBlockVersionHistory(dto));
+            QueryBlockVersionDTO dto, HttpServletResponse response) {
+        return retired(response, "/knowledge-wiki/page/{pageId}/history");
     }
 
     // ==================== Page Tags & Featured API ====================
@@ -617,6 +611,13 @@ public class SpaceController {
     @GetMapping("/{spaceId}/tags")
     public R<List<String>> getSpaceTags(@PathVariable("spaceId") Long spaceId) {
         return R.data(spaceApplication.getSpaceTags(spaceId));
+    }
+
+    private <T> R<T> retired(HttpServletResponse response, String replacement) {
+        response.setStatus(HttpServletResponse.SC_GONE);
+        response.setHeader("X-Kotion-Replacement", replacement);
+        return R.fail(WikiException.PAGE_WRITE_API_RETIRED.getCode(),
+                "PAGE_WRITE_API_RETIRED: use " + replacement);
     }
 
 }

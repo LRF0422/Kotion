@@ -92,7 +92,6 @@ export const TeamSpaceHome: React.FC<{ space?: Space; spaceId?: string; onCreate
                 spaceId,
                 parentId: "0",
                 title: "Untitled",
-                content: JSON.stringify({ type: "doc", content: [{ type: "title", content: [{ type: "heading", content: [{ type: "text", text: "Untitled" }] }] }] })
             }).then(res => {
                 const page = res.data
                 if (page?.id) navigator.go({ to: `/space-detail/${spaceId}/page/edit/${page.id}` })

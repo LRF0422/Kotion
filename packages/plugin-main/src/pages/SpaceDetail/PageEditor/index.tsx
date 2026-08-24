@@ -125,6 +125,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
     const [editorContentReady, setEditorContentReady] = useState(false)
     const [versionHistoryOpen, setVersionHistoryOpen] = useState(false)
     const [presentationOpen, setPresentationOpen] = useState(false)
+    const checkpointInFlightRef = useRef(false)
 
     // Generate stable user color based on user ID
     const userColor = useMemo(() => {
@@ -561,7 +562,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         flush: (pid: string, req: ApplyOpsRequest) => keepaliveSend(APIS.PAGE_APPLY_OPS.url, 'POST', pid, req),
     }), [])
 
-    const { saving, dirty, error: saveError, progress: saveProgress, behindServer, session, saveNow } = usePageSave({
+    const pageSave = usePageSave({
         editor: editor.current,
         pageId: pageId || null,
         // NOT gated on `active`: backgrounded tabs must keep auto-saving.
@@ -580,6 +581,10 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         endpoints,
         onSaved: notifySaved,
     })
+    const { saving, dirty, error: saveError, progress: saveProgress, behindServer, session, saveNow } = pageSave
+    const adoptRev = (pageSave as typeof pageSave & {
+        adoptRev: (rev: number | string | null | undefined) => void
+    }).adoptRev
 
     // Declare the host role in awareness. Hocuspocus drops an awareness entry the
     // moment its connection goes, so this is what lets collaborators notice the
@@ -650,7 +655,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
     // as a reconcile forward to a new rev, and the legacy content column is no
     // longer what that write updates. Reading it here would push the pre-rollback
     // content back over the restore.
-    const handleVersionRestored = useCallback(async () => {
+    const handleVersionRestored = useCallback(async (restoredRev?: number | string | null) => {
         if (!pageId) return
         try {
             const [pageRes, docRes] = await Promise.all([
@@ -667,13 +672,14 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                 // into a fresh set of ops and push the page forward again.
                 const opTracker = (ed.storage as any)?.opTracker
                 opTracker?.resetBaseline?.()
+                adoptRev(restoredRev ?? docRes?.data?.rev)
             }
             event.emit(ON_PAGE_REFRESH)
         } catch (err) {
             console.error('Failed to refresh page after restore:', err)
             toast.error(t('editor.version.refreshFailed', 'Restored on server — reload the page to see it'))
         }
-    }, [pageId, spaceService, t])
+    }, [pageId, spaceService, t, adoptRev])
 
     // Markdown import handler
     const handleImportMarkdown = useCallback(() => {
@@ -741,9 +747,36 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         document.body.removeChild(input);
     }, [editor]);
 
+    const createUserCheckpoint = useCallback(async () => {
+        if (props.active === false || !pageId || checkpointInFlightRef.current) return
+        checkpointInFlightRef.current = true
+        try {
+            // A checkpoint must describe everything visible in the editor. Do not
+            // materialize it until the pending op/reconcile write has completed.
+            try {
+                await saveNow()
+            } catch (err) {
+                console.error('Failed to flush page before checkpoint:', err)
+                toast.error(t('editor.version.checkpointSaveFailed', 'Save failed — checkpoint was not created'))
+                return
+            }
+
+            try {
+                await useApi(APIS.PAGE_CREATE_CHECKPOINT, { id: pageId }, { clientId })
+                toast.success(t('editor.version.checkpointSuccess', 'Checkpoint created'))
+            } catch (err) {
+                console.error('Failed to create page checkpoint:', err)
+                toast.error(t('editor.version.checkpointFailed', 'Failed to create checkpoint'))
+            }
+        } finally {
+            checkpointInFlightRef.current = false
+        }
+    }, [props.active, pageId, saveNow, clientId, t])
+
     useKeyPress(["ctrl.s"], (e) => {
         e.preventDefault()
-        saveNow()
+        if (e.repeat || checkpointInFlightRef.current) return
+        void createUserCheckpoint()
     })
 
     // Markdown export: serialize the doc via the built-in tiptap-markdown
@@ -942,7 +975,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                         </DropdownMenuGroup>
                         <DropdownMenuSeparator />
                         <DropdownMenuGroup>
-                            <TemplateCreator mode="page" pageId={pageId!} defaultName={page?.title} className="flex flex-row items-center gap-2 w-full relative select-none rounded-sm px-2 py-1.5 text-sm outline-none cursor-default hover:bg-accent hover:text-accent-foreground">
+                            <TemplateCreator mode="page" pageId={pageId!} defaultName={page?.title} beforeSave={saveNow} className="flex flex-row items-center gap-2 w-full relative select-none rounded-sm px-2 py-1.5 text-sm outline-none cursor-default hover:bg-accent hover:text-accent-foreground">
                                 <BookTemplate className="h-4 w-4" />
                                 <span>{t('editor.saveAsTemplate', 'Save as template')}</span>
                             </TemplateCreator>
@@ -1071,6 +1104,8 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
             open={versionHistoryOpen}
             onOpenChange={setVersionHistoryOpen}
             pageId={pageId}
+            clientId={clientId}
+            saveNow={saveNow}
             onRestored={handleVersionRestored}
         />
         {/* 放映模式：挂载即打开（内部自行请求浏览器全屏），关闭即卸载 */}

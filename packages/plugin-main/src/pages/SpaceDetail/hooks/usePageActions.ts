@@ -38,25 +38,6 @@ export const usePageActions = ({
             spaceId,
             parentId,
             title: 'Untitled',
-            content: JSON.stringify({
-                type: 'doc',
-                content: [
-                    {
-                        type: 'title',
-                        content: [
-                            {
-                                type: 'heading',
-                                content: [
-                                    {
-                                        type: 'text',
-                                        text: 'Untitled',
-                                    },
-                                ],
-                            },
-                        ],
-                    },
-                ],
-            }),
         };
 
         try {

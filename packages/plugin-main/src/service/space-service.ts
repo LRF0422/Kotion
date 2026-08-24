@@ -4,12 +4,19 @@ import { useApi } from "@kn/common"
 import { APIS } from "../api"
 
 
+export interface CreatePageInput {
+    spaceId: string
+    title: string
+    parentId?: string
+    templateId?: string
+}
+
 export interface SpaceService {
     getSpaceInfo: (spaceId: string) => Promise<Space>
     querySpaces: () => Promise<Page<Space>>
     getPageTree: (spaceId: string, searchValue?: string) => Promise<any>
     queryPage: (params: { spaceId?: string, status?: string, searchValue?: string, pageSize?: number }) => Promise<Page<any>>,
-    createPage: (page: any) => Promise<any>,
+    createPage: (page: CreatePageInput) => Promise<any>,
     getPage: (pageId: string) => Promise<any>,
     queryBlocks: (params: {
         pageId?: string
@@ -43,7 +50,7 @@ export const spaceService: SpaceService = {
         })
         return res.data
     },
-    createPage: async (page: any) => {
+    createPage: async (page: CreatePageInput) => {
         const res = await useApi(APIS.CREATE_OR_SAVE_PAGE, null, page)
         return res.data
     },

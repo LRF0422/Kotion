@@ -5,20 +5,26 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BooleanSupplier;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.knowledge.wiki.service.entity.Page;
 import com.knowledge.wiki.service.entity.PageCheckpoint;
 import com.knowledge.wiki.service.entity.PageContent;
 import com.knowledge.wiki.service.entity.PageHead;
 import com.knowledge.wiki.service.entity.WikiBlock;
+import com.knowledge.wiki.service.exception.WikiException;
 import com.knowledge.wiki.service.mapper.BlockBackfillMapper;
 import com.knowledge.wiki.service.mapper.PageHeadMapper;
 import com.knowledge.wiki.service.mapper.WikiBlockMapper;
 import com.knowledge.wiki.service.service.IPageContentService;
+import com.knowledge.wiki.service.service.IPageService;
 
 import cn.hutool.core.collection.CollUtil;
 import lombok.Getter;
@@ -59,6 +65,9 @@ public class BlockBackfillService {
     private IPageContentService pageContentService;
 
     @Autowired
+    private IPageService pageService;
+
+    @Autowired
     private WikiBlockMapper wikiBlockMapper;
 
     @Autowired
@@ -69,6 +78,9 @@ public class BlockBackfillService {
 
     @Autowired
     private PageDocService pageDocService;
+
+    @Autowired
+    private PlatformTransactionManager transactionManager;
 
     /** How one page's migration turned out. */
     @Getter
@@ -177,27 +189,38 @@ public class BlockBackfillService {
     }
 
     /**
-     * Migrate every page that has legacy rows.
+     * Inspect every live page, migrating only pages that have legacy rows and no
+     * authoritative head yet.
      *
      * @param dryRun when true, reassemble and verify but write nothing. The
      *               verification still runs — it just compares the rebuilt
      *               document against what would have been stored, rather than
      *               against what was.
-     * @param force  re-migrate pages that already have a head row, replacing their
-     *               {@code wiki_block} rows
      */
-    public SweepReport backfillAll(boolean dryRun, boolean force) {
-        List<Long> pageIds = blockBackfillMapper.selectLegacyPageIds();
+    public SweepReport backfillAll(boolean dryRun, BooleanSupplier shouldStop) {
+        List<Long> pageIds = blockBackfillMapper.selectPageIds();
         SweepReport report = new SweepReport(dryRun);
-        log.info("block backfill starting: {} page(s), dryRun={} force={}", pageIds.size(), dryRun, force);
+        log.info("block backfill starting: {} page(s), dryRun={}", pageIds.size(), dryRun);
+
+        TransactionTemplate perPage = new TransactionTemplate(transactionManager);
+        perPage.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
 
         for (Long pageId : pageIds) {
+            if (shouldStop != null && shouldStop.getAsBoolean()) {
+                throw new IllegalStateException("block backfill stopped because its deployment lock was lost");
+            }
             PageResult result;
             try {
-                result = backfillPage(pageId, dryRun, force);
+                result = perPage.execute(status -> {
+                    PageResult pageResult = backfillPage(pageId, dryRun);
+                    if (pageResult.getStatus() == PageResult.Status.MISMATCH) {
+                        status.setRollbackOnly();
+                    }
+                    return pageResult;
+                });
             } catch (Exception e) {
-                // One bad page must not stop the sweep; its transaction rolled back,
-                // so it is simply still unmigrated and will be retried next run.
+                // One bad page must not stop the sweep. The explicit per-page
+                // transaction guarantees that a partial page is never committed.
                 log.error("block backfill failed: pageId={}", pageId, e);
                 result = PageResult.failed(pageId, e.getMessage());
             }
@@ -212,18 +235,25 @@ public class BlockBackfillService {
      * Migrate one page: reassemble its legacy tree, store it as blocks, set the
      * head to rev 1, and take an {@code IMPORT} checkpoint so the migrated state
      * is itself a restorable point in history.
+     * <p>
+     * The caller must provide the transaction boundary. This method deliberately
+     * refuses to replace a page that already has a head: live PageOp history must
+     * never be reset from stale legacy rows.
+     * </p>
      */
-    @Transactional(rollbackFor = Exception.class)
-    public PageResult backfillPage(Long pageId, boolean dryRun, boolean force) {
+    PageResult backfillPage(Long pageId, boolean dryRun) {
         if (pageId == null) {
             return PageResult.skipped(null, PageResult.Status.SKIPPED_EMPTY);
         }
-        if (!force && pageHeadMapper.selectById(pageId) != null) {
+        if (pageHeadMapper.selectForUpdate(pageId) != null) {
             return PageResult.skipped(pageId, PageResult.Status.SKIPPED_MIGRATED);
         }
 
         List<PageContent> legacyRows = pageContentService.findByPageId(pageId);
         if (CollUtil.isEmpty(legacyRows)) {
+            if (!dryRun) {
+                initialiseMetadataOnlyPage(pageId);
+            }
             return PageResult.skipped(pageId, PageResult.Status.SKIPPED_EMPTY);
         }
 
@@ -236,6 +266,8 @@ public class BlockBackfillService {
         Map<String, Object> roundTrip = BlockDocCodec.assemble(rows);
         String sourceText = BlockDocCodec.extractText(rebuilt.getDoc());
         String roundTripText = BlockDocCodec.extractText(roundTrip);
+        String expectedStoredHash = BlockDocCodec.hash(roundTrip);
+        String storedHash = expectedStoredHash;
 
         if (!dryRun) {
             write(pageId, rows);
@@ -244,10 +276,14 @@ public class BlockBackfillService {
             Map<String, Object> stored = pageDocService.readDoc(pageId).getDoc();
             roundTrip = stored;
             roundTripText = BlockDocCodec.extractText(stored);
+            storedHash = BlockDocCodec.hash(stored);
         }
 
         int roundTripBlocks = BlockDocCodec.childrenOf(roundTrip).size();
-        boolean matches = rows.size() == roundTripBlocks && sourceText.equals(roundTripText);
+        boolean matches = rows.size() == roundTripBlocks
+                && sourceText.equals(roundTripText)
+                && expectedStoredHash.equals(storedHash)
+                && rebuilt.getWarnings().isEmpty();
 
         return new PageResult(pageId, matches ? PageResult.Status.OK : PageResult.Status.MISMATCH,
                 rebuilt.getLegacyRowCount(), rows.size(), roundTripBlocks, sourceText.length(),
@@ -337,6 +373,59 @@ public class BlockBackfillService {
         // baseline. Without it the earliest state the history could offer would be
         // whatever the first post-migration edit happened to leave behind.
         pageDocService.writeCheckpoint(pageId, INITIAL_REV, null, PageCheckpoint.KIND_IMPORT, "迁移基线");
+    }
+
+    private void initialiseMetadataOnlyPage(Long pageId) {
+        Page page = pageService.getById(pageId);
+        if (page == null) {
+            throw WikiException.PAGE_NOT_FOUND.newException();
+        }
+
+        Map<String, Object> titleAttrs = new LinkedHashMap<>();
+        titleAttrs.put("id", cn.hutool.core.util.IdUtil.fastSimpleUUID());
+        if (page.getIcon() != null) {
+            Map<String, Object> icon = new LinkedHashMap<>();
+            icon.put("icon", page.getIcon().getIcon());
+            icon.put("type", page.getIcon().getType() == com.knowledge.core.common.base.IconType.PICTIRE
+                    ? "IMAGE"
+                    : page.getIcon().getType() == null ? null : page.getIcon().getType().name());
+            titleAttrs.put("icon", icon);
+        }
+        if (page.getTags() != null) {
+            titleAttrs.put("tags", new ArrayList<>(page.getTags()));
+        }
+        Map<String, Object> headingAttrs = new LinkedHashMap<>();
+        String headingId = cn.hutool.core.util.IdUtil.fastSimpleUUID();
+        headingAttrs.put("id", headingId);
+        headingAttrs.put("level", 1);
+        headingAttrs.put("data-toc-id", headingId);
+
+        Map<String, Object> text = new LinkedHashMap<>();
+        text.put("type", "text");
+        text.put("text", cn.hutool.core.util.StrUtil.blankToDefault(page.getTitle(), Page.UNTITLE));
+        Map<String, Object> heading = new LinkedHashMap<>();
+        heading.put("type", "heading");
+        heading.put("attrs", headingAttrs);
+        heading.put("content", java.util.Collections.singletonList(text));
+        Map<String, Object> title = new LinkedHashMap<>();
+        title.put("type", BlockDocCodec.TYPE_TITLE);
+        title.put("attrs", titleAttrs);
+        title.put("content", java.util.Collections.singletonList(heading));
+
+        Map<String, Object> paragraphAttrs = new LinkedHashMap<>();
+        paragraphAttrs.put("id", cn.hutool.core.util.IdUtil.fastSimpleUUID());
+        Map<String, Object> paragraph = new LinkedHashMap<>();
+        paragraph.put("type", "paragraph");
+        paragraph.put("attrs", paragraphAttrs);
+
+        Map<String, Object> doc = new LinkedHashMap<>();
+        doc.put("type", "doc");
+        doc.put("content", java.util.Arrays.asList(title, paragraph));
+
+        List<WikiBlock> rows = toBlockRows(pageId,
+                new LegacyBlockReassembler.Reassembled(doc, new LinkedHashMap<>(), 0, 2,
+                        new ArrayList<>(), new ArrayList<>()));
+        write(pageId, rows);
     }
 
     private void upsertHead(Long pageId) {

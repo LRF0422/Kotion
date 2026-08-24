@@ -3,13 +3,17 @@ package com.knowledge.wiki.service.service.impl;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 import cn.hutool.json.JSONObject;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -17,9 +21,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.knowledge.core.secure.utils.SecurityContextUtil;
 import com.knowledge.core.version.VersionStatus;
 import com.knowledge.core.version.service.AbstractSubjectService;
-import com.knowledge.wiki.service.converter.PageConverter;
+import com.knowledge.wiki.service.doc.BlockDocCodec;
+import com.knowledge.wiki.service.doc.PageDocCommandService;
+import com.knowledge.wiki.service.doc.PageDocService;
+import com.knowledge.wiki.service.doc.WikiLinkProjectionService;
 import com.knowledge.wiki.service.cache.BlockCacheService;
 import com.knowledge.wiki.service.entity.BlockIndex;
 import com.knowledge.wiki.service.entity.Mark;
@@ -30,7 +38,6 @@ import com.knowledge.wiki.service.entity.PageVersion;
 import com.knowledge.wiki.service.entity.WikiLink;
 import com.knowledge.wiki.service.entity.enums.PagePermissionEnum;
 import com.knowledge.wiki.service.entity.dto.UpdateBlockDTO;
-import com.knowledge.wiki.service.entity.dto.BlockPatchItemDTO;
 import com.knowledge.wiki.service.entity.dto.QueryPageDTO;
 import com.knowledge.wiki.service.entity.dto.SaveTemplateDTO;
 import com.knowledge.wiki.service.entity.vo.PageBlockVO;
@@ -83,13 +90,24 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
     private BlockStorageService blockStorageService;
 
     @Autowired
+    @Lazy
+    private PageDocService pageDocService;
+
+    @Autowired
+    @Lazy
+    private PageDocCommandService pageDocCommandService;
+
+    @Autowired
+    @Lazy
+    private WikiLinkProjectionService wikiLinkProjectionService;
+
+    @Autowired
     private IPageSnapshotService pageSnapshotService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Page createPage(Page page, boolean publish) {
-        // Validation
-        if (page.getSpaceId() == null) {
+        if (page == null || page.getSpaceId() == null) {
             throw WikiException.INVALID_PARAMETER.newException();
         }
 
@@ -98,30 +116,175 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
             if (db == null) {
                 throw WikiException.PAGE_NOT_FOUND.newException();
             }
-            PageConverter.INSTANCE.update(page, db);
+            // POST /space/page historically doubled as both create and save. Keep
+            // only the harmless metadata part for old clients: document content,
+            // hierarchy, ownership and lifecycle state are never changed here.
+            applyCompatibleMetadataUpdate(page, db);
             this.updateById(db);
-            // Block storage is the single source of truth (no draft/publish version).
-            if (StrUtil.isNotBlank(db.getContent())) {
-                blockStorageService.flattenAndSave(db.getId(), db.getContent());
+            return db;
+        }
+
+        Map<String, Object> initialDoc = parseInitialDocument(page);
+        page.setContent(null);
+        page.setStatus(PageStatus.ACTIVE);
+        if (page.getParentId() == null) {
+            page.setParentId(Page.TOP_PAGE_ID);
+        }
+        if (!ObjectUtil.equal(page.getParentId(), Page.TOP_PAGE_ID)) {
+            Page parent = this.getById(page.getParentId());
+            if (parent == null || !ObjectUtil.equal(parent.getSpaceId(), page.getSpaceId())) {
+                throw WikiException.PAGE_PARENT_NOT_FOUND.newException();
             }
+            page.setAncestors(appendAncestor(parent));
         } else {
-            page.setStatus(PageStatus.ACTIVE);
-            if (!ObjectUtil.equal(page.getParentId(), Page.TOP_PAGE_ID)) {
-                Page parent = this.getById(page.getParentId());
-                if (parent == null) {
-                    throw WikiException.PAGE_PARENT_NOT_FOUND.newException();
-                }
-                page.setAncestors(parent.getAncestors() + "," + parent.getId());
+            page.setAncestors("");
+        }
+
+        // The page row and its authoritative PageDoc baseline participate in this
+        // same transaction. A failed document initialisation rolls the metadata row
+        // back as well, so a page can never be created half-initialised.
+        this.save(page);
+        pageDocCommandService.initializePage(page.getId(), initialDoc,
+                SecurityContextUtil.getUserId(), "页面创建");
+
+        // `publish` remains an interface compatibility no-op; PageDoc has one
+        // current state rather than legacy draft/publish content.
+        return page;
+    }
+
+    private void applyCompatibleMetadataUpdate(Page request, Page target) {
+        // Title, icon and tags are PageDoc title-node projections. Updating them
+        // independently here would reintroduce split authority, so the compatibility
+        // endpoint is limited to metadata that does not live in the document.
+        if (request.getDescription() != null) {
+            target.setDescription(request.getDescription());
+        }
+        if (request.getCover() != null) {
+            target.setCover(request.getCover());
+        }
+        if (request.getPinned() != null) {
+            target.setPinned(request.getPinned());
+        }
+    }
+
+    private Map<String, Object> parseInitialDocument(Page page) {
+        Map<String, Object> doc;
+        if (StrUtil.isBlank(page.getContent())) {
+            doc = canonicalDocument(page);
+        } else {
+            doc = BlockDocCodec.readJson(page.getContent());
+            if (doc == null || !"doc".equals(doc.get("type"))) {
+                throw WikiException.CONTENT_PARSE_ERROR.newException("页面内容不是有效的 ProseMirror 文档");
             }
-            this.save(page);
-            // Block storage is the single source of truth (no draft/publish version).
-            if (StrUtil.isNotBlank(page.getContent())) {
-                blockStorageService.flattenAndSave(page.getId(), page.getContent());
+            ensureCanonicalTitle(doc, page);
+            ensureBodyBlock(doc);
+        }
+        return doc;
+    }
+
+    private Map<String, Object> canonicalDocument(Page page) {
+        Map<String, Object> doc = new LinkedHashMap<>();
+        List<Map<String, Object>> content = new ArrayList<>();
+        content.add(canonicalTitle(page));
+        content.add(emptyParagraph());
+        doc.put("type", "doc");
+        doc.put("content", content);
+        return doc;
+    }
+
+    private void ensureCanonicalTitle(Map<String, Object> doc, Page page) {
+        List<Map<String, Object>> content = mutableContent(doc);
+        boolean hasTitle = content.stream().anyMatch(node -> BlockDocCodec.TYPE_TITLE.equals(node.get("type")));
+        if (!hasTitle) {
+            content.add(0, canonicalTitle(page));
+        }
+        doc.put("content", content);
+    }
+
+    private void ensureBodyBlock(Map<String, Object> doc) {
+        List<Map<String, Object>> content = mutableContent(doc);
+        boolean hasBody = content.stream().anyMatch(node -> !BlockDocCodec.TYPE_TITLE.equals(node.get("type")));
+        if (!hasBody) {
+            content.add(emptyParagraph());
+        }
+        doc.put("content", content);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> mutableContent(Map<String, Object> doc) {
+        Object raw = doc.get("content");
+        List<Map<String, Object>> result = new ArrayList<>();
+        if (raw instanceof List) {
+            for (Object item : (List<Object>) raw) {
+                if (item instanceof Map) {
+                    result.add((Map<String, Object>) item);
+                }
             }
         }
-        // The `publish` flag is retained for interface compatibility but is now a
-        // no-op: draft/publish versioning has been removed; saving is the only state.
-        return page;
+        return result;
+    }
+
+    private Map<String, Object> canonicalTitle(Page page) {
+        String headingId = freshBlockId();
+        Map<String, Object> headingAttrs = new LinkedHashMap<>();
+        headingAttrs.put("id", headingId);
+        headingAttrs.put("level", 1);
+        headingAttrs.put("textAlign", null);
+        headingAttrs.put("data-toc-id", headingId);
+
+        Map<String, Object> heading = node("heading", headingAttrs);
+        String title = StrUtil.blankToDefault(page.getTitle(), Page.UNTITLE);
+        if (StrUtil.isNotBlank(title)) {
+            Map<String, Object> text = new LinkedHashMap<>();
+            text.put("type", "text");
+            text.put("text", title);
+            heading.put("content", new ArrayList<>(Arrays.asList(text)));
+        }
+
+        Map<String, Object> titleAttrs = new LinkedHashMap<>();
+        titleAttrs.put("id", freshBlockId());
+        titleAttrs.put("uuid", null);
+        if (page.getIcon() != null) {
+            Map<String, Object> icon = new LinkedHashMap<>();
+            icon.put("icon", page.getIcon().getIcon());
+            if (page.getIcon().getType() != null) {
+                icon.put("type", page.getIcon().getType() == com.knowledge.core.common.base.IconType.PICTIRE
+                        ? "IMAGE"
+                        : page.getIcon().getType().name());
+            }
+            titleAttrs.put("icon", icon);
+        }
+        if (page.getTags() != null) {
+            titleAttrs.put("tags", new ArrayList<>(page.getTags()));
+        }
+        Map<String, Object> titleNode = node(BlockDocCodec.TYPE_TITLE, titleAttrs);
+        titleNode.put("content", new ArrayList<>(Arrays.asList(heading)));
+        return titleNode;
+    }
+
+    private Map<String, Object> emptyParagraph() {
+        Map<String, Object> attrs = new LinkedHashMap<>();
+        attrs.put("id", freshBlockId());
+        attrs.put("indent", 0);
+        attrs.put("textAlign", null);
+        return node("paragraph", attrs);
+    }
+
+    private Map<String, Object> node(String type, Map<String, Object> attrs) {
+        Map<String, Object> node = new LinkedHashMap<>();
+        node.put("type", type);
+        node.put("attrs", attrs);
+        return node;
+    }
+
+    private String appendAncestor(Page parent) {
+        return StrUtil.isBlank(parent.getAncestors())
+                ? String.valueOf(parent.getId())
+                : parent.getAncestors() + "," + parent.getId();
+    }
+
+    private String freshBlockId() {
+        return cn.hutool.core.util.IdUtil.fastSimpleUUID();
     }
 
     @Override
@@ -152,72 +315,75 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
     @Override
     public Page getPageContent(Long pageId) {
         Page subject = this.getById(pageId);
+        if (subject == null) {
+            return null;
+        }
 
-        // Block storage is the single source of truth. Assemble from block
-        // rows; if no blocks exist for this page, return an empty doc rather
-        // than fall back to the legacy PageVersion JSON.
-        String assembledJson = blockStorageService.assembleTreeJson(pageId);
-
-        Page page = new Page();
-        page.setId(subject.getId());
-        page.setTitle(subject.getTitle());
-        page.setSpaceId(subject.getSpaceId());
-        page.setParentId(subject.getParentId());
-        page.setStatus(subject.getStatus());
-        page.setCreateTime(subject.getCreateTime());
-        page.setUpdateTime(subject.getUpdateTime());
-        page.setContent(StrUtil.isNotBlank(assembledJson) ? assembledJson : "");
+        Page page = BeanUtil.copyProperties(subject, Page.class);
+        if (pageDocService.isInitialized(pageId)) {
+            page.setContent(BlockDocCodec.writeJson(pageDocService.readDoc(pageId).getDoc()));
+        } else {
+            // Read-only rollout bridge. Legacy writes are retired, but an existing
+            // page must remain visible until the mandatory backfill establishes its
+            // PageDoc head; otherwise the editor could persist a false blank page.
+            page.setContent(StrUtil.nullToEmpty(blockStorageService.assembleTreeJson(pageId)));
+        }
         return page;
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void saveAsTemplate(Long pageId, SaveTemplateDTO dto) {
-        // The audit fields are ignored on purpose: they are FieldFill.INSERT, and
-        // MyBatis-Plus only fills a field that is null, so carrying the source
-        // page's values over would date the template to when that page was first
-        // written rather than to when it was saved as a template.
-        Page template = copyPage(pageId, "id", "parentId", "spaceId", "ancestors",
+        Page source = this.getById(pageId);
+        if (source == null) {
+            throw WikiException.PAGE_NOT_FOUND.newException();
+        }
+        // Audit fields are intentionally cleared so the template records when it
+        // was created rather than inheriting the source page's timestamps.
+        Page template = BeanUtil.copyProperties(source, Page.class,
+                "id", "parentId", "ancestors",
                 "createTime", "createUser", "updateTime", "updateUser");
-        com.baomidou.mybatisplus.extension.conditions.update.LambdaUpdateChainWrapper<Page> update = this.lambdaUpdate()
-                .eq(Page::getId, template.getId())
-                .set(Page::getIsTemplate, true);
-        // Apply metadata from the save dialog so the template carries the
-        // user-supplied name / description / cover instead of just the copied
-        // page values. All fields are optional.
+        template.setId(null);
+        template.setParentId(Page.TOP_PAGE_ID);
+        template.setAncestors("");
+        template.setContent(null);
+        template.setIsTemplate(true);
         if (dto != null) {
             if (StrUtil.isNotBlank(dto.getName())) {
-                update.set(Page::getTitle, dto.getName());
+                template.setTitle(dto.getName());
             }
             if (dto.getDescription() != null) {
-                update.set(Page::getDescription, dto.getDescription());
+                template.setDescription(dto.getDescription());
             }
             if (CollUtil.isNotEmpty(dto.getCover())) {
-                update.set(Page::getCover, dto.getCover().get(0));
+                template.setCover(dto.getCover().get(0));
             }
         }
-        update.update();
+        this.save(template);
+
+        Map<String, Object> copiedDoc = copyDocumentWithFreshIds(pageDocService.readDoc(pageId).getDoc(), template);
+        replaceDocumentTitle(copiedDoc, template);
+        pageDocCommandService.initializePage(template.getId(), copiedDoc,
+                SecurityContextUtil.getUserId(), "保存为模板");
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public Page copyPage(Long pageId, String... ignore) {
-        Page page = this.getById(pageId);
-        Page template = BeanUtil.copyProperties(page, Page.class, ignore);
-        template.setId(null);
-        this.save(template);
-        // Content is assembled from the source page's blocks and persisted as the
-        // copy's own block rows (the single source of truth).
-        // Block ids MUST be regenerated: a block row is owned by exactly one page
-        // (its id is the primary key), so reusing the source page's ids would
-        // collide with the source's rows and the write is refused — leaving the
-        // copy with a title but no content.
-        String content = blockStorageService.assembleTreeJson(pageId);
-        if (StrUtil.isNotBlank(content)) {
-            content = blockStorageService.regenerateBlockIds(content);
-            blockStorageService.flattenAndSave(template.getId(), content);
+        Page source = this.getById(pageId);
+        if (source == null) {
+            throw WikiException.PAGE_NOT_FOUND.newException();
         }
-        template.setContent(content);
-        return template;
+        Page target = BeanUtil.copyProperties(source, Page.class, ignore);
+        target.setId(null);
+        target.setContent(null);
+        this.save(target);
+
+        Map<String, Object> copiedDoc = copyDocumentWithFreshIds(pageDocService.readDoc(pageId).getDoc(), target);
+        pageDocCommandService.initializePage(target.getId(), copiedDoc,
+                SecurityContextUtil.getUserId(), "页面复制");
+        target.setContent(BlockDocCodec.writeJson(copiedDoc));
+        return target;
     }
 
     @Override
@@ -237,15 +403,131 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
         page.setSpaceId(spaceId);
         page.setParentId(parentId == null ? Page.TOP_PAGE_ID : parentId);
         page.setIsTemplate(false);
-        // The template's blocks are its content. Ids are regenerated so they do
-        // not collide with the template's own rows (see copyPage).
-        String content = blockStorageService.assembleTreeJson(templateId);
-        if (StrUtil.isNotBlank(content)) {
-            page.setContent(blockStorageService.regenerateBlockIds(content));
-        }
-        // createPage() takes the "new page" branch (id == null): it validates the
-        // parent, derives `ancestors` and persists the blocks in one pass.
+        Map<String, Object> copiedDoc = copyDocumentWithFreshIds(pageDocService.readDoc(templateId).getDoc(), page);
+        replaceDocumentTitle(copiedDoc, page);
+        page.setContent(BlockDocCodec.writeJson(copiedDoc));
+        // createPage() validates the target parent and atomically persists both the
+        // target metadata and this fresh PageDoc baseline.
         return createPage(page, true);
+    }
+
+    private Map<String, Object> copyDocumentWithFreshIds(Map<String, Object> sourceDoc, Page target) {
+        Map<String, Object> copy = sourceDoc == null
+                ? canonicalDocument(target)
+                : BlockDocCodec.readJson(BlockDocCodec.writeJson(sourceDoc));
+        if (copy == null || !"doc".equals(copy.get("type"))) {
+            throw WikiException.CONTENT_PARSE_ERROR.newException("源页面文档损坏");
+        }
+        ensureCanonicalTitle(copy, target);
+        ensureBodyBlock(copy);
+        Map<String, String> referenceMap = new LinkedHashMap<>();
+        Map<Map<String, Object>, String> nodeIds = new IdentityHashMap<>();
+        for (Map<String, Object> child : mutableContent(copy)) {
+            collectFreshIds(child, referenceMap, nodeIds);
+        }
+        for (Map<String, Object> child : mutableContent(copy)) {
+            applyFreshIds(child, referenceMap, nodeIds);
+        }
+        return copy;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void collectFreshIds(Map<String, Object> node, Map<String, String> referenceMap,
+            Map<Map<String, Object>, String> nodeIds) {
+        if (node == null || "text".equals(node.get("type"))) {
+            return;
+        }
+        String freshId = freshBlockId();
+        nodeIds.put(node, freshId);
+        Object rawAttrs = node.get("attrs");
+        if (rawAttrs instanceof Map) {
+            Object oldId = ((Map<String, Object>) rawAttrs).get("id");
+            if (oldId instanceof String && StrUtil.isNotBlank((String) oldId)) {
+                // References to a duplicate source id resolve to its first occurrence,
+                // while every copied node still receives its own unique identity.
+                referenceMap.putIfAbsent((String) oldId, freshId);
+            }
+        }
+        for (Map<String, Object> child : BlockDocCodec.childrenOf(node)) {
+            collectFreshIds(child, referenceMap, nodeIds);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void applyFreshIds(Map<String, Object> node, Map<String, String> referenceMap,
+            Map<Map<String, Object>, String> nodeIds) {
+        if (node == null || "text".equals(node.get("type"))) {
+            return;
+        }
+        Map<String, Object> attrs;
+        Object rawAttrs = node.get("attrs");
+        if (rawAttrs instanceof Map) {
+            attrs = (Map<String, Object>) rawAttrs;
+        } else {
+            attrs = new LinkedHashMap<>();
+            node.put("attrs", attrs);
+        }
+
+        String newId = nodeIds.get(node);
+        if (newId == null) {
+            newId = freshBlockId();
+        }
+        node.remove("id");
+        attrs.put("id", newId);
+        rewriteBlockReference(attrs, "data-toc-id", referenceMap, newId);
+        rewriteBlockReference(attrs, "blockId", referenceMap, null);
+        rewriteBlockReference(attrs, "targetBlockId", referenceMap, null);
+        rewriteBlockReference(attrs, "sourceBlockId", referenceMap, null);
+
+        for (Map<String, Object> child : BlockDocCodec.childrenOf(node)) {
+            applyFreshIds(child, referenceMap, nodeIds);
+        }
+    }
+
+    private void rewriteBlockReference(Map<String, Object> attrs, String key, Map<String, String> idMap,
+            String ownId) {
+        if (!attrs.containsKey(key)) {
+            return;
+        }
+        Object oldValue = attrs.get(key);
+        String replacement = oldValue instanceof String ? idMap.get(oldValue) : null;
+        if (replacement != null) {
+            attrs.put(key, replacement);
+        } else if (ownId != null) {
+            attrs.put(key, ownId);
+        }
+    }
+
+    private void replaceDocumentTitle(Map<String, Object> doc, Page page) {
+        ensureCanonicalTitle(doc, page);
+        String titleText = StrUtil.blankToDefault(page.getTitle(), Page.UNTITLE);
+        for (Map<String, Object> node : mutableContent(doc)) {
+            if (!BlockDocCodec.TYPE_TITLE.equals(node.get("type"))) {
+                continue;
+            }
+            List<Map<String, Object>> titleChildren = BlockDocCodec.childrenOf(node);
+            Map<String, Object> heading;
+            if (titleChildren.isEmpty() || !"heading".equals(titleChildren.get(0).get("type"))) {
+                String headingId = freshBlockId();
+                Map<String, Object> attrs = new LinkedHashMap<>();
+                attrs.put("id", headingId);
+                attrs.put("level", 1);
+                attrs.put("data-toc-id", headingId);
+                heading = node("heading", attrs);
+                node.put("content", new ArrayList<>(Arrays.asList(heading)));
+            } else {
+                heading = titleChildren.get(0);
+            }
+            List<Map<String, Object>> textContent = new ArrayList<>();
+            if (StrUtil.isNotBlank(titleText)) {
+                Map<String, Object> text = new LinkedHashMap<>();
+                text.put("type", "text");
+                text.put("text", titleText);
+                textContent.add(text);
+            }
+            heading.put("content", textContent);
+            return;
+        }
     }
 
     @Override
@@ -444,28 +726,31 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void copySpacePage(Long spaceId, Long targetSpaceId) {
         List<Page> pages = getBySpaceId(spaceId);
-        pages.forEach(page -> {
-            Page newPage = BeanUtil.copyProperties(page, Page.class, "id");
-            newPage.setSpaceId(targetSpaceId);
-            createPage(page, true);
-            copyChildren(page, newPage);
-        });
+        Set<Long> sourceIds = pages.stream().map(Page::getId).collect(Collectors.toSet());
+        pages.stream()
+                .filter(page -> ObjectUtil.equal(page.getParentId(), Page.TOP_PAGE_ID)
+                        || !sourceIds.contains(page.getParentId()))
+                .forEach(page -> copySpaceBranch(page, targetSpaceId, Page.TOP_PAGE_ID));
     }
 
-    private void copyChildren(Page parent, Page newParent) {
-        List<Page> children = getChildren(parent.getId());
-        if (CollUtil.isNotEmpty(children)) {
-            children.forEach(it -> {
-                Page newChildren = BeanUtil.copyProperties(it, Page.class, "id");
-                newChildren.setParentId(newParent.getId());
-                newChildren.setAncestors(newParent.getAncestors() + "," + newParent.getAncestors());
-                newChildren.setSpaceId(newParent.getSpaceId());
-                createPage(newChildren, true);
-                copyChildren(it, newParent);
-            });
+    private Page copySpaceBranch(Page source, Long targetSpaceId, Long targetParentId) {
+        Page target = BeanUtil.copyProperties(source, Page.class,
+                "id", "spaceId", "parentId", "ancestors",
+                "createTime", "createUser", "createDept", "updateTime", "updateUser");
+        target.setSpaceId(targetSpaceId);
+        target.setParentId(targetParentId);
+        Map<String, Object> copiedDoc = copyDocumentWithFreshIds(pageDocService.readDoc(source.getId()).getDoc(), target);
+        replaceDocumentTitle(copiedDoc, target);
+        target.setContent(BlockDocCodec.writeJson(copiedDoc));
+        Page created = createPage(target, true);
+
+        for (Page child : getChildren(source.getId())) {
+            copySpaceBranch(child, targetSpaceId, created.getId());
         }
+        return created;
     }
 
     private List<Page> getChildren(Long parentId) {
@@ -506,20 +791,13 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
 
     @Override
     public void refreshBlock(List<Long> versionIds) {
-        List<PageVersion> pageVersions = pageVersionService.listByIds(versionIds);
-        pageVersions.stream().forEach(pageVersion -> {
-            // Get content from block storage
-            String contentJson = blockStorageService.assembleTreeJson(pageVersion.getSubjectId());
-            if (StrUtil.isNotBlank(contentJson)) {
-                PageContent content = JSONUtil.toBean(contentJson, PageContent.class);
-                if (content != null) {
-                    blockStorageService.flattenAndSave(pageVersion.getSubjectId(), content);
-                }
-            }
-
-            // Refresh link index for this page
-            syncPageLinks(pageVersion.getSubjectId());
-        });
+        // Compatibility event only: old versions are no longer content sources.
+        // Rebuild disposable projections from each page's authoritative PageDoc.
+        pageVersionService.listByIds(versionIds).stream()
+                .map(PageVersion::getSubjectId)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .forEach(this::syncPageLinks);
     }
 
     /**
@@ -535,15 +813,9 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
             return;
         }
         try {
-            List<WikiLink> links = extractLinks(pageId);
-            this.wikiLinkService.remove(
-                    this.wikiLinkService.lambdaQuery()
-                            .eq(WikiLink::getSourceType, LINK_TYPE_PAGE)
-                            .eq(WikiLink::getSourcePageId, pageId)
-                            .getWrapper());
-            if (CollUtil.isNotEmpty(links)) {
-                this.wikiLinkService.saveBatch(links);
-            }
+            // Compatibility callers must not rebuild wiki_link from stale
+            // wiki_page_block rows. The projector always reads wiki_block.node.
+            wikiLinkProjectionService.syncPage(pageId);
         } catch (Exception e) {
             log.warn("Failed to sync wiki links for pageId={}", pageId, e);
         }
@@ -614,47 +886,8 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
      * @param updateDto 更新信息
      * @return 是否更新成功
      */
-    @Transactional(rollbackFor = Exception.class)
     public boolean updateBlock(UpdateBlockDTO updateDto) {
-        if (updateDto == null || StrUtil.isBlank(updateDto.getBlockId())) {
-            throw WikiException.INVALID_PARAMETER.newException("更新参数不能为空");
-        }
-
-        String blockId = updateDto.getBlockId();
-        Long pageId = updateDto.getPageId();
-
-        // 验证页面存在性
-        Page page = this.getById(pageId);
-        if (page == null) {
-            throw WikiException.PAGE_NOT_FOUND.newException("指定页面不存在");
-        }
-
-        PageContent blockRow = pageContentService.lambdaQuery()
-                .eq(PageContent::getId, blockId)
-                .eq(PageContent::getPageId, pageId)
-                .one();
-
-        if (blockRow == null) {
-            throw WikiException.BLOCK_NOT_FOUND.newException("未找到指定的块");
-        }
-
-        if (updateDto.getContent() != null) {
-            blockRow.setAttrs(updateDto.getContent());
-        }
-        if (StrUtil.isNotBlank(updateDto.getText())) {
-            blockRow.setText(updateDto.getText());
-        }
-        if (StrUtil.isNotBlank(updateDto.getType())) {
-            blockRow.setType(updateDto.getType());
-        }
-        blockStorageService.upsertBlock(blockRow);
-
-        // Clear caches
-        blockCacheService.evictBlockCache(blockId);
-        blockCacheService.evictAssembledTree(pageId);
-        blockCacheService.evictPageCache(pageId);
-
-        return true;
+        throw WikiException.PAGE_WRITE_API_RETIRED.newException("请使用 PageDoc ops/reconcile 写入页面");
     }
 
     /**
@@ -675,50 +908,9 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
     // ==================== Block-first storage API ====================
 
     @Override
-    public BlockStorageService.PatchResult patchBlocks(Long pageId, java.util.List<BlockPatchItemDTO> changes,
-            java.util.List<String> blockOrder) {
-        return patchBlocks(pageId, changes, blockOrder, false);
-    }
-
-    @Override
-    public BlockStorageService.PatchResult patchBlocks(Long pageId, java.util.List<BlockPatchItemDTO> changes,
-            java.util.List<String> blockOrder, boolean checkpoint) {
-        if (pageId == null) {
-            throw WikiException.INVALID_PARAMETER.newException("页面ID不能为空");
-        }
-
-        Page page = this.getById(pageId);
-        if (page == null) {
-            throw WikiException.PAGE_NOT_FOUND.newException();
-        }
-
-        // Apply the incremental patch (transactional internally).
-        BlockStorageService.PatchResult result = blockStorageService.patchBlocks(pageId, changes, blockOrder,
-                checkpoint);
-        // Keep the backlink index in step with every incremental save.
-        syncPageLinks(pageId);
-        return result;
-    }
-
-    @Override
-    public BlockStorageService.PatchResult bulkReplaceBlocks(Long pageId, java.util.List<BlockPatchItemDTO> changes) {
-        if (pageId == null) {
-            throw WikiException.INVALID_PARAMETER.newException("页面ID不能为空");
-        }
-        Page page = this.getById(pageId);
-        if (page == null) {
-            throw WikiException.PAGE_NOT_FOUND.newException();
-        }
-        // Bulk replace path (chunked independent transactions, one PageVersion).
-        BlockStorageService.PatchResult result = blockStorageService.bulkReplaceBlocks(pageId, changes);
-        // Keep the backlink index in step with bulk imports/replaces.
-        syncPageLinks(pageId);
-        return result;
-    }
-
-    @Override
     public String getPageContentFromBlocks(Long pageId) {
-        return blockStorageService.assembleTreeJson(pageId);
+        // Compatibility name retained for callers; PageDoc is the only authority.
+        return BlockDocCodec.writeJson(pageDocService.readDoc(pageId).getDoc());
     }
 
     @Override

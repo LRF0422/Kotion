@@ -132,6 +132,8 @@ export interface UseOpSaveReturn {
   /** A catch-up fetch is in flight. */
   catchingUp: boolean
   saveNow: () => Promise<void>
+  /** Adopt a server command's acknowledged rev after reloading its document. */
+  adoptRev: (rev: number | string | null | undefined) => void
   /**
    * Send whatever is still owed, right now, synchronously enough to survive the
    * editor going away. Returns the write in flight, or null when nothing was
@@ -182,6 +184,11 @@ function chunk<T>(arr: T[], size: number): T[][] {
  * mint a new idempotency key each time, and a batch whose response was lost
  * would then be applied twice.
  */
+type ManualSaveWaiter = {
+  resolve: () => void
+  reject: (error: Error) => void
+}
+
 type PendingWrite =
   | {
       kind: 'ops'
@@ -243,6 +250,9 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
   const revRef = useRef<number | null>(null)
   const serverRevRef = useRef<number | null>(serverRev)
   const doSaveRef = useRef<() => Promise<void>>()
+  // Explicit saves (Ctrl+S / restore preflight) must wait for any in-flight save
+  // and learn whether it failed. Automatic saves still keep their retry behavior.
+  const manualSaveWaitersRef = useRef<ManualSaveWaiter[]>([])
   const catchingUpRef = useRef(false)
   const catchUpRef = useRef<() => Promise<void>>()
   const catchUpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -380,14 +390,25 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
   }, [editor, enabled, noteRev])
   catchUpRef.current = catchUp
 
+  const settleManualSaveWaiters = useCallback((failure?: Error) => {
+    const waiters = manualSaveWaitersRef.current.splice(0)
+    waiters.forEach(waiter => failure ? waiter.reject(failure) : waiter.resolve())
+  }, [])
+
   const doSave = useCallback(async () => {
-    if (!enabled) return
+    if (!enabled) {
+      settleManualSaveWaiters(new Error('This client is not the page save host'))
+      return
+    }
     if (savingRef.current) {
       queuedRef.current = true
       return
     }
     const tracker = getTracker(editor)
-    if (!tracker) return
+    if (!tracker) {
+      settleManualSaveWaiters(new Error('The page save tracker is not ready'))
+      return
+    }
 
     if (serverRevRef.current != null && revRef.current != null
       && serverRevRef.current > revRef.current) {
@@ -398,6 +419,7 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
         `[useOpSave] server is at rev ${serverRevRef.current}, this client at ${revRef.current}; write suspended`,
       )
       setBehindServer(true)
+      settleManualSaveWaiters(new Error('The page is catching up with a newer server revision'))
       return
     }
 
@@ -413,6 +435,7 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
           // reading it as work to do made an untouched page write itself back,
           // whole document and all. It answers *how* to write, not *whether* to.
           setDirty(false)
+          settleManualSaveWaiters()
           return
         }
         const snapshot = tracker.getReconcile()
@@ -425,9 +448,14 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
         const batch = tracker.getBatch()
         if (!batch) {
           // `getBatch` may itself have decided a reconcile is needed (duplicate
-          // top-level ids); leave `dirty` alone in that case so the next tick
-          // picks the reconcile up.
-          if (!tracker.needsReconcile) setDirty(false)
+          // top-level ids). An explicit save cannot wait for another editor tick,
+          // so immediately take the reconcile path before resolving its waiter.
+          if (tracker.needsReconcile) {
+            await doSaveRef.current?.()
+          } else {
+            setDirty(false)
+            settleManualSaveWaiters()
+          }
           return
         }
         const groups = batch.ops.length > batchThreshold
@@ -453,6 +481,8 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
     setError(null)
 
     let failed = false
+    let failure: Error | null = null
+    let missedServerRevision = false
     try {
       if (pending.kind === 'reconcile') {
         const result = await onReconcileRef.current(pending.request)
@@ -462,8 +492,22 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
         const total = pending.requests.length
         if (total > 1) setProgress({ done: pending.cursor, total })
         while (pending.cursor < total) {
-          const result = await onApplyOpsRef.current(pending.requests[pending.cursor])
-          noteRev(result?.rev)
+          const request = pending.requests[pending.cursor]
+          const result = await onApplyOpsRef.current(request)
+          const acknowledgedRev = toRev(result?.rev)
+          const expectedOwnRev = request.baseRev == null ? null : request.baseRev + pending.cursor + 1
+          if (expectedOwnRev != null && acknowledgedRev != null && acknowledgedRev > expectedOwnRev) {
+            // Another writer committed revisions before this batch. Even when our
+            // block-level op was accepted, the local Y.Doc has not necessarily seen
+            // those other blocks. Keep our pre-write rev so heartbeat catch-up cannot
+            // be masked by this acknowledgement.
+            missedServerRevision = true
+            console.info(
+              `[useOpSave] write acknowledged at rev ${acknowledgedRev} from base ${request.baseRev}; scheduling catch-up`,
+            )
+          } else {
+            noteRev(result?.rev)
+          }
           pending.cursor += 1
           if (total > 1) setProgress({ done: pending.cursor, total })
         }
@@ -475,6 +519,7 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
     } catch (err) {
       failed = true
       const e = err instanceof Error ? err : new Error(String(err))
+      failure = e
       if ((err as any)?.staleOps) {
         // The server marked part of this batch stale: the baseline the batch was
         // derived from no longer describes the database. Resending it — which is
@@ -492,7 +537,12 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
       setProgress(null)
       savingRef.current = false
       setSaving(false)
+      if (!failed && missedServerRevision) {
+        setBehindServer(true)
+        window.setTimeout(() => { void catchUpRef.current?.() }, 0)
+      }
       if (failed) {
+        settleManualSaveWaiters(failure ?? new Error('Page save failed'))
         if (retryCountRef.current < RETRY_DELAYS_MS.length) {
           if (retryTimerRef.current == null) {
             const delay = RETRY_DELAYS_MS[retryCountRef.current++]
@@ -516,13 +566,22 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
           tracker.requireReconcile()
           setDirty(true)
         }
-      } else if (queuedRef.current) {
+      } else if (queuedRef.current || tracker.hasDirty()) {
+        // Edits can arrive while the request is in flight without passing through
+        // doSave(), so queuedRef alone is not sufficient. A manual waiter resolves
+        // only once everything currently visible has reached the server.
         queuedRef.current = false
-        if (tracker.hasDirty()) void doSaveRef.current?.()
+        void doSaveRef.current?.()
+      } else {
+        settleManualSaveWaiters()
       }
     }
-  }, [editor, enabled, clientId, batchThreshold, batchSize, noteRev])
+  }, [editor, enabled, clientId, batchThreshold, batchSize, noteRev, settleManualSaveWaiters])
   doSaveRef.current = doSave
+
+  useEffect(() => () => {
+    settleManualSaveWaiters(new Error('The page editor closed before the save completed'))
+  }, [settleManualSaveWaiters])
 
   // Catch up whenever the watermark says the page moved on without us.
   //
@@ -652,7 +711,10 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
       // response was lost, the server replays the stored outcome.
       inFlight = stashed.kind === 'reconcile'
         ? onReconcileRef.current(stashed.request).catch(() => {})
-        : Promise.all(stashed.requests.slice(stashed.cursor).map(send))
+        : stashed.requests.slice(stashed.cursor).reduce<Promise<unknown>>(
+          (previous, request) => previous.then(() => send(request)),
+          Promise.resolve(),
+        )
     } else if (decision === 'reconcile') {
       inFlight = reconcile()
     } else if (decision === 'ops') {
@@ -700,8 +762,14 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
   const saveNow = useCallback(async () => {
     const tracker = getTracker(editor)
     tracker?.cancelIdle()
-    await doSave()
+    await new Promise<void>((resolve, reject) => {
+      manualSaveWaitersRef.current.push({ resolve, reject })
+      void doSave()
+    })
   }, [editor, doSave])
 
-  return { saving, dirty, error, progress, rev, behindServer, catchingUp, saveNow, flushNow: flushExit }
+  return {
+    saving, dirty, error, progress, rev, behindServer, catchingUp,
+    saveNow, adoptRev: noteRev, flushNow: flushExit,
+  }
 }

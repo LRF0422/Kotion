@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -12,6 +13,7 @@ import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -59,8 +61,8 @@ import com.knowledge.wiki.service.entity.enums.InvitationStatus;
 import com.knowledge.wiki.service.entity.enums.PageStatus;
 import com.knowledge.wiki.service.entity.vo.InvitedPageVO;
 import com.knowledge.wiki.service.entity.vo.PageBlockVO;
-import com.knowledge.wiki.service.entity.vo.PageContentVO;
 import com.knowledge.wiki.service.entity.vo.PageVO;
+import com.knowledge.wiki.service.entity.vo.WikiBlockVO;
 import com.knowledge.wiki.service.entity.vo.PendingInvitationVO;
 import com.knowledge.wiki.service.entity.vo.SharedPageVO;
 import com.knowledge.wiki.service.entity.vo.SpaceVO;
@@ -71,7 +73,6 @@ import com.knowledge.wiki.service.entity.vo.SpaceGraphVO;
 import com.knowledge.wiki.service.exception.WikiException;
 import com.knowledge.wiki.service.entity.enums.CollaboratorRole;
 import com.knowledge.wiki.service.entity.PageCollaborator;
-import com.knowledge.wiki.service.entity.PageContent;
 import com.knowledge.wiki.service.entity.ShareLink;
 import com.knowledge.wiki.service.entity.SpacePermission;
 import com.knowledge.wiki.service.entity.WikiLink;
@@ -86,8 +87,10 @@ import com.knowledge.wiki.service.service.IShareLinkService;
 import com.knowledge.wiki.service.service.ISpaceService;
 import com.knowledge.wiki.service.service.IWikiLinkService;
 import com.knowledge.wiki.service.service.IBlockVersionService;
-import com.knowledge.wiki.service.service.IPageContentService;
 import com.knowledge.wiki.service.service.IPermissionService;
+import com.knowledge.wiki.service.doc.PageDocService;
+import com.knowledge.wiki.service.doc.WikiBlockReadService;
+import com.knowledge.wiki.service.doc.WikiLinkProjectionService;
 import com.knowledge.wiki.service.service.ISpaceMemberService;
 import com.knowledge.system.vo.UserVO;
 
@@ -136,12 +139,18 @@ public class SpaceApplication {
     @Autowired
     private ICollaborationInvitationService collaborationInvitationService;
     @Autowired
-    private IPageContentService pageContentService;
+    private WikiBlockReadService wikiBlockReadService;
+    @Autowired
+    private PageDocService pageDocService;
+    @Autowired
+    private WikiLinkProjectionService wikiLinkProjectionService;
     @Autowired
     @org.springframework.context.annotation.Lazy
     private com.knowledge.wiki.service.search.WikiSearchService wikiSearchService;
     @Autowired
     private com.knowledge.wiki.service.collab.CollabSessionService collabSessionService;
+    @Autowired
+    private ApplicationEventPublisher eventPublisher;
 
     /**
      * Front-end base URL used to build share links, e.g. http://localhost:5173
@@ -467,6 +476,8 @@ public class SpaceApplication {
         if (page == null) {
             throw WikiException.PAGE_NOT_FOUND.newException();
         }
+        permissionService.checkPagePermission(SecurityContextUtil.getUserId(), page,
+                IPermissionService.PERMISSION_READ);
 
         List<WikiLink> links = wikiLinkService.lambdaQuery()
                 .eq(WikiLink::getTargetType, "PAGE")
@@ -486,7 +497,9 @@ public class SpaceApplication {
         if (CollUtil.isNotEmpty(sourcePageIds)) {
             List<Page> pages = spaceService.getPageService().listByIds(sourcePageIds);
             if (CollUtil.isNotEmpty(pages)) {
-                pageMap = pages.stream().collect(Collectors.toMap(Page::getId, p -> p));
+                pageMap = pages.stream()
+                        .filter(this::canReadPage)
+                        .collect(Collectors.toMap(Page::getId, p -> p));
             }
         }
 
@@ -500,6 +513,9 @@ public class SpaceApplication {
             backlink.setLinkKind(link.getLinkKind());
 
             Page sourcePage = pageMap.get(link.getSourcePageId());
+            if (sourcePage == null) {
+                continue;
+            }
             if (sourcePage != null) {
                 backlink.setSourcePageTitle(sourcePage.getTitle());
                 backlink.setSourcePageIcon(sourcePage.getIcon());
@@ -522,6 +538,9 @@ public class SpaceApplication {
         if (StrUtil.isBlank(blockId)) {
             throw WikiException.INVALID_PARAMETER.newException();
         }
+        if (wikiBlockReadService.getBlockInfo(blockId) == null) {
+            throw WikiException.BLOCK_NOT_FOUND.newException();
+        }
 
         List<WikiLink> links = wikiLinkService.lambdaQuery()
                 .eq(WikiLink::getTargetType, "BLOCK")
@@ -541,7 +560,9 @@ public class SpaceApplication {
         if (CollUtil.isNotEmpty(sourcePageIds)) {
             List<Page> pages = spaceService.getPageService().listByIds(sourcePageIds);
             if (CollUtil.isNotEmpty(pages)) {
-                pageMap = pages.stream().collect(Collectors.toMap(Page::getId, p -> p));
+                pageMap = pages.stream()
+                        .filter(this::canReadPage)
+                        .collect(Collectors.toMap(Page::getId, p -> p));
             }
         }
 
@@ -555,6 +576,9 @@ public class SpaceApplication {
             backlink.setLinkKind(link.getLinkKind());
 
             Page sourcePage = pageMap.get(link.getSourcePageId());
+            if (sourcePage == null) {
+                continue;
+            }
             if (sourcePage != null) {
                 backlink.setSourcePageTitle(sourcePage.getTitle());
                 backlink.setSourcePageIcon(sourcePage.getIcon());
@@ -691,23 +715,43 @@ public class SpaceApplication {
     }
 
     public PageVO createPage(PageDTO dto) {
+        if (dto.getId() != null) {
+            throw WikiException.PAGE_WRITE_API_RETIRED.newException("已有页面内容只能通过 PageDoc 保存");
+        }
+        checkSpaceWritable(dto.getSpaceId());
         if (dto.getTemplateId() == null) {
             Page page = PageConverter.INSTANCE.convertDO(dto);
             return PageConverter.INSTANCE.convertVO(spaceService.getPageService().createPage(page, dto.isPublish()));
         }
+        Page template = pageService.getById(dto.getTemplateId());
+        if (template == null) {
+            throw WikiException.PAGE_NOT_FOUND.newException();
+        }
+        permissionService.checkPagePermission(SecurityContextUtil.getUserId(), template,
+                IPermissionService.PERMISSION_READ);
         return PageConverter.INSTANCE.convertVO(spaceService.getPageService().createByTemplate(dto.getTemplateId(),
                 dto.getSpaceId(), dto.getParentId()));
     }
 
     public void savePageAsTemplate(Long pageId, SaveTemplateDTO dto) {
+        checkPageWritable(pageId);
         this.spaceService.getPageService().saveAsTemplate(pageId, dto);
     }
 
     public void deleteTemplate(Long templateId) {
+        Page template = pageService.getById(templateId);
+        if (template == null) {
+            throw WikiException.PAGE_NOT_FOUND.newException();
+        }
+        if (!Boolean.TRUE.equals(template.getIsTemplate())) {
+            throw WikiException.INVALID_PARAMETER.newException("目标页面不是模板");
+        }
+        checkPageWritable(templateId);
         this.spaceService.getPageService().delete(templateId);
     }
 
     public void movePageToTrash(Long pageId) {
+        checkPageWritable(pageId);
         spaceService.getPageService().moveToTrash(pageId);
         // Evict blocks of this page from search index
         wikiSearchService.evictPage(pageId);
@@ -720,7 +764,35 @@ public class SpaceApplication {
      * @param dto    move parameters
      */
     public void movePage(Long pageId, com.knowledge.wiki.service.entity.dto.MovePageDTO dto) {
-        spaceService.getPageService().movePage(pageId, dto.getTargetSpaceId(), dto.getTargetParentId());
+        checkPageWritable(pageId);
+        Page source = pageService.getById(pageId);
+        Long targetSpaceId = dto.getTargetSpaceId() != null ? dto.getTargetSpaceId() : source.getSpaceId();
+        checkSpaceWritable(targetSpaceId);
+        if (dto.getTargetParentId() != null && !Page.TOP_PAGE_ID.equals(dto.getTargetParentId())) {
+            Page targetParent = pageService.getById(dto.getTargetParentId());
+            if (targetParent == null) {
+                throw WikiException.PAGE_PARENT_NOT_FOUND.newException();
+            }
+            if (!targetSpaceId.equals(targetParent.getSpaceId())) {
+                throw WikiException.INVALID_PARAMETER.newException("目标父页面不属于目标空间");
+            }
+            permissionService.checkPagePermission(SecurityContextUtil.getUserId(), targetParent,
+                    IPermissionService.PERMISSION_WRITE);
+        }
+        spaceService.getPageService().movePage(pageId, targetSpaceId, dto.getTargetParentId());
+        // movePage updates the entire descendant subtree. Every Redis document
+        // carries spaceId, so reindex the same subtree rather than only its root.
+        List<Page> movedPages = pageService.lambdaQuery()
+                .eq(Page::getId, pageId)
+                .or()
+                .apply("FIND_IN_SET({0}, ancestors)", pageId)
+                .list();
+        for (Page moved : movedPages) {
+            // Use the same per-page projection listener as document writes so a
+            // metadata-only move cannot race an older async document projection.
+            eventPublisher.publishEvent(new com.knowledge.wiki.service.entity.event.PageDocChangedEvent(
+                    moved.getId(), pageDocService.readRev(moved.getId())));
+        }
     }
 
     public List<PageVO> queryTemplate(QueryPageTemplateDTO dto) {
@@ -730,6 +802,7 @@ public class SpaceApplication {
                 .ne(Page::getStatus, PageStatus.DELETED)
                 .list();
         return templates.stream()
+                .filter(this::canReadPage)
                 .map(page -> {
                     PageVO vo = PageConverter.INSTANCE.convertVO(page);
                     // Get content from block storage
@@ -847,13 +920,15 @@ public class SpaceApplication {
     }
 
     public void restorePage(Long pageId) {
+        checkPageWritable(pageId);
         spaceService.getPageService().restore(pageId);
+        wikiSearchService.reindexPage(pageId);
     }
 
     public void refreshBlock() {
-        List<Long> activeVersions = this.pageService.getAllActiveVersions().stream().map(PageVersion::getId)
-                .collect(Collectors.toList());
-        pageService.refreshBlock(activeVersions);
+        int links = wikiLinkProjectionService.rebuildAll();
+        int indexed = wikiSearchService.reindexAll();
+        log.info("Rebuilt wiki_block projections: backlinks={}, searchBlocks={}", links, indexed);
     }
 
     public IPage<PageVO> queryPage(QueryPageDTO dto) {
@@ -869,91 +944,24 @@ public class SpaceApplication {
                         .page(dto.page()));
     }
 
-    public IPage<PageContentVO> queryPageBlock(QueryPageBlockDTO dto) {
-        MPJLambdaWrapper<PageContent> wrapper = MPJWrappers.lambdaJoin(PageContent.class);
-        wrapper.selectAll(PageContent.class)
-                .leftJoin(Page.class, Page::getId, PageContent::getPageId)
-                .leftJoin(Space.class, Space::getId, Page::getSpaceId)
-                .selectAs(Page::getSpaceId, PageBlockVO::getSpaceId)
-                .selectAs(Space::getName, PageBlockVO::getSpaceName)
-                .selectAs(Page::getTitle, PageBlockVO::getPageTitle)
-                // Exclude trashed/deleted pages so block search results never leak
-                .ne(Page::getStatus, PageStatus.DELETED)
-                .ne(Page::getStatus, PageStatus.TRASH)
-                .like(StrUtil.isNotBlank(dto.getSearchValue()), PageContent::getText, dto.getSearchValue())
-                .eq(StrUtil.isNotBlank(dto.getType()), PageContent::getType, dto.getType())
-                .eq(dto.getSpaceId() != null, Space::getId, dto.getSpaceId())
-                .eq(dto.getPageId() != null, PageContent::getPageId, dto.getPageId())
-                .orderByDesc(PageContent::getUpdateTime)
-                .distinct();
-        return this.spaceService.getPageService().getPageContentService()
-                .selectJoinListPage(dto.page(), PageContentVO.class, wrapper);
+    public IPage<WikiBlockVO> queryPageBlock(QueryPageBlockDTO dto) {
+        return wikiBlockReadService.queryBlocks(dto);
     }
 
     public PageBlockVO getBlockInfo(String id) {
-        return this.pageService.getBlockInfo(id);
+        return wikiBlockReadService.getBlockInfo(id);
     }
 
-    /**
-     * 获取块详细信息（包含子节点）
-     */
+    /** 获取权威 wiki_block 的完整节点及页面上下文。 */
     public PageBlockDetailVO getBlockDetailInfo(String blockId) {
-        PageContent blockContent = this.pageService.getBlockDetailInfo(blockId);
-        if (blockContent == null) {
-            return null;
-        }
-
-        // 查询页面和空间信息
-        Long pageId = blockContent.getPageId();
-        Page page = pageId != null ? this.pageService.getById(pageId) : null;
-        Long spaceId = page != null ? page.getSpaceId() : null;
-        String pageTitle = page != null ? page.getTitle() : null;
-        String spaceName = null;
-        if (spaceId != null) {
-            Space space = spaceService.getById(spaceId);
-            spaceName = space != null ? space.getName() : null;
-        }
-
-        return convertToBlockDetailVO(blockContent, pageTitle, spaceId, spaceName);
-    }
-
-    /**
-     * 递归将 PageContent 转换为 PageBlockDetailVO
-     */
-    private PageBlockDetailVO convertToBlockDetailVO(PageContent content, String pageTitle, Long spaceId,
-            String spaceName) {
-        PageBlockDetailVO vo = new PageBlockDetailVO();
-        vo.setId(content.getId());
-        vo.setType(content.getType());
-        vo.setText(content.getText());
-        vo.setAttrs(content.getAttrs());
-        vo.setMarks(content.getMarks() != null ? content.getMarks().stream()
-                .map(m -> cn.hutool.json.JSONUtil.parseObj(cn.hutool.json.JSONUtil.toJsonStr(m)))
-                .collect(Collectors.toList()) : null);
-        vo.setParentId(content.getParentId());
-        vo.setPageId(content.getPageId());
-        vo.setPageTitle(pageTitle);
-        vo.setSpaceId(spaceId);
-        vo.setSpaceName(spaceName);
-        vo.setPath(content.getPath());
-        vo.setFullPath(content.getFullPath());
-
-        // 递归转换子节点
-        if (CollUtil.isNotEmpty(content.getContent())) {
-            List<PageBlockDetailVO> children = content.getContent().stream()
-                    .map(child -> convertToBlockDetailVO(child, pageTitle, spaceId, spaceName))
-                    .collect(Collectors.toList());
-            vo.setChildren(children);
-        }
-
-        return vo;
+        return wikiBlockReadService.getBlockDetail(blockId);
     }
 
     /**
      * 更新块内容
      */
     public boolean updateBlock(UpdateBlockDTO updateDto) {
-        return this.pageService.updateBlock(updateDto);
+        throw WikiException.PAGE_WRITE_API_RETIRED.newException("请使用 PageDoc ops/reconcile 写入页面");
     }
 
     /**
@@ -971,16 +979,7 @@ public class SpaceApplication {
      *         in, and any detected conflicts
      */
     public PatchResultDTO patchPageBlocks(com.knowledge.wiki.service.entity.dto.PatchPageBlocksDTO dto) {
-        checkPageWritable(dto.getPageId());
-        boolean checkpoint = Boolean.TRUE.equals(dto.getCheckpoint());
-        long startedAt = System.currentTimeMillis();
-        com.knowledge.wiki.service.service.impl.BlockStorageService.PatchResult result = this.pageService
-                .patchBlocks(dto.getPageId(), dto.getChanges(), dto.getBlockOrder(), checkpoint);
-        syncPageTitleFromPatch(dto, result);
-        touchPageUpdateStamp(dto.getPageId(), result);
-
-        logSaveOutcome("patch", dto, result, checkpoint, startedAt);
-        return PatchResultDTO.from(result);
+        throw WikiException.PAGE_WRITE_API_RETIRED.newException("请使用 PageDoc ops/checkpoints 写入页面");
     }
 
     /**
@@ -1023,6 +1022,21 @@ public class SpaceApplication {
      * patch endpoints — gateway auth alone only proves identity, not that the
      * caller can modify this particular page.
      */
+    private void checkSpaceWritable(Long spaceId) {
+        if (spaceId == null) {
+            throw WikiException.INVALID_PARAMETER.newException();
+        }
+        Space space = spaceService.getById(spaceId);
+        if (space == null) {
+            throw WikiException.SPACE_NOT_FOUND.newException();
+        }
+        String permission = permissionService.effectiveSpacePermission(SecurityContextUtil.getUserId(), space);
+        if (!IPermissionService.PERMISSION_WRITE.equals(permission)
+                && !IPermissionService.PERMISSION_ADMIN.equals(permission)) {
+            throw WikiException.FORBIDDEN_ACCESS.newException();
+        }
+    }
+
     private void checkPageWritable(Long pageId) {
         if (pageId == null) {
             throw WikiException.INVALID_PARAMETER.newException();
@@ -1086,6 +1100,13 @@ public class SpaceApplication {
                 IPermissionService.PERMISSION_READ);
     }
 
+    private boolean canReadPage(Page page) {
+        return page != null
+                && page.getStatus() != PageStatus.DELETED
+                && page.getStatus() != PageStatus.TRASH
+                && permissionService.effectivePagePermission(SecurityContextUtil.getUserId(), page) != null;
+    }
+
     /**
      * Bulk-replace path for a first import / paste of a very large document.
      * Reuses the same request shape as {@link #patchPageBlocks} but routes to the
@@ -1093,15 +1114,7 @@ public class SpaceApplication {
      * this when every change is an upsert of a brand-new block (fresh import).
      */
     public PatchResultDTO bulkReplacePageBlocks(com.knowledge.wiki.service.entity.dto.PatchPageBlocksDTO dto) {
-        checkPageWritable(dto.getPageId());
-        long startedAt = System.currentTimeMillis();
-        com.knowledge.wiki.service.service.impl.BlockStorageService.PatchResult result = this.pageService
-                .bulkReplaceBlocks(dto.getPageId(), dto.getChanges());
-        syncPageTitleFromPatch(dto, result);
-        touchPageUpdateStamp(dto.getPageId(), result);
-
-        logSaveOutcome("bulk", dto, result, true, startedAt);
-        return PatchResultDTO.from(result);
+        throw WikiException.PAGE_WRITE_API_RETIRED.newException("请使用 PageDoc reconcile 写入页面");
     }
 
     /**
@@ -1328,142 +1341,59 @@ public class SpaceApplication {
             return new ArrayList<>();
         }
 
-        // --- Phase 1: Try Redis RediSearch (fast path) ---
+        List<PageBlockDetailVO> redisResults = new ArrayList<>();
         try {
             List<com.knowledge.wiki.service.entity.vo.SearchHit> hits = wikiSearchService.search(keyword, pageId,
                     spaceId, 50);
             if (CollUtil.isNotEmpty(hits)) {
-                return convertSearchHitsToVOs(hits);
+                redisResults = convertSearchHitsToVOs(hits);
             }
-            // Redis returned empty — fall through to MySQL rather than trusting
-            // the empty result, because the index may not be populated yet.
         } catch (Exception e) {
-            log.warn("searchBlocks: Redis search failed, falling back to MySQL: {}", e.getMessage());
+            log.warn("searchBlocks: Redis search failed, using MySQL: {}", e.getMessage());
         }
 
-        // --- Phase 2: MySQL LIKE fallback ---
-        return searchBlocksViaMysql(keyword, pageId, spaceId);
+        // Redis is a rebuildable projection and can be partially populated after a
+        // process failure. Merge it with the authoritative MySQL result instead of
+        // treating one surviving hit as proof that the projection is complete.
+        List<PageBlockDetailVO> mysqlResults = searchBlocksViaMysql(keyword, pageId, spaceId);
+        Map<String, PageBlockDetailVO> merged = new LinkedHashMap<>();
+        for (PageBlockDetailVO item : redisResults) {
+            if (matchesSearchRequest(item, keyword, pageId, spaceId)) {
+                merged.put(item.getId(), item);
+            }
+        }
+        for (PageBlockDetailVO item : mysqlResults) {
+            merged.putIfAbsent(item.getId(), item);
+        }
+        return merged.values().stream().limit(50).collect(Collectors.toList());
     }
 
-    /**
-     * Convert RediSearch hits to PageBlockDetailVO list by fetching full
-     * block content from MySQL.
-     */
+    private boolean matchesSearchRequest(PageBlockDetailVO item, String keyword, Long pageId, Long spaceId) {
+        if (item == null || StrUtil.isBlank(item.getId())) {
+            return false;
+        }
+        if (pageId != null && !pageId.equals(item.getPageId())) {
+            return false;
+        }
+        if (spaceId != null && !spaceId.equals(item.getSpaceId())) {
+            return false;
+        }
+        return StrUtil.containsIgnoreCase(StrUtil.nullToEmpty(item.getText()), keyword);
+    }
+
+    /** Hydrate Redis hits from wiki_block while preserving hit order. */
     private List<PageBlockDetailVO> convertSearchHitsToVOs(
             List<com.knowledge.wiki.service.entity.vo.SearchHit> hits) {
-        // Collect block IDs and fetch full content from MySQL
         List<String> blockIds = hits.stream()
                 .map(com.knowledge.wiki.service.entity.vo.SearchHit::getBlockId)
                 .filter(StrUtil::isNotBlank)
                 .collect(Collectors.toList());
-        if (CollUtil.isEmpty(blockIds)) {
-            return new ArrayList<>();
-        }
-
-        List<PageContent> blocks = pageContentService.lambdaQuery()
-                .in(PageContent::getId, blockIds)
-                .list();
-        if (CollUtil.isEmpty(blocks)) {
-            return new ArrayList<>();
-        }
-
-        // Build lookup maps
-        Map<String, PageContent> blockMap = blocks.stream()
-                .collect(Collectors.toMap(PageContent::getId, b -> b, (a, b) -> a));
-        Set<Long> pageIds = blocks.stream()
-                .map(PageContent::getPageId)
-                .filter(java.util.Objects::nonNull)
-                .collect(Collectors.toSet());
-        Map<Long, Page> pageMap = CollUtil.isNotEmpty(pageIds)
-                ? pageService.listByIds(pageIds).stream()
-                        .collect(Collectors.toMap(Page::getId, p -> p, (a, b) -> a))
-                : new HashMap<>();
-        Map<Long, String> spaceNames = new HashMap<>();
-
-        // Preserve the RediSearch result order (relevance/updateTime)
-        List<PageBlockDetailVO> result = new ArrayList<>();
-        for (com.knowledge.wiki.service.entity.vo.SearchHit hit : hits) {
-            PageContent block = blockMap.get(hit.getBlockId());
-            if (block == null) {
-                continue;
-            }
-            Page page = pageMap.get(block.getPageId());
-            Long blockSpaceId = page != null ? page.getSpaceId() : hit.getSpaceId();
-            String spaceName = null;
-            if (blockSpaceId != null) {
-                spaceName = spaceNames.computeIfAbsent(blockSpaceId, sid -> {
-                    Space space = spaceService.getById(sid);
-                    return space != null ? space.getName() : null;
-                });
-            }
-            result.add(convertToBlockDetailVO(block,
-                    page != null ? page.getTitle() : hit.getPageTitle(),
-                    blockSpaceId, spaceName));
-        }
-        return result;
+        return wikiBlockReadService.getBlockDetails(blockIds);
     }
 
-    /**
-     * Original MySQL LIKE search — used as fallback when Redis is unavailable.
-     */
+    /** Authoritative MySQL LIKE fallback over wiki_block.text. */
     private List<PageBlockDetailVO> searchBlocksViaMysql(String keyword, Long pageId, Long spaceId) {
-        // Resolve searchable pages first so trashed/deleted pages never leak into
-        // results
-        Map<Long, Page> pageMap;
-        if (pageId != null) {
-            Page page = pageService.getById(pageId);
-            if (page == null || page.getStatus() == PageStatus.DELETED || page.getStatus() == PageStatus.TRASH) {
-                return new ArrayList<>();
-            }
-            pageMap = new HashMap<>();
-            pageMap.put(page.getId(), page);
-        } else if (spaceId != null) {
-            List<Page> pages = pageService.lambdaQuery()
-                    .eq(Page::getSpaceId, spaceId)
-                    .ne(Page::getStatus, PageStatus.DELETED)
-                    .ne(Page::getStatus, PageStatus.TRASH)
-                    .list();
-            if (CollUtil.isEmpty(pages)) {
-                return new ArrayList<>();
-            }
-            pageMap = pages.stream().collect(Collectors.toMap(Page::getId, p -> p, (a, b) -> a));
-        } else {
-            // Cross-space search: fetch all non-trashed/deleted pages
-            List<Page> pages = pageService.lambdaQuery()
-                    .ne(Page::getStatus, PageStatus.DELETED)
-                    .ne(Page::getStatus, PageStatus.TRASH)
-                    .last("LIMIT 5000")
-                    .list();
-            if (CollUtil.isEmpty(pages)) {
-                return new ArrayList<>();
-            }
-            pageMap = pages.stream().collect(Collectors.toMap(Page::getId, p -> p, (a, b) -> a));
-        }
-
-        List<PageContent> blocks = pageContentService.lambdaQuery()
-                .in(PageContent::getPageId, pageMap.keySet())
-                .like(PageContent::getText, keyword)
-                .orderByDesc(PageContent::getUpdateTime)
-                .last("LIMIT 50")
-                .list();
-        if (CollUtil.isEmpty(blocks)) {
-            return new ArrayList<>();
-        }
-
-        // Space names for result decoration (usually a single space)
-        Map<Long, String> spaceNames = new HashMap<>();
-        return blocks.stream().map(block -> {
-            Page page = pageMap.get(block.getPageId());
-            Long blockSpaceId = page != null ? page.getSpaceId() : null;
-            String spaceName = null;
-            if (blockSpaceId != null) {
-                spaceName = spaceNames.computeIfAbsent(blockSpaceId, sid -> {
-                    Space space = spaceService.getById(sid);
-                    return space != null ? space.getName() : null;
-                });
-            }
-            return convertToBlockDetailVO(block, page != null ? page.getTitle() : null, blockSpaceId, spaceName);
-        }).collect(Collectors.toList());
+        return wikiBlockReadService.search(keyword, pageId, spaceId, 50);
     }
 
     /**
@@ -1472,7 +1402,10 @@ public class SpaceApplication {
      * @return number of blocks indexed
      */
     public int reindexSearch() {
-        return wikiSearchService.reindexAll();
+        int links = wikiLinkProjectionService.rebuildAll();
+        int indexed = wikiSearchService.reindexAll();
+        log.info("Rebuilt wiki_block projections from reindex endpoint: backlinks={}, searchBlocks={}", links, indexed);
+        return indexed;
     }
 
     public void saveAsTemplate(TemplateDTO dto) {
@@ -2171,6 +2104,7 @@ public class SpaceApplication {
                 .orderByDesc(Page::getUpdateTime)
                 .list();
         return templates.stream()
+                .filter(this::canReadPage)
                 .map(page -> {
                     PageVO vo = PageConverter.INSTANCE.convertVO(page);
                     return vo;

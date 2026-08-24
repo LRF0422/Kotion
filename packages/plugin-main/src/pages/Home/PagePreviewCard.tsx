@@ -32,14 +32,13 @@ import { FileService, useApi, useOptionalService, useTranslation } from "@kn/com
 import { PageIconData, PageItemIcon } from "../SpaceDetail/components/PageItemIcon";
 import { APIS } from "../../api";
 
-/** The page fields the preview needs (subset of GET_PAGE_CONTENT's payload). */
+/** Page metadata supplied by the already-loaded Home row plus PAGE_DOC content. */
 interface PreviewPage {
     id: string;
     title?: string;
     icon?: PageIconData;
     spaceName?: string;
-    /** JSON string of page content */
-    content?: string;
+    doc?: Content | null;
 }
 
 // Short-lived content cache: hovering the same row twice within the TTL
@@ -76,18 +75,13 @@ interface CoverConfig {
  * the title, and the read-only editor here uses the plain Document top node
  * (no title schema) — but its attrs carry the page cover, so it's read first.
  */
-const parsePage = (raw?: string): { body: Content | null; cover: CoverConfig | null } => {
-    if (!raw) return { body: null, cover: null };
-    try {
-        const doc = JSON.parse(raw.replaceAll("&lt;", "<").replaceAll("&gt;", ">"));
-        const nodes: any[] = Array.isArray(doc?.content) ? doc.content : [];
-        const title = nodes.find((n) => n?.type === "title");
-        const cover = title?.attrs?.cover?.url ? (title.attrs.cover as CoverConfig) : null;
-        const body = nodes.filter((n) => n?.type !== "title");
-        return { body: body.length > 0 ? { type: "doc", content: body } : null, cover };
-    } catch {
-        return { body: null, cover: null };
-    }
+const parsePage = (doc?: Content | null): { body: Content | null; cover: CoverConfig | null } => {
+    if (!doc || typeof doc !== "object" || Array.isArray(doc)) return { body: null, cover: null };
+    const nodes: any[] = Array.isArray((doc as any)?.content) ? (doc as any).content : [];
+    const title = nodes.find((n) => n?.type === "title");
+    const cover = title?.attrs?.cover?.url ? (title.attrs.cover as CoverConfig) : null;
+    const body = nodes.filter((n) => n?.type !== "title");
+    return { body: body.length > 0 ? { type: "doc", content: body } : null, cover };
 };
 
 /** Read-only Tiptap instance rendering the page body at preview scale. */
@@ -131,7 +125,12 @@ const PreviewSkeleton: React.FC = () => (
 
 /** Card body — mounted only while the hover card is open, so the fetch and
  *  the read-only editor spin up lazily on first hover. */
-const PreviewBody: React.FC<{ pageId: string; icon?: PageIconData | null }> = ({ pageId, icon }) => {
+const PreviewBody: React.FC<{
+    pageId: string;
+    title?: string;
+    spaceName?: string;
+    icon?: PageIconData | null;
+}> = ({ pageId, title, spaceName, icon }) => {
     const { t } = useTranslation();
     const fileService = useOptionalService("fileService") as FileService | undefined;
     const [page, setPage] = useState<PreviewPage | null>(() => readCache(pageId));
@@ -140,13 +139,14 @@ const PreviewBody: React.FC<{ pageId: string; icon?: PageIconData | null }> = ({
     useEffect(() => {
         if (readCache(pageId)) return;
         let cancelled = false;
-        useApi(APIS.GET_PAGE_CONTENT, { id: pageId })
+        useApi(APIS.PAGE_DOC, { id: pageId })
             .then((res) => {
                 if (cancelled) return;
-                const data = res?.data as PreviewPage | undefined;
-                if (data) {
-                    writeCache(pageId, data);
-                    setPage(data);
+                const data = res?.data;
+                if (data?.doc) {
+                    const preview = { id: pageId, title, spaceName, icon: icon || undefined, doc: data.doc };
+                    writeCache(pageId, preview);
+                    setPage(preview);
                 } else {
                     setError(true);
                 }
@@ -157,9 +157,9 @@ const PreviewBody: React.FC<{ pageId: string; icon?: PageIconData | null }> = ({
         return () => {
             cancelled = true;
         };
-    }, [pageId]);
+    }, [pageId, title, spaceName, icon]);
 
-    const { body, cover } = useMemo(() => parsePage(page?.content), [page?.content]);
+    const { body, cover } = useMemo(() => parsePage(page?.doc), [page?.doc]);
     // Prefer the icon the hovered row already knows (emoji/image/date all
     // render identically to the list), and fall back to the fetched page.
     const pageIcon = icon || page?.icon || null;
@@ -198,11 +198,11 @@ const PreviewBody: React.FC<{ pageId: string; icon?: PageIconData | null }> = ({
                     <FileText className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                 )}
                 <span className="min-w-0 flex-1 truncate text-[13px] font-medium">
-                    {page?.title || t("home.untitled", "Untitled")}
+                    {title || page?.title || t("home.untitled", "Untitled")}
                 </span>
-                {page?.spaceName && (
+                {(spaceName || page?.spaceName) && (
                     <span className="max-w-[120px] shrink-0 truncate text-[11px] text-muted-foreground">
-                        {page.spaceName}
+                        {spaceName || page?.spaceName}
                     </span>
                 )}
             </div>
@@ -229,6 +229,9 @@ const PreviewBody: React.FC<{ pageId: string; icon?: PageIconData | null }> = ({
 
 export interface PagePreviewCardProps {
     pageId: string;
+    /** Metadata already present on the Home row; PAGE_DOC supplies only content. */
+    title?: string;
+    spaceName?: string;
     /** Row icon reused in the card header so it matches the list exactly. */
     icon?: PageIconData | null;
     /** Skip the hover card entirely (e.g. on touch devices). */
@@ -241,6 +244,8 @@ export interface PagePreviewCardProps {
 /** What a hovered row hands to the shared floating card. */
 interface PreviewTarget {
     pageId: string;
+    title?: string;
+    spaceName?: string;
     icon?: PageIconData | null;
     rect: { top: number; left: number; right: number };
     onOpenPage?: () => void;
@@ -399,7 +404,12 @@ export const PagePreviewProvider: React.FC<{ children: React.ReactNode }> = ({ c
                     {/* Keyed by page id: switching rows remounts the body, so the
                         new page's content fades in while the card slides over. */}
                     <div key={target.pageId} className="animate-in fade-in-0 duration-200">
-                        <PreviewBody pageId={target.pageId} icon={target.icon} />
+                        <PreviewBody
+                            pageId={target.pageId}
+                            title={target.title}
+                            spaceName={target.spaceName}
+                            icon={target.icon}
+                        />
                     </div>
                 </div>
             )}
@@ -411,6 +421,8 @@ PagePreviewProvider.displayName = "PagePreviewProvider";
 
 export const PagePreviewCard: React.FC<PagePreviewCardProps> = ({
     pageId,
+    title,
+    spaceName,
     icon,
     disabled,
     onOpenPage,
@@ -427,6 +439,8 @@ export const PagePreviewCard: React.FC<PagePreviewCardProps> = ({
         const r = el.getBoundingClientRect();
         ctx.open({
             pageId,
+            title,
+            spaceName,
             icon,
             rect: { top: r.top, left: r.left, right: r.right },
             onOpenPage,

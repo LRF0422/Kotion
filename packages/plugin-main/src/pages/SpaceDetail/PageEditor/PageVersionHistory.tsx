@@ -9,39 +9,32 @@ import {
 import { History, LoaderCircle, RotateCcw } from "@kn/icon";
 import React, { useCallback, useEffect, useState } from "react";
 
-/** Shape of a wiki_page_version row as returned by the version endpoints. */
-interface PageVersionItem {
-    id: string | number
-    version: string
-    subjectId?: string | number
-    status: string
-    title?: string
-    changeSummary?: string
-    createTime?: string | number
-    createUser?: string | number
+type PageHistoryKind = 'AUTO' | 'USER' | 'RESTORE' | 'IMPORT' | string
+
+/** One checkpoint-backed entry returned by GET /page/:id/history. */
+interface PageHistoryItem {
+    rev: number | string
+    kind: PageHistoryKind
+    label?: string | null
+    actor?: unknown
+    createdAt?: string | number | null
+    current: boolean
+    restoredFromRev?: number | string | null
 }
 
 export interface PageVersionHistoryProps {
     open: boolean
     onOpenChange: (open: boolean) => void
     pageId?: string
-    /** Called after a successful rollback so the host can refresh the editor. */
-    onRestored?: () => void
+    /** Identity of the editor session that currently holds the page write lease. */
+    clientId: string
+    /** Flush pending editor changes before the server changes the current rev. */
+    saveNow: () => Promise<void>
+    /** Called after a successful restore so the host can refresh the editor. */
+    onRestored?: (rev?: number | string | null) => void
 }
 
-const PAGE_SIZE = 50
-
-/**
- * The backend serializes IBaseEnum fields as `{ value, desc }` objects
- * (global EnumSerializer), so `status` must be unwrapped before comparing
- * against plain strings like 'ACTIVE' / 'DRAFT'.
- */
-const normalizeStatus = (s: unknown): string => {
-    if (s && typeof s === 'object') return String((s as any).value ?? '')
-    return s != null ? String(s) : ''
-}
-
-const formatTime = (value?: string | number): string => {
+const formatTime = (value?: string | number | null): string => {
     if (!value) return ''
     try {
         const d = new Date(value)
@@ -52,38 +45,60 @@ const formatTime = (value?: string | number): string => {
     }
 }
 
+const formatActor = (actor: unknown): string => {
+    if (actor == null || actor === '') return ''
+    if (typeof actor === 'object') {
+        const value = actor as Record<string, unknown>
+        const name = value.name ?? value.displayName ?? value.username ?? value.id
+        return name == null ? '' : String(name)
+    }
+    return String(actor)
+}
+
+const kindLabel = (kind: PageHistoryKind, t: ReturnType<typeof useTranslation>['t']): string => {
+    switch (kind) {
+        case 'USER': return t('editor.version.kind.user', 'Manual save')
+        case 'AUTO': return t('editor.version.kind.auto', 'Automatic checkpoint')
+        case 'RESTORE': return t('editor.version.kind.restore', 'Restore')
+        case 'IMPORT': return t('editor.version.kind.import', 'Import')
+        default: return String(kind || t('editor.version.kind.unknown', 'Checkpoint'))
+    }
+}
+
 /**
- * Right-side panel listing the page's version history with a
- * non-destructive restore action (rollback creates a NEW version,
- * so nothing is ever lost).
+ * Right-side panel listing checkpoint-backed page history. Restoring is
+ * non-destructive: the backend writes the selected document forward to a new rev.
  */
 export const PageVersionHistory: React.FC<PageVersionHistoryProps> = ({
-    open, onOpenChange, pageId, onRestored,
+    open, onOpenChange, pageId, clientId, saveNow, onRestored,
 }) => {
     const { t } = useTranslation()
     const [loading, setLoading] = useState(false)
-    const [versions, setVersions] = useState<PageVersionItem[]>([])
+    const [history, setHistory] = useState<PageHistoryItem[]>([])
     const [total, setTotal] = useState(0)
-    // Version awaiting rollback confirmation (null = dialog closed)
-    const [confirmTarget, setConfirmTarget] = useState<PageVersionItem | null>(null)
+    const [confirmTarget, setConfirmTarget] = useState<PageHistoryItem | null>(null)
     const [restoring, setRestoring] = useState(false)
 
-    const fetchVersions = useCallback(async () => {
+    const fetchHistory = useCallback(async () => {
         if (!pageId) return
         setLoading(true)
         try {
-            const res = await useApi(APIS.GET_PAGE_VERSIONS, {
-                pageId, current: 1, pageSize: PAGE_SIZE,
-            })
+            const res = await useApi(APIS.PAGE_HISTORY, { id: pageId, limit: 50 })
             const data = res?.data
-            const records: PageVersionItem[] = (data?.records || []).map((r: any) => ({
-                ...r,
-                status: normalizeStatus(r?.status),
-            }))
-            setVersions(records)
-            setTotal(data?.total ?? records.length)
+            const raw = Array.isArray(data) ? data : (data?.records || [])
+            const records: PageHistoryItem[] = raw.map((item: any) => ({
+                rev: item?.rev,
+                kind: item?.kind || '',
+                label: item?.label,
+                actor: item?.actor,
+                createdAt: item?.createdAt,
+                current: item?.current === true,
+                restoredFromRev: item?.restoredFromRev,
+            })).filter((item: PageHistoryItem) => item.rev != null)
+            setHistory(records)
+            setTotal(Array.isArray(data) ? records.length : (data?.total ?? records.length))
         } catch (err) {
-            console.error('Failed to load version history:', err)
+            console.error('Failed to load page history:', err)
             toast.error(t('editor.version.loadFailed', 'Failed to load version history'))
         } finally {
             setLoading(false)
@@ -91,42 +106,42 @@ export const PageVersionHistory: React.FC<PageVersionHistoryProps> = ({
     }, [pageId, t])
 
     useEffect(() => {
-        if (open) fetchVersions()
+        if (open) fetchHistory()
         else {
             setConfirmTarget(null)
             setRestoring(false)
         }
-    }, [open, fetchVersions])
+    }, [open, fetchHistory])
 
     const handleRestore = useCallback(async () => {
-        if (!pageId || !confirmTarget || restoring) return
+        if (!pageId || !confirmTarget || confirmTarget.current || restoring) return
         setRestoring(true)
         try {
-            await useApi(APIS.ROLLBACK_PAGE_VERSION, { pageId }, {
-                pageId,
-                targetVersionId: confirmTarget.id,
-            })
-            toast.success(t('editor.version.restoreSuccess', 'Restored to version {{version}}', { version: confirmTarget.version }))
-            setConfirmTarget(null)
-            await fetchVersions()
-            onRestored?.()
-        } catch (err) {
-            console.error('Failed to restore version:', err)
-            toast.error(t('editor.version.restoreFailed', 'Failed to restore version'))
+            try {
+                await saveNow()
+            } catch (err) {
+                console.error('Failed to flush page before restore:', err)
+                toast.error(t('editor.version.restoreSaveFailed', 'Save failed — restore was cancelled'))
+                return
+            }
+
+            try {
+                const response = await useApi(APIS.PAGE_RESTORE, { id: pageId }, {
+                    targetRev: confirmTarget.rev,
+                    clientId,
+                })
+                toast.success(t('editor.version.restoreSuccess', 'Restored to revision {{version}}', { version: confirmTarget.rev }))
+                setConfirmTarget(null)
+                await fetchHistory()
+                onRestored?.(response?.data?.rev)
+            } catch (err) {
+                console.error('Failed to restore page revision:', err)
+                toast.error(t('editor.version.restoreFailed', 'Failed to restore version'))
+            }
         } finally {
             setRestoring(false)
         }
-    }, [pageId, confirmTarget, restoring, fetchVersions, onRestored, t])
-
-    const statusBadge = (v: PageVersionItem) => {
-        if (v.status === 'ACTIVE') {
-            return <Badge variant="default" className="text-[10px] px-1.5 py-0">{t('editor.version.current', 'Current')}</Badge>
-        }
-        if (v.status === 'DRAFT') {
-            return <Badge variant="outline" className="text-[10px] px-1.5 py-0">{t('editor.version.draft', 'Draft')}</Badge>
-        }
-        return null
-    }
+    }, [pageId, confirmTarget, restoring, saveNow, clientId, fetchHistory, onRestored, t])
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
@@ -151,48 +166,63 @@ export const PageVersionHistory: React.FC<PageVersionHistoryProps> = ({
                                     </div>
                                 ))}
                             </div>
-                        ) : versions.length === 0 ? (
+                        ) : history.length === 0 ? (
                             <div className="py-12 text-center text-sm text-muted-foreground">
                                 {t('editor.version.empty', 'No versions yet')}
                             </div>
                         ) : (
-                            versions.map((v) => (
-                                <div
-                                    key={String(v.id)}
-                                    className="group flex flex-row items-start justify-between gap-2 rounded-md px-3 py-2.5 hover:bg-muted/60 transition-colors"
-                                >
-                                    <div className="flex flex-col gap-0.5 min-w-0">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-sm font-medium">v{v.version}</span>
-                                            {statusBadge(v)}
-                                        </div>
-                                        {(v.changeSummary || v.title) && (
-                                            <span className="text-xs text-muted-foreground truncate max-w-[260px]" title={v.changeSummary || v.title}>
-                                                {v.changeSummary || v.title}
+                            history.map((item) => {
+                                const actor = formatActor(item.actor)
+                                return (
+                                    <div
+                                        key={String(item.rev)}
+                                        className="group flex flex-row items-start justify-between gap-2 rounded-md px-3 py-2.5 hover:bg-muted/60 transition-colors"
+                                    >
+                                        <div className="flex flex-col gap-0.5 min-w-0">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm font-medium">r{item.rev}</span>
+                                                <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                                                    {kindLabel(item.kind, t)}
+                                                </Badge>
+                                                {item.current && (
+                                                    <Badge variant="default" className="text-[10px] px-1.5 py-0">
+                                                        {t('editor.version.current', 'Current')}
+                                                    </Badge>
+                                                )}
+                                            </div>
+                                            {item.label && (
+                                                <span className="text-xs text-muted-foreground truncate max-w-[260px]" title={item.label}>
+                                                    {item.label}
+                                                </span>
+                                            )}
+                                            {item.restoredFromRev != null && (
+                                                <span className="text-[11px] text-muted-foreground">
+                                                    {t('editor.version.restoredFrom', 'Restored from r{{rev}}', { rev: item.restoredFromRev })}
+                                                </span>
+                                            )}
+                                            <span className="text-[11px] text-muted-foreground/70">
+                                                {[actor, formatTime(item.createdAt)].filter(Boolean).join(' · ')}
                                             </span>
+                                        </div>
+                                        {!item.current && (
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-7 px-2 gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                                                onClick={() => setConfirmTarget(item)}
+                                            >
+                                                <RotateCcw className="h-3.5 w-3.5" />
+                                                <span className="text-xs">{t('editor.version.restore', 'Restore')}</span>
+                                            </Button>
                                         )}
-                                        <span className="text-[11px] text-muted-foreground/70">
-                                            {formatTime(v.createTime)}
-                                        </span>
                                     </div>
-                                    {v.status !== 'ACTIVE' && v.status !== 'DRAFT' && (
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-7 px-2 gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-                                            onClick={() => setConfirmTarget(v)}
-                                        >
-                                            <RotateCcw className="h-3.5 w-3.5" />
-                                            <span className="text-xs">{t('editor.version.restore', 'Restore')}</span>
-                                        </Button>
-                                    )}
-                                </div>
-                            ))
+                                )
+                            })
                         )}
                     </div>
                 </ScrollArea>
 
-                <AlertDialog open={!!confirmTarget} onOpenChange={(o) => { if (!o) setConfirmTarget(null) }}>
+                <AlertDialog open={!!confirmTarget} onOpenChange={(next) => { if (!next) setConfirmTarget(null) }}>
                     <AlertDialogContent>
                         <AlertDialogHeader>
                             <AlertDialogTitle>
@@ -200,8 +230,8 @@ export const PageVersionHistory: React.FC<PageVersionHistoryProps> = ({
                             </AlertDialogTitle>
                             <AlertDialogDescription>
                                 {t('editor.version.confirmDesc',
-                                    'The page will be restored to version {{version}}. This creates a new version — the current content is kept in history and nothing is lost.',
-                                    { version: confirmTarget?.version })}
+                                    'The page will be restored to revision {{version}}. This creates a new revision — the current content is kept in history and nothing is lost.',
+                                    { version: confirmTarget?.rev })}
                             </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>

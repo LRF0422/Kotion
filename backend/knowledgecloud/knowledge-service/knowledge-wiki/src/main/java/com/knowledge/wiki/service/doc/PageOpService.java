@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +24,7 @@ import com.knowledge.wiki.service.entity.WikiBlock;
 import com.knowledge.wiki.service.entity.dto.ApplyOpsDTO;
 import com.knowledge.wiki.service.entity.dto.BlockOpDTO;
 import com.knowledge.wiki.service.entity.dto.ReconcileDTO;
+import com.knowledge.wiki.service.entity.event.PageDocChangedEvent;
 import com.knowledge.wiki.service.entity.vo.ApplyOpsVO;
 import com.knowledge.wiki.service.entity.vo.OpResultVO;
 import com.knowledge.wiki.service.exception.WikiException;
@@ -92,6 +94,9 @@ public class PageOpService {
     @Autowired
     private PageDocService pageDocService;
 
+    @Autowired
+    private ApplicationEventPublisher eventPublisher;
+
     /**
      * Apply a batch of ops. Each op gets its own verdict; a rejected or stale op
      * does not abort the batch, because a collaborative writer's batch routinely
@@ -135,6 +140,9 @@ public class PageOpService {
         }
 
         PageHead head = lockHead(pageId);
+        if (request.getBaseRev() != null && request.getBaseRev() != revOf(head)) {
+            throw WikiException.PAGE_REVISION_CONFLICT.newException();
+        }
         List<WikiBlock> current = pageDocService.loadBlocks(pageId);
         List<BlockOpDTO> ops = diffToOps(request.getDoc(), current);
 
@@ -154,6 +162,35 @@ public class PageOpService {
      */
     private static long revOf(PageHead head) {
         return head == null || head.getRev() == null ? 0L : head.getRev();
+    }
+
+    /** Ensure the page has its rev-0 serialisation row and hold its write lock. */
+    @Transactional(rollbackFor = Exception.class)
+    public long ensureHead(Long pageId) {
+        if (pageId == null) {
+            throw WikiException.INVALID_PARAMETER.newException();
+        }
+        return revOf(lockHead(pageId));
+    }
+
+    /**
+     * Advance history for a successful state command whose reconcile was already
+     * identical (notably restoring an older rev with the same content). The empty
+     * normalised op array is replayable and preserves the forward-restore contract.
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public ApplyOpsVO recordStateCommand(Long pageId, Long actor) {
+        PageHead head = lockHead(pageId);
+        long newRev = revOf(head) + 1;
+        bumpHead(head, newRev, actor);
+        writeJournal(pageId, newRev, actor, null, new ArrayList<Map<String, Object>>());
+        pageDocService.syncPageMeta(pageId, actor, false, null, null);
+
+        ApplyOpsVO result = new ApplyOpsVO();
+        result.setRev(newRev);
+        result.setOpsApplied(0);
+        result.setResults(new ArrayList<OpResultVO>());
+        return result;
     }
 
     // ------------------------------------------------------------------
@@ -183,7 +220,7 @@ public class PageOpService {
         flush(state);
         bumpHead(head, newRev, actor);
         writeJournal(pageId, newRev, actor, idempotencyKey, state.journal);
-        pageDocService.syncPageTitleMeta(pageId, state.titleText, state.titleNode);
+        pageDocService.syncPageMeta(pageId, actor, state.titleTouched, state.titleText, state.titleNode);
 
         if (newRev % CHECKPOINT_OP_INTERVAL == 0) {
             pageDocService.writeCheckpoint(pageId, newRev, actor, PageCheckpoint.KIND_AUTO, null);
@@ -193,6 +230,10 @@ public class PageOpService {
         vo.setRev(newRev);
         vo.setOpsApplied(state.journal.size());
         vo.setResults(results);
+
+        // Published inside the authoritative transaction; the only consumers are
+        // AFTER_COMMIT listeners, so a rollback produces no cache/index/link work.
+        eventPublisher.publishEvent(new PageDocChangedEvent(pageId, newRev));
         return vo;
     }
 
@@ -219,30 +260,31 @@ public class PageOpService {
             return OpResultVO.rejected(op.getOp(), op.getBlockId(), REASON_MISSING_NODE);
         }
 
-        Meta existing = state.index.get(op.getBlockId());
-        if (existing != null) {
-            // Re-inserting a block that is already present and identical is a
-            // retry, not a conflict — answer applied and change nothing. Present
-            // but different is a genuine divergence the caller must see.
-            BlockDocCodec.FlatBlock probe = BlockDocCodec.toFlatBlock(op.getBlockId(), typeOf(op.getNode()),
-                    op.getNode());
-            if (probe.getNodeHash().equals(existing.getNodeHash())) {
-                return OpResultVO.applied(op.getOp(), op.getBlockId(), state.newRev);
-            }
-            return staleFor(state, op, REASON_CONCURRENT_CHANGE);
-        }
-
-        Placement placement = resolvePlacement(state, op);
-        if (placement.reason != null) {
-            return OpResultVO.rejected(op.getOp(), op.getBlockId(), placement.reason);
-        }
-
         String blockId = StrUtil.isBlank(op.getBlockId()) ? BlockDocCodec.readBlockId(op.getNode()) : op.getBlockId();
         if (StrUtil.isBlank(blockId)) {
             // Assignment at creation, which is allowed — as opposed to regenerating
             // an id a node already carries, which is never allowed. Importers and
             // server-side writers legitimately submit id-less nodes.
             blockId = IdUtil.fastSimpleUUID();
+        }
+
+        Meta existing = state.index.get(blockId);
+        if (existing != null) {
+            // Re-inserting a block that is already present and identical is a
+            // retry, not a conflict — answer applied and change nothing. Present
+            // but different is a genuine divergence the caller must see.
+            BlockDocCodec.FlatBlock probe = BlockDocCodec.toFlatBlock(blockId, typeOf(op.getNode()), op.getNode());
+            if (probe.getNodeHash().equals(existing.getNodeHash())) {
+                return OpResultVO.applied(op.getOp(), blockId, state.newRev);
+            }
+            WikiBlock row = wikiBlockMapper.selectById(blockId);
+            Map<String, Object> node = row == null ? null : BlockDocCodec.readJson(row.getNode());
+            return OpResultVO.stale(op.getOp(), blockId, REASON_CONCURRENT_CHANGE, node);
+        }
+
+        Placement placement = resolvePlacement(state, op);
+        if (placement.reason != null) {
+            return OpResultVO.rejected(op.getOp(), blockId, placement.reason);
         }
 
         BlockDocCodec.FlatBlock flat = BlockDocCodec.toFlatBlock(blockId, typeOf(op.getNode()), op.getNode());
@@ -281,11 +323,17 @@ public class PageOpService {
             return OpResultVO.applied(op.getOp(), op.getBlockId(), state.newRev);
         }
 
+        boolean replacedTitle = BlockDocCodec.TYPE_TITLE.equals(meta.getType())
+                && !BlockDocCodec.TYPE_TITLE.equals(flat.getType());
         meta.setNodeHash(flat.getNodeHash());
         meta.setType(flat.getType());
         meta.setRev(state.newRev);
         state.stage(row(state, op.getBlockId(), meta.getParentId(), meta.getBlockRank(), flat));
-        state.noteTitle(flat);
+        if (replacedTitle) {
+            state.noteTitleDeleted();
+        } else {
+            state.noteTitle(flat);
+        }
 
         Map<String, Object> journal = new LinkedHashMap<>();
         journal.put("op", BlockOpDTO.OP_REPLACE);
@@ -347,6 +395,10 @@ public class PageOpService {
         // which rows went away. Replay must not have to re-derive the subtree from a
         // tree that has since changed.
         for (String id : state.index.selfAndDescendants(op.getBlockId())) {
+            Meta deleted = state.index.get(id);
+            if (deleted != null && BlockDocCodec.TYPE_TITLE.equals(deleted.getType())) {
+                state.noteTitleDeleted();
+            }
             state.index.remove(id);
             state.stageDelete(id);
             Map<String, Object> journal = new LinkedHashMap<>();
@@ -797,6 +849,9 @@ public class PageOpService {
 
         private final List<Map<String, Object>> journal = new ArrayList<>();
 
+        /** Whether the batch changed or deleted the title block. */
+        private boolean titleTouched;
+
         /** Text of the title block, when this batch touched it. */
         private String titleText;
 
@@ -846,9 +901,16 @@ public class PageOpService {
 
         void noteTitle(BlockDocCodec.FlatBlock flat) {
             if (BlockDocCodec.TYPE_TITLE.equals(flat.getType())) {
+                titleTouched = true;
                 titleText = flat.getText();
                 titleNode = flat.getNode();
             }
+        }
+
+        void noteTitleDeleted() {
+            titleTouched = true;
+            titleText = null;
+            titleNode = null;
         }
     }
 

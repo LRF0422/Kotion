@@ -5,6 +5,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.knowledge.core.common.base.BaseService;
+import com.knowledge.core.common.base.Icon;
+import com.knowledge.core.common.base.IconType;
 import com.knowledge.core.secure.utils.SecurityContextUtil;
 import com.knowledge.wiki.service.converter.SpaceConverter;
 import com.knowledge.wiki.service.entity.Page;
@@ -47,7 +49,9 @@ public class SpaceServiceImpl extends BaseService<SpaceMapper, Space> implements
                 space.setType(SpaceType.SPACE);
             }
             this.save(space);
-            createHomePage(space);
+            if (space.getType() != SpaceType.TEMPALTE) {
+                createHomePage(space);
+            }
             log.info("Space created with ID: {}", space.getId());
         }
         return space;
@@ -57,11 +61,14 @@ public class SpaceServiceImpl extends BaseService<SpaceMapper, Space> implements
         Page newPage = new Page();
         newPage.setSpaceId(space.getId());
         newPage.setTitle("Welcome to " + space.getName());
-        newPage.setContent(
-                String.format(
-                        "{\"type\": \"doc\", \"attrs\": {\"id\": null, \"cover\": null, \"title\": null, \"comment\": [], \"creator\": null, \"createDate\": null, \"updateDate\": null}, \"content\": [{\"type\": \"title\", \"attrs\": {\"id\": \"33672345-63ce-4f4c-b8d7-9b4d3aca27a2\", \"icon\": {\"icon\": \"😄\", \"type\": \"EMOJI\"}, \"uuid\": null, \"cover\": null}, \"content\": [{\"type\": \"heading\", \"attrs\": {\"id\": \"778a858f-69d3-4e7e-931a-2eabc157dc15\", \"level\": 1, \"textAlign\": null, \"data-toc-id\": \"778a858f-69d3-4e7e-931a-2eabc157dc15\"}, \"content\": [{\"text\": \"Welcome to %s !!\", \"type\": \"text\"}]}]}, {\"type\": \"paragraph\", \"attrs\": {\"id\": \"b0143e14-1d87-4293-bd25-0363134d76b2\", \"indent\": 0, \"textAlign\": null}}]}",
-                        space.getName()));
+        Icon icon = new Icon();
+        icon.setIcon("😄");
+        icon.setType(IconType.EMOJI);
+        newPage.setIcon(icon);
+        // No client-authored JSON or fixed block IDs: createPage builds and stores
+        // the canonical title + paragraph PageDoc in this space transaction.
         Page homePage = pageService.createPage(newPage, true);
+        space.setHomePageId(homePage.getId());
         this.lambdaUpdate()
                 .eq(Space::getId, space.getId())
                 .set(Space::getHomePageId, homePage.getId())

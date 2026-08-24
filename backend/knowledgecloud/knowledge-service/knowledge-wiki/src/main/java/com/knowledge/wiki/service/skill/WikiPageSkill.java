@@ -1,33 +1,37 @@
 package com.knowledge.wiki.service.skill;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
 
-import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.knowledge.core.agent.annotation.AgentSkill;
 import com.knowledge.core.agent.annotation.SkillTierValue;
 import com.knowledge.core.agent.annotation.SkillTool;
 import com.knowledge.core.agent.annotation.ToolParam;
+import com.knowledge.core.secure.utils.SecurityContextUtil;
+import com.knowledge.wiki.service.doc.BlockDocCodec;
+import com.knowledge.wiki.service.doc.PageDocCommandService;
+import com.knowledge.wiki.service.doc.PageDocService;
+import com.knowledge.wiki.service.doc.WikiBlockReadService;
 import com.knowledge.wiki.service.entity.Page;
-import com.knowledge.wiki.service.entity.PageContent;
 import com.knowledge.wiki.service.entity.Space;
-import com.knowledge.wiki.service.entity.dto.QueryPageBlockDTO;
-import com.knowledge.wiki.service.entity.vo.PageContentVO;
-import com.knowledge.wiki.service.service.IPageContentService;
+import com.knowledge.wiki.service.entity.vo.PageBlockDetailVO;
+import com.knowledge.wiki.service.entity.vo.PageDocVO;
 import com.knowledge.wiki.service.service.IPageService;
+import com.knowledge.wiki.service.service.IPermissionService;
 import com.knowledge.wiki.service.service.ISpaceService;
-import com.knowledge.wiki.service.service.impl.BlockStorageService;
 
 import com.knowledge.wiki.service.entity.enums.SpaceStatus;
 import com.knowledge.wiki.service.entity.enums.SpaceType;
 
 import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONObject;
-import cn.hutool.json.JSONUtil;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -67,13 +71,16 @@ public class WikiPageSkill {
     private ISpaceService spaceService;
 
     @Autowired
-    private BlockStorageService blockStorageService;
+    private WikiBlockReadService wikiBlockReadService;
 
     @Autowired
-    private IPageContentService pageContentService;
+    private PageDocService pageDocService;
 
     @Autowired
-    private ObjectMapper objectMapper;
+    private PageDocCommandService pageDocCommandService;
+
+    @Autowired
+    private IPermissionService permissionService;
 
     /**
      * Summarize a page's content.
@@ -91,10 +98,12 @@ public class WikiPageSkill {
         log.info("Summarizing page with id={}", pageId);
 
         try {
-            Page page = pageService.getPageContent(pageId);
+            Page page = pageService.getById(pageId);
             if (page == null) {
                 return "Error: Page not found with id=" + pageId;
             }
+            permissionService.checkPagePermission(SecurityContextUtil.getUserId(), page,
+                    IPermissionService.PERMISSION_READ);
 
             StringBuilder result = new StringBuilder();
             result.append("# Page: ").append(page.getTitle()).append("\n\n");
@@ -110,20 +119,9 @@ public class WikiPageSkill {
 
             result.append("## Content\n\n");
 
-            // Get content from block storage
-            String contentJson = pageService.getPageContentFromBlocks(pageId);
-            if (StrUtil.isNotBlank(contentJson)) {
-                String textContent = extractTextFromContent(JSONUtil.parseObj(contentJson));
-                textContent = truncateContent(textContent, MAX_CONTENT_LENGTH);
-                result.append(textContent);
-            } else if (page.getContent() != null) {
-                // Fallback to page.content if available
-                String textContent = extractTextFromContent(page.getContent());
-                textContent = truncateContent(textContent, MAX_CONTENT_LENGTH);
-                result.append(textContent);
-            } else {
-                result.append("(No content available)\n");
-            }
+            Map<String, Object> doc = pageDocService.readDoc(pageId).getDoc();
+            String textContent = truncateContent(BlockDocCodec.extractText(doc), MAX_CONTENT_LENGTH);
+            result.append(StrUtil.isNotBlank(textContent) ? textContent : "(No content available)\n");
 
             log.info("Successfully summarized page id={}, title='{}'", pageId, page.getTitle());
             return result.toString();
@@ -330,31 +328,8 @@ public class WikiPageSkill {
         log.info("Searching for keyword='{}', spaceId={}, pageId={}", keyword, spaceId, pageId);
 
         try {
-            // Build query DTO
-            QueryPageBlockDTO dto = new QueryPageBlockDTO();
-            dto.setSearchValue(keyword);
-            dto.setSpaceId(spaceId);
-            dto.setPageId(pageId);
-            dto.setPageSize(MAX_SEARCH_RESULTS);
-            dto.setCurrent(1);
-
-            // Query page blocks with search
-            IPage<PageContentVO> resultPage = pageContentService.selectJoinListPage(
-                    dto.page(),
-                    PageContentVO.class,
-                    com.github.yulichang.toolkit.MPJWrappers.lambdaJoin(PageContent.class)
-                            .selectAll(PageContent.class)
-                            .leftJoin(Page.class, Page::getId, PageContent::getPageId)
-                            .leftJoin(Space.class, Space::getId, Page::getSpaceId)
-                            .selectAs(Page::getSpaceId, PageContentVO::getSpaceId)
-                            .selectAs(Space::getName, PageContentVO::getSpaceName)
-                            .selectAs(Page::getTitle, PageContentVO::getPageTitle)
-                            .like(StrUtil.isNotBlank(keyword), PageContent::getText, keyword)
-                            .eq(spaceId != null, Space::getId, spaceId)
-                            .eq(pageId != null, PageContent::getPageId, pageId)
-                            .distinct());
-
-            List<PageContentVO> blocks = resultPage.getRecords();
+            List<PageBlockDetailVO> blocks = wikiBlockReadService.search(keyword, pageId, spaceId,
+                    MAX_SEARCH_RESULTS);
 
             StringBuilder result = new StringBuilder();
             result.append("# Search Results for: \"").append(keyword).append("\"\n\n");
@@ -365,14 +340,11 @@ public class WikiPageSkill {
             }
 
             int maxResults = Math.min(blocks.size(), MAX_SEARCH_RESULTS);
-            result.append("**Found:** ").append(resultPage.getTotal()).append(" results");
-            if (resultPage.getTotal() > maxResults) {
-                result.append(" (showing first ").append(maxResults).append(")");
-            }
+            result.append("**Found:** ").append(blocks.size()).append(" results");
             result.append("\n\n");
 
             for (int i = 0; i < maxResults; i++) {
-                PageContentVO block = blocks.get(i);
+                PageBlockDetailVO block = blocks.get(i);
                 String blockId = block.getId() != null ? block.getId() : "";
                 String pageTitle = block.getPageTitle() != null ? block.getPageTitle() : "Unknown Page";
                 String spaceName = block.getSpaceName();
@@ -420,23 +392,34 @@ public class WikiPageSkill {
         log.info("Writing page: pageId={}, title='{}', spaceId={}", pageId, title, spaceId);
 
         try {
-            Page page;
-            boolean isNew = false;
+            Long actor = SecurityContextUtil.getUserId();
+            Page savedPage;
+            boolean isNew = pageId == null;
 
-            if (pageId != null) {
-                // Update existing page
-                page = pageService.getById(pageId);
-                if (page == null) {
+            if (!isNew) {
+                Page current = pageService.getById(pageId);
+                if (current == null) {
                     return "Error: Page not found with id=" + pageId;
                 }
-                if (StrUtil.isNotBlank(title)) {
-                    page.setTitle(title);
-                }
+                permissionService.checkPagePermission(actor, current, IPermissionService.PERMISSION_WRITE);
+
+                PageDocVO currentDoc = pageDocService.readDoc(pageId);
+                Map<String, Object> doc;
                 if (StrUtil.isNotBlank(content)) {
-                    page.setContent(convertToPageContent(content));
+                    String effectiveTitle = StrUtil.isNotBlank(title) ? title : current.getTitle();
+                    doc = convertToPageDocument(effectiveTitle, content);
+                } else {
+                    doc = BlockDocCodec.readJson(BlockDocCodec.writeJson(currentDoc.getDoc()));
+                    if (doc == null) {
+                        return "Error: Existing page document is invalid";
+                    }
+                    if (StrUtil.isNotBlank(title)) {
+                        replaceDocumentTitle(doc, title);
+                    }
                 }
+                pageDocCommandService.reconcileTrusted(pageId, doc, actor, currentDoc.getRev());
+                savedPage = pageService.getById(pageId);
             } else {
-                // Create new page
                 if (spaceId == null) {
                     return "Error: spaceId is required when creating a new page";
                 }
@@ -447,21 +430,23 @@ public class WikiPageSkill {
                     return "Error: content is required when creating a new page";
                 }
 
-                // Verify space exists
                 Space space = spaceService.getById(spaceId);
                 if (space == null) {
                     return "Error: Space not found with id=" + spaceId;
                 }
+                String spacePermission = permissionService.effectiveSpacePermission(actor, space);
+                if (!IPermissionService.PERMISSION_WRITE.equals(spacePermission)
+                        && !IPermissionService.PERMISSION_ADMIN.equals(spacePermission)) {
+                    return "Error: Write permission is required for space id=" + spaceId;
+                }
 
-                page = new Page();
+                Page page = new Page();
                 page.setTitle(title);
-                page.setContent(convertToPageContent(content));
+                page.setContent(BlockDocCodec.writeJson(convertToPageDocument(title, content)));
                 page.setSpaceId(spaceId);
                 page.setParentId(Page.TOP_PAGE_ID);
-                isNew = true;
+                savedPage = pageService.createPage(page, true);
             }
-
-            Page savedPage = pageService.createPage(page, true);
 
             StringBuilder result = new StringBuilder();
             result.append(isNew ? "# Page Created" : "# Page Updated").append("\n\n");
@@ -497,28 +482,16 @@ public class WikiPageSkill {
         log.info("Getting block detail for blockId={}", blockId);
 
         try {
-            PageContent blockData = pageService.getBlockDetailInfo(blockId);
+            PageBlockDetailVO blockData = wikiBlockReadService.getBlockDetail(blockId);
             if (blockData == null) {
                 return "Error: Block not found with id=" + blockId;
             }
 
-            // 查询页面信息用于上下文
-            String pageTitle = "Unknown Page";
-            String spaceName = null;
-            if (blockData.getPageId() != null) {
-                Page page = pageService.getById(blockData.getPageId());
-                if (page != null) {
-                    pageTitle = page.getTitle() != null ? page.getTitle() : "Unknown Page";
-                    if (page.getSpaceId() != null) {
-                        Space space = spaceService.getById(page.getSpaceId());
-                        spaceName = space != null ? space.getName() : null;
-                    }
-                }
-            }
-
+            String pageTitle = StrUtil.blankToDefault(blockData.getPageTitle(), "Unknown Page");
+            String spaceName = blockData.getSpaceName();
             String blockType = blockData.getType() != null ? blockData.getType() : "";
             String blockText = blockData.getText();
-            String path = blockData.getPath();
+            String path = blockData.getFullPath();
 
             StringBuilder result = new StringBuilder();
             result.append("# Block Detail\n\n");
@@ -535,8 +508,8 @@ public class WikiPageSkill {
             }
             result.append("\n## Content\n\n");
 
-            // If there's structured content, extract it; otherwise use text
-            if (CollUtil.isNotEmpty(blockData.getContent())) {
+            // The detail VO carries the complete ProseMirror node from wiki_block.node.
+            if (blockData.getContent() != null) {
                 String extractedContent = extractTextFromContent(blockData.getContent());
                 result.append(truncateContent(extractedContent, MAX_CONTENT_LENGTH));
             } else if (StrUtil.isNotBlank(blockText)) {
@@ -570,30 +543,7 @@ public class WikiPageSkill {
 
         StringBuilder text = new StringBuilder();
 
-        if (content instanceof PageContent) {
-            // Handle PageContent entity from block-first storage
-            PageContent pc = (PageContent) content;
-            String type = pc.getType() != null ? pc.getType() : "";
-
-            if (StrUtil.isNotBlank(pc.getText())) {
-                text.append(pc.getText());
-            }
-
-            // Recurse into children
-            if (CollUtil.isNotEmpty(pc.getContent())) {
-                for (PageContent child : pc.getContent()) {
-                    String childText = extractTextFromContent(child);
-                    if (!childText.isEmpty()) {
-                        text.append(childText);
-                    }
-                }
-            }
-
-            if (isBlockElement(type) && text.length() > 0) {
-                text.append("\n");
-            }
-
-        } else if (content instanceof Map || content instanceof JSONObject) {
+        if (content instanceof Map || content instanceof JSONObject) {
             Map<String, Object> block;
             if (content instanceof JSONObject) {
                 block = (JSONObject) content;
@@ -702,103 +652,104 @@ public class WikiPageSkill {
         return content.substring(0, maxLength - 3) + "...";
     }
 
-    /**
-     * Convert plain text or markdown content into the page's JSON content format.
-     * Creates a simple document structure with paragraphs.
-     */
-    private String convertToPageContent(String content) {
-        if (StrUtil.isBlank(content)) {
-            return "{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\",\"attrs\":{\"id\":\""
-                    + java.util.UUID.randomUUID().toString() + "\"}}]}";
-        }
+    /** Build the canonical title block plus markdown-like body blocks for AI writes. */
+    private Map<String, Object> convertToPageDocument(String title, String content) {
+        Map<String, Object> doc = new LinkedHashMap<>();
+        List<Map<String, Object>> blocks = new ArrayList<>();
+        blocks.add(titleNode(title));
 
-        // Split content by double newlines into paragraphs
-        String[] paragraphs = content.split("\\n\\n+");
-        StringBuilder jsonBuilder = new StringBuilder();
-        jsonBuilder.append("{\"type\":\"doc\",\"content\":[");
-
-        boolean first = true;
-        for (String raw : paragraphs) {
-            String para = raw.trim();
-            if (para.isEmpty()) {
-                continue;
-            }
-
-            if (!first) {
-                jsonBuilder.append(",");
-            }
-            first = false;
-
-            String blockId = java.util.UUID.randomUUID().toString();
-
-            // Detect heading level from markdown
-            int headingLevel = 0;
-            String textContent = para;
-            if (para.startsWith("# ")) {
-                headingLevel = 1;
-                textContent = para.substring(2).trim();
-            } else if (para.startsWith("## ")) {
-                headingLevel = 2;
-                textContent = para.substring(3).trim();
-            } else if (para.startsWith("### ")) {
-                headingLevel = 3;
-                textContent = para.substring(4).trim();
-            }
-
-            // Escape text for JSON
-            String escapedText = escapeJsonString(textContent);
-
-            if (headingLevel > 0) {
-                jsonBuilder.append("{\"type\":\"heading\",\"attrs\":{\"id\":\"")
-                        .append(blockId).append("\",\"level\":").append(headingLevel)
-                        .append("},\"content\":[{\"text\":\"").append(escapedText)
-                        .append("\",\"type\":\"text\"}]}");
-            } else {
-                jsonBuilder.append("{\"type\":\"paragraph\",\"attrs\":{\"id\":\"")
-                        .append(blockId).append("\"},\"content\":[{\"text\":\"").append(escapedText)
-                        .append("\",\"type\":\"text\"}]}");
+        if (StrUtil.isNotBlank(content)) {
+            for (String raw : content.split("\\n\\n+")) {
+                String value = raw.trim();
+                if (value.isEmpty()) {
+                    continue;
+                }
+                int level = 0;
+                if (value.startsWith("### ")) {
+                    level = 3;
+                    value = value.substring(4).trim();
+                } else if (value.startsWith("## ")) {
+                    level = 2;
+                    value = value.substring(3).trim();
+                } else if (value.startsWith("# ")) {
+                    level = 1;
+                    value = value.substring(2).trim();
+                }
+                blocks.add(textBlock(level > 0 ? "heading" : "paragraph", value, level));
             }
         }
-
-        jsonBuilder.append("]}");
-        return jsonBuilder.toString();
+        if (blocks.size() == 1) {
+            blocks.add(textBlock("paragraph", "", 0));
+        }
+        doc.put("type", "doc");
+        doc.put("content", blocks);
+        return doc;
     }
 
-    /**
-     * Escape a string for safe inclusion in a JSON string value.
-     * Handles backslash, quotes, and control characters per RFC 7159.
-     */
-    private String escapeJsonString(String value) {
-        if (value == null || value.isEmpty()) {
-            return "";
+    private Map<String, Object> titleNode(String title) {
+        String headingId = IdUtil.fastSimpleUUID();
+        Map<String, Object> headingAttrs = new LinkedHashMap<>();
+        headingAttrs.put("id", headingId);
+        headingAttrs.put("level", 1);
+        headingAttrs.put("data-toc-id", headingId);
+        Map<String, Object> heading = node("heading", headingAttrs);
+        heading.put("content", new ArrayList<>(Arrays.asList(textNode(StrUtil.blankToDefault(title, Page.UNTITLE)))));
+
+        Map<String, Object> titleAttrs = new LinkedHashMap<>();
+        titleAttrs.put("id", IdUtil.fastSimpleUUID());
+        titleAttrs.put("uuid", null);
+        Map<String, Object> titleNode = node(BlockDocCodec.TYPE_TITLE, titleAttrs);
+        titleNode.put("content", new ArrayList<>(Arrays.asList(heading)));
+        return titleNode;
+    }
+
+    private Map<String, Object> textBlock(String type, String text, int headingLevel) {
+        Map<String, Object> attrs = new LinkedHashMap<>();
+        String id = IdUtil.fastSimpleUUID();
+        attrs.put("id", id);
+        if (headingLevel > 0) {
+            attrs.put("level", headingLevel);
+            attrs.put("data-toc-id", id);
         }
-        StringBuilder sb = new StringBuilder(value.length());
-        for (int i = 0; i < value.length(); i++) {
-            char c = value.charAt(i);
-            switch (c) {
-                case '\\':
-                    sb.append("\\\\");
-                    break;
-                case '"':
-                    sb.append("\\\"");
-                    break;
-                case '\n':
-                    sb.append("\\n");
-                    break;
-                case '\r':
-                    sb.append("\\r");
-                    break;
-                case '\t':
-                    sb.append("\\t");
-                    break;
-                default:
-                    if (c < 0x20) {
-                        sb.append(String.format("\\u%04x", (int) c));
-                    } else {
-                        sb.append(c);
-                    }
+        Map<String, Object> block = node(type, attrs);
+        if (StrUtil.isNotBlank(text)) {
+            block.put("content", new ArrayList<>(Arrays.asList(textNode(text))));
+        }
+        return block;
+    }
+
+    private Map<String, Object> node(String type, Map<String, Object> attrs) {
+        Map<String, Object> node = new LinkedHashMap<>();
+        node.put("type", type);
+        node.put("attrs", attrs);
+        return node;
+    }
+
+    private Map<String, Object> textNode(String text) {
+        Map<String, Object> node = new LinkedHashMap<>();
+        node.put("type", "text");
+        node.put("text", text);
+        return node;
+    }
+
+    private void replaceDocumentTitle(Map<String, Object> doc, String title) {
+        for (Map<String, Object> block : BlockDocCodec.childrenOf(doc)) {
+            if (!BlockDocCodec.TYPE_TITLE.equals(block.get("type"))) {
+                continue;
             }
+            List<Map<String, Object>> children = BlockDocCodec.childrenOf(block);
+            Map<String, Object> heading;
+            if (children.isEmpty() || !"heading".equals(children.get(0).get("type"))) {
+                heading = BlockDocCodec.childrenOf(titleNode(title)).get(0);
+                block.put("content", new ArrayList<>(Arrays.asList(heading)));
+            } else {
+                heading = children.get(0);
+                heading.put("content", new ArrayList<>(Arrays.asList(textNode(title))));
+            }
+            return;
         }
-        return sb.toString();
+        List<Map<String, Object>> content = BlockDocCodec.childrenOf(doc);
+        content.add(0, titleNode(title));
+        doc.put("content", content);
     }
 }
