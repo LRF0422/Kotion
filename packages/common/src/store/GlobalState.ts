@@ -34,6 +34,7 @@ export interface GlobalState {
         bySpace: Record<string, {
             openPages: { pageId: string; title?: string; icon?: string; lastActiveAt: number }[];
             activePageId?: string;
+            hydrated?: boolean;
         }>
     }
 }

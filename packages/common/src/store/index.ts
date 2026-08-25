@@ -75,7 +75,8 @@ const store = createStore((state: GlobalState = {
         action.type === "PAGE_TAB_ACTIVATE" ||
         action.type === "PAGE_TAB_CLOSE" ||
         action.type === "PAGE_TAB_CLOSE_MANY" ||
-        action.type === "PAGE_TAB_UPDATE_META"
+        action.type === "PAGE_TAB_UPDATE_META" ||
+        action.type === "PAGE_TABS_HYDRATE"
     ) {
         const { spaceId } = action.payload
         if (!spaceId) return state
@@ -94,9 +95,12 @@ const store = createStore((state: GlobalState = {
             nextBucket = { ...bucket, openPages }
         } else if (action.type === "PAGE_TAB_ACTIVATE") {
             const { pageId, lastActiveAt } = action.payload
-            const openPages = bucket.openPages.map(p =>
-                p.pageId === pageId ? { ...p, lastActiveAt: lastActiveAt ?? p.lastActiveAt } : p
-            )
+            const exists = bucket.openPages.some(p => p.pageId === pageId)
+            const openPages = exists
+                ? bucket.openPages.map(p =>
+                    p.pageId === pageId ? { ...p, lastActiveAt: lastActiveAt ?? p.lastActiveAt } : p
+                )
+                : [...bucket.openPages, { pageId, lastActiveAt: lastActiveAt ?? 0 }]
             nextBucket = { ...bucket, openPages, activePageId: pageId }
         } else if (action.type === "PAGE_TAB_CLOSE") {
             const { pageId } = action.payload
@@ -138,6 +142,44 @@ const store = createStore((state: GlobalState = {
                     : p
             )
             nextBucket = { ...bucket, openPages }
+        } else if (action.type === "PAGE_TABS_HYDRATE") {
+            const hydratedPages = Array.isArray(action.payload.openPages) ? action.payload.openPages : []
+            const currentById = new Map(bucket.openPages.map(page => [page.pageId, page]))
+            const hydratedIds = new Set<string>()
+            const openPages = hydratedPages.flatMap((page: any) => {
+                if (!page || typeof page.pageId !== "string" || !page.pageId || hydratedIds.has(page.pageId)) {
+                    return []
+                }
+                hydratedIds.add(page.pageId)
+                const current = currentById.get(page.pageId)
+                return [{
+                    pageId: page.pageId,
+                    title: current?.title ?? page.title,
+                    icon: current?.icon ?? page.icon,
+                    lastActiveAt: current?.lastActiveAt ?? 0,
+                }]
+            })
+            // A child route layout effect may activate the URL page before the
+            // space-level storage owner hydrates. Preserve that page, but let the
+            // persisted list replace any other stale in-memory background tabs.
+            if (bucket.activePageId && !hydratedIds.has(bucket.activePageId)) {
+                openPages.push(currentById.get(bucket.activePageId) ?? {
+                    pageId: bucket.activePageId,
+                    lastActiveAt: 0,
+                })
+            }
+            nextBucket = { ...bucket, openPages, hydrated: true }
+        }
+
+        // Keep the active editor and visible tab strip in lockstep. Activation
+        // and hydration preserve the URL page above; other actions fall back to
+        // the most-recent remaining tab instead of reviving a stale page.
+        if (nextBucket.activePageId && !nextBucket.openPages.some(p => p.pageId === nextBucket.activePageId)) {
+            const next = nextBucket.openPages.reduce<{ pageId: string; lastActiveAt: number } | undefined>(
+                (best, page) => (!best || page.lastActiveAt > best.lastActiveAt ? page : best),
+                undefined
+            )
+            nextBucket = { ...nextBucket, activePageId: next?.pageId }
         }
 
         return {

@@ -1,4 +1,4 @@
-import React, { useEffect } from "react"
+import React, { useLayoutEffect } from "react"
 import { useParams, usePageTabs } from "@kn/common"
 
 /**
@@ -11,13 +11,13 @@ export const PageRouteSync: React.FC = () => {
     const params = useParams()
     const spaceId = params.id
     const pageId = params.pageId
-    const { openTab, activateTab } = usePageTabs(spaceId)
+    const { openPages, activePageId, activateTab } = usePageTabs(spaceId)
+    const routePageIsActive = activePageId === pageId && openPages.some(page => page.pageId === pageId)
 
-    useEffect(() => {
-        if (!spaceId || !pageId) return
-        openTab(pageId)
+    useLayoutEffect(() => {
+        if (!spaceId || !pageId || routePageIsActive) return
         activateTab(pageId)
-    }, [spaceId, pageId, openTab, activateTab])
+    }, [spaceId, pageId, routePageIsActive, activateTab])
 
     return null
 }

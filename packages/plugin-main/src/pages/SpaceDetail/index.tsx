@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useResponsive, Button, Sheet, SheetContent, SheetTitle, cn, toast } from "@kn/ui";
 import { Menu, PanelLeftClose, PanelLeftOpen } from "@kn/icon";
-import { useApi, useService, useNavigator, useToggle, useMobilePageHeader, useTranslation } from "@kn/common";
+import { useApi, useService, useNavigator, useToggle, useMobilePageHeader, useTranslation, usePageTabsStorage } from "@kn/common";
 import { APIS } from "../../api";
 import { Outlet, useParams, useMatch } from "@kn/common";
 import { Space } from "../../model/Space";
@@ -38,6 +38,7 @@ export const SpaceDetail: React.FC = () => {
     const [flag, setFlag] = useState(0)
     const [restoreFlag, setRestoreFlag] = useState(0)
     const params = useParams()
+    usePageTabsStorage(params.id)
     const isPageEdit = !!useMatch("/space-detail/:id/page/edit/:pageId")
     const navigator = useNavigator()
     const [searchValue, setSearchValue] = useState<string>()
