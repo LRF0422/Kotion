@@ -186,6 +186,72 @@
   }
 }
 
+@layer components {
+  .kn-app-shell {
+    background: hsl(var(--muted) / 0.4);
+  }
+
+  html[data-ui-style="modern"] .kn-app-shell {
+    padding: var(--kn-app-shell-padding);
+    gap: var(--kn-workspace-gap);
+    background: hsl(var(--muted) / 0.58);
+    -webkit-backdrop-filter: blur(18px) saturate(1.15);
+    backdrop-filter: blur(18px) saturate(1.15);
+  }
+
+  html[data-ui-style="modern"] .kn-workspace-shell {
+    gap: var(--kn-workspace-gap);
+  }
+
+  .kn-shell-top-drag-region {
+    display: none;
+  }
+
+  html[data-ui-style="modern"] .kn-shell-top-drag-region {
+    display: block;
+    height: var(--kn-app-shell-padding);
+  }
+
+  html[data-ui-style="modern"] .kn-workspace-sidebar,
+  html[data-ui-style="modern"] .kn-workspace-editor,
+  html[data-ui-style="modern"] .kn-workspace-dock[data-expanded="true"] .kn-dock-viewport {
+    overflow: hidden;
+    border: 1px solid hsl(var(--border) / 0.8);
+    border-radius: var(--kn-workspace-radius);
+    background: hsl(var(--background));
+    box-shadow: 0 8px 24px hsl(0 0% 0% / 0.08);
+  }
+
+  html[data-ui-style="modern"] .kn-app-rail,
+  html[data-ui-style="modern"] .kn-workspace-dock,
+  html[data-ui-style="modern"] .kn-dock-rail {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  html[data-ui-style="modern"] .kn-workspace-shell {
+    background: transparent;
+  }
+
+  html[data-ui-style="modern"] .kn-dock-panel {
+    border-left-width: 0;
+    border-right-width: 0;
+  }
+
+  html[data-ui-style="modern"] .kn-dock-rail {
+    border-left-width: 0;
+    border-right-width: 0;
+  }
+
+  html[data-ui-style="modern"] .kn-workspace-dock[data-expanded="true"] {
+    gap: var(--kn-workspace-gap);
+  }
+}
+
 /* ------------------------------------------------------------------
  * Safari / WebKit performance: GPU layer promotion for animated
  * overlays and modals.  Without these hints Safari keeps the element

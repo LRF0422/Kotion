@@ -9,9 +9,12 @@
   <script>
     // Apply saved theme immediately to prevent flash
     (function () {
+      const root = document.documentElement;
       const theme = localStorage.getItem('kn-ui-theme') || localStorage.getItem('theme');
+      const uiStyle = localStorage.getItem('kn-ui-style');
+      root.dataset.uiStyle = uiStyle === 'modern' ? 'modern' : 'classic';
       if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-        document.documentElement.classList.add('dark');
+        root.classList.add('dark');
       }
     })();
   </script>

@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 import { applyColorScheme, subscribe, ResolvedMode } from "./color-scheme"
+import { applyUiStyle } from "./ui-style"
 
 type Theme = "dark" | "light" | "system"
 
@@ -64,6 +65,10 @@ export function ThemeProvider({
         return subscribe(() => applyColorScheme(resolvedModeRef.current))
     }, [])
 
+    useEffect(() => {
+        applyUiStyle()
+    }, [])
+
     const setThemeStable = useCallback((newTheme: Theme) => {
         if (typeof window !== "undefined") {
             window.localStorage.setItem(storageKey, newTheme)
@@ -88,6 +93,8 @@ export function ThemeProvider({
 export * from "./color-scheme"
 export * from "./use-color-scheme"
 export * from "./use-resolved-theme"
+export * from "./ui-style"
+export * from "./use-ui-style"
 
 export const useTheme = () => {
     const context = useContext(ThemeProviderContext)

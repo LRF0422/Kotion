@@ -21,7 +21,7 @@ import {
     Save,
 } from "@kn/icon";
 import { useSafeState } from "ahooks";
-import { useTheme } from "@kn/ui";
+import { useTheme, useUiStyle, type UiStyle } from "@kn/ui";
 import { useTranslation } from "@kn/common";
 import { SettingsPanel, SettingsSection, SettingsRow } from "./primitives";
 
@@ -45,8 +45,22 @@ const THEME_OPTIONS = [
     { value: "system", labelKey: "settings.preferences.themeSystem", icon: Monitor },
 ] as const;
 
+const UI_STYLE_OPTIONS = [
+    {
+        value: "modern",
+        labelKey: "settings.preferences.uiStyleModern",
+        descriptionKey: "settings.preferences.uiStyleModernDesc",
+    },
+    {
+        value: "classic",
+        labelKey: "settings.preferences.uiStyleClassic",
+        descriptionKey: "settings.preferences.uiStyleClassicDesc",
+    },
+] as const;
+
 export const MySetting: React.FC = () => {
     const { theme, setTheme } = useTheme();
+    const { uiStyle, setUiStyle } = useUiStyle();
     const { t, i18n } = useTranslation();
     const currentLang = i18n.language?.startsWith("zh") ? "zh" : "en";
 
@@ -125,6 +139,66 @@ export const MySetting: React.FC = () => {
                                 <span className="text-xs font-medium">{t(labelKey)}</span>
                             </Label>
                         ))}
+                    </RadioGroup>
+                </div>
+
+                <div className="space-y-2.5 px-4 py-3">
+                    <div className="space-y-0.5">
+                        <Label className="text-sm font-medium text-foreground">
+                            {t("settings.preferences.uiStyle")}
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                            {t("settings.preferences.uiStyleDesc")}
+                        </p>
+                    </div>
+                    <RadioGroup
+                        value={uiStyle}
+                        onValueChange={(value) => setUiStyle(value as UiStyle)}
+                        className="grid grid-cols-2 gap-2"
+                    >
+                        {UI_STYLE_OPTIONS.map(({ value, labelKey, descriptionKey }) => {
+                            const modern = value === "modern";
+                            return (
+                                <Label
+                                    key={value}
+                                    htmlFor={`ui-style-${value}`}
+                                    className={cn(
+                                        "flex cursor-pointer flex-col gap-2 rounded-lg border p-3 transition-colors",
+                                        uiStyle === value
+                                            ? "border-primary bg-primary/5 text-foreground"
+                                            : "border-border/60 text-muted-foreground hover:border-border hover:text-foreground",
+                                    )}
+                                >
+                                    <RadioGroupItem value={value} id={`ui-style-${value}`} className="sr-only" />
+                                    <div
+                                        className={cn(
+                                            "flex h-10 w-full bg-muted/60",
+                                            modern ? "gap-1 rounded-md p-1" : "border",
+                                        )}
+                                        aria-hidden
+                                    >
+                                        <span className={cn(
+                                            "h-full w-3 bg-background",
+                                            modern ? "rounded-sm border" : "border-r",
+                                        )} />
+                                        <span className={cn(
+                                            "h-full w-8 bg-background",
+                                            modern ? "rounded-sm border" : "border-r",
+                                        )} />
+                                        <span className={cn(
+                                            "h-full min-w-0 flex-1 bg-background",
+                                            modern && "rounded-sm border",
+                                        )} />
+                                    </div>
+                                    <div className="space-y-0.5">
+                                        <div className="text-xs font-medium">{t(labelKey)}</div>
+                                        <p className="text-[11px] leading-relaxed text-muted-foreground">
+                                            {t(descriptionKey)}
+                                        </p>
+                                    </div>
+                                </Label>
+                            );
+                        })}
                     </RadioGroup>
                 </div>
 

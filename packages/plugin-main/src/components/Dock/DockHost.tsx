@@ -43,7 +43,7 @@ const DockRail: React.FC<{
 }> = ({ panels, activeId, runningIds, onToggle, title, side }) => (
     <TooltipProvider delayDuration={300}>
         <div className={cn(
-            "flex h-full w-10 flex-shrink-0 flex-col items-center gap-1 bg-muted/40 py-2",
+            "kn-dock-rail flex h-full w-10 flex-shrink-0 flex-col items-center gap-1 bg-muted/40 py-2",
             side === 'right' ? "border-l" : "border-r"
         )}>
             <style>{`
@@ -229,13 +229,17 @@ export const DockHost: React.FC<DockHostProps> = ({
     const RenderedComponent = rendered?.component
 
     return (
-        <div className={cn("flex h-full", className)}>
+        <div
+            className={cn("flex h-full", className)}
+            data-expanded={!!activePanel}
+            data-position={position}
+        >
             {/* Animated viewport: collapses to 0 so the editor reclaims the space.
                 The panel inside keeps its full width and is clipped, which reads as
                 a slide rather than a squeeze. */}
             <div
                 className={cn(
-                    "relative h-full flex-shrink-0 overflow-hidden",
+                    "kn-dock-viewport relative h-full flex-shrink-0 overflow-hidden",
                     // Drag-resize writes width on every mousemove; transitioning
                     // there would make the panel lag behind the pointer.
                     !resizing && "transition-[width] duration-200 ease-out"
@@ -251,7 +255,7 @@ export const DockHost: React.FC<DockHostProps> = ({
                 {rendered && RenderedComponent && (
                     <div
                         className={cn(
-                            "absolute top-0 flex h-full flex-col border-l bg-background",
+                            "kn-dock-panel absolute top-0 flex h-full flex-col border-l bg-background",
                             // Anchored to the edge the rail sits on, so the clipped
                             // side is the one facing the document.
                             position === 'right' ? "right-0" : "left-0",

@@ -334,7 +334,9 @@ export const SpaceDetail: React.FC = () => {
     return space && (
         <div className={cn(
             "w-full bg-muted/40",
-            isMobile ? "h-full flex flex-col" : cn("h-screen grid", gridCols)
+            isMobile
+                ? "h-full flex flex-col"
+                : cn("kn-workspace-shell h-full min-h-0 grid grid-rows-[minmax(0,1fr)]", gridCols)
         )}>
             {/* Mobile page-tree drawer */}
             {isMobile && (
@@ -357,7 +359,7 @@ export const SpaceDetail: React.FC = () => {
 
             {/* Desktop / tablet sidebar */}
             {!isMobile && (
-                <div className="h-screen w-full border-r border-solid flex flex-col overflow-hidden">
+                <div className="kn-workspace-sidebar flex h-full min-h-0 w-full flex-col overflow-hidden border-r border-solid">
                     {isTablet && (
                         <div className="flex items-center justify-end px-1 py-1 border-b flex-shrink-0">
                             <Button
@@ -378,7 +380,7 @@ export const SpaceDetail: React.FC = () => {
             {/* Main Content */}
             <div className={cn(
                 "w-full overflow-hidden",
-                isMobile ? "flex-1 min-h-0" : "h-full"
+                isMobile ? "flex-1 min-h-0" : "kn-workspace-editor h-full min-h-0 min-w-0"
             )}>
                 {isPageEdit ? (
                     <>
@@ -391,7 +393,12 @@ export const SpaceDetail: React.FC = () => {
             </div>
 
             {/* Side dock: plugin-contributed panels (outline / graph / agent / backlinks) */}
-            <DockHost position="right" spaceId={params.id} pageId={params.pageId} />
+            <DockHost
+                position="right"
+                spaceId={params.id}
+                pageId={params.pageId}
+                className="kn-workspace-dock"
+            />
 
             {/* Template Selector Dialog */}
             <TemplateSelector

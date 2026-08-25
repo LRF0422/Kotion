@@ -277,14 +277,19 @@ export function Layout({ onPluginsReady }: LayoutProps) {
                     )}
 
                     <div className={cn(
-                        "grid min-h-screen w-full transition-all",
-                        isMobile ? "grid-cols-1" : "grid-cols-[48px_1fr]",
+                        "grid w-full transition-opacity",
+                        isMobile
+                            ? "min-h-screen grid-cols-1"
+                            : "kn-app-shell relative h-screen min-h-0 grid-cols-[48px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] overflow-hidden [--kn-app-shell-padding:0px] [--kn-workspace-gap:0px] [--kn-workspace-radius:0px] md:[--kn-app-shell-padding:6px] md:[--kn-workspace-gap:6px] md:[--kn-workspace-radius:10px] lg:[--kn-app-shell-padding:8px] lg:[--kn-workspace-gap:8px] lg:[--kn-workspace-radius:12px]",
                         !pluginsLoaded && "opacity-0"
                     )} >
+                        {!isMobile && isDesktopShell && (
+                            <div className="kn-shell-top-drag-region titlebar-drag-region absolute inset-x-0 top-0 z-50" />
+                        )}
                         {/* Desktop Sidebar: SiYuan-style compact icon rail */}
                         {!isMobile && (
-                            <div className="border-r bg-muted/40">
-                                <div className="flex h-full max-h-screen flex-col items-center pt-3 electron-sidebar-padding">
+                            <div className="kn-app-rail min-h-0 overflow-hidden border-r bg-muted/40">
+                                <div className="flex h-full min-h-0 flex-col items-center pt-3 electron-sidebar-padding">
                                     {/* Draggable area for window movement (Electron only) */}
                                     {isDesktopShell && <div className="absolute top-0 left-0 right-0 h-10 titlebar-drag-region" />}
                                     <div className="flex-1 w-full px-1">
@@ -296,8 +301,8 @@ export function Layout({ onPluginsReady }: LayoutProps) {
 
                         {/* Mobile Header + Content + bottom Tab Bar */}
                         <div className={cn(
-                            "flex flex-col w-full relative",
-                            isMobile ? "h-[100dvh]" : "h-screen"
+                            "relative flex w-full min-w-0 flex-col",
+                            isMobile ? "h-[100dvh]" : "h-full min-h-0"
                         )}>
                             {/* Draggable region at the top of main content area (Electron only) */}
                             {!isMobile && isDesktopShell && <div className="absolute top-0 left-0 right-0 h-10 titlebar-drag-region" />}
@@ -306,7 +311,7 @@ export function Layout({ onPluginsReady }: LayoutProps) {
 
                             <main className={cn(
                                 "w-full overflow-hidden",
-                                isMobile ? "flex-1 min-h-0" : "h-screen"
+                                isMobile ? "flex-1 min-h-0" : "h-full min-h-0"
                             )}>
                                 {pluginsLoaded ? <Outlet /> : null}
                             </main>
