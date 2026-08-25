@@ -291,6 +291,7 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
     public List<Tree<Long>> getPageTree(Long spaceId, String searchValue) {
         List<Page> allPage = this.lambdaQuery()
                 .eq(Page::getSpaceId, spaceId)
+                .eq(Page::getIsTemplate, false)
                 .like(StrUtil.isNotEmpty(searchValue), Page::getTitle, searchValue)
                 .eq(Page::getStatus, PageStatus.ACTIVE)
                 .list();
