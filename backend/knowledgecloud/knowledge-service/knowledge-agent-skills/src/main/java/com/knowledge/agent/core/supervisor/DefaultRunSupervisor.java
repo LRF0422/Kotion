@@ -19,6 +19,7 @@ import com.knowledge.agent.core.memory.MemoryInjector;
 import com.knowledge.agent.core.memory.ThreadSummarizer;
 import com.knowledge.agent.core.entity.AgentRunEntity;
 import com.knowledge.agent.core.run.AgentRun;
+import com.knowledge.agent.core.run.PendingToolCall;
 import com.knowledge.agent.core.run.RunStatus;
 import com.knowledge.agent.core.run.RunStore;
 import com.knowledge.agent.core.run.RunView;
@@ -209,13 +210,22 @@ public class DefaultRunSupervisor {
         if (run == null) {
             return null;
         }
-        if (run.statusEnum().isActive()) {
-            long seq = eventLog.lastSeq(runId);
-            if (seq > run.getLastSeq()) {
-                run.setLastSeq(seq);
+        // Keep the cursor from the same persisted snapshot as status, pending
+        // calls and assistantText. Advancing only lastSeq can skip durable events
+        // that are required to reconcile a stale WAITING_TOOLS snapshot.
+        RunView view = RunView.of(run);
+        view.setReplayThroughSeq(eventLog.lastSeq(runId));
+        if (RunStatus.SUSPENDED.name().equals(run.getStatus())
+                && "plan_approval".equals(run.getSuspendReason())) {
+            Checkpoint checkpoint = checkpointStore.load(runId);
+            if (checkpoint != null && checkpoint.getPendingPlanCalls() != null
+                    && !checkpoint.getPendingPlanCalls().isEmpty()) {
+                PendingToolCall pendingPlan = checkpoint.getPendingPlanCalls().get(0);
+                view.setPendingPlanCallId(pendingPlan.getCallId());
+                view.setPendingPlan(pendingPlan.getArgsJson());
             }
         }
-        return RunView.of(run);
+        return view;
     }
 
     /**
@@ -240,7 +250,8 @@ public class DefaultRunSupervisor {
      * Deliver a resume payload to the run's loop, rebuilding the loop from its
      * checkpoint when it is not alive locally (crash recovery on demand).
      *
-     * @return false when the run is owned by another live instance.
+     * @return false when the run is owned by another live instance or a waiting
+     *         loop could not enqueue the resume payload
      */
     public boolean resume(String runId, ResumePayload payload) {
         AgentRun run = runStore.load(runId);
@@ -269,7 +280,7 @@ public class DefaultRunSupervisor {
             }
         }
         if (waiting) {
-            handle.gate.offer(payload);
+            return handle.gate.offer(payload);
         }
         return true;
     }

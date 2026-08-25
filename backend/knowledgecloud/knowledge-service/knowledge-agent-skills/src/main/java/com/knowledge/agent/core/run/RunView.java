@@ -37,6 +37,9 @@ public class RunView {
 
     private long lastSeq;
 
+    /** Current durable event watermark; attach replays through it before tools run. */
+    private long replayThroughSeq;
+
     private long promptTokens;
 
     private long completionTokens;
@@ -49,6 +52,12 @@ public class RunView {
 
     /** Pending frontend tool calls (when WAITING_TOOLS). */
     private List<PendingToolCall> pendingTools = new ArrayList<>();
+
+    /** Persisted present_plan call needed to rebuild approval UI after refresh. */
+    private String pendingPlanCallId;
+
+    /** Raw present_plan args JSON; the frontend extracts its plan field. */
+    private String pendingPlan;
 
     private long createTime;
 

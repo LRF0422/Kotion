@@ -6,7 +6,14 @@
  */
 
 import { authorizedFetch } from '../../utils/session'
-import { normalizeAgentEvent, readSseDataLines, wireNumber } from './events'
+import {
+    acceptAgentEvent,
+    AgentControlError,
+    AgentSequenceGapError,
+    normalizeAgentEvent,
+    readSseDataLines,
+    wireNumber,
+} from './events'
 import type {
     AgentEvent,
     CreateRunInput,
@@ -21,6 +28,13 @@ const DEFAULT_API_BASE = '/api/knowledge-agent/api/agent/v1'
 
 const MAX_RECONNECTS = 5
 const RECONNECT_BASE_DELAY_MS = 500
+const RESUME_RESPONSE_TIMEOUT_MS = 10_000
+const REQUEST_TIMEOUT_MS = 15_000
+
+function isPermanentStreamError(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error)
+    return /\((400|401|403|404)\)/.test(message)
+}
 
 export interface AgentClientOptions {
     /** API base (defaults to the gateway path). */
@@ -43,6 +57,7 @@ function normalizeRunView(view: RunView): RunView {
     return {
         ...view,
         lastSeq: wireNumber(view.lastSeq),
+        replayThroughSeq: wireNumber(view.replayThroughSeq),
         promptTokens: wireNumber(view.promptTokens),
         completionTokens: wireNumber(view.completionTokens),
         cachedPromptTokens: wireNumber(view.cachedPromptTokens),
@@ -94,6 +109,7 @@ export class AgentClient {
         while (true) {
             const events = this.streamOnce(runId, cursor, signal)
             let receivedAny = false
+            let streamError: unknown
             try {
                 for await (const event of events) {
                     receivedAny = true
@@ -110,6 +126,8 @@ export class AgentClient {
                 // same as a network error and reconnect from the last seq.
             } catch (error) {
                 if (signal?.aborted) throw error
+                if (error instanceof AgentControlError || isPermanentStreamError(error)) throw error
+                streamError = error
             }
             if (signal?.aborted) return
             if (reconnects >= MAX_RECONNECTS) {
@@ -118,9 +136,9 @@ export class AgentClient {
             reconnects += 1
             const delay = RECONNECT_BASE_DELAY_MS * Math.pow(2, reconnects - 1)
             await new Promise(resolve => setTimeout(resolve, delay))
-            // Reset reconnect counter when we successfully received events,
-            // indicating the connection was alive for a meaningful period.
-            if (receivedAny) {
+            // A repeated durable gap must eventually fail instead of resetting
+            // forever after replaying the same valid prefix on every reconnect.
+            if (receivedAny && !(streamError instanceof AgentSequenceGapError)) {
                 reconnects = 0
             }
         }
@@ -130,28 +148,60 @@ export class AgentClient {
      * Resume a paused run and stream from afterSeq (the resume response is an
      * SSE stream continuing the run's event log).
      */
-    async *resume(runId: string, payload: ResumePayload, afterSeq = 0, signal?: AbortSignal): AsyncGenerator<AgentEvent> {
-        const response = await authorizedFetch(this.apiBase + '/runs/' + encodeURIComponent(runId) + '/resume', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...payload, afterSeq }),
-            signal,
-        })
+    async resume(
+        runId: string,
+        payload: ResumePayload,
+        afterSeq = 0,
+        signal?: AbortSignal
+    ): Promise<AsyncGenerator<AgentEvent>> {
+        const controller = new AbortController()
+        const forwardAbort = () => controller.abort()
+        if (signal?.aborted) controller.abort()
+        else signal?.addEventListener('abort', forwardAbort, { once: true })
+        const timer = setTimeout(() => controller.abort(), RESUME_RESPONSE_TIMEOUT_MS)
+        let response: Response
+        try {
+            response = await authorizedFetch(this.apiBase + '/runs/' + encodeURIComponent(runId) + '/resume', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...payload, afterSeq }),
+                signal: controller.signal,
+            })
+        } catch (error) {
+            signal?.removeEventListener('abort', forwardAbort)
+            if (controller.signal.aborted && !signal?.aborted) {
+                throw new Error('Resume request timed out before response headers')
+            }
+            throw error
+        } finally {
+            clearTimeout(timer)
+        }
         if (!response.ok) {
+            signal?.removeEventListener('abort', forwardAbort)
             throw new Error('Resume failed (' + response.status + ')')
         }
         if (!response.body) {
+            signal?.removeEventListener('abort', forwardAbort)
             throw new Error('Resume response body is null')
         }
-        yield* this.streamFromBody(response.body, afterSeq)
+        const events = this.streamFromBody(response.body, afterSeq)
+        return (async function* () {
+            try {
+                yield* events
+            } finally {
+                signal?.removeEventListener('abort', forwardAbort)
+                controller.abort()
+            }
+        })()
     }
 
     // ==================== threads & memory ====================
 
-    async getThread(conversationId: string): Promise<ThreadView | null> {
+    async getThread(conversationId: string, strict = false): Promise<ThreadView | null> {
         try {
             return await this.request<ThreadView>('/threads/' + encodeURIComponent(conversationId))
-        } catch {
+        } catch (error) {
+            if (strict) throw error
             return null
         }
     }
@@ -203,10 +253,9 @@ export class AgentClient {
                 continue
             }
             if (!event) continue
-            // Dedupe: replays may overlap the live tail. seq is normalized to a
-            // number first — comparing the raw wire string would fall back to
-            // lexicographic ordering and silently drop everything past seq 9.
-            if (event.seq > cursor) {
+            // Dedupe overlapping replay/live frames, but reject forward gaps so
+            // a later run.suspended event cannot hide a missing tool.requested.
+            if (acceptAgentEvent(event, cursor)) {
                 cursor = event.seq
                 yield event
             }
@@ -214,17 +263,34 @@ export class AgentClient {
     }
 
     private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
-        const response = await authorizedFetch(this.apiBase + path, {
-            ...init,
-            headers: { 'Content-Type': 'application/json', ...(init.headers ?? {}) },
-        })
-        if (!response.ok) {
-            throw new Error('Agent API error (' + response.status + ')')
+        const controller = new AbortController()
+        const sourceSignal = init.signal
+        const forwardAbort = () => controller.abort()
+        if (sourceSignal?.aborted) controller.abort()
+        else sourceSignal?.addEventListener('abort', forwardAbort, { once: true })
+        const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+        try {
+            const response = await authorizedFetch(this.apiBase + path, {
+                ...init,
+                signal: controller.signal,
+                headers: { 'Content-Type': 'application/json', ...(init.headers ?? {}) },
+            })
+            if (!response.ok) {
+                throw new Error('Agent API error (' + response.status + ')')
+            }
+            const json = (await response.json().catch(() => ({}))) as ApiResponse<T>
+            if (json.success === false || (json.code != null && json.code !== 200 && json.code !== 0)) {
+                throw new Error(json.msg || 'Agent API error')
+            }
+            return json.data as T
+        } catch (error) {
+            if (controller.signal.aborted && !sourceSignal?.aborted) {
+                throw new Error('Agent API request timed out')
+            }
+            throw error
+        } finally {
+            clearTimeout(timer)
+            sourceSignal?.removeEventListener('abort', forwardAbort)
         }
-        const json = (await response.json().catch(() => ({}))) as ApiResponse<T>
-        if (json.success === false || (json.code != null && json.code !== 200 && json.code !== 0)) {
-            throw new Error(json.msg || 'Agent API error')
-        }
-        return json.data as T
     }
 }

@@ -245,7 +245,8 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
     }, [value])
 
     const connecting = targetStatus === 'connecting'
-    const isValid = value.trim().length > 0 && !isLoading && !connecting
+    const targetUnavailable = connecting || targetStatus === 'error'
+    const isValid = value.trim().length > 0 && !isLoading && !targetUnavailable
 
     const handleFormSubmit = (e: FormEvent) => {
         e.preventDefault()

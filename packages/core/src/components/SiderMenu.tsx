@@ -189,7 +189,7 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
                 >
                     <Avatar className={cn(
                         "border-2 hover:border-primary transition-colors",
-                        isMobile ? "h-8 w-8" : "h-8 w-8"
+                        isMobile ? "h-8 w-8" : "kn-rail-avatar h-8 w-8"
                     )}>
                         <AvatarImage src={usePath(userInfo?.avatar as string)} />
                         <AvatarFallback className="text-[10px] font-medium">{userInfo?.account?.slice(0, 2).toUpperCase()}</AvatarFallback>
@@ -279,7 +279,10 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
                     <div className="flex-1" />
 
                     {/* Bottom section: controls + user avatar (compact to fit the narrow rail) */}
-                    <div className="flex flex-col items-center gap-2">
+                    <div className={cn(
+                        "flex flex-col items-center gap-2",
+                        !isMobile && "kn-rail-bottom"
+                    )}>
                         <div className={cn(
                             "flex gap-1.5 [&_button]:h-8 [&_button]:w-8",
                             isMobile ? "flex-row justify-center" : "flex-col items-center"

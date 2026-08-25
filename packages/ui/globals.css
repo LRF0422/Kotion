@@ -186,14 +186,27 @@
   }
 }
 
+html[data-ui-style="modern"],
+html[data-ui-style="modern"] body,
+html[data-ui-style="modern"] #root {
+  width: 100%;
+  min-height: 100%;
+  background: hsl(var(--muted) / 0.58);
+}
+
 @layer components {
   .kn-app-shell {
     background: hsl(var(--muted) / 0.4);
   }
 
   html[data-ui-style="modern"] .kn-app-shell {
+    --kn-global-rail-width: 40px;
+    width: 100vw;
+    height: 100dvh;
+    min-height: 100dvh;
     padding: var(--kn-app-shell-padding);
-    gap: var(--kn-workspace-gap);
+    padding-inline: calc(var(--kn-app-shell-padding) * 0.5);
+    gap: calc(var(--kn-workspace-gap) * 0.5);
     background: hsl(var(--muted) / 0.58);
     -webkit-backdrop-filter: blur(18px) saturate(1.15);
     backdrop-filter: blur(18px) saturate(1.15);
@@ -212,6 +225,7 @@
     height: var(--kn-app-shell-padding);
   }
 
+  html[data-ui-style="modern"] .kn-route-pane,
   html[data-ui-style="modern"] .kn-workspace-sidebar,
   html[data-ui-style="modern"] .kn-workspace-editor,
   html[data-ui-style="modern"] .kn-workspace-dock[data-expanded="true"] .kn-dock-viewport {
@@ -219,7 +233,7 @@
     border: 1px solid hsl(var(--border) / 0.8);
     border-radius: var(--kn-workspace-radius);
     background: hsl(var(--background));
-    box-shadow: 0 8px 24px hsl(0 0% 0% / 0.08);
+    box-shadow: 0 2px 8px hsl(0 0% 0% / 0.04);
   }
 
   html[data-ui-style="modern"] .kn-app-rail,
@@ -231,6 +245,42 @@
     box-shadow: none;
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
+  }
+
+  html[data-ui-style="modern"] .kn-dock-rail {
+    width: 36px;
+  }
+
+  html[data-ui-style="modern"] .kn-rail-bottom {
+    gap: 2px;
+    padding: 4px;
+    border: 1px solid hsl(var(--border) / 0.65);
+    border-radius: 12px;
+    background: hsl(var(--background) / 0.52);
+    box-shadow: 0 4px 14px hsl(0 0% 0% / 0.08);
+    -webkit-backdrop-filter: blur(12px) saturate(1.1);
+    backdrop-filter: blur(12px) saturate(1.1);
+  }
+
+  html[data-ui-style="modern"] .kn-rail-bottom > div {
+    gap: 2px;
+  }
+
+  html[data-ui-style="modern"] .kn-rail-bottom button {
+    border-color: transparent;
+    border-radius: 8px;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  html[data-ui-style="modern"] .kn-rail-bottom button:hover {
+    background: hsl(var(--background) / 0.78);
+  }
+
+  html[data-ui-style="modern"] .kn-rail-bottom .kn-rail-avatar {
+    width: 28px;
+    height: 28px;
+    border-width: 0;
   }
 
   html[data-ui-style="modern"] .kn-workspace-shell {

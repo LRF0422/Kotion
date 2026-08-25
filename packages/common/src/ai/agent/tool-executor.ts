@@ -1,7 +1,7 @@
 /**
  * EditorToolExecutor — executes frontend-dispatched editor tools with:
  *  - callId idempotency (event replay never re-executes an editor operation)
- *  - per-tool timeout guard
+ *  - completion tracking without unsafe non-cancelling timeouts
  *  - execution callbacks for the UI (start/success/error)
  */
 
@@ -13,36 +13,62 @@ export interface ToolExecutionResult {
     error?: string
 }
 
+export function ensureSerializableToolResult(outcome: ToolExecutionResult): ToolExecutionResult {
+    if (!outcome.ok || outcome.result === undefined) {
+        return outcome
+    }
+    try {
+        JSON.stringify(outcome.result)
+        return outcome
+    } catch (error: any) {
+        return {
+            ok: false,
+            error: 'Tool result is not JSON serializable: ' + (error?.message ?? String(error)),
+        }
+    }
+}
+
 export interface EditorToolExecutorOptions {
     /** Resolve the live editor-bound tool definitions (factory output). */
     resolveTools: () => ToolsRecord | Promise<ToolsRecord>
     /** Execution notifications for the UI. */
     onExecution?: OnToolExecution
-    /** Per-tool execution timeout (ms). */
-    timeoutMs?: number
 }
-
-const DEFAULT_TIMEOUT_MS = 120_000
 
 export class EditorToolExecutor {
     private readonly resolveTools: EditorToolExecutorOptions['resolveTools']
     private readonly onExecution?: OnToolExecution
-    private readonly timeoutMs: number
     /** Idempotency cache: callId → result (replays/reconnects reuse it). */
     private readonly cache = new Map<string, ToolExecutionResult>()
+    /** In-flight calls share one promise so rerenders cannot repeat side effects. */
+    private readonly inFlight = new Map<string, Promise<ToolExecutionResult>>()
 
     constructor(options: EditorToolExecutorOptions) {
         this.resolveTools = options.resolveTools
         this.onExecution = options.onExecution
-        this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
     }
 
-    /** Execute a frontend tool call; cached results return immediately. */
+    /** Execute a frontend tool call; cached/in-flight results are shared by callId. */
     async execute(callId: string, toolName: string, args: Record<string, any>): Promise<ToolExecutionResult> {
         const cached = this.cache.get(callId)
         if (cached) {
             return cached
         }
+        const running = this.inFlight.get(callId)
+        if (running) {
+            return running
+        }
+        const execution = this.executeOnce(callId, toolName, args)
+            .finally(() => this.inFlight.delete(callId))
+        this.inFlight.set(callId, execution)
+        return execution
+    }
+
+    private async executeOnce(
+        callId: string,
+        toolName: string,
+        args: Record<string, any>
+    ): Promise<ToolExecutionResult> {
         const started = Date.now()
         this.onExecution?.({
             toolName,
@@ -59,17 +85,17 @@ export class EditorToolExecutor {
             if (!definition || typeof definition.execute !== 'function') {
                 outcome = { ok: false, error: 'Tool not available on frontend: ' + toolName }
             } else {
-                const result = await this.withTimeout(
-                    definition.execute(args, callId),
-                    this.timeoutMs,
-                    toolName
-                )
+                // Do not race mutating editor operations against a timeout: the
+                // underlying promise cannot be cancelled and may commit later,
+                // after the backend has already retried under a new callId.
+                const result = await definition.execute(args, callId)
                 outcome = { ok: true, result }
             }
         } catch (error: any) {
             outcome = { ok: false, error: error?.message ?? String(error) }
         }
 
+        outcome = ensureSerializableToolResult(outcome)
         this.cache.set(callId, outcome)
         this.onExecution?.({
             toolName,
@@ -87,17 +113,5 @@ export class EditorToolExecutor {
     /** Drop cached results (a new run with fresh call ids is safe to reset). */
     clearCache(): void {
         this.cache.clear()
-    }
-
-    private async withTimeout<T>(promise: Promise<T>, timeoutMs: number, toolName: string): Promise<T> {
-        let timer: ReturnType<typeof setTimeout> | undefined
-        const timeout = new Promise<never>((_, reject) => {
-            timer = setTimeout(() => reject(new Error('工具执行超时: ' + toolName)), timeoutMs)
-        })
-        try {
-            return await Promise.race([promise, timeout])
-        } finally {
-            if (timer) clearTimeout(timer)
-        }
     }
 }

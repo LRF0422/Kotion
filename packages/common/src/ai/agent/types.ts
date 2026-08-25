@@ -70,12 +70,15 @@ export interface RunView {
     errorCode?: string
     errorMessage?: string
     lastSeq: number
+    replayThroughSeq: number
     promptTokens: number
     completionTokens: number
     /** Prompt tokens served from the provider's context cache (subset of promptTokens). */
     cachedPromptTokens: number
     assistantText?: string
     pendingTools: PendingToolCall[]
+    pendingPlanCallId?: string
+    pendingPlan?: string
     spaceId?: string
     pageId?: string
     createTime: number
@@ -167,6 +170,7 @@ export type AgentEvent =
     | { seq: number; type: 'run.completed'; finishReason?: string; usage?: RunUsage }
     | { seq: number; type: 'run.failed'; code?: string; error?: string }
     | { seq: number; type: 'run.cancelled' }
+    | { seq: 0; type: 'control.error'; code: string; error?: string }
 
 export const TERMINAL_EVENT_TYPES: ReadonlySet<AgentEvent['type']> = new Set([
     'run.completed', 'run.failed', 'run.cancelled',

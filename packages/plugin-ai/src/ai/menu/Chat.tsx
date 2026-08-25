@@ -244,7 +244,7 @@ export const ExpandableChatDemo: React.FC<{
             cancelled = true
             acquired?.release()
         }
-    }, [activeSessionId, targetPageId, acquireAttempt])
+    }, [activeSessionId, targetPageId, acquireAttempt, editor])
 
     const handleRetryPage = useCallback(() => setAcquireAttempt(n => n + 1), [])
 
@@ -338,15 +338,29 @@ export const ExpandableChatDemo: React.FC<{
     // tools[] carries the always-on schemas; skill-owned tools ride inside
     // skills[] and stay deferred until the model calls one.
     const { tools: toolSpecs, skills } = useMemo(() => buildAgentRunInputs(catalog), [catalog])
+    const resolveTools = useCallback(() => allTools, [allTools])
+    const liveCurrentPageId = getPageBridge()?.getCurrentPage()?.pageId
+    const targetToolsReady = !targetPageId
+        ? !!currentPage?.pageId
+        : ((targetStatus === 'current' && String(liveCurrentPageId) === targetPageId)
+            || (targetStatus === 'ready' && offscreenHandle?.pageId === targetPageId))
 
     const agent = useEditorAgent({
         conversationId: activeSessionId,
         tools: isAskMode ? [] : toolSpecs,
         skills: isAskMode ? [] : skills,
-        resolveTools: () => allTools,
-        spaceId: targetPage?.spaceId,
-        pageId: targetPage?.pageId,
+        resolveTools,
+        autoExecuteTools: targetToolsReady,
+        spaceId: targetPage?.spaceId ?? currentPage?.spaceId,
+        pageId: targetPage?.pageId ?? currentPage?.pageId,
     })
+
+    // Re-attach a persisted run whenever this conversation surface is mounted.
+    useEffect(() => {
+        if (targetToolsReady && agent.state.phase === 'idle' && !agent.state.runId) {
+            void agent.attach()
+        }
+    }, [activeSessionId, targetToolsReady, agent.state.phase, agent.state.runId, agent.attach])
 
     // ─── Composer state ───────────────────────────────────────────
     const [input, setInput] = useState("")
@@ -416,8 +430,8 @@ export const ExpandableChatDemo: React.FC<{
 
     const abandonAgent = useCallback(async () => {
         abandoningRef.current = true
-        try { await agent.cancel() } catch { /* ignore */ }
-        agent.reset()
+        const cancelled = await agent.cancel().catch(() => false)
+        if (cancelled) agent.reset()
         abandoningRef.current = false
     }, [agent])
 
@@ -462,14 +476,14 @@ export const ExpandableChatDemo: React.FC<{
 
     const handleSend = useCallback(() => {
         const text = input.trim()
-        if (!text || isActive) return
+        if (!text || isActive || !targetToolsReady) return
         setInput("")
         submitMessage(text)
         requestAnimationFrame(() => {
             if (composerRef.current) composerRef.current.style.height = 'auto'
             composerRef.current?.focus()
         })
-    }, [input, isActive, submitMessage])
+    }, [input, isActive, targetToolsReady, submitMessage])
 
     const handleInputChange = useCallback((value: string) => {
         setInput(value)
@@ -644,9 +658,7 @@ export const ExpandableChatDemo: React.FC<{
                         <div className="mx-2 my-1.5">
                             <PlanApprovalCard
                                 planText={agent.state.plan.text}
-                                onDecision={(approved, feedback) => {
-                                    void agent.approvePlan(approved, feedback)
-                                }}
+                                onDecision={(approved, feedback) => agent.approvePlan(approved, feedback)}
                             />
                         </div>
                     )}
@@ -661,6 +673,21 @@ export const ExpandableChatDemo: React.FC<{
                             >
                                 继续执行
                             </button>
+                        </div>
+                    )}
+
+                    {agent.state.error && agent.state.phase !== 'failed' && (
+                        <div className="mx-2 my-1.5 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-[11px] text-amber-700 dark:text-amber-300">
+                            <span className="min-w-0 flex-1">Agent 暂时不可用：{agent.state.error}</span>
+                            {agent.state.phase === 'suspended' && (
+                                <button
+                                    type="button"
+                                    className="shrink-0 rounded-md border border-amber-500/30 px-2 py-1 font-medium hover:bg-amber-500/10"
+                                    onClick={agent.retryConnection}
+                                >
+                                    重试
+                                </button>
+                            )}
                         </div>
                     )}
 
@@ -701,7 +728,7 @@ export const ExpandableChatDemo: React.FC<{
                     onModelParamsChange={handleModelParamsChange}
                     targetPage={targetPage}
                     currentPage={currentPage}
-                    targetStatus={targetStatus}
+                    targetStatus={!targetPage && !currentPage?.pageId ? 'connecting' : targetStatus}
                     onPickPage={setTargetPage}
                     onClearPage={() => setTargetPage(null)}
                     onRetryPage={handleRetryPage}

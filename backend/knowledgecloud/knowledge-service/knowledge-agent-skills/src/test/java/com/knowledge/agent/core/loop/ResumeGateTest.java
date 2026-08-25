@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -35,6 +36,34 @@ class ResumeGateTest {
         long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
         assertNull(received);
         assertTrue(elapsedMs >= 90, "await should block for the poll interval");
+    }
+
+    @Test
+    void offerReturnsFalseWhenBoundedQueueIsFull() {
+        ResumeGate gate = new ResumeGate();
+        ResumePayload payload = new ResumePayload();
+        payload.setAction("continue");
+
+        for (int i = 0; i < 8; i++) {
+            assertTrue(gate.offer(payload));
+        }
+        assertFalse(gate.offer(payload));
+    }
+
+    @Test
+    void cancelSupersedesQueuedPayloadsAndRejectsFurtherOffers() throws Exception {
+        ResumeGate gate = new ResumeGate();
+        ResumePayload payload = new ResumePayload();
+        payload.setAction("continue");
+        for (int i = 0; i < 8; i++) {
+            assertTrue(gate.offer(payload));
+        }
+
+        gate.cancel();
+
+        assertFalse(gate.offer(payload));
+        ResumePayload received = gate.await(5000);
+        assertEquals("cancel", received.getAction());
     }
 
     @Test

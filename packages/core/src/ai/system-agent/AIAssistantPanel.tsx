@@ -38,6 +38,7 @@ import {
     useEditorAgent,
     useCapabilityProviders,
     buildAgentRunInputs,
+    getPageBridge,
     type AgentChatMessage,
 } from '@kn/common'
 import { SubAgentTree } from './SubAgentTree'
@@ -116,21 +117,25 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
     const catalog = useMemo(() => getCatalog(), [getCatalog])
     // tools[] 常驻；技能自带的工具随 skills[] 下发，首次调用前不展开参数结构。
     const { tools: toolSpecs, skills } = useMemo(() => buildAgentRunInputs(catalog), [catalog])
+    const resolveTools = useCallback(() => allTools, [allTools])
+    const currentPage = getPageBridge()?.getCurrentPage()
 
     const agent = useEditorAgent({
         conversationId,
         tools: toolSpecs,
         skills,
-        resolveTools: () => allTools,
+        resolveTools,
+        spaceId: currentPage?.spaceId,
+        pageId: currentPage?.pageId !== undefined ? String(currentPage.pageId) : undefined,
     })
 
     // 断点恢复：面板打开且空闲时自动续接未过期的 run（防重入）。
     useEffect(() => {
-        if (open && agent.state.phase === 'idle' && !agent.state.runId) {
+        if (open && currentPage?.pageId && agent.state.phase === 'idle' && !agent.state.runId) {
             void agent.attach()
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [open])
+    }, [open, currentPage?.pageId])
 
     // run 终态 → 快照进消息历史，重置 agent 状态迎接下一轮。
     const lastPhaseRef = useRef(agent.state.phase)
@@ -166,7 +171,7 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
 
     const handleSubmit = useCallback(async () => {
         const trimmed = input.trim()
-        if (!trimmed || agent.state.phase !== 'idle') return
+        if (!trimmed || !currentPage?.pageId || agent.state.phase !== 'idle') return
         const userMessage: Message = {
             id: 'user-' + Date.now().toString(36),
             role: 'user',
@@ -180,7 +185,8 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
             content: m.content,
         }))
         await agent.start([...history, { role: 'user', content: trimmed }], { mode })
-    }, [input, agent, messages, mode])
+            .catch(() => undefined)
+    }, [input, agent, messages, mode, currentPage?.pageId])
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -335,9 +341,7 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
                                     {agent.state.phase === 'waiting-approval' && agent.state.plan && (
                                         <PlanApprovalCard
                                             planText={agent.state.plan.text}
-                                            onDecision={(approved, feedback) => {
-                                                void agent.approvePlan(approved, feedback)
-                                            }}
+                                            onDecision={(approved, feedback) => agent.approvePlan(approved, feedback)}
                                         />
                                     )}
 
@@ -362,7 +366,25 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
                     </div>
                 </ScrollArea>
 
-                {/* 错误显示 */}
+                {/* 连接错误保持 run 可恢复，不把后端任务误判为终态。 */}
+                {agent.state.phase !== 'failed' && agent.state.error && (
+                    <div className="px-4 py-2 bg-amber-500/10 border-t border-amber-500/20">
+                        <div className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-300">
+                            <AlertTriangle className="h-3.5 w-3.5" />
+                            <span className="min-w-0 flex-1">{agent.state.error}</span>
+                            {agent.state.phase === 'suspended' && (
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 border-amber-500/30 px-2 text-xs"
+                                    onClick={agent.retryConnection}
+                                >
+                                    重试
+                                </Button>
+                            )}
+                        </div>
+                    </div>
+                )}
                 {agent.state.phase === 'failed' && agent.state.error && (
                     <div className="px-4 py-2 bg-destructive/10 border-t border-destructive/20">
                         <div className="flex items-center gap-2 text-xs text-destructive">

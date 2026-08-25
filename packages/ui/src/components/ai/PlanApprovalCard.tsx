@@ -14,7 +14,7 @@ export interface PlanApprovalCardProps {
     /** 计划文本（present_plan 的参数内容，可能为 JSON 或纯文本）。 */
     planText: string
     /** 用户决策回调（批准/拒绝 + 可选反馈）。 */
-    onDecision: (approved: boolean, feedback?: string) => void
+    onDecision: (approved: boolean, feedback?: string) => Promise<void> | void
     className?: string
 }
 
@@ -29,10 +29,16 @@ export const PlanApprovalCard: React.FC<PlanApprovalCardProps> = ({
     const [feedback, setFeedback] = useState('')
     const [inFlight, setInFlight] = useState(false)
 
-    const decide = (approved: boolean) => {
+    const decide = async (approved: boolean) => {
         if (inFlight) return
         setInFlight(true)
-        onDecision(approved, feedback.trim() || undefined)
+        try {
+            await onDecision(approved, feedback.trim() || undefined)
+        } catch {
+            // The Agent UI surfaces transport errors and keeps the decision retryable.
+        } finally {
+            setInFlight(false)
+        }
     }
 
     let display = planText

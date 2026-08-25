@@ -12,6 +12,28 @@
 
 import type { AgentEvent } from './types'
 
+export class AgentControlError extends Error {
+    readonly code: string
+
+    constructor(code: string, message?: string) {
+        super(message || code)
+        this.name = 'AgentControlError'
+        this.code = code
+    }
+}
+
+export class AgentSequenceGapError extends Error {
+    readonly expectedSeq: number
+    readonly receivedSeq: number
+
+    constructor(expectedSeq: number, receivedSeq: number) {
+        super('Agent event sequence gap: expected ' + expectedSeq + ', received ' + receivedSeq)
+        this.name = 'AgentSequenceGapError'
+        this.expectedSeq = expectedSeq
+        this.receivedSeq = receivedSeq
+    }
+}
+
 /** Coerce a wire number (may arrive as a string) to a finite number. */
 export function wireNumber(value: unknown, fallback = 0): number {
     const parsed = typeof value === 'number' ? value : Number(value)
@@ -52,6 +74,29 @@ export function parseAgentEventFrame(line: string): AgentEvent | null {
 }
 
 /**
+ * Validate one normalized stream event against the last contiguous sequence.
+ * Control errors are out-of-band and duplicates are safe to ignore.
+ */
+export function acceptAgentEvent(event: AgentEvent, cursor: number): boolean {
+    if (event.type === 'control.error') {
+        throw new AgentControlError(event.code, event.error)
+    }
+    // Backward compatibility for servers that encoded control failures as an
+    // unsequenced run.failed frame before control.error was introduced.
+    if (event.seq === 0 && event.type === 'run.failed') {
+        throw new AgentControlError(event.code || 'AGENT_CONTROL_ERROR', event.error)
+    }
+    if (event.seq <= cursor) {
+        return false
+    }
+    const expectedSeq = cursor + 1
+    if (event.seq !== expectedSeq) {
+        throw new AgentSequenceGapError(expectedSeq, event.seq)
+    }
+    return true
+}
+
+/**
  * Minimal SSE reader over a fetch Response body — yields complete
  * data payload strings, ignoring keepalive comments and CR/LF variants.
  */
@@ -65,10 +110,14 @@ export async function* readSseDataLines(body: ReadableStream<Uint8Array>): Async
             if (done) break
             buffer += decoder.decode(value, { stream: true })
             // Split on double-newline (SSE frame boundary), supporting \n\n and \r\n\r\n.
-            let boundary: number
-            while ((boundary = buffer.indexOf('\n\n')) !== -1 || (boundary = buffer.indexOf('\r\n\r\n')) !== -1) {
+            while (true) {
+                const lfBoundary = buffer.indexOf('\n\n')
+                const crlfBoundary = buffer.indexOf('\r\n\r\n')
+                if (lfBoundary === -1 && crlfBoundary === -1) break
+                const useCrlf = crlfBoundary !== -1 && (lfBoundary === -1 || crlfBoundary <= lfBoundary)
+                const boundary = useCrlf ? crlfBoundary : lfBoundary
                 const frame = buffer.slice(0, boundary)
-                buffer = buffer.slice(boundary + (frame.endsWith('\r') ? 4 : 2))
+                buffer = buffer.slice(boundary + (useCrlf ? 4 : 2))
                 const dataLines = frame.split(/\r?\n/).filter(l => l.trimStart().startsWith('data:'))
                 if (dataLines.length > 0) {
                     const payload = dataLines

@@ -29,15 +29,26 @@ public class ResumeGate {
         return payload;
     }
 
-    public void offer(ResumePayload payload) {
-        if (payload == null) {
-            return;
+    /**
+     * Offer a resume payload without blocking.
+     *
+     * @return whether the bounded queue accepted the payload
+     */
+    public synchronized boolean offer(ResumePayload payload) {
+        if (payload == null || cancelled) {
+            return false;
         }
-        queue.offer(payload);
+        return queue.offer(payload);
     }
 
-    public void cancel() {
+    public synchronized void cancel() {
+        if (cancelled) {
+            return;
+        }
         cancelled = true;
+        // Cancellation supersedes queued resume requests. Clearing while holding
+        // the same monitor as offer guarantees space for the wake-up marker.
+        queue.clear();
         queue.offer(CANCEL_MARKER);
     }
 

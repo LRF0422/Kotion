@@ -1,5 +1,5 @@
 
-import { Outlet } from "react-router-dom"
+import { Outlet, useLocation } from "react-router-dom"
 import { SiderMenu } from "./components/SiderMenu"
 import { useContext, useEffect, useState } from "react"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogTitle, AlertDialogTrigger, Badge, Item, ItemContent, ItemDescription, ItemTitle, Rate, SparklesText, cn, useIsMobile, useVirtualKeyboard, Button } from "@kn/ui"
@@ -62,6 +62,8 @@ export function Layout({ onPluginsReady }: LayoutProps) {
 
     const dispatch = useDispatch()
     const navigator = useNavigator()
+    const location = useLocation()
+    const isWorkspaceRoute = location.pathname.startsWith('/space-detail/')
     const { pluginManager } = useContext(AppContext)
     const [pluginsLoaded, setPluginsLoaded] = useState(false)
     const [refreshFlag, setRefreshFlag] = useState(0)
@@ -280,7 +282,7 @@ export function Layout({ onPluginsReady }: LayoutProps) {
                         "grid w-full transition-opacity",
                         isMobile
                             ? "min-h-screen grid-cols-1"
-                            : "kn-app-shell relative h-screen min-h-0 grid-cols-[48px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] overflow-hidden [--kn-app-shell-padding:0px] [--kn-workspace-gap:0px] [--kn-workspace-radius:0px] md:[--kn-app-shell-padding:6px] md:[--kn-workspace-gap:6px] md:[--kn-workspace-radius:10px] lg:[--kn-app-shell-padding:8px] lg:[--kn-workspace-gap:8px] lg:[--kn-workspace-radius:12px]",
+                            : "kn-app-shell relative h-screen min-h-0 grid-cols-[var(--kn-global-rail-width)_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] overflow-hidden [--kn-global-rail-width:48px] [--kn-app-shell-padding:0px] [--kn-workspace-gap:0px] [--kn-workspace-radius:0px] md:[--kn-app-shell-padding:6px] md:[--kn-workspace-gap:4px] md:[--kn-workspace-radius:10px] lg:[--kn-app-shell-padding:8px] lg:[--kn-workspace-gap:6px] lg:[--kn-workspace-radius:12px]",
                         !pluginsLoaded && "opacity-0"
                     )} >
                         {!isMobile && isDesktopShell && (
@@ -311,7 +313,8 @@ export function Layout({ onPluginsReady }: LayoutProps) {
 
                             <main className={cn(
                                 "w-full overflow-hidden",
-                                isMobile ? "flex-1 min-h-0" : "h-full min-h-0"
+                                isMobile ? "flex-1 min-h-0" : "h-full min-h-0",
+                                !isMobile && !isWorkspaceRoute && "kn-route-pane"
                             )}>
                                 {pluginsLoaded ? <Outlet /> : null}
                             </main>
