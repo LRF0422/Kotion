@@ -535,6 +535,7 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
     public IPage<Page> queryRecentPage(QueryPageDTO dto) {
         return this.lambdaQuery()
                 .eq(dto.getSpaceId() != null, Page::getSpaceId, dto.getSpaceId())
+                .eq(Page::getIsTemplate, false)
                 .eq(dto.getStatus() != null, Page::getStatus, dto.getStatus())
                 // Exclude trashed/deleted pages unless explicitly requested
                 .ne(dto.getStatus() == null, Page::getStatus, PageStatus.DELETED)
