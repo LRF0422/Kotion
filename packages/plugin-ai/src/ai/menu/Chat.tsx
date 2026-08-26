@@ -20,6 +20,7 @@ import {
     PageEditWindow,
     event,
     useActiveEditor,
+    useTranslation,
     DOCK_PANEL_RUNNING,
 } from "@kn/common"
 import type {
@@ -111,6 +112,8 @@ export const ExpandableChatDemo: React.FC<{
     embedded?: boolean
     onClose?: () => void
 }> = ({ editor, embedded, onClose }) => {
+    const { t } = useTranslation()
+
     // ─── Model / mode preferences (persisted) ─────────────────────
     const [selectedModel, setSelectedModel] = useState<string>(() => {
         try { return localStorage.getItem(MODEL_STORAGE_KEY) || '' } catch { return '' }
@@ -355,11 +358,15 @@ export const ExpandableChatDemo: React.FC<{
         pageId: targetPage?.pageId ?? currentPage?.pageId,
     })
 
-    // Re-attach a persisted run whenever this conversation surface is mounted.
+    // Re-attach at most once per session activation. Without this guard, resetting
+    // a completed run immediately triggers another attach while the backend is
+    // still clearing thread.activeRunId, replaying the same assistant output.
+    const attachAttemptedSessionRef = useRef<string | null>(null)
     useEffect(() => {
-        if (targetToolsReady && agent.state.phase === 'idle' && !agent.state.runId) {
-            void agent.attach()
-        }
+        if (!targetToolsReady || agent.state.phase !== 'idle' || agent.state.runId) return
+        if (attachAttemptedSessionRef.current === activeSessionId) return
+        attachAttemptedSessionRef.current = activeSessionId
+        void agent.attach()
     }, [activeSessionId, targetToolsReady, agent.state.phase, agent.state.runId, agent.attach])
 
     // ─── Composer state ───────────────────────────────────────────
@@ -617,13 +624,27 @@ export const ExpandableChatDemo: React.FC<{
 
                     {isActive && agent.state.reasoning && (
                         <ChatBubble variant="received">
-                            <ChatBubbleMessage className="bg-muted/40 dark:bg-muted/20 p-2.5 rounded-lg rounded-tl-sm">
-                                <details open className="group">
-                                    <summary className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground cursor-pointer select-none">
-                                        <Sparkles className="h-3 w-3 animate-pulse" />
-                                        <span>思考过程…</span>
+                            <ChatBubbleMessage className="border border-primary/10 bg-primary/[0.03] p-2.5 rounded-lg rounded-tl-sm">
+                                <details open className="group/reasoning">
+                                    <summary className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground cursor-pointer select-none">
+                                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                                            <Sparkles className="h-3 w-3" />
+                                        </span>
+                                        <span>{t('ai.chat.thinking', 'Thinking')}</span>
+                                        <span className="inline-flex items-end gap-0.5" aria-hidden="true">
+                                            {[0, 1, 2].map(index => (
+                                                <span
+                                                    key={index}
+                                                    className="h-1 w-1 rounded-full bg-primary animate-bounce motion-reduce:animate-none"
+                                                    style={{
+                                                        animationDelay: `${index * 140}ms`,
+                                                        animationDuration: '900ms',
+                                                    }}
+                                                />
+                                            ))}
+                                        </span>
                                     </summary>
-                                    <div className="mt-1.5 pl-1 border-l-2 border-muted-foreground/20 text-[11px] leading-relaxed text-muted-foreground/80 whitespace-pre-wrap break-words">
+                                    <div className="mt-2 max-h-32 overflow-y-auto border-l-2 border-primary/15 pl-2 text-[11px] leading-relaxed text-muted-foreground/80 whitespace-pre-wrap break-words">
                                         {agent.state.reasoning}
                                     </div>
                                 </details>

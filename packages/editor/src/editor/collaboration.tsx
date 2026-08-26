@@ -48,6 +48,8 @@ export interface CollaborationEditorProps extends EditorRenderProps {
   externalExtensions?: ExtensionWrapper[];
   /** Called when content has finished loading into the editor */
   onContentReady?: () => void;
+  /** Anchor the table of contents to this editor instead of the viewport. */
+  tocContained?: boolean;
 }
 
 // The Yjs field the Collaboration extension binds to (its built-in default).
@@ -149,7 +151,7 @@ const CollaborationEditorInner = forwardRef<
   Editor | null,
   React.PropsWithChildren<CollaborationEditorInnerProps>
 >((props, ref) => {
-  const { content, user, provider, pageInfo, toc, width = 'w-[calc(100vw-350px)]', fullWidth, onContentReady, extensions, extensionWrappers } = props
+  const { content, user, provider, pageInfo, toc, tocContained, width = 'w-[calc(100vw-350px)]', fullWidth, onContentReady, extensions, extensionWrappers } = props
   const blockMenuItems = React.useMemo(() => resolveBlockMenuItems(extensionWrappers as ExtensionWrapper[]), [extensionWrappers])
   const [items, setItems] = useSafeState<any[]>([])
   const [contentReady, setContentReady] = useSafeState(false)
@@ -394,7 +396,12 @@ const CollaborationEditorInner = forwardRef<
           {contentReady && <ChangeTrackerBar editor={editor} />}
           {/* ToC - Notion-style floating outline on the right edge */}
           {toc && contentReady && (
-            <NotionToC editor={editor} items={items} />
+            <NotionToC
+              editor={editor}
+              items={items}
+              contained={tocContained}
+              offsetTop={tocContained ? 40 : undefined}
+            />
           )}
           {/* Mobile: formatting toolbar docked above the soft keyboard */}
           {isMobile && contentReady && (

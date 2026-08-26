@@ -79,7 +79,9 @@ export const ai = new AiPlugin({
                     "chat": {
                         "trackingHint": "Track document changes; review and merge them in the editor",
                         "trackingOn": "Tracking",
-                        "trackingOff": "Track changes"
+                        "trackingOff": "Track changes",
+                        "thinking": "Thinking",
+                        "reasoning": "Reasoning"
                     }
                 }
             }
@@ -108,7 +110,9 @@ export const ai = new AiPlugin({
                     "chat": {
                         "trackingHint": "跟踪文档变动，可在编辑器中审阅并合并",
                         "trackingOn": "跟踪中",
-                        "trackingOff": "跟踪变动"
+                        "trackingOff": "跟踪变动",
+                        "thinking": "思考中",
+                        "reasoning": "思考过程"
                     }
                 }
             }

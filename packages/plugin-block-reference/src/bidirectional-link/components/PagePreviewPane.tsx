@@ -21,7 +21,7 @@ import {
     useEditor,
     useEditorExtension,
 } from '@kn/editor';
-import { Skeleton, cn } from '@kn/ui';
+import { FlatEmoji, Skeleton, cn } from '@kn/ui';
 import { FileText } from '@kn/icon';
 import { FileService, useOptionalService } from '@kn/common';
 import { usePageInfo } from '../../hooks';
@@ -135,7 +135,7 @@ export const PagePreviewPane: React.FC<PagePreviewPaneProps> = ({ pageId, classN
             {/* Header: icon + title + space name */}
             <div className="flex items-center gap-2 border-b border-border/60 px-3 py-2">
                 {icon ? (
-                    <span className="text-base leading-none flex-shrink-0">{icon}</span>
+                    <FlatEmoji emoji={icon} size={16} className="flex-shrink-0" />
                 ) : (
                     <FileText className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                 )}

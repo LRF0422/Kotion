@@ -19,10 +19,23 @@ import { ToC, highlightMatch, type TocItem } from './ToC'
 // Tick length by heading level — shorter = deeper, which reads as indentation.
 const tickWidth = (level: number) => Math.max(24 - (Math.min(level, 6) - 1) * 4, 8)
 
-export const NotionToC: React.FC<{ editor: Editor; items: TocItem[]; offsetTop?: number }> = ({
+// Keep the desktop outline above the editor's bottom status bar.
+const STATUS_BAR_OFFSET = 28
+
+interface NotionToCProps {
+    editor: Editor
+    items: TocItem[]
+    offsetTop?: number
+    offsetBottom?: number
+    contained?: boolean
+}
+
+export const NotionToC: React.FC<NotionToCProps> = ({
     editor,
     items,
     offsetTop = 80,
+    offsetBottom = STATUS_BAR_OFFSET,
+    contained = false,
 }) => {
     const [activeId, setActiveId] = useState<string | null>(null)
     const [mobileOpen, setMobileOpen] = useState(false)
@@ -36,6 +49,7 @@ export const NotionToC: React.FC<{ editor: Editor; items: TocItem[]; offsetTop?:
         }
     })
     const rafRef = useRef<number>(0)
+    const rootRef = useRef<HTMLDivElement>(null)
     const tocListRef = useRef<HTMLDivElement>(null)
     const isMobile = useIsMobile()
     const { t } = useTranslation()
@@ -55,9 +69,9 @@ export const NotionToC: React.FC<{ editor: Editor; items: TocItem[]; offsetTop?:
         return items.filter(item => item.textContent.toLowerCase().includes(q))
     }, [items, searchQuery])
 
-    // Keep the tick strip inside the viewport: compress the gap between ticks as
-    // the heading count grows so a long document never overflows off-screen.
-    // Short documents keep the comfortable default spacing.
+    // Keep the tick strip inside its host: compress the gap between ticks as
+    // the heading count grows so a long document never overflows. Observing the
+    // host also keeps the outline correct while a PageEditWindow is resized.
     useEffect(() => {
         const TICK_HEIGHT = 2 // h-0.5
         const STRIP_PADDING = 32 // py-4 (top + bottom)
@@ -68,14 +82,23 @@ export const NotionToC: React.FC<{ editor: Editor; items: TocItem[]; offsetTop?:
                 setTickGap(DEFAULT_GAP)
                 return
             }
-            const available = window.innerHeight - offsetTop - STRIP_PADDING
+            const hostHeight = rootRef.current?.clientHeight
+                ?? window.innerHeight - offsetTop - offsetBottom
+            const available = hostHeight - STRIP_PADDING
             const gap = (available - n * TICK_HEIGHT) / (n - 1)
             setTickGap(Math.max(0, Math.min(DEFAULT_GAP, gap)))
         }
         compute()
+        const observer = typeof ResizeObserver !== 'undefined' && rootRef.current
+            ? new ResizeObserver(compute)
+            : null
+        if (rootRef.current) observer?.observe(rootRef.current)
         window.addEventListener('resize', compute)
-        return () => window.removeEventListener('resize', compute)
-    }, [items.length, offsetTop])
+        return () => {
+            observer?.disconnect()
+            window.removeEventListener('resize', compute)
+        }
+    }, [items.length, offsetTop, offsetBottom])
 
     // Track which heading is currently at the top of the viewport.
     useEffect(() => {
@@ -193,8 +216,9 @@ export const NotionToC: React.FC<{ editor: Editor; items: TocItem[]; offsetTop?:
 
     return (
         <div
-            className="group fixed right-0 z-40 flex justify-end"
-            style={{ top: offsetTop, height: `calc(100dvh - ${offsetTop}px)`, alignItems: 'center' }}
+            ref={rootRef}
+            className={cn('group right-0 z-40 flex justify-end', contained ? 'absolute' : 'fixed')}
+            style={{ top: offsetTop, bottom: offsetBottom, alignItems: 'center' }}
         >
             {/* Collapsed: tick marks. Fade out while the strip is hovered. */}
             <div
@@ -223,7 +247,8 @@ export const NotionToC: React.FC<{ editor: Editor; items: TocItem[]; offsetTop?:
             {/* Expanded: heading labels. Revealed on hover, or always visible when pinned. */}
             <div
                 className={cn(
-                    'absolute right-2 top-1/2 -translate-y-1/2 flex flex-col max-h-[70vh]',
+                    'absolute right-2 top-1/2 -translate-y-1/2 flex flex-col',
+                    contained ? 'max-h-[70%]' : 'max-h-[70vh]',
                     'min-w-[220px] max-w-[300px] rounded-lg border bg-background shadow-lg',
                     'transition-all duration-200',
                     pinned

@@ -14,36 +14,16 @@
  * @module @kn/plugin-block-reference/bidirectional-link/components
  */
 
-import React, { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useContext, useEffect, useState } from "react";
 import { NodeViewWrapper, type NodeViewProps, PageContext } from "@kn/editor";
 import { useNavigator } from "@kn/common";
 import { ArrowUpRight, FileText, Loader2, Pencil, Trash2 } from "@kn/icon";
-import { cn, HoverCard, HoverCardContent, HoverCardTrigger, Button } from "@kn/ui";
+import { cn, HoverCard, HoverCardContent, HoverCardTrigger, Button, FlatEmoji } from "@kn/ui";
 import { usePageInfo, useSpaceService } from "../../hooks";
 import { useI18n } from "../../i18n/use-i18n";
 import { PageEditWindow } from "@kn/common";
 import { invalidatePage } from "../../utils/cache";
-
-/** Flatten a ProseMirror JSON tree into a short plain-text excerpt. */
-const extractExcerpt = (content: string | undefined, maxLen = 140): string => {
-    if (!content) return '';
-    try {
-        const parsed = typeof content === 'string' ? JSON.parse(content) : content;
-        const parts: string[] = [];
-        const walk = (node: any) => {
-            if (!node || typeof node !== 'object' || parts.join(' ').length > maxLen) return;
-            // Skip the title node — it duplicates the card header.
-            if (node.type === 'title') return;
-            if (typeof node.text === 'string') parts.push(node.text);
-            if (Array.isArray(node.content)) node.content.forEach(walk);
-        };
-        walk(parsed);
-        const text = parts.join(' ').replace(/\s+/g, ' ').trim();
-        return text.length > maxLen ? text.slice(0, maxLen) + '…' : text;
-    } catch {
-        return '';
-    }
-};
+import { PagePreviewPane } from "./PagePreviewPane";
 
 export const PageLinkNodeView: React.FC<NodeViewProps> = React.memo((props) => {
     const { node, editor, deleteNode, updateAttributes } = props;
@@ -70,8 +50,6 @@ export const PageLinkNodeView: React.FC<NodeViewProps> = React.memo((props) => {
             updateAttributes({ title: pageInfo.title });
         }
     }, [editor.isEditable, pageInfo?.title, titleAttr, updateAttributes]);
-
-    const excerpt = useMemo(() => extractExcerpt(pageInfo?.content), [pageInfo?.content]);
 
     const handleJump = useCallback(async () => {
         if (!pageId || isBroken) return;
@@ -147,7 +125,7 @@ export const PageLinkNodeView: React.FC<NodeViewProps> = React.memo((props) => {
                         {loading ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin flex-shrink-0" />
                         ) : icon ? (
-                            <span className="text-sm leading-none flex-shrink-0">{icon}</span>
+                            <FlatEmoji emoji={icon} size={14} className="flex-shrink-0" />
                         ) : (
                             <FileText className="h-3.5 w-3.5 flex-shrink-0" />
                         )}
@@ -156,7 +134,7 @@ export const PageLinkNodeView: React.FC<NodeViewProps> = React.memo((props) => {
                         </span>
                     </span>
                 </HoverCardTrigger>
-                <HoverCardContent side="top" align="start" className="w-80 p-0" sideOffset={6}>
+                <HoverCardContent side="top" align="start" className="w-[400px] overflow-hidden p-0" sideOffset={8}>
                     {isBroken ? (
                         <div className="p-3">
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -176,33 +154,9 @@ export const PageLinkNodeView: React.FC<NodeViewProps> = React.memo((props) => {
                             )}
                         </div>
                     ) : (
-                        <div className="p-3">
-                            {/* Header: icon + title + space */}
-                            <div className="flex items-start gap-2">
-                                <span className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md bg-accent text-accent-foreground">
-                                    {icon ? (
-                                        <span className="text-lg leading-none">{icon}</span>
-                                    ) : (
-                                        <FileText className="h-4 w-4" />
-                                    )}
-                                </span>
-                                <div className="min-w-0 flex-1">
-                                    <div className="truncate text-sm font-medium">{displayTitle}</div>
-                                    {pageInfo?.spaceName && (
-                                        <div className="truncate text-xs text-muted-foreground">
-                                            {pageInfo.spaceName}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                            {/* Content excerpt */}
-                            {excerpt && (
-                                <p className="mt-2 text-xs leading-relaxed text-muted-foreground line-clamp-3">
-                                    {excerpt}
-                                </p>
-                            )}
-                            {/* Actions */}
-                            <div className="mt-2 flex items-center justify-between border-t border-border/60 pt-2">
+                        <div className="flex max-h-[440px] flex-col overflow-hidden">
+                            {pageId && <PagePreviewPane pageId={pageId} className="min-h-0 flex-1" />}
+                            <div className="flex shrink-0 items-center justify-between border-t border-border/60 bg-popover px-3 py-2">
                                 <span className="text-[10px] text-muted-foreground">
                                     {t('bidirectionalLink.ctrlClickHint')}
                                 </span>

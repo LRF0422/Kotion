@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useMemo } from 'react'
 import { StopCircle, AlertCircle, Sparkles, IconCopy } from '@kn/icon'
 import { Streamdown, formatDistanceToNow, useCopyToClipboard } from '@kn/ui'
+import { useTranslation } from '@kn/common'
 import {
     ChatBubble,
     ChatBubbleMessage,
@@ -21,6 +22,7 @@ export const MessageBubble = React.memo(function MessageBubble({
     message,
     onRevealReference,
 }: MessageBubbleProps) {
+    const { t } = useTranslation()
     const [, copy] = useCopyToClipboard()
     const [copied, setCopied] = useState(false)
 
@@ -63,7 +65,7 @@ export const MessageBubble = React.memo(function MessageBubble({
                             <details className="mb-2 group/reasoning">
                                 <summary className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors">
                                     <Sparkles className="h-3 w-3" />
-                                    <span>思考过程</span>
+                                    <span>{t('ai.chat.reasoning', 'Reasoning')}</span>
                                     <span className="text-[9px] text-muted-foreground/50 group-open/reasoning:hidden">▸</span>
                                 </summary>
                                 <div className="mt-1.5 pl-1 border-l-2 border-muted-foreground/20 text-[11px] leading-relaxed text-muted-foreground/80 whitespace-pre-wrap break-words">

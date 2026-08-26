@@ -31,7 +31,12 @@
       "Bash(pnpm build:editor 2>&1 | head -50)",
       "Bash(echo \"exit: $?\")",
       "Bash(ls node_modules/.bin/tsc)",
-      "Bash(ls packages/plugin-main/node_modules/.bin/tsc)"
+      "Bash(ls packages/plugin-main/node_modules/.bin/tsc)",
+      "Bash(rg *)",
+      "Bash(mvn *)",
+      "Bash(pnpm build:ai *)",
+      "Bash(pnpm build:editor *)",
+      "Bash(pnpm *)"
     ]
   },
   "disabledMcpjsonServers": [
