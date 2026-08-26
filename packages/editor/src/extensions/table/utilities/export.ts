@@ -1,6 +1,6 @@
-import * as XLSX from "xlsx";
 import { Editor } from "@tiptap/core";
 import { Node as PMNode } from "@tiptap/pm/model";
+import { logger } from "@kn/common";
 
 import { findTable } from "./index";
 
@@ -64,16 +64,20 @@ export const exportTableToCSV = (editor: Editor): boolean => {
   return true;
 };
 
-/** Export the active table as an .xlsx file. */
+/** Schedule an .xlsx export. Returns false when there is no active table. */
 export const exportTableToExcel = (editor: Editor): boolean => {
   const table = getActiveTable(editor);
   if (!table) return false;
 
   const matrix = tableToMatrix(table);
-  const worksheet = XLSX.utils.aoa_to_sheet(matrix);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Sheet1");
-  XLSX.writeFile(workbook, "table.xlsx");
+  void import("xlsx")
+    .then(XLSX => {
+      const worksheet = XLSX.utils.aoa_to_sheet(matrix);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Sheet1");
+      XLSX.writeFile(workbook, "table.xlsx");
+    })
+    .catch(error => logger.error("Error exporting table to Excel:", error));
   return true;
 };
 

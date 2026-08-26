@@ -9,7 +9,7 @@ import lombok.Getter;
 @Getter
 public enum PluginStatus implements BaseEnum<String> {
 
-    PENGDING("PENDING", "待审核"),
+    PENDING("PENDING", "待审核"),
     IN_PROGRESS("IN_PROGRESS", "审核中"),
     REJECTED("REJECTED", "审核未通过"),
     DONE("DONE", "审核通过");

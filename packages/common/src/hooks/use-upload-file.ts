@@ -9,11 +9,16 @@ export interface KnowledgeFile {
     originalName: string
 }
 
+export interface PluginArtifactFile extends KnowledgeFile {
+    integrity: string
+}
+
 export interface UploadKit {
     uploadedFiles: KnowledgeFile[]
     remove: (path: string) => void
     upload: (type?: string[]) => Promise<KnowledgeFile>,
     uploadFile: (file: File) => Promise<KnowledgeFile>,
+    uploadPluginFile: (file: File) => Promise<PluginArtifactFile>,
     usePath: (fileName: string) => string
 }
 
@@ -77,10 +82,18 @@ export const useUploadFile = () => {
         return res.data
     }
 
+    const uploadPluginFile = async (file: File): Promise<PluginArtifactFile> => {
+        const res = await useApi(APIS.UPLOAD_PLUGIN_FILE, null, {
+            file
+        }, { 'Content-Type': 'multipart/form-data' })
+        return res.data
+    }
+
     return {
         uploadedFiles: files,
         upload,
         uploadFile,
+        uploadPluginFile,
         remove,
         usePath
     } as UploadKit

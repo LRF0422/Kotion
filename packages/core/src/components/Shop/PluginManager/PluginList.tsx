@@ -1,5 +1,5 @@
-import React, { useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { KnowledgeFile, useApi, useUploadFile, APIS, AppContext, event, PLUGIN_CHANGED } from "@kn/common";
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { PluginArtifactFile, GlobalState, useApi, useUploadFile, useSelector, APIS, AppContext, event, PLUGIN_CHANGED } from "@kn/common";
 import {
     Avatar, Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, DialogTrigger,
     IconButton, Input, Label, Tabs, TabsContent, TabsList, TabsTrigger, AlertDialog, AlertDialogAction,
@@ -29,6 +29,7 @@ interface Plugin {
     name: string;
     icon: string;
     developer: string;
+    developerId?: string;
     maintainer: string;
     description?: string;
     status: PluginStatus;
@@ -47,6 +48,30 @@ interface Plugin {
 const installState = (p: Pick<Plugin, 'installStatus'>): string | undefined =>
     typeof p.installStatus === 'string' ? p.installStatus : (p.installStatus?.value ?? undefined);
 
+const nextPatchVersion = (version?: string) => {
+    const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version || '');
+    return match ? `${match[1]}.${match[2]}.${(BigInt(match[3]) + 1n).toString()}` : '1.0.0';
+};
+
+const hasVersionDescriptionContent = (content: any): boolean => {
+    if (!content) return false;
+    const value = typeof content === 'string' ? (() => {
+        try { return JSON.parse(content); } catch { return null; }
+    })() : content;
+    if (!value) return false;
+    if (typeof value.text === 'string' && value.text.trim()) return true;
+    return Array.isArray(value.content) && value.content.some((child: any) => hasVersionDescriptionContent(child));
+};
+
+const pickPluginFile = () => new Promise<File | null>((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.js,application/javascript,text/javascript';
+    input.onchange = () => resolve(input.files?.[0] ?? null);
+    input.addEventListener('cancel', () => resolve(null));
+    input.click();
+});
+
 interface PluginVersion {
     label: string;
     content: any;
@@ -63,12 +88,15 @@ export interface PluginListProps {
 export const PluginList: React.FC<PluginListProps> = (props) => {
 
     const { t } = useTranslation();
-    const { usePath, upload } = useUploadFile();
+    const { userInfo } = useSelector((state: GlobalState) => state);
+    const { usePath, uploadPluginFile } = useUploadFile();
     const { pluginManager } = useContext(AppContext);
     const [open, setOpen] = useState(false);
     const [currentId, setCurrentId] = useState<string>();
     const [currentPlugin, setCurrentPlugin] = useState<Plugin>();
-    const [file, setFile] = useState<KnowledgeFile>();
+    const [file, setFile] = useState<PluginArtifactFile>();
+    const [version, setVersion] = useState("1.0.0");
+    const uploadSessionRef = useRef(0);
     const [descriptions, setDescriptions] = useState<PluginVersion[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
     const [loading, setLoading] = useState(false);
@@ -137,11 +165,15 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
 
     useEffect(() => {
         if (currentId) {
+            const requestId = ++uploadSessionRef.current;
+            setFile(undefined);
             setLoading(true);
             useApi(APIS.GET_PLUGIN, { id: currentId })
                 .then(res => {
+                    if (requestId !== uploadSessionRef.current) return;
                     const desc: PluginVersion[] = res.data.currentVersion?.versionDescription || [];
                     setCurrentPlugin(res.data);
+                    setVersion(nextPatchVersion(res.data.currentVersion?.version));
                     setDescriptions(desc.length > 0 ? res.data.currentVersion.versionDescription : [
                         { label: "Feature", content: {} },
                         { label: "Detail", content: {} },
@@ -150,11 +182,12 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                     setOpen(true);
                 })
                 .catch(error => {
+                    if (requestId !== uploadSessionRef.current) return;
                     console.error('Failed to load plugin:', error);
                     toast.error(t('pluginManager.loadFailed'));
                 })
                 .finally(() => {
-                    setLoading(false);
+                    if (requestId === uploadSessionRef.current) setLoading(false);
                 });
         }
     }, [currentId])
@@ -349,12 +382,25 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
             return;
         }
 
+        if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)) {
+            toast.error(t('pluginUploader.validation.versionFormat'));
+            return;
+        }
+        const normalizedLabels = descriptions.map(item => item.label.trim().toLowerCase());
+        if (!descriptions.length || descriptions.length > 20
+            || normalizedLabels.some(label => !label)
+            || new Set(normalizedLabels).size !== normalizedLabels.length
+            || !descriptions.some(item => hasVersionDescriptionContent(item.content))) {
+            toast.error(t('pluginUploader.validation.descriptionContent'));
+            return;
+        }
+
         setPublishing(true);
         try {
-            await useApi(APIS.CREATE_PLUGIN, null, {
-                id: currentPlugin.id,
-                resourcePath: file?.name,
-                publish: true,
+            await useApi(APIS.PUBLISH_PLUGIN_VERSION, { id: currentPlugin.id }, {
+                version,
+                resourcePath: file.name,
+                integrity: file.integrity,
                 versionDescs: descriptions.map(item => ({
                     label: item.label,
                     content: JSON.stringify(item.content),
@@ -370,7 +416,7 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
         } finally {
             setPublishing(false);
         }
-    }, [currentPlugin, file, descriptions, props.onRefresh, t]);
+    }, [currentPlugin, file, version, descriptions, props.onRefresh, t]);
 
     // Badge/color/label are driven by the runtime install state (ACTIVE / DISABLED /
     // not installed), not the catalog review status — that's what the toggle controls.
@@ -399,19 +445,19 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
     };
     return <div className="w-full h-full flex flex-col overflow-hidden">
         {/* Toolbar */}
-        <div className="flex items-center gap-2 p-3 border-b flex-shrink-0">
-            <div className="flex items-center gap-2 flex-1 min-w-0">
+        <div className="flex flex-wrap items-center gap-2 p-3 border-b flex-shrink-0">
+            <div className="flex w-full items-center gap-2 min-w-0 md:w-auto md:flex-1">
                 <Input
                     icon={<SearchIcon className="h-4 w-4" />}
                     placeholder={t('pluginManager.searchPlugins')}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="flex-1 min-w-0 max-w-xs"
+                    className="flex-1 min-w-0 max-w-none sm:max-w-xs"
                 />
 
                 {/* Sort Options */}
                 <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
-                    <SelectTrigger className="w-[140px]">
+                    <SelectTrigger className="w-[120px] sm:w-[140px]">
                         <ArrowUpDownIcon className="h-4 w-4 mr-1" />
                         <SelectValue placeholder={t('pluginManager.sortBy')} />
                     </SelectTrigger>
@@ -433,9 +479,9 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                 </Button>
             </div>
 
-            <Separator orientation="vertical" className="h-6" />
+            <Separator orientation="vertical" className="hidden h-6 md:block" />
 
-            <div className="flex items-center gap-1 flex-shrink-0">
+            <div className="ml-auto flex items-center gap-1 flex-shrink-0">
                 <TooltipProvider>
                     <Tooltip>
                         <TooltipTrigger asChild>
@@ -453,7 +499,7 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                 </TooltipProvider>
 
                 <PluginUploader>
-                    <Button size="sm" className="flex-shrink-0">
+                    <Button size="sm" className="h-11 flex-shrink-0">
                         <PlusIcon className="h-4 w-4 mr-1" />
                         {t('pluginManager.newPlugin')}
                     </Button>
@@ -520,7 +566,7 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
         )}
 
         {/* Main Content Area */}
-        <div className="flex-1 flex overflow-hidden min-w-0">
+        <div className="relative flex-1 flex overflow-hidden min-w-0">
             {/* Plugin List */}
             <ScrollArea className={cn("flex-1 min-w-0", detailPlugin && "border-r")}>
                 <div className="p-2 space-y-1">
@@ -627,20 +673,24 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                                                 <IconButton icon={<MoreVerticalIcon className="h-4 w-4" />} />
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="end">
-                                                <DropdownMenuItem onClick={() => handleEditPlugin(item)}>
-                                                    <EditIcon className="h-4 w-4 mr-2" />
-                                                    {t('pluginManager.edit')}
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => {
-                                                    if (currentId === item.id) {
-                                                        setOpen(true);
-                                                    } else {
-                                                        setCurrentId(item.id);
-                                                    }
-                                                }}>
-                                                    <UploadIcon className="h-4 w-4 mr-2" />
-                                                    {t('pluginManager.publishNewVersion')}
-                                                </DropdownMenuItem>
+                                                {String(item.developerId || '') === String(userInfo?.id || '') && (
+                                                    <>
+                                                        <DropdownMenuItem onClick={() => handleEditPlugin(item)}>
+                                                            <EditIcon className="h-4 w-4 mr-2" />
+                                                            {t('pluginManager.edit')}
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem onClick={() => {
+                                                            if (currentId === item.id) {
+                                                                setOpen(true);
+                                                            } else {
+                                                                setCurrentId(item.id);
+                                                            }
+                                                        }}>
+                                                            <UploadIcon className="h-4 w-4 mr-2" />
+                                                            {t('pluginManager.publishNewVersion')}
+                                                        </DropdownMenuItem>
+                                                    </>
+                                                )}
                                                 <DropdownMenuItem onClick={() => handleCopyPluginKey(item)}>
                                                     <CopyIcon className="h-4 w-4 mr-2" />
                                                     {t('pluginManager.copyPluginKey')}
@@ -665,7 +715,7 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
 
             {/* Detail Panel */}
             {detailPlugin && (
-                <div className="w-[350px] flex-shrink-0 flex flex-col h-full">
+                <div className="absolute inset-0 z-10 flex h-full w-full flex-col bg-background md:static md:w-[350px] md:flex-shrink-0">
                     <div className="p-4 border-b flex items-center justify-between">
                         <h3 className="font-semibold">{t('pluginManager.pluginDetails')}</h3>
                         <IconButton
@@ -740,21 +790,23 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                                         <PowerIcon className={cn("h-4 w-4 mr-2", getStatusColor(installState(detailPlugin)))} />
                                         {installState(detailPlugin) === 'ACTIVE' ? t('pluginManager.disable') : t('pluginManager.enable')}
                                     </Button>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="justify-start"
-                                        onClick={() => {
-                                            if (currentId === detailPlugin.id) {
-                                                setOpen(true);
-                                            } else {
-                                                setCurrentId(detailPlugin.id);
-                                            }
-                                        }}
-                                    >
-                                        <UploadIcon className="h-4 w-4 mr-2" />
-                                        {t('pluginManager.publish')}
-                                    </Button>
+                                    {String(detailPlugin.developerId || '') === String(userInfo?.id || '') && (
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="justify-start"
+                                            onClick={() => {
+                                                if (currentId === detailPlugin.id) {
+                                                    setOpen(true);
+                                                } else {
+                                                    setCurrentId(detailPlugin.id);
+                                                }
+                                            }}
+                                        >
+                                            <UploadIcon className="h-4 w-4 mr-2" />
+                                            {t('pluginManager.publish')}
+                                        </Button>
+                                    )}
                                     <Button
                                         variant="outline"
                                         size="sm"
@@ -806,7 +858,9 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
         <Dialog open={open} onOpenChange={(value) => {
             setOpen(value);
             if (!value) {
+                uploadSessionRef.current += 1;
                 setFile(undefined);
+                setVersion("1.0.0");
                 setCurrentId(undefined);
                 setCurrentPlugin(undefined);
             }
@@ -839,6 +893,16 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                     </div>
 
                     <div className="space-y-2">
+                        <Label>{t('pluginManager.version')}</Label>
+                        <Input
+                            value={version}
+                            onChange={(event) => setVersion(event.target.value)}
+                            placeholder="1.0.0"
+                            className="font-mono"
+                        />
+                    </div>
+
+                    <div className="space-y-2">
                         <Label className="flex items-center gap-2">
                             {t('pluginManager.uploadPluginFile')}
                             <span className="text-xs text-muted-foreground">({t('pluginManager.required')})</span>
@@ -846,13 +910,25 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                         <div className="flex items-center gap-2">
                             <Button
                                 variant="outline"
-                                onClick={() => {
-                                    upload().then(res => {
-                                        setFile(res);
+                                onClick={async () => {
+                                    const selected = await pickPluginFile();
+                                    if (!selected) return;
+                                    if (selected.size > 100 * 1024 * 1024) {
+                                        toast.error(t('pluginUploader.uploadSection.fileLimit'));
+                                        return;
+                                    }
+                                    const requestId = ++uploadSessionRef.current;
+                                    setLoading(true);
+                                    try {
+                                        const uploaded = await uploadPluginFile(selected);
+                                        if (requestId !== uploadSessionRef.current) return;
+                                        setFile(uploaded);
                                         toast.success(t('pluginManager.fileUploaded'));
-                                    }).catch(() => {
-                                        toast.error(t('pluginManager.operationFailed'));
-                                    });
+                                    } catch {
+                                        if (requestId === uploadSessionRef.current) toast.error(t('pluginManager.operationFailed'));
+                                    } finally {
+                                        if (requestId === uploadSessionRef.current) setLoading(false);
+                                    }
                                 }}
                                 disabled={loading}
                             >

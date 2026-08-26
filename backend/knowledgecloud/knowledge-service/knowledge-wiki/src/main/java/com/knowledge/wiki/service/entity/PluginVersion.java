@@ -5,6 +5,7 @@ import java.util.List;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.knowledge.core.version.BaseVersion;
+import com.knowledge.wiki.service.entity.enums.PluginStatus;
 import com.knowledge.wiki.service.typeHandler.VersionDescListTypeHandler;
 
 import lombok.Data;
@@ -21,6 +22,7 @@ public class PluginVersion extends BaseVersion {
      * submitted by the publisher together with resourcePath.
      */
     private String integrity;
+    private PluginStatus reviewStatus;
     @TableField(typeHandler = VersionDescListTypeHandler.class)
     private List<VersionDesc> versionDescription;
 

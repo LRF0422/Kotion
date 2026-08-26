@@ -12,6 +12,7 @@ import { terser } from "rollup-plugin-terser";
 import tailwindcss from "tailwindcss";
 import autoprefixer from "autoprefixer";
 import { createRequire } from "module";
+import { gzipSync } from "node:zlib";
 
 // Build-time plugin API version, read from @kn/plugin-api's package.json
 // (single source of truth for the host/plugin version handshake).
@@ -20,6 +21,15 @@ import { createRequire } from "module";
 // -> common -> rollup-config (which breaks pnpm's node_modules symlinks).
 const require = createRequire(import.meta.url);
 const apiVersion = require("../plugin-api/package.json").version;
+const registryKeys = (packageName) => {
+  const unscopedName = packageName.replace(/^@[^/]+\//, "");
+  return [
+    packageName,
+    unscopedName,
+    unscopedName.replace(/^plugin-/, ""),
+    unscopedName.replace(/-plugin$/, ""),
+  ].filter((key, index, keys) => key && keys.indexOf(key) === index);
+};
 
 export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
   // Ensure only one React instance — externalize react/react-dom, bundle sub-paths (jsx-runtime etc.)
@@ -45,7 +55,7 @@ export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
       name: pkg.name,
       file: "dist/index.js",
       format: "umd",
-      sourcemap: true,
+      sourcemap: process.env.BUILD_SOURCEMAP === "true",
       exports: "named",
       globals: {
         "@kn/common": "__KN__.common",
@@ -60,7 +70,9 @@ export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
       // apiVersion, so the host can do a version handshake before activation.
       // Runs inside the UMD factory where `exports` is in scope.
       outro: `if (typeof window !== 'undefined' && window.__KN__ && window.__KN__.definePlugin) {
-  window.__KN__.definePlugin(${JSON.stringify(pkg.name)}, exports, { apiVersion: ${JSON.stringify(apiVersion)}, packageName: ${JSON.stringify(pkg.name)} });
+  ${JSON.stringify(registryKeys(pkg.name))}.forEach(function (key) {
+    window.__KN__.definePlugin(key, exports, { apiVersion: ${JSON.stringify(apiVersion)}, packageName: ${JSON.stringify(pkg.name)} });
+  });
 }`,
       inlineDynamicImports: true,
     },
@@ -92,7 +104,13 @@ export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
     }),
     // PostCSS for source files with Tailwind CSS and other transformations
     postcss({
-      plugins: [postcssCascadeLayers(),cssnext(), nested(),tailwindcss(), autoprefixer()],
+      plugins: [
+        postcssCascadeLayers(),
+        cssnext(),
+        nested(),
+        tailwindcss(),
+        autoprefixer(),
+      ],
       extensions: [".css"],
       extract: false,
       minimize: true,
@@ -134,9 +152,12 @@ export default function bundleStats(pkg) {
       for (const [fileName, output] of Object.entries(bundle)) {
         if (output.type === "chunk") {
           const content = output.code;
-          const size = Buffer.byteLength(content, "utf-8");
-          const sizeKB = (size / 1024).toFixed(2);
-          fileSizes[fileName] = sizeKB + " KB";
+          const rawBytes = Buffer.byteLength(content, "utf-8");
+          const gzipBytes = gzipSync(content, { level: 6 }).byteLength;
+          fileSizes[fileName] = {
+            raw: `${(rawBytes / 1024).toFixed(2)} KB`,
+            gzip: `${(gzipBytes / 1024).toFixed(2)} KB`,
+          };
           if (isPluginPkg(pkg)) {
             // Note: Auto-upload disabled in build. Use separate deploy step.
             // Uncomment and configure environment variables for deployment.

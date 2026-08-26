@@ -9,7 +9,9 @@
     "build:docker": "docker build -t kn:latest .",
     "build-plugin": "rollup -c",
     "lint": "eslint . --ext ts,tsx --fix --report-unused-disable-directives --max-warnings 100",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "size": "node ../../scripts/report-web-bundle-size.mjs dist",
+    "size:json": "node ../../scripts/report-web-bundle-size.mjs dist --json"
   },
   "dependencies": {
     "@kn/ui": "workspace:*",

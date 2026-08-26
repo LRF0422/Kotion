@@ -12,6 +12,19 @@ import { Button } from "@ui/components/ui/button"
 import { Progress } from "@ui/components/ui/progress"
 import { ScrollArea } from "@ui/components/ui/scroll-area"
 
+export interface FileUploaderMessages {
+  maxSingleFile?: string
+  maxFiles?: (count: number) => string
+  rejected?: (fileName: string, message?: string) => string
+  dropActive?: string
+  dropIdle?: string
+  uploadHint?: (maxFileCount: number, maxSize: number) => string
+  uploading?: (target: string) => string
+  uploaded?: (target: string) => string
+  uploadFailed?: (target: string) => string
+  removeFile?: string
+}
+
 interface FileUploaderProps extends React.HTMLAttributes<HTMLDivElement> {
   /**
    * Value of the uploader.
@@ -87,6 +100,18 @@ interface FileUploaderProps extends React.HTMLAttributes<HTMLDivElement> {
    * @example disabled
    */
   disabled?: boolean
+
+  /** Whether FileUploader should display its own upload toast.promise. */
+  showUploadToast?: boolean
+
+  /** Localized copy used by the dropzone, rejections, upload status, and remove action. */
+  messages?: FileUploaderMessages
+
+  /** Called when the parent wants to render upload failures inline. */
+  onUploadError?: (error: unknown) => void
+
+  /** Called with the complete rejected-file list. */
+  onFileReject?: (rejections: FileRejection[]) => void
 }
 
 export function FileUploader(props: FileUploaderProps) {
@@ -102,6 +127,10 @@ export function FileUploader(props: FileUploaderProps) {
     maxFileCount = 1,
     multiple = false,
     disabled = false,
+    showUploadToast = true,
+    messages,
+    onUploadError,
+    onFileReject,
     className,
     ...dropzoneProps
   } = props
@@ -114,34 +143,33 @@ export function FileUploader(props: FileUploaderProps) {
   const onDrop = React.useCallback(
     (acceptedFiles: File[], rejectedFiles: FileRejection[]) => {
       if (!multiple && maxFileCount === 1 && acceptedFiles.length > 1) {
-        toast.error("Cannot upload more than 1 file at a time")
+        toast.error(messages?.maxSingleFile ?? "Cannot upload more than 1 file at a time")
         return
       }
 
       if ((files?.length ?? 0) + acceptedFiles.length > maxFileCount) {
-        toast.error(`Cannot upload more than ${maxFileCount} files`)
+        toast.error(messages?.maxFiles?.(maxFileCount) ?? `Cannot upload more than ${maxFileCount} files`)
         return
       }
 
-      const newFiles = acceptedFiles.map((file) =>
-        Object.assign(file, {
-          preview: URL.createObjectURL(file),
-        })
-      )
+      const updatedFiles = files ? [...files, ...acceptedFiles] : acceptedFiles
 
-      const updatedFiles = files ? [...files, ...newFiles] : newFiles
-
-      setFiles(updatedFiles)
+      if (acceptedFiles.length > 0) setFiles(updatedFiles)
 
       if (rejectedFiles.length > 0) {
+        onFileReject?.(rejectedFiles)
         rejectedFiles.forEach(({ file, errors }) => {
           if (errors && errors.length > 0) {
-            toast.error(`File ${file.name} was rejected, message: ${errors[0]?.message}`)
+            toast.error(
+              messages?.rejected?.(file.name, errors[0]?.message)
+                ?? `File ${file.name} was rejected, message: ${errors[0]?.message}`
+            )
           }
         })
       }
 
       if (
+        acceptedFiles.length > 0 &&
         onUpload &&
         updatedFiles.length > 0 &&
         updatedFiles.length <= maxFileCount
@@ -149,39 +177,32 @@ export function FileUploader(props: FileUploaderProps) {
         const target =
           updatedFiles.length > 0 ? `${updatedFiles.length} files` : `file`
 
-        toast.promise(onUpload(updatedFiles), {
-          loading: `Uploading ${target}...`,
-          success: () => {
-            setFiles(updatedFiles)
-            return `${target} uploaded`
-          },
-          error: `Failed to upload ${target}`,
-        })
+        const uploadPromise = onUpload(updatedFiles)
+          .catch((error) => {
+            onUploadError?.(error)
+            throw error
+          })
+
+        if (showUploadToast) {
+          toast.promise(uploadPromise, {
+            loading: messages?.uploading?.(target) ?? `Uploading ${target}...`,
+            success: messages?.uploaded?.(target) ?? `${target} uploaded`,
+            error: messages?.uploadFailed?.(target) ?? `Failed to upload ${target}`,
+          })
+        } else {
+          void uploadPromise.catch(() => undefined)
+        }
       }
     },
 
-    [files, maxFileCount, multiple, onUpload, setFiles]
+    [files, maxFileCount, messages, multiple, onFileReject, onUpload, onUploadError, setFiles, showUploadToast]
   )
 
   function onRemove(index: number) {
     if (!files) return
     const newFiles = files.filter((_, i) => i !== index)
     setFiles(newFiles)
-    onValueChange?.(newFiles)
   }
-
-  // Revoke preview url when component unmounts
-  React.useEffect(() => {
-    return () => {
-      if (!files) return
-      files.forEach((file) => {
-        if (isFileWithPreview(file)) {
-          URL.revokeObjectURL(file.preview)
-        }
-      })
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   const isDisabled = disabled || (files?.length ?? 0) >= maxFileCount
 
@@ -217,7 +238,7 @@ export function FileUploader(props: FileUploaderProps) {
                   />
                 </div>
                 <p className="font-medium text-muted-foreground">
-                  Drop the files here
+                  {messages?.dropActive ?? "Drop the files here"}
                 </p>
               </div>
             ) : (
@@ -230,14 +251,13 @@ export function FileUploader(props: FileUploaderProps) {
                 </div>
                 <div className="flex flex-col gap-px">
                   <p className="font-medium text-muted-foreground">
-                    Drag {`'n'`} drop files here, or click to select files
+                    {messages?.dropIdle ?? "Drag 'n' drop files here, or click to select files"}
                   </p>
                   <p className="text-sm text-muted-foreground/70">
-                    You can upload
-                    {maxFileCount > 1
-                      ? ` ${maxFileCount === Infinity ? "multiple" : maxFileCount}
-                      files (up to ${formatBytes(maxSize)} each)`
-                      : ` a file with ${formatBytes(maxSize)}`}
+                    {messages?.uploadHint?.(maxFileCount, maxSize)
+                      ?? (maxFileCount > 1
+                        ? `You can upload ${maxFileCount === Infinity ? "multiple" : maxFileCount} files (up to ${formatBytes(maxSize)} each)`
+                        : `You can upload a file with ${formatBytes(maxSize)}`)}
                   </p>
                 </div>
               </div>
@@ -254,6 +274,7 @@ export function FileUploader(props: FileUploaderProps) {
                 file={file}
                 onRemove={() => onRemove(index)}
                 progress={progresses?.[file.name]}
+                removeLabel={messages?.removeFile}
               />
             ))}
           </div>
@@ -267,9 +288,10 @@ interface FileCardProps {
   file: File
   onRemove: () => void
   progress?: number
+  removeLabel?: string
 }
 
-function FileCard({ file, progress, onRemove }: FileCardProps) {
+function FileCard({ file, progress, onRemove, removeLabel }: FileCardProps) {
   return (
     <div className="relative flex items-center gap-2.5">
       <div className="flex flex-1 gap-2.5">
@@ -283,7 +305,7 @@ function FileCard({ file, progress, onRemove }: FileCardProps) {
               {formatBytes(file.size)}
             </p>
           </div>
-          {progress ? <Progress value={progress} /> : null}
+          {progress !== undefined ? <Progress value={progress} /> : null}
         </div>
       </div>
       <div className="flex items-center gap-2">
@@ -291,11 +313,11 @@ function FileCard({ file, progress, onRemove }: FileCardProps) {
           type="button"
           variant="outline"
           size="icon"
-          className="size-7"
+          className="size-11"
           onClick={onRemove}
         >
           <Cross2Icon className="size-4" aria-hidden="true" />
-          <span className="sr-only">Remove file</span>
+          <span className="sr-only">{removeLabel ?? "Remove file"}</span>
         </Button>
       </div>
     </div>

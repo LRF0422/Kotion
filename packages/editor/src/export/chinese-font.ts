@@ -1,5 +1,5 @@
 // 定义中文字体支持
-import jsPDF from 'jspdf';
+import type jsPDF from 'jspdf';
 
 // 中文字体支持 - 使用jsPDF内置的Unicode支持
 export function addChineseFont(doc: jsPDF, fontName: string = 'SourceHanSansCN'): void {

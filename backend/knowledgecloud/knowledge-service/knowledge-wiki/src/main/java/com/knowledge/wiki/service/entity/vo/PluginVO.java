@@ -1,6 +1,7 @@
 package com.knowledge.wiki.service.entity.vo;
 
 import java.io.Serializable;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import com.knowledge.wiki.service.entity.enums.InstalledPluginStatus;
@@ -38,6 +39,10 @@ public class PluginVO implements Serializable {
     private Long downloads;
     private String screenShot;
     private String resourcePath;
+    private List<String> tags;
+    private PluginVersionVO candidateVersion;
+    private LocalDateTime createTime;
+    private LocalDateTime updateTime;
     /** Runtime install status of the current user: null = not installed, ACTIVE / DISABLED. */
     private InstalledPluginStatus installStatus;
 }

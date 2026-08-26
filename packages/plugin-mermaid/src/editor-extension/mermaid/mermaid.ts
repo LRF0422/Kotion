@@ -1,6 +1,20 @@
-import { PMNode as Node, ReactNodeViewRenderer, withNodeViewErrorBoundary } from "@kn/editor";
-import { MermaidView } from "./MermaidView";
+import React from "react";
+import { PMNode as Node, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer, withNodeViewErrorBoundary } from "@kn/editor";
 
+const LazyMermaidView = React.lazy(async () => {
+    const module = await import("./MermaidView");
+    return { default: module.MermaidView };
+});
+
+const MermaidNodeView: React.FC<NodeViewProps> = (props) => React.createElement(
+    React.Suspense,
+    {
+        fallback: React.createElement(NodeViewWrapper, {
+            className: "my-2 min-h-40 rounded-md border bg-muted/20",
+        }),
+    },
+    React.createElement(LazyMermaidView, props),
+)
 
 declare module '@kn/editor' {
     interface Commands<ReturnType> {
@@ -19,8 +33,8 @@ export const Mermaid = Node.create({
 
     addNodeView() {
         return ReactNodeViewRenderer(
-            withNodeViewErrorBoundary(MermaidView),
-            { stopEvent: (eventWrapper) => true }
+            withNodeViewErrorBoundary(MermaidNodeView),
+            { stopEvent: () => true }
         )
     },
 

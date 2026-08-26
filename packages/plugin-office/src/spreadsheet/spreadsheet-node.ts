@@ -1,7 +1,22 @@
-import { PMNode as Node, mergeAttributes } from "@kn/editor"
-import { ReactNodeViewRenderer } from "@kn/editor"
-import { SpreadsheetView } from "./SpreadsheetView"
+import React from "react"
+import { PMNode as Node, mergeAttributes, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer, withNodeViewErrorBoundary } from "@kn/editor"
 import { DEFAULT_SPREADSHEET_HEIGHT } from "./constants"
+
+const LazySpreadsheetView = React.lazy(async () => {
+    const module = await import("./SpreadsheetView")
+    return { default: module.SpreadsheetView }
+})
+
+const SpreadsheetNodeView: React.FC<NodeViewProps> = (props) => React.createElement(
+    React.Suspense,
+    {
+        fallback: React.createElement(NodeViewWrapper, {
+            className: "relative my-2 rounded-md border bg-muted/20",
+            style: { height: props.node.attrs.height ?? DEFAULT_SPREADSHEET_HEIGHT },
+        }),
+    },
+    React.createElement(LazySpreadsheetView, props),
+)
 
 declare module "@kn/editor" {
     interface Commands<ReturnType> {
@@ -51,7 +66,7 @@ export const SpreadsheetNode = Node.create({
     },
 
     addNodeView() {
-        return ReactNodeViewRenderer(SpreadsheetView, {
+        return ReactNodeViewRenderer(withNodeViewErrorBoundary(SpreadsheetNodeView), {
             stopEvent: () => true,
         })
     },

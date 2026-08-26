@@ -15,10 +15,13 @@
  */
 package com.knowledge.resource.endpoint;
 
+import com.knowledge.core.log.exception.ServiceException;
 import com.knowledge.core.oss.OssClient;
 import com.knowledge.core.oss.model.KnowledgeFile;
+import com.knowledge.core.oss.props.OssProperties;
 import com.knowledge.core.tool.utils.IoUtil;
 import com.knowledge.core.tool.utils.StringUtil;
+import com.knowledge.resource.endpoint.dto.PluginFileUpload;
 import io.swagger.annotations.Api;
 import lombok.AllArgsConstructor;
 import lombok.SneakyThrows;
@@ -29,7 +32,16 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.servlet.http.HttpServletResponse;
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Base64;
 import java.util.List;
 
 /**
@@ -43,7 +55,11 @@ import java.util.List;
 @Api(value = "对象存储端点", tags = "对象存储端点")
 public class OssEndpoint {
 
+	private static final long MAX_PLUGIN_FILE_SIZE = 100L * 1024L * 1024L;
+	private static final int COPY_BUFFER_SIZE = 8192;
+
 	private OssClient ossClient;
+	private OssProperties ossProperties;
 
 	/**
 	 * 创建存储桶
@@ -133,6 +149,137 @@ public class OssEndpoint {
 	public R<KnowledgeFile> putFile(@RequestParam MultipartFile file) {
 		KnowledgeFile knowledgeFile = ossClient.putFile(file.getOriginalFilename(), file);
 		return R.data(knowledgeFile);
+	}
+
+	/**
+	 * 上传插件 JavaScript 产物，并返回对应的 SRI 哈希。
+	 *
+	 * @param files 插件 JavaScript 文件（必须且只能上传一个）
+	 * @return 上传后的对象名称、原始文件名和 SRI 哈希
+	 */
+	@SneakyThrows
+	@PostMapping("/put-plugin-file")
+	public R<PluginFileUpload> putPluginFile(@RequestParam("file") MultipartFile[] files) {
+		if (files.length != 1) {
+			throw new ServiceException("必须且只能上传一个插件文件");
+		}
+
+		MultipartFile file = files[0];
+		String originalName = file.getOriginalFilename();
+		if (file.isEmpty()) {
+			throw new ServiceException("插件文件不能为空");
+		}
+		if (StringUtil.isBlank(originalName) || !originalName.endsWith(".js")) {
+			throw new ServiceException("插件文件必须使用 .js 扩展名");
+		}
+		if (file.getSize() > MAX_PLUGIN_FILE_SIZE) {
+			throw new ServiceException("插件文件不能超过 100 MiB");
+		}
+
+		Path stagedFile = Files.createTempFile("plugin-artifact-", ".js");
+		try {
+			String integrity = stageAndHash(file, stagedFile);
+			KnowledgeFile uploadedFile;
+			try (InputStream inputStream = new RetryableFileInputStream(stagedFile)) {
+				uploadedFile = ossClient.putFile(ossProperties.getBucketName(), originalName, inputStream);
+			}
+			return R.data(new PluginFileUpload(uploadedFile.getName(), originalName, integrity));
+		} finally {
+			Files.deleteIfExists(stagedFile);
+		}
+	}
+
+	private String stageAndHash(MultipartFile file, Path stagedFile) throws IOException, NoSuchAlgorithmException {
+		MessageDigest digest = MessageDigest.getInstance("SHA-384");
+		long totalBytes = 0L;
+		byte[] buffer = new byte[COPY_BUFFER_SIZE];
+		try (InputStream inputStream = new BufferedInputStream(file.getInputStream());
+			 OutputStream outputStream = new BufferedOutputStream(Files.newOutputStream(stagedFile))) {
+			int bytesRead;
+			while ((bytesRead = inputStream.read(buffer)) != -1) {
+				totalBytes += bytesRead;
+				if (totalBytes > MAX_PLUGIN_FILE_SIZE) {
+					throw new ServiceException("插件文件不能超过 100 MiB");
+				}
+				digest.update(buffer, 0, bytesRead);
+				outputStream.write(buffer, 0, bytesRead);
+			}
+		}
+		if (totalBytes == 0L) {
+			throw new ServiceException("插件文件不能为空");
+		}
+		return "sha384-" + Base64.getEncoder().encodeToString(digest.digest());
+	}
+
+	/**
+	 * Some OSS clients retry an upload with the same InputStream instance. Reopen the staged
+	 * artifact after EOF or a provider-initiated close so every retry starts from byte zero.
+	 */
+	private static final class RetryableFileInputStream extends InputStream {
+
+		private final Path path;
+		private InputStream delegate;
+		private boolean reopenBeforeRead;
+
+		private RetryableFileInputStream(Path path) throws IOException {
+			this.path = path;
+			this.delegate = openStream();
+		}
+
+		@Override
+		public int read() throws IOException {
+			prepareForRead();
+			int value = delegate.read();
+			if (value == -1) {
+				reopenBeforeRead = true;
+			}
+			return value;
+		}
+
+		@Override
+		public int read(byte[] bytes, int offset, int length) throws IOException {
+			prepareForRead();
+			int bytesRead = delegate.read(bytes, offset, length);
+			if (bytesRead == -1) {
+				reopenBeforeRead = true;
+			}
+			return bytesRead;
+		}
+
+		@Override
+		public long skip(long bytes) throws IOException {
+			prepareForRead();
+			return delegate.skip(bytes);
+		}
+
+		@Override
+		public int available() throws IOException {
+			prepareForRead();
+			return delegate.available();
+		}
+
+		@Override
+		public void close() throws IOException {
+			if (delegate != null) {
+				delegate.close();
+				delegate = null;
+			}
+			reopenBeforeRead = true;
+		}
+
+		private void prepareForRead() throws IOException {
+			if (delegate == null || reopenBeforeRead) {
+				if (delegate != null) {
+					delegate.close();
+				}
+				delegate = openStream();
+				reopenBeforeRead = false;
+			}
+		}
+
+		private InputStream openStream() throws IOException {
+			return new BufferedInputStream(Files.newInputStream(path));
+		}
 	}
 
 	/**

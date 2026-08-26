@@ -6,7 +6,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { TourHost } from "./components/Tour/TourHost"
 import { ChevronLeft } from "@kn/icon"
 import { MobileTabBar } from "./components/mobile/MobileTabBar"
-import { useApi, APIS, useNavigator, useUploadFile, getAccessToken, clearTokens, useDispatch, AppContext, event, GO_TO_MARKETPLACE, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS, PLUGIN_INCOMPATIBLE, TOGGLE_AI_ASSISTANT, TOGGLE_DOCK_PANEL, dockRuntime } from "@kn/common"
+import { useApi, APIS, useNavigator, useUploadFile, getAccessToken, clearTokens, useDispatch, AppContext, event, GO_TO_MARKETPLACE, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS, PLUGIN_INCOMPATIBLE, TOGGLE_AI_ASSISTANT, TOGGLE_DOCK_PANEL, dockRuntime, logger } from "@kn/common"
 import { toast } from "@kn/ui"
 import React from "react"
 import { useAsyncEffect } from "ahooks"
@@ -66,19 +66,35 @@ export function Layout({ onPluginsReady }: LayoutProps) {
     const isWorkspaceRoute = location.pathname.startsWith('/space-detail/')
     const { pluginManager } = useContext(AppContext)
     const [pluginsLoaded, setPluginsLoaded] = useState(false)
+    const [pluginLoadError, setPluginLoadError] = useState<unknown>(null)
     const [refreshFlag, setRefreshFlag] = useState(0)
+    const webBootMode = (window as any).__KN_WEB_BOOT_MODE__ as 'development' | 'share' | 'main' | undefined
+
+    // App's initial plugin set is immutable. Crossing the share boundary must
+    // bootstrap again so the correct bundled/remote plugin policy is selected.
+    useEffect(() => {
+        if (!webBootMode || webBootMode === 'development') return
+        const isShareRoute = location.pathname.startsWith('/share/')
+        if (isShareRoute === (webBootMode === 'share')) return
+        logger.info('Reloading application after crossing public share boundary')
+        window.location.assign(`${location.pathname}${location.search}${location.hash}`)
+    }, [location.hash, location.pathname, location.search, webBootMode])
 
     // The agent now lives in the workspace side dock. Entry points outside the
     // workspace (sidebar menu, mobile tab bar, Home quick actions) still emit
     // TOGGLE_AI_ASSISTANT; forward it to the dock when one is mounted, and fall
     // back to the standalone page when there isn't (e.g. on /home).
     const openAgent = React.useCallback(() => {
-        if (dockRuntime.isMounted('right')) {
+        const hasAgentPanel = pluginManager
+            ?.resolveDockPanels('right')
+            .some(panel => panel.id === 'agent') ?? false
+
+        if (dockRuntime.isMounted('right') && hasAgentPanel) {
             event.emit(TOGGLE_DOCK_PANEL, { id: 'agent' })
         } else {
             navigator.go({ to: '/ai-assistant' })
         }
-    }, [navigator])
+    }, [navigator, pluginManager])
 
     useEffect(() => {
         event.on(TOGGLE_AI_ASSISTANT, openAgent)
@@ -135,37 +151,46 @@ export function Layout({ onPluginsReady }: LayoutProps) {
             return
         }
 
+        setPluginLoadError(null)
         console.log('enter layout');
 
         try {
             const token = getAccessToken()
-            console.log('Token check:', token ? 'present' : 'missing')
 
+            // Public shares always have the bundled compatibility set. Authenticated
+            // viewers may additionally load remote-only plugins; duplicates are filtered.
+            if (window.location.pathname.startsWith('/share/')) {
+                let installedPlugins: any[] = []
+                if (token) {
+                    try {
+                        installedPlugins = (await useApi(APIS.GET_INSTALLED_PLUGINS)).data
+                    } catch (error) {
+                        logger.warn('Failed to load viewer plugins for public share; using compatibility plugins only', error)
+                    }
+                }
+                const { failedPlugins } = await pluginManager.init(installedPlugins)
+                if (failedPlugins.length > 0) {
+                    logger.warn('Some viewer plugins failed on public share:', failedPlugins)
+                }
+                setPluginsLoaded(true)
+                onPluginsReady(true)
+                event.emit(PLUGIN_INIT_SUCCESS)
+                return
+            }
+
+            console.log('Token check:', token ? 'present' : 'missing')
             if (token) {
-                // Reset plugin manager state before reinitializing to ensure clean state on page refresh
                 console.log('Loading plugins in Layout, refreshFlag:', refreshFlag)
                 const installedPlugins: any[] = (await useApi(APIS.GET_INSTALLED_PLUGINS)).data
-                await pluginManager.init(installedPlugins)
+                const { failedPlugins } = await pluginManager.init(installedPlugins)
+                if (failedPlugins.length > 0) {
+                    throw new Error(`Failed to load required plugins: ${failedPlugins.join(', ')}`)
+                }
 
                 setPluginsLoaded(true)
                 onPluginsReady(true)
-                // Emit PLUGIN_INIT_SUCCESS to notify other components that plugins are ready.
-                // Do NOT emit PLUGIN_CHANGED here – Layout itself listens to that event
-                // to trigger reinit, so emitting it would cause an infinite refresh loop.
                 event.emit(PLUGIN_INIT_SUCCESS)
             } else {
-                // Public share pages are viewable without authentication:
-                // initialize with built-in plugins only so their routes resolve.
-                if (window.location.pathname.startsWith('/share/')) {
-                    console.log('No token, but public share route - loading built-in plugins')
-                    await pluginManager.init([])
-                    setPluginsLoaded(true)
-                    onPluginsReady(true)
-                    event.emit(PLUGIN_INIT_SUCCESS)
-                    return
-                }
-                // No auth token, redirect to login preserving the deep link
-                // (e.g. invitation links) so the user lands back after login
                 console.log('No token found, redirecting to login')
                 await pluginManager.init([])
                 const backTo = window.location.pathname + window.location.search
@@ -174,12 +199,18 @@ export function Layout({ onPluginsReady }: LayoutProps) {
                     : '/login'
             }
         } catch (error) {
-            console.error('Failed to load plugins:', error)
-            // Only redirect to login if not already there
+            logger.error('Failed to load plugins:', error)
+
+            if (getAccessToken() && !window.location.pathname.startsWith('/share/')) {
+                // Never mount an editable document with an incomplete schema after
+                // the installed-plugin request fails. Require an explicit retry.
+                setPluginLoadError(error)
+                return
+            }
+
             await pluginManager.init([])
             setPluginsLoaded(true)
             onPluginsReady(true)
-            // Don't auto-redirect on plugin load failure - let user stay on current page
         }
     }, [pluginManager, refreshFlag])
 
@@ -264,17 +295,27 @@ export function Layout({ onPluginsReady }: LayoutProps) {
                     <OffscreenEditorHost />
 
                     {/* Show loading overlay while plugins are loading */}
-                    {!pluginsLoaded && (
+                    {(!pluginsLoaded || Boolean(pluginLoadError)) && (
                         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
-                            <div className="flex flex-col items-center gap-4">
-                                <SparklesText className="text-[60px]" sparklesCount={8} text="KN" />
-                                <div className="flex items-center gap-2 text-lg text-muted-foreground">
-                                    <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '0ms' }} />
-                                    <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '150ms' }} />
-                                    <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '300ms' }} />
+                            {pluginLoadError ? (
+                                <div className="flex max-w-sm flex-col items-center gap-4 px-6 text-center">
+                                    <SparklesText className="text-[48px]" sparklesCount={6} text="KN" />
+                                    <p className="text-sm text-muted-foreground">
+                                        Failed to load the installed plugins. Retry before opening the workspace to avoid editing with an incomplete document schema.
+                                    </p>
+                                    <Button onClick={() => setRefreshFlag(flag => flag + 1)}>Retry</Button>
                                 </div>
-                                <p className="text-sm text-muted-foreground">Loading workspace...</p>
-                            </div>
+                            ) : (
+                                <div className="flex flex-col items-center gap-4">
+                                    <SparklesText className="text-[60px]" sparklesCount={8} text="KN" />
+                                    <div className="flex items-center gap-2 text-lg text-muted-foreground">
+                                        <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '0ms' }} />
+                                        <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '150ms' }} />
+                                        <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '300ms' }} />
+                                    </div>
+                                    <p className="text-sm text-muted-foreground">Loading workspace...</p>
+                                </div>
+                            )}
                         </div>
                     )}
 

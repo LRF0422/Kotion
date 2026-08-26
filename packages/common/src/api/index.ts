@@ -18,6 +18,10 @@ export const APIS = {
         url: '/knowledge-resource/oss/endpoint/put-file',
         method: 'POST'
     } as API,
+    UPLOAD_PLUGIN_FILE: {
+        url: '/knowledge-resource/oss/endpoint/put-plugin-file',
+        method: 'POST'
+    } as API,
     REGISTER: {
         url: '/knowledge-system/user/register',
         method: 'POST'
@@ -36,6 +40,26 @@ export const APIS = {
     } as API,
     CREATE_PLUGIN: {
         url: '/knowledge-wiki/plugin',
+        method: 'POST'
+    } as API,
+    SUBMIT_PLUGIN: {
+        url: '/knowledge-wiki/plugin/submissions',
+        method: 'POST'
+    } as API,
+    RESUBMIT_PLUGIN: {
+        url: '/knowledge-wiki/plugin/submissions/:id',
+        method: 'PUT'
+    } as API,
+    GET_MY_PLUGIN_SUBMISSIONS: {
+        url: '/knowledge-wiki/plugin/submissions/mine',
+        method: 'GET'
+    } as API,
+    REVIEW_PLUGIN_SUBMISSION: {
+        url: '/knowledge-wiki/plugin/submissions/:id/review',
+        method: 'POST'
+    } as API,
+    PUBLISH_PLUGIN_VERSION: {
+        url: '/knowledge-wiki/plugin/:id/versions',
         method: 'POST'
     } as API,
     GET_PLUGIN: {

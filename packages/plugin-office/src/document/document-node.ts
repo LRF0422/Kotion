@@ -1,7 +1,22 @@
-import { PMNode as Node, mergeAttributes } from "@kn/editor"
-import { ReactNodeViewRenderer } from "@kn/editor"
-import { DocumentView } from "./DocumentView"
+import React from "react"
+import { PMNode as Node, mergeAttributes, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer, withNodeViewErrorBoundary } from "@kn/editor"
 import { DEFAULT_DOCUMENT_HEIGHT } from "./constants"
+
+const LazyDocumentView = React.lazy(async () => {
+    const module = await import("./DocumentView")
+    return { default: module.DocumentView }
+})
+
+const DocumentNodeView: React.FC<NodeViewProps> = (props) => React.createElement(
+    React.Suspense,
+    {
+        fallback: React.createElement(NodeViewWrapper, {
+            className: "relative my-2 rounded-md border bg-muted/20",
+            style: { height: props.node.attrs.height ?? DEFAULT_DOCUMENT_HEIGHT },
+        }),
+    },
+    React.createElement(LazyDocumentView, props),
+)
 
 declare module "@kn/editor" {
     interface Commands<ReturnType> {
@@ -51,7 +66,7 @@ export const DocumentNode = Node.create({
     },
 
     addNodeView() {
-        return ReactNodeViewRenderer(DocumentView, {
+        return ReactNodeViewRenderer(withNodeViewErrorBoundary(DocumentNodeView), {
             stopEvent: () => true,
         })
     },

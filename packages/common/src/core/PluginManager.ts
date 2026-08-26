@@ -195,6 +195,10 @@ export class PluginManager {
         })
     }
 
+    private _isInitialPluginKey(pluginKey?: string): boolean {
+        return Boolean(pluginKey && this._initialPlugins.some(plugin => plugin.pluginKey === pluginKey))
+    }
+
     /**
      * Invalidate internal derived-data caches and notify listeners.
      */
@@ -301,7 +305,7 @@ export class PluginManager {
         return plugin
     }
 
-    public async init(remotePlugins: any[]) {
+    public async init(remotePlugins: any[]): Promise<{ failedPlugins: string[] }> {
         logger.info('Initializing remote plugins:', remotePlugins);
         logger.info('Current init status:', this._init);
 
@@ -330,10 +334,16 @@ export class PluginManager {
                 this._init = true
                 logger.info('Plugins loaded:', this.plugins.length);
                 logger.debug('Services loaded:', this._serviceRegistry.getAll());
-                return
+                return { failedPlugins: [] }
             }
 
-            const loadResults = await Promise.allSettled(remotePlugins.map(async (plugin) => {
+            const loadableRemotePlugins = remotePlugins.filter(plugin => {
+                if (!this._isInitialPluginKey(plugin.pluginKey)) return true
+                logger.info(`Skipping remote plugin ${plugin.pluginKey || plugin.name}: already provided by the host`)
+                return false
+            })
+
+            const loadResults = await Promise.allSettled(loadableRemotePlugins.map(async (plugin) => {
                 try {
                     const path = this._buildPluginUrl(plugin)
                     const registration = await pluginScriptLoader.load(path, plugin.pluginKey, plugin.name, {
@@ -347,16 +357,33 @@ export class PluginManager {
             }))
             console.log('Load results:', loadResults);
 
+            const failedPlugins = new Set<string>()
+            loadResults.forEach((result, index) => {
+                if (result.status === 'rejected') {
+                    failedPlugins.add(loadableRemotePlugins[index]?.name || loadableRemotePlugins[index]?.pluginKey || 'unknown')
+                }
+            })
+
             const successfulPlugins: KPlugin<any>[] = []
+            const seenPluginNames = new Set(this._initialPlugins.map(plugin => plugin.name))
             for (const result of loadResults) {
                 if (result.status !== 'fulfilled') continue
                 const { plugin, registration } = result.value
-                if (!this._checkApiCompat(registration.meta, plugin.name)) continue
+                if (!this._checkApiCompat(registration.meta, plugin.name)) {
+                    failedPlugins.add(plugin.name || plugin.pluginKey)
+                    continue
+                }
                 const instance = this._extractPlugin(registration)
                 if (!instance) {
                     logger.warn(`Invalid plugin ${plugin.name} detected, skipping`)
+                    failedPlugins.add(plugin.name || plugin.pluginKey)
                     continue
                 }
+                if (seenPluginNames.has(instance.name)) {
+                    logger.info(`Skipping plugin ${instance.name}: a plugin with the same runtime name is already active`)
+                    continue
+                }
+                seenPluginNames.add(instance.name)
                 successfulPlugins.push(instance)
             }
 
@@ -369,10 +396,10 @@ export class PluginManager {
             logger.info(`All plugins loaded: ${this.plugins.length} (${successfulPlugins.length} remote)`);
             logger.debug('Services loaded:', this._serviceRegistry.getAll());
 
-            const failedCount = loadResults.filter(r => r.status === 'rejected').length
-            if (failedCount > 0) {
-                logger.warn(`${failedCount} plugins failed to load`)
+            if (failedPlugins.size > 0) {
+                logger.warn(`${failedPlugins.size} plugins failed to load or activate`)
             }
+            return { failedPlugins: [...failedPlugins] }
         } catch (error) {
             logger.error('Fatal error during plugin initialization:', error)
             this.plugins = [...this._initialPlugins]
@@ -418,6 +445,11 @@ export class PluginManager {
 
     async installPlugin(plugin: any, callBack?: () => void) {
         try {
+            if (this._isInitialPluginKey(plugin?.pluginKey)) {
+                logger.warn(`Plugin ${plugin.pluginKey || plugin.name} is provided by the host and cannot be installed remotely`)
+                return false
+            }
+
             if (!this._validatePlugin(plugin)) {
                 logger.error('Plugin validation failed')
                 return false
@@ -442,6 +474,10 @@ export class PluginManager {
             const loadedPlugin = this._extractPlugin(registration)
             if (!loadedPlugin) {
                 logger.error(`Invalid plugin structure for ${plugin.name}`)
+                return false
+            }
+            if (!this._validatePlugin(loadedPlugin)) {
+                logger.error(`Plugin ${loadedPlugin.name} conflicts with an active runtime plugin`)
                 return false
             }
 

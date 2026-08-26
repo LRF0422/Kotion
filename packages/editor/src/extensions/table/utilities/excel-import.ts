@@ -1,15 +1,17 @@
-import * as XLSX from 'xlsx';
 import { Editor } from '@tiptap/core';
 
 /**
  * Parse Excel file and return data as 2D array
  */
 export const parseExcelFile = async (file: File): Promise<string[][]> => {
+    const xlsxModule = import('xlsx');
+
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
 
-        reader.onload = (e) => {
+        reader.onload = async (e) => {
             try {
+                const XLSX = await xlsxModule;
                 const data = e.target?.result;
                 const workbook = XLSX.read(data, { type: 'binary' });
 

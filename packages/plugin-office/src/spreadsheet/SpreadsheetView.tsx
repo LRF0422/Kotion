@@ -4,8 +4,7 @@ import { X } from "@kn/icon"
 import React, { useCallback, useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { useUniver } from "./useUniver"
-import { triggerExcelFileImport, parseExcelToUniverData } from "./excel-to-univer"
-import { downloadWorkbookAsExcel } from "./univer-to-excel"
+import { triggerExcelFileImport } from "./excel-file-picker"
 
 export const SpreadsheetView: React.FC<NodeViewProps> = React.memo((props) => {
     const { node, updateAttributes, editor } = props
@@ -41,6 +40,7 @@ export const SpreadsheetView: React.FC<NodeViewProps> = React.memo((props) => {
         const file = await triggerExcelFileImport()
         if (!file) return
         try {
+            const { parseExcelToUniverData } = await import("./excel-to-univer")
             const data = await parseExcelToUniverData(file)
             importWorkbookDataRef.current(data)
         } catch (e) {
@@ -50,9 +50,10 @@ export const SpreadsheetView: React.FC<NodeViewProps> = React.memo((props) => {
 
     // Export uses the live snapshot so unsaved edits are included.
     const getCurrentSnapshotRef = useRef<() => Record<string, any> | null>(() => null)
-    const handleExportExcel = useCallback(() => {
+    const handleExportExcel = useCallback(async () => {
         try {
             const snapshot = getCurrentSnapshotRef.current() ?? node.attrs.workbookData
+            const { downloadWorkbookAsExcel } = await import("./univer-to-excel")
             downloadWorkbookAsExcel(snapshot, 'spreadsheet.xlsx')
         } catch (e) {
             console.error('Failed to export Excel:', e)

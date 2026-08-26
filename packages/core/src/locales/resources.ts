@@ -104,7 +104,8 @@ export const resources = {
                 "viewAll": "查看全部消息"
             },
             "pluginUploader": {
-                "dialogTitle": "发布插件",
+                "dialogTitle": "提交插件",
+                "editTitle": "修改并重新提交插件",
                 "step": "步骤",
                 "steps": {
                     "basicInfo": "基本信息",
@@ -129,15 +130,24 @@ export const resources = {
                     "version": "版本号",
                     "versionPlaceholder": "1.0.0",
                     "versionHint": "语义化版本格式：主版本.次版本.修订号",
+                    "category": "插件分类",
+                    "categoryPlaceholder": "选择插件分类",
+                    "categoryHint": "用于插件市场筛选和展示",
                     "tags": "分类标签",
                     "tagsPlaceholder": "输入标签后按 Enter 添加",
                     "tagsHint": "添加 1-5 个标签，便于用户搜索发现",
                     "icon": "插件图标",
                     "iconHint": "PNG/JPG, 建议 120×120px",
                     "iconUpload": "上传",
+                    "iconPreview": "插件图标预览",
                     "description": "插件简介",
                     "descriptionPlaceholder": "请简要描述插件的核心功能和使用场景，这将显示在插件列表中...",
                     "descriptionHint": "一句话描述插件的核心价值"
+                },
+                "categories": {
+                    "feature": "功能增强",
+                    "app": "应用",
+                    "connector": "连接器"
                 },
                 "tabs": {
                     "feature": "功能特性",
@@ -147,6 +157,8 @@ export const resources = {
                     "changelog": "更新日志",
                     "changelogHint": "版本更新内容和历史记录",
                     "customHint": "自定义描述内容",
+                    "custom": "自定义章节",
+                    "customPlaceholder": "输入章节名称",
                     "addCustom": "添加自定义分类"
                 },
                 "docTip": {
@@ -156,12 +168,19 @@ export const resources = {
                 "uploadSection": {
                     "title": "上传插件文件",
                     "hint": "支持 .js 文件，最大 100MB",
-                    "uploading": "正在上传文件...",
-                    "uploaded": "插件文件已就绪"
+                    "uploading": "正在安全上传并计算完整性校验...",
+                    "uploaded": "插件文件和完整性校验已就绪",
+                    "singleFile": "一次只能上传一个插件文件",
+                    "rejected": "文件 {{name}} 不符合要求：{{message}}",
+                    "dropActive": "松开以上传插件文件",
+                    "dropIdle": "拖拽 .js 文件到这里，或点击选择",
+                    "fileLimit": "仅支持 .js，最大 100MB"
                 },
                 "preview": {
                     "title": "发布预览",
                     "aboutToPublish": "即将发布",
+                    "submitForReview": "提交审核",
+                    "integrityReady": "文件与 SRI 已就绪",
                     "noName": "未填写名称",
                     "noDescription": "暂无描述",
                     "pluginKey": "插件标识",
@@ -172,13 +191,22 @@ export const resources = {
                     "noTags": "未添加标签"
                 },
                 "submitTip": {
-                    "content": "提交须知：提交后插件将进入审核队列，审核通过后自动上架到插件市场。审核周期通常为 1-3 个工作日。"
+                    "title": "提交后进入审核",
+                    "content": "提交须知：提交后插件将进入审核队列，审核通过后自动上架到插件市场。审核周期通常为 1-3 个工作日。",
+                    "reviewContent": "提交后不会立即上架。您可以在“我的提交”中查看审核状态；审核通过后插件才会出现在市场。"
                 },
                 "buttons": {
                     "prev": "上一步",
                     "next": "下一步",
                     "submit": "提交审核",
                     "submitting": "提交中...",
+                    "submitForReview": "提交审核",
+                    "upload": "上传",
+                    "replace": "替换",
+                    "remove": "移除",
+                    "removeFile": "移除文件",
+                    "addSection": "添加章节",
+                    "removeSection": "移除章节",
                     "aiGenerate": "AI 生成",
                     "aiGenerating": "生成中..."
                 },
@@ -202,10 +230,23 @@ export const resources = {
                     "fileRequired": "请先上传插件文件（.js 格式）",
                     "validationError": "表单验证失败，请检查输入",
                     "keepOneTab": "至少保留一个描述分类",
-                    "fillBasicFirst": "请先填写插件名称等基本信息"
+                    "fillBasicFirst": "请先填写插件名称等基本信息",
+                    "tagsMax": "最多添加 5 个标签",
+                    "featuresTitle": "请完善功能说明",
+                    "descriptionLabels": "章节名称不能为空或重复",
+                    "descriptionContent": "请至少填写一个有效的功能说明章节",
+                    "descriptionsMax": "最多添加 20 个说明章节",
+                    "uploadTitle": "插件文件尚未就绪",
+                    "uploadInProgress": "请等待插件文件上传完成",
+                    "summaryTitle": "请检查当前步骤",
+                    "iconType": "图标仅支持 PNG 或 JPG",
+                    "iconSize": "图标不能超过 2MB",
+                    "iconSquare": "图标必须为正方形",
+                    "iconDimensions": "图标尺寸至少为 120×120px"
                 },
                 "toast": {
                     "submitSuccess": "🎉 插件提交成功！审核通过后将自动上架",
+                    "submittedForReview": "插件已提交审核，可在“我的提交”中查看进度",
                     "submitFailed": "提交失败，请检查网络后重试",
                     "iconUploaded": "图标上传成功",
                     "iconUploadFailed": "图标上传失败，请检查图片格式",
@@ -229,6 +270,20 @@ export const resources = {
                 "type": "类型",
                 "allPlugins": "全部插件",
                 "pendingReview": "待审核",
+                "mySubmissions": "我的提交",
+                "submissions": {
+                    "emptyTitle": "还没有插件提交",
+                    "emptyDescription": "从“新建插件”开始提交第一个插件审核。",
+                    "editResubmit": "修改并重新提交",
+                    "readOnly": "等待状态更新",
+                    "loadMore": "加载更多",
+                    "status": {
+                        "pending": "待审核",
+                        "in_progress": "审核中",
+                        "rejected": "未通过",
+                        "done": "已通过"
+                    }
+                },
                 "feature": "功能",
                 "uiEnhancement": "界面增强",
                 "integration": "集成",
@@ -273,6 +328,7 @@ export const resources = {
                 "cancel": "取消",
                 "confirm": "确认",
                 "publishVersion": "发布新版本",
+                "version": "版本号",
                 "uploadPluginFile": "上传插件文件",
                 "required": "必填",
                 "chooseFile": "选择文件",
@@ -916,7 +972,8 @@ export const resources = {
                 "viewAll": "View all messages"
             },
             "pluginUploader": {
-                "dialogTitle": "Publish Plugin",
+                "dialogTitle": "Submit Plugin",
+                "editTitle": "Edit and resubmit plugin",
                 "step": "Step",
                 "steps": {
                     "basicInfo": "Basic Info",
@@ -941,15 +998,24 @@ export const resources = {
                     "version": "Version",
                     "versionPlaceholder": "1.0.0",
                     "versionHint": "Semantic version format: major.minor.patch",
+                    "category": "Category",
+                    "categoryPlaceholder": "Select a category",
+                    "categoryHint": "Used for Marketplace filtering and discovery",
                     "tags": "Tags",
                     "tagsPlaceholder": "Type and press Enter to add",
                     "tagsHint": "Add 1-5 tags to help users discover your plugin",
                     "icon": "Plugin Icon",
                     "iconHint": "PNG/JPG, recommended 120×120px",
                     "iconUpload": "Upload",
+                    "iconPreview": "Plugin icon preview",
                     "description": "Description",
                     "descriptionPlaceholder": "Briefly describe your plugin's core features and use cases. This will be shown in the plugin list...",
                     "descriptionHint": "One sentence describing your plugin's core value"
+                },
+                "categories": {
+                    "feature": "Feature",
+                    "app": "App",
+                    "connector": "Connector"
                 },
                 "tabs": {
                     "feature": "Features",
@@ -959,6 +1025,8 @@ export const resources = {
                     "changelog": "Changelog",
                     "changelogHint": "Version updates and history",
                     "customHint": "Custom description content",
+                    "custom": "Custom section",
+                    "customPlaceholder": "Enter section name",
                     "addCustom": "Add custom category"
                 },
                 "docTip": {
@@ -968,12 +1036,19 @@ export const resources = {
                 "uploadSection": {
                     "title": "Upload Plugin File",
                     "hint": "Supports .js files, max 100MB",
-                    "uploading": "Uploading file...",
-                    "uploaded": "Plugin file ready"
+                    "uploading": "Uploading securely and calculating integrity...",
+                    "uploaded": "Plugin file and integrity are ready",
+                    "singleFile": "Only one plugin file can be uploaded at a time",
+                    "rejected": "File {{name}} was rejected: {{message}}",
+                    "dropActive": "Drop to upload the plugin file",
+                    "dropIdle": "Drag a .js file here, or click to select",
+                    "fileLimit": ".js only, maximum 100MB"
                 },
                 "preview": {
                     "title": "Publish Preview",
                     "aboutToPublish": "Ready to publish",
+                    "submitForReview": "Submit for review",
+                    "integrityReady": "File and SRI ready",
                     "noName": "No name provided",
                     "noDescription": "No description",
                     "pluginKey": "Plugin Key",
@@ -984,13 +1059,22 @@ export const resources = {
                     "noTags": "No tags added"
                 },
                 "submitTip": {
-                    "content": "Submission Notice: After submission, your plugin will enter the review queue and be published automatically once approved. Review typically takes 1-3 business days."
+                    "title": "Submitted for review",
+                    "content": "Submission Notice: After submission, your plugin will enter the review queue and be published automatically once approved. Review typically takes 1-3 business days.",
+                    "reviewContent": "Submission does not publish immediately. Track the review in My submissions; the plugin appears in Marketplace only after approval."
                 },
                 "buttons": {
                     "prev": "Previous",
                     "next": "Next",
                     "submit": "Submit for Review",
                     "submitting": "Submitting...",
+                    "submitForReview": "Submit for review",
+                    "upload": "Upload",
+                    "replace": "Replace",
+                    "remove": "Remove",
+                    "removeFile": "Remove file",
+                    "addSection": "Add section",
+                    "removeSection": "Remove section",
                     "aiGenerate": "AI Generate",
                     "aiGenerating": "Generating..."
                 },
@@ -1014,10 +1098,23 @@ export const resources = {
                     "fileRequired": "Please upload a plugin file (.js format)",
                     "validationError": "Form validation failed, please check your input",
                     "keepOneTab": "Keep at least one description category",
-                    "fillBasicFirst": "Please fill in the plugin name and basic info first"
+                    "fillBasicFirst": "Please fill in the plugin name and basic info first",
+                    "tagsMax": "Add no more than 5 tags",
+                    "featuresTitle": "Complete the feature documentation",
+                    "descriptionLabels": "Section names cannot be empty or duplicated",
+                    "descriptionContent": "Add meaningful content to at least one documentation section",
+                    "descriptionsMax": "Add no more than 20 documentation sections",
+                    "uploadTitle": "Plugin file is not ready",
+                    "uploadInProgress": "Wait for the plugin file upload to finish",
+                    "summaryTitle": "Check this step",
+                    "iconType": "The icon must be PNG or JPG",
+                    "iconSize": "The icon must be 2MB or smaller",
+                    "iconSquare": "The icon must be square",
+                    "iconDimensions": "The icon must be at least 120×120px"
                 },
                 "toast": {
                     "submitSuccess": "🎉 Plugin submitted successfully! It will be published after review",
+                    "submittedForReview": "Plugin submitted for review. Track it in My submissions",
                     "submitFailed": "Submission failed, please check your network and try again",
                     "iconUploaded": "Icon uploaded successfully",
                     "iconUploadFailed": "Icon upload failed, please check image format",
@@ -1041,6 +1138,20 @@ export const resources = {
                 "type": "Type",
                 "allPlugins": "All Plugins",
                 "pendingReview": "Pending Review",
+                "mySubmissions": "My submissions",
+                "submissions": {
+                    "emptyTitle": "No plugin submissions yet",
+                    "emptyDescription": "Use New Plugin to submit your first plugin for review.",
+                    "editResubmit": "Edit and resubmit",
+                    "readOnly": "Waiting for status update",
+                    "loadMore": "Load more",
+                    "status": {
+                        "pending": "Pending",
+                        "in_progress": "In review",
+                        "rejected": "Rejected",
+                        "done": "Approved"
+                    }
+                },
                 "feature": "Feature",
                 "uiEnhancement": "UI Enhancement",
                 "integration": "Integration",
@@ -1085,6 +1196,7 @@ export const resources = {
                 "cancel": "Cancel",
                 "confirm": "Confirm",
                 "publishVersion": "Publish New Version",
+                "version": "Version",
                 "uploadPluginFile": "Upload Plugin File",
                 "required": "Required",
                 "chooseFile": "Choose File",

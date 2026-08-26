@@ -1,26 +1,63 @@
-import ReactDOM from 'react-dom/client'
-import { App } from "@kn/core"
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { App } from "@kn/core";
+import { DefaultPluginInstance } from "@kn/plugin-main";
 
-import React from 'react'
-import "@kn/ui/globals.css"
-import { DefaultPluginInstance } from "@kn/plugin-main"
-import { fileManager } from "@kn/file-manager"
-import { blockReference } from "@kn/plugin-block-reference"
-import { bitable } from "@kn/plugin-bitable"
-import { speechToText } from "@kn/plugin-speech-to-text"
-import { ai } from "@kn/plugin-ai"
-import { chart } from "@kn/chart-plugin"
-import { drawnix } from "@kn/plugin-drawnix"
-import { mermaid } from "@kn/mermaid-plugin"
-import { excalidraw } from "@kn/plugin-excalidraw"
-import { comment } from "@kn/plugin-comment"
-import { stickyNote } from "@kn/plugin-sticky-note"
-import { theme } from "@kn/plugin-theme"
-import { office} from "@kn/plugin-office"
+import "@kn/ui/globals.css";
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <App plugins={[ai, bitable, blockReference, speechToText, chart,
-    comment, stickyNote, theme, office,
-    drawnix, DefaultPluginInstance, fileManager, mermaid, excalidraw]} />
-)
- 
+const webBootMode = import.meta.env.DEV
+  ? "development"
+  : window.location.pathname.startsWith("/share/")
+    ? "share"
+    : "main";
+
+(window as any).__KN_WEB_BOOT_MODE__ = webBootMode;
+const shouldLoadBundledPlugins = webBootMode !== "main";
+
+const loadInitialPlugins = async () => {
+  if (!shouldLoadBundledPlugins) {
+    return [DefaultPluginInstance];
+  }
+
+  try {
+    const { bundledPlugins } = await import("./bundled-plugins");
+    return bundledPlugins;
+  } catch (error) {
+    window.__KN__.common.logger.error("Failed to load bundled plugins:", error);
+    if (webBootMode === "share") throw error;
+    return [DefaultPluginInstance];
+  }
+};
+
+const bootstrap = async () => {
+  const root = ReactDOM.createRoot(document.getElementById("root")!);
+
+  if (shouldLoadBundledPlugins) {
+    root.render(
+      <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">
+        Loading plugins…
+      </div>,
+    );
+  }
+
+  try {
+    const plugins = await loadInitialPlugins();
+    root.render(<App plugins={plugins} />);
+  } catch (error) {
+    root.render(
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center">
+        <p className="text-sm text-muted-foreground">
+          Failed to load the plugins required for this shared page.
+        </p>
+        <button
+          className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground"
+          onClick={() => window.location.reload()}
+        >
+          Retry
+        </button>
+      </div>,
+    );
+  }
+};
+
+void bootstrap();

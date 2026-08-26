@@ -26,10 +26,10 @@ export {
 export { zodResolver } from "@hookform/resolvers/zod"
 export * from "zod"
 export { useForm, Controller } from "react-hook-form"
+export type { Control, UseFormReturn } from "react-hook-form"
 export { type TimeValue } from "react-aria-components"
 
 import styled from "styled-components"
 export { styled }
 export { motion } from "framer-motion"
-export { Streamdown } from "streamdown"
 export { format, parseISO, formatDistanceToNow } from "date-fns"

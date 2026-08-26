@@ -13,6 +13,10 @@ public enum WikiException implements BusinessExceptionAssert {
     PLUGIN_EXISTS(1000, "该插件已存在"),
     PLUGIN_NOT_FOUND(1001, "插件不存在"),
     PLUGIN_VERSION_NOT_FOUND(1002, "插件版本不存在"),
+    PLUGIN_VERSION_EXISTS(1003, "该插件版本已存在"),
+    PLUGIN_FORBIDDEN(1004, "无权操作该插件"),
+    PLUGIN_INVALID_STATE(1005, "插件当前状态不允许此操作"),
+    PLUGIN_INVALID_VERSION(1006, "无效的插件语义化版本"),
 
     // Space related (2000-2999)
     SPACE_NOT_FOUND(2001, "空间不存在"),

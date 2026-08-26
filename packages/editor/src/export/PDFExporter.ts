@@ -1,6 +1,4 @@
 import { EditorView } from '@tiptap/pm/view';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 
 // 确保中文字体加载的辅助函数
 async function ensureChineseFontLoaded(element: HTMLElement): Promise<void> {
@@ -61,6 +59,11 @@ export class PDFExporter {
                 return false;
             }
 
+            const dependencyModules = Promise.all([
+                import('jspdf'),
+                import('html2canvas')
+            ]);
+
             // 等待所有组件渲染完成
             // 强制布局重新计算，确保所有组件都已渲染
             await new Promise(resolve => {
@@ -70,6 +73,10 @@ export class PDFExporter {
                     });
                 });
             });
+
+            const [jsPDFModule, html2canvasModule] = await dependencyModules;
+            const jsPDF = jsPDFModule.default;
+            const html2canvas = html2canvasModule.default;
 
             // 直接使用 html2canvas 捕获原始元素，不进行克隆
             // 这样可以保留所有计算样式和布局

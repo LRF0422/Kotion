@@ -75,40 +75,42 @@ public class PluginServiceImpl extends AbstractSubjectService<PluginMapper, Plug
     }
 
     @Override
+    public Plugin getByIdForUpdate(Long id) {
+        return this.baseMapper.selectByIdForUpdate(id);
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public void createPlugin(Plugin plugin, boolean publish) {
         if (plugin.getId() == null) {
-            Plugin db = this.getByKey(plugin.getPluginKey());
-            if (db == null) {
-                log.debug("Creating new plugin: {}", plugin.getPluginKey());
-                plugin.setStatus(PluginStatus.PENGDING);
-                this.save(plugin);
-                this.pluginVersionService.createOrSaveDraft(plugin);
-            } else {
-                log.debug("Updating existing plugin: {}", plugin.getPluginKey());
-                PluginConverter.INSTANCE.update(plugin, db);
-                plugin.setId(db.getId());
-                this.updateById(db);
-                this.pluginVersionService.createOrSaveDraft(db);
+            if (this.getByKey(plugin.getPluginKey()) != null) {
+                throw WikiException.PLUGIN_EXISTS.newException();
             }
+            log.debug("Creating new plugin: {}", plugin.getPluginKey());
+            plugin.setStatus(PluginStatus.PENDING);
+            this.save(plugin);
         } else {
             log.debug("Updating plugin by ID: {}", plugin.getId());
             Plugin db = this.getById(plugin.getId());
+            if (db == null) {
+                throw WikiException.PLUGIN_NOT_FOUND.newException();
+            }
             PluginConverter.INSTANCE.update(plugin, db);
             this.updateById(db);
-            this.pluginVersionService.createOrSaveDraft(db);
+            plugin = db;
         }
-        if (publish) {
-            log.info("Publishing plugin: {}", plugin.getPluginKey());
-            this.pluginVersionService.publish(pluginVersionService.getDraftVersion(plugin.getId()).getId());
+        PluginVersion draft = this.pluginVersionService.getPendingVersion(plugin.getId());
+        if (draft == null) {
+            draft = this.pluginVersionService.createOrSaveDraft(plugin);
+        } else {
+            draft.setResourcePath(plugin.getResourcePath());
+            draft.setIntegrity(plugin.getIntegrity());
+            draft.setVersionDescription(plugin.getVersionDescs());
         }
-    }
-
-    private boolean checkExists(Plugin plugin) {
-        return this.lambdaQuery()
-                .eq(Plugin::getPluginKey, plugin.getPluginKey())
-                .exists();
-
+        draft.setStatus(com.knowledge.core.version.VersionStatus.PENDING);
+        this.pluginVersionService.updateById(draft);
+        plugin.setStatus(PluginStatus.PENDING);
+        this.updateById(plugin);
     }
 
     @Override

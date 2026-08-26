@@ -2,7 +2,7 @@ import { ExtensionWrapper } from "@kn/common"
 import { SpreadsheetNode } from "./spreadsheet-node"
 import { Sheet } from "@kn/icon"
 import React from "react"
-import { triggerExcelFileImport, parseExcelToUniverData } from "./excel-to-univer"
+import { triggerExcelFileImport } from "./excel-file-picker"
 import { spreadsheetTools } from "./tools"
 import { spreadsheetExpertSkill } from "./skills"
 import { createT } from "../i18n"
@@ -12,6 +12,7 @@ const t = createT();
 const importExcelAction = async (editor: any) => {
     const file = await triggerExcelFileImport()
     if (!file) return
+    const { parseExcelToUniverData } = await import("./excel-to-univer")
     const workbookData = await parseExcelToUniverData(file)
     editor.commands.insertSpreadsheet(workbookData)
 }

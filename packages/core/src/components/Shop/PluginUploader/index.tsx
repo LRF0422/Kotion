@@ -1,824 +1,490 @@
 import {
-    Button, Dialog, DialogContent, DialogDescription,
-    DialogHeader, DialogTitle, DialogTrigger, FileUploader,
-    Form, FormControl, FormField, FormItem, FormLabel, FormMessage, IconButton, Input,
-    Step, Stepper, Tabs, TabsContent, TabsList, TabsTrigger, TagInput, Textarea, useForm, zodResolver, toast,
-    AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
-    AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, Progress, ScrollArea, cn
+  Alert,
+  AlertDescription,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertTitle,
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  Form,
+  ScrollArea,
+  useForm,
+  zodResolver,
 } from "@kn/ui";
-import React, { PropsWithChildren, useCallback, useMemo } from "react";
-import { z } from "@kn/ui";
-import { CheckCircle2, PlusIcon, TrashIcon, Loader2Icon, XIcon, UploadIcon, ImageIcon, Sparkles } from "@kn/icon";
-import { CollaborationEditor, JSONContent, Editor } from "@kn/editor";
-import { useTranslation } from "@kn/common";
-import { useApi, useUploadFile } from "@kn/common";
-import { useSafeState } from "ahooks";
-import { APIS } from "@kn/common";
-import { generateText, parseMarkdownToNodes } from "@kn/common";
+import { Loader2Icon } from "@kn/icon";
+import { generateText, parseMarkdownToNodes, useTranslation } from "@kn/common";
+import type { Editor, JSONContent } from "@kn/editor";
+import React from "react";
 
-interface Description {
-    label: string,
-    content: JSONContent
-}
+import {
+  WizardNavigation,
+  type WizardStep,
+} from "./components/WizardNavigation";
+import {
+  createDefaultPluginSubmission,
+  createPluginSubmissionSchema,
+} from "./schema";
+import { BasicInfoStep } from "./steps/BasicInfoStep";
+import { FeaturesStep } from "./steps/FeaturesStep";
+import { UploadReviewStep } from "./steps/UploadReviewStep";
+import type {
+  PluginDescriptionValue,
+  PluginSubmissionValues,
+  PluginUploaderProps,
+} from "./types";
+import { usePluginSubmission } from "./use-plugin-submission";
 
-export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
-    const { t } = useTranslation();
+const BASIC_FIELDS: Array<keyof PluginSubmissionValues> = [
+  "name",
+  "pluginKey",
+  "version",
+  "category",
+  "tags",
+  "description",
+];
 
-    const steps: Step[] = useMemo(() => [
-        { number: 1, label: t('pluginUploader.steps.basicInfo'), description: t('pluginUploader.steps.basicInfoDesc') },
-        { number: 2, label: t('pluginUploader.steps.features'), description: t('pluginUploader.steps.featuresDesc') },
-        { number: 3, label: t('pluginUploader.steps.upload'), description: t('pluginUploader.steps.uploadDesc') }
-    ], [t]);
+const hasEditorContent = (content: JSONContent) => {
+  if (!content || typeof content !== "object") return false;
+  if (typeof content.text === "string" && content.text.trim()) return true;
+  return (
+    Array.isArray(content.content) && content.content.some(hasEditorContent)
+  );
+};
 
-    const { upload, usePath, uploadFile } = useUploadFile()
-    const [open, setOpen] = useSafeState(false);
-    const [showExitDialog, setShowExitDialog] = useSafeState(false);
-    const [currentStep, setCurrentStep] = React.useState(1);
-    const [activeTagIndex, setActiveTagIndex] = React.useState<number | null>(null);
-    const [resourcePath, setResourcePath] = useSafeState<string>("");
-    const [uploadProgress, setUploadProgress] = useSafeState(0);
-    const [isUploading, setIsUploading] = useSafeState(false);
-    const [isSubmitting, setIsSubmitting] = useSafeState(false);
-    const [iconPath, setIconPath] = useSafeState<string>("");
-    const [iconUploading, setIconUploading] = useSafeState(false);
-    const [attachments, setAttachments] = useSafeState<File[]>([]);
-    const [descriptions, setDescriptions] = React.useState<Description[]>([
-        { label: "Feature", content: {} },
-        { label: "Detail", content: {} },
-        { label: "ChangeLog", content: {} },
+export const PluginUploader: React.FC<PluginUploaderProps> = ({
+  children,
+  submission,
+  onSubmitted,
+}) => {
+  const { t } = useTranslation();
+  const schema = React.useMemo(() => createPluginSubmissionSchema(t), [t]);
+  const form = useForm<PluginSubmissionValues>({
+    resolver: zodResolver(schema) as any,
+    defaultValues: createDefaultPluginSubmission(),
+    mode: "onBlur",
+  });
+
+  const [open, setOpen] = React.useState(false);
+  const [showExitDialog, setShowExitDialog] = React.useState(false);
+  const [currentStep, setCurrentStep] = React.useState(1);
+  const [highestStep, setHighestStep] = React.useState(1);
+  const [activeTagIndex, setActiveTagIndex] = React.useState<number | null>(
+    null,
+  );
+  const [activeDescriptionId, setActiveDescriptionId] =
+    React.useState("feature");
+  const [stepError, setStepError] = React.useState<string>();
+  const [isAiGenerating, setIsAiGenerating] = React.useState(false);
+  const editorRefs = React.useRef<Record<string, Editor | null>>({});
+  const featuresRef = React.useRef<HTMLDivElement>(null);
+  const uploadRef = React.useRef<HTMLDivElement>(null);
+  const customIdRef = React.useRef(0);
+  const aiSessionRef = React.useRef(0);
+
+  const submissionFlow = usePluginSubmission({
+    form,
+    submission,
+    onSubmitted,
+    t,
+  });
+
+  const steps: WizardStep[] = React.useMemo(
+    () => [
+      {
+        number: 1,
+        label: t("pluginUploader.steps.basicInfo"),
+        description: t("pluginUploader.steps.basicInfoDesc"),
+      },
+      {
+        number: 2,
+        label: t("pluginUploader.steps.features"),
+        description: t("pluginUploader.steps.featuresDesc"),
+      },
+      {
+        number: 3,
+        label: t("pluginUploader.steps.upload"),
+        description: t("pluginUploader.steps.uploadDesc"),
+      },
+    ],
+    [t],
+  );
+
+  const resetWizard = React.useCallback(() => {
+    aiSessionRef.current += 1;
+    submissionFlow.reset();
+    const firstDescriptionId = form.getValues("versionDescs")[0]?.id ?? "feature";
+    setCurrentStep(1);
+    setHighestStep(1);
+    setActiveDescriptionId(firstDescriptionId);
+    setActiveTagIndex(null);
+    setStepError(undefined);
+    setIsAiGenerating(false);
+    editorRefs.current = {};
+  }, [form, submissionFlow.reset]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    resetWizard();
+  }, [open, resetWizard]);
+
+  const syncEditors = React.useCallback(() => {
+    const descriptions = form.getValues("versionDescs");
+    const next = descriptions.map((item) => {
+      const editor = editorRefs.current[item.id];
+      return editor ? { ...item, content: editor.getJSON() } : item;
+    });
+    form.setValue("versionDescs", next, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+    return next;
+  }, [form]);
+
+  const validateFeatures = React.useCallback(() => {
+    const descriptions = syncEditors();
+    const labels = descriptions
+      .map((item) => item.label.trim().toLowerCase())
+      .filter(Boolean);
+    if (
+      labels.length !== descriptions.length ||
+      new Set(labels).size !== labels.length
+    ) {
+      setStepError(t("pluginUploader.validation.descriptionLabels"));
+      featuresRef.current?.focus();
+      return false;
+    }
+    if (!descriptions.some((item) => hasEditorContent(item.content))) {
+      setStepError(t("pluginUploader.validation.descriptionContent"));
+      featuresRef.current?.focus();
+      return false;
+    }
+    setStepError(undefined);
+    return true;
+  }, [syncEditors, t]);
+
+  const validateStep = React.useCallback(
+    async (step = currentStep) => {
+      setStepError(undefined);
+      if (step === 1) {
+        const valid = await form.trigger(BASIC_FIELDS);
+        if (!valid) {
+          const first = BASIC_FIELDS.find(
+            (field) => form.formState.errors[field],
+          );
+          if (first) form.setFocus(first as any);
+          setStepError(t("pluginUploader.validation.formIncomplete"));
+        }
+        return valid;
+      }
+      if (step === 2) return validateFeatures();
+      if (submissionFlow.isUploading) {
+        setStepError(t("pluginUploader.validation.uploadInProgress"));
+        uploadRef.current?.focus();
+        return false;
+      }
+      const values = form.getValues();
+      if (!values.resourcePath || !values.integrity) {
+        form.setError("resourcePath", {
+          message: t("pluginUploader.validation.fileRequired"),
+        });
+        setStepError(t("pluginUploader.validation.fileRequired"));
+        uploadRef.current?.focus();
+        return false;
+      }
+      return true;
+    },
+    [currentStep, form, submissionFlow.isUploading, t, validateFeatures],
+  );
+
+  const handleNext = async () => {
+    if (!(await validateStep())) return;
+    const next = Math.min(currentStep + 1, 3);
+    setCurrentStep(next);
+    setHighestStep((value) => Math.max(value, next));
+  };
+
+  const updateDescriptions = (
+    updater: (items: PluginDescriptionValue[]) => PluginDescriptionValue[],
+  ) => {
+    const next = updater(form.getValues("versionDescs"));
+    form.setValue("versionDescs", next, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  };
+
+  const addDescription = () => {
+    if (form.getValues("versionDescs").length >= 20) {
+      setStepError(t("pluginUploader.validation.descriptionsMax"));
+      return;
+    }
+    customIdRef.current += 1;
+    const id = `custom-${customIdRef.current}`;
+    updateDescriptions((items) => [
+      ...items,
+      {
+        id,
+        label: `${t("pluginUploader.tabs.custom")} ${customIdRef.current}`,
+        content: {},
+      },
     ]);
-    const [activeDescTab, setActiveDescTab] = React.useState("Feature");
-    const [isAiGenerating, setIsAiGenerating] = useSafeState(false);
-    const editorRefs = React.useRef<Record<string, Editor | null>>({});
+    setActiveDescriptionId(id);
+  };
 
-    const formSchema = z.object({
-        name: z.string()
-            .min(2, t('pluginUploader.validation.nameMin'))
-            .max(50, t('pluginUploader.validation.nameMax')),
-        pluginKey: z.string()
-            .min(2, t('pluginUploader.validation.keyMin'))
-            .max(50, t('pluginUploader.validation.keyMax'))
-            .regex(/^[a-z0-9-]+$/, t('pluginUploader.validation.keyFormat')),
-        version: z.string()
-            .regex(/^\d+\.\d+\.\d+$/, t('pluginUploader.validation.versionFormat')),
-        tags: z.array(z.object({
-            id: z.string(),
-            text: z.string()
-        })).min(1, t('pluginUploader.validation.tagsMin')),
-        icon: z.string().optional(),
-        resourcePath: z.string(),
-        description: z.string()
-            .min(10, t('pluginUploader.validation.descriptionMin'))
-            .max(500, t('pluginUploader.validation.descriptionMax')),
-        versionDescs: z.array(z.object({
-            label: z.string(),
-            content: z.string()
-        }))
-    })
+  const removeDescription = (id: string) => {
+    updateDescriptions((items) => items.filter((item) => item.id !== id));
+    if (activeDescriptionId === id) setActiveDescriptionId("feature");
+    delete editorRefs.current[id];
+  };
 
-    const form = useForm<z.infer<typeof formSchema>>({
-        resolver: zodResolver(formSchema),
-        defaultValues: {
-            name: "",
-            pluginKey: "",
-            version: "1.0.0",
-            tags: [],
-            icon: "",
-            resourcePath: "",
-            description: "",
-            versionDescs: []
-        },
-    })
+  const updateDescriptionLabel = (id: string, label: string) => {
+    updateDescriptions((items) =>
+      items.map((item) => (item.id === id ? { ...item, label } : item)),
+    );
+  };
 
-    const validateCurrentStep = async (): Promise<boolean> => {
-        try {
-            switch (currentStep) {
-                case 1:
-                    // Trigger validation for basic fields
-                    const basicFields = await form.trigger(['name', 'pluginKey', 'version', 'tags', 'description']);
-                    if (!basicFields) {
-                        // Get the first error message to show in toast
-                        const errors = form.formState.errors;
-                        const firstError = errors.name?.message ||
-                            errors.pluginKey?.message ||
-                            errors.version?.message ||
-                            errors.tags?.message ||
-                            errors.description?.message;
-                        toast.error(firstError || t('pluginUploader.validation.formIncomplete'));
-                        return false;
-                    }
-                    return true;
-                case 2:
-                    // Description step - always valid (descriptions are optional)
-                    return true;
-                case 3:
-                    if (!resourcePath) {
-                        toast.error(t('pluginUploader.validation.fileRequired'));
-                        return false;
-                    }
-                    return true;
-                default:
-                    return true;
-            }
-        } catch (error: any) {
-            console.error('Validation error:', error);
-            toast.error(t('pluginUploader.validation.validationError'));
-            return false;
-        }
-    };
+  const handleAiGenerate = async () => {
+    const values = form.getValues();
+    const active = values.versionDescs.find(
+      (item) => item.id === activeDescriptionId,
+    );
+    if (!active || !values.name) {
+      setStepError(t("pluginUploader.validation.fillBasicFirst"));
+      return;
+    }
+    const generation = ++aiSessionRef.current;
+    setIsAiGenerating(true);
+    try {
+      const prompt = `Generate Markdown documentation for the ${active.label} section of plugin ${values.name} (${values.pluginKey}, version ${values.version}). Description: ${values.description}. Tags: ${values.tags.map((tag) => tag.text).join(", ")}. Output Markdown only.`;
+      let text = "";
+      const { textStream } = generateText(prompt);
+      for await (const part of textStream) text += part;
+      if (generation !== aiSessionRef.current || !open) return;
+      const content: JSONContent = {
+        type: "doc",
+        content: parseMarkdownToNodes(text),
+      };
+      editorRefs.current[active.id]?.commands.setContent(content);
+      updateDescriptions((items) =>
+        items.map((item) =>
+          item.id === active.id ? { ...item, content } : item,
+        ),
+      );
+    } catch (error: any) {
+      if (generation === aiSessionRef.current)
+        setStepError(
+          error?.message || t("pluginUploader.toast.aiGenerateFailed"),
+        );
+    } finally {
+      if (generation === aiSessionRef.current) setIsAiGenerating(false);
+    }
+  };
 
-    const handleNext = async () => {
-        if (currentStep < 3) {
-            const isValid = await validateCurrentStep();
-            if (isValid) {
-                setCurrentStep((prev) => Math.min(prev + 1, 3));
-            }
-        }
-    };
+  const closeSafely = (nextOpen: boolean) => {
+    if (
+      !nextOpen &&
+      (form.formState.isDirty ||
+        currentStep > 1 ||
+        submissionFlow.isUploading ||
+        isAiGenerating)
+    ) {
+      setShowExitDialog(true);
+      return;
+    }
+    setOpen(nextOpen);
+    if (!nextOpen) resetWizard();
+  };
 
-    const handlePrev = () => {
-        if (currentStep > 1) {
-            setCurrentStep((prev) => Math.max(prev - 1, 1));
-        }
-    };
+  const confirmExit = () => {
+    setShowExitDialog(false);
+    setOpen(false);
+    resetWizard();
+  };
 
-    const handleStepClick = (stepNumber: number) => {
-        // Only allow clicking on completed or current steps
-        if (stepNumber <= currentStep) {
-            setCurrentStep(stepNumber);
-        }
-    };
-
-    const handleSubmit = async () => {
-        const isValid = await validateCurrentStep();
-        if (!isValid) return;
-
-        setIsSubmitting(true);
-        try {
-            const value = form.getValues();
-            value.versionDescs = descriptions.map(item => ({
-                label: item.label,
-                // Only stringify if content is an object (not already a string)
-                content: typeof item.content === 'string' ? item.content : JSON.stringify(item.content)
-            }));
-            value.resourcePath = resourcePath;
-            value.icon = iconPath;
-
-            await useApi(APIS.CREATE_PLUGIN, null, value);
-
-            toast.success(t('pluginUploader.toast.submitSuccess'));
-
-            // Reset form and close dialog
-            resetForm();
-            setOpen(false);
-        } catch (error: any) {
-            toast.error(error?.message || t('pluginUploader.toast.submitFailed'));
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-
-    const resetForm = () => {
-        form.reset();
-        setCurrentStep(1);
-        setIconPath("");
-        setAttachments([]);
-        setResourcePath("");
-        setUploadProgress(0);
-        setDescriptions([
-            { label: "Feature", content: {} },
-            { label: "Detail", content: {} },
-            { label: "ChangeLog", content: {} },
-        ]);
-        setActiveDescTab("Feature");
-    };
-
-    const handleDialogClose = (newOpen: boolean) => {
-        if (!newOpen && (currentStep > 1 || form.formState.isDirty)) {
-            setShowExitDialog(true);
-        } else {
-            setOpen(newOpen);
-            if (!newOpen) {
-                resetForm();
-            }
-        }
-    };
-
-    const confirmExit = () => {
-        setShowExitDialog(false);
+  const onSubmit = form.handleSubmit(
+    async (values) => {
+      if (!validateFeatures() || !(await validateStep(3))) return;
+      const success = await submissionFlow.submit(form.getValues());
+      if (success) {
         setOpen(false);
-        resetForm();
-    };
+        resetWizard();
+      }
+    },
+    () => {
+      setCurrentStep(1);
+      setStepError(t("pluginUploader.validation.formIncomplete"));
+    },
+  );
 
-    const handleIconUpload = useCallback(async () => {
-        try {
-            setIconUploading(true);
-            const res = await upload(["image/*"]);
-            setIconPath(res.name);
-            toast.success(t('pluginUploader.toast.iconUploaded'));
-        } catch (error: any) {
-            toast.error(error?.message || t('pluginUploader.toast.iconUploadFailed'));
-        } finally {
-            setIconUploading(false);
-        }
-    }, [upload]);
+  const activeStep = steps[currentStep - 1];
 
-    const handleRemoveIcon = useCallback(() => {
-        setIconPath("");
-        toast.info(t('pluginUploader.toast.iconRemoved'));
-    }, []);
+  return (
+    <>
+      <Dialog open={open} onOpenChange={closeSafely}>
+        <DialogTrigger asChild onClick={() => setOpen(true)}>
+          {children}
+        </DialogTrigger>
+        <DialogContent
+          aria-describedby={undefined}
+          className="flex h-[100dvh] max-w-full flex-col gap-0 overflow-hidden rounded-none border-0 p-0 sm:h-[720px] sm:max-w-[960px] sm:rounded-xl sm:border"
+        >
+          <DialogHeader className="shrink-0 border-b px-4 py-4 pt-safe text-left sm:px-6">
+            <DialogTitle className="text-lg">
+              {submission
+                ? t("pluginUploader.editTitle")
+                : t("pluginUploader.dialogTitle")}
+            </DialogTitle>
+            <DialogDescription>
+              {activeStep.label} · {activeStep.description}
+            </DialogDescription>
+          </DialogHeader>
 
-    const handleAddDescriptionTab = () => {
-        const newLabel = `Custom${descriptions.length + 1}`;
-        setDescriptions([...descriptions, { label: newLabel, content: {} }]);
-        setActiveDescTab(newLabel);
-    };
-
-    const handleRemoveDescriptionTab = (index: number) => {
-        if (descriptions.length <= 1) {
-            toast.warning(t('pluginUploader.validation.keepOneTab'));
-            return;
-        }
-
-        const newDescriptions = descriptions.filter((_, i) => i !== index);
-        setDescriptions(newDescriptions);
-        if (activeDescTab === descriptions[index].label) {
-            setActiveDescTab(newDescriptions[0].label);
-        }
-    };
-
-    const handleAiGenerate = useCallback(async () => {
-        const formValues = form.getValues();
-        const tabLabel = activeDescTab;
-
-        if (!formValues.name) {
-            toast.warning(t('pluginUploader.validation.fillBasicFirst'));
-            return;
-        }
-
-        setIsAiGenerating(true);
-
-        const pluginInfo = [
-            `Plugin Name: ${formValues.name}`,
-            formValues.pluginKey ? `Plugin Key: ${formValues.pluginKey}` : '',
-            formValues.version ? `Version: ${formValues.version}` : '',
-            formValues.tags?.length ? `Tags: ${formValues.tags.map((t: any) => t.text).join(', ')}` : '',
-            formValues.description ? `Description: ${formValues.description}` : '',
-        ].filter(Boolean).join('\n');
-
-        const tabPrompts: Record<string, string> = {
-            "Feature": `Based on the following plugin information, generate a Feature description document in Markdown format. Include the main features with brief descriptions, organized with headings and bullet points.\n\n${pluginInfo}`,
-            "Detail": `Based on the following plugin information, generate a detailed usage documentation in Markdown format. Include installation, configuration, usage examples, and API reference if applicable.\n\n${pluginInfo}`,
-            "ChangeLog": `Based on the following plugin information, generate a ChangeLog document in Markdown format. Include version ${formValues.version || '1.0.0'} as the initial release with key changes and features.\n\n${pluginInfo}`,
-        };
-
-        const prompt = tabPrompts[tabLabel] || `Based on the following plugin information, generate a ${tabLabel} document in Markdown format.\n\n${pluginInfo}`;
-
-        try {
-            let fullText = "";
-            const { textStream } = generateText(`${prompt}\n\nPlease output Markdown content directly without any extra conversation.`);
-
-            for await (const part of textStream) {
-                fullText += part;
-            }
-
-            const nodes = parseMarkdownToNodes(fullText);
-            const content: JSONContent = { type: 'doc', content: nodes };
-
-            const editorInstance = editorRefs.current[tabLabel];
-            if (editorInstance) {
-                editorInstance.commands.setContent(content);
-            }
-
-            setDescriptions(prev => prev.map(item =>
-                item.label === tabLabel ? { ...item, content } : item
-            ));
-
-            toast.success(t('pluginUploader.toast.aiGenerated'));
-        } catch (error: any) {
-            toast.error(error?.message || t('pluginUploader.toast.aiGenerateFailed'));
-        } finally {
-            setIsAiGenerating(false);
-        }
-    }, [activeDescTab, form, t]);
-
-    // Step 1: Basic Info
-    const renderBasicInfo = () => (
-        <Form {...form}>
-            <form className="space-y-5">
-                {/* 基础标识信息 */}
-                <div className="space-y-4">
-                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                        <span className="w-1.5 h-1.5 rounded-full bg-primary"></span>
-                        {t('pluginUploader.sections.basicIdentity')}
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 pl-3">
-                        <FormField
-                            control={form.control}
-                            name="name"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>{t('pluginUploader.fields.pluginName')} <span className="text-destructive">*</span></FormLabel>
-                                    <FormControl>
-                                        <Input placeholder={t('pluginUploader.fields.pluginNamePlaceholder')} {...field} />
-                                    </FormControl>
-                                    <p className="text-xs text-muted-foreground">{t('pluginUploader.fields.pluginNameHint')}</p>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                        <FormField
-                            control={form.control}
-                            name="pluginKey"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>{t('pluginUploader.fields.pluginKey')} <span className="text-destructive">*</span></FormLabel>
-                                    <FormControl>
-                                        <Input placeholder={t('pluginUploader.fields.pluginKeyPlaceholder')} {...field} />
-                                    </FormControl>
-                                    <p className="text-xs text-muted-foreground">{t('pluginUploader.fields.pluginKeyHint')}</p>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                    </div>
-                </div>
-
-                {/* 版本与分类 */}
-                <div className="space-y-4">
-                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                        <span className="w-1.5 h-1.5 rounded-full bg-primary"></span>
-                        {t('pluginUploader.sections.versionAndCategory')}
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 pl-3">
-                        <FormField
-                            control={form.control}
-                            name="version"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>{t('pluginUploader.fields.version')} <span className="text-destructive">*</span></FormLabel>
-                                    <FormControl>
-                                        <Input placeholder={t('pluginUploader.fields.versionPlaceholder')} {...field} />
-                                    </FormControl>
-                                    <p className="text-xs text-muted-foreground">{t('pluginUploader.fields.versionHint')}</p>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                        <FormField
-                            control={form.control}
-                            name="tags"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>{t('pluginUploader.fields.tags')} <span className="text-destructive">*</span></FormLabel>
-                                    <FormControl>
-                                        <TagInput
-                                            tags={field.value}
-                                            setTags={(tags) => field.onChange(tags)}
-                                            activeTagIndex={activeTagIndex}
-                                            setActiveTagIndex={setActiveTagIndex}
-                                            placeholder={t('pluginUploader.fields.tagsPlaceholder')}
-                                        />
-                                    </FormControl>
-                                    <p className="text-xs text-muted-foreground">{t('pluginUploader.fields.tagsHint')}</p>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                    </div>
-                </div>
-
-                {/* 展示信息 */}
-                <div className="space-y-4">
-                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                        <span className="w-1.5 h-1.5 rounded-full bg-primary"></span>
-                        {t('pluginUploader.sections.displayInfo')}
-                    </div>
-                    <div className="flex gap-4 pl-3">
-                        {/* Icon Upload */}
-                        <div className="space-y-2">
-                            <FormLabel>{t('pluginUploader.fields.icon')}</FormLabel>
-                            <div
-                                className={cn(
-                                    "relative w-20 h-20 flex items-center justify-center border-2 rounded-lg overflow-hidden transition-all",
-                                    iconPath ? "border-green-500 bg-green-50/50 dark:bg-green-950/30" : "border-dashed border-muted-foreground/50 bg-muted/30 hover:border-primary hover:bg-muted/50",
-                                    iconUploading ? "cursor-wait" : "cursor-pointer"
-                                )}
-                                onClick={() => {
-                                    if (!iconUploading && !iconPath) {
-                                        handleIconUpload();
-                                    }
-                                }}
-                            >
-                                {iconUploading ? (
-                                    <Loader2Icon className="h-6 w-6 animate-spin text-primary" />
-                                ) : iconPath ? (
-                                    <>
-                                        <img
-                                            src={usePath(iconPath)}
-                                            alt="Plugin Icon"
-                                            className="w-full h-full object-cover"
-                                        />
-                                        <div className="absolute inset-0 bg-black/60 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
-                                            <IconButton
-                                                icon={<TrashIcon className="h-4 w-4 text-white" />}
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleRemoveIcon();
-                                                }}
-                                            />
-                                        </div>
-                                    </>
-                                ) : (
-                                    <div className="flex flex-col items-center gap-1 text-muted-foreground">
-                                        <ImageIcon className="h-6 w-6" />
-                                        <span className="text-xs">{t('pluginUploader.fields.iconUpload')}</span>
-                                    </div>
-                                )}
-                            </div>
-                            <p className="text-xs text-muted-foreground">{t('pluginUploader.fields.iconHint')}</p>
-                        </div>
-                        {/* Description */}
-                        <div className="flex-1">
-                            <FormField
-                                control={form.control}
-                                name="description"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>{t('pluginUploader.fields.description')} <span className="text-destructive">*</span></FormLabel>
-                                        <FormControl>
-                                            <Textarea
-                                                placeholder={t('pluginUploader.fields.descriptionPlaceholder')}
-                                                rows={4}
-                                                className="resize-none"
-                                                {...field}
-                                            />
-                                        </FormControl>
-                                        <div className="flex justify-between items-center">
-                                            <p className="text-xs text-muted-foreground">{t('pluginUploader.fields.descriptionHint')}</p>
-                                            <span className={cn(
-                                                "text-xs",
-                                                (field.value?.length || 0) > 400 ? "text-orange-500" : "text-muted-foreground"
-                                            )}>
-                                                {field.value?.length || 0}/500
-                                            </span>
-                                        </div>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                        </div>
-                    </div>
-                </div>
-            </form>
-        </Form>
-    );
-
-    // Tab label mapping for display
-    const tabLabelMap: Record<string, { name: string; hint: string }> = useMemo(() => ({
-        "Feature": { name: t('pluginUploader.tabs.feature'), hint: t('pluginUploader.tabs.featureHint') },
-        "Detail": { name: t('pluginUploader.tabs.detail'), hint: t('pluginUploader.tabs.detailHint') },
-        "ChangeLog": { name: t('pluginUploader.tabs.changelog'), hint: t('pluginUploader.tabs.changelogHint') }
-    }), [t]);
-
-    const getTabDisplay = (label: string) => tabLabelMap[label] || { name: label, hint: t('pluginUploader.tabs.customHint') };
-
-    // Step 2: Version Description
-    const renderDescription = () => (
-        <div className="space-y-4">
-            {/* Header Section */}
-            <div className="p-4 bg-muted/30 rounded-lg border border-dashed">
-                <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                        <span className="text-sm">💡</span>
-                    </div>
-                    <div>
-                        <p className="text-sm font-medium">{t('pluginUploader.docTip.title')}</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                            {t('pluginUploader.docTip.content')}
-                        </p>
-                    </div>
-                </div>
-            </div>
-
-            <Tabs value={activeDescTab} onValueChange={setActiveDescTab}>
-                <div className="flex items-center justify-between mb-3">
-                    <TabsList className="h-9">
-                        {descriptions.map((item, index) => (
-                            <TabsTrigger key={index} value={item.label} className="text-sm px-3 gap-1">
-                                {getTabDisplay(item.label).name}
-                                {descriptions.length > 1 && index >= 3 && (
-                                    <XIcon
-                                        className="h-3 w-3 ml-1 hover:text-destructive cursor-pointer"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleRemoveDescriptionTab(index);
-                                        }}
-                                    />
-                                )}
-                            </TabsTrigger>
-                        ))}
-                    </TabsList>
-                    <div className="flex items-center gap-1">
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleAiGenerate}
-                            disabled={isAiGenerating}
-                            className="gap-1.5 text-xs h-7 text-purple-600 border-purple-200 hover:bg-purple-50 dark:text-purple-400 dark:border-purple-800 dark:hover:bg-purple-950/30"
-                        >
-                            {isAiGenerating ? (
-                                <Loader2Icon className="h-3 w-3 animate-spin" />
-                            ) : (
-                                <Sparkles className="h-3 w-3" />
-                            )}
-                            {isAiGenerating ? t('pluginUploader.buttons.aiGenerating') : t('pluginUploader.buttons.aiGenerate')}
-                        </Button>
-                        <IconButton
-                            icon={<PlusIcon className="h-4 w-4" />}
-                            onClick={handleAddDescriptionTab}
-                        />
-                    </div>
-                </div>
-
-                {/* Tab hint */}
-                <p className="text-xs text-muted-foreground mb-2 pl-1">
-                    {getTabDisplay(activeDescTab).hint}
-                </p>
-
-                <div className="border rounded-lg overflow-hidden">
-                    {descriptions.map((item: any, index) => (
-                        <TabsContent key={index} value={item.label} className="m-0">
-                            <CollaborationEditor
-                                ref={(editor: Editor | null) => { editorRefs.current[item.label] = editor; }}
-                                id=""
-                                content={item.content}
-                                isEditable
-                                synced={true}
-                                width="w-full"
-                                withTitle={false}
-                                toc={false}
-                                toolbar={true}
-                                user={null}
-                                token=""
-                                className="min-h-[280px] max-h-[400px] prose-sm"
-                                onBlur={(editor) => {
-                                    const content = editor.getJSON();
-                                    setDescriptions((data) => data.map((it, i) => i === index ? { ...it, content } : it))
-                                }}
-                            />
-                        </TabsContent>
-                    ))}
-                </div>
-            </Tabs>
-        </div>
-    );
-
-    // Step 3: Upload & Submit
-    const renderUploadSubmit = () => (
-        <div className="space-y-6">
-            {/* File Upload Section */}
-            <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <UploadIcon className="h-4 w-4 text-primary" />
-                        <span className="text-sm font-medium">{t('pluginUploader.uploadSection.title')}</span>
-                        <span className="text-destructive">*</span>
-                    </div>
-                    <span className="text-xs text-muted-foreground">{t('pluginUploader.uploadSection.hint')}</span>
-                </div>
-
-                <FileUploader
-                    value={attachments}
-                    className="w-full"
-                    accept={{
-                        "text/javascript": [".js"]
-                    }}
-                    maxSize={1024 * 1024 * 100}
-                    onValueChange={(files) => setAttachments(files)}
-                    onUpload={async (file) => {
-                        setIsUploading(true);
-                        setUploadProgress(0);
-                        try {
-                            const interval = setInterval(() => {
-                                setUploadProgress(prev => Math.min(prev + 10, 90));
-                            }, 200);
-
-                            const res = await uploadFile(file[0]);
-                            clearInterval(interval);
-                            setUploadProgress(100);
-                            setResourcePath(res.name);
-
-                            toast.success(t('pluginUploader.toast.fileUploaded', { filename: res.originalName }));
-                        } catch (error: any) {
-                            toast.error(error?.message || t('pluginUploader.toast.fileUploadFailed'));
-                        } finally {
-                            setIsUploading(false);
-                        }
-                    }}
-                    disabled={isUploading}
+          <Form {...form}>
+            <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
+              <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+                <WizardNavigation
+                  steps={steps}
+                  currentStep={currentStep}
+                  highestStep={highestStep}
+                  onStepClick={setCurrentStep}
+                  stepLabel={t("pluginUploader.step")}
                 />
 
-                {isUploading && (
-                    <div className="space-y-2 p-3 bg-muted/30 rounded-lg">
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                            <span>{t('pluginUploader.uploadSection.uploading')}</span>
-                            <span>{uploadProgress}%</span>
-                        </div>
-                        <Progress value={uploadProgress} className="w-full h-2" />
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                  <ScrollArea className="min-h-0 flex-1">
+                    <div className="mx-auto w-full max-w-3xl space-y-4 px-4 py-5 sm:px-6">
+                      {stepError && currentStep !== 2 && (
+                        <Alert variant="destructive">
+                          <AlertTitle>
+                            {t("pluginUploader.validation.summaryTitle")}
+                          </AlertTitle>
+                          <AlertDescription>{stepError}</AlertDescription>
+                        </Alert>
+                      )}
+
+                      {currentStep === 1 && (
+                        <BasicInfoStep
+                          form={form}
+                          activeTagIndex={activeTagIndex}
+                          setActiveTagIndex={setActiveTagIndex}
+                          iconUploading={submissionFlow.iconUploading}
+                          onUploadIcon={submissionFlow.uploadIcon}
+                          onRemoveIcon={submissionFlow.removeIcon}
+                          resolvePath={submissionFlow.usePath}
+                          t={t}
+                        />
+                      )}
+                      {currentStep === 2 && (
+                        <FeaturesStep
+                          form={form}
+                          activeId={activeDescriptionId}
+                          onActiveIdChange={setActiveDescriptionId}
+                          onAdd={addDescription}
+                          onRemove={removeDescription}
+                          onLabelChange={updateDescriptionLabel}
+                          onAiGenerate={handleAiGenerate}
+                          isAiGenerating={isAiGenerating}
+                          editorRefs={editorRefs}
+                          focusRef={featuresRef}
+                          error={stepError}
+                          t={t}
+                        />
+                      )}
+                      {currentStep === 3 && (
+                        <UploadReviewStep
+                          form={form}
+                          attachments={submissionFlow.attachments}
+                          onFilesChange={submissionFlow.setArtifactFiles}
+                          onUpload={submissionFlow.uploadArtifact}
+                          isUploading={submissionFlow.isUploading}
+                          uploadError={submissionFlow.uploadError || submissionFlow.submitError}
+                          focusRef={uploadRef}
+                          resolvePath={submissionFlow.usePath}
+                          t={t}
+                        />
+                      )}
                     </div>
-                )}
+                  </ScrollArea>
 
-                {resourcePath && (
-                    <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950/30 rounded-lg border border-green-200 dark:border-green-900">
-                        <CheckCircle2 className="h-4 w-4 text-green-600" />
-                        <span className="text-sm text-green-700 dark:text-green-400">{t('pluginUploader.uploadSection.uploaded')}</span>
-                    </div>
-                )}
-            </div>
-
-            {/* Summary Card */}
-            <div className="rounded-lg border bg-gradient-to-br from-muted/50 to-muted/30 p-4 space-y-4">
-                <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">{t('pluginUploader.preview.title')}</span>
-                    <span className="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full">{t('pluginUploader.preview.aboutToPublish')}</span>
-                </div>
-
-                <div className="flex gap-4">
-                    {/* Icon Preview */}
-                    {iconPath && (
-                        <div className="w-14 h-14 rounded-lg overflow-hidden border bg-background flex-shrink-0">
-                            <img
-                                src={usePath(iconPath)}
-                                alt="Plugin Icon"
-                                className="w-full h-full object-cover"
-                            />
-                        </div>
+                  <DialogFooter className="shrink-0 flex-row gap-2 border-t bg-background px-4 py-3 pb-safe sm:px-6 sm:py-4">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-11 flex-1 sm:flex-none"
+                      onClick={() =>
+                        setCurrentStep((step) => Math.max(1, step - 1))
+                      }
+                      disabled={currentStep === 1}
+                    >
+                      {t("pluginUploader.buttons.prev")}
+                    </Button>
+                    {currentStep < 3 ? (
+                      <Button
+                        type="button"
+                        className="h-11 flex-1 sm:flex-none sm:min-w-28"
+                        onClick={handleNext}
+                      >
+                        {t("pluginUploader.buttons.next")}
+                      </Button>
+                    ) : (
+                      <Button
+                        type="submit"
+                        className="h-11 flex-1 sm:flex-none sm:min-w-36"
+                        disabled={
+                          submissionFlow.isSubmitting ||
+                          submissionFlow.isUploading ||
+                          submissionFlow.iconUploading ||
+                          isAiGenerating
+                        }
+                      >
+                        {submissionFlow.isSubmitting && (
+                          <Loader2Icon className="mr-2 size-4 animate-spin" />
+                        )}
+                        {submissionFlow.isSubmitting
+                          ? t("pluginUploader.buttons.submitting")
+                          : t("pluginUploader.buttons.submitForReview")}
+                      </Button>
                     )}
-
-                    <div className="flex-1 space-y-2">
-                        <div className="flex items-center gap-2">
-                            <span className="font-medium">{form.watch('name') || t('pluginUploader.preview.noName')}</span>
-                            <span className="text-xs px-1.5 py-0.5 bg-muted rounded">v{form.watch('version') || '1.0.0'}</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground line-clamp-2">
-                            {form.watch('description') || t('pluginUploader.preview.noDescription')}
-                        </p>
-                    </div>
+                  </DialogFooter>
                 </div>
+              </div>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
 
-                <div className="grid grid-cols-2 gap-3 text-sm pt-3 border-t">
-                    <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground w-16">{t('pluginUploader.preview.pluginKey')}</span>
-                        <code className="text-xs bg-muted px-2 py-0.5 rounded font-mono">
-                            {form.watch('pluginKey') || '-'}
-                        </code>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground w-16">{t('pluginUploader.preview.fileStatus')}</span>
-                        <span className={cn(
-                            "text-xs font-medium flex items-center gap-1",
-                            resourcePath ? "text-green-600" : "text-orange-500"
-                        )}>
-                            {resourcePath ? (
-                                <><CheckCircle2 className="h-3 w-3" /> {t('pluginUploader.preview.uploaded')}</>
-                            ) : (
-                                <><UploadIcon className="h-3 w-3" /> {t('pluginUploader.preview.pending')}</>
-                            )}
-                        </span>
-                    </div>
-                    <div className="flex items-center gap-2 col-span-2">
-                        <span className="text-xs text-muted-foreground w-16">{t('pluginUploader.preview.tags')}</span>
-                        <div className="flex gap-1 flex-wrap">
-                            {form.watch('tags')?.length > 0 ? (
-                                form.watch('tags').map((tag: any, index: number) => (
-                                    <span key={index} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
-                                        {tag.text}
-                                    </span>
-                                ))
-                            ) : (
-                                <span className="text-xs text-muted-foreground">{t('pluginUploader.preview.noTags')}</span>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* Submission Tips */}
-            <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-900">
-                <p className="text-xs text-blue-700 dark:text-blue-400">
-                    📋 <strong>{t('pluginUploader.submitTip.content')}</strong>
-                </p>
-            </div>
-        </div>
-    );
-
-    const render = () => {
-        switch (currentStep) {
-            case 1:
-                return renderBasicInfo();
-            case 2:
-                return renderDescription();
-            case 3:
-                return renderUploadSubmit();
-            default:
-                return renderBasicInfo();
-        }
-    }
-
-    return (
-        <>
-            <Dialog open={open} onOpenChange={handleDialogClose}>
-                <DialogTrigger asChild onClick={() => setOpen(true)}>
-                    {children}
-                </DialogTrigger>
-                <DialogContent className="max-w-2xl w-full max-h-[90vh] flex flex-col p-0 overflow-hidden">
-                    <DialogHeader className="px-6 pt-6 pb-4 border-b flex-shrink-0">
-                        <DialogTitle className="text-lg flex items-center gap-2">
-                            <span>{t('pluginUploader.dialogTitle')}</span>
-                            <span className="text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-                                {t('pluginUploader.step')} {currentStep}/{steps.length}
-                            </span>
-                        </DialogTitle>
-                        <DialogDescription className="flex items-center gap-1">
-                            <span className="font-medium text-foreground">{steps[currentStep - 1].label}</span>
-                            <span>-</span>
-                            <span>{(steps[currentStep - 1] as any).description || ''}</span>
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-                        {/* Stepper */}
-                        <div className="px-6 py-4 border-b bg-muted/30 flex-shrink-0">
-                            <Stepper
-                                steps={steps}
-                                currentStep={currentStep}
-                                onStepClick={handleStepClick}
-                            />
-                        </div>
-
-                        {/* Content */}
-                        <ScrollArea className="flex-1 min-h-0">
-                            <div className="px-6 py-5">
-                                {render()}
-                            </div>
-                        </ScrollArea>
-
-                        {/* Footer */}
-                        <div className="px-6 py-4 border-t bg-background flex-shrink-0 flex items-center justify-between">
-                            <Button
-                                variant="ghost"
-                                onClick={handlePrev}
-                                disabled={currentStep === 1}
-                                className="gap-1"
-                            >
-                                {t('pluginUploader.buttons.prev')}
-                            </Button>
-                            <div className="flex items-center gap-2">
-                                {currentStep < 3 ? (
-                                    <Button onClick={handleNext}>
-                                        {t('pluginUploader.buttons.next')}
-                                    </Button>
-                                ) : (
-                                    <Button
-                                        onClick={handleSubmit}
-                                        disabled={isSubmitting || !resourcePath}
-                                        className="min-w-[100px]"
-                                    >
-                                        {isSubmitting ? (
-                                            <>
-                                                <Loader2Icon className="h-4 w-4 mr-2 animate-spin" />
-                                                {t('pluginUploader.buttons.submitting')}
-                                            </>
-                                        ) : (
-                                            t('pluginUploader.buttons.submit')
-                                        )}
-                                    </Button>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                </DialogContent>
-            </Dialog>
-
-            <AlertDialog open={showExitDialog} onOpenChange={setShowExitDialog}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>{t('pluginUploader.exitDialog.title')}</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            {t('pluginUploader.exitDialog.description')}
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel onClick={() => setShowExitDialog(false)}>
-                            {t('pluginUploader.exitDialog.cancel')}
-                        </AlertDialogCancel>
-                        <AlertDialogAction onClick={confirmExit}>
-                            {t('pluginUploader.exitDialog.confirm')}
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
-        </>
-    );
-}
+      <AlertDialog open={showExitDialog} onOpenChange={setShowExitDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t("pluginUploader.exitDialog.title")}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("pluginUploader.exitDialog.description")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>
+              {t("pluginUploader.exitDialog.cancel")}
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={confirmExit}>
+              {t("pluginUploader.exitDialog.confirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+};

@@ -1,8 +1,13 @@
 package com.knowledge.wiki.service.mapper;
 
+import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
+
 import com.github.yulichang.base.MPJBaseMapper;
 import com.knowledge.wiki.service.entity.Plugin;
 
 public interface PluginMapper extends MPJBaseMapper<Plugin> {
 
+    @Select("SELECT * FROM wiki_plugin WHERE id = #{id} AND is_deleted = 0 FOR UPDATE")
+    Plugin selectByIdForUpdate(@Param("id") Long id);
 }

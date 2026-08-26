@@ -5,6 +5,7 @@ import java.util.List;
 
 import com.knowledge.wiki.service.entity.VersionDesc;
 import com.knowledge.wiki.service.entity.enums.PluginCategory;
+import com.knowledge.core.version.VersionStatus;
 import com.knowledge.wiki.service.entity.enums.PluginStatus;
 
 import lombok.Data;
@@ -36,5 +37,7 @@ public class PluginVersionVO implements Serializable {
     private Long activeVersionId;
     private List<VersionDesc> versionDescription;
     private String version;
+    private VersionStatus status;
+    private PluginStatus reviewStatus;
 
 }

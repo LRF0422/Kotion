@@ -1,7 +1,22 @@
-import { PMNode as Node, mergeAttributes } from "@kn/editor"
-import { ReactNodeViewRenderer } from "@kn/editor"
-import { SlideView } from "./SlideView"
+import React from "react"
+import { PMNode as Node, mergeAttributes, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer, withNodeViewErrorBoundary } from "@kn/editor"
 import { DEFAULT_SLIDE_HEIGHT } from "./constants"
+
+const LazySlideView = React.lazy(async () => {
+    const module = await import("./SlideView")
+    return { default: module.SlideView }
+})
+
+const SlideNodeView: React.FC<NodeViewProps> = (props) => React.createElement(
+    React.Suspense,
+    {
+        fallback: React.createElement(NodeViewWrapper, {
+            className: "relative my-2 rounded-md border bg-muted/20",
+            style: { height: props.node.attrs.height ?? DEFAULT_SLIDE_HEIGHT },
+        }),
+    },
+    React.createElement(LazySlideView, props),
+)
 
 declare module "@kn/editor" {
     interface Commands<ReturnType> {
@@ -51,7 +66,7 @@ export const SlideNode = Node.create({
     },
 
     addNodeView() {
-        return ReactNodeViewRenderer(SlideView, {
+        return ReactNodeViewRenderer(withNodeViewErrorBoundary(SlideNodeView), {
             stopEvent: () => true,
         })
     },

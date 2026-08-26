@@ -7,6 +7,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -16,6 +17,9 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.knowledge.core.tool.api.R;
 import com.knowledge.wiki.service.application.PluginApplication;
 import com.knowledge.wiki.service.entity.dto.PluginDTO;
+import com.knowledge.wiki.service.entity.dto.PluginReviewDTO;
+import com.knowledge.wiki.service.entity.dto.PluginSubmissionDTO;
+import com.knowledge.wiki.service.entity.dto.PluginVersionPublishDTO;
 import com.knowledge.wiki.service.entity.dto.QueryPluginDTO;
 import com.knowledge.wiki.service.entity.vo.PluginVO;
 
@@ -34,8 +38,35 @@ public class PluginController {
 
     @PostMapping("/public/inner")
     public R<?> createInner(@Validated @Valid @RequestBody PluginDTO dto) {
-        pluginApplication.createPlugin(dto);
+        pluginApplication.createInnerPlugin(dto);
         return R.success();
+    }
+
+    @PostMapping("/submissions")
+    public R<PluginVO> submit(@Valid @RequestBody PluginSubmissionDTO dto) {
+        return R.data(pluginApplication.submit(dto));
+    }
+
+    @PutMapping("/submissions/{id}")
+    public R<PluginVO> resubmit(@PathVariable("id") Long id,
+            @Valid @RequestBody PluginSubmissionDTO dto) {
+        return R.data(pluginApplication.resubmit(id, dto));
+    }
+
+    @GetMapping("/submissions/mine")
+    public R<IPage<PluginVO>> mySubmissions(QueryPluginDTO dto) {
+        return R.data(pluginApplication.mySubmissions(dto));
+    }
+
+    @PostMapping("/submissions/{id}/review")
+    public R<PluginVO> review(@PathVariable("id") Long id, @Valid @RequestBody PluginReviewDTO dto) {
+        return R.data(pluginApplication.review(id, dto));
+    }
+
+    @PostMapping("/{id}/versions")
+    public R<PluginVO> publishVersion(@PathVariable("id") Long id,
+            @Valid @RequestBody PluginVersionPublishDTO dto) {
+        return R.data(pluginApplication.publishVersion(id, dto));
     }
 
     @GetMapping({ "/public", "" })

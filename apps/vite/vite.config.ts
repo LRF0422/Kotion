@@ -59,6 +59,10 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react(), bookmarkMetadataProxy()],
     define: clientEnvVars,
+    build: {
+      manifest: true,
+      sourcemap: process.env.BUILD_SOURCEMAP === 'true',
+    },
     resolve: {
       tsconfigPaths: true,
       dedupe: ['react', 'react-dom', 'react-router-dom'],

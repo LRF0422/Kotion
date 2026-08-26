@@ -10,6 +10,8 @@ public interface IPluginService extends ISubjectService<Plugin> {
 
     Plugin getByKey(String key);
 
+    Plugin getByIdForUpdate(Long id);
+
     void createPlugin(Plugin plugin, boolean publish);
 
     void installPlugin(Long versionId);

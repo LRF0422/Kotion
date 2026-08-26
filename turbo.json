@@ -3,6 +3,9 @@
   "globalDependencies": [
     "**/.env.*local"
   ],
+  "globalEnv": [
+    "BUILD_SOURCEMAP"
+  ],
   "tasks": {
     "build": {
       "dependsOn": [

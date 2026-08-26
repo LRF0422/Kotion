@@ -7,7 +7,6 @@
 
 import { Editor } from '@kn/editor'
 import { z } from '@kn/ui'
-import { downloadWorkbookAsExcel } from './univer-to-excel'
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -457,6 +456,7 @@ export const exportSpreadsheetTool = {
             if (!node.workbookData) return { success: false, error: '该电子表格暂无数据可导出' }
 
             const filename = params.filename?.trim() || 'spreadsheet.xlsx'
+            const { downloadWorkbookAsExcel } = await import('./univer-to-excel')
             downloadWorkbookAsExcel(node.workbookData, filename)
 
             return { success: true, message: `已导出电子表格为 ${filename.endsWith('.xlsx') ? filename : filename + '.xlsx'}` }

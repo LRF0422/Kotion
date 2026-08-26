@@ -7,6 +7,7 @@ import javax.validation.constraints.NotNull;
 
 import com.knowledge.wiki.service.entity.PluginLogo;
 import com.knowledge.wiki.service.entity.VersionDesc;
+import com.knowledge.wiki.service.entity.enums.PluginCategory;
 
 import lombok.Data;
 
@@ -17,6 +18,9 @@ public class PluginDTO implements Serializable {
     private String pluginKey;
     private String name;
     private String description;
+    private String version;
+    private PluginCategory category;
+    private String icon;
     private List<TagDTO> tags;
     private Long developerId;
     private String developerName;
