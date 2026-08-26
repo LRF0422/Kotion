@@ -37,7 +37,9 @@
       "Bash(pnpm build:ai *)",
       "Bash(pnpm build:editor *)",
       "Bash(pnpm *)",
-      "Bash(python3 *)"
+      "Bash(python3 *)",
+      "mcp__ide__getDiagnostics",
+      "Bash(curl *)"
     ]
   },
   "disabledMcpjsonServers": [

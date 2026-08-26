@@ -18,7 +18,7 @@ import { MobileEditorToolbar } from "./MobileEditorToolbar";
 import { EditorStatusBar } from "./EditorStatusBar";
 import { ChangeTrackerBar } from "./ChangeTrackerBar";
 import { PageHeader } from "./PageHeader";
-import { PageContext, PageContextProps } from "./context";
+import { PageContext } from "./context";
 import { rewriteUnknownContent } from "./rewriteUnknowContent";
 import { loadContentProgressive, isLargeDocument } from "./loadContentProgressive";
 import { TableOfContents, getHierarchicalIndexes, MousePointerSync } from "@editor/extensions";
@@ -151,7 +151,7 @@ const CollaborationEditorInner = forwardRef<
   Editor | null,
   React.PropsWithChildren<CollaborationEditorInnerProps>
 >((props, ref) => {
-  const { content, user, provider, pageInfo, toc, tocContained, width = 'w-[calc(100vw-350px)]', fullWidth, onContentReady, extensions, extensionWrappers } = props
+  const { content, user, provider, pageInfo, toc, tocContained, width = 'w-[calc(100vw-350px)]', fullWidth, withTitle = true, onContentReady, extensions, extensionWrappers } = props
   const blockMenuItems = React.useMemo(() => resolveBlockMenuItems(extensionWrappers as ExtensionWrapper[]), [extensionWrappers])
   const [items, setItems] = useSafeState<any[]>([])
   const [contentReady, setContentReady] = useSafeState(false)
@@ -341,7 +341,7 @@ const CollaborationEditorInner = forwardRef<
   const isMobile = useIsMobile();
 
   return (editor &&
-    <PageContext.Provider value={pageInfo as PageContextProps}>
+    <PageContext.Provider value={pageInfo ?? {}}>
       <ThemeProvider theme={selectedTheme}>
         <div className={cn("flex flex-col relative", width, props.className)}>
           {!isMobile && <EditorMenu editor={editor} extensionWrappers={extensionWrappers as ExtensionWrapper[]} />}
@@ -353,7 +353,7 @@ const CollaborationEditorInner = forwardRef<
           <div className="flex-1 min-h-0 w-full overflow-y-auto" id="editor-container">
             {/* Cover/header spans the full pane width; rendered outside the
                 centred StyledEditor column. */}
-            {contentReady && <PageHeader editor={editor} />}
+            {withTitle && contentReady && <PageHeader editor={editor} />}
             <StyledEditor $fullWidth={fullWidth}>
               <EditorContent editor={editor} />
               {contentReady && (extensionWrappers as ExtensionWrapper[])

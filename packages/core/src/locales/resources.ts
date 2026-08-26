@@ -570,6 +570,12 @@ export const resources = {
                     "words": "词数",
                     "blocks": "块数"
                 },
+                "missingPlugin": {
+                    "title": "需要 {{plugin}} 插件",
+                    "description": "安装并启用该插件后，即可查看和编辑此内容。",
+                    "preserved": "原始内容已保留",
+                    "browse": "前往插件市场"
+                },
                 "tracker": {
                     "title": "跟踪中",
                     "count": "{{count}} 项变动",
@@ -1437,6 +1443,12 @@ export const resources = {
                     "characters": "Characters",
                     "words": "Words",
                     "blocks": "Blocks"
+                },
+                "missingPlugin": {
+                    "title": "{{plugin}} plugin required",
+                    "description": "Install and enable this plugin to view and edit this content.",
+                    "preserved": "Original content preserved",
+                    "browse": "Open marketplace"
                 },
                 "tracker": {
                     "title": "Tracking",

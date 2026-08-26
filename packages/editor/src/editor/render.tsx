@@ -65,6 +65,7 @@ export const EditorRender = forwardRef<
     onBlur,
     width = 'w-[calc(100vw-350px)]',
     fullWidth,
+    toolbar = true,
     onContentReady,
   } = props;
 
@@ -174,13 +175,13 @@ export const EditorRender = forwardRef<
   const selectedTheme = currentTheme === 'dark' ? dark : light;
 
   return (editor &&
-    <PageContext.Provider value={pageInfo as PageContextProps}>
+    <PageContext.Provider value={pageInfo ?? {}}>
       <ThemeProvider theme={selectedTheme}>
         <div className={cn("flex flex-col relative", width, props.className)}>
           <div className="flex-1 min-h-0 w-full overflow-y-auto" id="editor-container">
             {/* Cover/header spans the full pane width; rendered outside the
                 centred StyledEditor column. */}
-            {contentReady && <PageHeader editor={editor} />}
+            {withTitle && contentReady && <PageHeader editor={editor} />}
             <StyledEditor $fullWidth={fullWidth}>
               <EditorContent editor={editor} />
               {!contentReady && (
@@ -211,20 +212,17 @@ export const EditorRender = forwardRef<
               )}
             </StyledEditor>
           </div>
-          {/* Bottom status bar: character / word / block counts */}
-          {contentReady && <EditorStatusBar editor={editor} />}
-          {/* Change-tracker merge bar (visible only while tracking is on) */}
-          {contentReady && <ChangeTrackerBar editor={editor} />}
-          {/* Render bubble menus (e.g., comment read-only popup) */}
-          {editor && extensionWrappers?.map((wrapper, idx) => {
+          {/* Optional editor chrome. Static previews pass toolbar={false}. */}
+          {toolbar && contentReady && <EditorStatusBar editor={editor} />}
+          {toolbar && contentReady && <ChangeTrackerBar editor={editor} />}
+          {toolbar && editor && extensionWrappers?.map((wrapper, idx) => {
             if (!wrapper.bubbleMenu) return null;
             const menus: ElementType[] = Array.isArray(wrapper.bubbleMenu) ? wrapper.bubbleMenu : [wrapper.bubbleMenu];
             return menus.map((Menu, j) => (
               <Menu key={`render-bubble-${idx}-${j}`} editor={editor} />
             ));
           })}
-          {/* Floating UI components (always mounted, independent of bubble menu) */}
-          {editor && extensionWrappers?.map((wrapper, idx) => {
+          {toolbar && editor && extensionWrappers?.map((wrapper, idx) => {
             if (!wrapper.floatingUI) return null;
             const FloatingComp = wrapper.floatingUI;
             return <FloatingComp key={`render-floating-${idx}`} editor={editor} />;
