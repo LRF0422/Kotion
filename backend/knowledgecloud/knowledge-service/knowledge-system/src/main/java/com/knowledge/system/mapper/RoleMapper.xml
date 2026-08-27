@@ -12,12 +12,13 @@
         <result column="is_deleted" property="isDeleted"/>
     </resultMap>
 
-    <resultMap id="treeNodeResultMap" type="com.knowledge.core.tool.node.TreeNode">
+    <resultMap id="roleVoResultMap" type="com.knowledge.system.domain.vo.RoleVO">
         <id column="id" property="id"/>
         <result column="parent_id" property="parentId"/>
-        <result column="title" property="title"/>
-        <result column="value" property="value"/>
-        <result column="key" property="key"/>
+        <result column="role_name" property="roleName"/>
+        <result column="role_alias" property="roleAlias"/>
+        <result column="sort" property="sort"/>
+        <result column="admin" property="admin"/>
     </resultMap>
 
     <!-- 通用查询结果列 -->
@@ -30,14 +31,15 @@
         select * from knowledge_role where is_deleted = 0
     </select>
 
-    <select id="tree" resultMap="treeNodeResultMap">
-        select id, parent_id, role_name as title, id as 'value', id as 'key' from knowledge_role where is_deleted = 0
-        <if test="param1!=null">
-            and tenant_id = #{param1}
+    <select id="tree" resultMap="roleVoResultMap">
+        SELECT id, parent_id, role_name, role_alias, sort, admin
+        FROM knowledge_role
+        WHERE tenant_id = #{tenantId}
+          AND is_deleted = 0
+        <if test="excludeRole != null">
+            AND role_alias &lt;&gt; #{excludeRole}
         </if>
-        <if test="param2!=null">
-            and role_alias &lt;&gt; #{param2}
-        </if>
+        ORDER BY sort ASC, id ASC
     </select>
 
     <select id="getRoleNames" resultType="java.lang.String">

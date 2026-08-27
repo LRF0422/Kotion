@@ -19,6 +19,8 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.github.yulichang.base.MPJBaseService;
 import com.knowledge.system.dto.QueryUserDTO;
 import com.knowledge.system.domain.User;
+import com.knowledge.system.domain.dto.AdminUserSubmitDTO;
+import com.knowledge.system.vo.UserVO;
 import java.util.List;
 
 /**
@@ -34,6 +36,20 @@ public interface IUserService extends MPJBaseService<User> {
 
 	IPage<User> userList(QueryUserDTO dto);
 
+	IPage<UserVO> adminUserList(QueryUserDTO dto);
+
+	UserVO adminUserDetail(Long userId);
+
+	UserVO submitAdminUser(AdminUserSubmitDTO dto);
+
+	boolean removeAdminUsers(String userIds);
+
+	boolean grantAdminRoles(String userIds, String roleIds);
+
+	boolean resetAdminPasswords(String userIds);
+
+	boolean setAdminUserStatus(String userIds, Integer status);
+
 	User userInfo(Long userId);
 
 	User userInfo(String tenantId, String account, String password);
@@ -45,6 +61,8 @@ public interface IUserService extends MPJBaseService<User> {
 	boolean updatePassword(Long userId, String oldPassword, String newPassword, String newPassword1);
 
 	List<String> getRoleName(String roleIds);
+
+	List<String> getRoleAlias(String tenantId, String roleIds);
 
 	List<String> getDeptName(String deptIds);
 

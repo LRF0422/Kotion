@@ -43,6 +43,7 @@ public class RoleController {
 	 * 角色分页列表
 	 */
 	@GetMapping("/list")
+	@PreAuthorize(RoleConstant.HAS_ROLE_ADMIN)
 	@ApiOperationSupport(order = 1)
 	@ApiOperation(value = "角色列表", notes = "传入QueryUserGroupDTO")
 	public R<IPage<RoleVO>> list(QueryUserGroupDTO dto) {
@@ -53,6 +54,7 @@ public class RoleController {
 	 * 角色树形结构
 	 */
 	@GetMapping("/tree")
+	@PreAuthorize(RoleConstant.HAS_ROLE_ADMIN)
 	@ApiOperationSupport(order = 2)
 	@ApiOperation(value = "树形结构", notes = "树形结构")
 	public R<List<RoleVO>> tree(KnowledgeUser user) {

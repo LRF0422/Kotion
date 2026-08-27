@@ -74,6 +74,7 @@ public class TokenUtil {
 	 */
 	public AuthInfo createAuthInfoInstance(UserInfo userInfo) {
 		UserVO user = userInfo.getUser();
+		String roleAliases = Func.join(userInfo.getRoles());
 
 		// 设置jwt参数
 		Map<String, Object> param = new HashMap<>(16);
@@ -82,6 +83,7 @@ public class TokenUtil {
 		param.put(TokenConstant.OAUTH_ID, userInfo.getOauthId());
 		param.put(TokenConstant.USER_ID, Func.toStr(user.getId()));
 		param.put(TokenConstant.ROLE_ID, user.getRoleId());
+		param.put(TokenConstant.ROLE_NAME, roleAliases);
 		param.put(TokenConstant.DEPT_ID, user.getDeptId());
 		param.put(TokenConstant.ACCOUNT, user.getAccount());
 		param.put(TokenConstant.USER_NAME, user.getAccount());
@@ -96,7 +98,7 @@ public class TokenUtil {
 		authInfo.setOauthId(userInfo.getOauthId());
 		authInfo.setAccount(user.getAccount());
 		authInfo.setUserName(user.getRealName());
-		authInfo.setAuthority(Func.join(userInfo.getRoles()));
+		authInfo.setAuthority(roleAliases);
 		authInfo.setAccessToken(accessToken.getToken());
 		authInfo.setExpiresIn(accessToken.getExpire());
 		authInfo.setRefreshToken(createRefreshTokenInstance(userInfo).getToken());

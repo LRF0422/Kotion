@@ -49,29 +49,27 @@
     </select>
 
     <select id="getRoleName" resultType="java.lang.String">
-        SELECT
-        role_name
-        FROM
-        knowledge_role
-        WHERE
-        id IN
-        <foreach collection="array" item="ids" index="index" open="(" close=")" separator=",">
-            #{ids}
+        SELECT role_name
+        FROM knowledge_role
+        WHERE tenant_id = #{tenantId}
+          AND id IN
+        <foreach collection="ids" item="id" open="(" close=")" separator=",">
+            #{id}
         </foreach>
-        and is_deleted = 0
+          AND is_deleted = 0
+        ORDER BY sort ASC, id ASC
     </select>
 
     <select id="getRoleAlias" resultType="java.lang.String">
-        SELECT
-            role_alias
-        FROM
-            knowledge_role
-        WHERE
-            id IN
-        <foreach collection="array" item="ids" index="index" open="(" close=")" separator=",">
-            #{ids}
+        SELECT role_alias
+        FROM knowledge_role
+        WHERE tenant_id = #{tenantId}
+          AND id IN
+        <foreach collection="ids" item="id" open="(" close=")" separator=",">
+            #{id}
         </foreach>
-        and is_deleted = 0
+          AND is_deleted = 0
+        ORDER BY sort ASC, id ASC
     </select>
 
     <select id="getDeptName" resultType="java.lang.String">

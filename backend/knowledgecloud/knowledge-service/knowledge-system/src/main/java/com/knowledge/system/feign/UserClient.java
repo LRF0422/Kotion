@@ -34,19 +34,16 @@ public class UserClient implements IUserClient {
         if (user == null) {
             return R.fail("User not found");
         }
-        UserVO userVO = UserConverter.INSTANCE.convert(user);
-        UserInfo userInfo = new UserInfo();
-        userInfo.setUser(userVO);
-        return R.data(userInfo);
+        return R.data(buildUserInfo(user));
     }
 
     @Override
     public R<UserInfo> userInfo(String tenantId, String account, String password) {
         User user = userService.userInfo(tenantId, account, password);
-        UserVO userVO = UserConverter.INSTANCE.convert(user);
-        UserInfo userInfo = new UserInfo();
-        userInfo.setUser(userVO);
-        return R.data(userInfo);
+        if (user == null) {
+            return R.fail("User not found");
+        }
+        return R.data(buildUserInfo(user));
     }
 
     @Override
@@ -101,6 +98,14 @@ public class UserClient implements IUserClient {
         queryUserDTO.setSearchValue(keyword);
         IPage<User> userPage = userService.userList(queryUserDTO);
         return R.data(UserConverter.INSTANCE.convertKnowledgeUserPage(userPage));
+    }
+
+    private UserInfo buildUserInfo(User user) {
+        UserVO userVO = UserConverter.INSTANCE.convert(user);
+        UserInfo userInfo = new UserInfo();
+        userInfo.setUser(userVO);
+        userInfo.setRoles(userService.getRoleAlias(user.getTenantId(), user.getRoleId()));
+        return userInfo;
     }
 
 }

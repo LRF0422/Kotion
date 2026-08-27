@@ -39,7 +39,8 @@
       "Bash(pnpm *)",
       "Bash(python3 *)",
       "mcp__ide__getDiagnostics",
-      "Bash(curl *)"
+      "Bash(curl *)",
+      "Bash(ps -axo pid,ppid,etime,%cpu,%mem,command)"
     ]
   },
   "disabledMcpjsonServers": [

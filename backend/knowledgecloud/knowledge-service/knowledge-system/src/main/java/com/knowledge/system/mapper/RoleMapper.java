@@ -20,6 +20,8 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.knowledge.system.domain.Role;
 import com.knowledge.system.domain.vo.RoleVO;
 
+import org.apache.ibatis.annotations.Param;
+
 import java.util.List;
 
 /**
@@ -45,7 +47,7 @@ public interface RoleMapper extends BaseMapper<Role> {
 	 * @param excludeRole
 	 * @return
 	 */
-	List<RoleVO> tree(String tenantId, String excludeRole);
+	List<RoleVO> tree(@Param("tenantId") String tenantId, @Param("excludeRole") String excludeRole);
 
 	/**
 	 * 获取角色名

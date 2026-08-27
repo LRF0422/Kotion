@@ -41,6 +41,7 @@ import com.knowledge.system.service.IRoleService;
 import com.knowledge.system.service.IUserRoleService;
 
 import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.StrUtil;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -68,27 +69,55 @@ public class RoleServiceImpl extends ServiceImpl<RoleMapper, Role> implements IR
 
 	@Override
 	public void saveOrUpdateRole(Role role) {
+		String tenantId = SecurityContextUtil.getTenantId();
+		if (StrUtil.isBlank(tenantId)) {
+			throw new BusinessException("tenant is required");
+		}
+		role.setRoleName(StrUtil.trim(role.getRoleName()));
+		role.setRoleAlias(StrUtil.trim(role.getRoleAlias()));
+		if (StrUtil.isBlank(role.getRoleName()) || StrUtil.isBlank(role.getRoleAlias())) {
+			throw new BusinessException("role name and alias are required");
+		}
+		if (checkRoleNameExists(role.getRoleName(), role.getId())) {
+			throw new BusinessException("role name repeat");
+		}
 		if (role.getId() != null) {
-			Role db = this.getById(role.getId());
-			this.updateById(RoleConverter.INSTANCE.update(role, db));
-		} else {
-			if (checkRoleNameExists(role.getRoleName())) {
-				throw new BusinessException("role name repeat");
+			Role db = this.lambdaQuery()
+					.eq(Role::getTenantId, tenantId)
+					.eq(Role::getId, role.getId())
+					.one();
+			if (db == null) {
+				throw new BusinessException("role not found");
 			}
+			Role updated = RoleConverter.INSTANCE.update(role, db);
+			updated.setTenantId(tenantId);
+			this.updateById(updated);
+		} else {
+			role.setTenantId(tenantId);
 			this.save(role);
 		}
 	}
 
-	private boolean checkRoleNameExists(String name) {
+	private boolean checkRoleNameExists(String name, Long excludedRoleId) {
 		return this.lambdaQuery()
 				.eq(Role::getRoleName, name)
-				.eq(TenantItemImpl::getTenantId, SecurityContextUtil.getUserId())
+				.eq(TenantItemImpl::getTenantId, SecurityContextUtil.getTenantId())
+				.ne(excludedRoleId != null, Role::getId, excludedRoleId)
 				.exists();
 	}
 
 	@Override
 	public IPage<RoleVO> selectRolePage(QueryUserGroupDTO dto) {
-		return RoleConverter.INSTANCE.convertVO(this.lambdaQuery().page(dto.page()));
+		String keyword = StrUtil.trim(dto.getSearchValue());
+		return RoleConverter.INSTANCE.convertVO(this.lambdaQuery()
+				.eq(Role::getTenantId, SecurityContextUtil.getTenantId())
+				.and(StrUtil.isNotBlank(keyword), wrapper -> wrapper
+						.like(Role::getRoleName, keyword)
+						.or()
+						.like(Role::getRoleAlias, keyword))
+				.orderByAsc(Role::getSort)
+				.orderByAsc(Role::getId)
+				.page(dto.page()));
 	}
 
 	@Override

@@ -1,194 +1,150 @@
 package com.knowledge.system.controller;
 
+import javax.validation.Valid;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
 import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.github.xiaoymin.knife4j.annotations.ApiOperationSupport;
 import com.knowledge.core.mp.support.Condition;
 import com.knowledge.core.secure.utils.SecurityContextUtil;
 import com.knowledge.core.tool.KnowledgeUser;
 import com.knowledge.core.tool.api.R;
-import com.knowledge.core.tool.utils.Func;
+import com.knowledge.core.tool.constant.RoleConstant;
 import com.knowledge.system.application.AdminApplication;
 import com.knowledge.system.converter.UserConverter;
-import com.knowledge.system.service.IUserService;
 import com.knowledge.system.domain.User;
+import com.knowledge.system.domain.dto.AdminUserSubmitDTO;
 import com.knowledge.system.domain.dto.RegisterDTO;
 import com.knowledge.system.dto.QueryUserDTO;
+import com.knowledge.system.service.IUserService;
 import com.knowledge.system.vo.UserVO;
 
 import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiParam;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.*;
-
-import javax.validation.Valid;
-
-import java.util.List;
-
 @RestController
 @RequestMapping("/user")
 public class UserController {
 
-	@Autowired
-	private IUserService userService;
-	@Autowired
-	private AdminApplication adminApplication;
+    @Autowired
+    private IUserService userService;
+    @Autowired
+    private AdminApplication adminApplication;
 
-	/**
-	 * 查询单条
-	 */
-	@ApiOperationSupport(order = 1)
-	@ApiOperation(value = "查看详情", notes = "传入id")
-	@GetMapping("/detail")
-	public R<UserVO> detail(User user) {
-		User detail = userService.getOne(Condition.getQueryWrapper(user));
-		return R.data(UserConverter.INSTANCE.convert(detail));
-	}
+    /**
+     * 公共用户资料查询，页面作者信息等场景仍使用该入口。
+     */
+    @ApiOperationSupport(order = 1)
+    @ApiOperation(value = "查看详情", notes = "传入id")
+    @GetMapping("/detail")
+    public R<UserVO> detail(User user) {
+        User detail = userService.getOne(Condition.getQueryWrapper(user));
+        return R.data(UserConverter.INSTANCE.convert(detail));
+    }
 
-	/**
-	 * 用户分页列表
-	 */
-	@ApiOperationSupport(order = 2)
-	@ApiOperation(value = "用户列表", notes = "传入QueryUserDTO")
-	@GetMapping("/list")
-	public R<IPage<UserVO>> list(QueryUserDTO dto) {
-		return R.data(UserConverter.INSTANCE.convert(userService.userList(dto)));
-	}
+    @GetMapping("/admin/detail")
+    @PreAuthorize(RoleConstant.HAS_ROLE_ADMIN)
+    public R<UserVO> adminDetail(@RequestParam("id") Long id) {
+        return R.data(userService.adminUserDetail(id));
+    }
 
-	/**
-	 * 查询单条
-	 */
-	@ApiOperationSupport(order = 3)
-	@ApiOperation(value = "查看详情", notes = "传入id")
-	@GetMapping("/info")
-	public R<UserVO> info() {
-		User detail = userService.getById(SecurityContextUtil.getUserId());
-		return R.data(UserConverter.INSTANCE.convert(detail));
-	}
+    @ApiOperationSupport(order = 2)
+    @ApiOperation(value = "用户列表", notes = "传入QueryUserDTO")
+    @GetMapping("/list")
+    @PreAuthorize(RoleConstant.HAS_ROLE_ADMIN)
+    public R<IPage<UserVO>> list(QueryUserDTO dto) {
+        return R.data(userService.adminUserList(dto));
+    }
 
-	/**
-	 * 新增或修改
-	 */
-	@PostMapping("/submit")
-	@ApiOperationSupport(order = 4)
-	@ApiOperation(value = "新增或修改", notes = "传入User")
-	public R submit(@Valid @RequestBody User user) {
-		return R.status(userService.submit(user));
-	}
+    @ApiOperationSupport(order = 3)
+    @ApiOperation(value = "当前用户信息")
+    @GetMapping("/info")
+    public R<UserVO> info() {
+        User detail = userService.getById(SecurityContextUtil.getUserId());
+        return R.data(UserConverter.INSTANCE.convert(detail));
+    }
 
-	/**
-	 * 修改
-	 */
-	@PostMapping("/update")
-	@ApiOperationSupport(order = 5)
-	@ApiOperation(value = "修改", notes = "传入User")
-	public R update(@Valid @RequestBody User user) {
-		return R.status(userService.updateById(user));
-	}
+    @PostMapping("/submit")
+    @PreAuthorize(RoleConstant.HAS_ROLE_ADMIN)
+    @ApiOperationSupport(order = 4)
+    @ApiOperation(value = "新增或修改管理员用户")
+    public R<UserVO> submit(@Valid @RequestBody AdminUserSubmitDTO dto) {
+        return R.data(userService.submitAdminUser(dto));
+    }
 
-	/**
-	 * 删除
-	 */
-	@PostMapping("/remove")
-	@ApiOperationSupport(order = 6)
-	@ApiOperation(value = "删除", notes = "传入地基和")
-	public R remove(@RequestParam String ids) {
-		return R.status(userService.removeBatchByIds(Func.toLongList(ids)));
-	}
+    @PostMapping("/update")
+    @PreAuthorize(RoleConstant.HAS_ROLE_ADMIN)
+    @ApiOperationSupport(order = 5)
+    @ApiOperation(value = "修改管理员用户资料")
+    public R<UserVO> update(@Valid @RequestBody AdminUserSubmitDTO dto) {
+        if (dto.getId() == null) {
+            return R.fail("用户 ID 不能为空");
+        }
+        return R.data(userService.submitAdminUser(dto));
+    }
 
-	/**
-	 * 设置菜单权限
-	 *
-	 * @param userIds
-	 * @param roleIds
-	 * @return
-	 */
-	@PostMapping("/grant")
-	@ApiOperationSupport(order = 7)
-	@ApiOperation(value = "权限设置", notes = "传入roleId集合以及menuId集合")
-	public R grant(@ApiParam(value = "userId集合", required = true) @RequestParam String userIds,
-			@ApiParam(value = "roleId集合", required = true) @RequestParam String roleIds) {
-		boolean temp = userService.grant(userIds, roleIds);
-		return R.status(temp);
-	}
+    @PostMapping("/remove")
+    @PreAuthorize(RoleConstant.HAS_ROLE_ADMIN)
+    @ApiOperationSupport(order = 6)
+    @ApiOperation(value = "删除用户", notes = "传入用户 ID 集合")
+    public R<?> remove(@RequestParam String ids) {
+        return R.status(userService.removeAdminUsers(ids));
+    }
 
-	@PostMapping("/reset-password")
-	@ApiOperationSupport(order = 8)
-	@ApiOperation(value = "初始化密码", notes = "传入userId集合")
-	public R resetPassword(@ApiParam(value = "userId集合", required = true) @RequestParam String userIds) {
-		boolean temp = userService.resetPassword(userIds);
-		return R.status(temp);
-	}
+    @PostMapping("/grant")
+    @PreAuthorize(RoleConstant.HAS_ROLE_ADMIN)
+    @ApiOperationSupport(order = 7)
+    @ApiOperation(value = "设置角色", notes = "完整替换用户角色")
+    public R<?> grant(@ApiParam(value = "userId集合", required = true) @RequestParam String userIds,
+            @ApiParam(value = "roleId集合", required = true) @RequestParam String roleIds) {
+        return R.status(userService.grantAdminRoles(userIds, roleIds));
+    }
 
-	/**
-	 * 启用账号
-	 */
-	@PostMapping("/enable")
-	@ApiOperationSupport(order = 10)
-	@ApiOperation(value = "启用账号", notes = "传入userId集合")
-	public R enable(@ApiParam(value = "userId集合", required = true) @RequestParam String userIds) {
-		return R.status(userService.update(Wrappers.<User>update().lambda()
-			.set(User::getStatus, 1)
-			.in(User::getId, Func.toLongList(userIds))));
-	}
+    @PostMapping("/reset-password")
+    @PreAuthorize(RoleConstant.HAS_ROLE_ADMIN)
+    @ApiOperationSupport(order = 8)
+    @ApiOperation(value = "初始化密码", notes = "传入userId集合")
+    public R<?> resetPassword(@ApiParam(value = "userId集合", required = true) @RequestParam String userIds) {
+        return R.status(userService.resetAdminPasswords(userIds));
+    }
 
-	/**
-	 * 禁用账号（不允许禁用自己）
-	 */
-	@PostMapping("/disable")
-	@ApiOperationSupport(order = 11)
-	@ApiOperation(value = "禁用账号", notes = "传入userId集合")
-	public R disable(@ApiParam(value = "userId集合", required = true) @RequestParam String userIds) {
-		List<Long> ids = Func.toLongList(userIds);
-		Long currentUserId = SecurityContextUtil.getUserId();
-		if (currentUserId != null && ids.contains(currentUserId)) {
-			return R.fail("不能禁用当前登录账号");
-		}
-		return R.status(userService.update(Wrappers.<User>update().lambda()
-			.set(User::getStatus, 2)
-			.in(User::getId, ids)));
-	}
+    @PostMapping("/enable")
+    @PreAuthorize(RoleConstant.HAS_ROLE_ADMIN)
+    @ApiOperationSupport(order = 10)
+    @ApiOperation(value = "启用账号", notes = "传入userId集合")
+    public R<?> enable(@ApiParam(value = "userId集合", required = true) @RequestParam String userIds) {
+        return R.status(userService.setAdminUserStatus(userIds, 1));
+    }
 
-	/**
-	 * 修改密码
-	 *
-	 * @param oldPassword
-	 * @param newPassword
-	 * @param newPassword1
-	 * @return
-	 */
-	@PostMapping("/update-password")
-	@ApiOperationSupport(order = 9)
-	@ApiOperation(value = "修改密码", notes = "传入密码")
-	public R updatePassword(KnowledgeUser user,
-			@ApiParam(value = "旧密码", required = true) @RequestParam String oldPassword,
-			@ApiParam(value = "新密码", required = true) @RequestParam String newPassword,
-			@ApiParam(value = "新密码", required = true) @RequestParam String newPassword1) {
-		boolean temp = userService.updatePassword(user.getUserId(), oldPassword, newPassword, newPassword1);
-		return R.status(temp);
-	}
+    @PostMapping("/disable")
+    @PreAuthorize(RoleConstant.HAS_ROLE_ADMIN)
+    @ApiOperationSupport(order = 11)
+    @ApiOperation(value = "禁用账号", notes = "传入userId集合")
+    public R<?> disable(@ApiParam(value = "userId集合", required = true) @RequestParam String userIds) {
+        return R.status(userService.setAdminUserStatus(userIds, 2));
+    }
 
-	@PostMapping("/register")
-	public R<?> register(@RequestBody RegisterDTO dto) {
-		adminApplication.register(dto);
-		return R.success();
-	}
+    @PostMapping("/update-password")
+    @ApiOperationSupport(order = 9)
+    @ApiOperation(value = "修改密码", notes = "传入密码")
+    public R<?> updatePassword(KnowledgeUser user,
+            @ApiParam(value = "旧密码", required = true) @RequestParam String oldPassword,
+            @ApiParam(value = "新密码", required = true) @RequestParam String newPassword,
+            @ApiParam(value = "新密码", required = true) @RequestParam String newPassword1) {
+        return R.status(userService.updatePassword(user.getUserId(), oldPassword, newPassword, newPassword1));
+    }
 
-	// /**
-	// * Search users by keyword
-	// */
-	// @GetMapping("/search")
-	// @ApiOperationSupport(order = 10)
-	// @ApiOperation(value = "搜索用户", notes = "根据关键词搜索用户")
-	// public R<?> searchUsers(@RequestParam("keyword") String keyword,
-	// @RequestParam(value = "pageSize", required = false, defaultValue = "10")
-	// Integer pageSize) {
-	// QueryUserDTO queryUserDTO = new QueryUserDTO();
-	// queryUserDTO.setSize(pageSize);
-	// queryUserDTO.setSearchValue(keyword);
-	// return
-	// R.data(UserConverter.INSTANCE.convert(userService.userList(queryUserDTO)));
-	// }
-
+    @PostMapping("/register")
+    public R<?> register(@RequestBody RegisterDTO dto) {
+        adminApplication.register(dto);
+        return R.success();
+    }
 }

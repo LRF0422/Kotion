@@ -11,12 +11,12 @@ import { CommentList } from './pages/comments/CommentList'
 import { PluginList } from './pages/plugins/PluginList'
 import { AISettings } from './pages/ai/AISettings'
 import { AiUsage } from './pages/ai/AiUsage'
-import { LogList } from './pages/logs/LogList'
+import { LogList } from './pages/audit/LogList'
 import { SystemSettings } from './pages/settings/SystemSettings'
-import { isLoggedIn } from './lib/auth'
+import { isAdminLoggedIn } from './lib/auth'
 
 const RequireAuth = ({ children }: { children: React.ReactNode }) => {
-  if (!isLoggedIn()) {
+  if (!isAdminLoggedIn()) {
     return <Navigate to="/login" replace />
   }
   return <>{children}</>

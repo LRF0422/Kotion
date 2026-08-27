@@ -23,6 +23,9 @@ export const clearTokens = () => {
 
 export const isLoggedIn = () => Boolean(getAccessToken())
 
+export const hasAuthority = (authority: string | undefined, expected: string) =>
+  Boolean(authority?.split(',').map((item) => item.trim().replace(/^ROLE_/i, '')).includes(expected))
+
 export interface AuthUser {
   userId?: string
   userName?: string
@@ -44,4 +47,9 @@ export const getAuthUser = (): AuthUser | null => {
   } catch {
     return null
   }
+}
+
+export const isAdminLoggedIn = () => {
+  const user = getAuthUser()
+  return isLoggedIn() && hasAuthority(user?.authority, 'administrator')
 }

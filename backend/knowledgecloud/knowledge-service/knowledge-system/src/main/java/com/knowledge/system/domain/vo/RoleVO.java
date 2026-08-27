@@ -16,6 +16,8 @@
 package com.knowledge.system.domain.vo;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import io.swagger.annotations.ApiModel;
 import io.swagger.annotations.ApiModelProperty;
 import lombok.Data;
@@ -39,12 +41,14 @@ public class RoleVO implements INode {
 	 * 主键
 	 */
 	@ApiModelProperty(value = "主键")
+	@JsonSerialize(using = ToStringSerializer.class)
 	private Long id;
 
 	/**
 	 * 父主键
 	 */
 	@ApiModelProperty(value = "父主键")
+	@JsonSerialize(using = ToStringSerializer.class)
 	private Long parentId;
 
 	/**

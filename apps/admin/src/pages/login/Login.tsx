@@ -13,7 +13,7 @@ import {
 } from '@kn/ui'
 import { BookOpen, Loader2 } from '@kn/icon'
 import { login } from '@/api'
-import { saveAuthUser, saveTokens } from '@/lib/auth'
+import { clearTokens, hasAuthority, saveAuthUser, saveTokens } from '@/lib/auth'
 
 export const Login = () => {
   const navigate = useNavigate()
@@ -31,6 +31,11 @@ export const Login = () => {
     setLoading(true)
     try {
       const data = await login(account, password)
+      if (!hasAuthority(data.authority, 'administrator')) {
+        clearTokens()
+        toast({ title: '当前账号没有管理后台权限', variant: 'destructive' })
+        return
+      }
       saveTokens(data.access_token, data.refresh_token)
       saveAuthUser({
         userId: data.userId,

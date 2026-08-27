@@ -15,6 +15,9 @@
  */
 package com.knowledge.system.vo;
 
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
+
 import io.swagger.annotations.ApiModel;
 import lombok.Data;
 
@@ -33,6 +36,7 @@ public class UserVO implements Serializable {
 	/**
 	 * 主键id
 	 */
+	@JsonSerialize(using = ToStringSerializer.class)
 	private Long id;
 
 	/**
@@ -85,6 +89,7 @@ public class UserVO implements Serializable {
 	 */
 	private String postId;
 	private String roleName;
+	private String roleAlias;
 	private String deptName;
 	private String sexName;
 

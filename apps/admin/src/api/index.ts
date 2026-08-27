@@ -45,6 +45,7 @@ export interface UserVO {
   sexName?: string
   roleId?: string
   roleName?: string
+  roleAlias?: string
   deptName?: string
   tenantId?: string
   isSetup?: boolean
@@ -54,21 +55,29 @@ export interface UserVO {
 
 export interface UserSubmitDTO {
   id?: string
-  account?: string
+  account: string
   password?: string
   name?: string
   realName?: string
   email?: string
   phone?: string
-  tenantId?: string
+  roleIds?: string[]
 }
 
 export const getUserInfo = () => get<UserVO>('/knowledge-system/user/info')
 
-export const getUserList = (params: { current: number; size: number; searchValue?: string }) =>
-  get<PageResult<UserVO>>('/knowledge-system/user/list', params)
+export const getUserList = (params: {
+  current: number
+  size: number
+  searchValue?: string
+  status?: 1 | 2
+  roleId?: string
+}) => get<PageResult<UserVO>>('/knowledge-system/user/list', params)
 
-export const submitUser = (user: UserSubmitDTO) => post<unknown>('/knowledge-system/user/submit', user)
+export const getAdminUserDetail = (id: string) =>
+  get<UserVO>('/knowledge-system/user/admin/detail', { id })
+
+export const submitUser = (user: UserSubmitDTO) => post<UserVO>('/knowledge-system/user/submit', user)
 
 export const removeUsers = (ids: string) => post<unknown>('/knowledge-system/user/remove', undefined, { ids })
 

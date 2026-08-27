@@ -20,6 +20,8 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.github.yulichang.base.MPJBaseMapper;
 import com.knowledge.system.domain.User;
 
+import org.apache.ibatis.annotations.Param;
+
 import java.util.List;
 
 /**
@@ -54,7 +56,7 @@ public interface UserMapper extends MPJBaseMapper<User> {
 	 * @param ids
 	 * @return
 	 */
-	List<String> getRoleName(String[] ids);
+	List<String> getRoleName(@Param("tenantId") String tenantId, @Param("ids") String[] ids);
 
 	/**
 	 * 获取角色别名
@@ -62,7 +64,7 @@ public interface UserMapper extends MPJBaseMapper<User> {
 	 * @param ids
 	 * @return
 	 */
-	List<String> getRoleAlias(String[] ids);
+	List<String> getRoleAlias(@Param("tenantId") String tenantId, @Param("ids") String[] ids);
 
 	/**
 	 * 获取部门名
