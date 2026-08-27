@@ -30,6 +30,7 @@ import com.knowledge.wiki.service.entity.dto.PluginDTO;
 import com.knowledge.wiki.service.entity.dto.PluginReviewDTO;
 import com.knowledge.wiki.service.entity.dto.PluginSubmissionDTO;
 import com.knowledge.wiki.service.entity.dto.PluginVersionPublishDTO;
+import com.knowledge.wiki.service.entity.dto.QueryAdminPluginDTO;
 import com.knowledge.wiki.service.entity.dto.QueryPluginDTO;
 import com.knowledge.wiki.service.entity.dto.TagDTO;
 import com.knowledge.wiki.service.entity.enums.PluginCategory;
@@ -164,6 +165,16 @@ public class PluginApplication {
                         .like(Plugin::getPluginKey, dto.getSearchValue()))
                 .orderByDesc(Plugin::getUpdateTime));
         return page.convert(this::toSubmissionVO);
+    }
+
+    public IPage<PluginVO> adminReviewList(QueryAdminPluginDTO dto) {
+        requireReviewer();
+        return pluginService.pageAdminReviewPlugins(dto).convert(this::toSubmissionVO);
+    }
+
+    public PluginVO adminReviewDetail(Long id) {
+        requireReviewer();
+        return toSubmissionVO(requirePlugin(id));
     }
 
     public PluginVO detail(Long id) {

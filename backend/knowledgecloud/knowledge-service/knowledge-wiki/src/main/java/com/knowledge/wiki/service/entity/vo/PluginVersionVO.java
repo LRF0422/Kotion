@@ -1,6 +1,7 @@
 package com.knowledge.wiki.service.entity.vo;
 
 import java.io.Serializable;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import com.knowledge.wiki.service.entity.VersionDesc;
@@ -39,5 +40,7 @@ public class PluginVersionVO implements Serializable {
     private String version;
     private VersionStatus status;
     private PluginStatus reviewStatus;
+    private LocalDateTime createTime;
+    private LocalDateTime updateTime;
 
 }

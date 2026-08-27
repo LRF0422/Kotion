@@ -2,15 +2,19 @@ package com.knowledge.wiki.service.service;
 
 import java.util.List;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.knowledge.core.version.service.ISubjectService;
 import com.knowledge.wiki.service.entity.Plugin;
 import com.knowledge.wiki.service.entity.PluginVersion;
+import com.knowledge.wiki.service.entity.dto.QueryAdminPluginDTO;
 
 public interface IPluginService extends ISubjectService<Plugin> {
 
     Plugin getByKey(String key);
 
     Plugin getByIdForUpdate(Long id);
+
+    IPage<Plugin> pageAdminReviewPlugins(QueryAdminPluginDTO dto);
 
     void createPlugin(Plugin plugin, boolean publish);
 

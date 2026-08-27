@@ -90,7 +90,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: '平台能力',
     items: [
-      { title: '插件管理', url: '/plugins', icon: Blocks },
+      { title: '插件审核', url: '/plugins', icon: Blocks },
       { title: 'AI 配置', url: '/ai', icon: Sparkles },
       { title: 'AI 用量', url: '/ai-usage', icon: Gauge },
     ],

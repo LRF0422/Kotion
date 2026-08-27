@@ -248,12 +248,33 @@ export const toggleCommentResolved = (id: string) => put<unknown>(`/knowledge-wi
 
 export type PluginCategory = 'FEATURE' | 'APP' | 'CONNECTOR'
 export type PluginStatus = 'PENDING' | 'IN_PROGRESS' | 'REJECTED' | 'DONE'
+export type PluginVersionStatus = 'DRAFT' | 'PENDING' | 'ACTIVE' | 'IN_ACTIVE'
+export type PluginReviewDecision = 'START' | 'APPROVE' | 'REJECT'
+
+export interface PluginVersionDescription {
+  label?: string
+  content?: string
+}
+
+export interface PluginVersionVO {
+  id?: string
+  subjectId?: string
+  version?: string
+  status?: PluginVersionStatus
+  reviewStatus?: PluginStatus
+  resourcePath?: string
+  integrity?: string
+  versionDescription?: PluginVersionDescription[]
+  createTime?: string
+  updateTime?: string
+}
 
 export interface PluginVO {
   id: string
   name: string
   description?: string
   developer?: string
+  developerId?: string
   icon?: string
   pluginKey?: string
   status?: PluginStatus
@@ -262,7 +283,11 @@ export interface PluginVO {
   maintainer?: string
   category?: PluginCategory
   installedVersion?: string
-  currentVersion?: { id?: string; version?: string; updateTime?: string }
+  currentVersion?: PluginVersionVO
+  candidateVersion?: PluginVersionVO
+  tags?: string[]
+  createTime?: string
+  updateTime?: string
   rating?: number
   downloads?: number
 }
@@ -273,6 +298,20 @@ export const getPluginList = (params: {
   searchValue?: string
   category?: PluginCategory
 }) => get<PageResult<PluginVO>>('/knowledge-wiki/plugin', params)
+
+export const getAdminPluginList = (params: {
+  current: number
+  pageSize: number
+  searchValue?: string
+  category?: PluginCategory
+  reviewStatus?: PluginStatus
+}) => get<PageResult<PluginVO>>('/knowledge-wiki/admin/plugin/list', params)
+
+export const getAdminPluginDetail = (id: string) =>
+  get<PluginVO>(`/knowledge-wiki/admin/plugin/${id}/detail`)
+
+export const reviewPluginSubmission = (id: string, decision: PluginReviewDecision) =>
+  post<PluginVO>(`/knowledge-wiki/plugin/submissions/${id}/review`, { decision })
 
 // ---------- 日志（knowledge-log，current + size） ----------
 

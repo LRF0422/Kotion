@@ -67,6 +67,8 @@ public class PluginVersionServiceImpl extends AbstractVersionService<Plugin, Plu
     public PluginVersion getRejectedCandidate(Long pluginId) {
         return this.lambdaQuery().eq(PluginVersion::getSubjectId, pluginId)
                 .eq(PluginVersion::getStatus, VersionStatus.DRAFT)
+                .eq(PluginVersion::getReviewStatus,
+                        com.knowledge.wiki.service.entity.enums.PluginStatus.REJECTED)
                 .orderByDesc(PluginVersion::getId)
                 .last("LIMIT 1")
                 .one();

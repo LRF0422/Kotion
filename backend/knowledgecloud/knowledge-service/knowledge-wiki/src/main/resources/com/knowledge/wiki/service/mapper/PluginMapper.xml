@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.knowledge.wiki.service.mapper.PluginMapper">
+
+    <!--
+        One row per plugin. The correlated subquery selects the current review
+        candidate without joining historical versions into the paginated result.
+    -->
+    <select id="selectAdminReviewPage" resultType="com.knowledge.wiki.service.entity.Plugin">
+        SELECT p.*
+        FROM wiki_plugin p
+        LEFT JOIN wiki_plugin_version candidate ON candidate.id = (
+            SELECT pv.id
+            FROM wiki_plugin_version pv
+            WHERE pv.subject_id = p.id
+              AND pv.tenant_id = p.tenant_id
+              AND pv.is_deleted = 0
+              AND (
+                  (pv.status = 'PENDING' AND pv.review_status IN ('PENDING', 'IN_PROGRESS'))
+                  OR (pv.status = 'DRAFT' AND pv.review_status = 'REJECTED')
+              )
+            ORDER BY
+                CASE WHEN pv.status = 'PENDING' THEN 0 ELSE 1 END,
+                pv.id DESC
+            LIMIT 1
+        )
+        WHERE p.is_deleted = 0
+        <if test="query.category != null">
+            AND p.category = #{query.category}
+        </if>
+        <if test="query.searchValue != null and query.searchValue != ''">
+            AND (
+                p.name LIKE CONCAT('%', #{query.searchValue}, '%')
+                OR p.plugin_key LIKE CONCAT('%', #{query.searchValue}, '%')
+            )
+        </if>
+        <if test="query.reviewStatus != null">
+            AND COALESCE(candidate.review_status, p.status) = #{query.reviewStatus}
+        </if>
+        ORDER BY
+            CASE COALESCE(candidate.review_status, p.status)
+                WHEN 'PENDING' THEN 0
+                WHEN 'IN_PROGRESS' THEN 1
+                WHEN 'REJECTED' THEN 2
+                WHEN 'DONE' THEN 3
+                ELSE 4
+            END,
+            COALESCE(candidate.update_time, p.update_time) DESC,
+            p.id DESC
+    </select>
+
+</mapper>

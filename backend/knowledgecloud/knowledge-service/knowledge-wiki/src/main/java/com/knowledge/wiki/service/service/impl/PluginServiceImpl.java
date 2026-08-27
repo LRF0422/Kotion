@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.github.yulichang.toolkit.MPJWrappers;
 import com.github.yulichang.wrapper.MPJLambdaWrapper;
 import com.knowledge.core.version.service.AbstractSubjectService;
@@ -14,6 +15,7 @@ import com.knowledge.wiki.service.converter.PluginConverter;
 import com.knowledge.wiki.service.entity.InstalledPlugin;
 import com.knowledge.wiki.service.entity.Plugin;
 import com.knowledge.wiki.service.entity.PluginVersion;
+import com.knowledge.wiki.service.entity.dto.QueryAdminPluginDTO;
 import com.knowledge.wiki.service.entity.enums.PluginStatus;
 import com.knowledge.wiki.service.exception.WikiException;
 import com.knowledge.wiki.service.mapper.PluginMapper;
@@ -77,6 +79,11 @@ public class PluginServiceImpl extends AbstractSubjectService<PluginMapper, Plug
     @Override
     public Plugin getByIdForUpdate(Long id) {
         return this.baseMapper.selectByIdForUpdate(id);
+    }
+
+    @Override
+    public IPage<Plugin> pageAdminReviewPlugins(QueryAdminPluginDTO dto) {
+        return this.baseMapper.selectAdminReviewPage(dto.page(), dto);
     }
 
     @Override
