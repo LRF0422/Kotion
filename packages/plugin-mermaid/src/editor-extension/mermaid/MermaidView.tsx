@@ -5,6 +5,7 @@ import { EmptyState, Button, Card, CardContent, useTheme } from "@kn/ui"
 import Editor, { Monaco } from '@monaco-editor/react';
 import { HelpCircle, GitBranch, ArrowRightLeft, Network, ZoomIn, ZoomOut, RotateCcw, CopyIcon, DownloadIcon, Maximize2, Pencil, Check } from "@kn/icon"
 import RenderMermaid from "../../component"
+import { normalizePersistedMermaidSource } from "./mermaid-source-normalization"
 
 const MIN_ZOOM = 0.25
 const MAX_ZOOM = 5
@@ -32,29 +33,77 @@ const handleDownloadSvg = (
 
 export const MermaidView: React.FC<NodeViewProps> = (props) => {
 
+    const persistedSource = typeof props.node.attrs.data === 'string' ? props.node.attrs.data : ''
     const editorRef = useRef<Monaco>();
     const previewRef = useRef<HTMLDivElement | null>(null);
     const diagramRef = useRef<HTMLDivElement | null>(null);
     const cardRef = useRef<HTMLDivElement | null>(null);
+    const codeRef = useRef(persistedSource)
+    const lastPersistedSourceRef = useRef(persistedSource)
+    const normalizationVersionRef = useRef(0)
     const { theme } = useTheme()
     const { t } = useTranslation()
     const isEditable = props.editor.isEditable
     const isDark = theme === 'dark'
-    const [code, setCode] = useState(props.node.attrs.data)
+    const [code, setCode] = useState(persistedSource)
+    const [isNormalizing, setIsNormalizing] = useState(true)
     const [zoom, setZoom] = useState(1)
     const [isFullscreen, setIsFullscreen] = useState(false)
     // Click-to-edit: start in edit mode if no code yet (new block)
-    const [isEditing, setIsEditing] = useState(!props.node.attrs.data)
+    const [isEditing, setIsEditing] = useState(!persistedSource)
     const value = useDebounce(code, {
         wait: 500,
     })
 
     useEffect(() => {
-        props.updateAttributes({
-            ...props.node.attrs,
-            data: value
+        codeRef.current = code
+    }, [code])
+
+    useEffect(() => {
+        const source = persistedSource
+        const previousPersistedSource = lastPersistedSourceRef.current
+        const localSourceAtStart = codeRef.current
+        const canApply = localSourceAtStart === previousPersistedSource || localSourceAtStart === source
+        const version = ++normalizationVersionRef.current
+        lastPersistedSourceRef.current = source
+
+        if (!canApply) {
+            setIsNormalizing(false)
+            return
+        }
+
+        let cancelled = false
+        setIsNormalizing(true)
+        void normalizePersistedMermaidSource(source).then((result) => {
+            if (cancelled || version !== normalizationVersionRef.current) return
+            if (codeRef.current !== localSourceAtStart && codeRef.current !== source) return
+
+            if (result.source !== codeRef.current) {
+                codeRef.current = result.source
+                setCode(result.source)
+            }
+            lastPersistedSourceRef.current = result.source
+            setIsNormalizing(false)
+
+            if (result.changed && isEditable && props.node.attrs.data === source) {
+                props.updateAttributes({ data: result.source })
+            }
         })
-    }, [value])
+
+        return () => {
+            cancelled = true
+        }
+    }, [isEditable, persistedSource, props.node.attrs.data, props.updateAttributes])
+
+    useEffect(() => {
+        if (
+            !isEditable ||
+            isNormalizing ||
+            value === props.node.attrs.data ||
+            value === lastPersistedSourceRef.current
+        ) return
+        props.updateAttributes({ data: value })
+    }, [isEditable, isNormalizing, props.node.attrs.data, props.updateAttributes, value])
 
     // Click outside to exit edit mode
     useEffect(() => {
@@ -290,7 +339,7 @@ export const MermaidView: React.FC<NodeViewProps> = (props) => {
                         {/* Left Panel: Code Editor */}
                         <div className="w-1/2 border-r min-w-0 flex flex-col">
                             <Editor
-                                defaultValue={code}
+                                value={code}
                                 width="100%"
                                 height="100%"
                                 theme={isDark ? "vs-dark" : "light"}
@@ -305,7 +354,11 @@ export const MermaidView: React.FC<NodeViewProps> = (props) => {
                                     editorRef.current = monaco
                                 }}
                                 onChange={(value) => {
-                                    setCode(value || '')
+                                    const nextCode = value || ''
+                                    normalizationVersionRef.current += 1
+                                    setIsNormalizing(false)
+                                    codeRef.current = nextCode
+                                    setCode(nextCode)
                                 }}
                             />
                         </div>

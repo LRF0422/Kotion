@@ -2,29 +2,23 @@ import React, {
     FormEvent,
     forwardRef,
     useEffect,
-    useMemo,
     useRef,
     useState,
 } from 'react'
-import { Send, Square, Sparkles, ChevronDown, Check, MessageCircle, Bot, FileDiff, SlidersHorizontal } from '@kn/icon'
+import { Send, Square, MessageCircle, Bot, FileDiff } from '@kn/icon'
 import {
     Button,
     ChatInput,
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
     Tooltip,
     TooltipContent,
     TooltipProvider,
     TooltipTrigger,
 } from '@kn/ui'
-import type { ChatMode, ChatModelParams, ModelInfo } from '@kn/common'
-import { fetchModels, useTranslation } from '@kn/common'
+import type { ChatMode, ChatModelParams } from '@kn/common'
+import { useTranslation } from '@kn/common'
 
+import { ModelSelector } from '../../components/ModelSelector'
 import type { ChatTargetPage } from '../chat-sessions'
-import { ModelParamsPopover, isModelParamsCustomized } from './ModelParamsPopover'
 import { PageMentionPicker, TargetPageStatus } from './PageMentionPicker'
 
 // ─── Mode toggle ───────────────────────────────────────────────────
@@ -65,120 +59,6 @@ const ModeToggle: React.FC<ModeToggleProps> = ({ mode, onModeChange, disabled })
                 )
             })}
         </div>
-    )
-}
-
-// ─── Model selector ────────────────────────────────────────────────
-
-interface ModelSelectorProps {
-    model: string
-    onModelChange: (model: string) => void
-    modelParams: ChatModelParams
-    onModelParamsChange: (params: ChatModelParams) => void
-    disabled?: boolean
-}
-
-/**
- * Model picker. The sampling-params popover is folded into the dropdown
- * footer (anchored to this trigger) so the composer toolbar stays one icon
- * lighter; a dot on the trigger still signals customized params.
- */
-const ModelSelector: React.FC<ModelSelectorProps> = ({
-    model, onModelChange, modelParams, onModelParamsChange, disabled,
-}) => {
-    const { t } = useTranslation()
-    const [models, setModels] = useState<ModelInfo[]>([])
-    const [open, setOpen] = useState(false)
-    // Params popover — opened from the dropdown footer, anchored to the trigger.
-    const [paramsOpen, setParamsOpen] = useState(false)
-    const loadedRef = useRef(false)
-
-    useEffect(() => {
-        if (open && !loadedRef.current) {
-            loadedRef.current = true
-            fetchModels().then(setModels)
-        }
-    }, [open])
-
-    const grouped = useMemo(() => {
-        const map = new Map<string, ModelInfo[]>()
-        for (const m of models) {
-            const provider = m.provider || 'other'
-            if (!map.has(provider)) map.set(provider, [])
-            map.get(provider)!.push(m)
-        }
-        return map
-    }, [models])
-
-    const displayLabel = model || 'deepseek-chat'
-    const paramsCustomized = isModelParamsCustomized(modelParams)
-
-    return (
-        <DropdownMenu open={open} onOpenChange={setOpen}>
-            <ModelParamsPopover
-                params={modelParams}
-                onChange={onModelParamsChange}
-                open={paramsOpen}
-                onOpenChange={setParamsOpen}
-            >
-                <DropdownMenuTrigger asChild disabled={disabled}>
-                    <button
-                        type="button"
-                        disabled={disabled}
-                        className="relative flex shrink-0 items-center gap-1 h-5 px-1.5 rounded-md text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/70 disabled:opacity-50 transition-colors"
-                    >
-                        <Sparkles className="h-3 w-3 shrink-0" />
-                        <span className="max-w-[90px] truncate">{displayLabel}</span>
-                        <ChevronDown className="h-2.5 w-2.5 shrink-0" />
-                        {paramsCustomized && (
-                            <span
-                                aria-hidden
-                                className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-primary"
-                            />
-                        )}
-                    </button>
-                </DropdownMenuTrigger>
-            </ModelParamsPopover>
-            <DropdownMenuContent align="start" className="w-[220px]">
-                {models.length === 0 && (
-                    <div className="px-2 py-1.5 text-[10px] text-muted-foreground">
-                        {t('ai.chat.loadingModels', { defaultValue: '加载模型中…' })}
-                    </div>
-                )}
-                {Array.from(grouped.entries()).map(([provider, providerModels]) => (
-                    <React.Fragment key={provider}>
-                        <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                            {provider}
-                        </div>
-                        {providerModels.map((m) => (
-                            <DropdownMenuItem
-                                key={m.id}
-                                onClick={() => onModelChange(m.id)}
-                                className="flex items-center justify-between text-xs"
-                            >
-                                <span className="truncate">{m.name || m.id}</span>
-                                {model === m.id && <Check className="h-3 w-3 text-primary shrink-0 ml-1" />}
-                            </DropdownMenuItem>
-                        ))}
-                    </React.Fragment>
-                ))}
-                {/* Sampling params live here instead of a dedicated toolbar icon. */}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                    disabled={disabled}
-                    onSelect={() => setParamsOpen(true)}
-                    className="flex items-center gap-1.5 text-xs"
-                >
-                    <SlidersHorizontal className="h-3 w-3 shrink-0" />
-                    <span className="truncate">
-                        {t('ai.modelParams.title', { defaultValue: '模型参数' })}
-                    </span>
-                    {paramsCustomized && (
-                        <span aria-hidden className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />
-                    )}
-                </DropdownMenuItem>
-            </DropdownMenuContent>
-        </DropdownMenu>
     )
 }
 

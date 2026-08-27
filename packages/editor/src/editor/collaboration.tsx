@@ -10,7 +10,7 @@ import { ThemeProvider } from "styled-components";
 import light, { dark } from "../styles/theme";
 import { StyledEditor } from "../styles/editor";
 import { ExtensionWrapper, logger, request } from "@kn/common";
-import { useSafeState, useUnmount } from "ahooks";
+import { useSafeState } from "ahooks";
 import { NotionToC } from "./NotionToC";
 import { cn, useIsMobile, useTheme } from "@kn/ui";
 import { EditorMenu } from "./EditorMenu";
@@ -20,6 +20,7 @@ import { ChangeTrackerBar } from "./ChangeTrackerBar";
 import { PageHeader } from "./PageHeader";
 import { PageContext } from "./context";
 import { rewriteUnknownContent } from "./rewriteUnknowContent";
+import { migratePluginContentInYDoc } from "./plugin-content-migration";
 import { loadContentProgressive, isLargeDocument } from "./loadContentProgressive";
 import { TableOfContents, getHierarchicalIndexes, MousePointerSync } from "@editor/extensions";
 import Collaboration from "@tiptap/extension-collaboration";
@@ -326,15 +327,6 @@ const CollaborationEditorInner = forwardRef<
   }, [editor, content, provider, extensions]);
 
 
-  // Cleanup provider on unmount. Several callers (JournalEditor, PageRoom) rely
-  // on the editor to tear down the provider they handed in.
-  useUnmount(() => {
-    if (provider) {
-      provider.awareness?.destroy();
-      provider.disconnect();
-    }
-  });
-
   // Get current theme from context
   const { theme: currentTheme } = useTheme();
   const selectedTheme = currentTheme === 'dark' ? dark : light;
@@ -429,6 +421,11 @@ CollaborationEditorInner.displayName = "CollaborationEditorInner";
  * top" bug. Seeding the Y.Doc first means the editor initialises from real
  * content and the placeholder is never created.
  */
+type ExtensionBundle = {
+  extensions: AnyExtension[];
+  extensionWrappers: ExtensionWrapper[];
+};
+
 export const CollaborationEditor = forwardRef<
   Editor | null,
   React.PropsWithChildren<CollaborationEditorProps>
@@ -436,6 +433,25 @@ export const CollaborationEditor = forwardRef<
   const { content, provider, withTitle, externalExtensions } = props
 
   const [extensions, extensionWrappers] = useEditorExtension(undefined, withTitle, externalExtensions)
+  const latestBundle = React.useMemo<ExtensionBundle>(() => ({
+    extensions: extensions as AnyExtension[],
+    extensionWrappers: extensionWrappers as ExtensionWrapper[],
+  }), [extensions, extensionWrappers]);
+  const [activeBundle, setActiveBundle] = React.useState<ExtensionBundle>(latestBundle);
+  const latestBundleRef = React.useRef(latestBundle);
+  latestBundleRef.current = latestBundle;
+  const failedExtensionsRef = React.useRef<AnyExtension[] | null>(null);
+  const innerEditorRef = React.useRef<Editor | null>(null);
+  const [migrationPending, setMigrationPending] = React.useState(false);
+
+  const setInnerEditorRef = React.useCallback((editor: Editor | null) => {
+    innerEditorRef.current = editor;
+    if (typeof ref === 'function') {
+      ref(editor);
+    } else if (ref) {
+      ref.current = editor;
+    }
+  }, [ref]);
 
   // `readyFor` tracks which provider has been prepared. The inner editor is
   // only mounted once the *current* provider has been prepared, guaranteeing
@@ -456,6 +472,7 @@ export const CollaborationEditor = forwardRef<
   React.useEffect(() => {
     let cancelled = false;
     setReadyFor(undefined);
+    failedExtensionsRef.current = null;
 
     if (!provider) {
       setReadyFor(NO_PROVIDER);
@@ -513,6 +530,23 @@ export const CollaborationEditor = forwardRef<
         }
       }
 
+      // A route refresh can remount the whole editor before the in-place schema
+      // transition effect gets a chance to run. Normalize an already-populated
+      // Y.Doc here as well, before any Collaboration extension binds to it.
+      const preparedBundle = latestBundleRef.current;
+      try {
+        migratePluginContentInYDoc(
+          provider.document,
+          getSchema(preparedBundle.extensions),
+          COLLAB_FIELD,
+        );
+        if (!cancelled) setActiveBundle(preparedBundle);
+      } catch (error) {
+        failedExtensionsRef.current = preparedBundle.extensions;
+        logger.error("[CollaborationEditor] failed to prepare plugin content", error);
+        return;
+      }
+
       if (!cancelled) setReadyFor(provider);
     })();
 
@@ -521,11 +555,64 @@ export const CollaborationEditor = forwardRef<
     // identity changes are picked up via refs without remounting the editor.
   }, [provider]);
 
+  // Provider ownership belongs to the outer editor. Schema transitions only
+  // unmount the inner Tiptap instance and must not disconnect the room.
+  React.useEffect(() => {
+    if (!provider) return;
+
+    return () => {
+      provider.awareness?.destroy();
+      provider.disconnect();
+    };
+  }, [provider]);
+
   const ready = provider ? readyFor === provider : readyFor === NO_PROVIDER;
 
-  if (!ready) {
-    // Lightweight skeleton while we wait for sync / seed the Y.Doc. Mirrors the
-    // inner editor's own loading skeleton so there's no visual jump.
+  // Destroy the old schema binding before touching the Y.Doc. The next render
+  // shows the preparation skeleton while the migration effect runs.
+  React.useEffect(() => {
+    if (
+      !provider
+      || !ready
+      || migrationPending
+      || activeBundle.extensions === extensions
+      || failedExtensionsRef.current === extensions
+    ) {
+      return;
+    }
+
+    innerEditorRef.current?.destroy();
+    setMigrationPending(true);
+  }, [activeBundle.extensions, extensions, migrationPending, provider, ready]);
+
+  React.useEffect(() => {
+    if (!provider || !migrationPending) return;
+
+    const nextBundle = latestBundleRef.current;
+    try {
+      migratePluginContentInYDoc(
+        provider.document,
+        getSchema(nextBundle.extensions),
+        COLLAB_FIELD,
+      );
+      failedExtensionsRef.current = null;
+      setActiveBundle(nextBundle);
+    } catch (error) {
+      failedExtensionsRef.current = nextBundle.extensions;
+      logger.error("[CollaborationEditor] failed to migrate plugin content", error);
+    } finally {
+      setMigrationPending(false);
+    }
+  }, [migrationPending, provider]);
+
+  const schemaChanged = provider
+    && ready
+    && activeBundle.extensions !== extensions
+    && failedExtensionsRef.current !== extensions;
+  const waitingForSchema = migrationPending || Boolean(schemaChanged && !innerEditorRef.current);
+
+  if (!ready || waitingForSchema) {
+    // Lightweight skeleton while we wait for sync / seed / schema migration.
     return (
       <div className={cn("flex flex-col relative", props.width ?? 'w-[calc(100vw-350px)]', props.className)}>
         <div className="flex-1 min-h-0 w-full overflow-y-auto p-4">
@@ -542,13 +629,15 @@ export const CollaborationEditor = forwardRef<
     );
   }
 
+  const renderBundle = provider ? activeBundle : latestBundle;
+
   return (
     <CollaborationEditorInner
       key={provider ? `p:${props.id}` : `np:${props.id}`}
-      ref={ref}
+      ref={setInnerEditorRef}
       {...props}
-      extensions={extensions as AnyExtension[]}
-      extensionWrappers={extensionWrappers as ExtensionWrapper[]}
+      extensions={renderBundle.extensions}
+      extensionWrappers={renderBundle.extensionWrappers}
     />
   );
 });

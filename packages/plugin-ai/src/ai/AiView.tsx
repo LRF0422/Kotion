@@ -1,6 +1,6 @@
 import { NodeViewProps, NodeViewContent, NodeViewWrapper } from "@kn/editor";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Button, Streamdown, toast } from "@kn/ui";
+import { Button, Streamdown, Textarea, toast } from "@kn/ui";
 import { Check, Copy, Loader2, RotateCcw, Send, Sparkles, Square, X } from "@kn/icon";
 import {
     streamKnowledgeChat,
@@ -8,6 +8,8 @@ import {
     useTranslation,
     type AgentChatMessage,
 } from "@kn/common";
+import { ModelSelector } from "./components/ModelSelector";
+import { useModelPreference } from "./model-preference";
 
 const AI_BLOCK_SYSTEM =
     "你是写作助手。请根据用户的要求生成内容，使用 Markdown 格式，直接输出正文，不要解释或寒暄。";
@@ -35,6 +37,7 @@ export const AiView: React.FC<NodeViewProps> = (props) => {
     const { t, i18n } = useTranslation();
     const lang = i18n.language?.startsWith("zh") ? "zh" : "en";
     const editable = props.editor.isEditable;
+    const [selectedModel, setSelectedModel] = useModelPreference();
 
     const [prompt, setPrompt] = useState<string>(props.node.attrs.prompt || "");
     const [refineText, setRefineText] = useState("");
@@ -66,7 +69,10 @@ export const AiView: React.FC<NodeViewProps> = (props) => {
 
         let acc = "";
         try {
-            const { textStream } = streamKnowledgeChat(messages, { signal: ac.signal });
+            const { textStream } = streamKnowledgeChat(messages, {
+                model: selectedModel || undefined,
+                signal: ac.signal,
+            });
             for await (const part of textStream) {
                 if (ac.signal.aborted) break;
                 acc += part;
@@ -80,7 +86,7 @@ export const AiView: React.FC<NodeViewProps> = (props) => {
             if (abortRef.current === ac) abortRef.current = null;
             setIsLoading(false);
         }
-    }, [t]);
+    }, [selectedModel, t]);
 
     const generate = useCallback((p: string) => {
         const text = p.trim();
@@ -132,124 +138,150 @@ export const AiView: React.FC<NodeViewProps> = (props) => {
         );
     }, [result, t]);
 
-    const onPromptKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
+    const hasOutput = !!result.trim();
+    const hasResult = !isLoading && hasOutput && !error;
+    const isIdle = !isLoading && !hasOutput && !error;
+    const showPreview = isLoading || hasOutput || !!error;
+    const canRegenerate = (hasResult || !!error) && messagesRef.current.length > 0;
+    const activeValue = hasResult ? refineText : prompt;
+
+    useEffect(() => {
+        const el = promptRef.current;
+        if (!el) return;
+        el.style.height = "auto";
+        el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+    }, [activeValue, hasResult, isLoading]);
+
+    const submitCurrentInput = useCallback(() => {
+        if (hasResult) {
+            refine();
+        } else {
             generate(prompt);
-        } else if (e.key === "Escape" && !result && !isLoading) {
-            // Notion-style: Esc on an empty draft discards the block.
+        }
+    }, [generate, hasResult, prompt, refine]);
+
+    const onComposerKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            submitCurrentInput();
+        } else if (e.key === "Escape" && !hasOutput && !isLoading) {
             e.preventDefault();
             props.deleteNode();
         }
         e.stopPropagation();
-    };
+    }, [hasOutput, isLoading, props, submitCurrentInput]);
 
-    const onRefineKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            refine();
-        }
-        e.stopPropagation();
-    };
-
-    const hasResult = !isLoading && !!result.trim() && !error;
+    const selectQuickPrompt = useCallback((seed: string) => {
+        setPrompt(seed);
+        requestAnimationFrame(() => {
+            const el = promptRef.current;
+            if (!el) return;
+            el.focus();
+            el.setSelectionRange(seed.length, seed.length);
+        });
+    }, []);
 
     // Read-only / non-editable: don't show the authoring UI.
     if (!editable) {
         return (
             <NodeViewWrapper as="div">
-                <div className="hidden">
+                <div className="hidden" aria-hidden="true">
                     <NodeViewContent />
                 </div>
             </NodeViewWrapper>
         );
     }
 
+    const title = t("ai.title", { defaultValue: "由 AI 生成" });
+    const generatingLabel = t("ai.generating", { defaultValue: "生成中…" });
+    const composerPlaceholder = hasResult
+        ? t("ai.refinePlaceholder", { defaultValue: "继续修改，如：再正式一点…" })
+        : t("ai.blockPlaceholder", { defaultValue: "让 AI 帮你写点什么…" });
+    const composerDisabled = hasResult ? !refineText.trim() : !prompt.trim();
+
     return (
         <NodeViewWrapper as="div" className="my-2">
-            <div className="overflow-hidden rounded-xl border bg-card text-card-foreground shadow-sm">
-                {/* Header */}
-                <div className="flex items-center justify-between border-b px-4 py-2.5">
-                    <div className="flex items-center gap-2 text-sm font-semibold">
-                        {isLoading ? (
-                            <Loader2 className="h-4 w-4 animate-spin text-purple-500" />
-                        ) : (
-                            <Sparkles className="h-4 w-4 text-purple-500" />
-                        )}
-                        {t("ai.title", { defaultValue: "由 AI 生成" })}
-                    </div>
-                    <button
-                        onClick={props.deleteNode}
-                        disabled={isLoading}
-                        title={t("ai.delete", { defaultValue: "删除" })}
-                        className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
-                    >
-                        <X className="h-4 w-4" />
-                    </button>
-                </div>
+            <div
+                role="region"
+                contentEditable={false}
+                aria-label={title}
+                aria-busy={isLoading}
+                className="not-prose overflow-hidden rounded-xl border border-border/40 bg-popover text-popover-foreground shadow-sm transition-shadow focus-within:border-ring/40 focus-within:ring-1 focus-within:ring-ring/10"
+            >
+                <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+                    {isLoading ? generatingLabel : hasResult ? title : ""}
+                </span>
 
-                {/* Preview (streaming / result / error) */}
-                {(isLoading || result || error) && (
-                    <div className="max-h-[360px] overflow-y-auto border-b px-4 py-3">
-                        {error ? (
-                            <div className="flex items-start gap-2 text-sm text-destructive">
-                                <X className="mt-0.5 h-4 w-4 shrink-0" />
-                                <span className="break-words">{error}</span>
+                {showPreview && (
+                    <div className="max-h-[45vh] min-h-0 overflow-y-auto overflow-x-hidden border-b border-border/30 px-3 py-3 lg:max-h-[360px] lg:px-4">
+                        {!error && (isLoading || hasOutput) && (
+                            <div className="mb-2 flex items-center gap-2 text-[13px] font-medium text-muted-foreground">
+                                {isLoading ? (
+                                    <Loader2
+                                        aria-hidden="true"
+                                        className="h-3.5 w-3.5 shrink-0 animate-spin motion-reduce:animate-none"
+                                    />
+                                ) : (
+                                    <Sparkles aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-primary" />
+                                )}
+                                <span>{isLoading ? generatingLabel : title}</span>
                             </div>
-                        ) : result ? (
-                            <div className="text-sm leading-normal text-foreground/90">
+                        )}
+
+                        {error ? (
+                            <div role="alert" className="flex items-start gap-2 text-sm text-destructive">
+                                <X aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+                                <span className="min-w-0 break-words">{error}</span>
+                            </div>
+                        ) : hasOutput ? (
+                            <div className="min-w-0 break-words text-sm leading-relaxed text-foreground/90">
                                 <Streamdown isAnimating={isLoading}>{result}</Streamdown>
                             </div>
-                        ) : (
-                            <div className="flex items-center gap-2 py-1 text-sm text-muted-foreground">
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                                {t("ai.generating", { defaultValue: "生成中…" })}
-                            </div>
-                        )}
+                        ) : null}
                     </div>
                 )}
 
-                {/* Input row: initial prompt, or follow-up refine after a result */}
                 {!isLoading && (
-                    <div className="px-4 py-3">
-                        <div className="flex items-center gap-2.5">
-                            <textarea
+                    <div>
+                        <div className="flex items-end gap-2 px-2 py-2 lg:px-3">
+                            <Sparkles
+                                aria-hidden="true"
+                                className="mb-3 ml-1 h-4 w-4 shrink-0 text-primary lg:mb-2"
+                            />
+                            <Textarea
                                 ref={promptRef}
-                                value={hasResult ? refineText : prompt}
+                                value={activeValue}
                                 onChange={(e) =>
                                     hasResult ? setRefineText(e.target.value) : setPrompt(e.target.value)
                                 }
-                                onKeyDown={hasResult ? onRefineKeyDown : onPromptKeyDown}
-                                rows={2}
+                                onKeyDown={onComposerKeyDown}
+                                rows={1}
                                 autoFocus
-                                placeholder={
-                                    hasResult
-                                        ? t("ai.refinePlaceholder", { defaultValue: "继续修改，如：再正式一点…" })
-                                        : t("ai.blockPlaceholder", { defaultValue: "让 AI 帮你写点什么…" })
-                                }
-                                className="flex-1 resize-none rounded-lg border border-input bg-transparent px-3 py-2.5 text-sm outline-none placeholder:text-muted-foreground/50 focus-visible:ring-1 focus-visible:ring-ring"
+                                placeholder={composerPlaceholder}
+                                aria-label={composerPlaceholder}
+                                className="min-h-11 max-h-[120px] flex-1 resize-none overflow-y-auto rounded-none border-0 bg-transparent px-1 py-2.5 text-sm leading-relaxed shadow-none placeholder:text-muted-foreground/50 focus-visible:ring-0 lg:min-h-8 lg:py-1.5"
                             />
-                            <button
-                                disabled={hasResult ? !refineText.trim() : !prompt.trim()}
-                                onClick={() => (hasResult ? refine() : generate(prompt))}
-                                aria-label="Send"
-                                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-40"
+                            <Button
+                                type="button"
+                                size="icon"
+                                disabled={composerDisabled}
+                                onClick={submitCurrentInput}
+                                aria-label={t("ai.chat.send", { defaultValue: "发送" })}
+                                title={t("ai.chat.send", { defaultValue: "发送" })}
+                                className="h-11 w-11 shrink-0 rounded-lg disabled:cursor-not-allowed lg:h-8 lg:w-8"
                             >
-                                <Send className="h-4 w-4" />
-                            </button>
+                                <Send aria-hidden="true" className="h-4 w-4" />
+                            </Button>
                         </div>
 
-                        {/* Quick prompts (idle only) */}
-                        {!hasResult && !result && (
-                            <div className="mt-2.5 flex flex-wrap gap-2">
+                        {isIdle && (
+                            <div className="border-t border-border/30 p-1.5">
                                 {QUICK_PROMPTS.map((q) => (
                                     <button
                                         key={q.zh}
-                                        onClick={() => {
-                                            setPrompt(q.seed);
-                                            setTimeout(() => promptRef.current?.focus(), 0);
-                                        }}
-                                        className="rounded-full border px-3 py-1 text-[13px] text-foreground/80 transition-colors hover:bg-accent hover:text-accent-foreground"
+                                        type="button"
+                                        onClick={() => selectQuickPrompt(q.seed)}
+                                        className="flex h-11 w-full items-center rounded-lg px-3 text-left text-sm font-normal text-foreground/80 transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:h-8 lg:text-[13px]"
                                     >
                                         {q[lang]}
                                     </button>
@@ -259,48 +291,88 @@ export const AiView: React.FC<NodeViewProps> = (props) => {
                     </div>
                 )}
 
-                {/* Footer actions */}
-                <div className="flex items-center justify-between gap-2 border-t px-4 py-2">
-                    <div className="flex items-center gap-0.5">
+                <div className="flex flex-wrap items-center gap-2 border-t border-border/30 bg-muted/20 px-2 py-1.5 lg:px-3">
+                    <div className="flex min-w-0 flex-wrap items-center gap-1">
+                        <ModelSelector
+                            model={selectedModel}
+                            onModelChange={setSelectedModel}
+                            disabled={isLoading}
+                            density="comfortable"
+                        />
                         {hasResult && (
-                            <button
+                            <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
                                 title={t("ai.copy", { defaultValue: "复制" })}
+                                aria-label={t("ai.copy", { defaultValue: "复制" })}
                                 onClick={copy}
-                                className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                                className="h-11 w-11 text-muted-foreground lg:h-8 lg:w-8"
                             >
-                                <Copy className="h-3.5 w-3.5" />
-                            </button>
+                                <Copy aria-hidden="true" className="h-4 w-4" />
+                            </Button>
                         )}
-                        {(hasResult || error) && messagesRef.current.length > 0 && (
-                            <button
+                        {hasResult && canRegenerate && (
+                            <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
                                 title={t("ai.regenerate", { defaultValue: "重新生成" })}
+                                aria-label={t("ai.regenerate", { defaultValue: "重新生成" })}
                                 onClick={() => runMessages(messagesRef.current)}
-                                className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                                className="h-11 w-11 text-muted-foreground lg:h-8 lg:w-8"
                             >
-                                <RotateCcw className="h-3.5 w-3.5" />
-                            </button>
+                                <RotateCcw aria-hidden="true" className="h-4 w-4" />
+                            </Button>
                         )}
                     </div>
 
-                    <div className="flex items-center gap-1.5">
+                    <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
                         {isLoading ? (
-                            <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2.5 text-xs" onClick={stop}>
-                                <Square className="h-3 w-3" />
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className="h-11 gap-2 px-3 text-sm font-normal lg:h-8 lg:px-2.5 lg:text-xs"
+                                onClick={stop}
+                                aria-label={t("ai.stop", { defaultValue: "停止" })}
+                            >
+                                <Square aria-hidden="true" className="h-3.5 w-3.5" />
                                 {t("ai.stop", { defaultValue: "停止" })}
                             </Button>
                         ) : (
                             <>
                                 <Button
+                                    type="button"
                                     size="sm"
                                     variant="ghost"
-                                    className="h-7 px-2.5 text-sm font-normal text-muted-foreground"
+                                    className="h-11 px-3 text-sm font-normal text-muted-foreground lg:h-8 lg:px-2.5 lg:text-xs"
                                     onClick={props.deleteNode}
+                                    aria-label={t("ai.discard", { defaultValue: "丢弃" })}
                                 >
                                     {t("ai.discard", { defaultValue: "丢弃" })}
                                 </Button>
+                                {error && canRegenerate && (
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-11 gap-2 px-3 text-sm font-normal lg:h-8 lg:px-2.5 lg:text-xs"
+                                        onClick={() => runMessages(messagesRef.current)}
+                                    >
+                                        <RotateCcw aria-hidden="true" className="h-3.5 w-3.5" />
+                                        {t("ai.regenerate", { defaultValue: "重新生成" })}
+                                    </Button>
+                                )}
                                 {hasResult && (
-                                    <Button size="sm" className="h-7 gap-1.5 px-2.5 text-xs" onClick={accept}>
-                                        <Check className="h-3 w-3" />
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        className="h-11 gap-2 px-3 text-sm font-normal lg:h-8 lg:px-2.5 lg:text-xs"
+                                        onClick={accept}
+                                        aria-label={t("ai.accept", { defaultValue: "保留" })}
+                                    >
+                                        <Check aria-hidden="true" className="h-3.5 w-3.5" />
                                         {t("ai.accept", { defaultValue: "保留" })}
                                     </Button>
                                 )}
@@ -311,7 +383,7 @@ export const AiView: React.FC<NodeViewProps> = (props) => {
             </div>
 
             {/* Hidden content slot to satisfy the node's `block+` schema. */}
-            <div className="hidden">
+            <div className="hidden" aria-hidden="true">
                 <NodeViewContent />
             </div>
         </NodeViewWrapper>

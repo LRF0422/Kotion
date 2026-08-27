@@ -17,7 +17,8 @@
     "check:seed": "tsc src/hooks/seed-source.check.ts --outDir .tmp-check --module commonjs --target ES2020 --skipLibCheck && node .tmp-check/seed-source.check.js",
     "check:rev": "tsc src/hooks/rev.check.ts --outDir .tmp-check --module commonjs --target ES2020 --skipLibCheck && node .tmp-check/rev.check.js",
     "check:exit": "tsc src/hooks/exit-flush.check.ts --outDir .tmp-check --module commonjs --target ES2020 --skipLibCheck && node .tmp-check/exit-flush.check.js",
-    "check": "pnpm check:ops && pnpm check:session && pnpm check:merge && pnpm check:seed && pnpm check:rev && pnpm check:exit",
+    "check:plugin-content": "tsc src/editor/plugin-content-migration.check.ts --outDir .tmp-check --module commonjs --target ES2020 --skipLibCheck --esModuleInterop && node .tmp-check/plugin-content-migration.check.js",
+    "check": "pnpm check:ops && pnpm check:session && pnpm check:merge && pnpm check:seed && pnpm check:rev && pnpm check:exit && pnpm check:plugin-content",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {

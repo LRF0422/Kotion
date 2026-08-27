@@ -17,6 +17,9 @@ export const UnknownNode = Node.create({
             },
             data: {
                 default: null
+            },
+            originalContent: {
+                default: null
             }
         }
     },

@@ -1,0 +1,7 @@
+knowledge:
+  xss:
+    # Page documents are structured JSON and must be stored byte-for-byte.
+    # Context-specific escaping or sanitization belongs at render boundaries.
+    skip-url:
+      - /page/*/ops
+      - /page/*/reconcile

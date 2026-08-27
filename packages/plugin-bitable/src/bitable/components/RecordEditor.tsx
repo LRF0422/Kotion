@@ -1,5 +1,5 @@
-import React, { useEffect, useCallback } from 'react';
-import { useEditor, EditorContent, useEditorExtension } from '@kn/editor';
+import React, { useEffect, useCallback, useMemo, useRef } from 'react';
+import { EditorContent, getSchema, rewritePluginContent, useEditor, useEditorExtension } from '@kn/editor';
 import { BubbleMenu, TextSelection } from '@kn/editor';
 import {
     Bold,
@@ -33,15 +33,37 @@ export const RecordEditor: React.FC<RecordEditorProps> = ({
 }) => {
 
     const [extensions] = useEditorExtension();
+    const latestContentRef = useRef(content);
+    const contentPropRef = useRef(content);
+
+    if (contentPropRef.current !== content) {
+        contentPropRef.current = content;
+        latestContentRef.current = content;
+    }
+
+    const schemaContent = useMemo(() => {
+        const currentContent = latestContentRef.current;
+        if (!currentContent || typeof currentContent !== 'object') {
+            return currentContent;
+        }
+
+        return rewritePluginContent(
+            currentContent,
+            getSchema(extensions),
+            { fallbackToParagraph: true },
+        ).json;
+    }, [extensions]);
 
     const editor = useEditor({
-        extensions: extensions,
-        content,
+        extensions,
+        content: schemaContent,
         editable,
         onUpdate: ({ editor }) => {
-            onUpdate?.(editor.getJSON());
+            const nextContent = editor.getJSON();
+            latestContentRef.current = nextContent;
+            onUpdate?.(nextContent);
         },
-    });
+    }, [extensions]);
 
     useEffect(() => {
         if (editor && editor.isEditable !== editable) {

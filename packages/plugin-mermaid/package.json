@@ -10,6 +10,8 @@
   },
   "scripts": {
     "build": "rollup -c",
+    "check:source": "tsc src/editor-extension/mermaid/mermaid-source-normalization.check.ts src/editor-extension/mermaid/mermaid-source-normalization.ts --rootDir src/editor-extension/mermaid --outDir .tmp-check --module ES2022 --moduleResolution bundler --target ES2020 --lib ES2020,DOM --skipLibCheck && node -e \"require('fs').writeFileSync('.tmp-check/package.json', '{\\\"type\\\":\\\"module\\\"}')\" && node .tmp-check/mermaid-source-normalization.check.js",
+    "check": "pnpm check:source",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {

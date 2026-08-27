@@ -50,10 +50,10 @@ import { ChatEmptyState } from "./chat/ChatEmptyState"
 import { ChatComposer } from "./chat/ChatComposer"
 import type { TargetPageStatus } from "./chat/PageMentionPicker"
 import { UserChoiceCard } from "./chat/UserChoiceCard"
+import { useModelPreference } from "../model-preference"
 
 // ─── Persistence keys ──────────────────────────────────────────────
 
-const MODEL_STORAGE_KEY = 'kn_chat_model'
 const MODE_STORAGE_KEY = 'kn_chat_mode'
 const MODEL_PARAMS_STORAGE_KEY = 'kn_chat_model_params'
 
@@ -115,13 +115,7 @@ export const ExpandableChatDemo: React.FC<{
     const { t } = useTranslation()
 
     // ─── Model / mode preferences (persisted) ─────────────────────
-    const [selectedModel, setSelectedModel] = useState<string>(() => {
-        try { return localStorage.getItem(MODEL_STORAGE_KEY) || '' } catch { return '' }
-    })
-    const handleModelChange = useCallback((model: string) => {
-        setSelectedModel(model)
-        try { localStorage.setItem(MODEL_STORAGE_KEY, model) } catch { /* ignore */ }
-    }, [])
+    const [selectedModel, handleModelChange] = useModelPreference()
 
     const [chatMode, setChatMode] = useState<ChatMode>(() => {
         try {

@@ -80,6 +80,22 @@ class BlockDocCodecTest {
         assertEquals(link.get("marks").toString(), textNode.get("marks").toString());
     }
 
+    @Test
+    void structuredSourceStringsSurviveRoundTripByteForByte() {
+        String mermaidSource = "sequenceDiagram\nAlice->>John: Hi\nJohn-->>Alice: Hello\nAnimal <|-- Dog";
+        String codeSource = "const keep = value => value > 0; // literal &gt;";
+        Map<String, Object> mermaid = node("mermaid", "m1", null);
+        attrsOf(mermaid).put("data", mermaidSource);
+        Map<String, Object> codeBlock = node("codeBlock", "cb1", Arrays.asList(text(codeSource)));
+
+        Map<String, Object> after = BlockDocCodec.assemble(store(doc(Arrays.asList(mermaid, codeBlock))));
+        Map<String, Object> restoredMermaid = BlockDocCodec.childrenOf(after).get(0);
+        Map<String, Object> restoredCodeBlock = BlockDocCodec.childrenOf(after).get(1);
+
+        assertEquals(mermaidSource, attrsOf(restoredMermaid).get("data"));
+        assertEquals(codeSource, BlockDocCodec.childrenOf(restoredCodeBlock).get(0).get("text"));
+    }
+
     // ------------------------------------------------------------------
     // Identity convergence
     // ------------------------------------------------------------------

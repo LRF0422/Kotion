@@ -1,6 +1,6 @@
 import { GO_TO_MARKETPLACE, event, useTranslation } from "@kn/common";
 import { Puzzle, ShieldCheck, ShoppingBag } from "@kn/icon";
-import { Button } from "@kn/ui";
+import { Button, cn } from "@kn/ui";
 import { NodeViewProps } from "@tiptap/core";
 import { NodeViewWrapper } from "@tiptap/react";
 import React from "react";
@@ -23,32 +23,41 @@ export const UnknownNodeView: React.FC<NodeViewProps> = (props) => {
     };
 
     return (
-        <NodeViewWrapper className="my-4 w-full" contentEditable={false}>
-            <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 rounded-xl border border-border/70 bg-muted/30 p-4 sm:flex-row sm:items-center">
-                <div className="grid size-11 shrink-0 place-items-center rounded-lg bg-background shadow-sm ring-1 ring-border/70">
-                    <Puzzle className="size-5 text-muted-foreground" />
-                </div>
+        <NodeViewWrapper
+            className="not-prose my-3 w-full [&.ProseMirror-selectednode]:outline-none"
+            contentEditable={false}
+        >
+            <div
+                className={cn(
+                    "flex w-full max-w-xl flex-col gap-3 rounded-lg border border-border/60 bg-card p-3",
+                    "transition-[border-color,background-color,box-shadow] duration-150 md:flex-row md:items-center",
+                    props.selected && "border-ring/40 bg-accent/20 ring-1 ring-ring/10"
+                )}
+            >
+                <div className="flex min-w-0 flex-1 items-start gap-3">
+                    <div className="grid size-9 shrink-0 place-items-center rounded-md bg-muted">
+                        <Puzzle className="size-4 text-muted-foreground" />
+                    </div>
 
-                <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-sm font-semibold text-foreground">
+                    <div className="min-w-0 flex-1">
+                        <h3 className="text-sm font-semibold leading-5 text-foreground">
                             {t("editor.missingPlugin.title", { plugin: pluginName })}
                         </h3>
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
-                            <ShieldCheck className="size-3" />
+                        <p className="mt-0.5 text-[13px] leading-5 text-muted-foreground">
+                            {t("editor.missingPlugin.description")}
+                        </p>
+                        <span className="mt-1.5 inline-flex items-center gap-1 text-xs text-muted-foreground">
+                            <ShieldCheck className="size-3.5" />
                             {t("editor.missingPlugin.preserved")}
                         </span>
                     </div>
-                    <p className="mt-1 text-sm leading-5 text-muted-foreground">
-                        {t("editor.missingPlugin.description")}
-                    </p>
                 </div>
 
                 <Button
                     type="button"
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
-                    className="h-11 shrink-0 gap-2"
+                    className="ml-12 h-11 shrink-0 self-start gap-1.5 px-2 text-muted-foreground hover:text-foreground md:ml-0 md:self-center"
                     onMouseDown={event => event.preventDefault()}
                     onClick={event => {
                         event.stopPropagation();

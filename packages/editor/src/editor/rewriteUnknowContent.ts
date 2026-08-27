@@ -1,5 +1,5 @@
-import type { Schema } from '@tiptap/pm/model'
 import type { JSONContent } from '@tiptap/core'
+import type { Schema } from '@tiptap/pm/model'
 
 type RewriteUnknownContentOptions = {
     /**
@@ -20,25 +20,65 @@ type RewrittenContent = {
     unsupported: string
 }[]
 
-/**
- * Shallow clone a JSONContent node (only copies own enumerable keys at one level).
- * Much faster than JSON.parse(JSON.stringify()) for large objects since it avoids
- * serialization/deserialization overhead.
- */
-function shallowCloneJSON(obj: JSONContent): JSONContent {
-    const clone: Record<string, unknown> = {};
-    for (const key in obj) {
-        if (Object.prototype.hasOwnProperty.call(obj, key)) {
-            // For arrays and objects we keep the reference; rewriteUnknownContentInner
-            // will recursively process nested content/marks arrays in place.
-            clone[key] = (obj as Record<string, unknown>)[key];
-        }
+type RewriteResult = {
+    /**
+     * The cleaned JSON content
+     */
+    json: JSONContent | null
+    /**
+     * The array of nodes and marks that were rewritten
+     */
+    rewrittenContent: RewrittenContent
+    /**
+     * Whether the returned JSON differs from the input
+     */
+    changed: boolean
+}
+
+const UNKNOWN_NODE_TYPE = 'unknownNode'
+const ORIGINAL_CONTENT_ATTR = 'originalContent'
+
+function cloneValue<T>(value: T): T {
+    if (Array.isArray(value)) {
+        return value.map(item => cloneValue(item)) as T
     }
-    return clone as JSONContent;
+
+    if (value && typeof value === 'object') {
+        const clone: Record<string, unknown> = {}
+        Object.entries(value as Record<string, unknown>).forEach(([key, item]) => {
+            clone[key] = cloneValue(item)
+        })
+        return clone as T
+    }
+
+    return value
+}
+
+function isJSONContent(value: unknown): value is JSONContent {
+    return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+}
+
+function restoreUnknownNode(json: JSONContent, nodeType: string): JSONContent {
+    const originalContent = json.attrs?.[ORIGINAL_CONTENT_ATTR]
+
+    if (isJSONContent(originalContent) && originalContent.type === nodeType) {
+        return cloneValue(originalContent)
+    }
+
+    const attrs = cloneValue(json.attrs ?? {})
+    delete attrs.nodeType
+    delete attrs[ORIGINAL_CONTENT_ATTR]
+
+    return {
+        ...cloneValue(json),
+        type: nodeType,
+        attrs: Object.keys(attrs).length > 0 ? attrs : undefined,
+    }
 }
 
 /**
- * The actual implementation of the rewriteUnknownContent function
+ * The actual implementation of the rewriteUnknownContent function.
+ * The traversal is non-mutating so callers can safely retain their source JSON.
  */
 function rewriteUnknownContentInner({
     json,
@@ -52,98 +92,121 @@ function rewriteUnknownContentInner({
     validNodes: Set<string>
     options?: RewriteUnknownContentOptions
     rewrittenContent?: RewrittenContent
-}): {
-    /**
-     * The cleaned JSON content
-     */
-    json: JSONContent | null
-    /**
-     * The array of nodes and marks that were rewritten
-     */
-    rewrittenContent: RewrittenContent
-} {
-    if (json && json.marks && Array.isArray(json.marks)) {
-        json.marks = json.marks.filter(mark => {
-            const name = typeof mark === 'string' ? mark : mark.type
+}): RewriteResult {
+    const nodeType = json.attrs?.nodeType
 
-            if (validMarks.has(name)) {
-                return true
+    if (
+        json.type === UNKNOWN_NODE_TYPE
+        && typeof nodeType === 'string'
+        && validNodes.has(nodeType)
+    ) {
+        if (options?.fallbackToParagraph === false) {
+            return {
+                json: null,
+                rewrittenContent,
+                changed: true,
             }
+        }
 
-            rewrittenContent.push({
-                original: shallowCloneJSON(mark as JSONContent),
-                unsupported: name,
-            })
-            // Just ignore any unknown marks
-            return false
+        const restored = restoreUnknownNode(json, nodeType)
+        const result = rewriteUnknownContentInner({
+            json: restored,
+            validMarks,
+            validNodes,
+            options,
+            rewrittenContent,
         })
+
+        return {
+            ...result,
+            changed: true,
+        }
     }
 
-    if (json && json.content && Array.isArray(json.content)) {
-        json.content = json.content
-            .map(
-                value =>
-                    rewriteUnknownContentInner({
-                        json: value,
-                        validMarks,
-                        validNodes,
-                        options,
-                        rewrittenContent,
-                    }).json,
-            )
-            .filter(a => a !== null && a !== undefined) as JSONContent[]
-    }
-
-    if (json && json.type && !validNodes.has(json.type)) {
+    if (json.type && !validNodes.has(json.type)) {
+        const original = cloneValue(json)
         rewrittenContent.push({
-            original: shallowCloneJSON(json),
+            original,
             unsupported: json.type,
         })
-        // json.content && Array.isArray(json.content) &&
-        if (options?.fallbackToParagraph !== false) {
-            // Just treat it like a paragraph and hope for the best
-            json.attrs = { ...json.attrs, nodeType: json.type }
-            json.type = 'unknownNode'
 
+        if (options?.fallbackToParagraph === false) {
             return {
-                json,
+                json: null,
                 rewrittenContent,
+                changed: true,
             }
         }
 
-        // or just omit it entirely
         return {
-            json: null,
+            json: {
+                type: UNKNOWN_NODE_TYPE,
+                attrs: {
+                    nodeType: json.type,
+                    data: cloneValue(json.attrs?.data ?? null),
+                    [ORIGINAL_CONTENT_ATTR]: original,
+                },
+            },
             rewrittenContent,
+            changed: true,
         }
     }
 
-    if (json && json.type && json.type === "unknownNode" && validNodes.has(json.attrs?.nodeType)) {
-        // json.content && Array.isArray(json.content) &&
-        if (options?.fallbackToParagraph !== false) {
-            // Just treat it like a paragraph and hope for the best
-            // json.attrs = { name: json.type }
-            json.type = json.attrs?.nodeType
+    const result = cloneValue(json)
+    let changed = false
 
-            return {
-                json,
+    if (Array.isArray(json.marks)) {
+        const marks = json.marks
+            .filter(mark => {
+                const name = typeof mark === 'string' ? mark : mark.type
+
+                if (validMarks.has(name)) {
+                    return true
+                }
+
+                rewrittenContent.push({
+                    original: cloneValue(mark as JSONContent),
+                    unsupported: name,
+                })
+                changed = true
+                return false
+            })
+            .map(mark => cloneValue(mark))
+
+        result.marks = marks
+    }
+
+    if (Array.isArray(json.content)) {
+        const content: JSONContent[] = []
+
+        json.content.forEach(value => {
+            const childResult = rewriteUnknownContentInner({
+                json: value,
+                validMarks,
+                validNodes,
+                options,
                 rewrittenContent,
+            })
+            changed = changed || childResult.changed
+            if (childResult.json) {
+                content.push(childResult.json)
             }
-        }
+        })
 
-        // or just omit it entirely
-        return {
-            json: null,
-            rewrittenContent,
-        }
+        result.content = content
     }
 
-    return { json, rewrittenContent }
+    return {
+        json: result,
+        rewrittenContent,
+        changed,
+    }
 }
 
 /**
- * Rewrite unknown nodes and marks within JSON content
- * Allowing for user within the editor
+ * Rewrite unknown nodes and marks within JSON content so it can be loaded by the
+ * supplied schema. Unsupported nodes retain their complete source JSON and can
+ * therefore be restored when their plugin becomes available again.
  */
 export function rewriteUnknownContent(
     /**
@@ -158,25 +221,7 @@ export function rewriteUnknownContent(
      * Options for the cleaning process
      */
     options?: RewriteUnknownContentOptions,
-): {
-    /**
-     * The cleaned JSON content
-     */
-    json: JSONContent | null
-    /**
-     * The array of nodes and marks that were rewritten
-     */
-    rewrittenContent: {
-        /**
-         * The original JSON content that was rewritten
-         */
-        original: JSONContent
-        /**
-         * The name of the node or mark that was unsupported
-         */
-        unsupported: string
-    }[]
-} {
+): RewriteResult {
     return rewriteUnknownContentInner({
         json,
         validNodes: new Set(Object.keys(schema.nodes)),

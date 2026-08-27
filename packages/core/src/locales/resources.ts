@@ -675,6 +675,12 @@ export const resources = {
                 "refinePlaceholder": "继续修改，如：再短一点…",
                 "customPlaceholder": "告诉 AI 如何处理选中内容…",
                 "blockPlaceholder": "让 AI 帮你写点什么…",
+                "modelSelector": {
+                    "label": "选择模型",
+                    "defaultOption": "默认模型（{{model}}）",
+                    "loading": "加载模型中…",
+                    "empty": "暂无可用模型"
+                },
                 "modelParams": {
                     "title": "模型参数",
                     "reset": "重置",
@@ -1550,6 +1556,12 @@ export const resources = {
                 "refinePlaceholder": "Keep editing, e.g. make it shorter…",
                 "customPlaceholder": "Tell AI what to do with the selection…",
                 "blockPlaceholder": "Ask AI to write something for you…",
+                "modelSelector": {
+                    "label": "Choose model",
+                    "defaultOption": "Default model ({{model}})",
+                    "loading": "Loading models…",
+                    "empty": "No models available"
+                },
                 "modelParams": {
                     "title": "Model Parameters",
                     "reset": "Reset",
