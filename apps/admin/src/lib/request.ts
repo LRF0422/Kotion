@@ -127,7 +127,7 @@ const refreshTokenOnce = () => {
 
 export const request = async <T>(path: string, options: RequestOptions = {}, retried = false): Promise<T> => {
   const { method = 'GET', params, body, form, headers } = options
-  const token = getAccessToken()
+  const token = path === TOKEN_ENDPOINT ? null : getAccessToken()
   const response = await fetch(`${API_BASE}${path}${buildQuery(params)}`, {
     method,
     headers: {
@@ -141,7 +141,7 @@ export const request = async <T>(path: string, options: RequestOptions = {}, ret
   })
 
   // HTTP 401：尝试静默刷新后重放一次
-  if (response.status === 401 && !retried) {
+  if (response.status === 401 && !retried && path !== TOKEN_ENDPOINT) {
     const refreshed = await refreshTokenOnce()
     if (refreshed) {
       return request<T>(path, options, true)

@@ -32,6 +32,7 @@ export function setRequestToast(toastError: ToastFn) {
 
 const BASE_URL = API_BASE_URL
 const TIMEOUT = 50_000
+const isOAuthTokenRequest = (url?: string) => Boolean(url?.includes('/knowledge-auth/oauth2/token'))
 
 // ---------------------------------------------------------------------------
 // Axios instance
@@ -66,8 +67,10 @@ function normalizeErrorMessage(message: string): string {
 axiosInstance.interceptors.request.use(
     config => {
         const token = getAccessToken()
-        if (token) {
+        if (token && !isOAuthTokenRequest(config.url)) {
             config.headers['Authorization'] = `Bearer ${token}`
+        } else if (isOAuthTokenRequest(config.url)) {
+            delete config.headers['Authorization']
         }
         return config
     },
@@ -92,8 +95,8 @@ axiosInstance.interceptors.response.use(
         console.log('[Response Interceptor]', res.config.url, '| HTTP:', res.status, '| code:', code, '| data:', JSON.stringify(res.data)?.slice(0, 200))
 
         if (code === 401) {
-            handleSessionExpired()
-            return Promise.reject(new Error('无效的会话，或者会话已过期，请重新登录。'))
+            if (!isOAuthTokenRequest(res.config.url)) handleSessionExpired()
+            return Promise.reject(new Error(msg || '无效的会话，或者会话已过期，请重新登录。'))
         }
 
         if (code === 500) {
@@ -117,7 +120,7 @@ axiosInstance.interceptors.response.use(
         console.log('[Response Error Interceptor]', config?.url, '| HTTP:', httpStatus, '| data:', JSON.stringify(response?.data)?.slice(0, 200))
 
         // --- Silent token refresh on HTTP 401 ---
-        if (httpStatus === 401 && !config?._retried) {
+        if (httpStatus === 401 && !config?._retried && !isOAuthTokenRequest(config?.url)) {
             config._retried = true
 
             // A session-expired flow is already running — don't loop.

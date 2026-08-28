@@ -99,6 +99,7 @@ export const MermaidView: React.FC<NodeViewProps> = (props) => {
         if (
             !isEditable ||
             isNormalizing ||
+            value !== codeRef.current ||
             value === props.node.attrs.data ||
             value === lastPersistedSourceRef.current
         ) return
