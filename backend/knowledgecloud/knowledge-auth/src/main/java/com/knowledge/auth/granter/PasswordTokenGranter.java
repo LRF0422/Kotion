@@ -17,11 +17,11 @@ package com.knowledge.auth.granter;
 
 import lombok.AllArgsConstructor;
 import com.knowledge.auth.enums.KnowledgeUserEnum;
+import com.knowledge.auth.feign.AuthInternalClient;
 import com.knowledge.core.tool.api.R;
 import com.knowledge.core.tool.utils.DigestUtil;
 import com.knowledge.core.tool.utils.Func;
 import com.knowledge.system.vo.UserInfo;
-import com.knowledge.system.feign.IUserClient;
 import org.springframework.stereotype.Component;
 
 /**
@@ -35,7 +35,7 @@ public class PasswordTokenGranter implements ITokenGranter {
 
 	public static final String GRANT_TYPE = "password";
 
-	private IUserClient userClient;
+	private AuthInternalClient userClient;
 
 	@Override
 	public UserInfo grant(TokenParameter tokenParameter) {
@@ -49,11 +49,11 @@ public class PasswordTokenGranter implements ITokenGranter {
 			R<UserInfo> result;
 			// 根据不同用户类型调用对应的接口返回数据，用户可自行拓展
 			if (userType.equals(KnowledgeUserEnum.WEB.getName())) {
-				result = userClient.userInfo(tenantId, account, DigestUtil.encrypt(password));
+				result = userClient.passwordUserInfo(tenantId, account, DigestUtil.encrypt(password));
 			} else if (userType.equals(KnowledgeUserEnum.APP.getName())) {
-				result = userClient.userInfo(tenantId, account, DigestUtil.encrypt(password));
+				result = userClient.passwordUserInfo(tenantId, account, DigestUtil.encrypt(password));
 			} else {
-				result = userClient.userInfo(tenantId, account, DigestUtil.encrypt(password));
+				result = userClient.passwordUserInfo(tenantId, account, DigestUtil.encrypt(password));
 			}
 			userInfo = result.isSuccess() ? result.getData() : null;
 		}

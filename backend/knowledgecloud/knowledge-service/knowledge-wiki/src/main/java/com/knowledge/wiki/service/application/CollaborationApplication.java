@@ -2,9 +2,11 @@ package com.knowledge.wiki.service.application;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.baomidou.mybatisplus.core.plugins.IgnoreStrategy;
 import com.baomidou.mybatisplus.core.plugins.InterceptorIgnoreHelper;
@@ -27,6 +29,7 @@ import com.knowledge.wiki.service.service.ICollaborationInvitationService;
 import com.knowledge.wiki.service.service.IPageService;
 import com.knowledge.wiki.service.service.IPluginService;
 import com.knowledge.wiki.service.exception.WikiException;
+import com.knowledge.wiki.service.service.IPermissionService;
 import com.knowledge.wiki.service.service.ISpaceService;
 import lombok.extern.slf4j.Slf4j;
 
@@ -48,12 +51,23 @@ public class CollaborationApplication {
     private IUserClient userClient;
     @Autowired
     private IPluginService pluginService;
+    @Autowired
+    private IPermissionService permissionService;
 
     /**
      * Validate Invitation Token
      * GET /knowledge-wiki/collaboration/invitation/:token/validate
      */
     public InvitationValidateResponseDTO validateInvitation(String token) {
+        InterceptorIgnoreHelper.handle(IgnoreStrategy.builder().tenantLine(true).build());
+        try {
+            return validateInvitationInternal(token);
+        } finally {
+            InterceptorIgnoreHelper.clearIgnoreStrategy();
+        }
+    }
+
+    private InvitationValidateResponseDTO validateInvitationInternal(String token) {
         // Use getByTokenForValidation to get invitation regardless of status
         CollaborationInvitation invitation = collaborationInvitationService.getByTokenForValidation(token);
 
@@ -95,6 +109,8 @@ public class CollaborationApplication {
             response.setStatus("ACCEPTED");
         } else if (invitation.getStatus() == InvitationStatus.REJECTED) {
             response.setStatus("REVOKED");
+        } else if (invitation.getStatus() == InvitationStatus.EXPIRED) {
+            response.setStatus("EXPIRED");
         } else if (invitation.getExpiresAt() != null &&
                 invitation.getExpiresAt().isBefore(LocalDateTime.now())) {
             response.setStatus("EXPIRED");
@@ -109,25 +125,42 @@ public class CollaborationApplication {
      * Accept Invitation
      * POST /knowledge-wiki/collaboration/invitation/:token/accept
      */
+    @Transactional(rollbackFor = Exception.class)
     public InvitationAcceptResponseDTO acceptInvitation(String token) {
-        log.info("Accepting invitation with token: {}", token);
+        InterceptorIgnoreHelper.handle(IgnoreStrategy.builder().tenantLine(true).build());
+        try {
+            return acceptInvitationInternal(token);
+        } finally {
+            InterceptorIgnoreHelper.clearIgnoreStrategy();
+        }
+    }
+
+    private InvitationAcceptResponseDTO acceptInvitationInternal(String token) {
         InvitationAcceptResponseDTO response = new InvitationAcceptResponseDTO();
 
         CollaborationInvitation invitation = collaborationInvitationService.getByToken(token);
         if (invitation == null) {
             throw WikiException.INVITATION_NOT_FOUND.newException();
         }
+        requireCurrentInvitee(invitation);
 
         if (invitation.getStatus() == InvitationStatus.ACCEPTED) {
             throw WikiException.INVITATION_ALREADY_ACCEPTED.newException();
         }
-
-        if (invitation.getExpiresAt() != null &&
-                invitation.getExpiresAt().isBefore(LocalDateTime.now())) {
-            throw WikiException.INVITATION_EXPIRED.newException();
+        if (invitation.getStatus() != InvitationStatus.PENDING) {
+            throw WikiException.INVALID_INVITATION_STATUS.newException();
         }
 
-        // Accept the invitation
+        if (isExpired(invitation)) {
+            throw WikiException.INVITATION_EXPIRED.newException();
+        }
+        Page page = pageService.getById(invitation.getPageId());
+        if (page == null) {
+            throw WikiException.PAGE_NOT_FOUND.newException();
+        }
+        requireMatchingSpace(invitation, page);
+
+        // Accept the invitation and materialize its page grant/guest membership.
         spaceService.acceptInvitation(invitation.getId());
 
         response.setSuccess(true);
@@ -146,44 +179,49 @@ public class CollaborationApplication {
      */
     public PageVO getInvitationPage(String token) {
         InterceptorIgnoreHelper.handle(IgnoreStrategy.builder().tenantLine(true).build());
-        CollaborationInvitation invitation = collaborationInvitationService.getByToken(token);
-
-        if (invitation == null) {
-            throw WikiException.INVITATION_NOT_FOUND.newException();
-        }
-
-        // Verify the invitation is accepted or user has access
-        if (invitation.getStatus() != InvitationStatus.ACCEPTED) {
-            // Check if current user is the invitee
-            Long currentUserId = SecurityContextUtil.getUserId();
-            if (!invitation.getInviteeId().equals(currentUserId)) {
-                throw WikiException.FORBIDDEN_ACCESS.newException();
+        try {
+            CollaborationInvitation invitation = collaborationInvitationService.getByToken(token);
+            if (invitation == null) {
+                throw WikiException.INVITATION_NOT_FOUND.newException();
             }
-        }
+            requireCurrentInvitee(invitation);
+            if (invitation.getStatus() != InvitationStatus.ACCEPTED) {
+                throw WikiException.INVALID_INVITATION_STATUS.newException();
+            }
+            if (isExpired(invitation)) {
+                throw WikiException.INVITATION_EXPIRED.newException();
+            }
 
-        Page page = pageService.getPageContent(invitation.getPageId());
-        if (page == null) {
-            throw WikiException.PAGE_NOT_FOUND.newException();
-        }
-        PageVO vo = PageConverter.INSTANCE.convertVO(page);
+            Page pageRecord = pageService.getById(invitation.getPageId());
+            if (pageRecord == null) {
+                throw WikiException.PAGE_NOT_FOUND.newException();
+            }
+            requireMatchingSpace(invitation, pageRecord);
+            permissionService.checkPagePermission(SecurityContextUtil.getUserId(), pageRecord,
+                    IPermissionService.PERMISSION_READ);
 
-        // Add space info
-        Space space = spaceService.getById(invitation.getSpaceId());
-        if (space != null) {
-            vo.setSpaceId(space.getId());
-        }
+            Page page = pageService.getPageContent(invitation.getPageId());
+            if (page == null) {
+                throw WikiException.PAGE_NOT_FOUND.newException();
+            }
+            PageVO vo = PageConverter.INSTANCE.convertVO(page);
 
-        // Get and set parent pages
-        List<Page> parentPages = pageService.getParents(invitation.getPageId());
-        if (cn.hutool.core.collection.CollUtil.isNotEmpty(parentPages)) {
-            List<PageVO> parentVOs = parentPages.stream()
-                    .map(PageConverter.INSTANCE::convertVO)
-                    .collect(java.util.stream.Collectors.toList());
-            vo.setParents(parentVOs);
-        }
+            Space space = spaceService.getById(pageRecord.getSpaceId());
+            if (space != null) {
+                vo.setSpaceId(space.getId());
+            }
 
-        InterceptorIgnoreHelper.clearIgnoreStrategy();
-        return vo;
+            List<Page> parentPages = pageService.getParents(invitation.getPageId());
+            if (cn.hutool.core.collection.CollUtil.isNotEmpty(parentPages)) {
+                List<PageVO> parentVOs = parentPages.stream()
+                        .map(PageConverter.INSTANCE::convertVO)
+                        .collect(java.util.stream.Collectors.toList());
+                vo.setParents(parentVOs);
+            }
+            return vo;
+        } finally {
+            InterceptorIgnoreHelper.clearIgnoreStrategy();
+        }
     }
 
     /**
@@ -193,30 +231,46 @@ public class CollaborationApplication {
      */
     public List<PluginVersionVO> getInvitationPlugins(String token) {
         InterceptorIgnoreHelper.handle(IgnoreStrategy.builder().tenantLine(true).build());
-        CollaborationInvitation invitation = collaborationInvitationService.getByTokenForValidation(token);
+        try {
+            CollaborationInvitation invitation = collaborationInvitationService.getByTokenForValidation(token);
+            if (invitation == null) {
+                throw WikiException.INVITATION_NOT_FOUND.newException();
+            }
+            requireCurrentInvitee(invitation);
 
-        if (invitation == null) {
-            throw WikiException.INVITATION_NOT_FOUND.newException();
+            if (invitation.getStatus() != InvitationStatus.PENDING &&
+                    invitation.getStatus() != InvitationStatus.ACCEPTED) {
+                throw WikiException.INVALID_INVITATION_STATUS.newException();
+            }
+            if (isExpired(invitation)) {
+                throw WikiException.INVITATION_EXPIRED.newException();
+            }
+
+            List<PluginVersion> installedPlugins = pluginService.getInstalledPlugins(null, invitation.getInviterId());
+            return PluginVersionConverter.INSTANCE.convertVO(installedPlugins);
+        } finally {
+            InterceptorIgnoreHelper.clearIgnoreStrategy();
         }
+    }
 
-        // Verify the invitation is valid (PENDING or ACCEPTED)
-        if (invitation.getStatus() != InvitationStatus.PENDING &&
-                invitation.getStatus() != InvitationStatus.ACCEPTED) {
-            throw WikiException.INVALID_INVITATION_STATUS.newException();
+    private void requireCurrentInvitee(CollaborationInvitation invitation) {
+        if (invitation.getInviteeId() == null
+                || !Objects.equals(invitation.getInviteeId(), SecurityContextUtil.getUserId())) {
+            throw WikiException.FORBIDDEN_ACCESS.newException();
         }
+    }
 
-        // Check if invitation has expired
-        if (invitation.getExpiresAt() != null &&
-                invitation.getExpiresAt().isBefore(LocalDateTime.now())) {
-            throw WikiException.INVITATION_EXPIRED.newException();
+    private boolean isExpired(CollaborationInvitation invitation) {
+        return invitation.getStatus() == InvitationStatus.EXPIRED
+                || (invitation.getExpiresAt() != null
+                        && invitation.getExpiresAt().isBefore(LocalDateTime.now()));
+    }
+
+    private void requireMatchingSpace(CollaborationInvitation invitation, Page page) {
+        if (invitation.getSpaceId() != null
+                && !Objects.equals(invitation.getSpaceId(), page.getSpaceId())) {
+            throw WikiException.FORBIDDEN_ACCESS.newException();
         }
-
-        // Get installed plugins
-        List<PluginVersion> installedPlugins = pluginService.getInstalledPlugins(null, invitation.getInviterId());
-        List<PluginVersionVO> result = PluginVersionConverter.INSTANCE.convertVO(installedPlugins);
-
-        InterceptorIgnoreHelper.clearIgnoreStrategy();
-        return result;
     }
 
 }

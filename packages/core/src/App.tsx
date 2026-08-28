@@ -18,7 +18,7 @@ import { Marketplace } from "./components/Shop/Marketplace";
 
 import { resources } from "./locales/resources"
 import { merge } from "lodash";
-import { setRequestToast, setSessionExpiredHandler, resetSessionExpiredGuard, useTranslation, useApi, APIS, saveTokens } from "@kn/common"
+import { clearContextSensitiveClientState, normalizeTokenResponse, notifyContextChanged, setRequestToast, setSessionExpiredHandler, resetSessionExpiredGuard, subscribeToContextChanges, useTranslation, useApi, APIS, saveTokens } from "@kn/common"
 import { registerCoreToolFactories } from "./ai/tools/register"
 import { registerOffscreenEditorBridge } from "./ai/offscreen"
 import { AIAssistantPage } from "./pages/AIAssistantPage"
@@ -29,6 +29,7 @@ import { ErrorPage } from "./components/ErrorPage";
 import { PluginErrorBoundary } from "./components/PluginErrorBoundary";
 import ReactDOM from "react-dom";
 import { PLUGIN_API_VERSION } from "@kn/plugin-api";
+import { OrganizationInvitationAccept } from "./components/settings/OrganizationInvitationAccept";
 
 const { createBrowserRouter,
     createRoutesFromElements, Route, RouterProvider, Provider,
@@ -105,11 +106,15 @@ const SessionExpiredDialog: React.FC<{ onSuccess: () => void; onStay: () => void
                 account,
                 password,
                 grantType: 'password',
+                audience: 'kotion-client',
                 type: 'account',
                 scope: 'all',
             })
-            const { data } = res
-            saveTokens(data.access_token, data.refresh_token)
+            const tokens = normalizeTokenResponse(res.data)
+            if (!tokens.accessToken || !tokens.refreshToken) throw new Error('Missing login tokens')
+            clearContextSensitiveClientState()
+            saveTokens(tokens.accessToken, tokens.refreshToken)
+            notifyContextChanged("")
             localStorage.setItem('isLogin', 'false')
             if (handled.current) return
             handled.current = true
@@ -228,11 +233,9 @@ function showSessionExpiredDialog() {
     root.render(
         <SessionExpiredDialog
             onSuccess={() => {
-                // Fresh tokens saved — allow future 401s to re-trigger this dialog,
-                // then close in place without navigating away.
                 resetSessionExpiredGuard()
                 toast.success(translateSafe('auth.login.title', 'Logged in'))
-                unmount()
+                window.location.assign('/')
             }}
             onStay={() => {
                 resetSessionExpiredGuard()
@@ -274,6 +277,10 @@ export const App: React.FC<AppProps> = (props) => {
     }, plugins), [])
     const [pluginsReady, setPluginsReady] = useState(false)
     const [refreshFlag, setRefreshFlag] = useState(0)
+
+    useEffect(() => subscribeToContextChanges(() => {
+        if (window.location.pathname !== '/login') window.location.assign('/')
+    }), [])
 
     // Wire up toast for the request module
     setRequestToast((msg, opts) => toast.error(msg))
@@ -362,6 +369,7 @@ export const App: React.FC<AppProps> = (props) => {
                     </Route>,
                     <Route path='/login' element={<Login />} />,
                     <Route path='/sign-up' element={<SignUpForm />} />,
+                    <Route path='/organization-invite/:token' element={<OrganizationInvitationAccept />} />,
                     <Route path='/welcome' element={<Welcome />} />
                 ]
             ))
@@ -377,6 +385,7 @@ export const App: React.FC<AppProps> = (props) => {
                     </Route>,
                     <Route path='/login' element={<Login />} />,
                     <Route path='/sign-up' element={<SignUpForm />} />,
+                    <Route path='/organization-invite/:token' element={<OrganizationInvitationAccept />} />,
                     <Route path='/welcome' element={<Welcome />} />
                 ]
             ))

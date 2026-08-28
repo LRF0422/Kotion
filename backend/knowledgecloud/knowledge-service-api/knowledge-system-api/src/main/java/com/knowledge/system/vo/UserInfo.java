@@ -59,4 +59,10 @@ public class UserInfo implements Serializable {
 
 	private Long currentInstallAppId;
 
+	private String currentContextType;
+	private String currentContextId;
+	private String audience;
+	private String sessionId;
+	private Integer authVersion;
+
 }

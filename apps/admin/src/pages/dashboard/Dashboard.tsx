@@ -118,10 +118,10 @@ export const Dashboard = () => {
     Promise.all([
       getTotalUsers().catch(() => 0),
       getWikiSummary().catch(() => ({ totalSpaces: 0, totalPages: 0 })),
-      getPageList({ current: 1, pageSize: 1, status: 'ACTIVE' }),
-      getPageList({ current: 1, pageSize: 1, status: 'DRAFT' }),
-      getPageList({ current: 1, pageSize: 1, status: 'TRASH' }),
-      getCommentList({ current: 1, pageSize: 1, resolved: false }),
+      getPageList({ current: 1, pageSize: 1, status: 'ACTIVE' }).catch(() => ({ total: 0 } as any)),
+      getPageList({ current: 1, pageSize: 1, status: 'DRAFT' }).catch(() => ({ total: 0 } as any)),
+      getPageList({ current: 1, pageSize: 1, status: 'TRASH' }).catch(() => ({ total: 0 } as any)),
+      getCommentList({ current: 1, pageSize: 1, resolved: false }).catch(() => ({ total: 0 } as any)),
       getLogList('api', { current: 1, size: 5 }).catch(() => null),
       getTopSpaces(8).catch(() => []),
     ])

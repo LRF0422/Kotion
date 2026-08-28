@@ -26,6 +26,8 @@
         <spring.plugin.version>2.0.0.RELEASE</spring.plugin.version>
         <org.mapstruct.version>1.5.2.Final</org.mapstruct.version>
         <hutool-all.version>5.8.18</hutool-all.version>
+        <flyway.version>9.22.3</flyway.version>
+        <mysql.connector.version>8.0.33</mysql.connector.version>
 
         <spring.boot.version>2.7.1</spring.boot.version>
         <spring.cloud.version>2021.0.3</spring.cloud.version>
@@ -188,6 +190,60 @@
             </plugin>
         </plugins>
     </build>
+
+    <!--
+        Database migrations are intentionally opt-in and are never bound to a
+        Maven lifecycle or a Spring Boot service startup. Invoke Flyway goals
+        explicitly with -Pdb-migrate from this aggregator project.
+    -->
+    <profiles>
+        <profile>
+            <id>db-migrate</id>
+            <properties>
+                <flyway.url>${env.FLYWAY_URL}</flyway.url>
+                <flyway.user>${env.FLYWAY_USER}</flyway.user>
+                <flyway.password>${env.FLYWAY_PASSWORD}</flyway.password>
+                <flyway.locations>filesystem:${maven.multiModuleProjectDirectory}/script/migration</flyway.locations>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.flywaydb</groupId>
+                        <artifactId>flyway-maven-plugin</artifactId>
+                        <version>${flyway.version}</version>
+                        <inherited>false</inherited>
+                        <configuration>
+                            <url>${flyway.url}</url>
+                            <user>${flyway.user}</user>
+                            <password>${flyway.password}</password>
+                            <locations>
+                                <location>${flyway.locations}</location>
+                            </locations>
+                            <baselineOnMigrate>false</baselineOnMigrate>
+                            <cleanDisabled>true</cleanDisabled>
+                            <connectRetries>0</connectRetries>
+                            <outOfOrder>false</outOfOrder>
+                            <validateOnMigrate>true</validateOnMigrate>
+                            <validateMigrationNaming>true</validateMigrationNaming>
+                            <failOnMissingLocations>true</failOnMissingLocations>
+                        </configuration>
+                        <dependencies>
+                            <dependency>
+                                <groupId>org.flywaydb</groupId>
+                                <artifactId>flyway-mysql</artifactId>
+                                <version>${flyway.version}</version>
+                            </dependency>
+                            <dependency>
+                                <groupId>com.mysql</groupId>
+                                <artifactId>mysql-connector-j</artifactId>
+                                <version>${mysql.connector.version}</version>
+                            </dependency>
+                        </dependencies>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
     <distributionManagement>
         <repository>

@@ -1,17 +1,10 @@
+import type { ContextVO, CurrentUser } from "../api/types"
+
 export interface GlobalState {
     settings?: any
-    userInfo?: {
-        name?: string;
-        avatar?: string;
-        account?: string;
-        job?: string;
-        organization?: string;
-        location?: string;
-        email?: string;
-        id?: string;
-        isSetup?: boolean;
-        permissions: Record<string, string[]>;
-    }
+    userInfo?: CurrentUser
+    currentContext?: ContextVO
+    availableContexts: ContextVO[]
     appInfo?: {
         id?: string
         appId?: string

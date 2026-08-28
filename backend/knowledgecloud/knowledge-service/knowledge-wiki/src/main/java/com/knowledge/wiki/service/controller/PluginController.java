@@ -3,6 +3,7 @@ package com.knowledge.wiki.service.controller;
 import javax.validation.Valid;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.knowledge.core.tool.api.R;
+import com.knowledge.core.tool.constant.RoleConstant;
 import com.knowledge.wiki.service.application.PluginApplication;
 import com.knowledge.wiki.service.entity.dto.PluginDTO;
 import com.knowledge.wiki.service.entity.dto.PluginReviewDTO;
@@ -59,6 +61,8 @@ public class PluginController {
     }
 
     @PostMapping("/submissions/{id}/review")
+    @PreAuthorize("(hasRole('platform.plugins.review') or " + RoleConstant.HAS_ROLE_ADMIN
+            + ") and principal.clientId == 'kotion-platform-admin'")
     public R<PluginVO> review(@PathVariable("id") Long id, @Valid @RequestBody PluginReviewDTO dto) {
         return R.data(pluginApplication.review(id, dto));
     }

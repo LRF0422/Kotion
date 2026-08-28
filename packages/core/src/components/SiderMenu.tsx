@@ -17,7 +17,7 @@ import { useUploadFile } from "@kn/common";
 import { LanguageToggle } from "../locales/LanguageToggle";
 import { MessageBox } from "./MessageBox";
 import { Sparkles } from "@kn/icon";
-import { clearTokens } from "@kn/common";
+import { APIS, clearContextSensitiveClientState, clearTokens, getRefreshToken, notifyContextChanged, useApi } from "@kn/common";
 
 const GITHUB_URL = "https://github.com/LRF0422/knowledge-repo";
 
@@ -98,8 +98,13 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
 
     // Memoized handlers for better performance
     const handleLogout = useCallback(() => {
-        clearTokens()
-        window.location.href = '/login'
+        void useApi(APIS.LOGOUT, undefined, { refreshToken: getRefreshToken() || '' })
+            .catch(() => undefined).finally(() => {
+            clearContextSensitiveClientState()
+            clearTokens()
+            notifyContextChanged("")
+            window.location.href = '/login'
+        })
     }, [])
 
     const handleGoToPersonalSpace = useCallback(() => {

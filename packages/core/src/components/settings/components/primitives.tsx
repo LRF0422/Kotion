@@ -32,7 +32,7 @@ export const SettingsSection: React.FC<
 > = ({ title, description, action, bare, tone = "default", className, children }) => (
     <section className={cn("space-y-3", className)}>
         {(title || description || action) && (
-            <div className="flex items-start justify-between gap-3">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div className="space-y-0.5">
                     {title && (
                         <h3
@@ -84,7 +84,7 @@ export const SettingsRow: React.FC<
 > = ({ label, description, icon, control, className, children }) => (
     <div
         className={cn(
-            "flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4",
+            "flex flex-col gap-2 px-4 py-3 md:flex-row md:items-center md:justify-between md:gap-4",
             className,
         )}
     >
@@ -102,6 +102,6 @@ export const SettingsRow: React.FC<
                 {children}
             </div>
         </div>
-        {control && <div className="shrink-0 sm:pl-4">{control}</div>}
+        {control && <div className="shrink-0 md:pl-4">{control}</div>}
     </div>
 );

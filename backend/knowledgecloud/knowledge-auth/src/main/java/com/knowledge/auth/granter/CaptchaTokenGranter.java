@@ -18,13 +18,13 @@ package com.knowledge.auth.granter;
 import com.knowledge.core.tool.utils.RedisUtil;
 import lombok.AllArgsConstructor;
 import com.knowledge.auth.enums.KnowledgeUserEnum;
+import com.knowledge.auth.feign.AuthInternalClient;
 import com.knowledge.auth.utils.TokenUtil;
 import com.knowledge.common.cache.CacheNames;
 import com.knowledge.core.log.exception.ServiceException;
 import com.knowledge.core.tool.api.R;
 import com.knowledge.core.tool.utils.*;
 import com.knowledge.system.vo.UserInfo;
-import com.knowledge.system.feign.IUserClient;
 import org.springframework.stereotype.Component;
 
 import javax.servlet.http.HttpServletRequest;
@@ -40,7 +40,7 @@ public class CaptchaTokenGranter implements ITokenGranter {
 
 	public static final String GRANT_TYPE = "captcha";
 
-	private IUserClient userClient;
+	private AuthInternalClient userClient;
 	private RedisUtil redisUtil;
 
 	@Override
@@ -66,11 +66,11 @@ public class CaptchaTokenGranter implements ITokenGranter {
 			R<UserInfo> result;
 			// 根据不同用户类型调用对应的接口返回数据，用户可自行拓展
 			if (userType.equals(KnowledgeUserEnum.WEB.getName())) {
-				result = userClient.userInfo(tenantId, account, DigestUtil.encrypt(password));
+				result = userClient.passwordUserInfo(tenantId, account, DigestUtil.encrypt(password));
 			} else if (userType.equals(KnowledgeUserEnum.APP.getName())) {
-				result = userClient.userInfo(tenantId, account, DigestUtil.encrypt(password));
+				result = userClient.passwordUserInfo(tenantId, account, DigestUtil.encrypt(password));
 			} else {
-				result = userClient.userInfo(tenantId, account, DigestUtil.encrypt(password));
+				result = userClient.passwordUserInfo(tenantId, account, DigestUtil.encrypt(password));
 			}
 			userInfo = result.isSuccess() ? result.getData() : null;
 		}

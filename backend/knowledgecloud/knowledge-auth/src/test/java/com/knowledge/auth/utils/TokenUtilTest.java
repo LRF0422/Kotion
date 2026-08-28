@@ -42,12 +42,28 @@ class TokenUtilTest {
         UserInfo userInfo = new UserInfo();
         userInfo.setUser(user);
         userInfo.setRoles(Arrays.asList("administrator", "user"));
+        userInfo.setPermissions(Arrays.asList("platform.dashboard.read", "platform.audit.read"));
+        userInfo.setCurrentContextType("TEAM");
+        userInfo.setCurrentContextId("100001");
+        userInfo.setAudience("kotion-platform-admin");
+        userInfo.setSessionId("session-1");
+        userInfo.setAuthVersion(3);
 
         AuthInfo authInfo = new TokenUtil(jwtTokenProvider).createAuthInfoInstance(userInfo);
 
         assertEquals("administrator,user", authInfo.getAuthority());
-        assertEquals("administrator,user", claims.getValue().get(TokenConstant.ROLE_NAME));
+        assertEquals("administrator,user,platform.dashboard.read,platform.audit.read",
+                claims.getValue().get(TokenConstant.ROLE_NAME));
+        assertEquals("kotion-platform-admin", claims.getValue().get(TokenConstant.CLIENT_ID));
         assertEquals("11,12", claims.getValue().get(TokenConstant.ROLE_ID));
+        assertEquals("100001", claims.getValue().get(TokenConstant.TENANT_ID));
+        assertEquals("100001", claims.getValue().get(IdentityTokenClaims.CONTEXT_ID));
+        assertEquals("TEAM", claims.getValue().get(IdentityTokenClaims.CONTEXT_TYPE));
+        assertEquals("kotion-platform-admin", claims.getValue().get(IdentityTokenClaims.AUDIENCE));
+        assertEquals("session-1", claims.getValue().get(IdentityTokenClaims.SESSION_ID));
+        assertEquals("platform.dashboard.read,platform.audit.read",
+                claims.getValue().get(IdentityTokenClaims.PERMISSIONS));
+        assertEquals(3, claims.getValue().get(IdentityTokenClaims.AUTH_VERSION));
     }
 
     private TokenInfo token(String value, int expire) {

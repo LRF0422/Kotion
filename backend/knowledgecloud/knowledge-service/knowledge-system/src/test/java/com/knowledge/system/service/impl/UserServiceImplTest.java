@@ -12,7 +12,9 @@ import com.knowledge.core.log.exception.ServiceException;
 import com.knowledge.core.secure.auth.KnowledgeUserAuthentication;
 import com.knowledge.core.tool.KnowledgeUser;
 import com.knowledge.system.dto.QueryUserDTO;
+import com.knowledge.system.service.IAuthSessionService;
 import com.knowledge.system.service.IRoleService;
+import com.knowledge.system.service.IUserRoleService;
 
 class UserServiceImplTest {
 
@@ -32,7 +34,8 @@ class UserServiceImplTest {
     @Test
     void currentAdministratorCannotResetOwnPassword() {
         authenticate(7L, "000000", "administrator");
-        UserServiceImpl service = new UserServiceImpl(mock(IRoleService.class));
+        UserServiceImpl service = new UserServiceImpl(
+                mock(IRoleService.class), mock(IUserRoleService.class), mock(IAuthSessionService.class));
 
         assertThrows(ServiceException.class, () -> service.resetAdminPasswords("7"));
     }

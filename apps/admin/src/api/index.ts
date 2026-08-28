@@ -2,7 +2,8 @@
  * 后端 API 定义：类型对齐 knowledge-system / knowledge-wiki / knowledge-log 的 VO/DTO。
  * 分页注意：system/log 模块用 current+size（Query），wiki 模块用 current+pageSize（PageDTO）。
  */
-import { del, get, post, put, type PageResult } from '@/lib/request'
+import { getRefreshToken, OPERATOR_AUDIENCE } from '@/lib/auth'
+import { del, get, post, postForm, put, type PageResult } from '@/lib/request'
 
 export type { PageResult }
 
@@ -19,107 +20,20 @@ export interface AuthInfo {
   authority: string
   userName: string
   account: string
+  permissions?: string[]
 }
 
 export const login = (account: string, password: string) =>
-  post<AuthInfo>('/knowledge-auth/oauth2/token', undefined, {
+  postForm<AuthInfo>('/knowledge-auth/oauth2/token', {
     grantType: 'password',
-    type: 'account',
-    scope: 'all',
+    audience: OPERATOR_AUDIENCE,
     account,
     password,
   })
 
-// ---------- 用户（knowledge-system，current + size） ----------
-
-export interface UserVO {
-  id: string
-  code?: string
-  account: string
-  name?: string
-  realName?: string
-  avatar?: string
-  email?: string
-  phone?: string
-  sex?: number
-  sexName?: string
-  roleId?: string
-  roleName?: string
-  roleAlias?: string
-  deptName?: string
-  tenantId?: string
-  isSetup?: boolean
-  /** 1-正常 2-禁用（null 视为正常） */
-  status?: number
-}
-
-export interface UserSubmitDTO {
-  id?: string
-  account: string
-  password?: string
-  name?: string
-  realName?: string
-  email?: string
-  phone?: string
-  roleIds?: string[]
-}
-
-export const getUserInfo = () => get<UserVO>('/knowledge-system/user/info')
-
-export const getUserList = (params: {
-  current: number
-  size: number
-  searchValue?: string
-  status?: 1 | 2
-  roleId?: string
-}) => get<PageResult<UserVO>>('/knowledge-system/user/list', params)
-
-export const getAdminUserDetail = (id: string) =>
-  get<UserVO>('/knowledge-system/user/admin/detail', { id })
-
-export const submitUser = (user: UserSubmitDTO) => post<UserVO>('/knowledge-system/user/submit', user)
-
-export const removeUsers = (ids: string) => post<unknown>('/knowledge-system/user/remove', undefined, { ids })
-
-export const grantUserRoles = (userIds: string, roleIds: string) =>
-  post<unknown>('/knowledge-system/user/grant', undefined, { userIds, roleIds })
-
-export const resetUserPassword = (userIds: string) =>
-  post<unknown>('/knowledge-system/user/reset-password', undefined, { userIds })
-
-export const enableUsers = (userIds: string) =>
-  post<unknown>('/knowledge-system/user/enable', undefined, { userIds })
-
-export const disableUsers = (userIds: string) =>
-  post<unknown>('/knowledge-system/user/disable', undefined, { userIds })
-
-// ---------- 角色（knowledge-system，current + pageSize） ----------
-
-export interface RoleVO {
-  id: string
-  parentId?: string
-  roleName: string
-  roleAlias?: string
-  sort?: number
-  admin?: boolean
-  userCount?: number
-  parentName?: string
-  permissions?: { id?: string; name?: string; code?: string }[]
-  children?: RoleVO[]
-}
-
-export const getRoleList = (params: { current: number; pageSize: number; searchValue?: string }) =>
-  get<PageResult<RoleVO>>('/knowledge-system/role/list', params)
-
-export const getRoleTree = () => get<RoleVO[]>('/knowledge-system/role/tree')
-
-export const submitRole = (role: { id?: string; roleName: string; roleAlias?: string; sort?: number }) =>
-  post<unknown>('/knowledge-system/role/submit', role)
-
-export const removeRoles = (ids: string) => post<unknown>('/knowledge-system/role/remove', undefined, { ids })
-
-export const grantRole = (userId: string, roleId: string) =>
-  post<unknown>('/knowledge-system/role/grant', undefined, { userId, roleId })
+export const logout = () => postForm<unknown>('/knowledge-auth/oauth2/logout', {
+  refreshToken: getRefreshToken(),
+})
 
 // ---------- 空间（knowledge-wiki，current + pageSize） ----------
 
@@ -205,7 +119,8 @@ export const getPageList = (params: {
   spaceId?: string
 }) => get<PageResult<PageVO>>('/knowledge-wiki/space/page/list', params)
 
-export const restorePage = (id: string) => put<unknown>(`/knowledge-wiki/space/page/${id}/restore`)
+export const restorePage = (id: string) =>
+  post<unknown>('/knowledge-wiki/admin/page/batch-restore', undefined, { ids: id })
 
 // ---------- 页面后台治理（knowledge-wiki /admin/page） ----------
 
@@ -498,25 +413,36 @@ export const getParamList = (params: {
 export const getParamValue = (paramKey: string) =>
   get<string | null>('/knowledge-system/param/value', { paramKey })
 
+export const getAiParamValue = (paramKey: string) =>
+  get<string | null>('/knowledge-system/param/ai/value', { paramKey })
+
+export const getAiParamList = () => get<Param[]>('/knowledge-system/param/ai/list')
+
+export const submitAiParam = (param: Param) => post<unknown>('/knowledge-system/param/ai/submit', param)
+
 export const submitParam = (param: Param) => post<unknown>('/knowledge-system/param/submit', param)
 
 export const removeParams = (ids: string) => post<unknown>('/knowledge-system/param/remove', undefined, { ids })
 
 /** 批量读取参数键值（不存在的键返回 null） */
 export const getParamValues = async (keys: string[]) => {
-  const values = await Promise.all(keys.map((key) => getParamValue(key).catch(() => null)))
+  const valueGetter = keys.every((key) => key.startsWith('ai.')) ? getAiParamValue : getParamValue
+  const values = await Promise.all(keys.map((key) => valueGetter(key).catch(() => null)))
   return Object.fromEntries(keys.map((key, index) => [key, values[index]])) as Record<string, string | null>
 }
 
 /** 批量保存参数（key 已存在则覆盖其 value） */
 export const saveParamValues = async (entries: Record<string, string>, names: Record<string, string> = {}) => {
-  // param/submit 依据 id 更新，因此需要先查出已存在的参数
-  const existing = await getParamList({ current: 1, size: 100 })
-  const byKey = new Map(existing.records.map((item) => [item.paramKey, item]))
+  const aiOnly = Object.keys(entries).every((key) => key.startsWith('ai.'))
+  const existingRecords = aiOnly
+    ? await getAiParamList()
+    : (await getParamList({ current: 1, size: 100 })).records
+  const byKey = new Map(existingRecords.map((item) => [item.paramKey, item]))
+  const submit = aiOnly ? submitAiParam : submitParam
   await Promise.all(
     Object.entries(entries).map(([paramKey, paramValue]) => {
       const found = byKey.get(paramKey)
-      return submitParam({
+      return submit({
         id: found?.id,
         paramKey,
         paramValue,

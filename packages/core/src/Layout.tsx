@@ -6,7 +6,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { TourHost } from "./components/Tour/TourHost"
 import { ChevronLeft } from "@kn/icon"
 import { MobileTabBar } from "./components/mobile/MobileTabBar"
-import { useApi, APIS, useNavigator, useUploadFile, getAccessToken, clearTokens, useDispatch, AppContext, event, GO_TO_MARKETPLACE, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS, PLUGIN_INCOMPATIBLE, TOGGLE_AI_ASSISTANT, TOGGLE_DOCK_PANEL, dockRuntime, logger } from "@kn/common"
+import { useApi, APIS, useNavigator, useUploadFile, getAccessToken, getRefreshToken, getTokenContextState, clearContextSensitiveClientState, clearTokens, normalizeTokenResponse, notifyContextChanged, saveTokens, useDispatch, AppContext, event, GO_TO_MARKETPLACE, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS, PLUGIN_INCOMPATIBLE, TOGGLE_AI_ASSISTANT, TOGGLE_DOCK_PANEL, dockRuntime, logger } from "@kn/common"
 import { toast } from "@kn/ui"
 import React from "react"
 import { useAsyncEffect } from "ahooks"
@@ -242,26 +242,47 @@ export function Layout({ onPluginsReady }: LayoutProps) {
 
         const token = getAccessToken()
         if (!token) {
-            console.log('No token for user info, skipping')
+            logger.info('No token for user info, skipping')
             return
         }
 
-        useApi(APIS.GET_USER_INFO).then((res) => {
-            dispatch({
-                type: 'UPDATE_USER',
-                payload: res.data
-            })
-        }).catch(e => {
-            console.error('Failed to get user info:', e)
-            // Only redirect if we have a token but it's invalid (401)
-            // Don't redirect on network errors
+        const tokenContext = getTokenContextState(token)
+        const handleIdentityError = (e: any) => {
+            logger.error('Failed to load current account context', e)
             if (e?.response?.status === 401 || e?.code === 401) {
                 clearTokens()
-                navigator.go({
-                    to: '/login'
-                })
+                navigator.go({ to: '/login' })
             }
-        })
+        }
+        useApi(APIS.GET_ME).then(meRes => {
+            dispatch({ type: 'UPDATE_USER', payload: meRes.data })
+        }).catch(handleIdentityError)
+        useApi(APIS.GET_CONTEXTS).then(async contextsRes => {
+            const contexts = contextsRes.data ?? []
+            const tokenContextMatch = contexts.find(context => context.id === tokenContext.contextId)
+            if (tokenContext.contextId && !tokenContextMatch && contexts[0]) {
+                try {
+                    const switched = await useApi(APIS.SWITCH_CONTEXT, { contextId: contexts[0].id }, {
+                        refreshToken: getRefreshToken() || ''
+                    })
+                    const tokens = normalizeTokenResponse(switched.data)
+                    if (!tokens.accessToken || !tokens.refreshToken) throw new Error('Missing fallback context tokens')
+                    saveTokens(tokens.accessToken, tokens.refreshToken)
+                    clearContextSensitiveClientState()
+                    notifyContextChanged(contexts[0].id)
+                    window.location.assign('/')
+                } catch (error) {
+                    logger.error('Unable to recover an unavailable authorization context', error)
+                    clearTokens()
+                    navigator.go({ to: '/login' })
+                }
+                return
+            }
+            const currentContext = tokenContextMatch
+                ?? contexts.find(context => context.type === tokenContext.contextType)
+                ?? contexts[0]
+            dispatch({ type: 'UPDATE_CONTEXTS', payload: { availableContexts: contexts, currentContextId: currentContext?.id } })
+        }).catch(handleIdentityError)
     }, [])
 
     const install = (versionId: string) => {

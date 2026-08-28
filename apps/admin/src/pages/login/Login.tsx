@@ -13,7 +13,7 @@ import {
 } from '@kn/ui'
 import { BookOpen, Loader2 } from '@kn/icon'
 import { login } from '@/api'
-import { clearTokens, hasAuthority, saveAuthUser, saveTokens } from '@/lib/auth'
+import { clearTokens, getTokenPermissions, hasOperatorAccess, saveAuthUser, saveTokens } from '@/lib/auth'
 
 export const Login = () => {
   const navigate = useNavigate()
@@ -31,9 +31,10 @@ export const Login = () => {
     setLoading(true)
     try {
       const data = await login(account, password)
-      if (!hasAuthority(data.authority, 'administrator')) {
+      const permissions = data.permissions ?? getTokenPermissions(data.access_token)
+      if (!hasOperatorAccess({ ...data, permissions })) {
         clearTokens()
-        toast({ title: '当前账号没有管理后台权限', variant: 'destructive' })
+        toast({ title: '当前账号没有平台运营权限', variant: 'destructive' })
         return
       }
       saveTokens(data.access_token, data.refresh_token)
@@ -44,6 +45,7 @@ export const Login = () => {
         avatar: data.avatar,
         authority: data.authority,
         tenantId: data.tenantId,
+        permissions,
       })
       navigate('/dashboard', { replace: true })
     } catch (error) {
@@ -64,8 +66,8 @@ export const Login = () => {
           <div className="mb-2 flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
             <BookOpen className="size-6" />
           </div>
-          <CardTitle className="text-xl">KN Admin</CardTitle>
-          <CardDescription>知识平台管理后台，请使用管理员账号登录</CardDescription>
+          <CardTitle className="text-xl">KN Operations</CardTitle>
+          <CardDescription>知识平台运营中心，请使用平台运营账号登录</CardDescription>
         </CardHeader>
         <CardContent>
           <form className="grid gap-4" onSubmit={onSubmit}>

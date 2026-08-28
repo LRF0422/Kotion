@@ -16,7 +16,12 @@ import {
     useSelector,
     GlobalState,
     useUploadFile,
+    APIS,
+    clearContextSensitiveClientState,
     clearTokens,
+    getRefreshToken,
+    notifyContextChanged,
+    useApi,
     event,
     TOGGLE_AI_ASSISTANT,
     useTranslation,
@@ -69,8 +74,13 @@ export const MobileTabBar: React.FC = () => {
     );
 
     const handleLogout = useCallback(() => {
-        clearTokens();
-        window.location.href = "/login";
+        void useApi(APIS.LOGOUT, undefined, { refreshToken: getRefreshToken() || '' })
+            .catch(() => undefined).finally(() => {
+            clearContextSensitiveClientState();
+            clearTokens();
+            notifyContextChanged("");
+            window.location.href = "/login";
+        });
     }, []);
 
     const items: TabItem[] = useMemo(

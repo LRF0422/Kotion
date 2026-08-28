@@ -34,8 +34,6 @@ import {
 } from '@kn/ui'
 import {
   LayoutDashboard,
-  Users,
-  ShieldCheck,
   FolderKanban,
   FileText,
   MessageSquare,
@@ -49,7 +47,8 @@ import {
   UserCircle,
   Github,
 } from '@kn/icon'
-import { clearTokens, getAuthUser } from '@/lib/auth'
+import { clearTokens, getAuthUser, hasPermission, type AuthUser } from '@/lib/auth'
+import { logout } from '@/api'
 import { Button } from '@kn/ui'
 
 const GITHUB_URL = 'https://github.com/LRF0422/knowledge-repo'
@@ -58,6 +57,7 @@ interface NavItem {
   title: string
   url: string
   icon: React.ComponentType<{ className?: string }>
+  permission?: string
 }
 
 interface NavGroup {
@@ -69,58 +69,62 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: '概览',
     items: [
-      { title: '仪表盘', url: '/dashboard', icon: LayoutDashboard },
-    ],
-  },
-  {
-    label: '用户与权限',
-    items: [
-      { title: '用户管理', url: '/users', icon: Users },
-      { title: '角色权限', url: '/roles', icon: ShieldCheck },
+      { title: '仪表盘', url: '/dashboard', icon: LayoutDashboard, permission: 'platform.dashboard.read' },
     ],
   },
   {
     label: '内容管理',
     items: [
-      { title: '空间管理', url: '/spaces', icon: FolderKanban },
-      { title: '页面管理', url: '/pages', icon: FileText },
-      { title: '评论审核', url: '/comments', icon: MessageSquare },
+      { title: '空间管理', url: '/spaces', icon: FolderKanban, permission: 'platform.content.spaces.read' },
+      { title: '页面管理', url: '/pages', icon: FileText, permission: 'platform.content.pages.read' },
+      { title: '评论审核', url: '/comments', icon: MessageSquare, permission: 'platform.content.comments.read' },
     ],
   },
   {
     label: '平台能力',
     items: [
-      { title: '插件审核', url: '/plugins', icon: Blocks },
-      { title: 'AI 配置', url: '/ai', icon: Sparkles },
-      { title: 'AI 用量', url: '/ai-usage', icon: Gauge },
+      { title: '插件审核', url: '/plugins', icon: Blocks, permission: 'platform.plugins.read' },
+      { title: 'AI 配置', url: '/ai', icon: Sparkles, permission: 'platform.ai.config.manage' },
+      { title: 'AI 用量', url: '/ai-usage', icon: Gauge, permission: 'platform.ai.usage.read' },
     ],
   },
   {
     label: '系统',
     items: [
-      { title: '日志审计', url: '/logs', icon: ScrollText },
-      { title: '系统设置', url: '/settings', icon: Settings },
+      { title: '日志审计', url: '/logs', icon: ScrollText, permission: 'platform.audit.read' },
+      { title: '系统设置', url: '/settings', icon: Settings, permission: 'platform.settings.manage' },
     ],
   },
 ]
+
+export const canAccessNavItem = (item: NavItem, user: AuthUser | null) =>
+  !item.permission || user?.permissions === undefined || hasPermission(user.permissions, item.permission)
+
+export const getVisibleNavGroups = (user: AuthUser | null) =>
+  NAV_GROUPS
+    .map((group) => ({ ...group, items: group.items.filter((item) => canAccessNavItem(item, user)) }))
+    .filter((group) => group.items.length > 0)
 
 /** 精确段匹配，避免 /ai-usage 被 /ai 误命中 */
 const isPathActive = (pathname: string, url: string) =>
   pathname === url || pathname.startsWith(`${url}/`)
 
-const findActiveItem = (pathname: string) =>
-  NAV_GROUPS.flatMap((group) => group.items).find((item) => isPathActive(pathname, item.url))
+const findActiveItem = (pathname: string, groups: NavGroup[]) =>
+  groups.flatMap((group) => group.items).find((item) => isPathActive(pathname, item.url))
 
 export const AdminLayout = () => {
   const location = useLocation()
   const navigate = useNavigate()
-  const activeItem = findActiveItem(location.pathname)
   const authUser = getAuthUser()
-  const displayName = authUser?.userName || authUser?.account || '管理员'
+  const visibleNavGroups = getVisibleNavGroups(authUser)
+  const activeItem = findActiveItem(location.pathname, visibleNavGroups)
+  const displayName = authUser?.userName || authUser?.account || '平台运营员'
 
   const handleLogout = () => {
-    clearTokens()
-    navigate('/login', { replace: true })
+    void logout().catch(() => undefined).finally(() => {
+      clearTokens()
+      navigate('/login', { replace: true })
+    })
   }
 
   return (
@@ -135,8 +139,8 @@ export const AdminLayout = () => {
                     <BookOpen className="size-4" />
                   </div>
                   <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-semibold">KN Admin</span>
-                    <span className="truncate text-xs text-muted-foreground">知识平台管理后台</span>
+                    <span className="truncate font-semibold">KN Operations</span>
+                    <span className="truncate text-xs text-muted-foreground">知识平台运营中心</span>
                   </div>
                 </Link>
               </SidebarMenuButton>
@@ -144,7 +148,7 @@ export const AdminLayout = () => {
           </SidebarMenu>
         </SidebarHeader>
         <SidebarContent>
-          {NAV_GROUPS.map((group) => (
+          {visibleNavGroups.map((group) => (
             <SidebarGroup key={group.label}>
               <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
               <SidebarGroupContent>
@@ -212,7 +216,7 @@ export const AdminLayout = () => {
             <BreadcrumbList>
               <BreadcrumbItem className="hidden md:block">
                 <BreadcrumbLink asChild>
-                  <Link to="/dashboard">管理后台</Link>
+                  <Link to="/dashboard">平台运营</Link>
                 </BreadcrumbLink>
               </BreadcrumbItem>
               {activeItem && (

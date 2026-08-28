@@ -3,8 +3,6 @@ import { ThemeProvider, Toaster } from '@kn/ui'
 import { AdminLayout } from './layout/AdminLayout'
 import { Login } from './pages/login/Login'
 import { Dashboard } from './pages/dashboard/Dashboard'
-import { UserList } from './pages/users/UserList'
-import { RoleList } from './pages/roles/RoleList'
 import { SpaceList } from './pages/spaces/SpaceList'
 import { PageList } from './pages/pages/PageList'
 import { CommentList } from './pages/comments/CommentList'
@@ -13,10 +11,10 @@ import { AISettings } from './pages/ai/AISettings'
 import { AiUsage } from './pages/ai/AiUsage'
 import { LogList } from './pages/audit/LogList'
 import { SystemSettings } from './pages/settings/SystemSettings'
-import { isAdminLoggedIn } from './lib/auth'
+import { isOperatorLoggedIn } from './lib/auth'
 
 const RequireAuth = ({ children }: { children: React.ReactNode }) => {
-  if (!isAdminLoggedIn()) {
+  if (!isOperatorLoggedIn()) {
     return <Navigate to="/login" replace />
   }
   return <>{children}</>
@@ -38,8 +36,6 @@ export const App = () => {
           >
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={<Dashboard />} />
-            <Route path="users" element={<UserList />} />
-            <Route path="roles" element={<RoleList />} />
             <Route path="spaces" element={<SpaceList />} />
             <Route path="pages" element={<PageList />} />
             <Route path="comments" element={<CommentList />} />

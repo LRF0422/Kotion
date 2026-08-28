@@ -48,6 +48,10 @@ public interface IUserClient {
 	@GetMapping(API_PREFIX + "/user-info-by-id")
 	R<UserInfo> userInfo(@RequestParam("userId") Long userId);
 
+	@GetMapping(API_PREFIX + "/user-info-by-context")
+	R<UserInfo> userInfo(@RequestParam("userId") Long userId,
+			@RequestParam("contextId") String contextId);
+
 	/**
 	 * 获取用户信息
 	 *

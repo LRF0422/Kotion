@@ -6,9 +6,11 @@ import com.knowledge.agent.core.mapper.AgentModelPriceMapper;
 import com.knowledge.agent.core.mapper.AgentRunMapper;
 import com.knowledge.agent.core.web.vo.UsageStatsVO;
 import com.knowledge.core.tool.api.R;
+import com.knowledge.core.tool.constant.RoleConstant;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -39,6 +41,8 @@ import java.util.stream.Collectors;
 @Api(tags = "Admin AI Usage (AgentCore)")
 @RestController
 @RequestMapping("/admin/ai")
+@PreAuthorize("(hasRole('platform.ai.usage.read') or " + RoleConstant.HAS_ROLE_ADMIN
+        + ") and principal.clientId == 'kotion-platform-admin'")
 @RequiredArgsConstructor
 public class AdminAiUsageController {
 
@@ -119,6 +123,8 @@ public class AdminAiUsageController {
     }
 
     @ApiOperation("Submit (insert or update) a model price")
+    @PreAuthorize("(hasRole('platform.ai.config.manage') or " + RoleConstant.HAS_ROLE_ADMIN
+            + ") and principal.clientId == 'kotion-platform-admin'")
     @PostMapping("/model-price/submit")
     public R<AgentModelPriceEntity> submitPrice(@RequestBody AgentModelPriceEntity price) {
         if (price.getModelName() == null || price.getModelName().trim().isEmpty()) {
@@ -133,6 +139,8 @@ public class AdminAiUsageController {
     }
 
     @ApiOperation("Delete a model price")
+    @PreAuthorize("(hasRole('platform.ai.config.manage') or " + RoleConstant.HAS_ROLE_ADMIN
+            + ") and principal.clientId == 'kotion-platform-admin'")
     @DeleteMapping("/model-price/{id}")
     public R<Void> deletePrice(@PathVariable Long id) {
         modelPriceMapper.deleteById(id);

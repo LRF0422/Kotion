@@ -31,7 +31,7 @@ const CLOUD_API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'https
 /** Base URL for the auth/cloud API, shared by the axios instance and refresh. */
 export const API_BASE_URL: string = isDesktop ? CLOUD_API_BASE_URL : '/api'
 
-const REFRESH_ENDPOINT = '/knowledge-auth/token/refresh'
+const REFRESH_ENDPOINT = '/knowledge-auth/oauth2/token'
 
 // ---------------------------------------------------------------------------
 // Session-expired handler (injected by the app to show a re-login dialog)
@@ -87,21 +87,40 @@ export function handleSessionExpired(): void {
 
 let refreshPromise: Promise<string | null> | null = null
 
+async function recoverConcurrentRefresh(originalRefreshToken: string): Promise<string | null> {
+    if (getRefreshToken() !== originalRefreshToken) return getAccessToken()
+    if (typeof window === 'undefined') return null
+    await new Promise<void>(resolve => {
+        const timeout = window.setTimeout(done, 5000)
+        const onStorage = (event: StorageEvent) => {
+            if (event.key === 'knowledge-refresh-token') done()
+        }
+        function done() {
+            window.clearTimeout(timeout)
+            window.removeEventListener('storage', onStorage)
+            resolve()
+        }
+        window.addEventListener('storage', onStorage)
+    })
+    return getRefreshToken() !== originalRefreshToken ? getAccessToken() : null
+}
+
 async function doRefresh(): Promise<string | null> {
     const refreshToken = getRefreshToken()
     if (!refreshToken) return null
 
     try {
+        const params = new URLSearchParams({
+            grantType: 'refresh_token',
+            refreshToken,
+        })
         const res = await fetch(`${API_BASE_URL}${REFRESH_ENDPOINT}`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${refreshToken}`,
-            },
-            body: JSON.stringify({ refreshToken }),
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: params,
         })
 
-        if (!res.ok) return null
+        if (!res.ok) return recoverConcurrentRefresh(refreshToken)
 
         const raw = await res.json().catch(() => null)
         // Support both a flat body ({ accessToken, refreshToken }) and an
@@ -113,12 +132,16 @@ async function doRefresh(): Promise<string | null> {
         const accessToken: string | undefined = payload?.accessToken ?? payload?.access_token
         const newRefreshToken: string | undefined = payload?.refreshToken ?? payload?.refresh_token
 
-        if (!accessToken || !newRefreshToken) return null
+        if (!accessToken || !newRefreshToken) return recoverConcurrentRefresh(refreshToken)
+
+        // A context switch or a new login may have replaced the refresh token
+        // while this request was in flight. Never let the stale response win.
+        if (getRefreshToken() !== refreshToken) return getAccessToken()
 
         saveTokens(accessToken, newRefreshToken)
         return accessToken
     } catch {
-        return null
+        return recoverConcurrentRefresh(refreshToken)
     }
 }
 
@@ -129,9 +152,21 @@ async function doRefresh(): Promise<string | null> {
  * @returns the new access token on success, or `null` when refresh is not
  *          possible (no refresh token / refresh rejected).
  */
+async function refreshAcrossTabs(): Promise<string | null> {
+    const originalRefreshToken = getRefreshToken()
+    const lockManager = typeof navigator !== 'undefined' ? (navigator as any).locks : undefined
+    if (!lockManager?.request) return doRefresh()
+    return lockManager.request('knowledge-oauth-refresh', async () => {
+        if (originalRefreshToken && getRefreshToken() !== originalRefreshToken) {
+            return getAccessToken()
+        }
+        return doRefresh()
+    })
+}
+
 export function refreshAccessToken(): Promise<string | null> {
     if (!refreshPromise) {
-        refreshPromise = doRefresh().finally(() => {
+        refreshPromise = refreshAcrossTabs().finally(() => {
             refreshPromise = null
         })
     }

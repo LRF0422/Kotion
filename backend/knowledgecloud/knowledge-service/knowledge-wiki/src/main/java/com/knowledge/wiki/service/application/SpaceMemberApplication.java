@@ -21,6 +21,7 @@ import com.knowledge.wiki.service.entity.dto.UpdateSpaceMemberRoleDTO;
 import com.knowledge.wiki.service.entity.enums.CollaboratorRole;
 import com.knowledge.wiki.service.entity.enums.SpaceType;
 import com.knowledge.wiki.service.exception.WikiException;
+import com.knowledge.wiki.service.service.IPermissionService;
 import com.knowledge.wiki.service.service.ISpaceMemberService;
 import com.knowledge.wiki.service.service.ISpaceService;
 
@@ -43,6 +44,9 @@ public class SpaceMemberApplication {
     private ISpaceService spaceService;
 
     @Autowired
+    private IPermissionService permissionService;
+
+    @Autowired
     private IUserClient userClient;
 
     @Autowired
@@ -52,46 +56,81 @@ public class SpaceMemberApplication {
      * List all members of a space with user details
      */
     public List<SpaceMemberDTO> listMembers(Long spaceId) {
-        List<SpaceMember> members = spaceMemberService.getSpaceMembers(spaceId);
+        Space space = spaceService.getById(spaceId);
+        if (space == null) {
+            throw WikiException.SPACE_NOT_FOUND.newException();
+        }
+        Long currentUserId = SecurityContextUtil.getUserId();
+        CollaboratorRole currentRole = spaceMemberService.getMemberRole(spaceId, currentUserId);
+        boolean owner = currentUserId != null && currentUserId.equals(space.getUserId());
+        if (permissionService.effectiveSpacePermission(currentUserId, space) == null
+                || (!owner && currentRole != CollaboratorRole.OWNER
+                        && currentRole != CollaboratorRole.ADMIN
+                        && currentRole != CollaboratorRole.MEMBER)) {
+            // GUEST remains page-grant-only, and public readers do not get the
+            // space member directory (which includes email addresses).
+            throw WikiException.FORBIDDEN_ACCESS.newException();
+        }
+
+        return loadMemberDetails(space);
+    }
+
+    /** Platform-operator metadata path; controller authorization is authoritative. */
+    public List<SpaceMemberDTO> listMembersForOperator(Long spaceId) {
+        Space space = spaceService.getById(spaceId);
+        if (space == null) {
+            throw WikiException.SPACE_NOT_FOUND.newException();
+        }
+        return loadMemberDetails(space);
+    }
+
+    private List<SpaceMemberDTO> loadMemberDetails(Space space) {
+        List<SpaceMember> members = spaceMemberService.getSpaceMembers(space.getId());
         if (CollUtil.isEmpty(members)) {
-            // If no members in table, return owner from space record
-            Space space = spaceService.getById(spaceId);
-            if (space != null && space.getUserId() != null) {
+            if (space.getUserId() != null) {
                 return buildOwnerFallback(space);
             }
             return ListUtil.empty();
         }
 
-        // Get user details
         List<Long> userIds = members.stream()
                 .map(SpaceMember::getUserId)
                 .collect(Collectors.toList());
+        boolean ownerMissing = space.getUserId() != null && !userIds.contains(space.getUserId());
+        if (ownerMissing) {
+            userIds.add(space.getUserId());
+        }
         R<List<KnowledgeUser>> usersRes = userClient.listByIds(userIds);
         List<KnowledgeUser> users = usersRes.getData();
-
         if (CollUtil.isEmpty(users)) {
             return ListUtil.empty();
         }
 
         Map<Long, KnowledgeUser> userMap = users.stream()
                 .collect(Collectors.toMap(KnowledgeUser::getUserId, u -> u, (a, b) -> a));
-
-        return members.stream()
+        List<SpaceMemberDTO> result = members.stream()
                 .map(member -> {
                     KnowledgeUser user = userMap.get(member.getUserId());
-                    if (user == null)
-                        return null;
+                    if (user == null) return null;
                     SpaceMemberDTO dto = new SpaceMemberDTO();
                     dto.setId(user.getUserId());
                     dto.setName(user.getUserName());
                     dto.setEmail(user.getEmail());
-                    // dto.setAvatar(user.getAvatar());
-                    dto.setRole(member.getRole().getCode());
+                    dto.setRole(user.getUserId().equals(space.getUserId())
+                            ? CollaboratorRole.OWNER.getCode()
+                            : member.getRole().getCode());
                     dto.setJoinedAt(member.getJoinedAt());
                     return dto;
                 })
-                .filter(m -> m != null)
+                .filter(member -> member != null)
                 .collect(Collectors.toList());
+        if (ownerMissing) {
+            KnowledgeUser ownerUser = userMap.get(space.getUserId());
+            if (ownerUser != null) {
+                result.add(buildMemberDTO(ownerUser, CollaboratorRole.OWNER, space.getCreateTime()));
+            }
+        }
+        return result;
     }
 
     /**
@@ -105,8 +144,7 @@ public class SpaceMemberApplication {
         // Verify current user has invite permission (OWNER or ADMIN)
         verifyInvitePermission(spaceId, currentUserId);
 
-        CollaboratorRole role = CollaboratorRole.fromCode(
-                dto.getRole() != null ? dto.getRole() : "MEMBER");
+        CollaboratorRole role = parseRole(dto.getRole() != null ? dto.getRole() : "MEMBER");
 
         // Cannot invite as OWNER
         if (role == CollaboratorRole.OWNER) {
@@ -154,9 +192,16 @@ public class SpaceMemberApplication {
         Long currentUserId = SecurityContextUtil.getUserId();
         verifyAdminPermission(spaceId, currentUserId);
 
-        CollaboratorRole newRole = CollaboratorRole.fromCode(dto.getRole());
-        // Cannot set role to OWNER via this endpoint
-        if (newRole == CollaboratorRole.OWNER) {
+        CollaboratorRole newRole = parseRole(dto.getRole());
+        // Cannot set or mutate the owner role via this endpoint.
+        Space space = spaceService.getById(spaceId);
+        CollaboratorRole currentRole = spaceMemberService.getMemberRole(spaceId, dto.getUserId());
+        if (newRole == CollaboratorRole.OWNER
+                || currentRole == CollaboratorRole.OWNER
+                || (space != null && dto.getUserId().equals(space.getUserId()))) {
+            throw WikiException.INVALID_PARAMETER.newException();
+        }
+        if (currentRole == null) {
             throw WikiException.INVALID_PARAMETER.newException();
         }
 
@@ -179,9 +224,14 @@ public class SpaceMemberApplication {
         Long currentUserId = SecurityContextUtil.getUserId();
         verifyAdminPermission(spaceId, currentUserId);
 
-        // Cannot remove the owner
+        // Cannot remove the owner, including legacy spaces without an OWNER row.
         CollaboratorRole targetRole = spaceMemberService.getMemberRole(spaceId, userId);
-        if (targetRole == CollaboratorRole.OWNER) {
+        Space space = spaceService.getById(spaceId);
+        if (targetRole == CollaboratorRole.OWNER
+                || (space != null && userId.equals(space.getUserId()))) {
+            throw WikiException.INVALID_PARAMETER.newException();
+        }
+        if (targetRole == null) {
             throw WikiException.INVALID_PARAMETER.newException();
         }
 
@@ -194,10 +244,17 @@ public class SpaceMemberApplication {
     public void leaveSpace(Long spaceId) {
         Long currentUserId = SecurityContextUtil.getUserId();
         CollaboratorRole role = spaceMemberService.getMemberRole(spaceId, currentUserId);
+        Space space = spaceService.getById(spaceId);
+        if (space == null) {
+            throw WikiException.SPACE_NOT_FOUND.newException();
+        }
 
-        // Owner cannot leave without transferring ownership
-        if (role == CollaboratorRole.OWNER) {
+        // Owner cannot leave without transferring ownership.
+        if (role == CollaboratorRole.OWNER || currentUserId.equals(space.getUserId())) {
             throw WikiException.INVALID_PARAMETER.newException();
+        }
+        if (role == null) {
+            throw WikiException.FORBIDDEN_ACCESS.newException();
         }
 
         spaceMemberService.removeMember(spaceId, currentUserId);
@@ -217,10 +274,15 @@ public class SpaceMemberApplication {
     public void transferOwnership(Long spaceId, Long newOwnerId) {
         Long currentUserId = SecurityContextUtil.getUserId();
 
-        // Only the current owner can transfer
+        // Only the current owner can transfer. Space.userId remains the
+        // backward-compatible ownership source for spaces without member rows.
+        Space space = spaceService.getById(spaceId);
+        if (space == null) {
+            throw WikiException.SPACE_NOT_FOUND.newException();
+        }
         CollaboratorRole currentRole = spaceMemberService.getMemberRole(spaceId, currentUserId);
-        if (currentRole != CollaboratorRole.OWNER) {
-            throw WikiException.INVALID_PARAMETER.newException();
+        if (currentRole != CollaboratorRole.OWNER && !currentUserId.equals(space.getUserId())) {
+            throw WikiException.FORBIDDEN_ACCESS.newException();
         }
 
         // Verify new owner is a member
@@ -231,41 +293,36 @@ public class SpaceMemberApplication {
         spaceMemberService.transferOwnership(spaceId, currentUserId, newOwnerId);
 
         // Also update the space's userId field
-        Space space = spaceService.getById(spaceId);
-        if (space != null) {
-            space.setUserId(newOwnerId);
-            spaceService.updateById(space);
-        }
+        space.setUserId(newOwnerId);
+        spaceService.updateById(space);
     }
 
     // --- Helper methods ---
 
-    private void verifyInvitePermission(Long spaceId, Long userId) {
-        CollaboratorRole role = spaceMemberService.getMemberRole(spaceId, userId);
-        if (role == null) {
-            // Check if owner from Space record (backward compat)
-            Space space = spaceService.getById(spaceId);
-            if (space != null && userId.equals(space.getUserId())) {
-                return; // Owner
+    private CollaboratorRole parseRole(String code) {
+        if (code == null) {
+            throw WikiException.INVALID_PARAMETER.newException();
+        }
+        for (CollaboratorRole role : CollaboratorRole.values()) {
+            if (role.getCode().equals(code)) {
+                return role;
             }
-            throw WikiException.INVALID_PARAMETER.newException();
         }
-        if (role != CollaboratorRole.OWNER && role != CollaboratorRole.ADMIN) {
-            throw WikiException.INVALID_PARAMETER.newException();
-        }
+        throw WikiException.INVALID_PARAMETER.newException();
+    }
+
+    private void verifyInvitePermission(Long spaceId, Long userId) {
+        verifyAdminPermission(spaceId, userId);
     }
 
     private void verifyAdminPermission(Long spaceId, Long userId) {
-        CollaboratorRole role = spaceMemberService.getMemberRole(spaceId, userId);
-        if (role == null) {
-            Space space = spaceService.getById(spaceId);
-            if (space != null && userId.equals(space.getUserId())) {
-                return;
-            }
-            throw WikiException.INVALID_PARAMETER.newException();
+        Space space = spaceService.getById(spaceId);
+        if (space == null) {
+            throw WikiException.SPACE_NOT_FOUND.newException();
         }
-        if (role != CollaboratorRole.OWNER && role != CollaboratorRole.ADMIN) {
-            throw WikiException.INVALID_PARAMETER.newException();
+        if (!IPermissionService.PERMISSION_ADMIN
+                .equals(permissionService.effectiveSpacePermission(userId, space))) {
+            throw WikiException.FORBIDDEN_ACCESS.newException();
         }
     }
 
@@ -275,16 +332,20 @@ public class SpaceMemberApplication {
             return ListUtil.empty();
         }
         KnowledgeUser user = userRes.getData();
+        List<SpaceMemberDTO> result = new ArrayList<>();
+        result.add(buildMemberDTO(user, CollaboratorRole.OWNER, space.getCreateTime()));
+        return result;
+    }
+
+    private SpaceMemberDTO buildMemberDTO(KnowledgeUser user, CollaboratorRole role,
+            java.time.LocalDateTime joinedAt) {
         SpaceMemberDTO dto = new SpaceMemberDTO();
         dto.setId(user.getUserId());
         dto.setName(user.getUserName());
         dto.setEmail(user.getEmail());
-        // dto.setAvatar(user.getAvatar());
-        dto.setRole(CollaboratorRole.OWNER.getCode());
-        dto.setJoinedAt(space.getCreateTime());
-        List<SpaceMemberDTO> result = new ArrayList<>();
-        result.add(dto);
-        return result;
+        dto.setRole(role.getCode());
+        dto.setJoinedAt(joinedAt);
+        return dto;
     }
 
 }

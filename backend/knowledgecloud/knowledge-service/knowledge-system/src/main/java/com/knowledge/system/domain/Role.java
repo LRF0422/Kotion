@@ -81,6 +81,17 @@ public class Role extends TenantItemImpl {
 
 	private Boolean isDefault;
 
+	/** Stable authorization identifier; display names may change. */
+	private String roleCode;
+
+	/** ORGANIZATION or PLATFORM. */
+	private String roleKind;
+
+	private Boolean builtIn;
+
+	/** 1-active, 2-disabled. */
+	private Integer status;
+
 	public static Role of(String roleName) {
 		return new Role().setRoleName(roleName);
 	}

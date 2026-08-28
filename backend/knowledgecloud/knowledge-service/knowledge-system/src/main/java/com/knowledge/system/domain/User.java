@@ -103,6 +103,15 @@ public class User extends TenantItemImpl {
 
 	private Boolean isSetup;
 
+	/** Global normalized login identifier used during the compatibility rollout. */
+	private String normalizedAccount;
+
+	/** The user's personal context; existing tenantId remains as a legacy default. */
+	private String personalContextId;
+
+	/** Incremented when credentials or security-sensitive assignments change. */
+	private Integer authVersion;
+
 	/**
 	 * 账号状态（1-正常 2-禁用）
 	 */

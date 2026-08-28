@@ -1,6 +1,7 @@
 package com.knowledge.wiki.service.controller;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -8,6 +9,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.knowledge.core.tool.api.R;
+import com.knowledge.core.tool.constant.RoleConstant;
 import com.knowledge.wiki.service.application.PluginApplication;
 import com.knowledge.wiki.service.entity.dto.QueryAdminPluginDTO;
 import com.knowledge.wiki.service.entity.vo.PluginVO;
@@ -17,6 +19,8 @@ import com.knowledge.wiki.service.entity.vo.PluginVO;
  */
 @RestController
 @RequestMapping("/admin/plugin")
+@PreAuthorize("(hasRole('platform.plugins.read') or " + RoleConstant.HAS_ROLE_ADMIN
+        + ") and principal.clientId == 'kotion-platform-admin'")
 public class AdminPluginController {
 
     @Autowired

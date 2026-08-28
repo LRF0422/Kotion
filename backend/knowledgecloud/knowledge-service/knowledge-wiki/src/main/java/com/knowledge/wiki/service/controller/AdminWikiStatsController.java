@@ -9,12 +9,14 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.knowledge.core.tool.api.R;
+import com.knowledge.core.tool.constant.RoleConstant;
 import com.knowledge.wiki.service.entity.vo.DailyCountVO;
 import com.knowledge.wiki.service.entity.vo.TopSpaceVO;
 import com.knowledge.wiki.service.mapper.AdminWikiStatsMapper;
@@ -24,6 +26,8 @@ import com.knowledge.wiki.service.mapper.AdminWikiStatsMapper;
  */
 @RestController
 @RequestMapping("/admin/stats")
+@PreAuthorize("(hasRole('platform.dashboard.read') or " + RoleConstant.HAS_ROLE_ADMIN
+        + ") and principal.clientId == 'kotion-platform-admin'")
 public class AdminWikiStatsController {
 
     private static final DateTimeFormatter DAY_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");

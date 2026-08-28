@@ -1,3 +1,9 @@
+knowledge:
+  security:
+    jwt:
+      access-token-validity: 900
+      refresh-token-validity: 2592000
+
 #第三方登陆配置
 social:
   oauth:

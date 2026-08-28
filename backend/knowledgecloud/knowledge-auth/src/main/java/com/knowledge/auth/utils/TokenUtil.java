@@ -27,6 +27,7 @@ import org.springframework.stereotype.Component;
 import javax.annotation.PostConstruct;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * 认证工具类
@@ -43,6 +44,7 @@ public class TokenUtil {
 	public final static String DEFAULT_TENANT_ID = "000000";
 	public final static String USER_TYPE_HEADER_KEY = "User-Type";
 	public final static String DEFAULT_USER_TYPE = "web";
+	public final static String DEFAULT_CLIENT_AUDIENCE = "kotion-client";
 	public final static String USER_NOT_FOUND = "用户名或密码错误";
 	public final static String USER_DISABLED = "账号已被禁用，请联系管理员";
 	public final static String HEADER_KEY = "Authorization";
@@ -74,27 +76,44 @@ public class TokenUtil {
 	 */
 	public AuthInfo createAuthInfoInstance(UserInfo userInfo) {
 		UserVO user = userInfo.getUser();
-		String roleAliases = Func.join(userInfo.getRoles());
+		String roleAliases = userInfo.getRoles() == null ? "" : Func.join(userInfo.getRoles());
+		String permissionCodes = userInfo.getPermissions() == null ? "" : Func.join(userInfo.getPermissions());
+		String grantedAuthorities = roleAliases;
+		if (Func.isNotBlank(permissionCodes)) {
+			grantedAuthorities = Func.isBlank(grantedAuthorities)
+					? permissionCodes
+					: grantedAuthorities + "," + permissionCodes;
+		}
+		if (Func.isBlank(userInfo.getSessionId())) {
+			userInfo.setSessionId(UUID.randomUUID().toString());
+		}
 
 		// 设置jwt参数
 		Map<String, Object> param = new HashMap<>(16);
 		param.put(TokenConstant.TOKEN_TYPE, TokenConstant.ACCESS_TOKEN);
-		param.put(TokenConstant.TENANT_ID, user.getTenantId());
+		param.put("jti", UUID.randomUUID().toString());
+		param.put(TokenConstant.TENANT_ID, Func.toStr(userInfo.getCurrentContextId(), user.getTenantId()));
 		param.put(TokenConstant.OAUTH_ID, userInfo.getOauthId());
 		param.put(TokenConstant.USER_ID, Func.toStr(user.getId()));
 		param.put(TokenConstant.ROLE_ID, user.getRoleId());
-		param.put(TokenConstant.ROLE_NAME, roleAliases);
+		param.put(TokenConstant.ROLE_NAME, grantedAuthorities);
 		param.put(TokenConstant.DEPT_ID, user.getDeptId());
 		param.put(TokenConstant.ACCOUNT, user.getAccount());
 		param.put(TokenConstant.USER_NAME, user.getAccount());
-		param.put(TokenConstant.CLIENT_ID, "knowledge");
+		param.put(TokenConstant.CLIENT_ID, Func.toStr(userInfo.getAudience(), DEFAULT_CLIENT_AUDIENCE));
+		param.put(IdentityTokenClaims.SESSION_ID, Func.toStr(userInfo.getSessionId(), UUID.randomUUID().toString()));
+		param.put(IdentityTokenClaims.AUDIENCE, Func.toStr(userInfo.getAudience(), DEFAULT_CLIENT_AUDIENCE));
+		param.put(IdentityTokenClaims.CONTEXT_TYPE, userInfo.getCurrentContextType());
+		param.put(IdentityTokenClaims.CONTEXT_ID, Func.toStr(userInfo.getCurrentContextId(), user.getTenantId()));
+		param.put(IdentityTokenClaims.PERMISSIONS, permissionCodes);
+		param.put(IdentityTokenClaims.AUTH_VERSION, Func.toInt(userInfo.getAuthVersion(), 0));
 
 		// Use JwtTokenProvider to create access token
 		TokenInfo accessToken = jwtTokenProvider.createAccessToken(param);
 
 		AuthInfo authInfo = new AuthInfo();
 		authInfo.setUserId(user.getId());
-		authInfo.setTenantId(user.getTenantId());
+		authInfo.setTenantId(Func.toStr(userInfo.getCurrentContextId(), user.getTenantId()));
 		authInfo.setOauthId(userInfo.getOauthId());
 		authInfo.setAccount(user.getAccount());
 		authInfo.setUserName(user.getRealName());
@@ -118,8 +137,14 @@ public class TokenUtil {
 		UserVO user = userInfo.getUser();
 		Map<String, Object> param = new HashMap<>(16);
 		param.put(TokenConstant.TOKEN_TYPE, TokenConstant.REFRESH_TOKEN);
+		param.put("jti", UUID.randomUUID().toString());
 		param.put(TokenConstant.USER_ID, Func.toStr(user.getId()));
-		param.put(TokenConstant.TENANT_ID, user.getTenantId());
+		param.put(TokenConstant.TENANT_ID, Func.toStr(userInfo.getCurrentContextId(), user.getTenantId()));
+		param.put(IdentityTokenClaims.SESSION_ID, Func.toStr(userInfo.getSessionId(), UUID.randomUUID().toString()));
+		param.put(IdentityTokenClaims.AUDIENCE, Func.toStr(userInfo.getAudience(), DEFAULT_CLIENT_AUDIENCE));
+		param.put(IdentityTokenClaims.CONTEXT_TYPE, userInfo.getCurrentContextType());
+		param.put(IdentityTokenClaims.CONTEXT_ID, Func.toStr(userInfo.getCurrentContextId(), user.getTenantId()));
+		param.put(IdentityTokenClaims.AUTH_VERSION, Func.toInt(userInfo.getAuthVersion(), 0));
 		return jwtTokenProvider.createRefreshToken(param);
 	}
 

@@ -15,11 +15,14 @@
  */
 package com.knowledge.auth.granter;
 
+import com.knowledge.auth.feign.AuthInternalClient;
+import com.knowledge.auth.utils.IdentityTokenClaims;
+import com.knowledge.auth.utils.TokenHashUtil;
 import com.knowledge.core.launch.constant.TokenConstant;
 import com.knowledge.core.secure.provider.JwtTokenProvider;
 import com.knowledge.core.tool.api.R;
 import com.knowledge.core.tool.utils.Func;
-import com.knowledge.system.feign.IUserClient;
+import com.knowledge.system.dto.AuthSessionValidationDTO;
 import com.knowledge.system.vo.UserInfo;
 import lombok.AllArgsConstructor;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -36,26 +39,57 @@ public class RefreshTokenGranter implements ITokenGranter {
 
 	public static final String GRANT_TYPE = "refresh_token";
 
-	private final IUserClient userClient;
+	private final AuthInternalClient authInternalClient;
 	private final JwtTokenProvider jwtTokenProvider;
 
 	@Override
 	public UserInfo grant(TokenParameter tokenParameter) {
 		String grantType = tokenParameter.getArgs().getStr("grantType");
 		String refreshToken = tokenParameter.getArgs().getStr("refreshToken");
-		UserInfo userInfo = null;
-		if (Func.isNoneBlank(grantType, refreshToken) && grantType.equals(TokenConstant.REFRESH_TOKEN)) {
-			// Use JwtTokenProvider to parse and validate the refresh token
-			Jwt jwt = jwtTokenProvider.parseToken(refreshToken);
-			if (jwt != null) {
-				String tokenType = Func.toStr(jwt.getClaim(TokenConstant.TOKEN_TYPE));
-				if (tokenType.equals(TokenConstant.REFRESH_TOKEN)) {
-					Long userId = Func.toLong(jwt.getClaim(TokenConstant.USER_ID));
-					R<UserInfo> result = userClient.userInfo(userId);
-					userInfo = result.isSuccess() ? result.getData() : null;
-				}
-			}
+		if (!Func.isNoneBlank(grantType, refreshToken) || !grantType.equals(TokenConstant.REFRESH_TOKEN)) {
+			return null;
 		}
+
+		Jwt jwt = jwtTokenProvider.parseToken(refreshToken);
+		if (jwt == null || !TokenConstant.REFRESH_TOKEN.equals(Func.toStr(jwt.getClaim(TokenConstant.TOKEN_TYPE)))) {
+			return null;
+		}
+
+		Long userId = Func.toLong(jwt.getClaim(TokenConstant.USER_ID));
+		String sessionId = Func.toStr(jwt.getClaim(IdentityTokenClaims.SESSION_ID));
+		String contextId = Func.toStr(jwt.getClaim(IdentityTokenClaims.CONTEXT_ID));
+		int tokenAuthVersion = Func.toInt(jwt.getClaim(IdentityTokenClaims.AUTH_VERSION), 0);
+		if (Func.isBlank(sessionId) || Func.isBlank(contextId)) {
+			// Legacy stateless refresh tokens cannot participate in rotation or
+			// revocation. Require one clean re-login after the session rollout.
+			return null;
+		}
+
+		// Resolve current account/context state before consuming the single-use
+		// refresh token, so ordinary lookup failures do not strand the session in a
+		// rotating state.
+		R<UserInfo> userResult = authInternalClient.userInfoByContext(userId, contextId);
+		UserInfo userInfo = userResult.isSuccess() ? userResult.getData() : null;
+		if (userInfo == null
+				|| tokenAuthVersion != Func.toInt(userInfo.getAuthVersion(), 0)) {
+			return null;
+		}
+
+		AuthSessionValidationDTO validation = new AuthSessionValidationDTO();
+		validation.setSessionKey(sessionId);
+		validation.setRefreshTokenHash(TokenHashUtil.sha256(refreshToken));
+		validation.setAuthVersion(tokenAuthVersion);
+		R<Boolean> validationResult = authInternalClient.validateSession(validation);
+		if (!validationResult.isSuccess() || !Boolean.TRUE.equals(validationResult.getData())) {
+			return null;
+		}
+
+		userInfo.setSessionId(sessionId);
+		userInfo.setAudience(jwt.getAudience().isEmpty()
+				? Func.toStr(jwt.getClaim(IdentityTokenClaims.AUDIENCE))
+				: jwt.getAudience().get(0));
+		userInfo.setCurrentContextType(Func.toStr(jwt.getClaim(IdentityTokenClaims.CONTEXT_TYPE)));
+		userInfo.setCurrentContextId(contextId);
 		return userInfo;
 	}
 }

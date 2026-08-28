@@ -7,7 +7,7 @@ import { z } from "@kn/ui"
 import { zodResolver } from '@kn/ui';
 import { useApi } from "@kn/common"
 import { APIS } from "@kn/common"
-import { saveTokens } from "@kn/common"
+import { clearContextSensitiveClientState, normalizeTokenResponse, notifyContextChanged, saveTokens } from "@kn/common"
 import { useTranslation } from "@kn/common"
 import { useState } from "react"
 import { Loader2, Eye, EyeOff, Check, ArrowRight } from "@kn/icon"
@@ -34,6 +34,7 @@ export function Login() {
             message: 'password is required'
         }),
         grantType: z.string().default('password'),
+        audience: z.string().default('kotion-client'),
         type: z.string().default('account'),
         scope: z.string().default("all")
     })
@@ -45,10 +46,14 @@ export function Login() {
 
     const onSubmit = (value: z.infer<typeof formSchema>) => {
         setLoading(true)
-        useApi(APIS.LOGIN, value).then(res => {
+        const body = new URLSearchParams(Object.entries(value).map(([key, item]) => [key, String(item)]))
+        useApi(APIS.LOGIN, undefined, body, { 'Content-Type': 'application/x-www-form-urlencoded' }).then(res => {
 
-            const { data } = res
-            saveTokens(data.access_token, data.refresh_token)
+            const tokens = normalizeTokenResponse(res.data)
+            if (!tokens.accessToken || !tokens.refreshToken) throw new Error('Missing login tokens')
+            clearContextSensitiveClientState()
+            saveTokens(tokens.accessToken, tokens.refreshToken)
+            notifyContextChanged("")
             localStorage.setItem("isLogin", "false")
 
             // Always enter the workspace. First-run onboarding is handled in-app by

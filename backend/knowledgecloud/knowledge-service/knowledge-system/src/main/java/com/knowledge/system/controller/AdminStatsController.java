@@ -3,11 +3,13 @@ package com.knowledge.system.controller;
 import com.github.xiaoymin.knife4j.annotations.ApiOperationSupport;
 import com.knowledge.core.boot.ctrl.KnowledgeController;
 import com.knowledge.core.tool.api.R;
+import com.knowledge.core.tool.constant.RoleConstant;
 import com.knowledge.system.domain.vo.DailyCountVO;
 import com.knowledge.system.mapper.AdminStatsMapper;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import lombok.AllArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -26,6 +28,8 @@ import java.util.stream.Collectors;
 @RestController
 @AllArgsConstructor
 @RequestMapping("/admin/stats")
+@PreAuthorize("(hasRole('platform.dashboard.read') or " + RoleConstant.HAS_ROLE_ADMIN
+		+ ") and principal.clientId == 'kotion-platform-admin'")
 @Api(value = "后台运营统计", tags = "后台运营统计")
 public class AdminStatsController extends KnowledgeController {
 

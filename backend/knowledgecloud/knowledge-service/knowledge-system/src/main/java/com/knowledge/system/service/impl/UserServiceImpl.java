@@ -2,11 +2,14 @@ package com.knowledge.system.service.impl;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,9 +20,9 @@ import com.github.yulichang.base.MPJBaseServiceImpl;
 import com.github.yulichang.toolkit.MPJWrappers;
 import com.github.yulichang.wrapper.MPJLambdaWrapper;
 import com.knowledge.common.constant.CommonConstant;
-import com.knowledge.core.common.base.TenantItemImpl;
 import com.knowledge.core.log.exception.ServiceException;
 import com.knowledge.core.secure.utils.SecurityContextUtil;
+import com.knowledge.core.tool.constant.KnowledgeConstant;
 import com.knowledge.core.tool.exception.BusinessException;
 import com.knowledge.core.tool.utils.DigestUtil;
 import com.knowledge.core.tool.utils.Func;
@@ -29,9 +32,12 @@ import com.knowledge.system.domain.Role;
 import com.knowledge.system.domain.User;
 import com.knowledge.system.domain.UserRole;
 import com.knowledge.system.domain.dto.AdminUserSubmitDTO;
+import com.knowledge.system.domain.dto.MeProfileUpdateDTO;
 import com.knowledge.system.dto.QueryUserDTO;
 import com.knowledge.system.mapper.UserMapper;
+import com.knowledge.system.service.IAuthSessionService;
 import com.knowledge.system.service.IRoleService;
+import com.knowledge.system.service.IUserRoleService;
 import com.knowledge.system.service.IUserService;
 import com.knowledge.system.vo.UserVO;
 
@@ -52,20 +58,30 @@ public class UserServiceImpl extends MPJBaseServiceImpl<UserMapper, User> implem
     private static final int STATUS_DISABLED = 2;
 
     private final IRoleService roleService;
+    private final IUserRoleService userRoleService;
+    private final IAuthSessionService authSessionService;
 
     @Override
     public boolean submit(User user) {
         if (Func.isNotEmpty(user.getPassword())) {
             user.setPassword(DigestUtil.encrypt(user.getPassword()));
         }
+        user.setAccount(StrUtil.trim(user.getAccount()));
+        user.setNormalizedAccount(normalizeAccount(user.getAccount()));
         Long cnt = baseMapper.selectCount(Wrappers.<User>query().lambda()
-                .eq(User::getTenantId, user.getTenantId())
-                .eq(User::getAccount, user.getAccount())
+                .and(wrapper -> wrapper
+                        .eq(User::getNormalizedAccount, user.getNormalizedAccount())
+                        .or()
+                        .apply("LOWER(TRIM(account)) = {0}", user.getNormalizedAccount()))
                 .ne(user.getId() != null, User::getId, user.getId()));
         if (cnt > 0) {
             throw new ServiceException("当前用户已存在!");
         }
-        return saveOrUpdate(user);
+        try {
+            return saveOrUpdate(user);
+        } catch (DuplicateKeyException error) {
+            throw new ServiceException("当前用户已存在!");
+        }
     }
 
     @Override
@@ -148,6 +164,7 @@ public class UserServiceImpl extends MPJBaseServiceImpl<UserMapper, User> implem
             User user = new User();
             user.setTenantId(tenantId);
             user.setAccount(account);
+            user.setNormalizedAccount(normalizeAccount(account));
             user.setName(StrUtil.isBlank(dto.getName()) ? account : StrUtil.trim(dto.getName()));
             user.setRealName(StrUtil.trim(dto.getRealName()));
             user.setEmail(StrUtil.trim(dto.getEmail()));
@@ -156,7 +173,11 @@ public class UserServiceImpl extends MPJBaseServiceImpl<UserMapper, User> implem
             user.setRoleId(roleIds);
             user.setStatus(STATUS_ACTIVE);
             user.setIsSetup(false);
-            this.save(user);
+            try {
+                this.save(user);
+            } catch (DuplicateKeyException error) {
+                throw new ServiceException("当前用户已存在!");
+            }
             return toAdminVO(user, tenantId);
         }
 
@@ -166,11 +187,16 @@ public class UserServiceImpl extends MPJBaseServiceImpl<UserMapper, User> implem
         User user = requireTenantUser(dto.getId(), tenantId);
         assertAccountAvailable(tenantId, account, user.getId());
         user.setAccount(account);
+        user.setNormalizedAccount(normalizeAccount(account));
         user.setName(StrUtil.isBlank(dto.getName()) ? account : StrUtil.trim(dto.getName()));
         user.setRealName(StrUtil.trim(dto.getRealName()));
         user.setEmail(StrUtil.trim(dto.getEmail()));
         user.setPhone(StrUtil.trim(dto.getPhone()));
-        this.updateById(user);
+        try {
+            this.updateById(user);
+        } catch (DuplicateKeyException error) {
+            throw new ServiceException("当前用户已存在!");
+        }
         return toAdminVO(user, tenantId);
     }
 
@@ -178,9 +204,13 @@ public class UserServiceImpl extends MPJBaseServiceImpl<UserMapper, User> implem
     @Transactional(rollbackFor = Exception.class)
     public boolean removeAdminUsers(String userIds) {
         List<Long> ids = requireAdminTargets(userIds, false);
-        return this.remove(Wrappers.<User>update().lambda()
+        boolean removed = this.remove(Wrappers.<User>update().lambda()
                 .eq(User::getTenantId, requireTenantId())
                 .in(User::getId, ids));
+        if (removed) {
+            authSessionService.revokeUserSessions(ids);
+        }
+        return removed;
     }
 
     @Override
@@ -189,11 +219,17 @@ public class UserServiceImpl extends MPJBaseServiceImpl<UserMapper, User> implem
         String tenantId = requireTenantId();
         List<Long> ids = requireAdminTargets(userIds, false);
         String normalizedRoleIds = normalizeRoleIds(tenantId, parseIds(roleIds, "角色"));
-        User update = new User();
-        update.setRoleId(normalizedRoleIds);
-        return this.update(update, Wrappers.<User>update().lambda()
+        boolean updated = this.update(Wrappers.<User>update().lambda()
+                .set(User::getRoleId, normalizedRoleIds)
+                .setSql("auth_version = auth_version + 1")
                 .eq(User::getTenantId, tenantId)
                 .in(User::getId, ids));
+        if (updated) {
+            List<Long> scopedRoleIds = parseIds(normalizedRoleIds, "角色");
+            syncScopedRoles(ids, scopedRoleIds, tenantId);
+            authSessionService.revokeUserSessions(ids);
+        }
+        return updated;
     }
 
     @Override
@@ -201,11 +237,15 @@ public class UserServiceImpl extends MPJBaseServiceImpl<UserMapper, User> implem
     public boolean resetAdminPasswords(String userIds) {
         String tenantId = requireTenantId();
         List<Long> ids = requireAdminTargets(userIds, false);
-        User update = new User();
-        update.setPassword(DigestUtil.encrypt(CommonConstant.DEFAULT_PASSWORD));
-        return this.update(update, Wrappers.<User>update().lambda()
+        boolean updated = this.update(Wrappers.<User>update().lambda()
+                .set(User::getPassword, DigestUtil.encrypt(CommonConstant.DEFAULT_PASSWORD))
+                .setSql("auth_version = auth_version + 1")
                 .eq(User::getTenantId, tenantId)
                 .in(User::getId, ids));
+        if (updated) {
+            authSessionService.revokeUserSessions(ids);
+        }
+        return updated;
     }
 
     @Override
@@ -216,11 +256,15 @@ public class UserServiceImpl extends MPJBaseServiceImpl<UserMapper, User> implem
         }
         String tenantId = requireTenantId();
         List<Long> ids = requireAdminTargets(userIds, false);
-        User update = new User();
-        update.setStatus(status);
-        return this.update(update, Wrappers.<User>update().lambda()
+        boolean updated = this.update(Wrappers.<User>update().lambda()
+                .set(User::getStatus, status)
+                .setSql(status == STATUS_DISABLED, "auth_version = auth_version + 1")
                 .eq(User::getTenantId, tenantId)
                 .in(User::getId, ids));
+        if (updated && status == STATUS_DISABLED) {
+            authSessionService.revokeUserSessions(ids);
+        }
+        return updated;
     }
 
     @Override
@@ -229,20 +273,63 @@ public class UserServiceImpl extends MPJBaseServiceImpl<UserMapper, User> implem
     }
 
     @Override
-    public User userInfo(String tenantId, String account, String password) {
-        if (StrUtil.isEmpty(tenantId)) {
-            return this.lambdaQuery().eq(User::getAccount, account)
-                    .eq(User::getPassword, password)
-                    .one();
+    @Transactional(rollbackFor = Exception.class)
+    public UserVO updateCurrentProfile(Long userId, MeProfileUpdateDTO dto) {
+        User user = this.getById(userId);
+        if (user == null) {
+            throw new ServiceException("用户不存在");
         }
-        return baseMapper.getUser(tenantId, account, password);
+        user.setName(StrUtil.trim(dto.getName()));
+        user.setRealName(StrUtil.trim(dto.getRealName()));
+        user.setAvatar(StrUtil.trim(dto.getAvatar()));
+        this.updateById(user);
+        return UserConverter.INSTANCE.convert(user);
     }
 
     @Override
+    public User userInfo(String tenantId, String account, String password) {
+        String normalizedAccount = normalizeAccount(account);
+        List<User> matches = this.lambdaQuery()
+                .and(wrapper -> wrapper
+                        .eq(User::getNormalizedAccount, normalizedAccount)
+                        .or()
+                        .eq(User::getAccount, StrUtil.trim(account)))
+                .eq(User::getPassword, password)
+                .last("LIMIT 2")
+                .list();
+        if (matches.size() == 1) {
+            User matched = matches.get(0);
+            if (StrUtil.isNotBlank(tenantId) && !tenantId.equals(matched.getTenantId())) {
+                return null;
+            }
+            return matched;
+        }
+        if (matches.size() > 1) {
+            throw new ServiceException("账号存在冲突，请联系平台运营人员处理");
+        }
+        return null;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public boolean grant(String userIds, String roleIds) {
-        User user = new User();
-        user.setRoleId(roleIds);
-        return this.update(user, Wrappers.<User>update().lambda().in(User::getId, Func.toLongList(userIds)));
+        List<Long> targetUserIds = Func.toLongList(userIds);
+        List<Long> targetRoleIds = Func.toLongList(roleIds);
+        if (targetUserIds.isEmpty()) {
+            return false;
+        }
+        boolean updated = this.update(Wrappers.<User>update().lambda()
+                .set(User::getRoleId, roleIds)
+                .setSql("auth_version = auth_version + 1")
+                .in(User::getId, targetUserIds));
+        if (updated) {
+            String scopeId = targetRoleIds.isEmpty()
+                    ? this.getById(targetUserIds.get(0)).getTenantId()
+                    : roleService.getById(targetRoleIds.get(0)).getTenantId();
+            syncScopedRoles(targetUserIds, targetRoleIds, scopeId);
+            authSessionService.revokeUserSessions(targetUserIds);
+        }
+        return updated;
     }
 
     @Override
@@ -254,15 +341,20 @@ public class UserServiceImpl extends MPJBaseServiceImpl<UserMapper, User> implem
 
     @Override
     public boolean updatePassword(Long userId, String oldPassword, String newPassword, String newPassword1) {
-        User user = getById(userId);
         if (!newPassword.equals(newPassword1)) {
             throw new ServiceException("请输入正确的确认密码!");
         }
-        if (!user.getPassword().equals(DigestUtil.encrypt(oldPassword))) {
-            throw new ServiceException("原密码不正确!");
+        String oldPasswordHash = DigestUtil.encrypt(oldPassword);
+        boolean updated = this.update(Wrappers.<User>update().lambda()
+                .set(User::getPassword, DigestUtil.encrypt(newPassword))
+                .setSql("auth_version = auth_version + 1")
+                .eq(User::getId, userId)
+                .eq(User::getPassword, oldPasswordHash));
+        if (!updated) {
+            throw new ServiceException("原密码不正确或已被修改!");
         }
-        return this.update(Wrappers.<User>update().lambda().set(User::getPassword, DigestUtil.encrypt(newPassword))
-                .eq(User::getId, userId));
+        authSessionService.revokeUserSessions(Collections.singletonList(userId));
+        return true;
     }
 
     @Override
@@ -286,8 +378,10 @@ public class UserServiceImpl extends MPJBaseServiceImpl<UserMapper, User> implem
     @Override
     public boolean existsByAccount(String account) {
         return this.lambdaQuery()
-                .eq(User::getAccount, account)
-                .eq(TenantItemImpl::getTenantId, SecurityContextUtil.getTenantId())
+                .and(wrapper -> wrapper
+                        .eq(User::getNormalizedAccount, normalizeAccount(account))
+                        .or()
+                        .apply("LOWER(TRIM(account)) = {0}", normalizeAccount(account)))
                 .exists();
     }
 
@@ -347,10 +441,33 @@ public class UserServiceImpl extends MPJBaseServiceImpl<UserMapper, User> implem
         return aliases ? baseMapper.getRoleAlias(tenantId, ids) : baseMapper.getRoleName(tenantId, ids);
     }
 
+    private void syncScopedRoles(List<Long> userIds, List<Long> selectedRoleIds, String scopeId) {
+        String scopeType = KnowledgeConstant.ADMIN_TENANT_ID.equals(scopeId) ? "PLATFORM" : "ORGANIZATION";
+        userIds.forEach(userId -> {
+            com.baomidou.mybatisplus.extension.conditions.update.LambdaUpdateChainWrapper<UserRole> removal =
+                    userRoleService.lambdaUpdate()
+                            .eq(UserRole::getUserId, userId)
+                            .eq(UserRole::getScopeType, scopeType)
+                            .eq(UserRole::getScopeId, scopeId);
+            if (selectedRoleIds.isEmpty()) {
+                removal.remove();
+            } else {
+                removal.notIn(UserRole::getRoleId, selectedRoleIds).remove();
+                selectedRoleIds.forEach(roleId -> roleService.grant(userId, roleId));
+            }
+        });
+    }
+
+    private String normalizeAccount(String account) {
+        return StrUtil.trim(account).toLowerCase(Locale.ROOT);
+    }
+
     private void assertAccountAvailable(String tenantId, String account, Long excludedUserId) {
         boolean exists = this.lambdaQuery()
-                .eq(User::getTenantId, tenantId)
-                .eq(User::getAccount, account)
+                .and(wrapper -> wrapper
+                        .eq(User::getNormalizedAccount, normalizeAccount(account))
+                        .or()
+                        .apply("LOWER(TRIM(account)) = {0}", normalizeAccount(account)))
                 .ne(excludedUserId != null, User::getId, excludedUserId)
                 .exists();
         if (exists) {

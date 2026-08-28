@@ -15,12 +15,15 @@
  */
 package com.knowledge.system.service.impl;
 
+import java.util.Locale;
+
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.github.yulichang.toolkit.MPJWrappers;
 import com.github.yulichang.wrapper.MPJLambdaWrapper;
 import com.knowledge.core.common.base.TenantItemImpl;
+import com.knowledge.core.tool.constant.KnowledgeConstant;
 import com.knowledge.core.tool.exception.BusinessException;
 import com.knowledge.system.converter.RoleConverter;
 import lombok.AllArgsConstructor;
@@ -162,12 +165,37 @@ public class RoleServiceImpl extends ServiceImpl<RoleMapper, Role> implements IR
 
 	@Override
 	public void grant(Long userId, Long roleId) {
-		if (!userRoleService.checkExists(userId, roleId)) {
-			UserRole userRole = new UserRole();
+		Role role = this.getById(roleId);
+		if (role == null) {
+			throw new BusinessException("role not found");
+		}
+		String inferredScopeType = KnowledgeConstant.ADMIN_TENANT_ID.equals(role.getTenantId())
+				? "PLATFORM"
+				: "ORGANIZATION";
+		String scopeType = StrUtil.blankToDefault(role.getRoleKind(), inferredScopeType);
+		if (StrUtil.isBlank(role.getRoleKind())) {
+			role.setRoleKind(scopeType);
+			if (StrUtil.isBlank(role.getRoleCode())) {
+				role.setRoleCode(StrUtil.blankToDefault(role.getRoleAlias(), role.getRoleName()).toUpperCase(Locale.ROOT));
+			}
+			if (role.getStatus() == null) {
+				role.setStatus(1);
+			}
+			this.updateById(role);
+		}
+		UserRole userRole = userRoleService.lambdaQuery()
+				.eq(UserRole::getUserId, userId)
+				.eq(UserRole::getRoleId, roleId)
+				.one();
+		if (userRole == null) {
+			userRole = new UserRole();
 			userRole.setRoleId(roleId);
 			userRole.setUserId(userId);
-			this.userRoleService.save(userRole);
 		}
+		userRole.setTenantId(role.getTenantId());
+		userRole.setScopeType(scopeType);
+		userRole.setScopeId(role.getTenantId());
+		this.userRoleService.saveOrUpdate(userRole);
 	}
 
 	@Override

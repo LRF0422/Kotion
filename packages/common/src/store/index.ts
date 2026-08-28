@@ -9,13 +9,26 @@ const store = createStore((state: GlobalState = {
     activeTabKey: '',
     collpase: false,
     rightCollpase: false,
-    pageTabs: { bySpace: {} }
+    pageTabs: { bySpace: {} },
+    availableContexts: []
 }, action: AnyAction) => {
     if (action.type === "UPDATE_USER") {
         const userInfo = action?.payload
         return {
-            userInfo,
-            ...state
+            ...state,
+            userInfo
+        }
+    }
+
+    if (action.type === "UPDATE_CONTEXTS") {
+        const availableContexts = action.payload?.availableContexts ?? []
+        const contextId = action.payload?.currentContextId
+        const requestedContext = availableContexts.find((context: any) => context.id === contextId)
+        const retainedContext = availableContexts.find((context: any) => context.id === state.currentContext?.id)
+        return {
+            ...state,
+            availableContexts,
+            currentContext: requestedContext ?? retainedContext
         }
     }
 

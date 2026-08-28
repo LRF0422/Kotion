@@ -10,7 +10,9 @@ import com.knowledge.core.log.service.ILogLoginService;
 import com.knowledge.core.mp.support.Condition;
 import com.knowledge.core.mp.support.Query;
 import com.knowledge.core.tool.api.R;
+import com.knowledge.core.tool.constant.RoleConstant;
 import com.knowledge.core.tool.utils.Func;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -24,6 +26,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @AllArgsConstructor
 @RequestMapping("/login")
+@PreAuthorize("(hasRole('platform.audit.read') or " + RoleConstant.HAS_ROLE_ADMIN
+		+ ") and principal.clientId == 'kotion-platform-admin'")
 public class LogLoginController {
 
 	private ILogLoginService logLoginService;

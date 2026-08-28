@@ -27,11 +27,12 @@ import com.knowledge.core.mp.support.Condition;
 import com.knowledge.core.mp.support.Query;
 import com.knowledge.core.tool.KnowledgeUser;
 import com.knowledge.core.tool.api.R;
+import com.knowledge.core.tool.constant.RoleConstant;
 import com.knowledge.core.tool.support.Kv;
 import com.knowledge.core.tool.utils.Func;
 import com.knowledge.system.domain.Tenant;
 import com.knowledge.system.service.ITenantService;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import springfox.documentation.annotations.ApiIgnore;
 
@@ -51,12 +52,18 @@ import java.util.Map;
 @Api(value = "租户管理", tags = "接口")
 public class TenantController extends KnowledgeController {
 
+	private static final String READ_ACCESS = "(hasRole('platform.settings.read') or "
+			+ RoleConstant.HAS_ROLE_ADMIN + ") and principal.clientId == 'kotion-platform-admin'";
+	private static final String MANAGE_ACCESS = "(hasRole('platform.settings.manage') or "
+			+ RoleConstant.HAS_ROLE_ADMIN + ") and principal.clientId == 'kotion-platform-admin'";
+
 	private ITenantService tenantService;
 
 	/**
 	 * 详情
 	 */
 	@GetMapping("/detail")
+	@PreAuthorize(READ_ACCESS)
 	@ApiOperation(value = "详情", notes = "传入tenant")
 	public R<Tenant> detail(Tenant tenant) {
 		Tenant detail = tenantService.getOne(Condition.getQueryWrapper(tenant));
@@ -67,6 +74,7 @@ public class TenantController extends KnowledgeController {
 	 * 分页
 	 */
 	@GetMapping("/list")
+	@PreAuthorize(READ_ACCESS)
 	@ApiImplicitParams({
 			@ApiImplicitParam(name = "tenantId", value = "参数名称", paramType = "query", dataType = "string"),
 			@ApiImplicitParam(name = "tenantName", value = "角色别名", paramType = "query", dataType = "string"),
@@ -87,6 +95,7 @@ public class TenantController extends KnowledgeController {
 	 * 下拉数据源
 	 */
 	@GetMapping("/select")
+	@PreAuthorize(READ_ACCESS)
 	@ApiOperation(value = "下拉数据源", notes = "传入tenant")
 	public R<List<Tenant>> select(Tenant tenant, KnowledgeUser knowledgeUser) {
 		QueryWrapper<Tenant> queryWrapper = Condition.getQueryWrapper(tenant);
@@ -100,6 +109,7 @@ public class TenantController extends KnowledgeController {
 	 * 自定义分页
 	 */
 	@GetMapping("/page")
+	@PreAuthorize(READ_ACCESS)
 	@ApiOperation(value = "分页", notes = "传入tenant")
 	public R<IPage<Tenant>> page(Tenant tenant, Query query) {
 		IPage<Tenant> pages = tenantService.selectTenantPage(Condition.getPage(query), tenant);
@@ -110,6 +120,7 @@ public class TenantController extends KnowledgeController {
 	 * 新增或修改
 	 */
 	@PostMapping("/submit")
+	@PreAuthorize(MANAGE_ACCESS)
 	@ApiOperation(value = "新增或修改", notes = "传入tenant")
 	public R submit(@Valid @RequestBody Tenant tenant) {
 		return R.status(tenantService.saveTenant(tenant));
@@ -119,6 +130,7 @@ public class TenantController extends KnowledgeController {
 	 * 删除
 	 */
 	@PostMapping("/remove")
+	@PreAuthorize(MANAGE_ACCESS)
 	@ApiOperation(value = "逻辑删除", notes = "传入ids")
 	public R remove(@ApiParam(value = "主键集合", required = true) @RequestParam String ids) {
 		return R.status(tenantService.removeBatchByIds(Func.toLongList(ids)));

@@ -8,6 +8,7 @@ import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import com.knowledge.core.secure.utils.SecurityContextUtil;
 import com.knowledge.wiki.service.entity.Page;
 import com.knowledge.wiki.service.entity.PageCollaborator;
 import com.knowledge.wiki.service.entity.Space;
@@ -22,6 +23,7 @@ import com.knowledge.wiki.service.service.ISpaceMemberService;
 import com.knowledge.wiki.service.service.ISpaceService;
 
 import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.StrUtil;
 
 /**
  * Unified permission resolution.
@@ -78,6 +80,11 @@ public class PermissionServiceImpl implements IPermissionService {
         if (userId == null || space == null) {
             return null;
         }
+        String currentContextId = SecurityContextUtil.getTenantId();
+        if (StrUtil.isNotBlank(currentContextId) && StrUtil.isNotBlank(space.getTenantId())
+                && !currentContextId.equals(space.getTenantId())) {
+            return null;
+        }
         // Space creator/owner always has full control
         if (userId.equals(space.getUserId())) {
             return PERMISSION_ADMIN;
@@ -102,8 +109,12 @@ public class PermissionServiceImpl implements IPermissionService {
 
     @Override
     public void checkPagePermission(Long userId, Page page, String requiredPermission) {
+        int requiredRank = rank(requiredPermission);
+        if (requiredRank == 0) {
+            throw WikiException.INVALID_PARAMETER.newException();
+        }
         String effective = effectivePagePermission(userId, page);
-        if (rank(effective) < rank(requiredPermission)) {
+        if (rank(effective) < requiredRank) {
             throw WikiException.FORBIDDEN_ACCESS.newException();
         }
     }

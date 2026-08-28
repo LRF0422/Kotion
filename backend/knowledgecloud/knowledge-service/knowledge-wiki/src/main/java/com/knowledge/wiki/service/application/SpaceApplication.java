@@ -56,7 +56,6 @@ import com.knowledge.wiki.service.entity.dto.ShareLinkRequestDTO;
 import com.knowledge.wiki.service.entity.dto.ShareLinkResponseDTO;
 import com.knowledge.wiki.service.entity.dto.SpaceMemberDTO;
 import com.knowledge.wiki.service.entity.enums.SpaceType;
-import com.knowledge.wiki.service.entity.enums.SpacePermissionEnum;
 import com.knowledge.wiki.service.entity.enums.InvitationStatus;
 import com.knowledge.wiki.service.entity.enums.PageStatus;
 import com.knowledge.wiki.service.entity.vo.InvitedPageVO;
@@ -74,7 +73,7 @@ import com.knowledge.wiki.service.exception.WikiException;
 import com.knowledge.wiki.service.entity.enums.CollaboratorRole;
 import com.knowledge.wiki.service.entity.PageCollaborator;
 import com.knowledge.wiki.service.entity.ShareLink;
-import com.knowledge.wiki.service.entity.SpacePermission;
+import com.knowledge.wiki.service.entity.SpaceMember;
 import com.knowledge.wiki.service.entity.WikiLink;
 import com.knowledge.wiki.service.entity.BlockVersion;
 import com.knowledge.wiki.service.entity.vo.BlockVersionVO;
@@ -135,6 +134,8 @@ public class SpaceApplication {
     @Autowired
     private ISpaceMemberService spaceMemberService;
     @Autowired
+    private SpaceMemberApplication spaceMemberApplication;
+    @Autowired
     private IPermissionService permissionService;
     @Autowired
     private ICollaborationInvitationService collaborationInvitationService;
@@ -166,7 +167,27 @@ public class SpaceApplication {
      */
     public void createSpace(SpaceDTO dto) {
         log.info("Creating space: {}", dto.getName());
+        Long currentUserId = SecurityContextUtil.getUserId();
+        String currentContextId = SecurityContextUtil.getTenantId();
+        if (currentUserId == null || currentUserId <= 0 || StrUtil.isBlank(currentContextId)) {
+            throw WikiException.FORBIDDEN_ACCESS.newException();
+        }
         Space space = SpaceConverter.INSTANCE.convertDO(dto);
+        if (space.getId() == null) {
+            space.setUserId(currentUserId);
+            space.setTenantId(currentContextId);
+        } else {
+            Space existing = spaceService.getById(space.getId());
+            if (existing == null || !currentContextId.equals(existing.getTenantId())) {
+                throw WikiException.SPACE_NOT_FOUND.newException();
+            }
+            String effectivePermission = permissionService.effectiveSpacePermission(currentUserId, existing);
+            if (!IPermissionService.PERMISSION_ADMIN.equals(effectivePermission)) {
+                throw WikiException.FORBIDDEN_ACCESS.newException();
+            }
+            space.setUserId(existing.getUserId());
+            space.setTenantId(existing.getTenantId());
+        }
         Space savedSpace = spaceService.createOrSave(space);
 
         // For team/collaboration spaces, add creator as OWNER member
@@ -254,6 +275,16 @@ public class SpaceApplication {
      * (creator, OWNER or ADMIN member), otherwise throws FORBIDDEN_ACCESS.
      */
     private Space requireSpaceAdmin(Long spaceId) {
+        Space space = requireReadableSpace(spaceId);
+        Long userId = SecurityContextUtil.getUserId();
+        if (!IPermissionService.PERMISSION_ADMIN
+                .equals(permissionService.effectiveSpacePermission(userId, space))) {
+            throw WikiException.FORBIDDEN_ACCESS.newException();
+        }
+        return space;
+    }
+
+    private Space requireReadableSpace(Long spaceId) {
         if (spaceId == null) {
             throw WikiException.INVALID_PARAMETER.newException();
         }
@@ -261,9 +292,7 @@ public class SpaceApplication {
         if (space == null) {
             throw WikiException.SPACE_NOT_FOUND.newException();
         }
-        Long userId = SecurityContextUtil.getUserId();
-        if (!IPermissionService.PERMISSION_ADMIN
-                .equals(permissionService.effectiveSpacePermission(userId, space))) {
+        if (permissionService.effectiveSpacePermission(SecurityContextUtil.getUserId(), space) == null) {
             throw WikiException.FORBIDDEN_ACCESS.newException();
         }
         return space;
@@ -300,6 +329,13 @@ public class SpaceApplication {
     public CollaborationInvitationResponseDTO createCollaborationInvitation(CollaborationInvitationRequestDTO dto) {
         log.info("Creating collaboration invitation for pageId: {}, spaceId: {}",
                 dto.getPageId(), dto.getSpaceId());
+        Page page = requirePagePermission(dto.getPageId(), IPermissionService.PERMISSION_ADMIN);
+        if (!dto.getSpaceId().equals(page.getSpaceId())) {
+            throw WikiException.INVALID_PARAMETER.newException();
+        }
+        validatePagePermission(CollUtil.isNotEmpty(dto.getPermissions())
+                ? dto.getPermissions().get(0)
+                : DEFAULT_PERMISSION);
         CollaborationInvitationResponseDTO response = new CollaborationInvitationResponseDTO();
         response.setCreatedAt(java.time.LocalDateTime.now());
 
@@ -602,7 +638,7 @@ public class SpaceApplication {
      *
      * <p>
      * Visible spaces = spaces the user owns (any non-template type) ∪ spaces
-     * the user has an explicit permission row for. Nodes are the live pages
+     * where wiki_space_member grants a non-GUEST role. Nodes are the live pages
      * (not deleted / trashed / template) in those spaces; edges are page-level
      * references from {@code wiki_link} whose both endpoints are visible nodes.
      *
@@ -613,7 +649,8 @@ public class SpaceApplication {
     public SpaceGraphVO getSpaceGraph() {
         SpaceGraphVO graph = new SpaceGraphVO();
         Long uid = SecurityContextUtil.getUserId();
-        if (uid == null) {
+        String contextId = SecurityContextUtil.getTenantId();
+        if (uid == null || uid <= 0 || StrUtil.isBlank(contextId)) {
             return graph;
         }
 
@@ -621,6 +658,7 @@ public class SpaceApplication {
         Set<Long> spaceIds = new HashSet<>();
         Map<Long, String> spaceNames = new HashMap<>();
         List<Space> ownedSpaces = spaceService.lambdaQuery()
+                .eq(Space::getTenantId, contextId)
                 .eq(Space::getUserId, uid)
                 .ne(Space::getType, SpaceType.TEMPALTE)
                 .list();
@@ -629,21 +667,30 @@ public class SpaceApplication {
             spaceNames.put(s.getId(), s.getName());
         }
 
-        List<SpacePermission> permissions = spaceService.getSpacePermissionService().lambdaQuery()
-                .eq(SpacePermission::getUserId, uid)
+        List<SpaceMember> memberships = spaceMemberService.lambdaQuery()
+                .eq(SpaceMember::getTenantId, contextId)
+                .eq(SpaceMember::getUserId, uid)
                 .list();
-        List<Long> permittedIds = permissions.stream()
-                .map(SpacePermission::getSpaceId)
+        List<Long> permittedIds = memberships.stream()
+                // GUEST is intentionally page-grant-only and must not make the whole
+                // space visible in the graph.
+                .filter(member -> member.getRole() != CollaboratorRole.GUEST)
+                .map(SpaceMember::getSpaceId)
                 .filter(id -> id != null && !spaceIds.contains(id))
                 .distinct()
                 .collect(Collectors.toList());
         if (CollUtil.isNotEmpty(permittedIds)) {
             spaceIds.addAll(permittedIds);
             List<Space> permittedSpaces = spaceService.lambdaQuery()
+                    .eq(Space::getTenantId, contextId)
                     .in(Space::getId, permittedIds)
                     .list();
             for (Space s : permittedSpaces) {
-                spaceNames.put(s.getId(), s.getName());
+                if (permissionService.effectiveSpacePermission(uid, s) != null) {
+                    spaceNames.put(s.getId(), s.getName());
+                } else {
+                    spaceIds.remove(s.getId());
+                }
             }
         }
 
@@ -1038,6 +1085,10 @@ public class SpaceApplication {
     }
 
     private void checkPageWritable(Long pageId) {
+        requirePagePermission(pageId, IPermissionService.PERMISSION_WRITE);
+    }
+
+    private Page requirePagePermission(Long pageId, String requiredPermission) {
         if (pageId == null) {
             throw WikiException.INVALID_PARAMETER.newException();
         }
@@ -1045,8 +1096,16 @@ public class SpaceApplication {
         if (page == null) {
             throw WikiException.PAGE_NOT_FOUND.newException();
         }
-        permissionService.checkPagePermission(SecurityContextUtil.getUserId(), page,
-                IPermissionService.PERMISSION_WRITE);
+        permissionService.checkPagePermission(SecurityContextUtil.getUserId(), page, requiredPermission);
+        return page;
+    }
+
+    private void validatePagePermission(String permission) {
+        if (!IPermissionService.PERMISSION_READ.equals(permission)
+                && !IPermissionService.PERMISSION_WRITE.equals(permission)
+                && !IPermissionService.PERMISSION_ADMIN.equals(permission)) {
+            throw WikiException.INVALID_PARAMETER.newException();
+        }
     }
 
     /**
@@ -1425,79 +1484,13 @@ public class SpaceApplication {
     }
 
     public List<SpaceMemberDTO> getSpaceMembers(Long spaceId) {
-        // Get space permissions for the space
-        List<SpacePermission> permissions = spaceService.getSpacePermissionService()
-                .lambdaQuery()
-                .eq(SpacePermission::getSpaceId, spaceId)
-                .list();
-
-        if (CollUtil.isEmpty(permissions)) {
-            // If no permissions exist, return only the space owner
-            Space space = spaceService.getById(spaceId);
-            if (space == null) {
-                throw WikiException.SPACE_NOT_FOUND.newException();
-            }
-            if (space.getUserId() != null) {
-                KnowledgeUser owner = ApiClientUtil.resolvingResponse(
-                        userClient.getUserById(space.getUserId()));
-                if (owner != null) {
-                    SpaceMemberDTO memberDTO = new SpaceMemberDTO();
-                    memberDTO.setId(owner.getUserId());
-                    memberDTO.setName(owner.getUserName());
-                    memberDTO.setEmail(owner.getEmail());
-                    memberDTO.setRole(CollaboratorRole.OWNER.getCode());
-                    memberDTO.setJoinedAt(space.getCreateTime());
-                    return ListUtil.toList(memberDTO);
-                }
-            }
-            return ListUtil.empty();
-        }
-
-        // Get user details for all members
-        List<Long> userIds = permissions.stream()
-                .map(SpacePermission::getUserId)
-                .collect(Collectors.toList());
-        List<KnowledgeUser> users = ApiClientUtil.resolvingResponse(
-                userClient.listByIds(userIds));
-
-        if (CollUtil.isEmpty(users)) {
-            return ListUtil.empty();
-        }
-
-        // Create a map for quick user lookup
-        Map<Long, KnowledgeUser> userMap = users.stream()
-                .collect(Collectors.toMap(KnowledgeUser::getUserId, u -> u, (a, b) -> a));
-
-        // Convert to DTOs
-        Space space = spaceService.getById(spaceId);
-        return permissions.stream()
-                .map(perm -> {
-                    KnowledgeUser user = userMap.get(perm.getUserId());
-                    if (user == null) {
-                        return null;
-                    }
-                    SpaceMemberDTO memberDTO = new SpaceMemberDTO();
-                    memberDTO.setId(user.getUserId());
-                    memberDTO.setName(user.getUserName());
-                    memberDTO.setEmail(user.getEmail());
-                    // Determine role based on permissions and ownership
-                    if (space != null && space.getUserId() != null &&
-                            space.getUserId().equals(user.getUserId())) {
-                        memberDTO.setRole(CollaboratorRole.OWNER.getCode());
-                    } else if (perm.getPermissions() != null &&
-                            perm.getPermissions().contains(SpacePermissionEnum.ADMIN)) {
-                        memberDTO.setRole(CollaboratorRole.ADMIN.getCode());
-                    } else {
-                        memberDTO.setRole(CollaboratorRole.MEMBER.getCode());
-                    }
-                    memberDTO.setJoinedAt(perm.getCreateTime());
-                    return memberDTO;
-                })
-                .filter(m -> m != null)
-                .collect(Collectors.toList());
+        // Compatibility alias for the older /space/{id}/members route. Keep one
+        // runtime source and one authorization boundary for both member APIs.
+        return spaceMemberApplication.listMembers(spaceId);
     }
 
     public List<PageCollaboratorDTO> getPageCollaborators(Long pageId) {
+        requirePagePermission(pageId, IPermissionService.PERMISSION_READ);
         // Get all collaborators for this page
         List<PageCollaborator> collaborators = pageCollaboratorService.lambdaQuery()
                 .eq(PageCollaborator::getPageId, pageId)
@@ -1561,6 +1554,8 @@ public class SpaceApplication {
     }
 
     public void updateCollaboratorPermission(Long pageId, Long userId, String permission) {
+        requirePagePermission(pageId, IPermissionService.PERMISSION_ADMIN);
+        validatePagePermission(permission);
         PageCollaborator collaborator = pageCollaboratorService.lambdaQuery()
                 .eq(PageCollaborator::getPageId, pageId)
                 .eq(PageCollaborator::getUserId, userId)
@@ -1576,6 +1571,7 @@ public class SpaceApplication {
     }
 
     public void removePageCollaborator(Long pageId, Long userId) {
+        requirePagePermission(pageId, IPermissionService.PERMISSION_ADMIN);
         pageCollaboratorService.lambdaUpdate()
                 .eq(PageCollaborator::getPageId, pageId)
                 .eq(PageCollaborator::getUserId, userId)
@@ -1838,6 +1834,14 @@ public class SpaceApplication {
         }
         if (invitation.getStatus() != InvitationStatus.PENDING) {
             throw WikiException.INVALID_INVITATION_STATUS.newException();
+        }
+        Long invitationSpaceId = invitation.getSpaceId();
+        if (invitationSpaceId == null && invitation.getPageId() != null) {
+            Page invitationPage = pageService.getById(invitation.getPageId());
+            invitationSpaceId = invitationPage != null ? invitationPage.getSpaceId() : null;
+        }
+        if (!spaceId.equals(invitationSpaceId)) {
+            throw WikiException.FORBIDDEN_ACCESS.newException();
         }
         Long userId = SecurityContextUtil.getUserId();
         boolean isAdmin = IPermissionService.PERMISSION_ADMIN
@@ -2120,6 +2124,8 @@ public class SpaceApplication {
         if (page == null || !spaceId.equals(page.getSpaceId())) {
             throw WikiException.INVALID_PARAMETER.newException();
         }
+        permissionService.checkPagePermission(SecurityContextUtil.getUserId(), page,
+                IPermissionService.PERMISSION_WRITE);
         page.setPinned(!Boolean.TRUE.equals(page.getPinned()));
         pageService.updateById(page);
         log.info("Toggled pin status of page {} in space {} to {}", pageId, spaceId, page.getPinned());
@@ -2129,6 +2135,7 @@ public class SpaceApplication {
      * Get all pinned/featured pages in a space
      */
     public List<PageVO> getPinnedPages(Long spaceId) {
+        requireReadableSpace(spaceId);
         List<Page> pages = pageService.lambdaQuery()
                 .eq(Page::getSpaceId, spaceId)
                 .eq(Page::getPinned, true)
@@ -2143,10 +2150,7 @@ public class SpaceApplication {
      * Update tags for a page
      */
     public void updatePageTags(Long pageId, List<String> tags) {
-        Page page = pageService.getById(pageId);
-        if (page == null) {
-            throw WikiException.INVALID_PARAMETER.newException();
-        }
+        Page page = requirePagePermission(pageId, IPermissionService.PERMISSION_WRITE);
         page.setTags(tags);
         pageService.updateById(page);
         log.info("Updated tags for page {}: {}", pageId, tags);
@@ -2156,6 +2160,7 @@ public class SpaceApplication {
      * Get all distinct tags used across pages in a space
      */
     public List<String> getSpaceTags(Long spaceId) {
+        requireReadableSpace(spaceId);
         List<Page> pages = pageService.lambdaQuery()
                 .eq(Page::getSpaceId, spaceId)
                 .isNotNull(Page::getTags)

@@ -1,19 +1,91 @@
 import { API } from "./use-api";
+import type {
+    ContextTokenResponse,
+    ContextVO,
+    CreateOrganizationBody,
+    CurrentUser,
+    InviteOrganizationMemberBody,
+    OrganizationInvitation,
+    OrganizationMember,
+    SwitchContextBody,
+    UpdateOrganizationMemberRoleBody,
+    UpdatePasswordBody,
+    UpdateProfileBody,
+} from "./types";
+
+export * from "./types";
+export * from "./use-api";
 
 export const APIS = {
     LOGIN: {
         url: '/knowledge-auth/oauth2/token',
         method: 'POST',
+        encoding: 'form',
         name: 'Login'
     } as API,
     REFRESH_TOKEN: {
-        url: '/knowledge-auth/token/refresh',
+        url: '/knowledge-auth/oauth2/token',
         method: 'POST',
+        encoding: 'form',
+    } as API,
+    LOGOUT: {
+        url: '/knowledge-auth/oauth2/logout',
+        method: 'POST',
+        encoding: 'form',
     } as API,
     GET_USER_INFO: {
         url: '/knowledge-system/user/info',
         method: 'GET'
     } as API,
+    GET_ME: {
+        url: '/knowledge-system/api/v1/me',
+        method: 'GET'
+    } as API<CurrentUser>,
+    UPDATE_ME_PROFILE: {
+        url: '/knowledge-system/api/v1/me/profile',
+        method: 'PATCH'
+    } as API<CurrentUser, undefined, UpdateProfileBody>,
+    UPDATE_ME_PASSWORD: {
+        url: '/knowledge-system/api/v1/me/password',
+        method: 'POST'
+    } as API<unknown, undefined, UpdatePasswordBody>,
+    GET_CONTEXTS: {
+        url: '/knowledge-system/api/v1/me/contexts',
+        method: 'GET'
+    } as API<ContextVO[]>,
+    CREATE_ORGANIZATION: {
+        url: '/knowledge-system/api/v1/organizations',
+        method: 'POST'
+    } as API<ContextVO, undefined, CreateOrganizationBody>,
+    GET_ORGANIZATION_MEMBERS: {
+        url: '/knowledge-system/api/v1/organizations/:contextId/members',
+        method: 'GET'
+    } as API<OrganizationMember[], { contextId: string }>,
+    INVITE_ORGANIZATION_MEMBER: {
+        url: '/knowledge-system/api/v1/organizations/:contextId/invitations',
+        method: 'POST'
+    } as API<OrganizationInvitation, { contextId: string }, InviteOrganizationMemberBody>,
+    ACCEPT_ORGANIZATION_INVITATION: {
+        url: '/knowledge-system/api/v1/organization-invitations/:token/accept',
+        method: 'POST'
+    } as API<ContextVO, { token: string }>,
+    UPDATE_ORGANIZATION_MEMBER_ROLE: {
+        url: '/knowledge-system/api/v1/organizations/:contextId/members/:memberId',
+        method: 'PATCH'
+    } as API<unknown, { contextId: string; memberId: string }, UpdateOrganizationMemberRoleBody>,
+    REMOVE_ORGANIZATION_MEMBER: {
+        url: '/knowledge-system/api/v1/organizations/:contextId/members/:memberId',
+        method: 'DELETE'
+    } as API<unknown, { contextId: string; memberId: string }>,
+    LEAVE_ORGANIZATION: {
+        url: '/knowledge-system/api/v1/organizations/:contextId/leave',
+        method: 'POST'
+    } as API<unknown, { contextId: string }>,
+    SWITCH_CONTEXT: {
+        url: '/knowledge-auth/oauth2/context',
+        method: 'POST',
+        encoding: 'form'
+    } as API<ContextTokenResponse, { contextId: string }, SwitchContextBody>,
     UPLOAD_FILE: {
         url: '/knowledge-resource/oss/endpoint/put-file',
         method: 'POST'

@@ -227,7 +227,7 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                                 key={item.id}
                                 onClick={() => selectItem(item)}
                                 className={cn(
-                                    "group flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm transition-colors",
+                                    "group flex min-h-11 w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm transition-colors lg:min-h-0",
                                     active
                                         ? "bg-accent font-medium text-foreground"
                                         : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
@@ -253,7 +253,7 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
         }
         return (
             <ScrollArea className="min-h-0 flex-1">
-                <div className="px-5 py-6 sm:px-8">
+                <div className="px-5 py-6 md:px-8">
                     {showHeader && (
                         <div className="mx-auto mb-6 w-full max-w-2xl space-y-0.5">
                             <h2 className="text-lg font-semibold text-foreground">{meta.title}</h2>
@@ -285,14 +285,14 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                     <DialogHeader className="flex-row items-center gap-1 space-y-0 border-b px-2 py-2.5 text-left">
                         <button
                             onClick={() => setMobileDetail(false)}
-                            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent"
+                            className="flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent"
                             aria-label={t("settings.back")}
                         >
                             <ChevronLeft className="h-5 w-5" />
                         </button>
                         <DialogTitle className="text-base font-semibold">{meta.title}</DialogTitle>
                     </DialogHeader>
-                    <div className="flex min-h-0 flex-1 flex-col">{renderContent(!isSkills)}</div>
+                    <div className="flex min-h-0 flex-1 flex-col">{renderContent(false)}</div>
                 </>
             )}
         </div>
@@ -323,8 +323,8 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                     // 覆盖 DialogContent 默认的 grid/gap/padding，改为 flex 列布局，
                     // 让内部 body 拿到确定高度（否则 grid auto 行会按内容撑高，ScrollArea 失效）。
                     "flex flex-col gap-0 overflow-hidden p-0",
-                    "h-[100dvh] max-w-full rounded-none border-0",
-                    "sm:h-[660px] sm:max-w-[920px] sm:rounded-xl sm:border",
+                    "h-[100dvh] max-w-full rounded-none border-0 pt-safe pb-safe",
+                    "md:h-[660px] md:max-w-[920px] md:rounded-xl md:border",
                 )}
             >
                 {isMobile ? MobileBody : DesktopBody}

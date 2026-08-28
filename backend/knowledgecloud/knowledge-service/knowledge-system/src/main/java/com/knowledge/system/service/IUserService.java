@@ -20,6 +20,7 @@ import com.github.yulichang.base.MPJBaseService;
 import com.knowledge.system.dto.QueryUserDTO;
 import com.knowledge.system.domain.User;
 import com.knowledge.system.domain.dto.AdminUserSubmitDTO;
+import com.knowledge.system.domain.dto.MeProfileUpdateDTO;
 import com.knowledge.system.vo.UserVO;
 import java.util.List;
 
@@ -51,6 +52,8 @@ public interface IUserService extends MPJBaseService<User> {
 	boolean setAdminUserStatus(String userIds, Integer status);
 
 	User userInfo(Long userId);
+
+	UserVO updateCurrentProfile(Long userId, MeProfileUpdateDTO dto);
 
 	User userInfo(String tenantId, String account, String password);
 

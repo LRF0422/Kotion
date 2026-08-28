@@ -1,5 +1,8 @@
 package com.knowledge.system.service.impl;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 import org.springframework.stereotype.Service;
 
 import com.github.yulichang.base.MPJBaseServiceImpl;
@@ -16,6 +19,19 @@ public class UserRoleServiceImpl extends MPJBaseServiceImpl<UserRoleMapper, User
                 .eq(UserRole::getUserId, userId)
                 .eq(UserRole::getRoleId, roleId)
                 .exists();
+    }
+
+    @Override
+    public List<Long> listRoleIds(Long userId, String scopeType, String scopeId) {
+        return this.lambdaQuery()
+                .eq(UserRole::getUserId, userId)
+                .eq(scopeType != null, UserRole::getScopeType, scopeType)
+                .eq(scopeId != null, UserRole::getScopeId, scopeId)
+                .list()
+                .stream()
+                .map(UserRole::getRoleId)
+                .distinct()
+                .collect(Collectors.toList());
     }
 
 }

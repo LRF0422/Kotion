@@ -81,4 +81,10 @@ public class Tenant extends BaseEntity {
 
 	private TenantType tenantType;
 
+	@JsonSerialize(using = ToStringSerializer.class)
+	private Long ownerUserId;
+
+	/** 1-active, 2-disabled. */
+	private Integer status;
+
 }

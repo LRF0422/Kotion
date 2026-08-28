@@ -27,9 +27,11 @@ import com.knowledge.core.log.service.ILogErrorService;
 import com.knowledge.core.mp.support.Condition;
 import com.knowledge.core.mp.support.Query;
 import com.knowledge.core.tool.api.R;
+import com.knowledge.core.tool.constant.RoleConstant;
 import com.knowledge.core.tool.utils.BeanUtil;
 import com.knowledge.core.tool.utils.Func;
 import com.knowledge.core.tool.utils.StringPool;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -49,6 +51,8 @@ import java.util.stream.Collectors;
 @RestController
 @AllArgsConstructor
 @RequestMapping("/error")
+@PreAuthorize("(hasRole('platform.audit.read') or " + RoleConstant.HAS_ROLE_ADMIN
+		+ ") and principal.clientId == 'kotion-platform-admin'")
 public class LogErrorController {
 
 	private ILogErrorService errorLogService;

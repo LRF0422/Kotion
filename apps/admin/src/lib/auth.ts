@@ -1,18 +1,28 @@
 /**
- * Token 存储：与主应用（@kn/common）使用相同的 localStorage key，
- * 便于管理后台与知识库前台共享登录态。
+ * 平台运营端使用独立的登录态，避免与租户知识库前台共享 token。
  */
-const ACCESS_TOKEN_KEY = 'knowledge-access-token'
-const REFRESH_TOKEN_KEY = 'knowledge-refresh-token'
-const USER_INFO_KEY = 'kn-admin-user'
+const ACCESS_TOKEN_KEY = 'knowledge-operator-access-token'
+const REFRESH_TOKEN_KEY = 'knowledge-operator-refresh-token'
+const USER_INFO_KEY = 'kn-operator-user'
+
+export const OPERATOR_AUDIENCE = 'kotion-platform-admin'
+
+const PLATFORM_OPERATOR_AUTHORITIES = [
+  'administrator',
+  'PLATFORM_SUPER_ADMIN',
+  'PLATFORM_OPERATOR',
+  'PLATFORM_AUDITOR',
+]
 
 export const getAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY)
 
 export const getRefreshToken = () => localStorage.getItem(REFRESH_TOKEN_KEY)
 
-export const saveTokens = (accessToken: string, refreshToken: string) => {
+export const saveTokens = (accessToken: string, refreshToken?: string) => {
   localStorage.setItem(ACCESS_TOKEN_KEY, accessToken)
-  localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken)
+  if (refreshToken) {
+    localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken)
+  }
 }
 
 export const clearTokens = () => {
@@ -23,8 +33,31 @@ export const clearTokens = () => {
 
 export const isLoggedIn = () => Boolean(getAccessToken())
 
+const normalizeAuthority = (authority: string) => authority.trim().replace(/^ROLE_/i, '').toLowerCase()
+
 export const hasAuthority = (authority: string | undefined, expected: string) =>
-  Boolean(authority?.split(',').map((item) => item.trim().replace(/^ROLE_/i, '')).includes(expected))
+  Boolean(authority?.split(',').map(normalizeAuthority).includes(normalizeAuthority(expected)))
+
+export const hasAnyAuthority = (authority: string | undefined, expected: string[]) =>
+  expected.some((item) => hasAuthority(authority, item))
+
+export const hasPermission = (permissions: string[] | undefined, expected: string) =>
+  Boolean(permissions?.includes('*') || permissions?.includes(expected))
+
+export const getTokenPermissions = (accessToken: string): string[] | undefined => {
+  try {
+    const payload = accessToken.split('.')[1]
+    if (!payload) return undefined
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/')
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=')
+    const permissions = (JSON.parse(atob(padded)) as { permissions?: string | string[] }).permissions
+    if (Array.isArray(permissions)) return permissions.length > 0 ? permissions : undefined
+    const parsed = permissions?.split(',').map((item) => item.trim()).filter(Boolean)
+    return parsed && parsed.length > 0 ? parsed : undefined
+  } catch {
+    return undefined
+  }
+}
 
 export interface AuthUser {
   userId?: string
@@ -33,6 +66,8 @@ export interface AuthUser {
   avatar?: string
   authority?: string
   tenantId?: string
+  /** Auth API may expose permission codes in a future compatible response. */
+  permissions?: string[]
 }
 
 export const saveAuthUser = (user: AuthUser) => {
@@ -49,7 +84,8 @@ export const getAuthUser = (): AuthUser | null => {
   }
 }
 
-export const isAdminLoggedIn = () => {
-  const user = getAuthUser()
-  return isLoggedIn() && hasAuthority(user?.authority, 'administrator')
-}
+export const hasOperatorAccess = (user: AuthUser | null | undefined) =>
+  Boolean(user?.permissions?.some((permission) => permission === 'PLATFORM_ADMIN' || permission.startsWith('platform.')))
+  || hasAnyAuthority(user?.authority, PLATFORM_OPERATOR_AUTHORITIES)
+
+export const isOperatorLoggedIn = () => isLoggedIn() && hasOperatorAccess(getAuthUser())
