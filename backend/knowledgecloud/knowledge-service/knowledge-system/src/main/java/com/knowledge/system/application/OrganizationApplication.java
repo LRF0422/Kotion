@@ -432,7 +432,7 @@ public class OrganizationApplication {
                 ? TenantType.INDIVIDUAL.getValue()
                 : tenant.getTenantType().getValue());
         vo.setOwnerUserId(tenant == null ? null : tenant.getOwnerUserId());
-        vo.setStatus(tenant == null ? STATUS_ACTIVE : tenant.getStatus());
+        vo.setStatus(tenant == null || tenant.getStatus() == null ? STATUS_ACTIVE : tenant.getStatus());
         vo.setMemberRole(membership.getMemberRole());
         return vo;
     }
