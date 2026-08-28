@@ -17,7 +17,7 @@ import lombok.AllArgsConstructor;
 @RestController
 @AllArgsConstructor
 @RequestMapping("/auth-session/internal")
-@PreAuthorize("hasRole('service') and principal.clientId == 'service' and principal.userId == -1")
+@PreAuthorize("hasRole('service') and principal.clientId == 'service'")
 public class AuthSessionClient {
 
     private final IAuthSessionService authSessionService;

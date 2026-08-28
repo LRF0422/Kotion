@@ -48,7 +48,7 @@ public class UserClient implements IUserClient {
     private IOrganizationMemberService organizationMemberService;
 
     @Override
-    @PreAuthorize("hasRole('service') and principal.clientId == 'service' and principal.userId == -1")
+    @PreAuthorize("hasRole('service') and principal.clientId == 'service'")
     public R<UserInfo> userInfo(Long userId) {
         User user = userService.userInfo(userId);
         if (user == null) {
@@ -58,7 +58,7 @@ public class UserClient implements IUserClient {
     }
 
     @Override
-    @PreAuthorize("hasRole('service') and principal.clientId == 'service' and principal.userId == -1")
+    @PreAuthorize("hasRole('service') and principal.clientId == 'service'")
     public R<UserInfo> userInfo(Long userId, String contextId) {
         User user = userService.userInfo(userId);
         if (user == null) {
@@ -85,7 +85,7 @@ public class UserClient implements IUserClient {
     }
 
     @Override
-    @PreAuthorize("hasRole('service') and principal.clientId == 'service' and principal.userId == -1")
+    @PreAuthorize("hasRole('service') and principal.clientId == 'service'")
     public R<UserInfo> userInfo(String tenantId, String account, String password) {
         User user = userService.userInfo(tenantId, account, password);
         if (user == null) {
@@ -110,7 +110,7 @@ public class UserClient implements IUserClient {
     }
 
     @Override
-    @PreAuthorize("hasRole('service') and principal.clientId == 'service' and principal.userId == -1")
+    @PreAuthorize("hasRole('service') and principal.clientId == 'service'")
     public R<?> grantRoles(GrantRolesDTO dto) {
         String roleIds = dto.getRoleIds().stream()
                 .map(String::valueOf)
