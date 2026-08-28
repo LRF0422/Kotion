@@ -10,9 +10,9 @@ import com.github.yulichang.base.MPJBaseServiceImpl;
 import com.knowledge.wiki.service.entity.Space;
 import com.knowledge.wiki.service.entity.SpaceMember;
 import com.knowledge.wiki.service.entity.enums.CollaboratorRole;
+import com.knowledge.wiki.service.mapper.SpaceMapper;
 import com.knowledge.wiki.service.mapper.SpaceMemberMapper;
 import com.knowledge.wiki.service.service.ISpaceMemberService;
-import com.knowledge.wiki.service.service.ISpaceService;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -25,12 +25,12 @@ public class SpaceMemberServiceImpl extends MPJBaseServiceImpl<SpaceMemberMapper
         implements ISpaceMemberService {
 
     @Autowired
-    private ISpaceService spaceService;
+    private SpaceMapper spaceMapper;
 
     @Override
     public SpaceMember addMember(Long spaceId, Long userId, CollaboratorRole role, Long invitedBy) {
         // Check if already a member
-        Space space = spaceService.getById(spaceId);
+        Space space = spaceMapper.selectById(spaceId);
         if (space == null) {
             throw new IllegalArgumentException("Space not found: " + spaceId);
         }
