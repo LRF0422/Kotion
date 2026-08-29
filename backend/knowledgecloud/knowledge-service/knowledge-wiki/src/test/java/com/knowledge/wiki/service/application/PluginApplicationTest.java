@@ -28,12 +28,14 @@ import com.knowledge.core.secure.auth.KnowledgeUserAuthentication;
 import com.knowledge.core.tool.KnowledgeUser;
 import com.knowledge.core.tool.exception.BusinessException;
 import com.knowledge.core.version.VersionStatus;
+import com.knowledge.wiki.service.entity.InstalledPlugin;
 import com.knowledge.wiki.service.entity.Plugin;
 import com.knowledge.wiki.service.entity.PluginVersion;
 import com.knowledge.wiki.service.entity.VersionDesc;
 import com.knowledge.wiki.service.entity.dto.PluginReviewDTO;
 import com.knowledge.wiki.service.entity.dto.PluginVersionPublishDTO;
 import com.knowledge.wiki.service.entity.dto.QueryAdminPluginDTO;
+import com.knowledge.wiki.service.entity.enums.InstalledPluginStatus;
 import com.knowledge.wiki.service.entity.enums.PluginReviewDecision;
 import com.knowledge.wiki.service.entity.enums.PluginStatus;
 import com.knowledge.wiki.service.entity.vo.PluginVO;
@@ -59,6 +61,37 @@ class PluginApplicationTest {
     @AfterEach
     void clearSecurityContext() {
         SecurityContextHolder.clearContext();
+    }
+
+    @Test
+    void detailReturnsActiveVersionAndInstallMetadata() {
+        Plugin plugin = plugin(7L, PluginStatus.DONE);
+        plugin.setCurrentVersionId(99L);
+        PluginVersion active = pluginVersion(8L, 7L, "1.0.0", VersionStatus.ACTIVE, PluginStatus.DONE);
+        active.setResourcePath("plugins/example/index.js");
+        active.setIntegrity("sha384-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+        PluginVersion installed = pluginVersion(6L, 7L, "0.9.0", VersionStatus.IN_ACTIVE, PluginStatus.DONE);
+        InstalledPlugin installRecord = new InstalledPlugin();
+        installRecord.setStatus(InstalledPluginStatus.DISABLED);
+
+        when(pluginService.getById(7L)).thenReturn(plugin);
+        when(pluginService.getActiveVersion(7L)).thenReturn(active);
+        when(pluginService.checkInstall(7L)).thenReturn(Collections.singletonList(installed));
+        when(installedPluginService.getInstallRecord(7L)).thenReturn(installRecord);
+        when(pluginTagService.listTagContents(7L)).thenReturn(Collections.singletonList("editor"));
+
+        PluginVO result = application.detail(7L);
+
+        assertNotNull(result.getCurrentVersion());
+        assertEquals(active.getId(), result.getCurrentVersion().getId());
+        assertEquals(active.getVersion(), result.getCurrentVersion().getVersion());
+        assertEquals(active.getId(), result.getCurrentVersionId());
+        assertEquals(active.getResourcePath(), result.getResourcePath());
+        assertEquals(active.getIntegrity(), result.getIntegrity());
+        assertEquals(1, result.getInstalleddVersions().size());
+        assertEquals(installed.getId(), result.getInstalleddVersions().get(0).getId());
+        assertEquals(InstalledPluginStatus.DISABLED, result.getInstallStatus());
+        assertEquals(Collections.singletonList("editor"), result.getTags());
     }
 
     @Test

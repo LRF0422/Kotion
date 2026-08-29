@@ -39,6 +39,7 @@ public class PluginVO implements Serializable {
     private Long downloads;
     private String screenShot;
     private String resourcePath;
+    private String integrity;
     private List<String> tags;
     private PluginVersionVO candidateVersion;
     private LocalDateTime createTime;

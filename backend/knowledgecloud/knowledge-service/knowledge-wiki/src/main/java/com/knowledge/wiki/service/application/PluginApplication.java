@@ -188,6 +188,12 @@ public class PluginApplication {
         }
         PluginVO vo = PluginConverter.INSTANCE.convertVO(plugin);
         vo.setCurrentVersion(PluginVersionConverter.INSTANCE.convertVO(activeVersion));
+        vo.setCurrentVersionId(activeVersion.getId());
+        vo.setResourcePath(activeVersion.getResourcePath());
+        vo.setIntegrity(activeVersion.getIntegrity());
+        vo.setInstalleddVersions(PluginVersionConverter.INSTANCE.convertVO(pluginService.checkInstall(id)));
+        InstalledPlugin record = installedPluginService.getInstallRecord(id);
+        vo.setInstallStatus(record == null ? null : record.getStatus());
         vo.setTags(pluginTagService.listTagContents(id));
         return vo;
     }
@@ -220,6 +226,7 @@ public class PluginApplication {
                 .selectAll(Plugin.class)
                 .selectAs(PluginVersion::getId, PluginVO::getCurrentVersionId)
                 .selectAs(PluginVersion::getResourcePath, PluginVO::getResourcePath)
+                .selectAs(PluginVersion::getIntegrity, PluginVO::getIntegrity)
                 .eq(dto.getCategory() != null, Plugin::getCategory, dto.getCategory())
                 .eq(Plugin::getStatus, PluginStatus.DONE)
                 .eq(PluginVersion::getStatus, VersionStatus.ACTIVE);

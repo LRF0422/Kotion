@@ -1,408 +1,322 @@
-import { AlertCircle, BoxSelect, CheckCircle2, Package, PanelLeftClose, PanelLeftOpen, PlusSquare, RefreshCcw, Slack, Trash2 } from "@kn/icon";
 import {
-    Accordion, AccordionContent,
-    AccordionItem, AccordionTrigger,
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-    AlertDialogTrigger,
-    Avatar,
-    Badge, Button, EmptyState, Input,
-    Sheet, SheetContent, SheetTitle,
-    Tooltip,
-    TooltipContent, TooltipProvider, TooltipTrigger,
-    useResponsive, cn
+  AppContext,
+  APIS,
+  event,
+  PLUGIN_CHANGED,
+  useApi,
+  useNavigator,
+  usePluginState,
+  useTranslation,
+  useUploadFile,
+} from "@kn/common";
+import { AlertCircle, Loader2, Trash2 } from "@kn/icon";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  Button,
+  Sheet,
+  SheetContent,
+  SheetTitle,
+  cn,
+  toast,
+  useResponsive,
 } from "@kn/ui";
-import React, { useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { useNavigator } from "@kn/common";
-import { Outlet } from "react-router-dom";
-import { PluginUploader } from "./PluginUploader";
-import { PluginManager } from "./PluginManager";
-import { useApi, useUploadFile } from "@kn/common";
-import { APIS } from "@kn/common";
-import { useSafeState } from "ahooks";
-import { AppContext, PLUGIN_CHANGED, event, usePluginState } from "@kn/common";
+import React, {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { Outlet, useLocation } from "react-router-dom";
+import { InstalledExtensionsSidebar } from "./InstalledExtensionsSidebar";
+import { PluginHubTopBar } from "./PluginHubTopBar";
+import { PluginVersionRecord } from "./plugin-model";
 
-
-const Item: React.FC<{ item: any, handleUnInstall: (item: any) => void, handleUpdate: (id: string) => void, isLoaded?: boolean }> = ({ item, handleUnInstall, handleUpdate, isLoaded }) => {
-    const navigator = useNavigator()
-    const { usePath } = useUploadFile()
-
-    return (
-        <div
-            className="group flex items-center gap-3 rounded-lg p-2.5 border bg-card hover:bg-accent/50 hover:border-primary/30 transition-colors cursor-pointer"
-            onClick={() => navigator.go({ to: `/plugin-hub/${item.subjectId}` })}
-        >
-            {/* Plugin Icon + runtime status */}
-            <div className="shrink-0 relative">
-                <Avatar className="h-11 w-11 rounded-lg border border-border/50">
-                    <img src={usePath(item.icon)} alt={item.name} className="object-cover" />
-                </Avatar>
-                <div className={cn(
-                    "absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-background",
-                    isLoaded ? "bg-green-500" : "bg-yellow-500"
-                )} title={isLoaded ? "Loaded" : "Not loaded"} />
-            </div>
-
-            {/* Plugin Info */}
-            <div className="flex-1 min-w-0 space-y-1">
-                <div className="flex items-center justify-between gap-2">
-                    <h4 className="text-sm font-semibold text-foreground truncate group-hover:text-primary transition-colors">
-                        {item.name}
-                    </h4>
-                    {isLoaded ? (
-                        <span className="shrink-0 inline-flex items-center gap-1 text-[10px] text-green-600 dark:text-green-400">
-                            <CheckCircle2 className="h-3 w-3" />
-                            Active
-                        </span>
-                    ) : (
-                        <span className="shrink-0 inline-flex items-center gap-1 text-[10px] text-yellow-600 dark:text-yellow-400">
-                            <AlertCircle className="h-3 w-3" />
-                            Inactive
-                        </span>
-                    )}
-                </div>
-
-                <p className="text-xs text-muted-foreground line-clamp-1">
-                    {item.description}
-                </p>
-
-                {/* Action Buttons */}
-                <div className="flex gap-1.5 pt-0.5">
-                    <Button
-                        variant="secondary"
-                        size="sm"
-                        className="h-8 px-2.5 text-xs gap-1.5 hover:bg-destructive/10 hover:text-destructive transition-colors"
-                        onClick={(e) => {
-                            e.stopPropagation()
-                            handleUnInstall(item)
-                        }}
-                    >
-                        <Trash2 className="h-3 w-3" />
-                        Uninstall
-                    </Button>
-                    {item.activeVersionId !== item.id && (
-                        <Badge
-                            variant="outline"
-                            className="h-8 px-2.5 text-xs cursor-pointer hover:bg-primary/10 hover:text-primary hover:border-primary/50 transition-colors"
-                            onClick={(e) => {
-                                e.stopPropagation()
-                                handleUpdate(item.id)
-                            }}
-                        >
-                            Update
-                        </Badge>
-                    )}
-                </div>
-            </div>
-        </div>
-    )
-}
+const SIDEBAR_STORAGE_KEY = "kn:plugin-sidebar-collapsed";
+const pluginVersionKey = (plugin: PluginVersionRecord) =>
+  String(plugin.id ?? plugin.subjectId ?? plugin.pluginKey ?? plugin.name);
 
 export const Shop: React.FC = () => {
+  const { isMobile, isTablet } = useResponsive();
+  const { t } = useTranslation();
+  const navigator = useNavigator();
+  const location = useLocation();
+  const { usePath } = useUploadFile();
+  const { pluginManager } = useContext(AppContext);
+  const { loadedPluginNames } = usePluginState();
 
-    const { isMobile, isTablet } = useResponsive()
-    const [installedPlugins, setInstalledPlugins] = useSafeState<any[]>([])
-    const navigator = useNavigator()
-    const [open, setOpen] = useState(false)
-    const [refreshing, setRefreshing] = useState(false)
-    const [installedKeyword, setInstalledKeyword] = useState("")
-    const [sidebarOpen, setSidebarOpen] = useState(false)
-    const { pluginManager } = useContext(AppContext)
-    const [currentPlugin, setCurrentPlugin] = useState<any | undefined>()
+  const [installedPlugins, setInstalledPlugins] = useState<
+    PluginVersionRecord[]
+  >([]);
+  const [installedLoading, setInstalledLoading] = useState(true);
+  const [installedError, setInstalledError] = useState<string>();
+  const [refreshing, setRefreshing] = useState(false);
+  const [keyword, setKeyword] = useState("");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [pendingUpdateId, setPendingUpdateId] = useState<string>();
+  const [pendingUninstallId, setPendingUninstallId] = useState<string>();
+  const [pluginToUninstall, setPluginToUninstall] =
+    useState<PluginVersionRecord>();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      localStorage.getItem(SIDEBAR_STORAGE_KEY) === "1",
+  );
+  const outletScrollRef = useRef<HTMLDivElement>(null);
+  const suppressNextPluginEventRef = useRef(false);
 
-    // Tablet: the installed sidebar is collapsible. Persisted across reloads.
-    const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(
-        () => typeof window !== "undefined" && localStorage.getItem("kn:plugin-sidebar-collapsed") === "1"
-    )
-    const toggleSidebarCollapsed = useCallback(() => {
-        setSidebarCollapsed(v => {
-            const next = !v
-            try { localStorage.setItem("kn:plugin-sidebar-collapsed", next ? "1" : "0") } catch { }
-            return next
-        })
-    }, [])
+  const currentPluginId = useMemo(() => {
+    const match = /^\/plugin-hub\/([^/]+)/.exec(location.pathname);
+    return match?.[1];
+  }, [location.pathname]);
 
-    // Runtime state for runtime "loaded" indicators
-    const { loadedPluginNames, pluginVersion } = usePluginState()
-
-    const loadInstalled = useCallback(() => {
-        return useApi(APIS.GET_INSTALLED_PLUGINS).then(res => {
-            setInstalledPlugins(res.data ?? [])
-        })
-    }, [setInstalledPlugins])
-
-    useEffect(() => {
-        loadInstalled()
-    }, [pluginVersion, loadInstalled])
-
-    useEffect(() => {
-        const handlePluginChange = () => { loadInstalled() }
-        event.on(PLUGIN_CHANGED, handlePluginChange)
-        return () => { event.off(PLUGIN_CHANGED, handlePluginChange) }
-    }, [loadInstalled])
-
-    const filteredInstalled = useMemo(() => {
-        const q = installedKeyword.trim().toLowerCase()
-        if (!q) return installedPlugins
-        return installedPlugins.filter((p: any) =>
-            [p.name, p.description].filter(Boolean).some(s => String(s).toLowerCase().includes(q)))
-    }, [installedPlugins, installedKeyword])
-
-    const goToMarketplace = () => navigator.go({ to: '/plugin-hub' })
-
-    const uninstall = (plugin: any) => {
-        setOpen(true)
-        setCurrentPlugin(plugin)
+  const loadInstalled = useCallback(async (background = false) => {
+    if (!background) setInstalledLoading(true);
+    setInstalledError(undefined);
+    try {
+      const response = await useApi(APIS.GET_INSTALLED_PLUGINS);
+      setInstalledPlugins(response.data ?? []);
+    } catch (error) {
+      setInstalledError(error instanceof Error ? error.message : "load-failed");
+    } finally {
+      if (!background) setInstalledLoading(false);
     }
+  }, []);
 
-    const handleUpdate = (id: string) => {
-        useApi(APIS.UPDATE_PLUGIN, { versionId: id }).then(() => {
-            // Clear plugin script cache before refreshing to ensure new version loads
-            pluginManager?.clearPluginCache()
-            event.emit(PLUGIN_CHANGED, { source: 'update' })
-        })
+  useEffect(() => {
+    void loadInstalled();
+  }, [loadInstalled]);
+
+  useEffect(() => {
+    const handlePluginChange = () => {
+      if (suppressNextPluginEventRef.current) {
+        suppressNextPluginEventRef.current = false;
+        return;
+      }
+      void loadInstalled(true);
+    };
+    event.on(PLUGIN_CHANGED, handlePluginChange);
+    return () => {
+      event.off(PLUGIN_CHANGED, handlePluginChange);
+    };
+  }, [loadInstalled]);
+
+  useEffect(() => {
+    outletScrollRef.current?.scrollTo({ top: 0 });
+  }, [location.pathname]);
+
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed((current) => {
+      const next = !current;
+      try {
+        localStorage.setItem(SIDEBAR_STORAGE_KEY, next ? "1" : "0");
+      } catch {
+        // Persistence is optional; the in-memory state still works.
+      }
+      return next;
+    });
+  }, []);
+
+  const navigateToPlugin = useCallback(
+    (plugin: PluginVersionRecord) => {
+      if (!plugin.subjectId) return;
+      navigator.go({ to: `/plugin-hub/${plugin.subjectId}` });
+      setSidebarOpen(false);
+    },
+    [navigator],
+  );
+
+  const browseMarketplace = useCallback(() => {
+    navigator.go({ to: "/plugin-hub" });
+    setSidebarOpen(false);
+  }, [navigator]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      pluginManager?.clearPluginCache();
+      await loadInstalled(true);
+      suppressNextPluginEventRef.current = true;
+      event.emit(PLUGIN_CHANGED, { source: "refresh" });
+    } finally {
+      setRefreshing(false);
     }
+  }, [loadInstalled, pluginManager]);
 
-    const handleRefresh = () => {
-        // Clear plugin script cache before refreshing to get latest state
-        pluginManager?.clearPluginCache()
-        setRefreshing(true)
-        loadInstalled().finally(() => setRefreshing(false))
-        event.emit(PLUGIN_CHANGED, { source: 'refresh' })
+  const handleUpdate = useCallback(
+    async (plugin: PluginVersionRecord) => {
+      if (!plugin.id) return;
+      const key = pluginVersionKey(plugin);
+      setPendingUpdateId(key);
+      try {
+        await useApi(APIS.UPDATE_PLUGIN, { versionId: plugin.id });
+        pluginManager?.clearPluginCache();
+        await loadInstalled(true);
+        suppressNextPluginEventRef.current = true;
+        event.emit(PLUGIN_CHANGED, { source: "update" });
+        toast.success(t("pluginHub.update.success"));
+      } catch {
+        toast.error(t("pluginHub.update.failed"));
+      } finally {
+        setPendingUpdateId(undefined);
+      }
+    },
+    [loadInstalled, pluginManager, t],
+  );
+
+  const confirmUninstall = useCallback(async () => {
+    if (!pluginToUninstall?.id) return;
+    const key = pluginVersionKey(pluginToUninstall);
+    setPendingUninstallId(key);
+    try {
+      await useApi(APIS.UNINSTALL_PLUGIN, { versionId: pluginToUninstall.id });
+      if (pluginToUninstall.name)
+        pluginManager?.uninstallPlugin(pluginToUninstall.name);
+      await loadInstalled(true);
+      suppressNextPluginEventRef.current = true;
+      event.emit(PLUGIN_CHANGED, { source: "uninstall" });
+      toast.success(t("pluginHub.uninstall.success"));
+      setPluginToUninstall(undefined);
+    } catch {
+      toast.error(t("pluginHub.uninstall.failed"));
+    } finally {
+      setPendingUninstallId(undefined);
     }
+  }, [loadInstalled, pluginManager, pluginToUninstall, t]);
 
-    const collapsedOnTablet = isTablet && sidebarCollapsed
-    const gridCols = isTablet
-        ? (sidebarCollapsed ? "grid-cols-[48px_1fr]" : "grid-cols-[300px_1fr]")
-        : "grid-cols-[320px_1fr]"
+  const sidebar = (
+    <InstalledExtensionsSidebar
+      plugins={installedPlugins}
+      keyword={keyword}
+      loading={installedLoading}
+      error={installedError}
+      refreshing={refreshing}
+      currentPluginId={currentPluginId}
+      loadedPluginNames={loadedPluginNames}
+      pendingUpdateId={pendingUpdateId}
+      pendingUninstallId={pendingUninstallId}
+      collapsed={isTablet && sidebarCollapsed}
+      showUtilityActions={isMobile}
+      resolveIcon={(path) => (path ? usePath(path) : "")}
+      onKeywordChange={setKeyword}
+      onRefresh={handleRefresh}
+      onRetry={() => void loadInstalled()}
+      onBrowse={browseMarketplace}
+      onNavigate={navigateToPlugin}
+      onUpdate={handleUpdate}
+      onUninstall={setPluginToUninstall}
+      onToggleCollapsed={isTablet ? toggleSidebar : undefined}
+    />
+  );
 
-    const sidebarContent = (
-        <div className="flex flex-col h-full min-h-0 bg-muted/30">
-            {/* Header */}
-            <div className="shrink-0 border-b bg-background">
-                <div className="flex items-center justify-between p-3 sm:p-4">
-                    <div className="flex items-center gap-2 min-w-0">
-                        <div className="p-2 rounded-lg bg-muted">
-                            <Package className="h-4 w-4 text-foreground" />
-                        </div>
-                        <div className="min-w-0">
-                            <h2 className="text-sm font-semibold truncate">Extensions</h2>
-                            <p className="text-xs text-muted-foreground">
-                                {installedPlugins.length} installed
-                            </p>
-                        </div>
-                    </div>
-                    <div className="flex gap-1 items-center shrink-0">
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-8 sm:w-8" onClick={handleRefresh}>
-                                        <RefreshCcw className={cn("h-4 w-4", refreshing && "animate-spin")} />
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Refresh</TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <PluginUploader>
-                                        <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-8 sm:w-8">
-                                            <PlusSquare className="h-4 w-4" />
-                                        </Button>
-                                    </PluginUploader>
-                                </TooltipTrigger>
-                                <TooltipContent>Upload Plugin</TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <PluginManager>
-                                        <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-8 sm:w-8">
-                                            <Slack className="h-4 w-4" />
-                                        </Button>
-                                    </PluginManager>
-                                </TooltipTrigger>
-                                <TooltipContent>Manage Plugins</TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
-                    </div>
-                </div>
+  const contentColumns = isTablet
+    ? sidebarCollapsed
+      ? "grid-cols-[56px_minmax(0,1fr)]"
+      : "grid-cols-[272px_minmax(0,1fr)]"
+    : "grid-cols-[288px_minmax(0,1fr)]";
 
-                {/* Search */}
-                <div className="px-3 sm:px-4 pb-3 sm:pb-4">
-                    <Input
-                        className="h-9 bg-background text-sm"
-                        placeholder="Search extensions..."
-                        value={installedKeyword}
-                        onChange={e => setInstalledKeyword(e.target.value)}
-                    />
-                </div>
-            </div>
+  const uninstalling = Boolean(
+    pluginToUninstall &&
+    pendingUninstallId === pluginVersionKey(pluginToUninstall),
+  );
 
-            {/* List */}
-            <div className="flex-1 min-h-0 overflow-auto px-2 sm:px-3 py-2">
-                <Accordion type="multiple" defaultValue={["installed"]}>
-                    <AccordionItem value="installed" className="border-none">
-                        <AccordionTrigger className="text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground py-2 px-2 hover:no-underline">
-                            <div className="flex items-center gap-2">
-                                <span>Installed</span>
-                                <Badge variant="secondary" className="h-5 px-1.5 text-xs">
-                                    {filteredInstalled.length}
-                                </Badge>
-                            </div>
-                        </AccordionTrigger>
-                        <AccordionContent className="pt-2">
-                            <div className="space-y-1.5">
-                                {filteredInstalled.length > 0 ? (
-                                    filteredInstalled.map((plugin: any, index: number) => (
-                                        <Item
-                                            key={index}
-                                            item={plugin}
-                                            handleUnInstall={uninstall}
-                                            handleUpdate={handleUpdate}
-                                            isLoaded={loadedPluginNames.has(plugin.name)}
-                                        />
-                                    ))
-                                ) : installedKeyword ? (
-                                    <p className="py-8 text-center text-xs text-muted-foreground">
-                                        No extensions match "{installedKeyword}"
-                                    </p>
-                                ) : (
-                                    <div className="py-8">
-                                        <EmptyState
-                                            title="No Plugins Installed"
-                                            description="Browse the marketplace to discover and install plugins"
-                                            className="border-dashed bg-background/50"
-                                            action={{ label: "Browse Marketplace", onClick: goToMarketplace }}
-                                            icons={[Package, BoxSelect, Slack]}
-                                        />
-                                    </div>
-                                )}
-                            </div>
-                        </AccordionContent>
-                    </AccordionItem>
-                </Accordion>
-            </div>
+  return (
+    <div className="flex h-full min-h-0 w-full flex-col bg-background">
+      <PluginHubTopBar
+        installedCount={installedPlugins.length}
+        onOpenInstalled={() => setSidebarOpen(true)}
+      />
+
+      <div
+        className={cn(
+          "min-h-0 flex-1",
+          isMobile ? "flex" : cn("grid", contentColumns),
+        )}
+      >
+        {isMobile ? (
+          <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+            <SheetContent
+              side="left"
+              className="w-[min(88vw,340px)] p-0 sm:max-w-none"
+            >
+              <SheetTitle className="sr-only">
+                {t("pluginHub.sidebar.title")}
+              </SheetTitle>
+              <div className="h-[100dvh] pb-safe pt-safe">{sidebar}</div>
+            </SheetContent>
+          </Sheet>
+        ) : (
+          <div className="h-full min-h-0 overflow-hidden">{sidebar}</div>
+        )}
+
+        <div
+          ref={outletScrollRef}
+          className="min-h-0 min-w-0 flex-1 overflow-y-auto"
+        >
+          <Outlet />
         </div>
-    )
+      </div>
 
-    return (
-        <div className={cn(
-            "w-full bg-background",
-            isMobile ? "h-screen flex flex-col" : cn("h-screen grid", gridCols)
-        )}>
-            {/* Mobile: installed sidebar lives in a drawer */}
-            {isMobile && (
-                <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-                    <SheetContent side="left" className="w-[300px] p-0">
-                        <SheetTitle className="sr-only">Installed extensions</SheetTitle>
-                        <div className="h-full pt-safe">
-                            {sidebarContent}
-                        </div>
-                    </SheetContent>
-                </Sheet>
-            )}
-
-            {/* Tablet / desktop sidebar (tablet is collapsible) */}
-            {!isMobile && (
-                <div className="h-screen w-full border-r flex flex-col overflow-hidden">
-                    {isTablet && (
-                        <div className="flex items-center justify-end px-1 py-1 border-b shrink-0 bg-background">
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8"
-                                onClick={toggleSidebarCollapsed}
-                                aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-                            >
-                                {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
-                            </Button>
-                        </div>
-                    )}
-                    {!collapsedOnTablet && sidebarContent}
-                </div>
-            )}
-
-            {/* Main content */}
-            <div className={cn("relative w-full overflow-auto", isMobile ? "flex-1 min-h-0" : "h-screen")}>
-                {/* Mobile trigger to open the installed drawer */}
-                {isMobile && (
-                    <Button
-                        size="sm"
-                        variant="secondary"
-                        className="fixed bottom-4 right-4 z-20 h-11 rounded-full shadow-lg gap-1.5 mb-safe-bottom"
-                        onClick={() => setSidebarOpen(true)}
-                    >
-                        <Package className="h-4 w-4" />
-                        Installed
-                        <Badge variant="default" className="h-5 px-1.5 text-xs">{installedPlugins.length}</Badge>
-                    </Button>
-                )}
-                <Outlet />
+      <AlertDialog
+        open={Boolean(pluginToUninstall)}
+        onOpenChange={(open) => {
+          if (!open && !uninstalling) setPluginToUninstall(undefined);
+        }}
+      >
+        <AlertDialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-md">
+          <AlertDialogHeader>
+            <div className="mb-2 flex items-start gap-3">
+              <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+                <AlertCircle className="size-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <AlertDialogTitle>
+                  {t("pluginHub.uninstall.title")}
+                </AlertDialogTitle>
+                <AlertDialogDescription className="mt-1">
+                  {t("pluginHub.uninstall.warning")}
+                </AlertDialogDescription>
+              </div>
             </div>
-
-            {/* Uninstall confirmation */}
-            <AlertDialog open={open} onOpenChange={setOpen}>
-                <AlertDialogTrigger />
-                <AlertDialogContent className="max-w-[90vw] sm:max-w-md mx-4">
-                    <AlertDialogHeader>
-                        <div className="flex items-center gap-3 mb-2">
-                            <div className="p-2 sm:p-3 rounded-full bg-destructive/10">
-                                <Trash2 className="h-5 w-5 sm:h-6 sm:w-6 text-destructive" />
-                            </div>
-                            <div className="flex-1">
-                                <AlertDialogTitle className="text-base sm:text-lg">Uninstall Plugin</AlertDialogTitle>
-                                <AlertDialogDescription className="text-xs sm:text-sm text-muted-foreground mt-1">
-                                    This action cannot be undone
-                                </AlertDialogDescription>
-                            </div>
-                        </div>
-                    </AlertDialogHeader>
-                    <div className="py-3 sm:py-4">
-                        <div className="rounded-lg border bg-muted/30 p-3 sm:p-4">
-                            <p className="text-xs sm:text-sm">
-                                Are you sure you want to permanently remove <span className="font-semibold text-foreground">{currentPlugin?.name}</span>?
-                                All plugin data and configurations will be deleted.
-                            </p>
-                        </div>
-                    </div>
-                    <AlertDialogFooter className="gap-2 flex-col sm:flex-row">
-                        <AlertDialogCancel
-                            className="mt-0 w-full sm:w-auto"
-                            onClick={() => {
-                                setCurrentPlugin(undefined)
-                                setOpen(false)
-                            }}
-                        >
-                            Cancel
-                        </AlertDialogCancel>
-                        <AlertDialogAction
-                            className="bg-destructive hover:bg-destructive/90 text-destructive-foreground w-full sm:w-auto"
-                            onClick={() => {
-                                if (currentPlugin) {
-                                    useApi(APIS.UNINSTALL_PLUGIN, { versionId: currentPlugin.id }).then(() => {
-                                        // Uninstall from runtime PluginManager (this also invalidates the script cache)
-                                        pluginManager?.uninstallPlugin(currentPlugin.name)
-                                        event.emit(PLUGIN_CHANGED, { source: 'uninstall' })
-                                        setOpen(false)
-                                    })
-                                }
-                            }}
-                        >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Uninstall
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
-        </div>
-    )
-}
+          </AlertDialogHeader>
+          <div className="rounded-xl border border-border/70 bg-muted/30 p-4 text-sm leading-relaxed">
+            {t("pluginHub.uninstall.description", {
+              name:
+                pluginToUninstall?.name ?? t("pluginHub.detail.unavailable"),
+            })}
+          </div>
+          <AlertDialogFooter className="gap-2 sm:gap-2">
+            <AlertDialogCancel disabled={uninstalling} className="h-11 sm:h-10">
+              {t("pluginHub.uninstall.cancel")}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="h-11 bg-destructive text-destructive-foreground hover:bg-destructive/90 sm:h-10"
+              disabled={uninstalling}
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmUninstall();
+              }}
+            >
+              {uninstalling ? (
+                <Loader2 className="mr-2 size-4 animate-spin" />
+              ) : (
+                <Trash2 className="mr-2 size-4" />
+              )}
+              {uninstalling
+                ? t("pluginHub.uninstall.pending")
+                : t("pluginHub.uninstall.confirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+};
