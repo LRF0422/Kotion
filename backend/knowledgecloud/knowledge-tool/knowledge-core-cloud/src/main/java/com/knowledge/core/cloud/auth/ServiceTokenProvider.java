@@ -22,8 +22,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.time.Clock;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -43,11 +45,6 @@ import java.util.concurrent.atomic.AtomicReference;
 public class ServiceTokenProvider {
 
     /**
-     * Token validity in seconds (1 hour)
-     */
-    private static final int SERVICE_TOKEN_VALIDITY_SECONDS = 3600;
-
-    /**
      * Refresh token when less than 5 minutes remaining
      */
     private static final long REFRESH_THRESHOLD_MILLIS = 5 * 60 * 1000L;
@@ -64,6 +61,7 @@ public class ServiceTokenProvider {
     private static final String SERVICE_CLIENT_ID = "service";
 
     private final JwtTokenProvider jwtTokenProvider;
+    private final Clock clock;
 
     /**
      * Cached token holder containing the token and its expiration time
@@ -72,7 +70,12 @@ public class ServiceTokenProvider {
 
     @Autowired
     public ServiceTokenProvider(JwtTokenProvider jwtTokenProvider) {
+        this(jwtTokenProvider, Clock.systemUTC());
+    }
+
+    ServiceTokenProvider(JwtTokenProvider jwtTokenProvider, Clock clock) {
         this.jwtTokenProvider = jwtTokenProvider;
+        this.clock = clock;
     }
 
     /**
@@ -100,7 +103,7 @@ public class ServiceTokenProvider {
      * @return true if the token should be refreshed
      */
     private boolean isExpiringSoon(CachedToken cached) {
-        long timeUntilExpiry = cached.expirationTimeMillis - System.currentTimeMillis();
+        long timeUntilExpiry = cached.expirationTimeMillis - clock.millis();
         return timeUntilExpiry < REFRESH_THRESHOLD_MILLIS;
     }
 
@@ -119,13 +122,15 @@ public class ServiceTokenProvider {
         log.debug("Generating new service account token");
 
         Map<String, Object> claims = buildServiceClaims();
+        long tokenGenerationStartMillis = clock.millis();
         TokenInfo tokenInfo = jwtTokenProvider.createAccessToken(claims);
 
-        long expirationTimeMillis = System.currentTimeMillis() + (SERVICE_TOKEN_VALIDITY_SECONDS * 1000L);
+        long expirationTimeMillis = tokenGenerationStartMillis
+                + TimeUnit.SECONDS.toMillis(tokenInfo.getExpire());
         CachedToken newCached = new CachedToken(tokenInfo.getToken(), expirationTimeMillis);
         cachedTokenRef.set(newCached);
 
-        log.debug("Service account token generated, expires in {} seconds", SERVICE_TOKEN_VALIDITY_SECONDS);
+        log.debug("Service account token generated, expires in {} seconds", tokenInfo.getExpire());
         return newCached.token;
     }
 

@@ -91,6 +91,9 @@ export const PresentationMode: React.FC<PresentationModeProps> = ({ editor, onCl
     const [index, setIndex] = useState(0)
     const [controlsVisible, setControlsVisible] = useState(true)
     const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const contentViewportRef = useRef<HTMLDivElement>(null)
+    const contentSlideRef = useRef<HTMLDivElement>(null)
+    const slideAnimationRef = useRef<Animation | null>(null)
 
     // 打开时对文档做一次快照切分；放映期间不跟随协作编辑实时变化。
     const { cover, slides } = useMemo(() => {
@@ -107,6 +110,32 @@ export const PresentationMode: React.FC<PresentationModeProps> = ({ editor, onCl
     const goTo = useCallback((next: number) => {
         setIndex(Math.max(0, Math.min(total - 1, next)))
     }, [total])
+
+    const animateContentSlide = useCallback(() => {
+        const element = contentSlideRef.current
+        slideAnimationRef.current?.cancel()
+        slideAnimationRef.current = null
+        if (!element || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+
+        slideAnimationRef.current = element.animate(
+            [
+                { opacity: 0, transform: 'translateY(10px)' },
+                { opacity: 1, transform: 'translateY(0)' },
+            ],
+            { duration: 250, easing: 'ease-out' }
+        )
+    }, [])
+
+    useEffect(() => {
+        if (contentViewportRef.current) contentViewportRef.current.scrollTop = 0
+        slideAnimationRef.current?.cancel()
+        slideAnimationRef.current = null
+    }, [index])
+
+    useEffect(() => () => {
+        slideAnimationRef.current?.cancel()
+        slideAnimationRef.current = null
+    }, [])
 
     // 进入时请求浏览器全屏（失败则仅覆盖层放映）；退出时还原。
     useEffect(() => {
@@ -236,7 +265,7 @@ export const PresentationMode: React.FC<PresentationModeProps> = ({ editor, onCl
             </div>
 
             {/* 幻灯片内容 */}
-            <div className="flex-1 min-h-0 overflow-y-auto">
+            <div ref={contentViewportRef} className="flex-1 min-h-0 overflow-y-auto">
                 {onCover ? (
                     <div key="cover" className="kn-presentation-slide flex h-full flex-col items-center justify-center gap-6 px-8 text-center">
                         {cover?.icon && <span className="text-7xl leading-none">{cover.icon}</span>}
@@ -246,15 +275,17 @@ export const PresentationMode: React.FC<PresentationModeProps> = ({ editor, onCl
                     </div>
                 ) : (
                     slideContent && (
-                        <div key={index} className="kn-presentation kn-presentation-slide mx-auto flex min-h-full w-full max-w-5xl flex-col justify-center px-8 py-16">
+                        <div ref={contentSlideRef} className="kn-presentation mx-auto flex min-h-full w-full max-w-5xl flex-col justify-center px-8 py-16">
                             <EditorRender
                                 id="presentation-slide"
                                 content={slideContent as any}
                                 isEditable={false}
                                 withTitle={false}
                                 toc={false}
+                                toolbar={false}
                                 width="w-full"
                                 pageInfo={{}}
+                                onContentReady={animateContentSlide}
                             />
                         </div>
                     )
