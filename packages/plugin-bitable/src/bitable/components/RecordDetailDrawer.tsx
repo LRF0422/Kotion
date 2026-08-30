@@ -16,6 +16,7 @@ interface RecordDetailDrawerProps {
     onClose: () => void;
     onNavigate: (recordId: string) => void;
     onUpdateRecord: (recordId: string, updates: Partial<RecordData>) => void;
+    onAddProperty: () => void;
     editable?: boolean;
 }
 
@@ -35,48 +36,50 @@ export const RecordDetailDrawer: React.FC<RecordDetailDrawerProps> = ({
     onClose,
     onNavigate,
     onUpdateRecord,
+    onAddProperty,
     editable = true,
 }) => {
     const { t } = useTranslation();
     const titleRef = useRef<HTMLDivElement>(null);
 
-    // Keep last non-null record so content stays mounted during close animation
-    const [activeRecord, setActiveRecord] = React.useState(record);
+    // Keep last non-null record so content stays mounted during close animation.
+    const [retainedRecord, setRetainedRecord] = React.useState(record);
     useEffect(() => {
-        if (record) setActiveRecord(record);
+        if (record) setRetainedRecord(record);
     }, [record]);
+    const displayedRecord = record ?? retainedRecord;
 
     // Sync title contentEditable when record changes
     useEffect(() => {
-        if (titleRef.current && activeRecord) {
+        if (titleRef.current && displayedRecord) {
             const titleField = fields.find(
                 (f) =>
                     (f.type === FieldType.TEXT || f.type === FieldType.LONG_TEXT) && f.isShow !== false
             );
             const title = titleField
-                ? String(activeRecord[titleField.id] || "")
+                ? String(displayedRecord[titleField.id] || "")
                 : "";
             titleRef.current.textContent = title;
         }
-    }, [activeRecord, fields]);
+    }, [displayedRecord, fields]);
 
     const handleContentUpdate = useCallback(
         (content: any) => {
-            if (activeRecord) {
-                onUpdateRecord(activeRecord.id, { content });
+            if (displayedRecord) {
+                onUpdateRecord(displayedRecord.id, { content });
             }
         },
-        [activeRecord, onUpdateRecord]
+        [displayedRecord, onUpdateRecord]
     );
 
-    if (!activeRecord) return null;
+    if (!displayedRecord) return null;
 
     const titleField = fields.find(
         (f) => (f.type === FieldType.TEXT || f.type === FieldType.LONG_TEXT) && f.isShow !== false
     );
     const idField = fields.find((f) => f.type === FieldType.ID);
 
-    const currentIndex = recordIds.indexOf(activeRecord.id);
+    const currentIndex = recordIds.indexOf(displayedRecord.id);
     const hasPrev = currentIndex > 0;
     const hasNext =
         currentIndex >= 0 && currentIndex < recordIds.length - 1;
@@ -98,7 +101,7 @@ export const RecordDetailDrawer: React.FC<RecordDetailDrawerProps> = ({
                     <div className="bitable-drawer__title-area">
                         {idField && (
                             <span className="bitable-drawer__id-badge">
-                                #{activeRecord[idField.id]}
+                                #{displayedRecord[idField.id]}
                             </span>
                         )}
                         <div
@@ -114,7 +117,7 @@ export const RecordDetailDrawer: React.FC<RecordDetailDrawerProps> = ({
                                 const newTitle =
                                     e.target.textContent || "";
                                 if (titleField) {
-                                    onUpdateRecord(activeRecord.id, {
+                                    onUpdateRecord(displayedRecord.id, {
                                         [titleField.id]: newTitle,
                                     });
                                 }
@@ -179,14 +182,14 @@ export const RecordDetailDrawer: React.FC<RecordDetailDrawerProps> = ({
                                         )}
                                         <span>{field.title}</span>
                                     </div>
-                                    <div className="bitable-drawer__field-value">
+                                    <div className="bitable-drawer__field-value w-full min-w-0">
                                         <DetailFieldValue
                                             field={field}
-                                            value={activeRecord[field.id]}
+                                            value={displayedRecord[field.id]}
                                             editable={editable}
                                             onChange={(v) =>
                                                 onUpdateRecord(
-                                                    activeRecord.id,
+                                                    displayedRecord.id,
                                                     { [field.id]: v }
                                                 )
                                             }
@@ -196,7 +199,11 @@ export const RecordDetailDrawer: React.FC<RecordDetailDrawerProps> = ({
                                 </div>
                             ))}
                         {editable && (
-                            <button className="bitable-drawer__add-property">
+                            <button
+                                type="button"
+                                className="bitable-drawer__add-property"
+                                onClick={onAddProperty}
+                            >
                                 <Plus style={{ width: 14, height: 14 }} />
                                 {t(
                                     "bitable.record.addProperty",
@@ -212,7 +219,7 @@ export const RecordDetailDrawer: React.FC<RecordDetailDrawerProps> = ({
                     {/* Content section */}
                     <div className="bitable-drawer__content">
                         <RecordEditor
-                            content={activeRecord.content}
+                            content={displayedRecord.content}
                             onUpdate={handleContentUpdate}
                             editable={editable}
                         />
@@ -221,21 +228,21 @@ export const RecordDetailDrawer: React.FC<RecordDetailDrawerProps> = ({
 
                 {/* Footer */}
                 <div className="bitable-drawer__footer">
-                    {activeRecord.createdTime && (
+                    {displayedRecord.createdTime && (
                         <span className="bitable-drawer__footer-text">
                             {t("bitable.fieldTypes.createdTime")}:{" "}
                             {format(
-                                new Date(activeRecord.createdTime),
+                                new Date(displayedRecord.createdTime),
                                 "PPP p"
                             )}
                         </span>
                     )}
-                    {activeRecord.updatedTime && (
+                    {displayedRecord.updatedTime && (
                         <span className="bitable-drawer__footer-text">
                             {" · "}
                             {t("bitable.fieldTypes.updatedTime")}:{" "}
                             {format(
-                                new Date(activeRecord.updatedTime),
+                                new Date(displayedRecord.updatedTime),
                                 "PPP p"
                             )}
                         </span>

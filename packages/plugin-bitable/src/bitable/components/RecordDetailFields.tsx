@@ -300,20 +300,38 @@ const DetailRating: React.FC<{ value: any; onChange: (v: number) => void; editab
 const DetailProgress: React.FC<{ value: any; onChange: (v: number) => void; editable: boolean }> = ({ value, onChange, editable }) => {
     const { progressTextSize } = useDensity();
     const progress = typeof value === 'number' ? value : 0;
+    const [draftProgress, setDraftProgress] = React.useState(progress);
+
+    React.useEffect(() => {
+        setDraftProgress(progress);
+    }, [progress]);
+
     if (!editable) {
         return (
-            <div className="flex items-center gap-3">
-                <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+            <div className="flex w-full min-w-0 items-center gap-3">
+                <div className="min-w-0 flex-1 h-2 bg-muted rounded-full overflow-hidden">
                     <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${progress}%` }} />
                 </div>
-                <span className={`${progressTextSize} tabular-nums text-muted-foreground w-10 text-right`}>{progress}%</span>
+                <span className={`${progressTextSize} tabular-nums text-muted-foreground w-10 shrink-0 text-right`}>{progress}%</span>
             </div>
         );
     }
     return (
-        <div className="flex items-center gap-3">
-            <Slider value={[progress]} onValueChange={(v) => onChange(v[0])} min={0} max={100} step={1} className="flex-1" />
-            <span className={`${progressTextSize} font-medium tabular-nums w-10 text-right`}>{progress}%</span>
+        <div className="flex w-full min-w-0 items-center gap-3">
+            <Slider
+                value={[draftProgress]}
+                onValueChange={(next) => setDraftProgress(next[0])}
+                onValueCommit={(next) => {
+                    const committedProgress = next[0];
+                    setDraftProgress(committedProgress);
+                    if (committedProgress !== progress) onChange(committedProgress);
+                }}
+                min={0}
+                max={100}
+                step={1}
+                className="min-w-0 flex-1"
+            />
+            <span className={`${progressTextSize} font-medium tabular-nums w-10 shrink-0 text-right`}>{draftProgress}%</span>
         </div>
     );
 };

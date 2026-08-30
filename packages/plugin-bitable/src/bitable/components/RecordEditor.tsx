@@ -33,7 +33,7 @@ export const RecordEditor: React.FC<RecordEditorProps> = ({
     className,
 }) => {
 
-    const [extensions] = useEditorExtension();
+    const [extensions] = useEditorExtension('dragable');
     const onUpdateRef = useRef(onUpdate);
     const lastEmittedContentRef = useRef<any>(null);
     onUpdateRef.current = onUpdate;

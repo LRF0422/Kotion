@@ -13,7 +13,8 @@
   "scripts": {
     "build": "rollup -c",
     "check:agent": "tsc src/ai/agent/agent-core.check.ts --rootDir src/ai --outDir .tmp-check --module commonjs --target ES2020 --lib ES2020,DOM --skipLibCheck && node -e \"require('fs').writeFileSync('.tmp-check/package.json', '{\\\"type\\\":\\\"commonjs\\\"}')\" && node --localstorage-file=.tmp-check/localstorage .tmp-check/agent/agent-core.check.js",
-    "check": "pnpm check:agent",
+    "check:request": "tsc src/utils/request-auth.check.ts --rootDir src/utils --outDir .tmp-check --module commonjs --target ES2020 --lib ES2020,DOM --skipLibCheck && node -e \"require('fs').writeFileSync('.tmp-check/package.json', '{\\\"type\\\":\\\"commonjs\\\"}')\" && node .tmp-check/request-auth.check.js",
+    "check": "pnpm check:agent && pnpm check:request",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {

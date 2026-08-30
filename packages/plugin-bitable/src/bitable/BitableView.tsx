@@ -115,6 +115,11 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
         setSelectedRecord(null);
     }, []);
 
+    const handleAddProperty = useCallback(() => {
+        setSelectedRecord(null);
+        setFieldConfigOpen(true);
+    }, []);
+
     const recordIds = useMemo(
         () => actions.processedData.map((r) => r.id),
         [actions.processedData]
@@ -293,6 +298,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                 onClose={handleCloseRecordDetail}
                 onNavigate={handleNavigateRecord}
                 onUpdateRecord={actions.handleUpdateRecord}
+                onAddProperty={handleAddProperty}
                 editable={editor.isEditable}
             />
         </NodeViewWrapper>
