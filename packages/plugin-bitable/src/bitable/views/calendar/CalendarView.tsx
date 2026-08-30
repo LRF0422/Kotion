@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef, useEffect } from "react";
+import React, { useMemo } from "react";
 import { parseISO, isSameDay, isSameMonth, isSameWeek, isSameYear, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear } from "date-fns";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Label } from "@kn/ui";
 import { useTranslation } from "@kn/common";
@@ -18,7 +18,7 @@ interface CalendarViewProps {
     view: ViewConfig;
     fields: FieldConfig[];
     data: RecordData[];
-    onAddRecord: () => void;
+    onCreateRecord: (values: Partial<RecordData>) => RecordData;
     onUpdateRecord: (recordId: string, updates: Partial<RecordData>) => void;
     onDeleteRecord: (recordIds: string[]) => void;
     onUpdateView: (viewId: string, updates: Partial<ViewConfig>) => void;
@@ -77,7 +77,7 @@ function ClientContainer() {
 /* ================ Main CalendarView ================ */
 
 export const CalendarView: React.FC<CalendarViewProps> = (props) => {
-    const { view, fields, data, onAddRecord, onUpdateRecord, onUpdateView, editable, onRecordClick } = props;
+    const { view, fields, data, onCreateRecord, onUpdateRecord, onUpdateView, editable, onRecordClick } = props;
     const { t } = useTranslation();
 
     const config = view.calendarConfig || { dateField: "" };
@@ -86,23 +86,6 @@ export const CalendarView: React.FC<CalendarViewProps> = (props) => {
     const dateField = fields.find(f => f.id === config.dateField);
     const endDateField = config.endDateField ? fields.find(f => f.id === config.endDateField) : null;
     const titleField = config.titleField ? fields.find(f => f.id === config.titleField) : textFields[0];
-
-    // Track pending event creation (click slot -> onAddRecord -> update new record with date)
-    const pendingRef = useRef<{ start: Date; prevLen: number } | null>(null);
-
-    useEffect(() => {
-        if (pendingRef.current && data.length > pendingRef.current.prevLen) {
-            const p = pendingRef.current;
-            const newRecord = data[data.length - 1];
-            if (newRecord && dateField) {
-                const updates: Partial<RecordData> = { [dateField.id]: p.start.toISOString() };
-                if (endDateField) updates[endDateField.id] = p.start.toISOString();
-                onUpdateRecord(newRecord.id, updates);
-                onRecordClick(newRecord);
-            }
-            pendingRef.current = null;
-        }
-    }, [data.length, dateField, endDateField, onUpdateRecord, onRecordClick]);
 
     // Convert RecordData -> CalendarEvent[]
     const events: CalendarEvent[] = useMemo(() => {
@@ -129,11 +112,14 @@ export const CalendarView: React.FC<CalendarViewProps> = (props) => {
                 } catch { return null; }
 
                 const title = titleField && r[titleField.id] ? String(r[titleField.id]) : `Record ${idx + 1}`;
-                const hash = r.id.split("").reduce((acc, c) => ((acc << 5) - acc + c.charCodeAt(0)) | 0, 0);
+                const recordId = String(r.id);
+                const hash = recordId.split("").reduce(
+                    (acc, character) => ((acc << 5) - acc + character.charCodeAt(0)) | 0,
+                    0
+                );
                 const color = EVENT_COLORS[Math.abs(hash) % EVENT_COLORS.length];
-                const id = Math.abs(hash) || idx + 1;
 
-                return { id, recordId: r.id, startDate, endDate, title, color };
+                return { id: recordId, recordId, startDate, endDate, title, color };
             })
             .filter((e): e is CalendarEvent => e !== null);
     }, [data, dateField, endDateField, titleField]);
@@ -146,12 +132,18 @@ export const CalendarView: React.FC<CalendarViewProps> = (props) => {
     };
 
     const handleCreateAtSlot = (date: Date) => {
-        pendingRef.current = { start: date, prevLen: data.length };
-        onAddRecord();
+        if (!dateField) return;
+        const values: Partial<RecordData> = { [dateField.id]: date.toISOString() };
+        if (endDateField) values[endDateField.id] = date.toISOString();
+        const record = onCreateRecord(values);
+        onRecordClick(record);
     };
 
-    const handleConfigChange = (key: "dateField" | "endDateField" | "titleField", value: string) => {
-        const newConfig = { ...config, [key]: value || undefined };
+    const handleConfigChange = (
+        key: "dateField" | "endDateField" | "titleField",
+        value: string | undefined
+    ) => {
+        const newConfig = { ...config, [key]: value };
         onUpdateView(view.id, { calendarConfig: newConfig });
     };
 
@@ -189,7 +181,7 @@ export const CalendarView: React.FC<CalendarViewProps> = (props) => {
             events={events}
             onEventMove={handleEventMove}
             onRecordClick={(recordId) => {
-                const record = data.find(r => r.id === recordId);
+                const record = data.find((candidate) => String(candidate.id) === String(recordId));
                 if (record) onRecordClick(record);
             }}
             onCreateAtSlot={handleCreateAtSlot}

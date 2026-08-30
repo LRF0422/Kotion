@@ -18,15 +18,13 @@ import { useSelection } from "./useSelection";
  * Keeps BitableView.tsx focused on rendering.
  */
 export function useBitableActions(
-    node: NodeViewProps["node"],
+    attrs: BitableAttrs,
     updateAttributes: NodeViewProps["updateAttributes"],
     selectedRecord: RecordData | null,
     setSelectedRecord: (r: RecordData | null) => void,
     currentViewId: string,
     setCurrentViewId: (id: string) => void
 ) {
-    const attrs = node.attrs as BitableAttrs;
-
     // Keep a ref to the latest attrs so update handlers can read current
     // data/fields/views without listing `attrs` as a dependency.
     const attrsRef = useRef(attrs);

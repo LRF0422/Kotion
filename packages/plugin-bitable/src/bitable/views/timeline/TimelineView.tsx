@@ -56,19 +56,28 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [scaleUnit, setScaleUnit] = useState<TimelineScale>(config.scaleUnit || "day");
 
+    useEffect(() => {
+        setScaleUnit(config.scaleUnit || "day");
+    }, [view.id, config.scaleUnit]);
+
     // Handle config change
     const handleConfigChange = useCallback(
-        (key: string, value: string | boolean) => {
+        (key: string, value: string | boolean | undefined) => {
             const newConfig = {
                 ...config,
-                [key]:
-                    typeof value === "string" && (value === "null" || value === "")
-                        ? undefined
-                        : value,
+                [key]: value,
             };
             onUpdateView(view.id, { timelineConfig: newConfig });
         },
         [config, onUpdateView, view.id]
+    );
+
+    const handleScaleChange = useCallback(
+        (nextScale: TimelineScale) => {
+            setScaleUnit(nextScale);
+            handleConfigChange("scaleUnit", nextScale);
+        },
+        [handleConfigChange]
     );
 
     // Navigation
@@ -98,16 +107,14 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
         const handler = (e: WheelEvent) => {
             if (e.ctrlKey || e.metaKey) {
                 e.preventDefault();
-                setScaleUnit((prev) => {
-                    if (prev === "day") return "week";
-                    if (prev === "week") return "month";
-                    return "day";
-                });
+                const nextScale =
+                    scaleUnit === "day" ? "week" : scaleUnit === "week" ? "month" : "day";
+                handleScaleChange(nextScale);
             }
         };
         el.addEventListener("wheel", handler, { passive: false });
         return () => el.removeEventListener("wheel", handler);
-    }, []);
+    }, [scaleUnit, handleScaleChange]);
 
     // Layout calculations
     const layout = useTimelineLayout({
@@ -121,8 +128,7 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
     // Drag handlers
     const drag = useTimelineDrag({
         editable,
-        columnWidth: layout.columnWidth,
-        daysPerPixel: layout.daysPerPixel,
+        geometry: layout.geometry,
         startDateField: layout.startDateField,
         endDateField: layout.endDateField,
         onUpdateRecord,
@@ -189,7 +195,7 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
                 onPrev={goToPrevious}
                 onNext={goToNext}
                 onToday={goToToday}
-                onScaleChange={setScaleUnit}
+                onScaleChange={handleScaleChange}
                 editable={editable}
                 config={config}
                 onConfigChange={handleConfigChange}
@@ -202,7 +208,8 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
             <TimelineGrid
                 timeScale={layout.timeScale}
                 columnWidth={layout.columnWidth}
-                timeRange={layout.timeRange}
+                geometry={layout.geometry}
+                scaleUnit={scaleUnit}
                 groupedRecords={layout.groupedRecords}
                 positionById={layout.positionById}
                 dependencies={layout.dependencies}

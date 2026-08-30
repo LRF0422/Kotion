@@ -7,8 +7,13 @@ import {
     FieldConfig,
     Person,
 } from "../../types";
-import { createEmptyRecord, updatedByPatch } from "../../utils/record";
-import { generateRecordId } from "../../utils/id";
+import {
+    createEmptyRecord,
+    createRecord,
+    createRecords,
+    sanitizeRecordValues,
+    updatedByPatch,
+} from "../../utils/record";
 
 /** Common dependencies shared across all action hooks. */
 export interface ActionDeps {
@@ -35,13 +40,11 @@ export function useRecordActions(
     }, [attrsRef, updateAttributes, currentPersonRef]);
 
     const handleCreateRecord = useCallback(
-        (values: Partial<RecordData>) => {
+        (values: Partial<RecordData>): RecordData => {
             const { data: currentData = [], fields } = attrsRef.current;
-            const newRecord = {
-                ...createEmptyRecord(fields, currentData, currentPersonRef.current),
-                ...values,
-            };
+            const newRecord = createRecord(fields, currentData, values, currentPersonRef.current);
             updateAttributes({ data: [...currentData, newRecord] });
+            return newRecord;
         },
         [attrsRef, updateAttributes, currentPersonRef]
     );
@@ -49,16 +52,18 @@ export function useRecordActions(
     const handleUpdateRecord = useCallback(
         (recordId: string, updates: Partial<RecordData>) => {
             const currentData = attrsRef.current.data || [];
-            const byUpdater = updatedByPatch(attrsRef.current.fields, currentPersonRef.current);
-            const newData = currentData.map((record: any) =>
-                record.id === recordId
-                    ? { ...record, ...updates, ...byUpdater, updatedTime: new Date().toISOString() }
+            const fields = attrsRef.current.fields;
+            const safeUpdates = sanitizeRecordValues(fields, updates);
+            const byUpdater = updatedByPatch(fields, currentPersonRef.current);
+            const newData = currentData.map((record: RecordData) =>
+                String(record.id) === String(recordId)
+                    ? { ...record, ...safeUpdates, ...byUpdater, updatedTime: new Date().toISOString() }
                     : record
             );
             updateAttributes({ data: newData });
 
-            if (selectedRecord?.id === recordId) {
-                const updatedRecord = newData.find((r: any) => r.id === recordId);
+            if (String(selectedRecord?.id) === String(recordId)) {
+                const updatedRecord = newData.find((record) => String(record.id) === String(recordId));
                 if (updatedRecord) setSelectedRecord(updatedRecord);
             }
         },
@@ -69,11 +74,13 @@ export function useRecordActions(
         (updatesMap: Map<string, Partial<RecordData>>) => {
             const currentData = attrsRef.current.data || [];
             const now = new Date().toISOString();
-            const byUpdater = updatedByPatch(attrsRef.current.fields, currentPersonRef.current);
-            const newData = currentData.map((record: any) => {
-                const recordUpdates = updatesMap.get(record.id);
+            const fields = attrsRef.current.fields;
+            const byUpdater = updatedByPatch(fields, currentPersonRef.current);
+            const newData = currentData.map((record: RecordData) => {
+                const recordUpdates = updatesMap.get(String(record.id));
                 if (recordUpdates) {
-                    return { ...record, ...recordUpdates, ...byUpdater, updatedTime: now };
+                    const safeUpdates = sanitizeRecordValues(fields, recordUpdates);
+                    return { ...record, ...safeUpdates, ...byUpdater, updatedTime: now };
                 }
                 return record;
             });
@@ -85,45 +92,47 @@ export function useRecordActions(
     const handleDeleteRecord = useCallback(
         (recordIds: string[]) => {
             const currentData = attrsRef.current.data || [];
-            const newData = currentData.filter((record: any) => !recordIds.includes(record.id));
+            const ids = new Set(recordIds.map(String));
+            const newData = currentData.filter((record) => !ids.has(String(record.id)));
             updateAttributes({ data: newData });
         },
         [attrsRef, updateAttributes]
     );
 
     const handleExcelImport = useCallback(
-        (newFields: FieldConfig[], newRecords: RecordData[]) => {
+        (newFields: FieldConfig[], newRecords: Array<Partial<RecordData>>) => {
             const { data: currentData = [], fields } = attrsRef.current;
             const mergedFields = [...fields, ...newFields];
-            const idField = fields.find((f) => f.type === "id");
-            const startId = currentData.length + 1;
-            const recordsWithId = newRecords.map((record, index) => ({
-                ...record,
-                [idField?.id || "id"]: startId + index,
-            }));
-            const mergedData = [...currentData, ...recordsWithId];
-            updateAttributes({ fields: mergedFields, data: mergedData });
+            const importedRecords = createRecords(
+                mergedFields,
+                currentData,
+                newRecords,
+                currentPersonRef.current
+            );
+            updateAttributes({
+                fields: mergedFields,
+                data: [...currentData, ...importedRecords],
+            });
         },
         [attrsRef, updateAttributes]
     );
 
     const handleDuplicateRecord = useCallback(
         (recordIds: string[]) => {
-            const currentData = attrsRef.current.data || [];
-            const now = new Date().toISOString();
-            const byUpdater = updatedByPatch(attrsRef.current.fields, currentPersonRef.current);
-            const duplicatedRecords = currentData
-                .filter((record: any) => recordIds.includes(record.id))
-                .map((record: any) => {
-                    const { id, createdTime, updatedTime, ...rest } = record;
-                    return {
-                        ...rest,
-                        ...byUpdater,
-                        id: generateRecordId(),
-                        createdTime: now,
-                        updatedTime: now,
-                    };
-                });
+            const { data: currentData = [], fields } = attrsRef.current;
+            const ids = new Set(recordIds.map(String));
+            const sourceRecords = currentData.filter((record) => ids.has(String(record.id)));
+            const duplicatedRecords: RecordData[] = [];
+            sourceRecords.forEach((record) => {
+                duplicatedRecords.push(
+                    createRecord(
+                        fields,
+                        [...currentData, ...duplicatedRecords],
+                        record,
+                        currentPersonRef.current
+                    )
+                );
+            });
             if (duplicatedRecords.length > 0) {
                 updateAttributes({ data: [...currentData, ...duplicatedRecords] });
             }

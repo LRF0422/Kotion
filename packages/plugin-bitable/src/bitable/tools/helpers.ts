@@ -1,7 +1,8 @@
 import { Editor } from "@kn/editor";
-import { FieldType, ViewType, ChartType, FieldConfig, ViewConfig, BitableAttrs } from "../../types";
+import { FieldType, ViewType, ChartType, FieldConfig, ViewConfig, BitableAttrs, RecordData } from "../../types";
 import { generateFieldId, generateViewId } from "../../utils/id";
-import { getDefaultFields } from "../constants/defaults";
+import { DEFAULT_RECORD_NUMBER_FIELD_ID, getDefaultFields } from "../constants/defaults";
+import { createRecords } from "../../utils/record";
 
 /**
  * Shared helpers for bitable AI tools.
@@ -78,12 +79,29 @@ export function buildFieldsConfig(rawFields?: RawFieldConfig[]): {
     const titleToIdMap: Record<string, string> = {};
 
     // Always add the ID field first
-    fields.push({ id: "id", title: "ID", type: FieldType.ID, width: 80, isShow: true });
-    titleToIdMap["ID"] = "id";
+    fields.push({
+        id: DEFAULT_RECORD_NUMBER_FIELD_ID,
+        title: "ID",
+        type: FieldType.ID,
+        width: 80,
+        isShow: true,
+    });
+    titleToIdMap["ID"] = DEFAULT_RECORD_NUMBER_FIELD_ID;
 
     if (rawFields && rawFields.length > 0) {
+        const usedFieldIds = new Set(["id", DEFAULT_RECORD_NUMBER_FIELD_ID]);
         rawFields.forEach((fieldConfig) => {
-            const fieldId = fieldConfig.id || fieldConfig.title;
+            if (fieldConfig.type === FieldType.ID) {
+                titleToIdMap[fieldConfig.title] = DEFAULT_RECORD_NUMBER_FIELD_ID;
+                return;
+            }
+
+            let fieldId = fieldConfig.id || fieldConfig.title;
+            while (usedFieldIds.has(fieldId)) {
+                fieldId = generateFieldId();
+            }
+            usedFieldIds.add(fieldId);
+
             const options = fieldConfig.options?.map((opt, idx) => ({
                 id: opt.id || String(idx + 1),
                 label: opt.label,
@@ -139,19 +157,16 @@ export function buildDefaultViews(fields: FieldConfig[]): ViewConfig[] {
 /** Transform initial data records: map field titles to field IDs. */
 export function processInitialData(
     initialData: Array<Record<string, any>> | undefined,
-    titleToIdMap: Record<string, string>
-): Record<string, any>[] {
-    const now = new Date().toISOString();
-    return (initialData || []).map((record, idx) => {
-        const transformedRecord: Record<string, any> = {
-            id: idx + 1,
-            createdTime: now,
-            updatedTime: now,
-        };
+    titleToIdMap: Record<string, string>,
+    fields: FieldConfig[]
+): RecordData[] {
+    const values = (initialData || []).map((record) => {
+        const transformedRecord: Partial<RecordData> = {};
         Object.entries(record).forEach(([key, value]) => {
             const fieldId = titleToIdMap[key] || key;
             transformedRecord[fieldId] = value;
         });
         return transformedRecord;
     });
+    return createRecords(fields, [], values);
 }

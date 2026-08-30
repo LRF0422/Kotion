@@ -81,6 +81,8 @@ export const useChartData = (
             tickFormatter: 'number' as const,
         },
     };
+    const isCountAggregation = chartConfig.aggregation === 'count';
+    const requiresYAxis = !isCountAggregation;
 
     // 字段 id → 字段的查找表，避免在数据/配置循环里反复 fields.find（O(字段数)）
     const fieldMap = useMemo(() => new Map(fields.map(f => [f.id, f])), [fields]);
@@ -106,12 +108,14 @@ export const useChartData = (
         if (chartConfig.xAxisField && !fieldMap.has(chartConfig.xAxisField)) {
             return { type: 'missing-x' };
         }
-        const missingY = chartConfig.yAxisFields.find(y => !fieldMap.has(y.fieldId));
-        if (missingY) {
-            return { type: 'missing-y', fieldId: missingY.fieldId };
+        if (requiresYAxis) {
+            const missingY = chartConfig.yAxisFields.find(y => !fieldMap.has(y.fieldId));
+            if (missingY) {
+                return { type: 'missing-y', fieldId: missingY.fieldId };
+            }
         }
         return null;
-    }, [chartConfig.xAxisField, chartConfig.yAxisFields, fieldMap]);
+    }, [chartConfig.xAxisField, chartConfig.yAxisFields, fieldMap, requiresYAxis]);
 
     // 获取当前配色方案的颜色
     const currentColors = useMemo(() => {
@@ -164,7 +168,10 @@ export const useChartData = (
 
     // 处理图表数据
     const chartData = useMemo(() => {
-        if (!chartConfig.xAxisField || chartConfig.yAxisFields.length === 0) {
+        if (
+            !chartConfig.xAxisField ||
+            (requiresYAxis && chartConfig.yAxisFields.length === 0)
+        ) {
             return [];
         }
 
@@ -267,7 +274,7 @@ export const useChartData = (
         }
 
         return processedData;
-    }, [data, chartConfig, fieldMap, getXValue, isDateBucketed]);
+    }, [data, chartConfig, fieldMap, getXValue, isDateBucketed, requiresYAxis]);
 
     // 饼图数据（需要特殊处理）
     const pieChartData = useMemo(() => {

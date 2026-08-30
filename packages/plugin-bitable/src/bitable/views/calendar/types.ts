@@ -9,7 +9,7 @@ export type EventColor = "blue" | "green" | "red" | "yellow" | "purple" | "orang
  * Maps a bitable record to calendar display data.
  */
 export interface CalendarEvent {
-    id: number;
+    id: string;
     recordId: string;
     startDate: string;
     endDate: string;

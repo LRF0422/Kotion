@@ -196,21 +196,19 @@ export function useTableColumns(params: UseTableColumnsParams): any[] {
                                             />
                                             {t("bitable.tableView.hideColumn")}
                                         </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                            onClick={() =>
-                                                onDeleteField(field.id)
-                                            }
-                                        >
-                                            <Trash2
-                                                style={{
-                                                    width: 14,
-                                                    height: 14,
-                                                }}
-                                            />
-                                            {t(
-                                                "bitable.tableView.deleteColumn"
-                                            )}
-                                        </DropdownMenuItem>
+                                        {field.type !== FieldType.ID && (
+                                            <DropdownMenuItem
+                                                onClick={() => onDeleteField(field.id)}
+                                            >
+                                                <Trash2
+                                                    style={{
+                                                        width: 14,
+                                                        height: 14,
+                                                    }}
+                                                />
+                                                {t("bitable.tableView.deleteColumn")}
+                                            </DropdownMenuItem>
+                                        )}
                                     </DropdownMenuContent>
                                 </DropdownMenu>
                             )}

@@ -14,7 +14,8 @@ export function convertFieldValue(
     value: any,
     fromType: FieldType,
     toType: FieldType,
-    fieldConfig?: FieldConfig
+    fieldConfig?: FieldConfig,
+    sourceFieldConfig?: FieldConfig
 ): any {
     // Handle null/undefined
     if (value === null || value === undefined) {
@@ -30,7 +31,7 @@ export function convertFieldValue(
     switch (toType) {
         case FieldType.TEXT:
         case FieldType.LONG_TEXT:
-            return convertToText(value, fromType);
+            return convertToText(value, fromType, sourceFieldConfig);
 
         case FieldType.NUMBER:
             return convertToNumber(value, fromType);
@@ -42,10 +43,10 @@ export function convertFieldValue(
             return convertToCheckbox(value, fromType);
 
         case FieldType.SELECT:
-            return convertToSelect(value, fromType, fieldConfig);
+            return convertToSelect(value, fromType, fieldConfig, sourceFieldConfig);
 
         case FieldType.MULTI_SELECT:
-            return convertToMultiSelect(value, fromType, fieldConfig);
+            return convertToMultiSelect(value, fromType, fieldConfig, sourceFieldConfig);
 
         case FieldType.RATING:
             return convertToRating(value, fromType, fieldConfig);
@@ -56,7 +57,7 @@ export function convertFieldValue(
         case FieldType.URL:
         case FieldType.EMAIL:
         case FieldType.PHONE:
-            return convertToText(value, fromType);
+            return convertToText(value, fromType, sourceFieldConfig);
 
         default:
             return value;
@@ -66,14 +67,31 @@ export function convertFieldValue(
 /**
  * Convert value to text
  */
-function convertToText(value: any, fromType: FieldType): string {
+function convertToText(
+    value: any,
+    fromType: FieldType,
+    sourceFieldConfig?: FieldConfig
+): string {
+    const sourceOptions = sourceFieldConfig?.options || [];
+
+    if (fromType === FieldType.SELECT && typeof value === 'string') {
+        return sourceOptions.find((option) => option.id === value)?.label || value;
+    }
+
+    if (fromType === FieldType.MULTI_SELECT && Array.isArray(value)) {
+        return value
+            .map((item) => {
+                const id = typeof item === 'string' ? item : item?.id;
+                return sourceOptions.find((option) => option.id === id)?.label || item?.label || String(item);
+            })
+            .join(', ');
+    }
+
     if (Array.isArray(value)) {
-        // For multi-select, join labels
-        return value.map((v: any) => v?.label || String(v)).join(', ');
+        return value.map((item: any) => item?.label || String(item)).join(', ');
     }
 
     if (typeof value === 'object' && value !== null) {
-        // For select options or objects
         if ('label' in value) {
             return value.label;
         }
@@ -161,58 +179,42 @@ function convertToCheckbox(value: any, fromType: FieldType): boolean {
 /**
  * Convert value to select
  */
-function convertToSelect(value: any, fromType: FieldType, fieldConfig?: FieldConfig): string | null {
-    // If it's already a select option ID, keep it
-    if (typeof value === 'string' && fieldConfig?.options) {
-        const options = fieldConfig.options as SelectOption[];
-        if (options.some(opt => opt.id === value)) {
-            return value;
-        }
+function convertToSelect(
+    value: any,
+    fromType: FieldType,
+    fieldConfig?: FieldConfig,
+    sourceFieldConfig?: FieldConfig
+): string | null {
+    const options = fieldConfig?.options || [];
+    const firstValue = Array.isArray(value) ? value[0] : value;
+    const candidateId = typeof firstValue === 'string' ? firstValue : firstValue?.id;
+
+    if (candidateId && options.some((option) => option.id === candidateId)) {
+        return candidateId;
     }
 
-    // Convert value to string and try to match with options
-    const strValue = convertToText(value, fromType);
+    const strValue = convertToText(firstValue, fromType, sourceFieldConfig).trim();
+    if (!strValue) return null;
 
-    if (fieldConfig?.options) {
-        const options = fieldConfig.options as SelectOption[];
-        // Try to find matching option by label
-        const matchingOption = options.find(opt =>
-            opt.label.toLowerCase() === strValue.toLowerCase()
-        );
-
-        if (matchingOption) {
-            return matchingOption.id;
-        }
-    }
-
-    return null;
+    const matchingOption = options.find(
+        (option) => option.label.trim().toLowerCase() === strValue.toLowerCase()
+    );
+    return matchingOption?.id || null;
 }
 
 /**
  * Convert value to multi-select
  */
-function convertToMultiSelect(value: any, fromType: FieldType, fieldConfig?: FieldConfig): string[] {
-    if (Array.isArray(value)) {
-        // If already an array of option IDs
-        if (fieldConfig?.options) {
-            const options = fieldConfig.options as SelectOption[];
-            const validIds = value.filter(v =>
-                typeof v === 'string' && options.some(opt => opt.id === v)
-            );
-            if (validIds.length > 0) {
-                return validIds;
-            }
-        }
-
-        // Convert array elements to option IDs
-        return value
-            .map(v => convertToSelect(v, fromType, fieldConfig))
-            .filter(Boolean) as string[];
-    }
-
-    // Single value - convert to select first
-    const singleOption = convertToSelect(value, fromType, fieldConfig);
-    return singleOption ? [singleOption] : [];
+function convertToMultiSelect(
+    value: any,
+    fromType: FieldType,
+    fieldConfig?: FieldConfig,
+    sourceFieldConfig?: FieldConfig
+): string[] {
+    const values = Array.isArray(value) ? value : [value];
+    return values
+        .map((item) => convertToSelect(item, fromType, fieldConfig, sourceFieldConfig))
+        .filter((item): item is string => Boolean(item));
 }
 
 /**
@@ -312,35 +314,75 @@ function getDefaultValueForType(type: FieldType): any {
     }
 }
 
-/**
- * Auto-generate select options from existing data when converting to select/multi-select
- * @param records All records
- * @param fieldId Field ID
- * @param fromType Original field type
- * @returns Generated select options
- */
+function sourceLabelsForValue(value: any, sourceField: FieldConfig): string[] {
+    if (value === null || value === undefined || value === '') return [];
+    const options = sourceField.options || [];
+
+    if (sourceField.type === FieldType.MULTI_SELECT && Array.isArray(value)) {
+        return value
+            .map((item) => {
+                const id = typeof item === 'string' ? item : item?.id;
+                return options.find((option) => option.id === id)?.label || item?.label || String(item);
+            })
+            .map((label) => label.trim())
+            .filter(Boolean);
+    }
+
+    if (sourceField.type === FieldType.SELECT) {
+        const id = typeof value === 'string' ? value : value?.id;
+        const label = options.find((option) => option.id === id)?.label || value?.label || String(value);
+        return label.trim() ? [label.trim()] : [];
+    }
+
+    const label = convertToText(value, sourceField.type, sourceField).trim();
+    return label ? [label] : [];
+}
+
+/** Prepare a lossless option set for conversion to select or multi-select. */
+export function prepareSelectOptions(
+    records: RecordData[],
+    sourceField: FieldConfig,
+    proposedOptions: SelectOption[] = []
+): SelectOption[] {
+    const options: SelectOption[] = [];
+    const labels = new Set<string>();
+    const ids = new Set<string>();
+
+    const addOption = (option: SelectOption) => {
+        const normalizedLabel = option.label.trim().toLowerCase();
+        if (!normalizedLabel || labels.has(normalizedLabel) || ids.has(option.id)) return;
+        labels.add(normalizedLabel);
+        ids.add(option.id);
+        options.push({ ...option, label: option.label.trim() });
+    };
+
+    proposedOptions.forEach(addOption);
+    if (sourceField.type === FieldType.SELECT || sourceField.type === FieldType.MULTI_SELECT) {
+        (sourceField.options || []).forEach(addOption);
+    }
+
+    records.forEach((record) => {
+        sourceLabelsForValue(record[sourceField.id], sourceField).forEach((label) => {
+            const normalizedLabel = label.toLowerCase();
+            if (labels.has(normalizedLabel)) return;
+            addOption({
+                id: generateOptionId(),
+                label,
+                color: OPTION_COLORS[options.length % OPTION_COLORS.length] as string,
+            });
+        });
+    });
+
+    return options;
+}
+
+/** Backwards-compatible option generation helper for non-select source fields. */
 export function generateSelectOptionsFromData(
     records: RecordData[],
     fieldId: string,
     fromType: FieldType
 ): SelectOption[] {
-    const uniqueValues = new Set<string>();
-
-    records.forEach(record => {
-        const value = record[fieldId];
-        if (value !== null && value !== undefined && value !== '') {
-            const strValue = convertToText(value, fromType);
-            if (strValue.trim()) {
-                uniqueValues.add(strValue.trim());
-            }
-        }
-    });
-
-    return Array.from(uniqueValues).slice(0, 50).map((label, index) => ({
-        id: generateOptionId(),
-        label,
-        color: OPTION_COLORS[index % OPTION_COLORS.length] as string,
-    }));
+    return prepareSelectOptions(records, { id: fieldId, title: fieldId, type: fromType });
 }
 
 /**

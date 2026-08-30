@@ -58,5 +58,5 @@ export interface BitableAttrs {
     views: ViewConfig[];
     currentView: string;
     records?: RecordData[];
-    data?: any;
+    data: RecordData[];
 }

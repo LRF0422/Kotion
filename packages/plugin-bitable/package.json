@@ -10,7 +10,9 @@
     "registry": "http://localhost:8081/repository/npm-hosted/"
   },
   "scripts": {
-    "build": "rollup -c "
+    "build": "rollup -c ",
+    "check:logic": "tsc src/utils/recordIdentity.check.ts src/utils/fieldConversion.check.ts src/bitable/views/timeline/timelineGeometry.check.ts --rootDir src --outDir .tmp-check --module commonjs --moduleResolution node --target ES2020 --lib ES2020,DOM --skipLibCheck --esModuleInterop && node -e \"require('fs').writeFileSync('.tmp-check/package.json', '{\\\"type\\\":\\\"commonjs\\\"}')\" && node .tmp-check/utils/recordIdentity.check.js && node .tmp-check/utils/fieldConversion.check.js && node .tmp-check/bitable/views/timeline/timelineGeometry.check.js",
+    "check": "pnpm check:logic"
   },
   "dependencies": {
     "@kn/common": "workspace:*",

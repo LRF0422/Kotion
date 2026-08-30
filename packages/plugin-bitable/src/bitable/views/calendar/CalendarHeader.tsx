@@ -9,6 +9,9 @@ import type { CalendarViewMode } from "./types";
 import type { CalendarEvent } from "./types";
 import type { FieldConfig } from "../../../types";
 
+const NO_END_DATE_FIELD = "__calendar_none__";
+const AUTO_TITLE_FIELD = "__calendar_auto__";
+
 const VIEW_ICONS: Record<CalendarViewMode, React.ReactNode> = {
     day: <List strokeWidth={1.8} />,
     week: <Columns strokeWidth={1.8} />,
@@ -23,7 +26,10 @@ interface CalendarHeaderProps {
     dateFields: FieldConfig[];
     textFields: FieldConfig[];
     config: { dateField: string; endDateField?: string; titleField?: string };
-    onConfigChange: (key: "dateField" | "endDateField" | "titleField", value: string) => void;
+    onConfigChange: (
+        key: "dateField" | "endDateField" | "titleField",
+        value: string | undefined
+    ) => void;
 }
 
 export function CalendarHeader({ events, dateFields, textFields, config, onConfigChange }: CalendarHeaderProps) {
@@ -111,20 +117,36 @@ export function CalendarHeader({ events, dateFields, textFields, config, onConfi
                                 </div>
                                 <div className="bitable-cal-settings__field">
                                     <Label>{t("bitable.calendarView.endDateField")}</Label>
-                                    <Select value={config.endDateField || ""} onValueChange={(v) => onConfigChange("endDateField", v)}>
+                                    <Select
+                                        value={config.endDateField || NO_END_DATE_FIELD}
+                                        onValueChange={(value) =>
+                                            onConfigChange(
+                                                "endDateField",
+                                                value === NO_END_DATE_FIELD ? undefined : value
+                                            )
+                                        }
+                                    >
                                         <SelectTrigger><SelectValue placeholder={t("bitable.calendarView.selectEndDateField")} /></SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="">{t("bitable.calendarView.noneField")}</SelectItem>
+                                            <SelectItem value={NO_END_DATE_FIELD}>{t("bitable.calendarView.noneField")}</SelectItem>
                                             {dateFields.map(f => <SelectItem key={f.id} value={f.id}>{f.title}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
                                 </div>
                                 <div className="bitable-cal-settings__field">
                                     <Label>{t("bitable.calendarView.titleField")}</Label>
-                                    <Select value={config.titleField || ""} onValueChange={(v) => onConfigChange("titleField", v)}>
+                                    <Select
+                                        value={config.titleField || AUTO_TITLE_FIELD}
+                                        onValueChange={(value) =>
+                                            onConfigChange(
+                                                "titleField",
+                                                value === AUTO_TITLE_FIELD ? undefined : value
+                                            )
+                                        }
+                                    >
                                         <SelectTrigger><SelectValue placeholder={t("bitable.calendarView.selectTitleField")} /></SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="">{t("bitable.calendarView.auto")}</SelectItem>
+                                            <SelectItem value={AUTO_TITLE_FIELD}>{t("bitable.calendarView.auto")}</SelectItem>
                                             {textFields.map(f => <SelectItem key={f.id} value={f.id}>{f.title}</SelectItem>)}
                                         </SelectContent>
                                     </Select>

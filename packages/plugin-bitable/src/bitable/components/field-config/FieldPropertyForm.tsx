@@ -394,6 +394,9 @@ export const FieldPropertyForm: React.FC<FieldPropertyFormProps> = ({
         setLocalFormat(field.format || "");
         setLocalWidth(field.width || 150);
         setLocalDescription(field.description || "");
+        setConversionTargetType(field.type);
+        setConversionOptions([]);
+        setShowTypeConversion(false);
     }, [field]);
 
     // Save on close
@@ -494,7 +497,19 @@ export const FieldPropertyForm: React.FC<FieldPropertyFormProps> = ({
                                     size="sm"
                                     variant="ghost"
                                     className="h-7 text-xs"
-                                    onClick={() => setShowTypeConversion(!showTypeConversion)}
+                                    onClick={() => {
+                                        const nextOpen = !showTypeConversion;
+                                        setShowTypeConversion(nextOpen);
+                                        if (nextOpen) {
+                                            setConversionTargetType(localType);
+                                            setConversionOptions(
+                                                localType === FieldType.SELECT ||
+                                                    localType === FieldType.MULTI_SELECT
+                                                    ? localOptions
+                                                    : []
+                                            );
+                                        }
+                                    }}
                                 >
                                     <RefreshCw className="h-3 w-3 mr-1" />
                                     {showTypeConversion
@@ -531,11 +546,14 @@ export const FieldPropertyForm: React.FC<FieldPropertyFormProps> = ({
                                                         type === FieldType.SELECT ||
                                                         type === FieldType.MULTI_SELECT
                                                     ) {
-                                                        setConversionOptions([
-                                                            { id: "1", label: t("bitable.defaultOptions.option1"), color: "#3b82f6" },
-                                                            { id: "2", label: t("bitable.defaultOptions.option2"), color: "#10b981" },
-                                                            { id: "3", label: t("bitable.defaultOptions.option3"), color: "#f59e0b" },
-                                                        ]);
+                                                        setConversionOptions(
+                                                            localType === FieldType.SELECT ||
+                                                                localType === FieldType.MULTI_SELECT
+                                                                ? localOptions
+                                                                : []
+                                                        );
+                                                    } else {
+                                                        setConversionOptions([]);
                                                     }
                                                 }}
                                                 disabledTypes={[FieldType.ID]}

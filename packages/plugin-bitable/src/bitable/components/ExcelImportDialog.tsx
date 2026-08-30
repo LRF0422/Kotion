@@ -23,13 +23,13 @@ import {
 import { Upload, FileSpreadsheet, ArrowRight, Plus, AlertCircle, Check } from "@kn/icon";
 import { useTranslation } from "@kn/common";
 import { FieldConfig, FieldType, RecordData } from "../../types";
-import { generateFieldId, generateRecordId } from "../../utils/id";
+import { generateFieldId } from "../../utils/id";
 
 interface ExcelImportDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     fields: FieldConfig[];
-    onImport: (newFields: FieldConfig[], newRecords: RecordData[]) => void;
+    onImport: (newFields: FieldConfig[], newRecords: Array<Partial<RecordData>>) => void;
 }
 
 interface ColumnMapping {
@@ -294,12 +294,8 @@ export const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
             });
 
             // 转换数据
-            const newRecords: RecordData[] = excelData.rows.map((row, rowIndex) => {
-                const record: RecordData = {
-                    id: generateRecordId(),
-                    createdTime: new Date().toISOString(),
-                    updatedTime: new Date().toISOString(),
-                };
+            const newRecords: Array<Partial<RecordData>> = excelData.rows.map((row) => {
+                const record: Partial<RecordData> = {};
 
                 columnMappings.forEach((mapping, colIndex) => {
                     const fieldId = fieldIdMap.get(colIndex);
@@ -338,6 +334,7 @@ export const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
     const getFieldTypeName = (type: FieldType): string => {
         const typeNames: Record<FieldType, string> = {
             [FieldType.TEXT]: t('bitable.fieldTypes.text'),
+            [FieldType.LONG_TEXT]: t('bitable.fieldTypes.longText'),
             [FieldType.NUMBER]: t('bitable.fieldTypes.number'),
             [FieldType.SELECT]: t('bitable.fieldTypes.select'),
             [FieldType.MULTI_SELECT]: t('bitable.fieldTypes.multiSelect'),

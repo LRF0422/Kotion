@@ -2,6 +2,7 @@ import { z } from "@kn/ui";
 import { Editor } from "@kn/editor";
 import { FieldType, ViewType, ChartType, FieldConfig, ViewConfig, BitableAttrs } from "../types";
 import { generateFieldId, generateViewId } from "../utils/id";
+import { createRecords, sanitizeRecordValues } from "../utils/record";
 import {
     findBitableNodes,
     findBitableByIndex,
@@ -202,7 +203,7 @@ export const bitableTools = [
         }) => {
             const { fields, titleToIdMap } = buildFieldsConfig(params.fields as any);
             const defaultViews = buildDefaultViews(fields);
-            const processedData = processInitialData(params.initialData, titleToIdMap);
+            const processedData = processInitialData(params.initialData, titleToIdMap, fields);
 
             editor.commands.insertContent({
                 type: "bitable",
@@ -237,7 +238,7 @@ export const bitableTools = [
         }) => {
             const { fields, titleToIdMap } = buildFieldsConfig(params.fields as any);
             const defaultViews = buildDefaultViews(fields);
-            const processedData = processInitialData(params.initialData, titleToIdMap);
+            const processedData = processInitialData(params.initialData, titleToIdMap, fields);
 
             editor.commands.insertContentAt(params.position, {
                 type: "bitable",
@@ -272,18 +273,16 @@ export const bitableTools = [
 
             const { attrs } = bitable;
             const existingData = attrs.data || [];
-            const now = new Date().toISOString();
-            const startId = existingData.length + 1;
-            const titleToIdMap = buildTitleToIdMap(attrs.fields || []);
-
-            const newRecords = params.records.map((record, idx) => {
-                const transformedRecord: Record<string, any> = { id: startId + idx, createdTime: now, updatedTime: now };
+            const fields = attrs.fields || [];
+            const titleToIdMap = buildTitleToIdMap(fields);
+            const values = params.records.map((record) => {
+                const transformedRecord: Record<string, any> = {};
                 Object.entries(record).forEach(([key, value]) => {
                     transformedRecord[titleToIdMap[key] || key] = value;
                 });
                 return transformedRecord;
             });
-
+            const newRecords = createRecords(fields, existingData, values);
             const newData = [...existingData, ...newRecords];
             updateBitableAttrs(editor, bitable.pos, { data: newData });
 
@@ -305,19 +304,21 @@ export const bitableTools = [
 
             const { attrs } = bitable;
             const existingData = attrs.data || [];
-            const recordIndex = existingData.findIndex((r: any) =>
-                r.id === params.recordId || r.id === Number(params.recordId) || String(r.id) === String(params.recordId)
+            const fields = attrs.fields || [];
+            const recordIndex = existingData.findIndex(
+                (record) => String(record.id) === String(params.recordId)
             );
             if (recordIndex === -1) return { success: false, error: `找不到ID为 ${params.recordId} 的记录` };
 
-            const titleToIdMap = buildTitleToIdMap(attrs.fields || []);
+            const titleToIdMap = buildTitleToIdMap(fields);
             const transformedUpdates: Record<string, any> = {};
             Object.entries(params.updates).forEach(([key, value]) => {
                 transformedUpdates[titleToIdMap[key] || key] = value;
             });
+            const safeUpdates = sanitizeRecordValues(fields, transformedUpdates);
 
-            const newData = existingData.map((record: any, idx: number) =>
-                idx === recordIndex ? { ...record, ...transformedUpdates, updatedTime: new Date().toISOString() } : record
+            const newData = existingData.map((record, idx) =>
+                idx === recordIndex ? { ...record, ...safeUpdates, updatedTime: new Date().toISOString() } : record
             );
 
             updateBitableAttrs(editor, bitable.pos, { data: newData });

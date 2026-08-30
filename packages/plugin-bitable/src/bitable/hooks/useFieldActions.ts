@@ -6,7 +6,7 @@ import {
     SelectOption,
     RecordData,
 } from "../../types";
-import { convertFieldValue, generateSelectOptionsFromData } from "../../utils/fieldConversion";
+import { convertFieldValue, prepareSelectOptions } from "../../utils/fieldConversion";
 import type { ActionDeps } from "./useRecordActions";
 
 /**
@@ -36,7 +36,10 @@ export function useFieldActions(deps: ActionDeps) {
     const handleDeleteField = useCallback(
         (fieldId: string) => {
             const { data: currentData = [], fields } = attrsRef.current;
-            const newFields = fields.filter((field) => field.id !== fieldId);
+            const field = fields.find((candidate) => candidate.id === fieldId);
+            if (!field || field.type === FieldType.ID || fieldId === "id") return;
+
+            const newFields = fields.filter((candidate) => candidate.id !== fieldId);
             const newData: RecordData[] = currentData.map((record: any) => {
                 const { [fieldId]: _, ...rest } = record;
                 return rest;
@@ -57,18 +60,13 @@ export function useFieldActions(deps: ActionDeps) {
         (fieldId: string, newType: FieldType, newOptions?: SelectOption[]) => {
             const { data: currentData = [], fields } = attrsRef.current;
             const field = fields.find((f) => f.id === fieldId);
-            if (!field) return;
+            if (!field || field.type === FieldType.ID || fieldId === "id") return;
 
             const oldType = field.type;
             const updatedField: FieldConfig = { ...field, type: newType };
 
             if (newType === FieldType.SELECT || newType === FieldType.MULTI_SELECT) {
-                if (newOptions && newOptions.length > 0) {
-                    updatedField.options = newOptions;
-                } else {
-                    const generatedOptions = generateSelectOptionsFromData(currentData, fieldId, oldType);
-                    updatedField.options = generatedOptions.length > 0 ? generatedOptions : newOptions || [];
-                }
+                updatedField.options = prepareSelectOptions(currentData, field, newOptions || []);
             } else {
                 delete updatedField.options;
             }
@@ -76,7 +74,13 @@ export function useFieldActions(deps: ActionDeps) {
             const newFields = fields.map((f) => (f.id === fieldId ? updatedField : f));
             const newData = currentData.map((record: any) => {
                 const value = record[fieldId];
-                const convertedValue = convertFieldValue(value, oldType, newType, updatedField);
+                const convertedValue = convertFieldValue(
+                    value,
+                    oldType,
+                    newType,
+                    updatedField,
+                    field
+                );
                 return { ...record, [fieldId]: convertedValue };
             });
 

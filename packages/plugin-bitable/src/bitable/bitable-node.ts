@@ -1,6 +1,7 @@
 import { PMNode as Node, ReactNodeViewRenderer, mergeAttributes, withNodeViewErrorBoundary } from "@kn/editor";
 import { BitableView } from "./BitableView";
 import { getDefaultFields, getDefaultViews } from "./constants/defaults";
+import { createRecords } from "../utils/record";
 
 declare module '@kn/editor' {
     interface Commands<ReturnType> {
@@ -36,7 +37,7 @@ export const Bitable = Node.create({
     },
 
     renderHTML({ HTMLAttributes }) {
-        return ["div", mergeAttributes(HTMLAttributes, { class: "node-bitable" }), 0];
+        return ["div", mergeAttributes(HTMLAttributes, { class: "node-bitable" })];
     },
 
     parseHTML() {
@@ -80,14 +81,21 @@ export const Bitable = Node.create({
     addCommands() {
         return {
             insertBitable: (customFields?: string[], data: any[] = []) => ({ commands }) => {
+                const fields = getDefaultFields(customFields);
                 const views = getDefaultViews();
+                const fieldIdByTitle = new Map(fields.map((field) => [field.title, field.id]));
+                const values = data.map((row) =>
+                    Object.fromEntries(
+                        Object.entries(row).map(([key, value]) => [fieldIdByTitle.get(key) || key, value])
+                    )
+                );
                 return commands.insertContent({
                     type: this.name,
                     attrs: {
-                        fields: getDefaultFields(customFields),
+                        fields,
                         views,
                         currentView: views[0]?.id,
-                        data: data
+                        data: createRecords(fields, [], values)
                     }
                 });
             }

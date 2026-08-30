@@ -18,6 +18,8 @@ import { useTranslation } from "@kn/common";
 import type { FieldConfig } from "../../../types";
 import type { TimelineScale } from "./types";
 
+const UNSET_FIELD_VALUE = "__timeline_unset__";
+
 interface TimelineHeaderProps {
     currentDate: Date;
     scaleUnit: TimelineScale;
@@ -37,7 +39,7 @@ interface TimelineHeaderProps {
         colorField?: string;
         criticalPathEnabled?: boolean;
     };
-    onConfigChange: (key: string, value: string | boolean) => void;
+    onConfigChange: (key: string, value: string | boolean | undefined) => void;
     dateFields: FieldConfig[];
     textFields: FieldConfig[];
     selectFields: FieldConfig[];
@@ -83,7 +85,7 @@ export function TimelineHeader({
             {
                 key: "endDateField",
                 label: t("bitable.timelineView.endDateField"),
-                value: config.endDateField || "",
+                value: config.endDateField || UNSET_FIELD_VALUE,
                 options: dateFields,
                 placeholder: t("bitable.timelineView.selectOptional"),
                 allowEmpty: true,
@@ -91,7 +93,7 @@ export function TimelineHeader({
             {
                 key: "titleField",
                 label: t("bitable.timelineView.titleField"),
-                value: config.titleField || "",
+                value: config.titleField || UNSET_FIELD_VALUE,
                 options: textFields,
                 placeholder: t("bitable.timelineView.selectOptional"),
                 allowEmpty: true,
@@ -99,7 +101,7 @@ export function TimelineHeader({
             {
                 key: "progressField",
                 label: t("bitable.timelineView.progressField"),
-                value: config.progressField || "",
+                value: config.progressField || UNSET_FIELD_VALUE,
                 options: progressFields,
                 placeholder: t("bitable.timelineView.selectOptional"),
                 allowEmpty: true,
@@ -107,7 +109,7 @@ export function TimelineHeader({
             {
                 key: "groupByField",
                 label: t("bitable.timelineView.groupByField"),
-                value: config.groupByField || "",
+                value: config.groupByField || UNSET_FIELD_VALUE,
                 options: selectFields,
                 placeholder: t("bitable.timelineView.selectOptional"),
                 allowEmpty: true,
@@ -115,7 +117,7 @@ export function TimelineHeader({
             {
                 key: "milestoneField",
                 label: t("bitable.timelineView.milestoneField"),
-                value: config.milestoneField || "",
+                value: config.milestoneField || UNSET_FIELD_VALUE,
                 options: selectFields,
                 placeholder: t("bitable.timelineView.selectOptional"),
                 allowEmpty: true,
@@ -123,7 +125,7 @@ export function TimelineHeader({
             {
                 key: "dependencyField",
                 label: t("bitable.timelineView.dependencyField"),
-                value: config.dependencyField || "",
+                value: config.dependencyField || UNSET_FIELD_VALUE,
                 options: textFields,
                 placeholder: t("bitable.timelineView.selectOptional"),
                 allowEmpty: true,
@@ -131,7 +133,7 @@ export function TimelineHeader({
             {
                 key: "colorField",
                 label: t("bitable.timelineView.customColors"),
-                value: config.colorField || "",
+                value: config.colorField || UNSET_FIELD_VALUE,
                 options: selectFields,
                 placeholder: t("bitable.timelineView.selectOptional"),
                 allowEmpty: true,
@@ -212,8 +214,11 @@ export function TimelineHeader({
                                         <Label>{field.label}</Label>
                                         <Select
                                             value={field.value}
-                                            onValueChange={(v) =>
-                                                onConfigChange(field.key, v)
+                                            onValueChange={(value) =>
+                                                onConfigChange(
+                                                    field.key,
+                                                    value === UNSET_FIELD_VALUE ? undefined : value
+                                                )
                                             }
                                         >
                                             <SelectTrigger>
@@ -221,7 +226,7 @@ export function TimelineHeader({
                                             </SelectTrigger>
                                             <SelectContent>
                                                 {field.allowEmpty && (
-                                                    <SelectItem value="">
+                                                    <SelectItem value={UNSET_FIELD_VALUE}>
                                                         {t("bitable.timelineView.none")}
                                                     </SelectItem>
                                                 )}

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
 import { useDebounce } from "ahooks";
 import { NodeViewProps, NodeViewWrapper } from "@kn/editor";
 import { useSelector, GlobalState, useTranslation } from "@kn/common";
@@ -27,12 +27,38 @@ import { BitableToolbar } from "./components/BitableToolbar";
 import { ViewConfigChips } from "./components/toolbar";
 import { RecordDetailDrawer } from "./components/RecordDetailDrawer";
 import { useBitableActions } from "./hooks/useBitableActions";
+import { normalizeRecordIdentity } from "../utils/recordIdentity";
 
 export const BitableView: React.FC<NodeViewProps> = (props) => {
     const { node, updateAttributes, deleteNode, editor } = props;
-    const attrs = node.attrs as BitableAttrs;
+    const rawAttrs = node.attrs as BitableAttrs;
+    const identityNormalization = useMemo(
+        () => normalizeRecordIdentity(rawAttrs.fields, rawAttrs.views, rawAttrs.data || []),
+        [rawAttrs.fields, rawAttrs.views, rawAttrs.data]
+    );
+    const attrs = useMemo<BitableAttrs>(
+        () =>
+            identityNormalization.changed
+                ? {
+                      ...rawAttrs,
+                      fields: identityNormalization.fields,
+                      views: identityNormalization.views,
+                      data: identityNormalization.data,
+                  }
+                : rawAttrs,
+        [rawAttrs, identityNormalization]
+    );
     const { t } = useTranslation();
     const resolvedTheme = useResolvedTheme();
+
+    useEffect(() => {
+        if (!identityNormalization.changed) return;
+        updateAttributes({
+            fields: identityNormalization.fields,
+            views: identityNormalization.views,
+            data: identityNormalization.data,
+        });
+    }, [identityNormalization, updateAttributes]);
 
     // Current user (for created_by / updated_by)
     const userInfo = useSelector((s: GlobalState) => s.userInfo);
@@ -58,7 +84,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
     const [currentViewId, setCurrentViewId] = useState(attrs.currentView);
 
     const actions = useBitableActions(
-        node,
+        attrs,
         updateAttributes,
         selectedRecord,
         setSelectedRecord,

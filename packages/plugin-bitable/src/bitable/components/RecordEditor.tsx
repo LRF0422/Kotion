@@ -17,6 +17,7 @@ import {
     CodeSquare,
 } from '@kn/icon';
 import { cn } from '@kn/ui';
+import { deepEqual } from '@kn/common';
 
 export interface RecordEditorProps {
     content?: any;
@@ -33,26 +34,21 @@ export const RecordEditor: React.FC<RecordEditorProps> = ({
 }) => {
 
     const [extensions] = useEditorExtension();
-    const latestContentRef = useRef(content);
-    const contentPropRef = useRef(content);
-
-    if (contentPropRef.current !== content) {
-        contentPropRef.current = content;
-        latestContentRef.current = content;
-    }
+    const onUpdateRef = useRef(onUpdate);
+    const lastEmittedContentRef = useRef<any>(null);
+    onUpdateRef.current = onUpdate;
 
     const schemaContent = useMemo(() => {
-        const currentContent = latestContentRef.current;
-        if (!currentContent || typeof currentContent !== 'object') {
-            return currentContent;
+        if (!content || typeof content !== 'object') {
+            return content;
         }
 
         return rewritePluginContent(
-            currentContent,
+            content,
             getSchema(extensions),
             { fallbackToParagraph: true },
         ).json;
-    }, [extensions]);
+    }, [content, extensions]);
 
     const editor = useEditor({
         extensions,
@@ -60,10 +56,28 @@ export const RecordEditor: React.FC<RecordEditorProps> = ({
         editable,
         onUpdate: ({ editor }) => {
             const nextContent = editor.getJSON();
-            latestContentRef.current = nextContent;
-            onUpdate?.(nextContent);
+            lastEmittedContentRef.current = nextContent;
+            onUpdateRef.current?.(nextContent);
         },
     }, [extensions]);
+
+    useEffect(() => {
+        if (!editor || editor.isDestroyed) return;
+
+        if (
+            lastEmittedContentRef.current &&
+            deepEqual(lastEmittedContentRef.current, schemaContent)
+        ) {
+            lastEmittedContentRef.current = null;
+            return;
+        }
+
+        if (!schemaContent && editor.isEmpty) return;
+        if (schemaContent && deepEqual(editor.getJSON(), schemaContent)) return;
+
+        editor.commands.setContent(schemaContent || '', { emitUpdate: false });
+        lastEmittedContentRef.current = null;
+    }, [editor, schemaContent]);
 
     useEffect(() => {
         if (editor && editor.isEditable !== editable) {

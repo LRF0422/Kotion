@@ -1,15 +1,17 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
-import { format, isWithinInterval, differenceInDays } from "date-fns";
+import { format } from "date-fns";
 import { Badge } from "@kn/ui";
 import { useTranslation } from "@kn/common";
 import type { RecordData, FieldConfig, SelectOption } from "../../../types";
-import type { DragState, DragPreview, BarPosition, Dependency } from "./types";
+import type { DragState, DragPreview, BarPosition, Dependency, TimelineScale } from "./types";
+import type { TimelineGeometry } from "./timelineGeometry";
 import { TimelineBar } from "./TimelineBar";
 
 interface TimelineGridProps {
     timeScale: Date[];
     columnWidth: number;
-    timeRange: { start: Date; end: Date };
+    geometry: TimelineGeometry;
+    scaleUnit: TimelineScale;
     groupedRecords: Record<string, RecordData[]>;
     positionById: Map<string, BarPosition | null>;
     dependencies: Dependency[];
@@ -44,7 +46,8 @@ interface TimelineGridProps {
 export function TimelineGrid({
     timeScale,
     columnWidth,
-    timeRange,
+    geometry,
+    scaleUnit,
     groupedRecords,
     positionById,
     dependencies,
@@ -77,11 +80,15 @@ export function TimelineGrid({
         if (!scrollToTodayRef.current) return;
         scrollToTodayRef.current = false;
         const container = scrollRef.current;
-        if (container && isWithinInterval(new Date(), { start: timeRange.start, end: timeRange.end })) {
-            const offset = differenceInDays(new Date(), timeRange.start) * columnWidth;
-            container.scrollTo({ left: Math.max(0, offset - container.clientWidth / 2), behavior: "smooth" });
+        const today = new Date();
+        if (container && geometry.containsDate(today)) {
+            const offset = geometry.dateToX(today);
+            container.scrollTo({
+                left: Math.max(0, offset - container.clientWidth / 2),
+                behavior: "smooth",
+            });
         }
-    }, [timeRange, columnWidth]);
+    }, [geometry]);
 
     // Ctrl+scroll to zoom, plain scroll to pan
     const handleWheel = useCallback(
@@ -104,14 +111,12 @@ export function TimelineGrid({
         });
     };
 
-    const todayLeft = isWithinInterval(new Date(), { start: timeRange.start, end: timeRange.end })
-        ? differenceInDays(new Date(), timeRange.start) * columnWidth
-        : null;
+    const today = new Date();
+    const todayLeft = geometry.containsDate(today) ? geometry.dateToX(today) : null;
 
     const formatScaleLabel = (date: Date) => {
-        // Column width determines format
-        if (columnWidth >= 100) return format(date, "MM/dd");
-        if (columnWidth >= 80) return format(date, "MM");
+        if (scaleUnit === "month") return format(date, "yyyy-MM");
+        if (scaleUnit === "week") return format(date, "MM/dd");
         return format(date, "d");
     };
 
@@ -175,7 +180,7 @@ export function TimelineGrid({
                 ref={scrollRef}
                 onWheel={handleWheel}
             >
-                <div style={{ minWidth: `${timeScale.length * columnWidth}px` }}>
+                <div style={{ minWidth: `${geometry.totalWidth}px` }}>
                     {/* Time scale header */}
                     <div className="bitable-tl-axis__header">
                         {timeScale.map((date, idx) => (
@@ -252,7 +257,8 @@ export function TimelineGrid({
                                     )}
                                     {!collapsedGroups.has(groupId) &&
                                         records.map((record) => {
-                                            const position = positionById.get(record.id);
+                                            const recordId = String(record.id);
+                                            const position = positionById.get(recordId);
                                             if (!position) return null;
 
                                             const isMilestone = !!(
@@ -271,9 +277,9 @@ export function TimelineGrid({
                                                         titleField={titleField}
                                                         progressField={progressField}
                                                         isMilestone={isMilestone}
-                                                        isCritical={criticalTaskIds.has(record.id)}
+                                                        isCritical={criticalTaskIds.has(recordId)}
                                                         editable={editable}
-                                                        isDragging={dragState?.recordId === record.id}
+                                                        isDragging={dragState?.recordId === recordId}
                                                         dragPreview={dragPreview}
                                                         onDragStart={handleDragStart}
                                                         onRecordClick={onRecordClick}

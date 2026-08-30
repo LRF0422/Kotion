@@ -1,6 +1,8 @@
 import { FieldType, ViewType, ChartType, FieldConfig, ViewConfig } from "../../types";
 import { generateFieldId, generateViewId } from "../../utils/id";
 
+export const DEFAULT_RECORD_NUMBER_FIELD_ID = "recordNumber";
+
 /**
  * Centralised default field and view configurations.
  *
@@ -12,7 +14,7 @@ import { generateFieldId, generateViewId } from "../../utils/id";
 /** Default field set used when no custom fields are provided. */
 export function getDefaultFields(customFields?: string[]): FieldConfig[] {
     const defaultFields: FieldConfig[] = [
-        { id: "id", title: "ID", type: FieldType.ID, width: 80, isShow: true },
+        { id: DEFAULT_RECORD_NUMBER_FIELD_ID, title: "ID", type: FieldType.ID, width: 80, isShow: true },
         { id: "name", title: "名称", type: FieldType.TEXT, width: 200, isShow: true },
         {
             id: "status", title: "状态", type: FieldType.SELECT, width: 150, isShow: true,

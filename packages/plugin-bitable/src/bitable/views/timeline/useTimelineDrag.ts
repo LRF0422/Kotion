@@ -1,12 +1,12 @@
 import { useState, useCallback } from "react";
-import { addDays } from "date-fns";
+import { addDays, differenceInCalendarDays } from "date-fns";
 import type { RecordData, FieldConfig } from "../../../types";
-import type { DragState, DragPreview, DragType, BarPosition, TimelineScale } from "./types";
+import type { DragState, DragPreview, DragType, BarPosition } from "./types";
+import type { TimelineGeometry } from "./timelineGeometry";
 
 interface UseTimelineDragArgs {
     editable: boolean;
-    columnWidth: number;
-    daysPerPixel: number;
+    geometry: TimelineGeometry;
     startDateField?: FieldConfig;
     endDateField?: FieldConfig | null;
     onUpdateRecord: (recordId: string, updates: Partial<RecordData>) => void;
@@ -14,19 +14,13 @@ interface UseTimelineDragArgs {
 
 export function useTimelineDrag({
     editable,
-    columnWidth,
-    daysPerPixel,
+    geometry,
     startDateField,
     endDateField,
     onUpdateRecord,
 }: UseTimelineDragArgs) {
     const [dragState, setDragState] = useState<DragState | null>(null);
     const [dragPreview, setDragPreview] = useState<DragPreview | null>(null);
-
-    const snapToGrid = useCallback(
-        (position: number) => Math.round(position / columnWidth) * columnWidth,
-        [columnWidth]
-    );
 
     const handleDragStart = useCallback(
         (
@@ -40,7 +34,7 @@ export function useTimelineDrag({
             e.stopPropagation();
 
             setDragState({
-                recordId: record.id,
+                recordId: String(record.id),
                 type,
                 startX: e.clientX,
                 originalLeft: position.left,
@@ -48,41 +42,59 @@ export function useTimelineDrag({
                 originalStartDate: position.startDate,
                 originalEndDate: position.endDate,
             });
-            setDragPreview({ left: position.left, width: position.width });
+            setDragPreview({
+                left: position.left,
+                width: position.width,
+                startDate: position.startDate,
+                endDate: position.endDate,
+            });
         },
         [editable]
     );
 
     const handleDragMove = useCallback(
         (e: React.MouseEvent) => {
-            if (!dragState || !dragPreview) return;
-
+            if (!dragState) return;
             const deltaX = e.clientX - dragState.startX;
-            let newLeft = dragPreview.left;
-            let newWidth = dragPreview.width;
 
-            switch (dragState.type) {
-                case "move":
-                    newLeft = snapToGrid(dragState.originalLeft + deltaX);
-                    break;
-                case "resize-left":
-                    newLeft = dragState.originalLeft + deltaX;
-                    newWidth = dragState.originalWidth - deltaX;
-                    if (newWidth < columnWidth) {
-                        newWidth = columnWidth;
-                        newLeft = dragState.originalLeft + dragState.originalWidth - columnWidth;
-                    }
-                    newLeft = snapToGrid(newLeft);
-                    break;
-                case "resize-right":
-                    newWidth = dragState.originalWidth + deltaX;
-                    if (newWidth < columnWidth) newWidth = columnWidth;
-                    break;
+            if (dragState.type === "move") {
+                const left = geometry.snapXToDay(dragState.originalLeft + deltaX);
+                const startDate = geometry.xToDate(left);
+                const duration = differenceInCalendarDays(
+                    dragState.originalEndDate,
+                    dragState.originalStartDate
+                );
+                const endDate = addDays(startDate, duration);
+                const position = geometry.positionForInclusiveRange(startDate, endDate);
+                setDragPreview({ ...position, startDate, endDate });
+                return;
             }
 
-            setDragPreview({ left: newLeft, width: newWidth });
+            if (dragState.type === "resize-left") {
+                const left = geometry.snapXToDay(dragState.originalLeft + deltaX);
+                const candidate = geometry.xToDate(left);
+                const startDate = candidate > dragState.originalEndDate
+                    ? dragState.originalEndDate
+                    : candidate;
+                const endDate = dragState.originalEndDate;
+                const position = geometry.positionForInclusiveRange(startDate, endDate);
+                setDragPreview({ ...position, startDate, endDate });
+                return;
+            }
+
+            if (dragState.type === "resize-right") {
+                const originalRight = dragState.originalLeft + dragState.originalWidth;
+                const right = geometry.snapXToDay(originalRight + deltaX);
+                const candidate = addDays(geometry.xToDate(right), -1);
+                const endDate = candidate < dragState.originalStartDate
+                    ? dragState.originalStartDate
+                    : candidate;
+                const startDate = dragState.originalStartDate;
+                const position = geometry.positionForInclusiveRange(startDate, endDate);
+                setDragPreview({ ...position, startDate, endDate });
+            }
         },
-        [dragState, dragPreview, columnWidth, snapToGrid]
+        [dragState, geometry]
     );
 
     const handleDragEnd = useCallback(() => {
@@ -92,35 +104,12 @@ export function useTimelineDrag({
             return;
         }
 
-        const deltaX = dragPreview.left - dragState.originalLeft;
-        const widthDelta = dragPreview.width - dragState.originalWidth;
-        const daysDelta = Math.round(deltaX * daysPerPixel);
-        const durationDelta = Math.round(widthDelta * daysPerPixel);
-
         const updates: Partial<RecordData> = {};
-
-        switch (dragState.type) {
-            case "move": {
-                const newStartDate = addDays(dragState.originalStartDate, daysDelta);
-                updates[startDateField.id] = newStartDate.toISOString();
-                if (endDateField) {
-                    const newEndDate = addDays(dragState.originalEndDate, daysDelta);
-                    updates[endDateField.id] = newEndDate.toISOString();
-                }
-                break;
-            }
-            case "resize-left": {
-                const adjustedStartDate = addDays(dragState.originalStartDate, daysDelta);
-                updates[startDateField.id] = adjustedStartDate.toISOString();
-                break;
-            }
-            case "resize-right": {
-                if (endDateField) {
-                    const adjustedEndDate = addDays(dragState.originalEndDate, durationDelta);
-                    updates[endDateField.id] = adjustedEndDate.toISOString();
-                }
-                break;
-            }
+        if (dragState.type === "move" || dragState.type === "resize-left") {
+            updates[startDateField.id] = dragPreview.startDate.toISOString();
+        }
+        if (endDateField && (dragState.type === "move" || dragState.type === "resize-right")) {
+            updates[endDateField.id] = dragPreview.endDate.toISOString();
         }
 
         if (Object.keys(updates).length > 0) {
@@ -129,7 +118,7 @@ export function useTimelineDrag({
 
         setDragState(null);
         setDragPreview(null);
-    }, [dragState, dragPreview, daysPerPixel, startDateField, endDateField, onUpdateRecord]);
+    }, [dragState, dragPreview, startDateField, endDateField, onUpdateRecord]);
 
     return {
         dragState,

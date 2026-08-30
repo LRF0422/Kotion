@@ -15,6 +15,8 @@ export interface DragState {
 export interface DragPreview {
     left: number;
     width: number;
+    startDate: Date;
+    endDate: Date;
 }
 
 export interface BarPosition {

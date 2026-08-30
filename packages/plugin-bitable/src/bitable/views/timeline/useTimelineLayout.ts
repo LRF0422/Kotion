@@ -7,11 +7,17 @@ import {
     eachMonthOfInterval,
     addMonths,
     subMonths,
-    differenceInDays,
+    isValid,
     parseISO,
 } from "date-fns";
 import type { FieldConfig, RecordData, SelectOption } from "../../../types";
 import type { BarPosition, MilestonePosition, Dependency, TimelineScale } from "./types";
+import { createTimelineGeometry } from "./timelineGeometry";
+
+function toTimelineDate(value: unknown): Date | null {
+    const date = typeof value === "string" ? parseISO(value) : value instanceof Date ? value : null;
+    return date && isValid(date) ? date : null;
+}
 
 interface UseTimelineLayoutArgs {
     currentDate: Date;
@@ -68,7 +74,7 @@ export function useTimelineLayout({
     }, [currentDate]);
 
     // Generate time scale ticks
-    const timeScale = useMemo(() => {
+    const rawTimeScale = useMemo(() => {
         const { start, end } = timeRange;
         switch (scaleUnit) {
             case "week":
@@ -92,25 +98,17 @@ export function useTimelineLayout({
         }
     }, [scaleUnit]);
 
-    // Days per pixel for drag calculations
-    const daysPerPixel = useMemo(() => {
-        switch (scaleUnit) {
-            case "week":
-                return 7 / columnWidth;
-            case "month":
-                return 30 / columnWidth;
-            default:
-                return 1 / columnWidth;
-        }
-    }, [scaleUnit, columnWidth]);
+    const geometry = useMemo(
+        () => createTimelineGeometry(rawTimeScale, scaleUnit, columnWidth),
+        [rawTimeScale, scaleUnit, columnWidth]
+    );
+    const timeScale = geometry.ticks;
 
     // Filter records with valid start dates
-    const validRecords = useMemo(() => {
-        return data.filter((record) => {
-            const startDate = record[config.startDateField];
-            return startDate && startDate !== null;
-        });
-    }, [data, config.startDateField]);
+    const validRecords = useMemo(
+        () => data.filter((record) => Boolean(toTimelineDate(record[config.startDateField]))),
+        [data, config.startDateField]
+    );
 
     // Group records by groupByField
     const groupedRecords = useMemo(() => {
@@ -139,7 +137,7 @@ export function useTimelineLayout({
     // recordById lookup table
     const recordById = useMemo(() => {
         const map = new Map<string, RecordData>();
-        data.forEach((r) => map.set(r.id, r));
+        data.forEach((record) => map.set(String(record.id), record));
         return map;
     }, [data]);
 
@@ -152,37 +150,16 @@ export function useTimelineLayout({
 
     // Calculate bar position for a record
     const calculateBarPosition = (record: RecordData): BarPosition | null => {
-        try {
-            const startDateStr = record[config.startDateField];
-            if (!startDateStr) return null;
+        const startDate = toTimelineDate(record[config.startDateField]);
+        if (!startDate) return null;
 
-            const startDate =
-                typeof startDateStr === "string"
-                    ? parseISO(startDateStr)
-                    : startDateStr instanceof Date
-                    ? startDateStr
-                    : null;
-            if (!startDate) return null;
+        const parsedEndDate = endDateField
+            ? toTimelineDate(record[endDateField.id])
+            : null;
+        const endDate = parsedEndDate && parsedEndDate >= startDate ? parsedEndDate : startDate;
+        const { left, width } = geometry.positionForInclusiveRange(startDate, endDate);
 
-            const endDateStr = endDateField ? record[endDateField.id] : null;
-            const endDate = endDateStr
-                ? typeof endDateStr === "string"
-                    ? parseISO(endDateStr)
-                    : endDateStr instanceof Date
-                    ? endDateStr
-                    : startDate
-                : startDate;
-
-            const daysSinceStart = differenceInDays(startDate, timeRange.start);
-            const duration = differenceInDays(endDate, startDate) + 1;
-
-            const left = daysSinceStart * columnWidth;
-            const width = Math.max(duration * columnWidth, columnWidth);
-
-            return { left, width, startDate, endDate };
-        } catch {
-            return null;
-        }
+        return { left, width, startDate, endDate };
     };
 
     // Pre-compute all positions
@@ -190,34 +167,18 @@ export function useTimelineLayout({
         const map = new Map<string, BarPosition | null>();
         Object.values(groupedRecords).forEach((records) => {
             records.forEach((record) => {
-                map.set(record.id, calculateBarPosition(record));
+                map.set(String(record.id), calculateBarPosition(record));
             });
         });
         return map;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [groupedRecords, config.startDateField, endDateField, timeRange, columnWidth]);
+    }, [groupedRecords, config.startDateField, endDateField, geometry]);
 
     // Calculate milestone position
     const calculateMilestonePosition = (record: RecordData): MilestonePosition | null => {
-        try {
-            const dateStr = record[config.startDateField];
-            if (!dateStr) return null;
-
-            const date =
-                typeof dateStr === "string"
-                    ? parseISO(dateStr)
-                    : dateStr instanceof Date
-                    ? dateStr
-                    : null;
-            if (!date) return null;
-
-            const daysSinceStart = differenceInDays(date, timeRange.start);
-            const left = daysSinceStart * columnWidth;
-
-            return { left, date };
-        } catch {
-            return null;
-        }
+        const date = toTimelineDate(record[config.startDateField]);
+        if (!date) return null;
+        return { left: geometry.dateToX(date), date };
     };
 
     // Group label helper
@@ -270,9 +231,12 @@ export function useTimelineLayout({
                         ? dependencyValue
                         : [dependencyValue];
                     depIds.forEach((depId) => {
-                        const dependentRecord = recordById.get(depId as string);
+                        const dependentRecord = recordById.get(String(depId));
                         if (dependentRecord) {
-                            deps.push({ from: dependentRecord.id, to: record.id });
+                            deps.push({
+                                from: String(dependentRecord.id),
+                                to: String(record.id),
+                            });
                         }
                     });
                 }
@@ -310,11 +274,11 @@ export function useTimelineLayout({
 
         for (const [, records] of Object.entries(groupedRecords)) {
             for (const record of records) {
-                if (record.id === fromRecordId) {
+                if (String(record.id) === fromRecordId) {
                     fromY = rowIndex * 48 + 36;
                     foundFrom = true;
                 }
-                if (record.id === toRecordId) {
+                if (String(record.id) === toRecordId) {
                     toY = rowIndex * 48 + 36;
                     foundTo = true;
                 }
@@ -340,7 +304,7 @@ export function useTimelineLayout({
         timeRange,
         timeScale,
         columnWidth,
-        daysPerPixel,
+        geometry,
         validRecords,
         groupedRecords,
         positionById,
