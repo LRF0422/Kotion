@@ -21,8 +21,7 @@
     ]
   },
   "include": [
-    "src",
-    "../common/src/core/PluginManager.ts"
+    "src"
   ],
   "exclude": [
     "node_modules"

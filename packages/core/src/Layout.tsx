@@ -1,20 +1,52 @@
 
-import { Outlet, useLocation } from "react-router-dom"
 import { SiderMenu } from "./components/SiderMenu"
 import { useContext, useEffect, useState } from "react"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogTitle, AlertDialogTrigger, Badge, Item, ItemContent, ItemDescription, ItemTitle, Rate, SparklesText, cn, useIsMobile, useVirtualKeyboard, Button } from "@kn/ui"
 import { TourHost } from "./components/Tour/TourHost"
 import { ChevronLeft } from "@kn/icon"
 import { MobileTabBar } from "./components/mobile/MobileTabBar"
-import { useApi, APIS, useNavigator, useUploadFile, getAccessToken, getRefreshToken, getTokenContextState, clearContextSensitiveClientState, clearTokens, normalizeTokenResponse, notifyContextChanged, saveTokens, useDispatch, AppContext, event, GO_TO_MARKETPLACE, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS, TOGGLE_AI_ASSISTANT, TOGGLE_DOCK_PANEL, dockRuntime, logger } from "@kn/common"
+import { useApi, APIS, useAsyncEffect, useLocation, Outlet, useNavigator, useUploadFile, getAccessToken, getRefreshToken, getTokenContextState, clearContextSensitiveClientState, clearTokens, normalizeTokenResponse, notifyContextChanged, saveTokens, useDispatch, AppContext, event, GO_TO_MARKETPLACE, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS, TOGGLE_AI_ASSISTANT, TOGGLE_DOCK_PANEL, dockRuntime, logger } from "@kn/common"
 import { toast } from "@kn/ui"
 import React from "react"
-import { useAsyncEffect } from "ahooks"
 import { MobilePageHeaderProvider, useMobilePageHeader } from "@kn/common"
 import { OffscreenEditorHost } from "./ai/offscreen"
+import { toRemotePluginDescriptor, type PluginRecord } from "./components/Shop/plugin-model"
 
 interface LayoutProps {
     onPluginsReady: (ready: boolean) => void
+}
+
+const normalizeInstalledPlugins = (value: unknown) => {
+    if (!Array.isArray(value)) {
+        logger.warn('Installed plugin response is not an array')
+        return {
+            plugins: [],
+            invalidPlugins: ['installed-plugin-response'],
+        }
+    }
+
+    const plugins: NonNullable<ReturnType<typeof toRemotePluginDescriptor>>[] = []
+    const invalidPlugins: string[] = []
+    value.forEach((entry: unknown) => {
+        const record = entry && typeof entry === 'object'
+            ? entry as PluginRecord
+            : null
+        const plugin = toRemotePluginDescriptor(record)
+        if (plugin) {
+            plugins.push(plugin)
+            return
+        }
+
+        const name = record?.name || record?.pluginKey || 'unknown'
+        invalidPlugins.push(name)
+        logger.warn('Skipping installed plugin with incomplete runtime metadata', {
+            name: record?.name,
+            pluginKey: record?.pluginKey,
+            currentVersionId: record?.currentVersionId,
+        })
+    })
+
+    return { plugins, invalidPlugins }
 }
 
 // Mobile top app bar. Navigation lives in the bottom MobileTabBar; this bar is
@@ -149,7 +181,7 @@ export function Layout({ onPluginsReady }: LayoutProps) {
             // Public shares always have the bundled compatibility set. Authenticated
             // viewers may additionally load remote-only plugins; duplicates are filtered.
             if (window.location.pathname.startsWith('/share/')) {
-                let installedPlugins: any[] = []
+                let installedPlugins: unknown = []
                 if (token) {
                     try {
                         installedPlugins = (await useApi(APIS.GET_INSTALLED_PLUGINS)).data
@@ -157,9 +189,11 @@ export function Layout({ onPluginsReady }: LayoutProps) {
                         logger.warn('Failed to load viewer plugins for public share; using compatibility plugins only', error)
                     }
                 }
-                const { failedPlugins, incompatiblePlugins } = await pluginManager.init(installedPlugins)
-                if (failedPlugins.length > 0) {
-                    logger.warn('Some viewer plugins failed on public share:', failedPlugins)
+                const { plugins: runtimePlugins, invalidPlugins } = normalizeInstalledPlugins(installedPlugins)
+                const { failedPlugins, incompatiblePlugins } = await pluginManager.init(runtimePlugins)
+                const allFailedPlugins = [...invalidPlugins, ...failedPlugins]
+                if (allFailedPlugins.length > 0) {
+                    logger.warn('Some viewer plugins failed on public share:', allFailedPlugins)
                 }
                 if (incompatiblePlugins.length > 0) {
                     logger.warn('Some viewer plugins were skipped on public share because their API versions are incompatible:', incompatiblePlugins)
@@ -173,13 +207,15 @@ export function Layout({ onPluginsReady }: LayoutProps) {
             console.log('Token check:', token ? 'present' : 'missing')
             if (token) {
                 console.log('Loading plugins in Layout, refreshFlag:', refreshFlag)
-                const installedPlugins: any[] = (await useApi(APIS.GET_INSTALLED_PLUGINS)).data
-                const { failedPlugins, incompatiblePlugins } = await pluginManager.init(installedPlugins)
+                const installedPlugins = (await useApi(APIS.GET_INSTALLED_PLUGINS)).data
+                const { plugins: runtimePlugins, invalidPlugins } = normalizeInstalledPlugins(installedPlugins)
+                const { failedPlugins, incompatiblePlugins } = await pluginManager.init(runtimePlugins)
                 if (incompatiblePlugins.length > 0) {
                     logger.warn('Some installed plugins were skipped because their API versions are incompatible:', incompatiblePlugins)
                 }
-                if (failedPlugins.length > 0) {
-                    throw new Error(`Failed to load required plugins: ${failedPlugins.join(', ')}`)
+                const allFailedPlugins = [...invalidPlugins, ...failedPlugins]
+                if (allFailedPlugins.length > 0) {
+                    throw new Error(`Failed to load required plugins: ${allFailedPlugins.join(', ')}`)
                 }
 
                 setPluginsLoaded(true)

@@ -8,17 +8,16 @@ import { SignUpForm } from "./components/SignUp";
 import { Welcome } from "./components/Welcome";
 import * as ui from "@kn/ui"
 import * as common from "@kn/common"
-import * as core from "./index"
+import * as legacyCoreApi from "./legacy-core-api"
 import * as icon from "@kn/icon"
 import * as editor from "@kn/editor"
-import { useAsyncEffect, useSafeState } from "ahooks";
 import { Shop } from "./components/Shop";
 import { PluginDetail } from "./components/Shop/PluginDetail";
 import { Marketplace } from "./components/Shop/Marketplace";
 
 import { resources } from "./locales/resources"
 import { merge } from "lodash";
-import { clearContextSensitiveClientState, normalizeTokenResponse, notifyContextChanged, setRequestToast, setSessionExpiredHandler, resetSessionExpiredGuard, subscribeToContextChanges, useTranslation, useApi, APIS, saveTokens } from "@kn/common"
+import { clearContextSensitiveClientState, normalizeTokenResponse, notifyContextChanged, setRequestToast, setSessionExpiredHandler, resetSessionExpiredGuard, subscribeToContextChanges, useAsyncEffect, useSafeState, useTranslation, useApi, useUploadFile, APIS, saveTokens } from "@kn/common"
 import { registerCoreToolFactories } from "./ai/tools/register"
 import { registerOffscreenEditorBridge } from "./ai/offscreen"
 import { AIAssistantPage } from "./pages/AIAssistantPage"
@@ -57,22 +56,6 @@ const reslove = (config: common.RouteConfig) => {
 }
 
 
-
-// Install window.__KN__ (frozen namespace with shared libs + plugin registry)
-// plus the legacy window.ui/common/... globals for old plugin bundles.
-common.setupGlobalNamespace({
-    React,
-    ReactDOM,
-    ui,
-    common,
-    core,
-    icon,
-    editor,
-    hostApiVersion: PLUGIN_API_VERSION,
-    // Publish the host's build-time env so plugin UMD bundles can read VITE_*
-    // variables at runtime via @kn/common's getAppEnv().
-    env: { ...(import.meta as any).env },
-})
 
 // ---------------------------------------------------------------------------
 // Session-expired dialog (rendered imperatively when token expires)
@@ -279,7 +262,7 @@ export const App: React.FC<AppProps> = (props) => {
     ensureCoreRuntimeRegistered()
     const { plugins = [] } = props
     const [router, setRouter] = useSafeState<any>()
-    const { usePath } = core.useUploadFile()
+    const { usePath } = useUploadFile()
     const pluginManager = useMemo(() => new common.PluginManager({
         // Plugin artifacts are served from the public (no-auth) plugin endpoint
         // so script tags need no Authorization query param and SRI/CORS work.
@@ -430,3 +413,20 @@ export const App: React.FC<AppProps> = (props) => {
         </ThemeProvider>
     </AppContext.Provider>
 }
+
+// Install window.__KN__ after App has been initialized so App.tsx does not need
+// to import the package root and create an App -> index -> App cycle.
+const coreApi = Object.freeze({ ...legacyCoreApi, App })
+common.setupGlobalNamespace({
+    React,
+    ReactDOM,
+    ui,
+    common,
+    core: coreApi,
+    icon,
+    editor,
+    hostApiVersion: PLUGIN_API_VERSION,
+    // Publish the host's build-time env so plugin UMD bundles can read VITE_*
+    // variables at runtime via @kn/common's getAppEnv().
+    env: { ...(import.meta as any).env },
+})

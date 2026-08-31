@@ -11,6 +11,12 @@ import {
     pluginServiceOwner,
 } from "./ServiceRegistry";
 import { PluginMeta, PluginRegistration } from "./global-namespace";
+import {
+    getRemotePluginInputName,
+    normalizeRemotePluginDescriptor,
+    type RemotePluginDescriptor,
+    type RemotePluginInput,
+} from "./plugin-runtime";
 import { pluginScriptLoader } from "../utils/import-util";
 import { logger } from "../utils/logger";
 import { event, PLUGIN_INCOMPATIBLE } from "../event";
@@ -265,7 +271,7 @@ export class PluginManager {
         logger.info(`Plugin script cache invalidated for URL: ${url}`)
     }
 
-    private _validatePlugin(plugin: any): boolean {
+    private _validatePlugin(plugin: { name?: string } | null | undefined): boolean {
         if (!plugin) {
             logger.error('Plugin is null or undefined')
             return false
@@ -286,33 +292,17 @@ export class PluginManager {
      * resourcePath (new file name), so the extra `v` parameter is only a
      * second line of defence against stale HTTP caches.
      */
-    private _buildPluginUrl(plugin: any): string {
+    private _buildPluginUrl(plugin: RemotePluginDescriptor): string {
         return this._resolveUrl(plugin.resourcePath)
             + '&cache=true'
-            + '&v=' + (plugin.id ?? plugin.version ?? '')
+            + '&v=' + (plugin.versionId ?? plugin.version ?? '')
     }
 
-    private _pluginIdentity(plugin: {
-        pluginKey?: string
-        name?: string
-        id?: string | number
-        currentVersionId?: string | number
-        version?: string
-        currentVersion?: string | { version?: string }
-    }): string {
-        const key = plugin.pluginKey || plugin.name || 'unknown'
-        const currentVersion = typeof plugin.currentVersion === 'string'
-            ? plugin.currentVersion
-            : plugin.currentVersion?.version
-        const version = plugin.currentVersionId
-            ?? plugin.id
-            ?? currentVersion
-            ?? plugin.version
-            ?? 'unknown'
-        return `${key}:${version}`
+    private _pluginIdentity(plugin: RemotePluginDescriptor): string {
+        return `${plugin.pluginKey}:${plugin.versionId ?? plugin.version ?? 'unknown'}`
     }
 
-    private _clearPluginIncompatibility(plugin: { pluginKey?: string; name?: string }): boolean {
+    private _clearPluginIncompatibility(plugin: { pluginKey?: string; name: string }): boolean {
         let cleared = false
         for (const [key, issue] of this._incompatiblePlugins) {
             const matches = plugin.pluginKey && issue.pluginKey
@@ -333,19 +323,9 @@ export class PluginManager {
      */
     private _getApiIncompatibility(
         meta: PluginMeta | undefined,
-        plugin: {
-            name?: string
-            pluginKey?: string
-            id?: string | number
-            currentVersionId?: string | number
-            version?: string
-            currentVersion?: string | { version?: string }
-        },
+        plugin: RemotePluginDescriptor,
     ): PluginApiIncompatibility | null {
-        const name = plugin.name || plugin.pluginKey || 'unknown'
-        const currentVersion = typeof plugin.currentVersion === 'string'
-            ? plugin.currentVersion
-            : plugin.currentVersion?.version
+        const name = plugin.name
         const apiVersion = meta?.apiVersion
         if (!apiVersion) {
             logger.warn(`Plugin ${name} has no apiVersion metadata (legacy bundle), loading anyway`)
@@ -359,8 +339,8 @@ export class PluginManager {
             return {
                 name,
                 pluginKey: plugin.pluginKey,
-                versionId: plugin.currentVersionId ?? plugin.id,
-                version: currentVersion ?? plugin.version,
+                versionId: plugin.versionId,
+                version: plugin.version,
                 apiVersion,
                 hostApiVersion: this._hostApiVersion,
             }
@@ -394,7 +374,7 @@ export class PluginManager {
         return plugin
     }
 
-    public async init(remotePlugins: any[]): Promise<PluginInitResult> {
+    public async init(remotePlugins: readonly RemotePluginInput[]): Promise<PluginInitResult> {
         logger.info('Initializing remote plugins:', remotePlugins);
         logger.info('Current init status:', this._init);
 
@@ -434,9 +414,18 @@ export class PluginManager {
                 return { failedPlugins: [...conflicts], incompatiblePlugins: [] }
             }
 
-            const loadableRemotePlugins = remotePlugins.filter(plugin => {
+            const failedPlugins = new Set<string>()
+            const normalizedRemotePlugins = remotePlugins.flatMap(input => {
+                const plugin = normalizeRemotePluginDescriptor(input)
+                if (plugin) return [plugin]
+                const name = getRemotePluginInputName(input)
+                failedPlugins.add(name)
+                logger.warn(`Skipping remote plugin ${name}: missing name or resourcePath`)
+                return []
+            })
+            const loadableRemotePlugins = normalizedRemotePlugins.filter(plugin => {
                 if (!this._isInitialPluginKey(plugin.pluginKey)) return true
-                logger.info(`Skipping remote plugin ${plugin.pluginKey || plugin.name}: already provided by the host`)
+                logger.info(`Skipping remote plugin ${plugin.pluginKey}: already provided by the host`)
                 return false
             })
 
@@ -454,7 +443,6 @@ export class PluginManager {
             }))
             console.log('Load results:', loadResults);
 
-            const failedPlugins = new Set<string>()
             const incompatiblePlugins = new Map<string, PluginApiIncompatibility>()
             loadResults.forEach((result, index) => {
                 if (result.status === 'rejected') {
@@ -584,10 +572,16 @@ export class PluginManager {
         return true
     }
 
-    async installPlugin(plugin: any, callBack?: () => void) {
+    async installPlugin(input: RemotePluginInput, callBack?: () => void) {
+        const plugin = normalizeRemotePluginDescriptor(input)
+        if (!plugin) {
+            logger.error(`Plugin ${getRemotePluginInputName(input)} is missing required runtime metadata`)
+            return false
+        }
+
         try {
-            if (this._isInitialPluginKey(plugin?.pluginKey)) {
-                logger.warn(`Plugin ${plugin.pluginKey || plugin.name} is provided by the host and cannot be installed remotely`)
+            if (this._isInitialPluginKey(plugin.pluginKey)) {
+                logger.warn(`Plugin ${plugin.pluginKey} is provided by the host and cannot be installed remotely`)
                 return false
             }
 
@@ -967,27 +961,34 @@ export class PluginManager {
      * @param plugins Array of plugin metadata with resourcePath and pluginKey
      * @returns Array of ExtensionWrapper from the loaded plugins
      */
-    async loadExternalPluginExtensions(plugins: Array<{ resourcePath: string; pluginKey: string; name: string }>): Promise<ExtensionWrapper[]> {
+    async loadExternalPluginExtensions(inputs: readonly RemotePluginInput[]): Promise<ExtensionWrapper[]> {
         const extensions: ExtensionWrapper[] = [];
 
-        if (!plugins || plugins.length === 0) {
+        if (!inputs || inputs.length === 0) {
             return extensions;
         }
 
+        const plugins = inputs.flatMap(input => {
+            const plugin = normalizeRemotePluginDescriptor(input)
+            if (plugin) return [plugin]
+            logger.warn(`Skipping external plugin ${getRemotePluginInputName(input)}: missing required runtime metadata`)
+            return []
+        })
+
         const loadResults = await Promise.allSettled(plugins.map(async (plugin) => {
             try {
-                if (!plugin.resourcePath || !plugin.pluginKey) {
-                    logger.warn(`Skipping plugin ${plugin.name}: missing resourcePath or pluginKey`);
-                    return null;
-                }
-
                 // Construct the plugin URL (same logic as init)
                 const pluginUrl = plugin.resourcePath.startsWith('http')
                     ? plugin.resourcePath
                     : this._buildPluginUrl(plugin);
 
                 // Load the plugin script
-                const registration = await pluginScriptLoader.load(pluginUrl, plugin.pluginKey, plugin.name);
+                const registration = await pluginScriptLoader.load(
+                    pluginUrl,
+                    plugin.pluginKey,
+                    plugin.name,
+                    { integrity: plugin.integrity },
+                );
 
                 // Version handshake before extracting the KPlugin instance
                 if (this._getApiIncompatibility(registration.meta, plugin)) {

@@ -3,7 +3,9 @@ import {
   APIS,
   event,
   PLUGIN_CHANGED,
+  Outlet,
   useApi,
+  useLocation,
   useNavigator,
   usePluginState,
   useTranslation,
@@ -35,7 +37,6 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Outlet, useLocation } from "react-router-dom";
 import { InstalledExtensionsSidebar } from "./InstalledExtensionsSidebar";
 import { PluginHubTopBar } from "./PluginHubTopBar";
 import { PluginVersionRecord } from "./plugin-model";

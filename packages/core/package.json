@@ -6,38 +6,33 @@
   "types": "src/index.ts",
   "publishConfig": {
     "main": "dist/index.js",
-    "types": "dist/core/src/index.d.ts",
+    "types": "dist/index.d.ts",
     "registry": "http://localhost:8081/repository/npm-hosted/"
   },
   "scripts": {
-    "build": "rollup -c",
+    "build": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\" && rollup -c && node ../../scripts/normalize-declaration-layout.mjs core common editor ui icon plugin-api",
     "check:space-page": "rm -rf .tmp-check/space-page && tsc src/domain/space-page/*.ts --rootDir src --outDir .tmp-check/space-page --module commonjs --target ES2022 --lib ES2022,DOM --skipLibCheck --noCheck && node -e \"const fs=require('fs'); const dir='.tmp-check/space-page/node_modules/@kn/common'; fs.mkdirSync(dir,{recursive:true}); fs.writeFileSync('.tmp-check/space-page/package.json','{\\\"type\\\":\\\"commonjs\\\"}'); fs.copyFileSync('.tmp-check/space-page/domain/space-page/space-page-common.check-runtime.js',dir+'/index.js'); fs.writeFileSync(dir+'/package.json','{\\\"main\\\":\\\"index.js\\\",\\\"type\\\":\\\"commonjs\\\"}')\" && node .tmp-check/space-page/domain/space-page/space-page-service.check.js",
     "check": "pnpm check:space-page",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "type": "module",
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.23",
-    "@ai-sdk/deepseek": "^2.0.3",
-    "@ai-sdk/provider": "^3.0.8",
-    "@ai-sdk/react": "^3.0.11",
     "@kn/common": "workspace:*",
     "@kn/editor": "workspace:*",
     "@kn/icon": "workspace:*",
     "@kn/plugin-api": "workspace:*",
     "@kn/ui": "workspace:*",
-    "@types/pako": "^2.0.3",
-    "ai": "^6.0.9",
-    "browser-fs-access": "^0.35.0",
-    "event-source-polyfill": "^1.0.31",
-    "json-hpack": "^0.0.2",
-    "pako": "^2.1.0",
-    "react-error-boundary": "^4.0.13",
-    "zipson": "^0.2.12"
+    "lodash": "^4.17.21"
+  },
+  "peerDependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
     "@kn/rollup-config": "workspace:*",
-    "@types/event-source-polyfill": "^1.0.5"
+    "@types/lodash": "^4.17.0",
+    "@types/react": "^18.3.23",
+    "@types/react-dom": "^18.3.1"
   },
   "keywords": [],
   "author": "",

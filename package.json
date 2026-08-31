@@ -7,7 +7,7 @@
     "registry": "http://localhost:8081/repository/npm-hosted/"
   },
   "scripts": {
-    "build": "turbo build",
+    "build": "pnpm check:boundaries && turbo build",
     "build:select": "bash scripts/build.sh",
     "build:core": "pnpm --filter @kn/core build",
     "build:icon": "pnpm --filter @kn/icon build",
@@ -41,6 +41,7 @@
     "mobile:preview": "pnpm --filter mobile preview",
     "clean:packages": "rm -rf ./packages/*/dist",
     "clean:lib": "rm -rf ./packages/*/node_modules",
+    "check:boundaries": "node scripts/check-package-boundaries.mjs",
     "dev": "turbo dev",
     "room-server": "pnpm --filter @kn/room-server start",
     "room-server:dev": "pnpm --filter @kn/room-server dev",

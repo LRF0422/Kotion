@@ -1,7 +1,9 @@
 import { KPlugin, PluginManager } from "./PluginManager";
+import { normalizeRemotePluginDescriptor } from "./plugin-runtime";
 import type { PluginRegistration } from "./global-namespace";
 import { pluginScriptLoader } from "../utils/import-util";
 import { logger } from "../utils/logger";
+import { event, PLUGIN_INCOMPATIBLE } from "../event";
 
 const assert = (condition: unknown, message: string): void => {
   if (!condition) throw new Error(message);
@@ -20,6 +22,19 @@ const remotePlugin = (
   resourcePath: `/${pluginKey}.js`,
 });
 
+const canonicalRemotePlugin = (
+  pluginKey: string,
+  name: string,
+  versionId: string,
+  version: string,
+) => ({
+  pluginKey,
+  name,
+  versionId,
+  version,
+  resourcePath: `/${pluginKey}.js`,
+});
+
 const registration = (
   name: string,
   apiVersion: string,
@@ -31,8 +46,34 @@ const registration = (
 });
 
 const run = async (): Promise<void> => {
+  const nameless = normalizeRemotePluginDescriptor({
+    pluginKey: "nameless-plugin",
+    resourcePath: "/nameless-plugin.js",
+    version: "2.0.0",
+  });
+  assert(
+    nameless?.name === "nameless-plugin",
+    "legacy descriptors should fall back to pluginKey for their display name",
+  );
+  const canonicalVersion = normalizeRemotePluginDescriptor({
+    pluginKey: "version-precedence",
+    name: "Version precedence",
+    resourcePath: "/version-precedence.js",
+    version: "2.0.0",
+    currentVersion: "1.0.0",
+  });
+  assert(
+    canonicalVersion?.version === "2.0.0",
+    "canonical version should take precedence over currentVersion",
+  );
+
   const originalLoad = pluginScriptLoader.load;
   const loadResults = new Map<string, PluginRegistration | Error>();
+  let incompatibleEvents = 0;
+  const handleIncompatible = () => {
+    incompatibleEvents += 1;
+  };
+  event.on(PLUGIN_INCOMPATIBLE, handleIncompatible);
 
   pluginScriptLoader.load = async (url, packageName) => {
     const versionId = /[?&]v=([^&]+)/.exec(url)?.[1];
@@ -97,6 +138,10 @@ const run = async (): Promise<void> => {
       manager.incompatiblePlugins.length === 1,
       "manager should retain incompatibility state after initialization",
     );
+    assert(
+      incompatibleEvents === 1,
+      "legacy PLUGIN_INCOMPATIBLE listeners should still be notified",
+    );
 
     const compatibleSibling = remotePlugin(
       incompatible.pluginKey,
@@ -147,7 +192,7 @@ const run = async (): Promise<void> => {
       "the incompatible plugin should remain inactive in a mixed initialization",
     );
 
-    const compatibleUpdate = remotePlugin(
+    const compatibleUpdate = canonicalRemotePlugin(
       incompatible.pluginKey,
       incompatible.name,
       "version-3",
@@ -171,6 +216,14 @@ const run = async (): Promise<void> => {
     assert(
       manager.incompatiblePlugins.length === 0,
       "initializing without remote plugins should clear incompatibility state",
+    );
+
+    const malformedResult = await manager.init([
+      { pluginKey: "malformed-plugin", name: "Malformed plugin" },
+    ]);
+    assert(
+      malformedResult.failedPlugins.includes("Malformed plugin"),
+      "plugins without a resource path should be rejected before loading",
     );
 
     const failedManager = new PluginManager(
@@ -261,6 +314,7 @@ const run = async (): Promise<void> => {
     );
     unsubscribe();
   } finally {
+    event.off(PLUGIN_INCOMPATIBLE, handleIncompatible);
     pluginScriptLoader.load = originalLoad;
   }
 };

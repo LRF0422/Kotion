@@ -6,7 +6,7 @@ import { Badge } from "@kn/ui";
 import { cn } from "@kn/ui";
 import { useResponsive } from "@kn/ui";
 import { GlobalState } from "@kn/common";
-import { useSafeState } from "ahooks";
+import { useSafeState } from "@kn/common";
 import {
     UserCircle,
     Settings,

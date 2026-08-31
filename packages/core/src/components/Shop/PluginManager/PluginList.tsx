@@ -1,5 +1,5 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { PluginArtifactFile, GlobalState, useApi, useUploadFile, useSelector, APIS, AppContext, event, PLUGIN_CHANGED } from "@kn/common";
+import { PluginArtifactFile, GlobalState, useApi, useUploadFile, useSelector, APIS, AppContext, event, PLUGIN_CHANGED, logger } from "@kn/common";
 import {
     Avatar, Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, DialogTrigger,
     IconButton, Input, Label, Tabs, TabsContent, TabsList, TabsTrigger, AlertDialog, AlertDialogAction,
@@ -18,6 +18,7 @@ import { PluginUploader } from "../PluginUploader";
 import { CollaborationEditor } from "@kn/editor";
 import { isObject } from "lodash";
 import { useTranslation } from "@kn/common";
+import { toRemotePluginDescriptor } from "../plugin-model";
 
 interface PluginStatus {
     code: string;
@@ -42,11 +43,24 @@ interface Plugin {
     currentVersionId?: string;
     pluginKey?: string;
     resourcePath?: string;
+    integrity?: string;
 }
 
 // Backend may serialize an enum as a bare string or as { value, desc }; normalize to a code.
 const installState = (p: Pick<Plugin, 'installStatus'>): string | undefined =>
     typeof p.installStatus === 'string' ? p.installStatus : (p.installStatus?.value ?? undefined);
+
+const pluginRuntimeDescriptor = (plugin: Plugin) => {
+    const descriptor = toRemotePluginDescriptor(plugin);
+    if (!descriptor) {
+        logger.warn('Skipping plugin with incomplete runtime metadata', {
+            name: plugin.name,
+            pluginKey: plugin.pluginKey,
+            currentVersionId: plugin.currentVersionId,
+        });
+    }
+    return descriptor;
+};
 
 const nextPatchVersion = (version?: string) => {
     const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version || '');
@@ -263,7 +277,12 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
         () => runBulk(
             APIS.ENABLE_PLUGIN,
             'pluginManager.bulkEnableSuccess',
-            p => pluginManager ? pluginManager.installPlugin(p as any) : false,
+            p => {
+                const descriptor = pluginRuntimeDescriptor(p);
+                return pluginManager && descriptor
+                    ? pluginManager.installPlugin(descriptor)
+                    : false;
+            },
         ),
         [runBulk, pluginManager]
     );
@@ -328,8 +347,9 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                 toast.success(t('pluginManager.disableSuccess'));
             } else {
                 await useApi(APIS.ENABLE_PLUGIN, { versionId: plugin.currentVersionId });
-                const activated = pluginManager
-                    ? await pluginManager.installPlugin(plugin as any)
+                const descriptor = pluginRuntimeDescriptor(plugin);
+                const activated = pluginManager && descriptor
+                    ? await pluginManager.installPlugin(descriptor)
                     : false;
                 event.emit(PLUGIN_CHANGED, { source: 'enable' });
                 if (activated) {

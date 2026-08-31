@@ -2,7 +2,7 @@ import { useNavigator } from "@kn/common";
 import { Blocks, LayoutDashboard, Power, Settings, UserRoundPlus, Github } from "@kn/icon";
 import React, { useContext, useEffect, useMemo, useState, useCallback, memo } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider, useIsMobile, Button } from "@kn/ui";
-import { useLocation } from "react-router-dom";
+import { useLocation } from "@kn/common";
 import { cn } from "@kn/ui";
 import { useSelector } from "@kn/common";
 import { GlobalState } from "@kn/common";

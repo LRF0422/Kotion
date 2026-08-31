@@ -1,3 +1,4 @@
+/** @deprecated Import useApi and related types from the @kn/common root. */
 export * from "../api/use-api"
 export * from "./use-navigator"
 export * from "./use-upload-file"

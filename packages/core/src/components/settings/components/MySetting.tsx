@@ -20,7 +20,7 @@ import {
     CalendarDays,
     Save,
 } from "@kn/icon";
-import { useSafeState } from "ahooks";
+import { useSafeState } from "@kn/common";
 import { useTheme, useUiStyle, type UiStyle } from "@kn/ui";
 import { useTranslation } from "@kn/common";
 import { SettingsPanel, SettingsSection, SettingsRow } from "./primitives";

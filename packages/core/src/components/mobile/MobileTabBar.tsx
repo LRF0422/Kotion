@@ -1,5 +1,4 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
 import {
     cn,
     Sheet,
@@ -12,6 +11,7 @@ import {
 } from "@kn/ui";
 import { Home, LayoutGrid, Sparkles, User, Settings, Power } from "@kn/icon";
 import {
+    useLocation,
     useNavigator,
     useSelector,
     GlobalState,

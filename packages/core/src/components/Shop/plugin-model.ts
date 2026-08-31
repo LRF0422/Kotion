@@ -1,4 +1,8 @@
-import type { PluginApiIncompatibility } from "@kn/common";
+import {
+  normalizeRemotePluginDescriptor,
+  type PluginApiIncompatibility,
+  type RemotePluginDescriptor,
+} from "@kn/common";
 import type { JSONContent } from "@kn/editor";
 
 export type SerializedEnum<T extends string = string> =
@@ -177,21 +181,45 @@ export const getPluginInstallState = (
   };
 };
 
-export const buildPluginRuntimePayload = (plugin: PluginRecord) => {
-  const versionId = getPluginVersionId(plugin);
-  const resourcePath =
-    plugin.resourcePath ?? plugin.currentVersion?.resourcePath;
-  const integrity = plugin.integrity ?? plugin.currentVersion?.integrity;
+type PluginRuntimeSource = {
+  name?: string;
+  pluginKey?: string;
+  versionId?: string | number;
+  version?: string;
+  currentVersionId?: string | number;
+  resourcePath?: string;
+  integrity?: string;
+  currentVersion?: string | PluginVersionRecord;
+};
 
-  if (!versionId || !resourcePath || !plugin.name) return null;
+/** Normalize backend marketplace DTOs before they enter the common runtime. */
+export const toRemotePluginDescriptor = (
+  plugin: PluginRuntimeSource | null | undefined,
+): RemotePluginDescriptor | null => {
+  if (!plugin) return null;
 
-  return {
-    ...plugin,
-    id: versionId,
-    version: plugin.currentVersion?.version,
-    resourcePath,
-    integrity,
-  };
+  const currentVersion =
+    typeof plugin.currentVersion === "object" ? plugin.currentVersion : undefined;
+  const versionId =
+    plugin.versionId ?? plugin.currentVersionId ?? currentVersion?.id;
+  const descriptor = normalizeRemotePluginDescriptor({
+    pluginKey: plugin.pluginKey,
+    name: plugin.name,
+    versionId,
+    version:
+      plugin.version ??
+      (typeof plugin.currentVersion === "string"
+        ? plugin.currentVersion
+        : currentVersion?.version),
+    resourcePath: plugin.resourcePath?.trim()
+      ? plugin.resourcePath
+      : currentVersion?.resourcePath,
+    integrity: plugin.integrity?.trim()
+      ? plugin.integrity
+      : currentVersion?.integrity,
+  });
+
+  return descriptor;
 };
 
 const sectionId = (label: string, index: number) => {

@@ -18,7 +18,7 @@ import { PluginDocumentationCard } from "./PluginDocumentationCard";
 import { PluginFactsPanel } from "./PluginFactsPanel";
 import { usePluginDetail } from "./use-plugin-detail";
 import {
-  buildPluginRuntimePayload,
+  toRemotePluginDescriptor,
   getPluginInstallState,
   normalizeDocumentationSections,
 } from "../plugin-model";
@@ -143,7 +143,7 @@ export const PluginDetail: React.FC = () => {
     [incompatiblePlugins, loadedPluginNames, plugin],
   );
   const runtimePayload = useMemo(
-    () => (plugin ? buildPluginRuntimePayload(plugin) : null),
+    () => (plugin ? toRemotePluginDescriptor(plugin) : null),
     [plugin],
   );
   const documentationSections = useMemo(
@@ -157,13 +157,19 @@ export const PluginDetail: React.FC = () => {
   const backToHub = () => navigator.go({ to: "/plugin-hub" });
 
   const handleInstall = async () => {
-    if (!plugin || !runtimePayload || installState.installed || installing)
-      return;
+    if (
+      !plugin ||
+      !runtimePayload ||
+      runtimePayload.versionId === undefined ||
+      runtimePayload.versionId === null ||
+      installState.installed ||
+      installing
+    ) return;
 
     let backendInstalled = false;
     setInstalling(true);
     try {
-      await useApi(APIS.INSTALL_PLUGIN, { versionId: runtimePayload.id });
+      await useApi(APIS.INSTALL_PLUGIN, { versionId: runtimePayload.versionId });
       backendInstalled = true;
       const activated = pluginManager
         ? await pluginManager.installPlugin(runtimePayload)
@@ -227,7 +233,10 @@ export const PluginDetail: React.FC = () => {
           iconUrl={plugin.icon ? usePath(plugin.icon) : undefined}
           installState={installState}
           installing={installing}
-          packageAvailable={Boolean(runtimePayload)}
+          packageAvailable={
+            runtimePayload?.versionId !== undefined &&
+            runtimePayload.versionId !== null
+          }
           onInstall={() => void handleInstall()}
         />
 

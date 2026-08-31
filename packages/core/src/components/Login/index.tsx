@@ -2,7 +2,7 @@ import { Button } from "@kn/ui"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@kn/ui"
 import { Input } from "@kn/ui"
 import { useForm } from "@kn/ui"
-import { Link, useNavigate, useSearchParams } from "react-router-dom"
+import { Link, useNavigate, useSearchParams } from "@kn/common"
 import { z } from "@kn/ui"
 import { zodResolver } from '@kn/ui';
 import { useApi } from "@kn/common"

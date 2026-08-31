@@ -1,5 +1,7 @@
 import { useContext, useEffect, useMemo, useState } from "react"
-import { AppContext, KPlugin, PluginApiIncompatibility, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS, event } from ".."
+import { AppContext } from "../core/AppContext"
+import type { KPlugin, PluginApiIncompatibility } from "../core/PluginManager"
+import { event, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS } from "../event"
 
 /**
  * Reactive hook for tracking plugin state changes.

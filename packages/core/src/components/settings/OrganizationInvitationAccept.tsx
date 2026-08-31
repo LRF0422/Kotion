@@ -7,12 +7,13 @@ import {
     notifyContextChanged,
     saveTokens,
     useApi,
+    useNavigate,
+    useParams,
     useTranslation,
 } from "@kn/common";
 import { Check, Loader2 } from "@kn/icon";
 import { Button } from "@kn/ui";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
 
 export const OrganizationInvitationAccept: React.FC = () => {
     const { token = "" } = useParams();

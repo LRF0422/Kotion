@@ -45,12 +45,13 @@ import {
   useDebounce,
   PLUGIN_CHANGED,
   event,
+  logger,
 } from "@kn/common";
 import { APIS } from "@kn/common";
 import { AppContext, useTranslation } from "@kn/common";
 import { PluginIcon } from "../PluginIcon";
 import {
-  buildPluginRuntimePayload,
+  toRemotePluginDescriptor,
   enumValue,
   getPluginInstallState,
   PluginRecord,
@@ -444,13 +445,21 @@ export const Marketplace: React.FC = () => {
   }, [debouncedKeyword, sort, selectCategory]);
 
   const installPlugin = async (plugin: PluginRecord) => {
-    const payload = buildPluginRuntimePayload(plugin);
-    if (!payload || installing) return;
+    const payload = toRemotePluginDescriptor(plugin);
+    if (!payload || payload.versionId === undefined || payload.versionId === null) {
+      logger.warn("Cannot install plugin without a backend version id", {
+        name: plugin.name,
+        pluginKey: plugin.pluginKey,
+        currentVersionId: plugin.currentVersionId,
+      });
+      return;
+    }
+    if (installing) return;
 
     setInstalling(true);
-    setInstallingPluginId(String(payload.id));
+    setInstallingPluginId(String(payload.versionId));
     try {
-      await useApi(APIS.INSTALL_PLUGIN, { versionId: payload.id });
+      await useApi(APIS.INSTALL_PLUGIN, { versionId: payload.versionId });
       await pluginManager?.installPlugin(payload);
       event.emit(PLUGIN_CHANGED, { source: "install" });
     } finally {

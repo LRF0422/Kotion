@@ -1,7 +1,7 @@
-import { FileService } from "../core/types";
+import type { FileService } from "../core/types";
 import { useService, useOptionalService } from "../hooks/use-service";
 
-// Re-export types from common for convenience
+/** @deprecated Import these contracts from the @kn/common root. */
 export type { FileService, UploadedFile, UploadOptions } from "../core/types";
 
 /**

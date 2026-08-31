@@ -1,7 +1,7 @@
 import { Button, Alert, AlertTitle, AlertDescription } from "@kn/ui";
 import { useNavigator } from "@kn/common";
 import React, { useState, useEffect } from "react";
-import { useRouteError } from "react-router-dom";
+import { useRouteError } from "@kn/common";
 import { useTranslation } from "@kn/common";
 
 interface ErrorPageProps {

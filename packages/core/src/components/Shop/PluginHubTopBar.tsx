@@ -1,8 +1,7 @@
-import { useNavigator, useTranslation } from "@kn/common";
+import { useLocation, useNavigator, useTranslation } from "@kn/common";
 import { ArrowLeft, Package, PlusSquare, Settings } from "@kn/icon";
 import { Badge, Button } from "@kn/ui";
 import React from "react";
-import { useLocation } from "react-router-dom";
 import { PluginManager } from "./PluginManager";
 import { PluginUploader } from "./PluginUploader";
 
