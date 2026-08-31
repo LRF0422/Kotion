@@ -1,12 +1,12 @@
 import React from 'react';
-import { useNavigate } from '@kn/common';
+import { type PageTreeNode, useNavigate } from '@kn/common';
 import { ChevronRight, Home } from '@kn/icon';
 import { Button } from '@kn/ui';
 import { PageBreadcrumbItem, buildPageBreadcrumb } from '../utils/page-breadcrumb';
 
 interface PageBreadcrumbProps {
     currentPageId: string;
-    pageTree: any[];
+    pageTree: PageTreeNode[];
     spaceId: string;
     currentTitle?: string;
 }

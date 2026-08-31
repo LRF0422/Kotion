@@ -1,7 +1,7 @@
 import type { Editor } from "@kn/editor"
 import { z } from "@kn/ui"
 import type { ToolsRecord } from "@kn/common"
-import { getPageBridge } from "@kn/common"
+import { getPageNavigationBridge, resolveService } from "@kn/common"
 import { discoverBlocks, findBlockByText } from "@kn/common"
 
 const BRIDGE_MISSING = '页面服务不可用（当前可能不在页面编辑器中）'
@@ -10,7 +10,7 @@ const BRIDGE_MISSING = '页面服务不可用（当前可能不在页面编辑�
  * Create page-level tools for the AI agent.
  *
  * These operate ACROSS pages (search / create / link / navigate) via the
- * PageBridge registered by the page editor, extending the agent beyond the
+ * PageNavigationBridge registered by the page editor, extending the agent beyond the
  * currently open document.
  */
 export const createPageTools = (editor: Editor): ToolsRecord => ({
@@ -20,23 +20,23 @@ export const createPageTools = (editor: Editor): ToolsRecord => ({
             query: z.string().optional().describe("搜索关键词，不填则返回最近的页面")
         }),
         execute: async ({ query }: { query?: string }) => {
-            const bridge = getPageBridge()
-            if (!bridge) return { error: BRIDGE_MISSING }
-
             try {
-                const pages = await bridge.searchPages(query)
-                const current = bridge.getCurrentPage()
+                const result = await resolveService('spacePageService').pages.queryPages({
+                    searchValue: query,
+                    pageSize: 30,
+                })
+                const current = getPageNavigationBridge()?.getCurrentPage()
                 return {
                     success: true,
-                    pages: pages.map(p => ({
-                        pageId: String(p.id),
-                        title: p.title,
-                        spaceId: p.spaceId !== undefined ? String(p.spaceId) : undefined,
-                        spaceName: p.spaceName,
-                        isCurrent: current.pageId !== undefined && String(p.id) === String(current.pageId)
+                    pages: result.records.map((page) => ({
+                        pageId: page.id,
+                        title: page.title,
+                        spaceId: page.spaceId,
+                        spaceName: page.spaceName,
+                        isCurrent: current?.pageId !== undefined && page.id === current.pageId
                     })),
-                    total: pages.length,
-                    currentPageId: current.pageId
+                    total: result.records.length,
+                    currentPageId: current?.pageId
                 }
             } catch (error) {
                 return { error: `搜索页面失败: ${error instanceof Error ? error.message : '未知错误'}` }
@@ -56,20 +56,20 @@ export const createPageTools = (editor: Editor): ToolsRecord => ({
             asSubPage?: boolean
             linkInDocument?: boolean
         }) => {
-            const bridge = getPageBridge()
-            if (!bridge) return { error: BRIDGE_MISSING }
+            const navigation = getPageNavigationBridge()
+            if (!navigation) return { error: BRIDGE_MISSING }
 
             if (!title || title.trim().length === 0) {
                 return { error: '页面标题不能为空' }
             }
 
-            const current = bridge.getCurrentPage()
+            const current = navigation.getCurrentPage()
             if (!current.spaceId) {
                 return { error: '无法确定当前空间，无法创建页面' }
             }
 
             try {
-                const page = await bridge.createPage({
+                const page = await resolveService('spacePageService').pages.createPage({
                     spaceId: current.spaceId,
                     title: title.trim(),
                     parentId: asSubPage ? current.pageId : undefined
@@ -163,11 +163,11 @@ export const createPageTools = (editor: Editor): ToolsRecord => ({
             spaceId: z.string().optional().describe("页面所属空间 id（searchPages 结果中有），不填则自动解析")
         }),
         execute: async ({ pageId, spaceId }: { pageId: string; spaceId?: string }) => {
-            const bridge = getPageBridge()
-            if (!bridge) return { error: BRIDGE_MISSING }
+            const navigation = getPageNavigationBridge()
+            if (!navigation) return { error: BRIDGE_MISSING }
 
             try {
-                await bridge.openPage(String(pageId), spaceId)
+                await navigation.openPage(String(pageId), spaceId)
                 return {
                     success: true,
                     pageId: String(pageId),

@@ -8,23 +8,27 @@ import {
     Clock, FileText, Plus, Settings, Users, UserPlus, ArrowRight, Activity, Pin,
     LayoutDashboard, TrendingUp, FolderOpen, MessageSquare
 } from "@kn/icon";
-import { useApi, useNavigator, useTranslation, useSafeState, useParams } from "@kn/common";
-import { APIS } from "../../api";
-import { Space, SpaceMember } from "../../model/Space";
+import {
+    useSpacePageService, useNavigator, useTranslation, useSafeState, useParams,
+    type Space, type SpaceMember, type PageSummary
+} from "@kn/common";
 import { ActivityFeed } from "../SpaceDetail/ActivityFeed";
 import { PageItemIcon } from "../SpaceDetail/components/PageItemIcon";
+
+const getIcon = (icon: unknown) => icon as any
 
 export const TeamSpaceHome: React.FC<{ space?: Space; spaceId?: string; onCreatePage?: () => void; onNavigateSettings?: () => void }> = (props) => {
     const { t } = useTranslation()
     const navigator = useNavigator()
     const params = useParams()
+    const spacePageService = useSpacePageService()
 
     const spaceId = props.spaceId || params.id
 
     const [space, setSpace] = useSafeState<Space | undefined>(props.space)
     const [members, setMembers] = useSafeState<SpaceMember[]>([])
-    const [recentPages, setRecentPages] = useSafeState<any[]>([])
-    const [pinnedPages, setPinnedPages] = useSafeState<any[]>([])
+    const [recentPages, setRecentPages] = useSafeState<PageSummary[]>([])
+    const [pinnedPages, setPinnedPages] = useSafeState<PageSummary[]>([])
     const [loadingMembers, setLoadingMembers] = useSafeState(true)
     const [loadingPages, setLoadingPages] = useSafeState(true)
     const [loadingPinned, setLoadingPinned] = useSafeState(true)
@@ -34,42 +38,45 @@ export const TeamSpaceHome: React.FC<{ space?: Space; spaceId?: string; onCreate
     // Fetch space info if not provided via props
     useEffect(() => {
         if (!props.space && spaceId) {
-            useApi(APIS.SPACE_DETAIL, { id: spaceId })
-                .then(res => setSpace(res.data))
+            spacePageService.spaces.getSpace(String(spaceId))
+                .then(setSpace)
                 .catch(() => { })
         }
-    }, [spaceId, props.space])
+    }, [spaceId, props.space, spacePageService])
 
     // Fetch space members
     useEffect(() => {
+        if (!spaceId) return
         setLoadingMembers(true)
-        useApi(APIS.LIST_SPACE_MEMBERS, { spaceId })
-            .then(res => setMembers(res.data || []))
+        spacePageService.members.listSpaceMembers(String(spaceId))
+            .then(setMembers)
             .catch(() => setMembers([]))
             .finally(() => setLoadingMembers(false))
-    }, [spaceId])
+    }, [spaceId, spacePageService])
 
     // Fetch recent pages for this space
     useEffect(() => {
+        if (!spaceId) return
         setLoadingPages(true)
-        useApi(APIS.QUERY_RECENT_PAGE, { spaceId, pageSize: 8 })
-            .then(res => {
-                const records = res.data?.records || []
+        spacePageService.pages.queryRecentPages({ spaceId: String(spaceId), pageSize: 8 })
+            .then(result => {
+                const records = result.records
                 setRecentPages(records)
-                setPageCount(res.data?.total || records.length)
+                setPageCount(result.total || records.length)
             })
             .catch(() => setRecentPages([]))
             .finally(() => setLoadingPages(false))
-    }, [spaceId])
+    }, [spaceId, spacePageService])
 
     // Fetch pinned pages
     useEffect(() => {
+        if (!spaceId) return
         setLoadingPinned(true)
-        useApi(APIS.GET_PINNED_PAGES, { spaceId })
-            .then(res => setPinnedPages(res.data || []))
+        spacePageService.pages.getPinnedPages(String(spaceId))
+            .then(setPinnedPages)
             .catch(() => setPinnedPages([]))
             .finally(() => setLoadingPinned(false))
-    }, [spaceId])
+    }, [spaceId, spacePageService])
 
     const handleNavigateMembers = useCallback(() => {
         navigator.go({ to: `/space-detail/${spaceId}/settings` })
@@ -88,16 +95,16 @@ export const TeamSpaceHome: React.FC<{ space?: Space; spaceId?: string; onCreate
             props.onCreatePage()
         } else {
             // Default: create a page in this space
-            useApi(APIS.CREATE_OR_SAVE_PAGE, null, {
-                spaceId,
+            if (!spaceId) return
+            spacePageService.pages.createPage({
+                spaceId: String(spaceId),
                 parentId: "0",
                 title: "Untitled",
-            }).then(res => {
-                const page = res.data
-                if (page?.id) navigator.go({ to: `/space-detail/${spaceId}/page/edit/${page.id}` })
+            }).then(page => {
+                if (page.id) navigator.go({ to: `/space-detail/${spaceId}/page/edit/${page.id}` })
             })
         }
-    }, [spaceId, navigator, props.onCreatePage])
+    }, [spaceId, navigator, props.onCreatePage, spacePageService])
 
     const handlePageClick = useCallback((pageId: string) => {
         navigator.go({ to: `/space-detail/${spaceId}/page/edit/${pageId}` })
@@ -131,7 +138,7 @@ export const TeamSpaceHome: React.FC<{ space?: Space; spaceId?: string; onCreate
                 <div className="flex items-start justify-between">
                     <div className="flex items-center gap-4">
                         <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10">
-                            {space.icon?.icon ? <PageItemIcon icon={space.icon} size={28} /> : <FileText className="h-7 w-7 text-primary" />}
+                            {getIcon(space.icon)?.icon ? <PageItemIcon icon={getIcon(space.icon)} size={28} /> : <FileText className="h-7 w-7 text-primary" />}
                         </div>
                         <div>
                             <h1 className="text-2xl font-bold tracking-tight">{space.name}</h1>

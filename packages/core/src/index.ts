@@ -7,4 +7,5 @@ export * from "./App"
 export * from "./components/Skills"
 export { MessageBox } from "./components/MessageBox"
 export * from "./ai"
+export * from "./domain/space-page"
 

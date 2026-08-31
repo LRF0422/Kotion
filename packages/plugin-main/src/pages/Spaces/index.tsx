@@ -1,11 +1,8 @@
-import { APIS } from "../../api";
 import { CardList } from "../../pages/components/CardList";
 import { Button } from "@kn/ui";
 import { Input } from "@kn/ui";
 import { MultiSelect } from "@kn/ui";
-import { useApi } from "@kn/common";
-import { Space } from "../../model/Space";
-import { useSafeState } from "@kn/common";
+import { type Space, useSafeState, useSpacePageService } from "@kn/common";
 import { Edit2, Eye, Plus, Star, UserCircle } from "@kn/icon";
 import React, { useEffect } from "react";
 import { CreateSpaceDlg } from "../components/SpaceForm";
@@ -17,12 +14,25 @@ export const Spaces: React.FC = () => {
 
     const [recentPage, setRecentPage] = useSafeState<Space[]>([])
     const navigator = useNavigator()
+    const service = useSpacePageService()
 
     useEffect(() => {
-        useApi(APIS.QUERY_SPACE, {}).then(res => {
-            setRecentPage(res.data.records)
-        })
-    }, [])
+        const loadSpaces = () => {
+            service.spaces.querySpaces().then(result => {
+                setRecentPage(result.records)
+            })
+        }
+        loadSpaces()
+        const unsubscribers = [
+            service.changes.subscribe("space.created", loadSpaces),
+            service.changes.subscribe("space.updated", loadSpaces),
+            service.changes.subscribe("space.deleted", loadSpaces),
+            service.changes.subscribe("space.archived", loadSpaces),
+            service.changes.subscribe("space.unarchived", loadSpaces),
+            service.changes.subscribe("space.favorite.changed", loadSpaces),
+        ]
+        return () => unsubscribers.forEach(unsubscribe => unsubscribe())
+    }, [service, setRecentPage])
 
     return <div className="flex justify-center">
         <div className="w-[800px] flex flex-col gap-2">

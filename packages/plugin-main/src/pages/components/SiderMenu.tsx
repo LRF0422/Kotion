@@ -1,4 +1,4 @@
-import { useNavigator, GlobalState, useApi, clearTokens, useSelector } from "@kn/common";
+import { useNavigator, GlobalState, useSpacePageService, clearTokens, useSelector } from "@kn/common";
 import { CalendarCheck2, LayoutDashboard, LayoutGrid, PanelBottom, Power, Settings, ShoppingBag, Users, UserRoundPlus } from "@kn/icon";
 import React, { ReactNode } from "react";
 import { EmptyProps } from "@kn/ui";
@@ -8,7 +8,6 @@ import { cn } from "@kn/ui";
 import { Avatar, AvatarFallback, AvatarImage } from "@kn/ui";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@kn/ui";
 import { Badge } from "@kn/ui";
-import { APIS } from "../../api";
 import { SettingDlg } from "./settings/SeetingDlg";
 import { ModeToggle } from "@kn/ui";
 
@@ -42,6 +41,7 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini' }> = ({ size
     const navigator = useNavigator()
     const location = useLocation()
     const { userInfo } = useSelector((state: GlobalState) => state)
+    const service = useSpacePageService()
 
     const handleLogout = () => {
         clearTokens()
@@ -51,9 +51,9 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini' }> = ({ size
     }
 
     const handleGoToPersonalSpace = () => {
-        useApi(APIS.PERSONAL_SPACE).then((res) => {
+        service.spaces.getPersonalSpace().then((space) => {
             navigator.go({
-                to: `/space-detail/${res.data.id}`
+                to: `/space-detail/${space.id}`
             })
         })
     }

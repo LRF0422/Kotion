@@ -7,11 +7,9 @@ import {
 } from "@kn/ui";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Box, Crown, EyeIcon, FolderOpen, Globe, Grid3X3, List, Plus, SearchIcon, Star, Users } from "@kn/icon";
-import { Space } from "../../model/Space";
-import { GlobalState, useApi, useDebounce, useNavigator, useSelector } from "@kn/common";
-import { APIS } from "../../api";
+import { type Space, GlobalState, useDebounce, useNavigator, useSelector, useSpacePageService } from "@kn/common";
 import { CreateSpaceDlg } from "../components/SpaceForm";
-import { PageItemIcon } from "../SpaceDetail/components/PageItemIcon";
+import { isPageIconData, PageItemIcon } from "../SpaceDetail/components/PageItemIcon";
 import { useLocation } from "react-router-dom";
 
 
@@ -75,7 +73,7 @@ const SpaceCard: React.FC<SpaceCardProps> = ({
                 <Star className={cn("h-3.5 w-3.5", favorite && "fill-amber-400 text-amber-400")} />
             </Button>
             <span className="flex h-10 w-10 items-center justify-center leading-none">
-                {space.icon?.icon ? <PageItemIcon icon={space.icon} size={28} /> : <Box className="h-5 w-5 text-muted-foreground" />}
+                {isPageIconData(space.icon) ? <PageItemIcon icon={space.icon} size={28} /> : <Box className="h-5 w-5 text-muted-foreground" />}
             </span>
             <p className="mt-2 truncate text-sm font-semibold">{space.name}</p>
             <div className="mt-1 flex items-center gap-1">
@@ -122,7 +120,7 @@ const SpaceRow: React.FC<SpaceRowProps> = ({
             className="space-fade-up group flex items-center gap-3 rounded-lg border border-border/60 bg-card px-3 py-2.5 cursor-pointer transition-colors duration-150 hover:bg-muted/50"
         >
             <span className="flex h-9 w-9 shrink-0 items-center justify-center leading-none">
-                {space.icon?.icon ? <PageItemIcon icon={space.icon} size={22} /> : <Box className="h-4 w-4 text-muted-foreground" />}
+                {isPageIconData(space.icon) ? <PageItemIcon icon={space.icon} size={22} /> : <Box className="h-4 w-4 text-muted-foreground" />}
             </span>
             <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
@@ -165,6 +163,7 @@ export const SpaceHub: React.FC = () => {
     const isMobile = useIsMobile()
     const { t } = useTranslation()
     const navigator = useNavigator()
+    const service = useSpacePageService()
     const location = useLocation()
     const { userInfo } = useSelector((state: GlobalState) => state)
 
@@ -215,9 +214,9 @@ export const SpaceHub: React.FC = () => {
             if (spaceTab === 'team') params.type = 'COLLABORATION'
             else if (spaceTab === 'normal') params.type = 'SPACE'
 
-            const res = await useApi(APIS.QUERY_SPACE, params)
-            const total = res.data.total || 0
-            setSpaces(res.data.records || [])
+            const result = await service.spaces.querySpaces(params)
+            const total = result.total || 0
+            setSpaces(result.records)
             setTotalSpaces(total)
             setTotalPages(Math.max(1, Math.ceil(total / pageSize)))
         } catch (error) {
@@ -229,14 +228,14 @@ export const SpaceHub: React.FC = () => {
             setShowLoadingSpaces(false)
             setIsLoadingSpaces(false)
         }
-    }, [currentPage, debouncedSearchValue, category, spaceTab, t])
+    }, [currentPage, debouncedSearchValue, category, spaceTab, service, t])
 
     // Fetch the favorite spaces shown in the pinned section.
     const fetchFavorites = useCallback(async () => {
         const loadingTimer = setTimeout(() => setShowLoadingFavorites(true), 250)
         try {
-            const res = await useApi(APIS.QUERY_SPACE, { template: false, favorite: true, pageSize: 8 })
-            setFavorites(res.data.records || [])
+            const result = await service.spaces.querySpaces({ template: false, favorite: true, pageSize: 8 })
+            setFavorites(result.records)
         } catch (error) {
             console.error('Failed to fetch favorites:', error)
             setFavorites([])
@@ -244,18 +243,17 @@ export const SpaceHub: React.FC = () => {
             clearTimeout(loadingTimer)
             setShowLoadingFavorites(false)
         }
-    }, [])
+    }, [service])
 
     const toggleFavorite = useCallback(async (spaceId: string) => {
         try {
-            await useApi(APIS.ADD_SPACE_FAVORITE, { id: spaceId })
-            await Promise.all([fetchFavorites(), fetchSpaces()])
+            await service.spaces.toggleSpaceFavorite(spaceId)
             toast.success(t('space-hub.favorite-updated', 'Favorite updated'))
         } catch (error) {
             console.error('Failed to toggle favorite:', error)
             toast.error(t('space-hub.favorite-error', 'Failed to update favorite'))
         }
-    }, [fetchFavorites, fetchSpaces, t])
+    }, [service, t])
 
     const navigateToSpace = useCallback((spaceId: string) => {
         navigator.go({ to: `/space-detail/${spaceId}` })
@@ -270,6 +268,23 @@ export const SpaceHub: React.FC = () => {
 
     useEffect(() => { fetchSpaces() }, [fetchSpaces])
     useEffect(() => { fetchFavorites() }, [fetchFavorites])
+
+    useEffect(() => {
+        const refreshSpaces = () => { void fetchSpaces() }
+        const refreshAll = () => {
+            void fetchSpaces()
+            void fetchFavorites()
+        }
+        const unsubscribers = [
+            service.changes.subscribe("space.created", refreshSpaces),
+            service.changes.subscribe("space.updated", refreshSpaces),
+            service.changes.subscribe("space.deleted", refreshAll),
+            service.changes.subscribe("space.archived", refreshAll),
+            service.changes.subscribe("space.unarchived", refreshAll),
+            service.changes.subscribe("space.favorite.changed", refreshAll),
+        ]
+        return () => unsubscribers.forEach(unsubscribe => unsubscribe())
+    }, [fetchFavorites, fetchSpaces, service])
 
     // Reset to page 1 whenever the search term or category or tab changes.
     useEffect(() => {

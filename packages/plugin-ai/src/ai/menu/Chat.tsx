@@ -15,7 +15,7 @@ import {
     useCapabilityProviders,
     buildAgentRunInputs,
     getOffscreenEditorBridge,
-    getPageBridge,
+    getPageNavigationBridge,
     revealBlockById,
     PageEditWindow,
     event,
@@ -210,7 +210,7 @@ export const ExpandableChatDemo: React.FC<{
             setTargetStatus('idle')
             return
         }
-        const currentPageId = getPageBridge()?.getCurrentPage()?.pageId
+        const currentPageId = getPageNavigationBridge()?.getCurrentPage()?.pageId
         if (currentPageId && String(currentPageId) === targetPageId) {
             setTargetStatus('current')
             return
@@ -249,7 +249,7 @@ export const ExpandableChatDemo: React.FC<{
     useEffect(() => {
         let tries = 0
         const read = () => {
-            const info = getPageBridge()?.getCurrentPage()
+            const info = getPageNavigationBridge()?.getCurrentPage()
             if (!info?.pageId) return false
             setCurrentPage({
                 pageId: String(info.pageId),
@@ -277,10 +277,10 @@ export const ExpandableChatDemo: React.FC<{
         if (ref.found === false) return
         if (revealBlockById(editor, ref.blockId)) return
         if (targetPage) {
-            const currentPageId = getPageBridge()?.getCurrentPage()?.pageId
+            const currentPageId = getPageNavigationBridge()?.getCurrentPage()?.pageId
             if (currentPageId !== undefined && String(currentPageId) === targetPage.pageId) return
             setPendingReveal({ pageId: targetPage.pageId, blockId: ref.blockId })
-            getPageBridge()?.openPage(targetPage.pageId, targetPage.spaceId)
+            getPageNavigationBridge()?.openPage(targetPage.pageId, targetPage.spaceId)
         }
     }, [editor, targetPage])
 
@@ -288,7 +288,7 @@ export const ExpandableChatDemo: React.FC<{
         if (!pendingReveal) return
         let tries = 0
         const timer = setInterval(() => {
-            const currentPageId = getPageBridge()?.getCurrentPage()?.pageId
+            const currentPageId = getPageNavigationBridge()?.getCurrentPage()?.pageId
             const arrived = currentPageId !== undefined && String(currentPageId) === pendingReveal.pageId
             if (arrived && revealBlockById(editor, pendingReveal.blockId)) {
                 clearInterval(timer)
@@ -336,7 +336,7 @@ export const ExpandableChatDemo: React.FC<{
     // skills[] and stay deferred until the model calls one.
     const { tools: toolSpecs, skills } = useMemo(() => buildAgentRunInputs(catalog), [catalog])
     const resolveTools = useCallback(() => allTools, [allTools])
-    const liveCurrentPageId = getPageBridge()?.getCurrentPage()?.pageId
+    const liveCurrentPageId = getPageNavigationBridge()?.getCurrentPage()?.pageId
     const targetToolsReady = !targetPageId
         ? !!currentPage?.pageId
         : ((targetStatus === 'current' && String(liveCurrentPageId) === targetPageId)

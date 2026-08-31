@@ -5,7 +5,11 @@ import { SiderMenuItemProps } from "./menu";
 import { TourConfig } from "./tour";
 import { RouteConfig } from "./route";
 import { Services } from "./types";
-import { ServiceRegistry } from "./ServiceRegistry";
+import {
+    ServiceRegistry,
+    type ServiceRegistryView,
+    pluginServiceOwner,
+} from "./ServiceRegistry";
 import { PluginMeta, PluginRegistration } from "./global-namespace";
 import { pluginScriptLoader } from "../utils/import-util";
 import { logger } from "../utils/logger";
@@ -128,13 +132,16 @@ export interface PluginManagerOptions {
     resolveUrl: (resourcePath: string) => string
     /** The plugin API version the host was built with (from @kn/plugin-api) */
     hostApiVersion: string
+    /** Application-owned services that plugins cannot replace. */
+    coreServices?: Partial<Services>
 }
 
 export class PluginManager {
 
     plugins: KPlugin<any>[] = []
     _initialPlugins: KPlugin<any>[] = []
-    private _serviceRegistry: ServiceRegistry = new ServiceRegistry()
+    private _serviceRegistry: ServiceRegistry
+    private _serviceRegistryView: ServiceRegistryView
     private _resolveUrl: (resourcePath: string) => string
     private _hostApiVersion: string
     _init: boolean = false
@@ -165,6 +172,14 @@ export class PluginManager {
     constructor(options: PluginManagerOptions, initalPlugins: KPlugin<any>[]) {
         this._resolveUrl = options.resolveUrl
         this._hostApiVersion = options.hostApiVersion
+        this._serviceRegistry = new ServiceRegistry(options.coreServices)
+        this._serviceRegistryView = Object.freeze({
+            get: <K extends keyof Services>(name: K) => this._serviceRegistry.get(name),
+            getOwner: (name: keyof Services) => this._serviceRegistry.getOwner(name),
+            has: (name: keyof Services) => this._serviceRegistry.has(name),
+            getAll: () => this._serviceRegistry.getAll(),
+            subscribe: (listener: (name: string) => void) => this._serviceRegistry.subscribe(listener),
+        })
         this._initialPlugins = initalPlugins
         this._buildPluginMap(initalPlugins)
         logger.debug('Initial plugins loaded:', this._initialPlugins);
@@ -322,6 +337,7 @@ export class PluginManager {
                 // Rebuild plugin map with only initial plugins
                 this._pluginMap.clear();
                 this._buildPluginMap(this._initialPlugins);
+                this._rebuildServices();
 
                 // Invalidate script cache so remote plugins are freshly loaded
                 this.clearPluginCache()
@@ -329,12 +345,18 @@ export class PluginManager {
 
             if (!remotePlugins || remotePlugins.length === 0) {
                 this.plugins = ([...(this._initialPlugins || [])])
+                const conflicts = this._rebuildServices()
+                if (conflicts.size > 0) {
+                    this.plugins = this.plugins.filter(plugin => !conflicts.has(plugin.name))
+                    this._pluginMap.clear()
+                    this._buildPluginMap(this.plugins)
+                    this._rebuildServices()
+                }
                 this._notifyChange()
-                this._mergeServices()
                 this._init = true
                 logger.info('Plugins loaded:', this.plugins.length);
                 logger.debug('Services loaded:', this._serviceRegistry.getAll());
-                return { failedPlugins: [] }
+                return { failedPlugins: [...conflicts] }
             }
 
             const loadableRemotePlugins = remotePlugins.filter(plugin => {
@@ -389,8 +411,23 @@ export class PluginManager {
 
             this.plugins = [...this._initialPlugins, ...successfulPlugins]
             this._buildPluginMap(successfulPlugins)
+
+            const serviceConflicts = this._rebuildServices()
+            if (serviceConflicts.size > 0) {
+                const initialNames = new Set(this._initialPlugins.map(plugin => plugin.name))
+                const rejectedRemoteNames = [...serviceConflicts].filter(name => !initialNames.has(name))
+                if (rejectedRemoteNames.length > 0) {
+                    const rejected = new Set(rejectedRemoteNames)
+                    this.plugins = this.plugins.filter(plugin => !rejected.has(plugin.name))
+                    rejectedRemoteNames.forEach(name => {
+                        this._pluginMap.delete(name)
+                        failedPlugins.add(name)
+                    })
+                    this._rebuildServices()
+                }
+            }
+
             this._notifyChange()
-            this._mergeServices()
             this._init = true
 
             logger.info(`All plugins loaded: ${this.plugins.length} (${successfulPlugins.length} remote)`);
@@ -403,20 +440,27 @@ export class PluginManager {
         } catch (error) {
             logger.error('Fatal error during plugin initialization:', error)
             this.plugins = [...this._initialPlugins]
+            this._pluginMap.clear()
+            this._buildPluginMap(this._initialPlugins)
+            this._rebuildServices()
             this._init = true
             throw error
         }
     }
 
-    private _mergeServices() {
-        const servicesArray = this.plugins
-            .map(it => it.services)
-            .filter(service => service !== undefined)
-
-        if (servicesArray.length > 0) {
-            const merged = merge({}, ...servicesArray) as Services
-            this._serviceRegistry.registerAll(merged)
-        }
+    private _rebuildServices(): Set<string> {
+        const conflicts = this._serviceRegistry.replacePluginServices(
+            this.plugins
+                .filter(plugin => plugin.services)
+                .map(plugin => ({
+                    owner: pluginServiceOwner(plugin.name),
+                    services: plugin.services!,
+                }))
+        )
+        conflicts.forEach(name => {
+            logger.error(`Plugin ${name} service registration rejected: a service key is already owned`)
+        })
+        return conflicts
     }
 
     uninstallPlugin(key: string) {
@@ -434,8 +478,8 @@ export class PluginManager {
         // it will be freshly loaded instead of using the stale cached version
         this.clearPluginCache()
 
-        // Rebuild services without the uninstalled plugin
-        this._mergeServices()
+        // Atomically rebuild plugin-owned services from the remaining plugins.
+        this._rebuildServices()
 
         logger.info('Plugin uninstalled:', key);
         // Notify listeners (does NOT emit global events – callers do that)
@@ -481,13 +525,15 @@ export class PluginManager {
                 return false
             }
 
+            if (loadedPlugin.services) {
+                this._serviceRegistry.registerAll(
+                    loadedPlugin.services,
+                    pluginServiceOwner(loadedPlugin.name)
+                )
+            }
+
             this.plugins = [...this.plugins, loadedPlugin]
             this._pluginMap.set(loadedPlugin.name, loadedPlugin)
-
-            // Merge services via ServiceRegistry if available
-            if (loadedPlugin.services) {
-                this._serviceRegistry.registerAll(loadedPlugin.services)
-            }
 
             logger.info(`Plugin ${loadedPlugin.name} installed successfully`)
             // Notify listeners (does NOT emit global events – callers do that)
@@ -501,10 +547,12 @@ export class PluginManager {
     }
 
     remove(name: string) {
-        const existed = this._pluginMap.has(name)
-        if (existed) {
+        const plugin = this._pluginMap.get(name)
+        const existed = Boolean(plugin)
+        if (plugin) {
             this.plugins = this.plugins.filter(it => it.name !== name)
             this._pluginMap.delete(name)
+            this._rebuildServices()
             logger.debug(`Plugin ${name} removed from manager`)
             this._notifyChange()
         }
@@ -867,12 +915,9 @@ export class PluginManager {
         return extensions;
     }
 
-    /**
-     * Access the ServiceRegistry for runtime service management.
-     * Plugins can use this to register/unregister services dynamically.
-     */
-    get serviceRegistry(): ServiceRegistry {
-        return this._serviceRegistry
+    /** Read-only service access for hooks and plugin consumers. */
+    get serviceRegistry(): ServiceRegistryView {
+        return this._serviceRegistryView
     }
 
     /**
@@ -880,23 +925,6 @@ export class PluginManager {
      */
     get pluginServices(): Services {
         return this._serviceRegistry.getAll()
-    }
-
-    /**
-     * Register a core service
-     * Core services are services provided by the application itself, not plugins
-     */
-    registerCoreService<K extends keyof Services>(name: K, service: Services[K]): void {
-        this._serviceRegistry.register(name, service)
-        logger.debug(`Core service registered: ${String(name)}`)
-    }
-
-    /**
-     * Unregister a core service
-     */
-    unregisterCoreService(name: keyof Services): void {
-        this._serviceRegistry.unregister(name)
-        logger.debug(`Core service unregistered: ${String(name)}`)
     }
 
     // ---- Deprecated method aliases (old typo names) ----

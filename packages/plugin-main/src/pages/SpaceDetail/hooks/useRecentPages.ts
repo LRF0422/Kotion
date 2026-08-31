@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useApi } from '@kn/common'
-import { APIS } from '../../../api'
+import { type PageSummary, useSpacePageService } from '@kn/common'
 
 export interface RecentPageItem {
     id: string
@@ -13,6 +12,16 @@ export interface RecentPageItem {
 const STORAGE_KEY = 'kn:recent-pages'
 const MAX_RECENT_ITEMS = 8
 
+const toRecentPageItem = (page: PageSummary): RecentPageItem => ({
+    id: page.id,
+    title: page.title,
+    icon: page.icon && typeof page.icon === 'object' && 'icon' in page.icon
+        ? page.icon as RecentPageItem['icon']
+        : undefined,
+    updatedAt: page.updatedAt == null ? undefined : String(page.updatedAt),
+    spaceId: page.spaceId,
+})
+
 /**
  * Custom hook to manage recently visited pages.
  * Uses localStorage as primary store with optional backend sync.
@@ -21,28 +30,7 @@ const MAX_RECENT_ITEMS = 8
 export const useRecentPages = (spaceId: string | undefined) => {
     const [recentPages, setRecentPages] = useState<RecentPageItem[]>([])
     const [loading, setLoading] = useState(false)
-
-    // Try to load from backend first, fall back to localStorage
-    useEffect(() => {
-        if (!spaceId) return
-
-        setLoading(true)
-        useApi(APIS.QUERY_RECENT_PAGE, { spaceId, pageSize: MAX_RECENT_ITEMS })
-            .then((res) => {
-                const records = res?.data?.records
-                if (Array.isArray(records)) {
-                    setRecentPages(records.slice(0, MAX_RECENT_ITEMS))
-                } else {
-                    // Fallback to localStorage
-                    loadFromLocalStorage(spaceId)
-                }
-            })
-            .catch(() => {
-                // Fallback to localStorage on API failure
-                loadFromLocalStorage(spaceId)
-            })
-            .finally(() => setLoading(false))
-    }, [spaceId])
+    const service = useSpacePageService()
 
     const loadFromLocalStorage = useCallback((sid: string) => {
         try {
@@ -55,6 +43,22 @@ export const useRecentPages = (spaceId: string | undefined) => {
             setRecentPages([])
         }
     }, [])
+
+    // Try to load from backend first, fall back to localStorage
+    useEffect(() => {
+        if (!spaceId) return
+
+        setLoading(true)
+        service.pages.queryRecentPages({ spaceId, pageSize: MAX_RECENT_ITEMS })
+            .then((result) => {
+                setRecentPages(result.records.slice(0, MAX_RECENT_ITEMS).map(toRecentPageItem))
+            })
+            .catch(() => {
+                // Fallback to localStorage on API failure
+                loadFromLocalStorage(spaceId)
+            })
+            .finally(() => setLoading(false))
+    }, [loadFromLocalStorage, service, spaceId])
 
     /**
      * Record a page visit. Adds the page to the top of the recent list

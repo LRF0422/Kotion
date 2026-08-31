@@ -8,8 +8,8 @@ import {
     PopoverTrigger,
     cn,
 } from '@kn/ui'
-import { getOffscreenEditorBridge, useTranslation } from '@kn/common'
-import type { OffscreenPageSummary } from '@kn/common'
+import { useSpacePageService, useTranslation } from '@kn/common'
+import type { PageSummary } from '@kn/common'
 
 import type { ChatTargetPage } from '../chat-sessions'
 
@@ -49,8 +49,8 @@ const STATUS_DOT: Record<Exclude<TargetPageStatus, 'idle'>, string> = {
 /**
  * "@-page" affordance rendered above the composer input. Unbound: a chip
  * showing the current page (the implicit default target) that doubles as the
- * trigger of a page-search popover backed by the core off-screen editing
- * bridge. Bound: a chip showing the target page, its editor connection state,
+ * trigger of a page-search popover backed by the space/page domain service.
+ * Bound: a chip showing the target page, its editor connection state,
  * an open-in-floating-window button and a remove button. Chat sessions each
  * bind one page.
  */
@@ -58,22 +58,25 @@ export const PageMentionPicker: React.FC<PageMentionPickerProps> = ({
     targetPage, currentPage, status, disabled, open, onOpenChange, onPick, onClear, onRetry, onOpenWindow,
 }) => {
     const { t } = useTranslation()
-    const bridge = getOffscreenEditorBridge()
+    const service = useSpacePageService()
 
     const [query, setQuery] = useState('')
-    const [results, setResults] = useState<OffscreenPageSummary[]>([])
+    const [results, setResults] = useState<PageSummary[]>([])
     const [searching, setSearching] = useState(false)
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const searchSeqRef = useRef(0)
 
     const runSearch = useCallback((q: string) => {
-        if (!bridge) return
         const seq = ++searchSeqRef.current
+        const searchValue = q.trim()
         setSearching(true)
-        bridge.searchPages(q.trim() || undefined)
-            .then(pages => {
+        const request = searchValue
+            ? service.pages.queryPages({ searchValue, pageSize: 50 })
+            : service.pages.queryRecentPages({ pageSize: 50 })
+        request
+            .then(result => {
                 if (seq !== searchSeqRef.current) return
-                setResults(pages)
+                setResults(result.records)
             })
             .catch(() => {
                 if (seq !== searchSeqRef.current) return
@@ -82,11 +85,19 @@ export const PageMentionPicker: React.FC<PageMentionPickerProps> = ({
             .finally(() => {
                 if (seq === searchSeqRef.current) setSearching(false)
             })
-    }, [bridge])
+    }, [service])
 
     // Fresh recent-pages list every time the popover opens.
     useEffect(() => {
-        if (!open) return
+        if (debounceRef.current) {
+            clearTimeout(debounceRef.current)
+            debounceRef.current = null
+        }
+        if (!open) {
+            searchSeqRef.current += 1
+            setSearching(false)
+            return
+        }
         setQuery('')
         runSearch('')
     }, [open, runSearch])
@@ -102,13 +113,11 @@ export const PageMentionPicker: React.FC<PageMentionPickerProps> = ({
         if (debounceRef.current) clearTimeout(debounceRef.current)
     }, [])
 
-    const handleSelect = useCallback((page: OffscreenPageSummary) => {
+    const handleSelect = useCallback((page: PageSummary) => {
         onOpenChange(false)
         onPick({ pageId: String(page.id), title: page.title || 'Untitled', spaceId: page.spaceId })
     }, [onOpenChange, onPick])
 
-    // The whole affordance is hidden when the engine isn't registered.
-    if (!bridge) return null
 
     // ── Bound: chip with status dot + remove ──
     if (targetPage) {

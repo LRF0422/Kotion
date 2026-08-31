@@ -7,9 +7,14 @@ import {
 import {
     FileText, Plus, LayoutTemplate, Trash2, Copy, Eye
 } from "@kn/icon"
-import { useApi, useNavigator, useTranslation, useSafeState } from "@kn/common"
-import { APIS } from "../../../api"
-import { PageItemIcon } from "../components/PageItemIcon"
+import {
+    type SpacePageTemplate,
+    useNavigator,
+    useSafeState,
+    useSpacePageService,
+    useTranslation,
+} from "@kn/common"
+import { PageIconData, PageItemIcon } from "../components/PageItemIcon"
 import { TemplatePreview } from "../../../components/TemplatePreview"
 
 interface SpaceTemplateLibraryProps {
@@ -18,14 +23,11 @@ interface SpaceTemplateLibraryProps {
     className?: string
 }
 
-interface TemplateItem {
-    id: string
-    title: string
-    description?: string
-    icon?: { icon?: string }
-    cover?: string
-    updateTime?: string
-    tags?: string[]
+const getTemplateIcon = (template: SpacePageTemplate): PageIconData | null => {
+    const icon = template.metadata?.icon
+    if (!icon || typeof icon !== "object" || Array.isArray(icon)) return null
+    const value = icon as Partial<PageIconData>
+    return typeof value.icon === "string" ? value as PageIconData : null
 }
 
 export const SpaceTemplateLibrary: React.FC<SpaceTemplateLibraryProps> = ({
@@ -34,54 +36,52 @@ export const SpaceTemplateLibrary: React.FC<SpaceTemplateLibraryProps> = ({
     className
 }) => {
     const { t } = useTranslation()
+    const service = useSpacePageService()
     const navigator = useNavigator()
-    const [templates, setTemplates] = useSafeState<TemplateItem[]>([])
+    const [templates, setTemplates] = useSafeState<SpacePageTemplate[]>([])
     const [loading, setLoading] = useSafeState(true)
 
     const fetchTemplates = useCallback(() => {
         setLoading(true)
-        useApi(APIS.GET_SPACE_TEMPLATES, { spaceId })
-            .then(res => setTemplates(res.data || []))
+        service.templates.getSpaceTemplates(spaceId)
+            .then(setTemplates)
             .catch(() => setTemplates([]))
             .finally(() => setLoading(false))
-    }, [spaceId])
+    }, [service, spaceId])
 
     useEffect(() => {
         fetchTemplates()
-    }, [spaceId])
+    }, [fetchTemplates])
 
     const handleUseTemplate = useCallback((templateId: string) => {
         if (onUseTemplate) {
             onUseTemplate(templateId)
         } else {
             // Default: create page from template
-            useApi(APIS.CREATE_OR_SAVE_PAGE, null, {
+            service.pages.createPage({
                 spaceId,
                 parentId: "0",
                 templateId,
                 title: "Untitled"
-            }).then(res => {
-                const page = res.data
-                if (page?.id) {
-                    navigator.go({ to: `/space-detail/${spaceId}/page/edit/${page.id}` })
-                }
+            }).then(page => {
+                navigator.go({ to: `/space-detail/${spaceId}/page/edit/${page.id}` })
             }).catch(() => {
                 toast.error(t('template.useError', 'Failed to create page from template'))
             })
         }
-    }, [spaceId, onUseTemplate, navigator])
+    }, [service, spaceId, onUseTemplate, navigator, t])
 
-    const [previewTemplate, setPreviewTemplate] = useState<TemplateItem | null>(null)
+    const [previewTemplate, setPreviewTemplate] = useState<SpacePageTemplate | null>(null)
 
     const handleDeleteTemplate = useCallback(async (templateId: string) => {
         try {
-            await useApi(APIS.DELETE_TEMPLATE, { id: templateId })
+            await service.templates.deleteTemplate(templateId)
             toast.success(t('template.deleted', 'Template deleted'))
             fetchTemplates()
         } catch {
             toast.error(t('template.deleteError', 'Failed to delete template'))
         }
-    }, [])
+    }, [service, fetchTemplates, t])
 
     if (loading) {
         return (
@@ -119,7 +119,7 @@ export const SpaceTemplateLibrary: React.FC<SpaceTemplateLibraryProps> = ({
                             <CardContent className="p-4">
                                 <div className="flex items-start gap-3">
                                     <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 shrink-0">
-                                        {template.icon?.icon ? <PageItemIcon icon={template.icon as any} size={16} /> : <LayoutTemplate className="h-4 w-4 text-primary" />}
+                                        {getTemplateIcon(template)?.icon ? <PageItemIcon icon={getTemplateIcon(template)} size={16} /> : <LayoutTemplate className="h-4 w-4 text-primary" />}
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <h4 className="text-sm font-medium truncate">
@@ -187,8 +187,8 @@ export const SpaceTemplateLibrary: React.FC<SpaceTemplateLibraryProps> = ({
                 <DialogContent className="max-w-3xl h-[80vh] flex flex-col">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
-                            {previewTemplate?.icon?.icon
-                                ? <PageItemIcon icon={previewTemplate.icon as any} size={18} />
+                            {previewTemplate && getTemplateIcon(previewTemplate)?.icon
+                                ? <PageItemIcon icon={getTemplateIcon(previewTemplate)} size={18} />
                                 : <LayoutTemplate className="h-4 w-4 text-primary" />}
                             {previewTemplate?.title || t('template.untitled', 'Untitled Template')}
                         </DialogTitle>

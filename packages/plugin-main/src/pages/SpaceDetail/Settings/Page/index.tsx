@@ -20,24 +20,18 @@ import {
     Move,
 } from "@kn/icon";
 import { SettingContext } from "..";
-import { useApi } from "@kn/common";
-import { APIS } from "../../../../api";
+import { useSpacePageService, type PageTreeNode } from "@kn/common";
 import { PageItemIcon } from "../../components/PageItemIcon";
 import { toast } from "@kn/ui";
 import { useTranslation } from "@kn/common";
 
-interface PageTreeNode {
-    id: string;
-    name: string;
-    icon?: any;
-    parentId?: string;
-    children?: PageTreeNode[];
-    isDraft?: boolean;
-}
+const getPageName = (page: PageTreeNode) => page.name || page.title;
+const getPageIcon = (page: PageTreeNode) => page.icon as any;
 
 export const PageManagement: React.FC = () => {
     const { space, spaceId } = useContext(SettingContext);
     const { t } = useTranslation();
+    const spacePageService = useSpacePageService();
     const [pageTree, setPageTree] = useState<PageTreeNode[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchValue, setSearchValue] = useState("");
@@ -51,17 +45,15 @@ export const PageManagement: React.FC = () => {
     useEffect(() => {
         if (!spaceId) return;
         setLoading(true);
-        useApi(APIS.GET_PAGE_TREE, { id: spaceId, searchValue })
-            .then((res: any) => {
-                setPageTree(res.data || []);
-            })
+        spacePageService.pages.getPageTree({ spaceId: String(spaceId), searchValue })
+            .then(setPageTree)
             .catch(() => {
                 toast.error(t("space-settings.page.load_error", { defaultValue: "Failed to load page tree" }));
             })
             .finally(() => {
                 setLoading(false);
             });
-    }, [spaceId, searchValue]);
+    }, [spaceId, searchValue, spacePageService, t]);
 
     // Open move dialog
     const handleOpenMoveDialog = useCallback((page: PageTreeNode) => {
@@ -77,9 +69,10 @@ export const PageManagement: React.FC = () => {
 
         setIsMoving(true);
         try {
-            await useApi(APIS.MOVE_PAGE, { id: movingPage.id }, {
-                targetParentId: selectedTargetId ? Number(selectedTargetId) : null,
-                targetSpaceId: Number(spaceId),
+            await spacePageService.pages.movePage({
+                pageId: movingPage.id,
+                targetParentId: selectedTargetId,
+                targetSpaceId: String(spaceId),
             });
 
             toast.success(
@@ -90,8 +83,8 @@ export const PageManagement: React.FC = () => {
             setSelectedTargetId(null);
             // Refresh tree
             setLoading(true);
-            useApi(APIS.GET_PAGE_TREE, { id: spaceId })
-                .then((res: any) => setPageTree(res.data || []))
+            spacePageService.pages.getPageTree({ spaceId: String(spaceId) })
+                .then(setPageTree)
                 .finally(() => setLoading(false));
         } catch {
             toast.error(
@@ -100,7 +93,7 @@ export const PageManagement: React.FC = () => {
         } finally {
             setIsMoving(false);
         }
-    }, [movingPage, selectedTargetId, spaceId, t]);
+    }, [movingPage, selectedTargetId, spaceId, spacePageService, t]);
 
     // Filtered flat list for move target selection
     const targetOptions = useMemo(() => {
@@ -119,7 +112,7 @@ export const PageManagement: React.FC = () => {
         const flat = flattenTree(pageTree, 0, movingPage.id);
         if (!targetSearchValue) return flat;
         return flat.filter((item) =>
-            item.name.toLowerCase().includes(targetSearchValue.toLowerCase())
+            getPageName(item).toLowerCase().includes(targetSearchValue.toLowerCase())
         );
     }, [pageTree, movingPage, targetSearchValue]);
 
@@ -129,9 +122,9 @@ export const PageManagement: React.FC = () => {
             const name = (
                 <div className="flex flex-row gap-1.5 items-center group w-full overflow-hidden relative">
                     <span className="flex-shrink-0">
-                        {treeNode.icon?.icon ? <PageItemIcon icon={treeNode.icon} size={12} /> : <FileText className="h-3 w-3 text-muted-foreground" />}
+                        {getPageIcon(treeNode)?.icon ? <PageItemIcon icon={getPageIcon(treeNode)} size={12} /> : <FileText className="h-3 w-3 text-muted-foreground" />}
                     </span>
-                    <span className="text-xs truncate flex-1">{treeNode.name}</span>
+                    <span className="text-xs truncate flex-1">{getPageName(treeNode)}</span>
                     <Button
                         size="sm"
                         className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
@@ -182,9 +175,9 @@ export const PageManagement: React.FC = () => {
             const name = (
                 <div className="flex flex-row gap-1.5 items-center w-full overflow-hidden">
                     <span className="flex-shrink-0">
-                        {treeNode.icon?.icon ? <PageItemIcon icon={treeNode.icon} size={12} /> : <FolderOpen className="h-3 w-3 text-muted-foreground" />}
+                        {getPageIcon(treeNode)?.icon ? <PageItemIcon icon={getPageIcon(treeNode)} size={12} /> : <FolderOpen className="h-3 w-3 text-muted-foreground" />}
                     </span>
-                    <span className="text-xs truncate">{treeNode.name}</span>
+                    <span className="text-xs truncate">{getPageName(treeNode)}</span>
                 </div>
             );
 
@@ -278,8 +271,8 @@ export const PageManagement: React.FC = () => {
                         </DialogTitle>
                         <DialogDescription>
                             {t("space-settings.page.move_description", {
-                                name: movingPage?.name || "",
-                                defaultValue: `Select a new parent for "${movingPage?.name || ""}"`,
+                                name: movingPage ? getPageName(movingPage) : "",
+                                defaultValue: `Select a new parent for "${movingPage ? getPageName(movingPage) : ""}"`,
                             })}
                         </DialogDescription>
                     </DialogHeader>
@@ -289,10 +282,10 @@ export const PageManagement: React.FC = () => {
                         <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 border">
                             <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                             <span className="text-sm font-medium truncate flex items-center gap-1">
-                                {movingPage?.icon?.icon && (
-                                    <PageItemIcon icon={movingPage.icon} size={14} />
+                                {movingPage && getPageIcon(movingPage)?.icon && (
+                                    <PageItemIcon icon={getPageIcon(movingPage)} size={14} />
                                 )}
-                                {movingPage?.name}
+                                {movingPage ? getPageName(movingPage) : undefined}
                             </span>
                             <ArrowRightLeft className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 ml-auto" />
                         </div>

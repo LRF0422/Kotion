@@ -1,8 +1,13 @@
-import { APIS } from "../../api";
 import { Button } from "@kn/ui";
 import { Avatar, AvatarFallback } from "@kn/ui";
 import { Badge } from "@kn/ui";
-import { useApi, useNavigator, useTranslation } from "@kn/common";
+import {
+    type CollaborationInvitation,
+    type PagePermission,
+    useNavigator,
+    useSpacePageService,
+    useTranslation,
+} from "@kn/common";
 import {
     AlertCircle,
     CheckCircle2,
@@ -14,20 +19,6 @@ import {
 import React, { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "@kn/common";
 import { toast } from "@kn/ui";
-
-// Types
-interface InvitationInfo {
-    id: string;
-    pageId: string;
-    spaceId: string;
-    pageTitle: string;
-    spaceName: string;
-    inviterName: string;
-    inviterId: string;
-    permission: 'READ' | 'WRITE' | 'ADMIN';
-    expiresAt?: string;
-    status: 'PENDING' | 'ACCEPTED' | 'EXPIRED' | 'REVOKED';
-}
 
 type InviteStatus = 'loading' | 'ready' | 'accepting' | 'error' | 'expired';
 
@@ -42,20 +33,20 @@ export const InviteCollaboration: React.FC = () => {
     const params = useParams();
     const [searchParams] = useSearchParams();
     const navigator = useNavigator();
+    const service = useSpacePageService();
 
     const [inviteStatus, setInviteStatus] = useState<InviteStatus>('loading');
-    const [invitation, setInvitation] = useState<InvitationInfo | null>(null);
+    const [invitation, setInvitation] = useState<CollaborationInvitation | null>(null);
     const [errorMessage, setErrorMessage] = useState<string>('');
 
-    const inviteToken = params.token || searchParams.get('token');
+    const inviteToken = params.token ? String(params.token) : searchParams.get('token');
 
     // Permission label mapping
-    const getPermissionLabel = (permission: string) => {
+    const getPermissionLabel = (permission: PagePermission) => {
         switch (permission) {
             case 'READ': return t('inviteCollaboration.permission.viewOnly');
             case 'WRITE': return t('inviteCollaboration.permission.canEdit');
             case 'ADMIN': return t('inviteCollaboration.permission.fullAccess');
-            default: return permission;
         }
     };
 
@@ -66,35 +57,43 @@ export const InviteCollaboration: React.FC = () => {
             setErrorMessage(t('inviteCollaboration.error.noToken'));
             return;
         }
-        validateInvitation();
-    }, [inviteToken]);
 
-    const validateInvitation = async () => {
-        try {
-            setInviteStatus('loading');
-            const res = await useApi(APIS.VALIDATE_INVITATION, { token: inviteToken });
-            const data = res.data;
-
-            if (!data || data.status === 'EXPIRED') {
-                setInviteStatus('expired');
-                setErrorMessage(t('inviteCollaboration.error.expired'));
-                return;
-            }
-            if (data.status === 'REVOKED') {
+        setInviteStatus('loading');
+        service.collaboration.validateInvitation(inviteToken)
+            .then(result => {
+                const data = result.invitation;
+                const invitationStatus = String(data?.status ?? result.reason ?? '').toUpperCase();
+                if (!result.valid || !data || invitationStatus === 'EXPIRED') {
+                    if (invitationStatus === 'EXPIRED') {
+                        setInviteStatus('expired');
+                        setErrorMessage(t('inviteCollaboration.error.expired'));
+                    } else {
+                        setInviteStatus('error');
+                        setErrorMessage(
+                            invitationStatus === 'REVOKED'
+                                ? t('inviteCollaboration.error.revoked')
+                                : result.reason || t('inviteCollaboration.error.processFailed')
+                        );
+                    }
+                    return;
+                }
+                if (invitationStatus === 'REVOKED') {
+                    setInviteStatus('error');
+                    setErrorMessage(t('inviteCollaboration.error.revoked'));
+                    return;
+                }
+                setInvitation(data);
+                setInviteStatus('ready');
+            })
+            .catch((error: any) => {
+                console.error('Failed to validate invitation:', error);
                 setInviteStatus('error');
-                setErrorMessage(t('inviteCollaboration.error.revoked'));
-                return;
-            }
-            setInvitation(data);
-            setInviteStatus('ready');
-        } catch (error: any) {
-            console.error('Failed to validate invitation:', error);
-            setInviteStatus('error');
-            setErrorMessage(error?.message || t('inviteCollaboration.error.processFailed'));
-        }
-    };
+                setErrorMessage(error?.message || t('inviteCollaboration.error.processFailed'));
+            });
+    }, [service, inviteToken, t]);
 
-    const goToPage = (inv: InvitationInfo) => {
+    const goToPage = (inv: CollaborationInvitation) => {
+        if (!inv.spaceId || !inv.pageId) return;
         navigator.go({ to: `/space-detail/${inv.spaceId}/page/edit/${inv.pageId}` });
     };
 
@@ -103,8 +102,8 @@ export const InviteCollaboration: React.FC = () => {
         if (!invitation) return;
         try {
             setInviteStatus('accepting');
-            if (invitation.status === 'PENDING') {
-                await useApi(APIS.ACCEPT_INVITATION, { token: inviteToken });
+            if (invitation.status === 'PENDING' && inviteToken) {
+                await service.collaboration.acceptInvitation(inviteToken);
                 toast.success(t('inviteCollaboration.toast.accepted'));
             }
             goToPage(invitation);
@@ -116,6 +115,9 @@ export const InviteCollaboration: React.FC = () => {
     };
 
     const getUserInitials = (name?: string) => name?.charAt(0)?.toUpperCase() || '?';
+    const spaceName = typeof invitation?.metadata?.spaceName === 'string'
+        ? invitation.metadata.spaceName
+        : undefined;
 
     // Loading state
     if (inviteStatus === 'loading') {
@@ -193,8 +195,8 @@ export const InviteCollaboration: React.FC = () => {
                             <div className="text-sm font-medium truncate">
                                 {invitation?.pageTitle || t('sharedPage.untitled')}
                             </div>
-                            {invitation?.spaceName && (
-                                <div className="text-xs text-muted-foreground truncate">{invitation.spaceName}</div>
+                            {spaceName && (
+                                <div className="text-xs text-muted-foreground truncate">{spaceName}</div>
                             )}
                         </div>
                         <Badge variant="secondary" className="shrink-0">

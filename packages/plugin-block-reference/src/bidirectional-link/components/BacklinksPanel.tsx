@@ -14,21 +14,19 @@
 import React, { useState, useEffect, useCallback, useContext, useMemo } from 'react';
 import { cn, ScrollArea, Skeleton, Collapsible, CollapsibleTrigger, CollapsibleContent } from '@kn/ui';
 import { Link2, FileText, SquareDashedBottom, RefreshCcw, Waypoints, ChevronRight, AtSign } from '@kn/icon';
-import { useNavigator } from "@kn/common";
+import { useNavigator, useSpacePageService } from "@kn/common";
+import type { PageRelation } from "@kn/common";
 import { PageContext } from "@kn/editor";
-import { getPageBacklinks } from '../services/linkService';
 import { getLocalPageBacklinks, getUnlinkedMentions, invalidateBacklinkIndex } from '../services/localBacklinkIndex';
-import { useSpaceService } from '../../hooks';
 import { useI18n } from '../../i18n/use-i18n';
-import type { BacklinkVO } from '../../types';
+import { getIconText } from '../../utils';
 
 interface BacklinksPanelProps {
     /**
      * Page ID to fetch backlinks for. Falls back to the current PageContext when
-     * omitted. Kept as string|number: page ids are 19-digit snowflakes that
-     * exceed Number.MAX_SAFE_INTEGER, so they must NOT be coerced to Number.
+     * omitted. Domain IDs stay as strings to preserve snowflake precision.
      */
-    pageId?: string | number;
+    pageId?: string;
     /** Optional className for styling */
     className?: string;
     /**
@@ -66,7 +64,7 @@ const highlightKeyword = (text: string, keyword?: string): React.ReactNode => {
 
 /** Single backlink / mention row (snippet + kind badge). */
 const BacklinkItem = React.memo<{
-    backlink: BacklinkVO;
+    backlink: PageRelation;
     keyword?: string;
     blockBadge: string;
     onClick: () => void;
@@ -108,17 +106,17 @@ BacklinkItem.displayName = 'BacklinkItem';
 /** Collapsible group of backlinks from a single source page. */
 const SourcePageGroup = React.memo<{
     pageTitle: string;
-    icon: { type: string; icon: string } | null;
-    items: BacklinkVO[];
+    icon: string | null;
+    items: PageRelation[];
     keyword?: string;
     blockBadge: string;
-    onItemClick: (link: BacklinkVO) => void;
+    onItemClick: (link: PageRelation) => void;
 }>(({ pageTitle, icon, items, keyword, blockBadge, onItemClick }) => (
     <Collapsible defaultOpen>
         <CollapsibleTrigger className="group flex w-full items-center gap-1.5 px-2 py-1.5 rounded-md hover:bg-muted transition-colors">
             <ChevronRight className="h-3.5 w-3.5 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
-            {icon?.icon ? (
-                <span className="text-sm leading-none">{icon.icon}</span>
+            {icon ? (
+                <span className="text-sm leading-none">{icon}</span>
             ) : (
                 <FileText className="h-3.5 w-3.5 text-muted-foreground" />
             )}
@@ -165,12 +163,12 @@ LoadingSkeleton.displayName = 'LoadingSkeleton';
 interface PageGroup {
     pageId: string;
     pageTitle: string;
-    icon: { type: string; icon: string } | null;
-    items: BacklinkVO[];
+    icon: string | null;
+    items: PageRelation[];
 }
 
 /** Group a flat backlink list by source page, preserving order. */
-const groupBySourcePage = (links: BacklinkVO[]): PageGroup[] => {
+const groupBySourcePage = (links: PageRelation[]): PageGroup[] => {
     const map = new Map<string, PageGroup>();
     for (const link of links) {
         const key = String(link.sourcePageId);
@@ -180,8 +178,8 @@ const groupBySourcePage = (links: BacklinkVO[]): PageGroup[] => {
         } else {
             map.set(key, {
                 pageId: key,
-                pageTitle: link.sourcePageTitle,
-                icon: link.sourcePageIcon,
+                pageTitle: link.sourcePageTitle || 'Untitled',
+                icon: getIconText(link.sourcePageIcon),
                 items: [link],
             });
         }
@@ -204,17 +202,14 @@ export const BacklinksPanel: React.FC<BacklinksPanelProps> = ({
     emptyFallback = null,
 }) => {
     const pageCtx = useContext(PageContext);
-    const spaceService = useSpaceService();
+    const service = useSpacePageService();
     const { t } = useI18n();
-    // Keep the raw (string) id. Page ids are 19-digit snowflakes > 2^53, so
-    // Number(id) corrupts the last digits — the backlinks request then 404s and
-    // the global interceptor pops a "页面不存在" toast on every page open.
-    const pageId = pageIdProp ?? pageCtx.id ?? undefined;
-    const currentSpaceId = pageCtx.spaceId;
+    const pageId = pageIdProp ?? (pageCtx.id != null ? String(pageCtx.id) : undefined);
+    const currentSpaceId = pageCtx.spaceId != null ? String(pageCtx.spaceId) : undefined;
     const currentTitle = pageCtx.title;
 
-    const [backlinks, setBacklinks] = useState<BacklinkVO[]>([]);
-    const [mentions, setMentions] = useState<BacklinkVO[]>([]);
+    const [backlinks, setBacklinks] = useState<PageRelation[]>([]);
+    const [mentions, setMentions] = useState<PageRelation[]>([]);
     const [loading, setLoading] = useState(false);
     const [filter, setFilter] = useState<FilterKind>('ALL');
     const [refreshTick, setRefreshTick] = useState(0);
@@ -233,14 +228,28 @@ export const BacklinksPanel: React.FC<BacklinksPanelProps> = ({
         setLoading(true);
         (async () => {
             try {
-                const remote = await getPageBacklinks(pageId);
+                let remote: PageRelation[] = [];
+                try {
+                    const relations = await service.relations.queryPageRelations({ pageId });
+                    remote = relations.map((relation) => ({
+                        ...relation,
+                        sourceId: relation.sourceId != null ? String(relation.sourceId) : undefined,
+                        sourcePageId: String(relation.sourcePageId),
+                        sourceBlockId: relation.sourceBlockId != null ? String(relation.sourceBlockId) : null,
+                        sourceSpaceId: relation.sourceSpaceId != null ? String(relation.sourceSpaceId) : undefined,
+                        targetPageId: relation.targetPageId != null ? String(relation.targetPageId) : pageId,
+                        targetBlockId: relation.targetBlockId != null ? String(relation.targetBlockId) : undefined,
+                    }));
+                } catch {
+                    remote = [];
+                }
                 const links = remote.length
                     ? remote
-                    : await getLocalPageBacklinks(currentSpaceId, pageId, spaceService);
+                    : await getLocalPageBacklinks(currentSpaceId, pageId, service);
                 if (cancelled) return;
                 setBacklinks(links);
                 // Mentions are always locally computed (backend has no index yet).
-                const found = await getUnlinkedMentions(currentSpaceId, pageId, currentTitle, spaceService);
+                const found = await getUnlinkedMentions(currentSpaceId, pageId, currentTitle, service);
                 if (!cancelled) setMentions(found);
             } catch {
                 if (!cancelled) {
@@ -252,7 +261,7 @@ export const BacklinksPanel: React.FC<BacklinksPanelProps> = ({
             }
         })();
         return () => { cancelled = true; };
-    }, [pageId, currentSpaceId, currentTitle, spaceService, refreshTick]);
+    }, [pageId, currentSpaceId, currentTitle, service, refreshTick]);
 
     const handleRefresh = useCallback(() => {
         invalidateBacklinkIndex();
@@ -265,7 +274,7 @@ export const BacklinksPanel: React.FC<BacklinksPanelProps> = ({
     }, [navigator, currentSpaceId, pageId]);
 
     // Handle click to navigate to the source page (resolving cross-space targets).
-    const handleClick = useCallback((link: BacklinkVO) => {
+    const handleClick = useCallback((link: PageRelation) => {
         const targetSpaceId = link.sourceSpaceId ?? currentSpaceId;
         if (!targetSpaceId) return;
         const suffix = link.sourceBlockId ? `?blockId=${link.sourceBlockId}` : '';
@@ -403,12 +412,12 @@ export const BacklinksPanel: React.FC<BacklinksPanelProps> = ({
                             {mentions.map((mention, i) => (
                                 <div key={`${mention.sourceId}-${i}`}>
                                     <div className="flex items-center gap-1.5 px-2 pt-1">
-                                        {mention.sourcePageIcon?.icon ? (
-                                            <span className="text-sm leading-none">{mention.sourcePageIcon.icon}</span>
+                                        {getIconText(mention.sourcePageIcon) ? (
+                                            <span className="text-sm leading-none">{getIconText(mention.sourcePageIcon)}</span>
                                         ) : (
                                             <FileText className="h-3.5 w-3.5 text-muted-foreground" />
                                         )}
-                                        <span className="text-sm font-medium truncate">{mention.sourcePageTitle}</span>
+                                        <span className="text-sm font-medium truncate">{mention.sourcePageTitle || 'Untitled'}</span>
                                     </div>
                                     <BacklinkItem
                                         backlink={mention}

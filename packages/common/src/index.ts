@@ -20,6 +20,7 @@ export type {
     Services
 } from "./core/types"
 export * from "./entity"
+export * from "./domain/space-page"
 export * from "./utils/logger"
 export * from "./utils/env-utils"
 export * from "./utils/auth"

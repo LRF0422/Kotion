@@ -20,7 +20,7 @@ import { event } from "@kn/common";
 export const PAGE_LINK_CLICK = "WIKI_PAGE_LINK_CLICK";
 
 export interface PageLinkAttributes {
-    pageId: number | null;
+    pageId: string | null;
     title: string | null;
 }
 

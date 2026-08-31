@@ -11,6 +11,8 @@
   },
   "scripts": {
     "build": "rollup -c",
+    "check:space-page": "rm -rf .tmp-check/space-page && tsc src/domain/space-page/*.ts --rootDir src --outDir .tmp-check/space-page --module commonjs --target ES2022 --lib ES2022,DOM --skipLibCheck --noCheck && node -e \"const fs=require('fs'); const dir='.tmp-check/space-page/node_modules/@kn/common'; fs.mkdirSync(dir,{recursive:true}); fs.writeFileSync('.tmp-check/space-page/package.json','{\\\"type\\\":\\\"commonjs\\\"}'); fs.copyFileSync('.tmp-check/space-page/domain/space-page/space-page-common.check-runtime.js',dir+'/index.js'); fs.writeFileSync(dir+'/package.json','{\\\"main\\\":\\\"index.js\\\",\\\"type\\\":\\\"commonjs\\\"}')\" && node .tmp-check/space-page/domain/space-page/space-page-service.check.js",
+    "check": "pnpm check:space-page",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "type": "module",

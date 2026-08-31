@@ -6,9 +6,10 @@ import {
 import {
     FileText, UserPlus, UserMinus, MessageSquare, Pin, Edit, Trash2, Undo2, Shield
 } from "@kn/icon"
-import { useApi, useTranslation, useSafeState } from "@kn/common"
-import { APIS } from "../../../api"
-import { SpaceActivity, ActivityActionType } from "../../../model/Space"
+import {
+    useSpacePageService, useTranslation, useSafeState,
+    type SpaceActivity, type ActivityActionType, type DateTimeValue
+} from "@kn/common"
 
 interface ActivityFeedProps {
     spaceId: string
@@ -28,8 +29,8 @@ const ACTION_ICONS: Record<string, React.ReactNode> = {
     PAGE_UNPINNED: <Pin className="h-3.5 w-3.5 text-gray-400" />,
 }
 
-function getActionText(actionType: ActivityActionType, metadata?: Record<string, any>): string {
-    const pageTitle = metadata?.pageTitle || 'a page'
+function getActionText(actionType: ActivityActionType, metadata?: Record<string, unknown>): string {
+    const pageTitle = String(metadata?.pageTitle || 'a page')
     switch (actionType) {
         case 'PAGE_CREATED': return `created "${pageTitle}"`
         case 'PAGE_EDITED': return `edited "${pageTitle}"`
@@ -38,7 +39,7 @@ function getActionText(actionType: ActivityActionType, metadata?: Record<string,
         case 'MEMBER_JOINED': return `joined the space`
         case 'MEMBER_LEFT': return `left the space`
         case 'MEMBER_ROLE_CHANGED':
-            return `changed role to ${metadata?.newRole || 'member'}`
+            return `changed role to ${String(metadata?.newRole || 'member')}`
         case 'COMMENT_ADDED': return `commented on "${pageTitle}"`
         case 'PAGE_PINNED': return `pinned "${pageTitle}"`
         case 'PAGE_UNPINNED': return `unpinned "${pageTitle}"`
@@ -46,7 +47,7 @@ function getActionText(actionType: ActivityActionType, metadata?: Record<string,
     }
 }
 
-function formatTimeAgo(dateStr?: string): string {
+function formatTimeAgo(dateStr?: DateTimeValue): string {
     if (!dateStr) return ''
     const date = new Date(dateStr)
     const now = new Date()
@@ -63,6 +64,7 @@ function formatTimeAgo(dateStr?: string): string {
 
 export const ActivityFeed: React.FC<ActivityFeedProps> = ({ spaceId, className }) => {
     const { t } = useTranslation()
+    const spacePageService = useSpacePageService()
     const [activities, setActivities] = useSafeState<SpaceActivity[]>([])
     const [loading, setLoading] = useSafeState(true)
     const [page, setPage] = useSafeState(1)
@@ -70,21 +72,21 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ spaceId, className }
 
     const fetchActivities = useCallback((pageNum: number, append = false) => {
         if (!append) setLoading(true)
-        useApi(APIS.GET_SPACE_ACTIVITIES, { spaceId, page: pageNum, pageSize: 20 })
-            .then(res => {
-                const data = res.data || []
+        spacePageService.activity.querySpaceActivities({ spaceId, page: pageNum, pageSize: 20 })
+            .then(result => {
+                const records = result.records
                 if (append) {
-                    setActivities(prev => [...prev, ...data])
+                    setActivities(prev => [...prev, ...records])
                 } else {
-                    setActivities(data)
+                    setActivities(records)
                 }
-                setHasMore(data.length >= 20)
+                setHasMore(result.hasNext ?? records.length >= 20)
             })
             .catch(() => {
                 if (!append) setActivities([])
             })
             .finally(() => setLoading(false))
-    }, [spaceId])
+    }, [spaceId, spacePageService])
 
     useEffect(() => {
         fetchActivities(1)

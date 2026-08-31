@@ -21,12 +21,13 @@ import React, {
 import { ScrollArea, cn, Skeleton } from '@kn/ui';
 import { SquareDashedBottom, FileText, Loader2 } from '@kn/icon';
 import { PageContext, type SuggestionProps } from '@kn/editor';
-import { searchBlocks, BlockInfo } from '../services/linkService';
+import { useSpacePageService } from '@kn/common';
+import type { BlockSummary } from '@kn/common';
 import { useI18n } from '../../i18n/use-i18n';
 import type { LinkSuggestionListHandle, LinkSuggestionCommandProps } from '../extensions/LinkTrigger';
 
 /** Extract text preview from block content */
-const getBlockPreview = (block: BlockInfo): string => {
+const getBlockPreview = (block: BlockSummary): string => {
     try {
         const content = typeof block.content === 'string'
             ? JSON.parse(block.content)
@@ -73,7 +74,7 @@ const getBlockTypeLabel = (type: string): string => {
 
 /** A block row with its flat keyboard index. */
 interface FlatBlock {
-    block: BlockInfo;
+    block: BlockSummary;
     preview: string;
     index: number;
 }
@@ -93,7 +94,7 @@ const BlockItem = React.memo<{
     onSelect: () => void;
     onHover: () => void;
 }>(({ item, isSelected, onSelect, onHover }) => {
-    const typeLabel = getBlockTypeLabel(item.block.type);
+    const typeLabel = getBlockTypeLabel(item.block.type || 'block');
 
     return (
         <div
@@ -163,10 +164,11 @@ type PickerProps = SuggestionProps<unknown, LinkSuggestionCommandProps>;
 export const BlockLinkPicker = forwardRef<LinkSuggestionListHandle, PickerProps>(
     ({ query, command }, ref) => {
         const pageCtx = useContext(PageContext);
+        const service = useSpacePageService();
         const { t } = useI18n();
-        const spaceId = pageCtx?.spaceId;
+        const spaceId = pageCtx?.spaceId ? String(pageCtx.spaceId) : undefined;
 
-        const [blocks, setBlocks] = useState<BlockInfo[]>([]);
+        const [blocks, setBlocks] = useState<BlockSummary[]>([]);
         const [loading, setLoading] = useState(true);
         const [selectedIndex, setSelectedIndex] = useState(0);
         const listRef = useRef<HTMLDivElement>(null);
@@ -177,11 +179,20 @@ export const BlockLinkPicker = forwardRef<LinkSuggestionListHandle, PickerProps>
                 setLoading(false);
                 return;
             }
+            let cancelled = false;
             setLoading(true);
-            searchBlocks(spaceId)
-                .then((data) => setBlocks(data.records || []))
-                .finally(() => setLoading(false));
-        }, [spaceId]);
+            service.relations.queryBlocks({ spaceId })
+                .then((data) => {
+                    if (!cancelled) setBlocks(data);
+                })
+                .catch(() => {
+                    if (!cancelled) setBlocks([]);
+                })
+                .finally(() => {
+                    if (!cancelled) setLoading(false);
+                });
+            return () => { cancelled = true; };
+        }, [service, spaceId]);
 
         // Filter by query, group by source page, current page first.
         const groups = useMemo<BlockGroup[]>(() => {

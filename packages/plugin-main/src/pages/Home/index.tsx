@@ -1,11 +1,9 @@
-import { APIS } from "../../api";
 import { Button, Card, CardContent, Dialog, DialogContent, DialogHeader, DialogTitle, Input, Skeleton, Tabs, TabsContent, TabsList, TabsTrigger, cn, useIsMobile } from "@kn/ui";
-import { useApi, useNavigator, useSelector, GlobalState, event, TOGGLE_AI_ASSISTANT, useDebounce } from "@kn/common";
-import { Space } from "../../model/Space";
+import { type BlockSummary, type DateTimeValue, type PageSummary, type Space, useSpacePageService, useNavigator, useSelector, GlobalState, event, TOGGLE_AI_ASSISTANT, useDebounce } from "@kn/common";
 import { ArrowRight, BanIcon, Book, Box, FileText, FilePlus, FolderPlus, LayoutGrid, Moon, Network, Plus, SearchIcon, Sparkles, Star, Sun, Sunset, Tag, Users, X, AlignLeft } from "@kn/icon";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { CreateSpaceDlg } from "../components/SpaceForm";
-import { PageItemIcon } from "../SpaceDetail/components/PageItemIcon";
+import { PageItemIcon, type PageIconData } from "../SpaceDetail/components/PageItemIcon";
 import { PagePreviewCard, PagePreviewProvider } from "./PagePreviewCard";
 import { SpaceGraph } from "../SpaceGraph";
 import { useTranslation } from "@kn/common";
@@ -21,17 +19,31 @@ const hueStyles = (hue: number) => ({
     } as React.CSSProperties,
 })
 
-const relativeTime = (value?: string): string => {
-    if (!value) return ""
+const relativeTime = (value?: DateTimeValue): string => {
+    if (value == null) return ""
+    const text = String(value)
     try {
-        return formatDistanceToNow(parseISO(value), { addSuffix: true })
+        const date = typeof value === "number" ? new Date(value) : parseISO(value)
+        return formatDistanceToNow(date, { addSuffix: true })
     } catch {
         try {
-            return format(parseISO(value), "MM/dd/yyyy")
+            const date = typeof value === "number" ? new Date(value) : parseISO(value)
+            return format(date, "MM/dd/yyyy")
         } catch {
-            return value
+            return text
         }
     }
+}
+
+const asPageIcon = (icon: unknown): PageIconData | undefined => {
+    if (!icon || typeof icon !== "object") return undefined
+    const value = icon as Partial<PageIconData>
+    return typeof value.icon === "string" ? value as PageIconData : undefined
+}
+
+const metadataText = (metadata: Record<string, unknown> | undefined, key: string): string | undefined => {
+    const value = metadata?.[key]
+    return typeof value === "string" ? value : undefined
 }
 
 /** Build a short snippet centered on the first keyword occurrence */
@@ -65,8 +77,8 @@ export const Home: React.FC = () => {
     const isMobile = useIsMobile()
     const [recentSpaces, setRecentSpaces] = useState<Space[]>([])
     const [teamSpaces, setTeamSpaces] = useState<Space[]>([])
-    const [recentPages, setRecentPages] = useState<any[]>([])
-    const [favoritePages, setFavoritePages] = useState<any[]>([])
+    const [recentPages, setRecentPages] = useState<PageSummary[]>([])
+    const [favoritePages, setFavoritePages] = useState<PageSummary[]>([])
     const [flag, setFlag] = useState(0)
     const [loading, setLoading] = useState(true)
     const [creatingPage, setCreatingPage] = useState(false)
@@ -74,6 +86,7 @@ export const Home: React.FC = () => {
     const [activeTab, setActiveTab] = useState("recent")
     const [currentHour, setCurrentHour] = useState(new Date().getHours())
     const navigator = useNavigator()
+    const service = useSpacePageService()
     const { t } = useTranslation()
     const { userInfo } = useSelector((state: GlobalState) => state)
 
@@ -93,7 +106,7 @@ export const Home: React.FC = () => {
     // page block contents, debounced and resolved server-side.
     const [contentQuery, setContentQuery] = useState("")
     const debouncedContentQuery = useDebounce(contentQuery, { wait: 400 })
-    const [blockResults, setBlockResults] = useState<any[]>([])
+    const [blockResults, setBlockResults] = useState<BlockSummary[]>([])
     const [contentLoading, setContentLoading] = useState(false)
 
     // Update current hour every minute to adapt to time changes
@@ -103,6 +116,25 @@ export const Home: React.FC = () => {
         }, 60000)
         return () => clearInterval(timer)
     }, [])
+
+    useEffect(() => {
+        const refresh = () => setFlag(value => value + 1)
+        const unsubscribers = [
+            service.changes.subscribe("space.created", refresh),
+            service.changes.subscribe("space.updated", refresh),
+            service.changes.subscribe("space.deleted", refresh),
+            service.changes.subscribe("space.archived", refresh),
+            service.changes.subscribe("space.unarchived", refresh),
+            service.changes.subscribe("space.favorite.changed", refresh),
+            service.changes.subscribe("page.created", refresh),
+            service.changes.subscribe("page.updated", refresh),
+            service.changes.subscribe("page.deleted", refresh),
+            service.changes.subscribe("page.trashed", refresh),
+            service.changes.subscribe("page.restoredFromTrash", refresh),
+            service.changes.subscribe("page.favorite.changed", refresh),
+        ]
+        return () => unsubscribers.forEach(unsubscribe => unsubscribe())
+    }, [service])
 
     const isMorning = currentHour >= 5 && currentHour < 12
     const isAfternoon = currentHour >= 12 && currentHour < 18
@@ -126,51 +158,50 @@ export const Home: React.FC = () => {
     useEffect(() => {
         setLoading(true)
         Promise.all([
-            useApi(APIS.QUERY_SPACE, { template: false, pageSize: 8, type: 'COLLABORATION' }),
-            useApi(APIS.QUERY_FAVORITE, { pageSize: 12 })
-        ]).then(([teamRes, favoritesRes]) => {
-            setTeamSpaces(teamRes.data.records || [])
-            const favData = favoritesRes?.data
-            setFavoritePages(Array.isArray(favData) ? favData : (favData?.records || []))
+            service.spaces.querySpaces({ template: false, pageSize: 8, type: 'COLLABORATION' }),
+            service.pages.queryFavoritePages({ pageSize: 12 })
+        ]).then(([teamResult, favoritesResult]) => {
+            setTeamSpaces(teamResult.records)
+            setFavoritePages(favoritesResult.records)
         }).finally(() => {
             setLoading(false)
         })
-    }, [flag])
+    }, [flag, service])
 
     // Recent spaces — name search resolved server-side; fetch a wider set while
     // searching so matches beyond the first few are reachable.
     useEffect(() => {
         setSpacesLoading(true)
         const searching = debouncedSpaceQuery.trim().length > 0
-        useApi(APIS.QUERY_SPACE, {
+        service.spaces.querySpaces({
             template: false,
             pageSize: searching ? 12 : 8,
             ...(searching ? { searchValue: debouncedSpaceQuery.trim() } : {}),
-        }).then((res) => {
-            setRecentSpaces(res.data.records || [])
+        }).then((result) => {
+            setRecentSpaces(result.records)
         }).catch(() => {
             setRecentSpaces([])
         }).finally(() => {
             setSpacesLoading(false)
         })
-    }, [debouncedSpaceQuery, flag])
+    }, [debouncedSpaceQuery, flag, service])
 
     // Recent pages — title search resolved server-side. Fetch a wider candidate
     // pool so the client-side tag filter has enough rows to match against.
     useEffect(() => {
         setPagesLoading(true)
         const searching = debouncedPageQuery.trim().length > 0
-        useApi(APIS.QUERY_RECENT_PAGE, {
+        service.pages.queryRecentPages({
             pageSize: 20,
             ...(searching ? { searchValue: debouncedPageQuery.trim() } : {}),
-        }).then((res) => {
-            setRecentPages(res.data.records || [])
+        }).then((result) => {
+            setRecentPages(result.records)
         }).catch(() => {
             setRecentPages([])
         }).finally(() => {
             setPagesLoading(false)
         })
-    }, [debouncedPageQuery, flag])
+    }, [debouncedPageQuery, flag, service])
 
     // Block-level content search — uses Redis RediSearch (SEARCH_BLOCKS) for
     // fast full-text retrieval across all spaces. Falls back to MySQL LIKE
@@ -184,22 +215,22 @@ export const Home: React.FC = () => {
             return
         }
         setContentLoading(true)
-        useApi(APIS.SEARCH_BLOCKS, { keyword: kw })
-            .then((res) => {
-                const records = (res?.data || []).filter((b: any) => b.type !== 'title' && b.text)
-                setBlockResults(records)
+        service.relations.searchBlocks({ keyword: kw })
+            .then((records) => {
+                setBlockResults(records.filter((block) => block.type !== 'title' && block.text))
             })
             .catch(() => setBlockResults([]))
             .finally(() => setContentLoading(false))
-    }, [debouncedContentQuery])
+    }, [debouncedContentQuery, service])
 
     const contentSearching = debouncedContentQuery.trim().length > 0
 
     // Pages edited within the last 7 days — small confidence-building stat.
-    const weekEditedCount = recentPages.filter((p: any) => {
-        if (!p.updateTime) return false
+    const weekEditedCount = recentPages.filter((page) => {
+        if (page.updateTime == null) return false
         try {
-            return Date.now() - parseISO(p.updateTime).getTime() < 7 * 24 * 60 * 60 * 1000
+            const updatedAt = typeof page.updateTime === "number" ? new Date(page.updateTime) : parseISO(page.updateTime)
+            return Date.now() - updatedAt.getTime() < 7 * 24 * 60 * 60 * 1000
         } catch {
             return false
         }
@@ -208,8 +239,8 @@ export const Home: React.FC = () => {
     // Distinct tags across the loaded recent pages — drives the filter chips.
     const availableTags = useMemo(() => {
         const set = new Set<string>()
-        recentPages.forEach((p: any) => {
-            (p.tags || []).forEach((tg: string) => {
+        recentPages.forEach((page) => {
+            (page.tags || []).forEach((tg) => {
                 if (tg) set.add(tg)
             })
         })
@@ -220,8 +251,8 @@ export const Home: React.FC = () => {
     // title search is applied server-side, so `recentPages` already reflects it.
     const filteredPages = useMemo(() => {
         if (selectedTags.length === 0) return recentPages
-        return recentPages.filter((p: any) =>
-            Array.isArray(p.tags) && p.tags.some((tg: string) => selectedTags.includes(tg))
+        return recentPages.filter((page) =>
+            Array.isArray(page.tags) && page.tags.some((tag) => selectedTags.includes(tag))
         )
     }, [recentPages, selectedTags])
 
@@ -231,7 +262,7 @@ export const Home: React.FC = () => {
     const filteredFavorites = useMemo(() => {
         const q = favQuery.trim().toLowerCase()
         if (!q) return favoritePages
-        return favoritePages.filter((p: any) => (p.title || "").toLowerCase().includes(q))
+        return favoritePages.filter((page) => page.title.toLowerCase().includes(q))
     }, [favoritePages, favQuery])
 
     const spaceSearching = debouncedSpaceQuery.trim().length > 0
@@ -242,14 +273,14 @@ export const Home: React.FC = () => {
     // deduped by id. While searching, only the server-side matches show.
     const spaceRows = useMemo(() => {
         const seen = new Set<string>()
-        const rows: { space: any; isTeam: boolean }[] = []
-        recentSpaces.forEach((space: any) => {
+        const rows: { space: Space; isTeam: boolean }[] = []
+        recentSpaces.forEach((space) => {
             if (seen.has(space.id)) return
             seen.add(space.id)
             rows.push({ space, isTeam: space.type === "COLLABORATION" })
         })
         if (!spaceSearching) {
-            teamSpaces.forEach((space: any) => {
+            teamSpaces.forEach((space) => {
                 if (seen.has(space.id)) return
                 seen.add(space.id)
                 rows.push({ space, isTeam: true })
@@ -275,14 +306,14 @@ export const Home: React.FC = () => {
         if (creatingPage) return
         setCreatingPage(true)
         try {
-            const personal = await useApi(APIS.PERSONAL_SPACE)
-            const spaceId = personal.data.id
-            const res = await useApi(APIS.CREATE_OR_SAVE_PAGE, null, {
+            const personal = await service.spaces.getPersonalSpace()
+            const spaceId = personal.id
+            const page = await service.pages.createPage({
                 spaceId,
                 parentId: "0",
                 title: "Untitled",
             })
-            navigator.go({ to: `/space-detail/${spaceId}/page/edit/${res.data.id}` })
+            navigator.go({ to: `/space-detail/${spaceId}/page/edit/${page.id}` })
         } catch (err) {
             console.error("Error creating page:", err)
         } finally {
@@ -551,6 +582,7 @@ export const Home: React.FC = () => {
                             ) : (
                                 <ul className="flex flex-col">
                                     {spaceRows.map(({ space, isTeam }) => {
+                                        const icon = asPageIcon(space.icon)
                                         return (
                                             <li
                                                 key={space.id}
@@ -561,8 +593,8 @@ export const Home: React.FC = () => {
                                                 )}
                                             >
                                                 <span className="flex h-6 w-6 shrink-0 items-center justify-center leading-none text-muted-foreground">
-                                                    {space.icon?.icon
-                                                        ? <PageItemIcon icon={space.icon} size={16} />
+                                                    {icon
+                                                        ? <PageItemIcon icon={icon} size={16} />
                                                         : isTeam
                                                             ? <Users className="h-4 w-4" />
                                                             : <Box className="h-4 w-4" />}

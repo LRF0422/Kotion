@@ -8,13 +8,6 @@
  * registry. Core registers an implementation at startup.
  */
 
-export interface OffscreenPageSummary {
-    id: string
-    title: string
-    spaceId?: string
-    spaceName?: string
-}
-
 /**
  * A live off-screen editing session for one page. The `editor` is a full
  * Tiptap editor bound to the page's collaborative Y.Doc, so every editor
@@ -38,8 +31,6 @@ export interface OffscreenEditorBridge {
      * fired) and the content is ready for programmatic edits.
      */
     acquire: (pageId: string) => Promise<OffscreenEditorHandle>
-    /** Search pages across all spaces by keyword (for @-mention pickers). */
-    searchPages: (query?: string) => Promise<OffscreenPageSummary[]>
 }
 
 let currentBridge: OffscreenEditorBridge | null = null

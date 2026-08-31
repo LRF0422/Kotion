@@ -14,6 +14,7 @@ import { cn, IconButton, Skeleton, Tooltip, TooltipContent, TooltipTrigger, Tool
 import { useBidirectionalBlockInfo } from "../hooks/useBidirectionalBlockInfo";
 import { usePageInfo } from "../../hooks";
 import { useI18n } from "../../i18n/use-i18n";
+import { getIconText } from "../../utils";
 
 /** Memoized toolbar button with tooltip */
 const ToolbarButton = React.memo<{
@@ -92,10 +93,18 @@ export const BlockLinkView: React.FC<NodeViewProps> = React.memo((props) => {
     }, [blockInfo, pageInfo, blockId, navigator]);
 
     // Parse content with memoization
-    const content = useMemo(() => {
+    const content = useMemo<JSONContent[] | null>(() => {
         if (!blockInfo?.content) return null;
         try {
-            return blockInfo.content;
+            const parsed = typeof blockInfo.content === 'string'
+                ? JSON.parse(blockInfo.content)
+                : blockInfo.content;
+            if (Array.isArray(parsed)) return parsed as JSONContent[];
+            if (parsed && typeof parsed === 'object') {
+                const node = parsed as JSONContent;
+                return node.type === 'doc' ? (node.content ?? []) : [node];
+            }
+            return null;
         } catch {
             return null;
         }
@@ -172,8 +181,8 @@ export const BlockLinkView: React.FC<NodeViewProps> = React.memo((props) => {
                                 }
                             }}
                         >
-                            {sourcePage?.icon?.icon ? (
-                                <span className="text-sm leading-none">{sourcePage.icon.icon}</span>
+                            {getIconText(sourcePage?.icon) ? (
+                                <span className="text-sm leading-none">{getIconText(sourcePage?.icon)}</span>
                             ) : (
                                 <FileText className="h-3 w-3 flex-shrink-0" />
                             )}

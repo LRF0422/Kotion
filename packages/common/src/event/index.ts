@@ -15,10 +15,6 @@ export const PLUGIN_INIT_SUCCESS = "PLUGIN_INIT_SUCCESS"
 /** Emitted when a plugin is skipped because its apiVersion major differs from the host's */
 export const PLUGIN_INCOMPATIBLE = "PLUGIN_INCOMPATIBLE"
 
-export const ON_PAGE_REFRESH = "ON_PAGE_REFRESH"
-
-export const ON_FAVORITE_CHANGE = "ON_FAVORITE_CHANGE"
-
 export const ON_MESSAGE = "ON_MESSAGE"
 
 export const GO_TO_MARKETPLACE = "GO_TO_MARKETPLACE"

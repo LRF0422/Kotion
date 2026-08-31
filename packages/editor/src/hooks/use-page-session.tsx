@@ -1,19 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { PageSessionState } from '@kn/common'
 import { closeSession, decideHeartbeat, shouldWaitForHost } from './session-rules'
+import { toRev } from './rev'
 
-/**
- * The caller's standing in a page's editing session, as reported by the server.
- * Mirrors `PageSessionVO`.
- */
-export interface PageSessionState {
-  role: 'HOST' | 'COLLABORATOR' | 'NONE'
-  alive: boolean
-  hostUserId?: number | string | null
-  hostName?: string | null
-  hostSelf?: boolean
-  /** The page's rev at the moment the server answered. */
-  rev?: number | null
-}
+export type { PageSessionState } from '@kn/common'
 
 export interface UsePageSessionOptions {
   /**
@@ -321,7 +311,7 @@ export function usePageSession(options: UsePageSessionOptions): UsePageSessionRe
     alive: state.alive,
     hostName: state.hostName ?? null,
     lastHostName: state.hostName ?? lastHostNameRef.current,
-    serverRev: state.rev ?? null,
+    serverRev: toRev(state.rev),
     hostDisconnected,
     sessionEnded,
     reclaim: claim,

@@ -1,15 +1,15 @@
 import { createContext } from "react";
 import { PluginManager } from "./PluginManager";
-import { ServiceRegistry } from "./ServiceRegistry";
+import type { ServiceRegistryView } from "./ServiceRegistry";
 
 
 export interface AppContextProps {
     pluginManager: PluginManager | undefined
     /**
-     * Direct access to the ServiceRegistry for runtime service management.
+     * Read-only access to registered services.
      * Also available via pluginManager.serviceRegistry.
      */
-    serviceRegistry?: ServiceRegistry
+    serviceRegistry?: ServiceRegistryView
 }
 
 const initalState: AppContextProps = {

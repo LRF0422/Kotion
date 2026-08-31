@@ -1,10 +1,14 @@
 import { Button, Card, Input, MultiSelect, Sheet, SheetContent, SheetTitle, toast } from "@kn/ui";
 import { format, parseISO, formatDistanceToNow } from "@kn/ui";
-import { useApi, useUploadFile, useTranslation } from "@kn/common"
+import {
+    type DateTimeValue,
+    type SpacePageTemplate,
+    useSpacePageService,
+    useUploadFile,
+    useTranslation,
+} from "@kn/common"
 import { ArrowLeft, Clock, Trash2, FileText, Plus } from "@kn/icon";
 import React, { useState, useEffect, useCallback } from "react";
-import { APIS } from "../api";
-import { Template } from "../model/Template";
 import { resolveUserBrief } from "../utils/userBrief";
 import { TemplatePreview } from "./TemplatePreview";
 
@@ -16,46 +20,19 @@ interface TemplateSelectorProps {
     onCreateBlank?: () => void;
 }
 
-const relativeTime = (value?: string): string => {
-    if (!value) return ""
+const relativeTime = (value?: DateTimeValue): string => {
+    if (value == null) return ""
+    const date = typeof value === "number" ? new Date(value) : parseISO(value)
     try {
-        return formatDistanceToNow(parseISO(value), { addSuffix: true })
+        return formatDistanceToNow(date, { addSuffix: true })
     } catch {
         try {
-            return format(parseISO(value), "MM/dd/yyyy")
+            return format(date, "MM/dd/yyyy")
         } catch {
-            return value
+            return String(value)
         }
     }
 }
-
-/**
- * Normalize a raw template record from the backend into the shape the cards
- * render. A template is just a page, so the API returns `PageVO`: the author is
- * a bare `createUser` / `updateUser` id (resolved to a name later) and there is
- * no `category` field — the page's `tags` play that role. `cover` may come back
- * as a single string rather than a list.
- */
-const normalizeTemplate = (item: any, untitled: string): Template => {
-    const coverRaw = item?.cover;
-    const cover = Array.isArray(coverRaw) ? coverRaw : (coverRaw ? [coverRaw] : []);
-    const tags: string[] = Array.isArray(item?.tags) ? item.tags.filter(Boolean) : [];
-    const authorId = item?.updateUser ?? item?.createUser;
-    return {
-        ...item,
-        id: item?.id,
-        title: item?.title ?? item?.name ?? untitled,
-        description: item?.description ?? "",
-        cover,
-        author: item?.author ?? item?.authorName ?? "",
-        authorId: authorId ? String(authorId) : undefined,
-        tags,
-        category: item?.category ?? item?.categories?.[0]?.text ?? tags[0] ?? "",
-        categories: item?.categories ?? tags.map((tag: string) => ({ id: tag.toLowerCase(), text: tag })),
-        createdAt: item?.createdAt ?? item?.createTime,
-        updatedAt: item?.updatedAt ?? item?.updateTime,
-    };
-};
 
 export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
     open,
@@ -63,13 +40,14 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
     onCreateFromTemplate,
     onCreateBlank
 }) => {
-    const [allTemplates, setAllTemplates] = useState<Template[]>([]);
-    const [filteredTemplates, setFilteredTemplates] = useState<Template[]>([]);
+    const [allTemplates, setAllTemplates] = useState<SpacePageTemplate[]>([]);
+    const [filteredTemplates, setFilteredTemplates] = useState<SpacePageTemplate[]>([]);
     const [searchValue, setSearchValue] = useState<string>("");
     const [categories, setCategories] = useState<{ id: string; text: string }[]>([]);
     const [loading, setLoading] = useState<boolean>(false);
-    const [previewTemplate, setPreviewTemplate] = useState<Template | null>(null);
+    const [previewTemplate, setPreviewTemplate] = useState<SpacePageTemplate | null>(null);
 
+    const service = useSpacePageService();
     const { usePath } = useUploadFile();
     const { t } = useTranslation();
 
@@ -112,13 +90,12 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
     const loadTemplates = async () => {
         setLoading(true);
         try {
-            const templateResponse = await useApi(APIS.QUERY_TEMPLATE);
-            // Backend may return either a plain array or a paginated { records: [] }
-            // object — handle both, mirroring how favorites are read in Home/index.tsx.
-            const raw = templateResponse?.data;
-            const list = Array.isArray(raw) ? raw : (raw?.records || []);
+            const result = await service.templates.queryTemplates();
             const untitled = t('template.untitled');
-            const templatesData: Template[] = list.map((item: any) => normalizeTemplate(item, untitled));
+            const templatesData = result.map(template => ({
+                ...template,
+                title: template.title || untitled,
+            }));
             setAllTemplates(templatesData);
             setFilteredTemplates(templatesData);
             // Names arrive after the grid renders — the cards fall back to the
@@ -134,6 +111,7 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
                 if (tpl.categories) {
                     tpl.categories.forEach(c => categorySet.set(c.id, c.text));
                 }
+                tpl.tags?.forEach(tag => categorySet.set(tag.toLowerCase(), tag));
             });
             const dynamicCategories = [
                 { id: 'all', text: t('template.allTemplates') },
@@ -151,7 +129,7 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
     };
 
     /** Turn the `createUser` / `updateUser` ids into display names, one fetch per distinct user. */
-    const hydrateAuthors = async (list: Template[]) => {
+    const hydrateAuthors = async (list: SpacePageTemplate[]) => {
         const ids = Array.from(new Set(list.map(tpl => tpl.authorId).filter(Boolean))) as string[];
         if (ids.length === 0) return;
         const briefs = await Promise.all(ids.map(async id => [id, await resolveUserBrief(id)] as const));
@@ -165,19 +143,19 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
     const handleDeleteTemplate = useCallback(async (e: React.MouseEvent, templateId: string) => {
         e.stopPropagation();
         try {
-            await useApi(APIS.DELETE_TEMPLATE, { id: templateId });
+            await service.templates.deleteTemplate(templateId);
             setAllTemplates(prev => prev.filter(tpl => tpl.id !== templateId));
             toast.success(t('template.deleteSuccess'));
         } catch (error) {
             toast.error(t('template.deleteFailed'));
         }
-    }, [t]);
+    }, [service, t]);
 
     const handleCategoryChange = (value: string[]) => {
         setSelectedCategories(value);
     };
 
-    const handleUseTemplate = (item: Template) => {
+    const handleUseTemplate = (item: SpacePageTemplate) => {
         onCreateFromTemplate(item.id, item.title);
         onOpenChange(false);
     };

@@ -16,14 +16,14 @@
 
 import React, { useCallback, useContext, useEffect, useState } from "react";
 import { NodeViewWrapper, type NodeViewProps, PageContext } from "@kn/editor";
-import { useNavigator } from "@kn/common";
+import { useNavigator, useSpacePageService } from "@kn/common";
 import { ArrowUpRight, FileText, Loader2, Pencil, Trash2 } from "@kn/icon";
 import { cn, HoverCard, HoverCardContent, HoverCardTrigger, Button, FlatEmoji } from "@kn/ui";
-import { usePageInfo, useSpaceService } from "../../hooks";
+import { usePageInfo } from "../../hooks";
 import { useI18n } from "../../i18n/use-i18n";
 import { PageEditWindow } from "@kn/common";
-import { invalidatePage } from "../../utils/cache";
 import { PagePreviewPane } from "./PagePreviewPane";
+import { getIconText } from "../../utils";
 
 export const PageLinkNodeView: React.FC<NodeViewProps> = React.memo((props) => {
     const { node, editor, deleteNode, updateAttributes } = props;
@@ -32,7 +32,7 @@ export const PageLinkNodeView: React.FC<NodeViewProps> = React.memo((props) => {
 
     const pageCtx = useContext(PageContext);
     const navigator = useNavigator();
-    const spaceService = useSpaceService();
+    const service = useSpacePageService();
     const { t } = useI18n();
     const [cardOpen, setCardOpen] = useState(false);
     const [editOpen, setEditOpen] = useState(false);
@@ -40,7 +40,7 @@ export const PageLinkNodeView: React.FC<NodeViewProps> = React.memo((props) => {
     const { pageInfo, loading, error, refetch } = usePageInfo(pageId);
     const isBroken = !loading && !!error;
     const displayTitle = pageInfo?.title || titleAttr || t('bidirectionalLink.untitled');
-    const icon = pageInfo?.icon?.icon || null;
+    const icon = getIconText(pageInfo?.icon);
 
     // Keep the serialized [[Title]] snapshot in sync with the live title so
     // backend text parsing and exports see the current name. Editable-only:
@@ -57,7 +57,7 @@ export const PageLinkNodeView: React.FC<NodeViewProps> = React.memo((props) => {
         let spaceId = pageInfo?.spaceId || pageCtx.spaceId;
         if (!pageInfo?.spaceId) {
             try {
-                const page = await spaceService.getPage(pageId);
+                const page = await service.pages.getPage(String(pageId));
                 if (page?.spaceId) spaceId = String(page.spaceId);
             } catch { /* fall back to the current space */ }
         }
@@ -65,7 +65,7 @@ export const PageLinkNodeView: React.FC<NodeViewProps> = React.memo((props) => {
             setCardOpen(false);
             navigator.go({ to: `/space-detail/${spaceId}/page/edit/${pageId}` });
         }
-    }, [pageId, isBroken, pageInfo?.spaceId, pageCtx.spaceId, spaceService, navigator]);
+    }, [pageId, isBroken, pageInfo?.spaceId, pageCtx.spaceId, service, navigator]);
 
     const handleClick = useCallback((e: React.MouseEvent) => {
         e.preventDefault();
@@ -186,7 +186,7 @@ export const PageLinkNodeView: React.FC<NodeViewProps> = React.memo((props) => {
                 </HoverCardContent>
             </HoverCard>
             {editOpen && pageId && (
-                <PageEditWindow pageId={pageId} onClose={handleEditClose} onPageMutated={invalidatePage} />
+                <PageEditWindow pageId={pageId} onClose={handleEditClose} />
             )}
         </NodeViewWrapper>
     );

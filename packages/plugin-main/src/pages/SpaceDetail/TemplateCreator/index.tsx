@@ -1,4 +1,12 @@
-import { GlobalState, logger, useApi, useSelector, useTranslation, useUploadFile } from "@kn/common";
+import {
+    GlobalState,
+    logger,
+    type Space,
+    useSelector,
+    useSpacePageService,
+    useTranslation,
+    useUploadFile,
+} from "@kn/common";
 import { LoaderCircle } from "@kn/icon";
 import {
     AlertDialog, AlertDialogAction, AlertDialogCancel,
@@ -7,7 +15,6 @@ import {
     FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet, FileUploader, Input, ScrollArea, Textarea, cn, toast, useForm, z, zodResolver
 } from "@kn/ui";
 import React, { PropsWithChildren, useMemo, useRef, useState } from "react";
-import { APIS } from "../../../api";
 import { getUploadedCoverNames, resolveTemplateCover, type TemplateCoverContent } from "./template-cover";
 
 
@@ -21,7 +28,7 @@ type PageMode = {
 
 type SpaceMode = {
     mode: 'space'
-    space: any
+    space: Space
 }
 
 export type TemplateCreatorProps = PropsWithChildren<{
@@ -46,6 +53,7 @@ const toCoverArray = (cover: unknown): string[] =>
 export const TemplateCreator: React.FC<TemplateCreatorProps> = (props) => {
     const { className } = props
     const { t } = useTranslation()
+    const service = useSpacePageService()
     const { userInfo } = useSelector((state: GlobalState) => state)
     const { usePath, uploadFile } = useUploadFile()
     const [open, setOpen] = useState(false)
@@ -110,9 +118,9 @@ export const TemplateCreator: React.FC<TemplateCreatorProps> = (props) => {
         try {
             if (props.mode === 'space') {
                 const payload = { ...values, title: values.name, name: values.name }
-                await useApi(APIS.SAVE_SPACE_AS_TEMPLATE, null, {
+                await service.templates.saveSpaceAsTemplate({
                     ...payload,
-                    // Backend TemplateDTO reads `screenShot` for the cover images.
+                    // Space templates use `screenShot` for the cover images.
                     screenShot: values.cover,
                     spaceId: props.space.id,
                 })
@@ -133,8 +141,9 @@ export const TemplateCreator: React.FC<TemplateCreatorProps> = (props) => {
                     logger.warn('[TemplateCreator] automatic cover generation failed', coverResult.error)
                 }
 
-                await useApi(APIS.SAVE_AS_TEMPLATE, { id: props.pageId }, {
+                await service.templates.savePageAsTemplate({
                     ...values,
+                    pageId: props.pageId,
                     title: values.name,
                     name: values.name,
                     cover: coverResult.cover,

@@ -4,31 +4,18 @@ import {
     Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator
 } from "@kn/ui"
 import { FileText, Plus, FilePlus2, LayoutDashboard, Loader2, AlignLeft } from "@kn/icon"
-import { useApi, useTranslation } from "@kn/common"
-import { APIS } from "../../../api"
-
-/** A block-level search hit returned by the backend */
-interface BlockSearchResult {
-    id: string
-    type: string
-    text: string
-    pageId: string | number
-    pageTitle?: string
-    spaceId?: string | number
-    spaceName?: string
-}
+import { logger, type BlockSummary, type PageTreeNode, useSpacePageService, useTranslation } from "@kn/common"
 
 interface FlatPage {
     id: string
     title: string
-    icon?: string
 }
 
 interface GlobalSearchDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
     spaceId?: string
-    pageTree: any[]
+    pageTree: PageTreeNode[]
     onNavigateToPage: (pageId: string) => void
     onCreatePage: () => void
     onCreateSiblingPage: () => void
@@ -36,12 +23,11 @@ interface GlobalSearchDialogProps {
 }
 
 /** Flatten the hutool page tree into a plain list for client-side title matching */
-function flattenPageTree(tree: any[], acc: FlatPage[] = []): FlatPage[] {
+function flattenPageTree(tree: PageTreeNode[], acc: FlatPage[] = []): FlatPage[] {
     for (const node of tree || []) {
         acc.push({
-            id: String(node.id),
+            id: node.id,
             title: node.name || node.title || 'Untitled',
-            icon: node.icon,
         })
         if (node.children?.length) {
             flattenPageTree(node.children, acc)
@@ -93,8 +79,9 @@ export const GlobalSearchDialog: React.FC<GlobalSearchDialogProps> = ({
     onGoToPersonalSpace,
 }) => {
     const { t } = useTranslation()
+    const service = useSpacePageService()
     const [query, setQuery] = useState('')
-    const [blockResults, setBlockResults] = useState<BlockSearchResult[]>([])
+    const [blockResults, setBlockResults] = useState<BlockSummary[]>([])
     const [searching, setSearching] = useState(false)
     const requestSeq = useRef(0)
 
@@ -126,16 +113,16 @@ export const GlobalSearchDialog: React.FC<GlobalSearchDialogProps> = ({
         setSearching(true)
         const seq = ++requestSeq.current
         const timer = setTimeout(() => {
-            useApi(APIS.SEARCH_BLOCKS, { keyword: kw, spaceId })
-                .then((res) => {
+            service.relations.searchBlocks({ keyword: kw, spaceId, pageSize: 20 })
+                .then((results) => {
                     if (seq !== requestSeq.current) return
-                    const list: BlockSearchResult[] = (res?.data || [])
+                    const blocks = results
                         // title blocks duplicate what the page-title match already shows
-                        .filter((b: BlockSearchResult) => b.type !== 'title' && b.text)
-                    setBlockResults(list.slice(0, 20))
+                        .filter((block) => block.type !== 'title' && block.text)
+                    setBlockResults(blocks.slice(0, 20))
                 })
                 .catch((err) => {
-                    console.error('Block search failed:', err)
+                    logger.error('Block search failed:', err)
                     if (seq === requestSeq.current) setBlockResults([])
                 })
                 .finally(() => {
@@ -143,7 +130,7 @@ export const GlobalSearchDialog: React.FC<GlobalSearchDialogProps> = ({
                 })
         }, 250)
         return () => clearTimeout(timer)
-    }, [query, spaceId])
+    }, [query, service, spaceId])
 
     const kw = query.trim()
     const hasQuery = kw.length > 0
@@ -202,12 +189,12 @@ export const GlobalSearchDialog: React.FC<GlobalSearchDialogProps> = ({
                                     <CommandItem
                                         key={`block-${block.id}`}
                                         value={`block-${block.id}`}
-                                        onSelect={() => handleSelectPage(String(block.pageId))}
+                                        onSelect={() => block.pageId && handleSelectPage(block.pageId)}
                                     >
                                         <AlignLeft className="mr-2 mt-0.5 shrink-0 self-start text-muted-foreground" />
                                         <div className="flex min-w-0 flex-col gap-0.5">
                                             <span className="truncate text-sm">
-                                                <Highlighted text={makeSnippet(block.text, kw)} keyword={kw} />
+                                                <Highlighted text={makeSnippet(block.text ?? '', kw)} keyword={kw} />
                                             </span>
                                             {block.pageTitle && (
                                                 <span className="truncate text-xs text-muted-foreground">

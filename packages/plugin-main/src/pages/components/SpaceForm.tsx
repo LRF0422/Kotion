@@ -1,4 +1,3 @@
-import { APIS } from "../../api";
 import { DialogDescription, IconSelector, IconPropsProps } from "@kn/ui";
 import { Button } from "@kn/ui";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@kn/ui";
@@ -8,7 +7,7 @@ import { Textarea } from "@kn/ui";
 import { Separator } from "@kn/ui";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kn/ui";
 import { toast } from "@kn/ui";
-import { useApi, GlobalState } from "@kn/common";
+import { GlobalState, useSpacePageService } from "@kn/common";
 import { zodResolver } from "@kn/ui";
 import { CheckCircle2, Users, BookOpen } from "@kn/icon";
 import React, { ReactNode, useState } from "react";
@@ -24,6 +23,7 @@ export const SpaceForm: React.FC<SpaceFormProps> = (props) => {
 
     const { userInfo } = useSelector((state: GlobalState) => state)
     const { t } = useTranslation()
+    const service = useSpacePageService()
     const [isSubmitting, setIsSubmitting] = useState(false)
 
     const FormSchema = z.object({
@@ -60,7 +60,7 @@ export const SpaceForm: React.FC<SpaceFormProps> = (props) => {
     async function onSubmit(values: z.infer<typeof FormSchema>) {
         setIsSubmitting(true)
         try {
-            await useApi(APIS.CREATE_SPACE, null, values)
+            await service.spaces.createSpace(values)
             toast.success(t("creation.success", "Space created successfully"), {
                 icon: <CheckCircle2 className="h-4 w-4" />
             })

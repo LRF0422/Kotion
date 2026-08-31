@@ -1,5 +1,5 @@
-import { APIS } from "../../../api";
-import { useApi, useTranslation } from "@kn/common";
+import { useSpacePageService, useTranslation } from "@kn/common";
+import type { PageHistoryItem, PageHistoryKind } from "@kn/common";
 import {
     Sheet, SheetContent, SheetHeader, SheetTitle,
     ScrollArea, Badge, Button, Skeleton, toast,
@@ -8,19 +8,6 @@ import {
 } from "@kn/ui";
 import { History, LoaderCircle, RotateCcw } from "@kn/icon";
 import React, { useCallback, useEffect, useState } from "react";
-
-type PageHistoryKind = 'AUTO' | 'USER' | 'RESTORE' | 'IMPORT' | string
-
-/** One checkpoint-backed entry returned by GET /page/:id/history. */
-interface PageHistoryItem {
-    rev: number | string
-    kind: PageHistoryKind
-    label?: string | null
-    actor?: unknown
-    createdAt?: string | number | null
-    current: boolean
-    restoredFromRev?: number | string | null
-}
 
 export interface PageVersionHistoryProps {
     open: boolean
@@ -73,6 +60,7 @@ export const PageVersionHistory: React.FC<PageVersionHistoryProps> = ({
     open, onOpenChange, pageId, clientId, saveNow, onRestored,
 }) => {
     const { t } = useTranslation()
+    const service = useSpacePageService()
     const [loading, setLoading] = useState(false)
     const [history, setHistory] = useState<PageHistoryItem[]>([])
     const [total, setTotal] = useState(0)
@@ -83,27 +71,16 @@ export const PageVersionHistory: React.FC<PageVersionHistoryProps> = ({
         if (!pageId) return
         setLoading(true)
         try {
-            const res = await useApi(APIS.PAGE_HISTORY, { id: pageId, limit: 50 })
-            const data = res?.data
-            const raw = Array.isArray(data) ? data : (data?.records || [])
-            const records: PageHistoryItem[] = raw.map((item: any) => ({
-                rev: item?.rev,
-                kind: item?.kind || '',
-                label: item?.label,
-                actor: item?.actor,
-                createdAt: item?.createdAt,
-                current: item?.current === true,
-                restoredFromRev: item?.restoredFromRev,
-            })).filter((item: PageHistoryItem) => item.rev != null)
-            setHistory(records)
-            setTotal(Array.isArray(data) ? records.length : (data?.total ?? records.length))
+            const data = await service.documents.getPageHistory({ pageId, limit: 50 })
+            setHistory(data.records)
+            setTotal(data.total ?? data.records.length)
         } catch (err) {
             console.error('Failed to load page history:', err)
             toast.error(t('editor.version.loadFailed', 'Failed to load version history'))
         } finally {
             setLoading(false)
         }
-    }, [pageId, t])
+    }, [pageId, service, t])
 
     useEffect(() => {
         if (open) fetchHistory()
@@ -126,14 +103,15 @@ export const PageVersionHistory: React.FC<PageVersionHistoryProps> = ({
             }
 
             try {
-                const response = await useApi(APIS.PAGE_RESTORE, { id: pageId }, {
+                const response = await service.documents.restorePageRevision({
+                    pageId,
                     targetRev: confirmTarget.rev,
                     clientId,
                 })
                 toast.success(t('editor.version.restoreSuccess', 'Restored to revision {{version}}', { version: confirmTarget.rev }))
                 setConfirmTarget(null)
                 await fetchHistory()
-                onRestored?.(response?.data?.rev)
+                onRestored?.(response.rev)
             } catch (err) {
                 console.error('Failed to restore page revision:', err)
                 toast.error(t('editor.version.restoreFailed', 'Failed to restore version'))
@@ -141,7 +119,7 @@ export const PageVersionHistory: React.FC<PageVersionHistoryProps> = ({
         } finally {
             setRestoring(false)
         }
-    }, [pageId, confirmTarget, restoring, saveNow, clientId, fetchHistory, onRestored, t])
+    }, [pageId, confirmTarget, restoring, saveNow, clientId, service, fetchHistory, onRestored, t])
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>

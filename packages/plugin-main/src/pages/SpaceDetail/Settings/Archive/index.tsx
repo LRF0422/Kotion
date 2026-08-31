@@ -7,13 +7,13 @@ import { Button } from "@kn/ui";
 import { toast } from "@kn/ui";
 import { Archive as ArchiveIcon, ArchiveRestore, Info, LoaderCircle, CheckCircle2 } from "@kn/icon";
 import React, { useContext, useState } from "react";
-import { useApi, useTranslation } from "@kn/common";
-import { APIS } from "../../../../api";
+import { useSpacePageService, useTranslation } from "@kn/common";
 import { SettingContext } from "..";
 
 
 export const Archive: React.FC = () => {
     const { t } = useTranslation()
+    const service = useSpacePageService()
     const { space, spaceId } = useContext(SettingContext)
 
     const [archived, setArchived] = useState<boolean>(!!space?.archived)
@@ -21,9 +21,10 @@ export const Archive: React.FC = () => {
     const [submitting, setSubmitting] = useState(false)
 
     const handleArchive = async () => {
+        if (!spaceId) return
         setSubmitting(true)
         try {
-            await useApi(APIS.ARCHIVE_SPACE, { id: spaceId })
+            await service.spaces.archiveSpace(spaceId)
             setArchived(true)
             setConfirmOpen(false)
             toast.success(t("space-settings.archive.success"), {
@@ -37,9 +38,10 @@ export const Archive: React.FC = () => {
     }
 
     const handleRestore = async () => {
+        if (!spaceId) return
         setSubmitting(true)
         try {
-            await useApi(APIS.UNARCHIVE_SPACE, { id: spaceId })
+            await service.spaces.unarchiveSpace(spaceId)
             setArchived(false)
             toast.success(t("space-settings.archive.restore_success"), {
                 icon: <CheckCircle2 className="h-4 w-4" />

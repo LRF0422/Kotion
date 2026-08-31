@@ -27,8 +27,6 @@
  *   pointerdown inside a window raises it above its siblings (click-to-focus).
  * - Auto-saves via the shared op-save session hook; a pending write is flushed
  *   before the lease is released on close.
- * - `onPageMutated` (see the bridge props) lets callers drop their own page
- *   caches when the window loads or persists content.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -41,75 +39,35 @@ import {
     toRev,
     useHostPresence,
     usePageSave,
-    keepaliveSend,
-    toSessionState,
     HOST_AWARENESS_FIELD,
     HOST_AWARENESS_HOST,
     type Editor,
-    type PageSaveEndpoints,
     type BlockStoreRead,
 } from "@kn/editor";
 import {
-    useApi,
     useNavigator,
     useSelector,
-    useService,
+    useSpacePageService,
     useTranslation,
     getAccessToken,
     getAppEnv,
     setPageEditWindowImpl,
-    type API,
     type GlobalState,
     type PageEditWindowProps,
+    type PageRecord,
 } from "@kn/common";
 import { ArrowUpRight, Check, CloudOff, FileText, LoaderCircle, Maximize2, Minus, Pencil, X } from "@kn/icon";
 import { cn, Button, FlatEmoji } from "@kn/ui";
 
-/** Op-based save endpoints — same contract as the main PageEditor's session writer. */
-const PAGE_DOC: API = {
-    url: '/knowledge-wiki/page/:id/doc',
-    method: 'GET',
-    name: 'Read page document',
-};
-const PAGE_APPLY_OPS: API = {
-    url: '/knowledge-wiki/page/:id/ops',
-    method: 'POST',
-    name: 'Apply page ops',
-};
-const PAGE_RECONCILE: API = {
-    url: '/knowledge-wiki/page/:id/reconcile',
-    method: 'POST',
-    name: 'Reconcile page',
-};
-const PAGE_SESSION_CLAIM: API = {
-    url: '/knowledge-wiki/page/:id/session/claim',
-    method: 'POST',
-    name: 'Claim page session',
-};
-const PAGE_SESSION_HEARTBEAT: API = {
-    url: '/knowledge-wiki/page/:id/session/heartbeat',
-    method: 'POST',
-    name: 'Heartbeat page session',
-};
-const PAGE_SESSION_RELEASE: API = {
-    url: '/knowledge-wiki/page/:id/session',
-    method: 'DELETE',
-    name: 'Release page session',
-};
-
-/** The page fields this window needs (matches spaceService.getPage's shape). */
-interface PageInfoLike {
-    id: string;
-    title: string;
+/** The page fields this window renders, with a narrowed icon shape for the header. */
+type PageInfoLike = Omit<PageRecord, "icon"> & {
     icon?: { type?: string; icon?: string };
-    spaceId: string;
-    /** JSON string of page content */
-    content?: string;
-}
+};
 
-interface SpaceServiceLike {
-    getPage: (pageId: string) => Promise<PageInfoLike | null | undefined>;
-}
+const mapPageRecord = (page: PageRecord): PageInfoLike => ({
+    ...page,
+    icon: page.icon as PageInfoLike["icon"],
+});
 
 // Local translation table bridged to the app's current language, so the
 // window works regardless of which i18n resources the host app registered.
@@ -241,12 +199,10 @@ const bindMinimizedResize = () => {
     minimizedResizeBound = true;
 };
 
-const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, onPageMutated }) => {
+const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose }) => {
     const t = useWindowI18n();
     const navigator = useNavigator();
-    // "spaceService" is added to the Services interface via module augmentation
-    // in the plugin layer, which core doesn't see — look it up untyped.
-    const spaceService = (useService as (name: string) => unknown)("spaceService") as SpaceServiceLike;
+    const service = useSpacePageService();
     const { userInfo } = useSelector((state: GlobalState) => state);
 
     const winRef = useRef<HTMLDivElement>(null);
@@ -268,11 +224,6 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, on
     const [closing, setClosing] = useState(false);
     // Geometry to hand back on restore, captured the moment we collapse.
     const restoreRectRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
-
-    // Keep the latest callback out of effect deps — cache invalidation must
-    // not retrigger page loads.
-    const onPageMutatedRef = useRef(onPageMutated);
-    onPageMutatedRef.current = onPageMutated;
 
     // Initial geometry: centered, sized to the viewport, cascaded by the number
     // of windows already open. Computed once — all later moves/resizes mutate
@@ -431,16 +382,35 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, on
     // ---- Load the target page (always fresh: editing needs latest content) ----
     useEffect(() => {
         let cancelled = false;
-        onPageMutatedRef.current?.(pageId);
-        spaceService.getPage(pageId)
-            .then((res) => {
+        service.pages.getPage(pageId)
+            .then((record) => {
                 if (cancelled) return;
-                if (res) setPage(res);
-                else setLoadError(true);
+                setPage(mapPageRecord(record));
+                service.changes.emit("page.updated", {
+                    page: record,
+                    spaceId: record.spaceId,
+                });
             })
             .catch(() => { if (!cancelled) setLoadError(true); });
         return () => { cancelled = true; };
-    }, [pageId, spaceService]);
+    }, [pageId, service]);
+
+    const metadataRequestRef = useRef(0);
+    useEffect(() => {
+        metadataRequestRef.current += 1;
+    }, [pageId]);
+
+    const refreshPageMetadata = useCallback(async () => {
+        const requestId = ++metadataRequestRef.current;
+        try {
+            const metadata = await service.pages.getPageMetadata(pageId);
+            if (requestId !== metadataRequestRef.current) return;
+            setPage((current) => current ? mapPageRecord({ ...current, ...metadata }) : current);
+        } catch {
+            // Saving the document succeeded; a metadata refresh failure must not
+            // turn the editor's save state into an error.
+        }
+    }, [pageId, service]);
 
     // ---- Collaboration provider (same room as the main editor for this page) ----
     useEffect(() => {
@@ -481,15 +451,19 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, on
         return () => clearTimeout(timer);
     }, [pageId]);
 
-    // ---- Content pre-processing (unescape like the main PageEditor) ----
-    const parsedContent = useMemo(() => {
-        if (!page?.content) return undefined;
+    // ---- Legacy fallback pre-processing ----
+    // PageRecord carries the old page-row content only as a migration fallback;
+    // the document store below remains authoritative.
+    const legacyContent = useMemo(() => {
+        const content = page?.legacyContent;
+        if (content == null) return undefined;
+        if (typeof content !== 'string') return content;
         try {
-            return JSON.parse((page.content as string).replaceAll("&lt;", "<").replaceAll("&gt;", ">"));
+            return JSON.parse(content.replaceAll("&lt;", "<").replaceAll("&gt;", ">"));
         } catch {
             return undefined;
         }
-    }, [page?.content]);
+    }, [page?.legacyContent]);
 
     // ---- Seed content: read from the block store, which is the authority ----
     // `undefined` while the read is in flight, `null` once it has failed.
@@ -498,25 +472,27 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, on
     useEffect(() => {
         setBlockDoc(undefined)
         let cancelled = false
-        useApi(PAGE_DOC, { id: pageId })
-            .then((res: any) => {
+        service.documents.getPageDocument(pageId)
+            .then((document) => {
                 if (cancelled) return
-                const data = res?.data
-                setBlockDoc({ doc: data?.doc ?? null, rev: toRev(data?.rev) })
+                setBlockDoc({
+                    doc: document.doc ?? document.content ?? null,
+                    rev: toRev(document.rev),
+                })
             })
             .catch(() => {
                 if (cancelled) return
                 setBlockDoc(null)
             })
         return () => { cancelled = true }
-    }, [pageId])
+    }, [pageId, service])
 
     // `null` means "not decided yet", holding the editor back from mounting so
     // the first reconcile cannot persist an unseeded document (see the main
     // PageEditor for the reasoning).
     const seed = useMemo(
-        () => (page ? chooseSeed(blockDoc, parsedContent) : null),
-        [blockDoc, page, parsedContent],
+        () => (page ? chooseSeed(blockDoc, legacyContent) : null),
+        [blockDoc, page, legacyContent],
     )
 
     // ---- Op-based auto-save, same session model as the main PageEditor ----
@@ -528,28 +504,6 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, on
 
     const { hostPresent, hostSeen } = useHostPresence(provider?.awareness as any)
 
-    const endpoints = useMemo<PageSaveEndpoints>(() => ({
-        claim: async (pid: string, cid: string) => toSessionState((await useApi(PAGE_SESSION_CLAIM, { id: pid }, { clientId: cid }) as any)?.data),
-        heartbeat: async (pid: string, cid: string) => toSessionState((await useApi(PAGE_SESSION_HEARTBEAT, { id: pid }, { clientId: cid }) as any)?.data),
-        release: (pid: string, cid: string) => {
-            void keepaliveSend(PAGE_SESSION_RELEASE.url, 'DELETE', pid, { clientId: cid })
-        },
-        applyOps: async (pid: string, req: any) => {
-            const res: any = await useApi(PAGE_APPLY_OPS, { id: pid }, req)
-            return res?.data ?? {}
-        },
-        reconcile: async (pid: string, req: any) => {
-            const res: any = await useApi(PAGE_RECONCILE, { id: pid }, req)
-            return res?.data ?? {}
-        },
-        fetchDoc: async (pid: string) => {
-            const res: any = await useApi(PAGE_DOC, { id: pid })
-            const data = res?.data
-            return { doc: data?.doc ?? null, rev: toRev(data?.rev) }
-        },
-        flush: (pid: string, req: any) => keepaliveSend(PAGE_APPLY_OPS.url, 'POST', pid, req),
-    }), [])
-
     const { saving, dirty, error: saveError, session, flushNow } = usePageSave({
         editor: editorInstance,
         pageId,
@@ -557,8 +511,10 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, on
         clientId,
         presence: { connected: connectionStatus === 'connected', hostPresent, hostSeen },
         reconcileOnly: syncTimedOut && !synced,
-        endpoints,
-        onSaved: () => onPageMutatedRef.current?.(pageId),
+        documents: service.documents,
+        onSaved: ({ titleChanged }) => {
+            if (titleChanged) void refreshPageMetadata();
+        },
     })
 
     // Declare the session role in awareness (same field/value as the main
@@ -586,10 +542,9 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, on
     // ---- Close / navigate ----
     // Flush anything still owed (the session's own unmount close does the
     // authoritative flush-then-release; this just gets it out earlier).
-    const flushAndNotify = useCallback(() => {
+    const flushPending = useCallback(() => {
         void flushNow?.()
-        onPageMutatedRef.current?.(pageId);
-    }, [flushNow, pageId]);
+    }, [flushNow]);
 
     // The parent owns our mount, so the exit animation runs here and onClose
     // fires once it finishes.
@@ -597,10 +552,10 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, on
 
     const handleClose = useCallback(() => {
         if (closing) return;
-        flushAndNotify();
+        flushPending();
         setClosing(true);
         closeTimer.current = window.setTimeout(onClose, CLOSE_ANIM_MS);
-    }, [closing, flushAndNotify, onClose]);
+    }, [closing, flushPending, onClose]);
 
     useEffect(() => () => {
         if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
@@ -611,10 +566,10 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, on
         if (!spaceId) return;
         // The route change replaces the whole view — animating out would only
         // delay the navigation.
-        flushAndNotify();
+        flushPending();
         onClose();
         navigator.go({ to: `/space-detail/${spaceId}/page/edit/${pageId}` });
-    }, [page?.spaceId, pageId, navigator, flushAndNotify, onClose]);
+    }, [page?.spaceId, pageId, navigator, flushPending, onClose]);
 
     // ---- Dragging (header) — mutate style directly, no re-renders ----
     const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
@@ -792,10 +747,20 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, on
                     </div>
                 ) : page && seed && (synced || syncTimedOut) ? (
                     <CollaborationEditor
-                        pageInfo={page}
+                        pageInfo={{
+                            id: page.id,
+                            spaceId: page.spaceId,
+                            parentId: page.parentId ?? undefined,
+                            title: page.title,
+                            createUser: page.createdById,
+                            updateUser: page.updatedById,
+                            createTime: page.createTime == null ? undefined : String(page.createTime),
+                            updateTime: page.updateTime == null ? undefined : String(page.updateTime),
+                        }}
                         ref={(ed: Editor | null) => setEditorInstance(ed)}
                         synced={synced}
                         provider={provider}
+                        pageDocuments={service.documents}
                         className="h-full"
                         id={pageId}
                         user={collaborationUser}

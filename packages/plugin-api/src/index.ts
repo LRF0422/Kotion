@@ -15,7 +15,7 @@
  * constant). Bump the MAJOR part on breaking contract changes; plugins built
  * against a different major version are skipped by the host at load time.
  */
-export const PLUGIN_API_VERSION = "1.0.0"
+export const PLUGIN_API_VERSION = "2.0.0"
 
 /**
  * Metadata a plugin bundle registers alongside its exports.
@@ -53,4 +53,35 @@ export type {
     DockPanelContext,
     DockPanelProps,
     DockPosition,
+    SpacePageService,
+    SpaceOperations,
+    PageOperations,
+    TemplateOperations,
+    MemberPermissionOperations,
+    CollaborationOperations,
+    ShareOperations,
+    CommentOperations,
+    TagOperations,
+    ActivityOperations,
+    RelationOperations,
+    PageHistoryOperations,
+    PageSessionOperations,
+    PageOperationOperations,
+    PageDocumentOperations,
+    SpaceId,
+    PageId,
+    BlockId,
+    UserId,
+    PagedResult,
+    Space,
+    UserSummary,
+    PageMetadata,
+    PageSummary,
+    PageTreeNode,
+    PageDocument,
+    PageDocumentSnapshot,
+    SpacePageChange,
+    SpacePageChangeStream,
+    CurrentPageContext,
+    PageNavigationBridge,
 } from "@kn/common"

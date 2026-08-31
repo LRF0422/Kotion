@@ -1,8 +1,5 @@
-import { APIS } from "../../../api";
 import { Tabs, TabsContent, TabsList, TabsTrigger, Skeleton, Card, CardContent } from "@kn/ui";
-import { useApi } from "@kn/common";
-import { Space } from "../../../model/Space";
-import { useSafeState } from "@kn/common";
+import { type Space, useSafeState, useSpacePageService } from "@kn/common";
 import React, { createContext, useEffect } from "react";
 import { useParams } from "@kn/common";
 import { Basic } from "./Basic";
@@ -19,21 +16,28 @@ export const SettingContext = createContext<{ space?: Space; spaceId?: string }>
 
 export const SpaceSettings: React.FC = () => {
 
-    const [space, setSpace] = useSafeState<any>()
+    const [space, setSpace] = useSafeState<Space>()
     const [loading, setLoading] = useSafeState(true)
     const params = useParams()
     const { t } = useTranslation()
+    const service = useSpacePageService()
 
     useEffect(() => {
+        if (!params.id) return
         setLoading(true)
-        useApi(APIS.SPACE_DETAIL, { id: params.id })
-            .then((res: any) => {
-                setSpace(res.data)
-            })
+        service.spaces.getSpace(params.id)
+            .then(setSpace)
             .finally(() => {
                 setLoading(false)
             })
-    }, [params.id])
+    }, [params.id, service, setLoading, setSpace])
+
+    useEffect(() => {
+        if (!params.id) return
+        return service.changes.subscribe("space.updated", ({ payload }) => {
+            if (payload.space?.id === params.id) setSpace(payload.space)
+        })
+    }, [params.id, service, setSpace])
 
     if (loading) {
         return <div className="h-screen bg-background">

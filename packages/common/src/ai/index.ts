@@ -14,8 +14,8 @@ export * from "./constants"
 // Tools (backend-only; editor-specific tools are in @kn/core)
 export * from "./tools"
 
-// Page bridge — page-level operations (search/create/open) for AI tools
-export * from "./page-bridge"
+// Active-page context and application-shell navigation
+export * from "./page-navigation-bridge"
 
 // Offscreen editor bridge — off-screen page editing sessions (engine in core)
 export * from "./offscreen-editor-bridge"

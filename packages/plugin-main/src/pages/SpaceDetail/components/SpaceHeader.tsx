@@ -1,7 +1,7 @@
 import React from 'react'
 import { IconButton, Input } from '@kn/ui'
 import { Search, StarIcon } from '@kn/icon'
-import { Space } from '../../../model/Space'
+import { Space } from '@kn/common'
 import { PageItemIcon } from './PageItemIcon'
 
 interface SpaceHeaderProps {

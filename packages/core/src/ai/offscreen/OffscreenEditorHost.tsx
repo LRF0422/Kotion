@@ -18,17 +18,19 @@ import {
     toRev,
     useHostPresence,
     usePageSave,
-    keepaliveSend,
-    toSessionState,
     HOST_AWARENESS_FIELD,
     HOST_AWARENESS_HOST,
     type Editor,
-    type PageSaveEndpoints,
     type BlockStoreRead,
 } from "@kn/editor"
-import { useApi, useSelector, getAccessToken, getAppEnv, type GlobalState } from "@kn/common"
-
-import { OFFSCREEN_APIS } from "./api"
+import {
+    useSelector,
+    useSpacePageService,
+    getAccessToken,
+    getAppEnv,
+    type GlobalState,
+    type PageRecord,
+} from "@kn/common"
 import { offscreenSessionManager } from "./session-manager"
 
 /**
@@ -47,8 +49,9 @@ const CURSOR_COLORS = [
 
 const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
     const { userInfo } = useSelector((state: GlobalState) => state)
+    const service = useSpacePageService()
 
-    const [page, setPage] = useState<any | null>(null)
+    const [page, setPage] = useState<PageRecord | null>(null)
     const [editorInstance, setEditorInstance] = useState<Editor | null>(null)
     const [contentReady, setContentReady] = useState(false)
     const [synced, setSynced] = useState(false)
@@ -61,13 +64,12 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
     // ---- Load the target page (always fresh: editing needs latest content) ----
     useEffect(() => {
         let cancelled = false
-        useApi(OFFSCREEN_APIS.GET_PAGE_CONTENT, { id: pageId })
-            .then((res: any) => {
+        service.pages.getPage(pageId)
+            .then((record) => {
                 if (cancelled) return
-                if (res?.data) setPage(res.data)
-                else offscreenSessionManager.markError(pageId, new Error('Failed to load page'))
+                setPage(record)
             })
-            .catch((err: any) => {
+            .catch((err: unknown) => {
                 if (cancelled) return
                 offscreenSessionManager.markError(
                     pageId,
@@ -75,7 +77,7 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
                 )
             })
         return () => { cancelled = true }
-    }, [pageId])
+    }, [pageId, service])
 
     // ---- Collaboration provider (same room as any visible editor of this page) ----
     useEffect(() => {
@@ -113,15 +115,17 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
         return () => clearTimeout(timer)
     }, [pageId])
 
-    // ---- Content pre-processing (unescape like the main PageEditor) ----
-    const parsedContent = useMemo(() => {
-        if (!page?.content) return undefined
+    // ---- Legacy fallback pre-processing ----
+    const legacyContent = useMemo(() => {
+        const content = page?.legacyContent
+        if (content == null) return undefined
+        if (typeof content !== 'string') return content
         try {
-            return JSON.parse((page.content as string).replaceAll("&lt;", "<").replaceAll("&gt;", ">"))
+            return JSON.parse(content.replaceAll("&lt;", "<").replaceAll("&gt;", ">"))
         } catch {
             return undefined
         }
-    }, [page?.content])
+    }, [page?.legacyContent])
 
     // ---- Seed content: read from the block store, which is the authority ----
     // `undefined` while the read is in flight, `null` once it has failed.
@@ -130,22 +134,24 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
     useEffect(() => {
         setBlockDoc(undefined)
         let cancelled = false
-        useApi(OFFSCREEN_APIS.PAGE_DOC, { id: pageId })
-            .then((res: any) => {
+        service.documents.getPageDocument(pageId)
+            .then((document) => {
                 if (cancelled) return
-                const data = res?.data
-                setBlockDoc({ doc: data?.doc ?? null, rev: toRev(data?.rev) })
+                setBlockDoc({
+                    doc: document.doc ?? document.content ?? null,
+                    rev: toRev(document.rev),
+                })
             })
             .catch(() => {
                 if (cancelled) return
                 setBlockDoc(null)
             })
         return () => { cancelled = true }
-    }, [pageId])
+    }, [pageId, service])
 
     const seed = useMemo(
-        () => (page ? chooseSeed(blockDoc, parsedContent) : null),
-        [blockDoc, page, parsedContent],
+        () => (page ? chooseSeed(blockDoc, legacyContent) : null),
+        [blockDoc, page, legacyContent],
     )
 
     // An untrusted seed means the block store could not be read: an AI edit made
@@ -170,28 +176,6 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
 
     const { hostPresent, hostSeen } = useHostPresence(provider?.awareness as any)
 
-    const endpoints = useMemo<PageSaveEndpoints>(() => ({
-        claim: async (pid: string, cid: string) => toSessionState((await useApi(OFFSCREEN_APIS.PAGE_SESSION_CLAIM, { id: pid }, { clientId: cid }) as any)?.data),
-        heartbeat: async (pid: string, cid: string) => toSessionState((await useApi(OFFSCREEN_APIS.PAGE_SESSION_HEARTBEAT, { id: pid }, { clientId: cid }) as any)?.data),
-        release: (pid: string, cid: string) => {
-            void keepaliveSend(OFFSCREEN_APIS.PAGE_SESSION_RELEASE.url, 'DELETE', pid, { clientId: cid })
-        },
-        applyOps: async (pid: string, req: any) => {
-            const res: any = await useApi(OFFSCREEN_APIS.PAGE_APPLY_OPS, { id: pid }, req)
-            return res?.data ?? {}
-        },
-        reconcile: async (pid: string, req: any) => {
-            const res: any = await useApi(OFFSCREEN_APIS.PAGE_RECONCILE, { id: pid }, req)
-            return res?.data ?? {}
-        },
-        fetchDoc: async (pid: string) => {
-            const res: any = await useApi(OFFSCREEN_APIS.PAGE_DOC, { id: pid })
-            const data = res?.data
-            return { doc: data?.doc ?? null, rev: toRev(data?.rev) }
-        },
-        flush: (pid: string, req: any) => keepaliveSend(OFFSCREEN_APIS.PAGE_APPLY_OPS.url, 'POST', pid, req),
-    }), [])
-
     const { session, flushNow } = usePageSave({
         editor: editorInstance,
         pageId,
@@ -199,7 +183,7 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
         clientId,
         presence: { connected: connectionStatus === 'connected', hostPresent, hostSeen },
         reconcileOnly: syncTimedOut && !synced,
-        endpoints,
+        documents: service.documents,
     })
 
     // Declare the session role in awareness (same field/value as the main
@@ -254,10 +238,20 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
     return (
         <div style={{ width: 800, height: 600, overflow: 'hidden' }}>
             <CollaborationEditor
-                pageInfo={page}
+                pageInfo={{
+                    id: page.id,
+                    spaceId: page.spaceId,
+                    parentId: page.parentId ?? undefined,
+                    title: page.title,
+                    createUser: page.createdById,
+                    updateUser: page.updatedById,
+                    createTime: page.createTime == null ? undefined : String(page.createTime),
+                    updateTime: page.updateTime == null ? undefined : String(page.updateTime),
+                }}
                 ref={(ed: Editor | null) => setEditorInstance(ed)}
                 synced={synced}
                 provider={provider}
+                pageDocuments={service.documents}
                 id={pageId}
                 user={collaborationUser}
                 token={getAccessToken() || ''}

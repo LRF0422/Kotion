@@ -2,7 +2,7 @@
  * PagePreviewPane — inline editor-rendered preview of a page.
  *
  * Embedded (non-popup) variant of the page preview: given a pageId it fetches
- * the page through usePageInfo (LRU-cached via spaceService.getPage) and
+ * the page through usePageInfo (LRU-cached via spacePageService.pages) and
  * renders cover + header + body. The body uses a real read-only Tiptap editor
  * so the preview matches actual page rendering (headings, lists, code blocks,
  * embeds…) instead of a plain-text excerpt.
@@ -26,6 +26,7 @@ import { FileText } from '@kn/icon';
 import { FileService, useOptionalService } from '@kn/common';
 import { usePageInfo } from '../../hooks';
 import { useI18n } from '../../i18n/use-i18n';
+import { getIconText } from '../../utils';
 
 /** Cover config persisted on the title node's attrs (see editor PageHeader). */
 interface CoverConfig {
@@ -40,10 +41,12 @@ interface CoverConfig {
  * the title, and the read-only editor uses the plain Document top node), but
  * its attrs carry the page cover, so it's read before filtering.
  */
-const parsePage = (raw?: string): { body: Content | null; cover: CoverConfig | null } => {
+const parsePage = (raw?: unknown): { body: Content | null; cover: CoverConfig | null } => {
     if (!raw) return { body: null, cover: null };
     try {
-        const doc = JSON.parse(raw.replaceAll('&lt;', '<').replaceAll('&gt;', '>'));
+        const doc = typeof raw === 'string'
+            ? JSON.parse(raw.replaceAll('&lt;', '<').replaceAll('&gt;', '>'))
+            : raw;
         const nodes: any[] = Array.isArray(doc?.content) ? doc.content : [];
         const title = nodes.find((n) => n?.type === 'title');
         const cover = title?.attrs?.cover?.url ? (title.attrs.cover as CoverConfig) : null;
@@ -103,8 +106,11 @@ export const PagePreviewPane: React.FC<PagePreviewPaneProps> = ({ pageId, classN
     const fileService = useOptionalService('fileService') as FileService | undefined;
     const { pageInfo, loading, error } = usePageInfo(pageId);
 
-    const { body, cover } = useMemo(() => parsePage(pageInfo?.content), [pageInfo?.content]);
-    const icon = pageInfo?.icon?.icon || null;
+    const { body, cover } = useMemo(
+        () => parsePage(pageInfo?.legacyContent),
+        [pageInfo?.legacyContent]
+    );
+    const icon = getIconText(pageInfo?.icon);
 
     // Same URL resolution chain as the editor's PageHeader: absolute/data URLs
     // pass through, stored file names go through fileService's download endpoint.
@@ -142,11 +148,6 @@ export const PagePreviewPane: React.FC<PagePreviewPaneProps> = ({ pageId, classN
                 <span className="min-w-0 flex-1 truncate text-[13px] font-medium">
                     {pageInfo?.title || t('bidirectionalLink.untitled')}
                 </span>
-                {pageInfo?.spaceName && (
-                    <span className="max-w-[110px] shrink-0 truncate text-[11px] text-muted-foreground">
-                        {pageInfo.spaceName}
-                    </span>
-                )}
             </div>
             {/* Body: read-only editor clamped in height with a bottom fade */}
             <div className="relative min-h-0 flex-1 overflow-hidden px-4 py-3">

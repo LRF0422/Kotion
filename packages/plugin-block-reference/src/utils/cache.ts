@@ -4,7 +4,7 @@
  */
 
 import { CACHE_TTL, CACHE_MAX_SIZE } from '../constants';
-import type { BlockInfo, PageInfo } from '../types';
+import type { BlockSummary, PageRecord } from '@kn/common';
 
 interface CacheItem<T> {
     value: T;
@@ -111,8 +111,8 @@ export class LRUCache<T> {
 }
 
 // Singleton cache instances for block and page data
-export const blockCache = new LRUCache<BlockInfo>(CACHE_MAX_SIZE, CACHE_TTL);
-export const pageCache = new LRUCache<PageInfo>(CACHE_MAX_SIZE, CACHE_TTL);
+export const blockCache = new LRUCache<BlockSummary>(CACHE_MAX_SIZE, CACHE_TTL);
+export const pageCache = new LRUCache<PageRecord>(CACHE_MAX_SIZE, CACHE_TTL);
 
 /**
  * Clear all plugin caches

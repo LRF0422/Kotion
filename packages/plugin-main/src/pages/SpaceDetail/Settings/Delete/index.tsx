@@ -7,22 +7,23 @@ import { Button } from "@kn/ui"
 import { toast } from "@kn/ui"
 import { Trash2, AlertTriangle, LoaderCircle } from "@kn/icon"
 import React, { useContext, useState } from "react"
-import { useApi, useNavigator, useTranslation } from "@kn/common"
-import { APIS } from "../../../../api"
+import { useNavigator, useSpacePageService, useTranslation } from "@kn/common"
 import { SettingContext } from ".."
 
 export const Delete: React.FC = () => {
     const { t } = useTranslation()
     const { space, spaceId } = useContext(SettingContext)
     const navigator = useNavigator()
+    const service = useSpacePageService()
 
     const [confirmOpen, setConfirmOpen] = useState(false)
     const [submitting, setSubmitting] = useState(false)
 
     const handleDelete = async () => {
+        if (!spaceId) return
         setSubmitting(true)
         try {
-            await useApi(APIS.DELETE_SPACE, { id: spaceId })
+            await service.spaces.deleteSpace(spaceId)
             toast.success(t("space-settings.delete.success", { name: space?.name }))
             navigator.go({ to: "/spaces" })
         } catch (error) {

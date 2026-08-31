@@ -38,7 +38,7 @@ import {
     useEditorAgent,
     useCapabilityProviders,
     buildAgentRunInputs,
-    getPageBridge,
+    getPageNavigationBridge,
     type AgentChatMessage,
 } from '@kn/common'
 import { SubAgentTree } from './SubAgentTree'
@@ -118,7 +118,7 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
     // tools[] 常驻；技能自带的工具随 skills[] 下发，首次调用前不展开参数结构。
     const { tools: toolSpecs, skills } = useMemo(() => buildAgentRunInputs(catalog), [catalog])
     const resolveTools = useCallback(() => allTools, [allTools])
-    const currentPage = getPageBridge()?.getCurrentPage()
+    const currentPage = getPageNavigationBridge()?.getCurrentPage()
 
     const agent = useEditorAgent({
         conversationId,

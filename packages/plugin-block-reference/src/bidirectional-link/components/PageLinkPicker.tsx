@@ -21,16 +21,15 @@ import React, {
 import { ScrollArea, cn, Skeleton } from '@kn/ui';
 import { FileText, FilePlus2, Loader2 } from '@kn/icon';
 import { PageContext, type SuggestionProps } from '@kn/editor';
-import { event } from '@kn/common';
-import { searchPages, PageTreeNode } from '../services/linkService';
-import { useSpaceService } from '../../hooks';
+import { useSpacePageService } from '@kn/common';
+import type { PageSummary } from '@kn/common';
 import { useI18n } from '../../i18n/use-i18n';
 import { PagePreviewPane } from './PagePreviewPane';
 import type { LinkSuggestionListHandle, LinkSuggestionCommandProps } from '../extensions/LinkTrigger';
 
 /** Page item — matches the slash menu's item look (icon chip + hover shift). */
 const PageItem = React.memo<{
-    page: PageTreeNode;
+    page: PageSummary;
     index: number;
     isSelected: boolean;
     onSelect: () => void;
@@ -60,7 +59,7 @@ const PageItem = React.memo<{
             <FileText className="h-4 w-4" />
         </span>
         <div className="min-w-0 flex-1">
-            <div className="truncate text-sm">{page.name || untitledLabel}</div>
+            <div className="truncate text-sm">{page.title || untitledLabel}</div>
             {page.spaceName && (
                 <div className="truncate text-xs text-muted-foreground">{page.spaceName}</div>
             )}
@@ -87,10 +86,10 @@ type PickerProps = SuggestionProps<unknown, LinkSuggestionCommandProps>;
 export const PageLinkPicker = forwardRef<LinkSuggestionListHandle, PickerProps>(
     ({ query, command }, ref) => {
         const pageCtx = useContext(PageContext);
-        const spaceService = useSpaceService();
+        const service = useSpacePageService();
         const { t } = useI18n();
 
-        const [pages, setPages] = useState<PageTreeNode[]>([]);
+        const [pages, setPages] = useState<PageSummary[]>([]);
         const [loading, setLoading] = useState(true);
         const [creating, setCreating] = useState(false);
         const [selectedIndex, setSelectedIndex] = useState(0);
@@ -103,15 +102,16 @@ export const PageLinkPicker = forwardRef<LinkSuggestionListHandle, PickerProps>(
         useEffect(() => {
             setLoading(true);
             const timer = setTimeout(() => {
-                searchPages(query)
+                service.pages.queryPages({ searchValue: query.trim() || undefined, pageSize: 50 })
                     .then((data) => {
-                        setPages(data);
+                        setPages(data.records);
                         setSelectedIndex(0);
                     })
+                    .catch(() => setPages([]))
                     .finally(() => setLoading(false));
             }, 250);
             return () => clearTimeout(timer);
-        }, [query]);
+        }, [query, service]);
 
         // The trailing "create page" action only appears with a non-empty query.
         const showCreate = query.trim().length > 0;
@@ -140,18 +140,17 @@ export const PageLinkPicker = forwardRef<LinkSuggestionListHandle, PickerProps>(
             if (!title || creating || !pageCtx.spaceId) return;
             setCreating(true);
             try {
-                const page = await spaceService.createPage({
-                    spaceId: pageCtx.spaceId,
+                const page = await service.pages.createPage({
+                    spaceId: String(pageCtx.spaceId),
                     title,
                 });
-                event.emit("ON_PAGE_REFRESH");
-                command({ page: { id: page.id, title } });
+                command({ page: { id: String(page.id), title: page.title || title } });
             } catch {
                 // Keep the menu open so the user can retry or pick another page.
             } finally {
                 setCreating(false);
             }
-        }, [query, creating, pageCtx.spaceId, spaceService, command]);
+        }, [query, creating, pageCtx.spaceId, service, command]);
 
         const selectAt = useCallback((index: number) => {
             if (index === createIndex && showCreate) {
@@ -160,7 +159,7 @@ export const PageLinkPicker = forwardRef<LinkSuggestionListHandle, PickerProps>(
             }
             const page = pages[index];
             if (page) {
-                command({ page: { id: page.id, title: page.name || t('bidirectionalLink.untitled') } });
+                command({ page: { id: String(page.id), title: page.title || t('bidirectionalLink.untitled') } });
             }
         }, [pages, createIndex, showCreate, handleCreate, command, t]);
 

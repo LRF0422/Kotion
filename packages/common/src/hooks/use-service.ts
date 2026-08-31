@@ -15,8 +15,8 @@ import { useContext, useEffect, useState, useCallback } from "react";
  *
  * @example
  * ```typescript
- * // Returns SpaceService type automatically
- * const spaceService = useService("spaceService");
+ * // Returns SpacePageService type automatically
+ * const spacePageService = useService("spacePageService");
  *
  * // Returns FileService type automatically
  * const fileService = useService("fileService");

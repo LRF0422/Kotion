@@ -16,12 +16,6 @@ export interface PageEditWindowProps {
     /** Page to open in the floating editor window. */
     pageId: string;
     onClose: () => void;
-    /**
-     * Invoked whenever the window may have changed the page's persisted
-     * content (on load, after each save, on close) so callers can invalidate
-     * their own caches of that page.
-     */
-    onPageMutated?: (pageId: string) => void;
 }
 
 let impl: React.ComponentType<PageEditWindowProps> | null = null;

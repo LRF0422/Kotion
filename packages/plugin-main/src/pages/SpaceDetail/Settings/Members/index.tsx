@@ -8,22 +8,34 @@ import {
     DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger
 } from "@kn/ui";
 import { Crown, LogOut, Mail, MoreHorizontal, Search, Shield, UserMinus, UserPlus, Users, X } from "@kn/icon";
-import { useApi, useTranslation, useSafeState, useDebounce, useNavigator, useSelector, GlobalState } from "@kn/common";
-import { APIS } from "../../../../api";
-import { SpaceMember, MemberRole, PendingInvitation, canManageMembers } from "../../../../model/Space";
+import {
+    canManageMembers,
+    GlobalState,
+    type MemberRole,
+    type PendingInvitation,
+    type SpaceMember,
+    type UserSummary,
+    useDebounce,
+    useNavigator,
+    useSafeState,
+    useSelector,
+    useSpacePageService,
+    useTranslation,
+} from "@kn/common";
 import { SettingContext } from "../index";
 
 export const Members: React.FC = () => {
     const { t } = useTranslation()
     const { spaceId } = useContext(SettingContext)
     const navigator = useNavigator()
+    const service = useSpacePageService()
     const { userInfo } = useSelector((state: GlobalState) => state)
 
     const [members, setMembers] = useSafeState<SpaceMember[]>([])
     const [loading, setLoading] = useSafeState(true)
     const [inviteOpen, setInviteOpen] = useState(false)
     const [searchKeyword, setSearchKeyword] = useState('')
-    const [searchResults, setSearchResults] = useState<any[]>([])
+    const [searchResults, setSearchResults] = useState<UserSummary[]>([])
     const [searching, setSearching] = useState(false)
     const [selectedRole, setSelectedRole] = useState<MemberRole>('MEMBER')
 
@@ -55,14 +67,14 @@ export const Members: React.FC = () => {
     const fetchMembers = useCallback(() => {
         if (!spaceId) return
         setLoading(true)
-        useApi(APIS.LIST_SPACE_MEMBERS, { spaceId })
-            .then(res => setMembers(res.data || []))
+        service.members.listSpaceMembers(spaceId)
+            .then(setMembers)
             .catch(() => {
                 toast.error(t('members.fetchError', 'Failed to load members'))
                 setMembers([])
             })
             .finally(() => setLoading(false))
-    }, [spaceId, t])
+    }, [service, spaceId, t])
 
     useEffect(() => { fetchMembers() }, [fetchMembers])
 
@@ -70,13 +82,28 @@ export const Members: React.FC = () => {
     const fetchPending = useCallback(() => {
         if (!spaceId || !canManage) return
         setLoadingPending(true)
-        useApi(APIS.LIST_PENDING_INVITATIONS, { spaceId })
-            .then(res => setPending(res.data || []))
+        service.members.listPendingInvitations(spaceId)
+            .then(setPending)
             .catch(() => setPending([]))
             .finally(() => setLoadingPending(false))
-    }, [spaceId, canManage])
+    }, [service, spaceId, canManage])
 
     useEffect(() => { fetchPending() }, [fetchPending])
+
+    useEffect(() => {
+        if (!spaceId) return
+        return service.changes.subscribe('space.members.changed', change => {
+            if (change.payload.spaceId !== spaceId) return
+            if (canManage) fetchPending()
+        })
+    }, [service, spaceId, canManage, fetchMembers, fetchPending])
+
+    useEffect(() => {
+        if (!spaceId || !canManage) return
+        return service.changes.subscribe('collaboration.changed', change => {
+            if (change.payload.spaceId === spaceId) fetchPending()
+        })
+    }, [service, spaceId, canManage, fetchPending])
 
     // Search users for invitation
     useEffect(() => {
@@ -85,17 +112,17 @@ export const Members: React.FC = () => {
             return
         }
         setSearching(true)
-        useApi(APIS.SEARCH_USERS, { keyword: debouncedKeyword, pageSize: 5 })
-            .then(res => setSearchResults(res.data?.records || []))
+        service.members.searchUsers({ keyword: debouncedKeyword, pageSize: 5 })
+            .then(result => setSearchResults(result.records))
             .catch(() => setSearchResults([]))
             .finally(() => setSearching(false))
-    }, [debouncedKeyword])
+    }, [service, debouncedKeyword])
 
     // Invite a user
-    const handleInvite = useCallback(async (userId: string | number) => {
+    const handleInvite = useCallback(async (userId: string) => {
         if (!spaceId) return
         try {
-            await useApi(APIS.INVITE_SPACE_MEMBERS, { spaceId }, {
+            await service.members.inviteSpaceMembers({
                 spaceId,
                 userIds: [userId],
                 role: selectedRole
@@ -103,77 +130,72 @@ export const Members: React.FC = () => {
             toast.success(t('members.invited', 'Member invited successfully'))
             setSearchKeyword('')
             setSearchResults([])
-            fetchMembers()
         } catch {
             toast.error(t('members.inviteError', 'Failed to invite member'))
         }
-    }, [spaceId, selectedRole, fetchMembers, t])
+    }, [service, spaceId, selectedRole, t])
 
     // Update role
-    const handleUpdateRole = useCallback(async (userId: string | number, role: MemberRole) => {
+    const handleUpdateRole = useCallback(async (userId: string, role: MemberRole) => {
         if (!spaceId) return
         try {
-            await useApi(APIS.UPDATE_SPACE_MEMBER_ROLE, { spaceId }, { userId, role })
+            await service.members.updateSpaceMemberRole({ spaceId, userId, role })
             toast.success(t('members.roleUpdated', 'Role updated'))
-            fetchMembers()
         } catch {
             toast.error(t('members.roleError', 'Failed to update role'))
         }
-    }, [spaceId, fetchMembers, t])
+    }, [service, spaceId, t])
 
     // Remove member
-    const handleRemove = useCallback(async (userId: string | number) => {
+    const handleRemove = useCallback(async (userId: string) => {
         if (!spaceId) return
         try {
-            await useApi(APIS.REMOVE_SPACE_MEMBER, { spaceId, userId })
+            await service.members.removeSpaceMember(spaceId, userId)
             toast.success(t('members.removed', 'Member removed'))
-            fetchMembers()
         } catch {
             toast.error(t('members.removeError', 'Failed to remove member'))
         }
-    }, [spaceId, fetchMembers, t])
+    }, [service, spaceId, t])
 
     // Revoke a pending invitation
-    const handleRevoke = useCallback(async (invitationId: string | number) => {
+    const handleRevoke = useCallback(async (invitationId: string) => {
         if (!spaceId) return
         try {
-            await useApi(APIS.REVOKE_INVITATION, { spaceId, invitationId })
+            await service.members.revokeInvitation(spaceId, invitationId)
             toast.success(t('members.invitationRevoked', 'Invitation revoked'))
-            fetchPending()
         } catch {
             toast.error(t('members.revokeError', 'Failed to revoke invitation'))
         }
-    }, [spaceId, fetchPending, t])
+    }, [service, spaceId, t])
 
     // Transfer ownership (OWNER only, double confirm via dialog)
     const handleTransfer = useCallback(async () => {
         if (!spaceId || !transferTarget) return
         setTransferring(true)
         try {
-            await useApi(APIS.TRANSFER_SPACE_OWNERSHIP, { spaceId, newOwnerId: transferTarget.id })
+            await service.members.transferSpaceOwnership(spaceId, transferTarget.id)
             toast.success(t('members.transferred', 'Ownership transferred'))
             setTransferTarget(null)
-            fetchMembers()
         } catch {
             toast.error(t('members.transferError', 'Failed to transfer ownership'))
         } finally {
             setTransferring(false)
         }
-    }, [spaceId, transferTarget, fetchMembers, t])
+    }, [service, spaceId, transferTarget, t])
 
     // Leave space (non-OWNER)
     const handleLeave = useCallback(async () => {
         if (!spaceId) return
         setLeaving(true)
         try {
-            await useApi(APIS.LEAVE_SPACE, { spaceId })
+            await service.members.leaveSpace(spaceId)
             toast.success(t('members.left', 'You have left the space'))
             navigator.go({ to: '/all-spaces' })
         } catch {
             toast.error(t('members.leaveError', 'Failed to leave the space'))
             setLeaving(false)
         }
-    }, [spaceId, navigator, t])
+    }, [service, spaceId, navigator, t])
 
     // Apply search / role filters to the member list
     const filteredMembers = useMemo(() => {
@@ -277,25 +299,25 @@ export const Members: React.FC = () => {
                                                 ))}
                                             </div>
                                         )}
-                                        {!searching && searchResults.map((user: any) => {
-                                            const alreadyMember = members.some(m => String(m.id) === String(user.userId || user.id))
+                                        {!searching && searchResults.map(user => {
+                                            const alreadyMember = members.some(member => member.id === user.id)
                                             return (
-                                                <div key={user.userId || user.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/60">
+                                                <div key={user.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/60">
                                                     <Avatar className="h-8 w-8">
-                                                        <AvatarImage src={user.avatar} />
+                                                        <AvatarImage src={user.avatar || user.avatarUrl} />
                                                         <AvatarFallback className="text-xs">
-                                                            {(user.userName || user.name || '?').charAt(0).toUpperCase()}
+                                                            {(user.name || '?').charAt(0).toUpperCase()}
                                                         </AvatarFallback>
                                                     </Avatar>
                                                     <div className="flex-1 min-w-0">
-                                                        <p className="text-sm font-medium truncate">{user.userName || user.name}</p>
-                                                        <p className="text-xs text-muted-foreground truncate">{user.email || user.account}</p>
+                                                        <p className="text-sm font-medium truncate">{user.name}</p>
+                                                        <p className="text-xs text-muted-foreground truncate">{user.email}</p>
                                                     </div>
                                                     <Button
                                                         size="sm"
                                                         variant={alreadyMember ? "ghost" : "outline"}
                                                         disabled={alreadyMember}
-                                                        onClick={() => handleInvite(user.userId || user.id)}
+                                                        onClick={() => handleInvite(user.id)}
                                                         className="h-7 text-xs"
                                                     >
                                                         {alreadyMember ? t('members.joined', 'Joined') : t('members.add', 'Add')}
@@ -460,7 +482,7 @@ export const Members: React.FC = () => {
                     ) : (
                         <div className="border rounded-lg divide-y">
                             {pending.map(inv => (
-                                <div key={String(inv.id)} className="flex items-center gap-3 p-3">
+                                <div key={inv.id} className="flex items-center gap-3 p-3">
                                     <div className="p-2 rounded-md bg-muted">
                                         <Mail className="h-4 w-4 text-muted-foreground" />
                                     </div>

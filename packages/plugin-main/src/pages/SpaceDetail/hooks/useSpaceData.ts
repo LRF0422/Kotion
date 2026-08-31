@@ -1,7 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useApi, useService } from "@kn/common";
-import { APIS } from '../../../api';
-import { Space } from '../../../model/Space';
+import { type PageSummary, type PageTreeNode, type Space, type SpacePageTemplate, useSpacePageService } from "@kn/common";
 
 interface UseSpaceDataProps {
     spaceId: string | undefined;
@@ -10,10 +8,10 @@ interface UseSpaceDataProps {
 
 interface UseSpaceDataReturn {
     space: Space | undefined;
-    pageTree: any[];
-    favorites: any[];
-    trash: any[];
-    yourTemplates: any[];
+    pageTree: PageTreeNode[];
+    favorites: PageSummary[];
+    trash: PageSummary[];
+    yourTemplates: SpacePageTemplate[];
     loading: boolean;
     error: string | null;
     refreshPageTree: () => void;
@@ -27,25 +25,23 @@ interface UseSpaceDataReturn {
  */
 export const useSpaceData = ({ spaceId, searchValue }: UseSpaceDataProps): UseSpaceDataReturn => {
     const [space, setSpace] = useState<Space>();
-    const [pageTree, setPageTree] = useState<any[]>([]);
-    const [favorites, setFavorites] = useState<any[]>([]);
-    const [trash, setTrash] = useState<any[]>([]);
-    const [yourTemplates, setYourTemplates] = useState<any[]>([]);
+    const [pageTree, setPageTree] = useState<PageTreeNode[]>([]);
+    const [favorites, setFavorites] = useState<PageSummary[]>([]);
+    const [trash, setTrash] = useState<PageSummary[]>([]);
+    const [yourTemplates] = useState<SpacePageTemplate[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [pageTreeFlag, setPageTreeFlag] = useState(0);
     const [favoritesFlag, setFavoritesFlag] = useState(0);
     const [trashFlag, setTrashFlag] = useState(0);
+    const service = useSpacePageService();
 
-    const spaceService = useService('spaceService');
-
-    // Fetch space info
     useEffect(() => {
         if (!spaceId) return;
 
-        spaceService.getSpaceInfo(spaceId)
-            .then(res => {
-                setSpace(res);
+        service.spaces.getSpace(spaceId)
+            .then(result => {
+                setSpace(result);
                 setError(null);
             })
             .catch(err => {
@@ -53,72 +49,96 @@ export const useSpaceData = ({ spaceId, searchValue }: UseSpaceDataProps): UseSp
                 console.error('Error loading space:', err);
             });
 
-        return () => {
-            setSpace(undefined);
-        };
-    }, [spaceId]);
+        return () => setSpace(undefined);
+    }, [service, spaceId]);
 
-    // Fetch page tree with debounce
     useEffect(() => {
         if (!spaceId) return;
 
         const timeoutId = setTimeout(() => {
             setLoading(true);
-            spaceService.getPageTree(spaceId, searchValue)
-                .then(res => {
-                    setPageTree(res);
+            service.pages.getPageTree({ spaceId, searchValue })
+                .then(result => {
+                    setPageTree(result);
                     setError(null);
                 })
                 .catch(err => {
                     setError('Failed to load page tree');
                     console.error('Error loading page tree:', err);
                 })
-                .finally(() => {
-                    setLoading(false);
-                });
+                .finally(() => setLoading(false));
         }, 300);
 
         return () => clearTimeout(timeoutId);
-    }, [pageTreeFlag, searchValue, spaceId]);
+    }, [pageTreeFlag, searchValue, service, spaceId]);
 
-    // Fetch favorites
     useEffect(() => {
         if (!spaceId) return;
 
-        useApi(APIS.QUERY_FAVORITE, { scope: spaceId, pageSize: 5 })
-            .then(res => {
-                setFavorites(res.data);
+        service.pages.queryFavoritePages({ spaceId, pageSize: 5 })
+            .then(result => {
+                setFavorites(result.records);
                 setError(null);
             })
             .catch(err => {
                 console.error('Error loading favorites:', err);
             });
-    }, [favoritesFlag, spaceId]);
+    }, [favoritesFlag, service, spaceId]);
 
-    // Fetch trash
     useEffect(() => {
         if (!spaceId) return;
 
-        useApi(APIS.QUERY_PAGE, { spaceId, status: 'TRASH', pageSize: 20 })
-            .then(res => {
-                setTrash(res.data.records);
+        service.pages.queryPages({ spaceId, status: 'TRASH', pageSize: 20 })
+            .then(result => {
+                setTrash(result.records);
                 setError(null);
             })
             .catch(err => {
                 console.error('Error loading trash:', err);
             });
-    }, [trashFlag, spaceId]);
+    }, [trashFlag, service, spaceId]);
+
+    useEffect(() => {
+        if (!spaceId) return;
+        const matchesSpace = (changedSpaceId?: string) => !changedSpaceId || changedSpaceId === spaceId;
+        const unsubscribers = [
+            service.changes.subscribe('space.updated', ({ payload }) => {
+                if (payload.space?.id === spaceId) setSpace(payload.space);
+            }),
+            service.changes.subscribe('page.created', ({ payload }) => {
+                if (matchesSpace(payload.spaceId ?? payload.page.spaceId)) setPageTreeFlag(value => value + 1);
+            }),
+            service.changes.subscribe('page.updated', ({ payload }) => {
+                if (matchesSpace(payload.spaceId ?? payload.page.spaceId)) setPageTreeFlag(value => value + 1);
+            }),
+            service.changes.subscribe('page.moved', ({ payload }) => {
+                if (matchesSpace(payload.spaceId)) setPageTreeFlag(value => value + 1);
+            }),
+            service.changes.subscribe('page.trashed', () => {
+                setPageTreeFlag(value => value + 1);
+                setTrashFlag(value => value + 1);
+            }),
+            service.changes.subscribe('page.restoredFromTrash', () => {
+                setPageTreeFlag(value => value + 1);
+                setTrashFlag(value => value + 1);
+            }),
+            service.changes.subscribe('page.favorite.changed', ({ payload }) => {
+                if (matchesSpace(payload.spaceId)) setFavoritesFlag(value => value + 1);
+            }),
+        ];
+        return () => unsubscribers.forEach(unsubscribe => unsubscribe());
+    }, [service, spaceId]);
 
     const refreshPageTree = useCallback(() => {
-        setPageTreeFlag(f => f + 1);
+        setPageTreeFlag(flag => flag + 1);
     }, []);
 
     const refreshFavorites = useCallback(() => {
-        setFavoritesFlag(f => f + 1);
+        setFavoritesFlag(flag => flag + 1);
     }, []);
 
     const refreshTrash = useCallback(() => {
-        setTrashFlag(f => f + 1);
+        setTrashFlag(flag => flag + 1);
     }, []);
 
     return {

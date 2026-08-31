@@ -15,15 +15,19 @@ export interface PageIconData {
     config?: DateIconConfig
 }
 
+export const isPageIconData = (value: unknown): value is PageIconData =>
+    !!value && typeof value === 'object' && 'icon' in value && typeof value.icon === 'string'
+
 interface PageItemIconProps {
-    icon?: PageIconData | null
+    icon?: unknown
     /** 像素尺寸（宽=高），默认 14 */
     size?: number
     className?: string
 }
 
-export const PageItemIcon: React.FC<PageItemIconProps> = ({ icon, size = 14, className }) => {
+export const PageItemIcon: React.FC<PageItemIconProps> = ({ icon: value, size = 14, className }) => {
     const fileService = useOptionalService('fileService') as FileService | undefined
+    const icon = isPageIconData(value) ? value : undefined
 
     if (!icon?.icon) return null
 

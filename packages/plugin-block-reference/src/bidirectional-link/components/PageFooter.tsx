@@ -11,10 +11,9 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useNavigator, event } from "@kn/common";
+import { useNavigator, event, useSpacePageService } from "@kn/common";
 import { FileText, FileX2 } from "@kn/icon";
 import { cn } from "@kn/ui";
-import { useSpaceService } from "../../hooks";
 import { useI18n } from "../../i18n/use-i18n";
 import { PAGE_LINK_CLICK } from "../extensions/PageLink";
 
@@ -31,7 +30,7 @@ interface PendingLink {
 
 export const PageFooter: React.FC<{ editor?: any }> = () => {
     const navigator = useNavigator();
-    const spaceService = useSpaceService();
+    const service = useSpacePageService();
     const { t } = useI18n();
     const [pending, setPending] = useState<PendingLink | null>(null);
     const tooltipRef = useRef<HTMLDivElement>(null);
@@ -42,7 +41,7 @@ export const PageFooter: React.FC<{ editor?: any }> = () => {
     const jumpTo = useCallback(async (link: PendingLink) => {
         let spaceId: string | undefined;
         try {
-            const page = await spaceService.getPage(link.pageId);
+            const page = await service.pages.getPage(String(link.pageId));
             if (page?.spaceId) spaceId = String(page.spaceId);
         } catch {
             // Resolution failed — treat the target as deleted.
@@ -53,7 +52,7 @@ export const PageFooter: React.FC<{ editor?: any }> = () => {
         }
         setPending(null);
         navigator.go({ to: `/space-detail/${spaceId}/page/edit/${link.pageId}` });
-    }, [navigator, spaceService]);
+    }, [navigator, service]);
 
     // Clicking a legacy [[page link]] mark emits its position/title. A plain
     // click surfaces a confirmation tooltip; Cmd/Ctrl+Click or read-only clicks

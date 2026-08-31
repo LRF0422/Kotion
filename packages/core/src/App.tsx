@@ -30,10 +30,13 @@ import { PluginErrorBoundary } from "./components/PluginErrorBoundary";
 import ReactDOM from "react-dom";
 import { PLUGIN_API_VERSION } from "@kn/plugin-api";
 import { OrganizationInvitationAccept } from "./components/settings/OrganizationInvitationAccept";
+import { createSpacePageService } from "./domain/space-page";
 
 const { createBrowserRouter,
     createRoutesFromElements, Route, RouterProvider, Provider,
     AppContext, i18n, initReactI18next, LanguageDetector, event, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS, createRoot } = common;
+
+const spacePageService = createSpacePageService()
 
 const reslove = (config: common.RouteConfig) => {
     // Wrap each plugin route element with PluginErrorBoundary to isolate plugin errors
@@ -263,8 +266,17 @@ export interface AppProps {
     plugins?: Plugins,
 }
 
+let coreRuntimeRegistered = false
+const ensureCoreRuntimeRegistered = () => {
+    if (coreRuntimeRegistered) return
+    registerCoreToolFactories()
+    registerOffscreenEditorBridge()
+    registerPageEditWindow()
+    coreRuntimeRegistered = true
+}
 
 export const App: React.FC<AppProps> = (props) => {
+    ensureCoreRuntimeRegistered()
     const { plugins = [] } = props
     const [router, setRouter] = useSafeState<any>()
     const { usePath } = core.useUploadFile()
@@ -274,6 +286,7 @@ export const App: React.FC<AppProps> = (props) => {
         resolveUrl: (resourcePath: string) => usePath(resourcePath)
             .replace('/oss/endpoint/download', '/oss/endpoint/public/plugin'),
         hostApiVersion: PLUGIN_API_VERSION,
+        coreServices: { spacePageService },
     }, plugins), [])
     const [pluginsReady, setPluginsReady] = useState(false)
     const [refreshFlag, setRefreshFlag] = useState(0)
@@ -282,21 +295,19 @@ export const App: React.FC<AppProps> = (props) => {
         if (window.location.pathname !== '/login') window.location.assign('/')
     }), [])
 
+    useEffect(() => {
+        const unbind = common.bindServiceRegistry(pluginManager.serviceRegistry)
+        return () => {
+            if (typeof unbind === 'function') unbind()
+        }
+    }, [pluginManager])
+
     // Wire up toast for the request module
     setRequestToast((msg, opts) => toast.error(msg))
 
     // Wire up session-expired dialog — shows a prompt instead of silently
     // redirecting to /login when the token expires
     setSessionExpiredHandler(showSessionExpiredDialog)
-
-    // Register core AI tool factories so plugins can use them via @kn/common
-    registerCoreToolFactories()
-
-    // Register the off-screen page editing engine (Chat @-page sessions)
-    registerOffscreenEditorBridge()
-
-    // Publish the floating page-edit window through @kn/common's bridge
-    registerPageEditWindow()
 
     // Listen for plugin events to update routes
     useEffect(() => {

@@ -1,19 +1,16 @@
 import React, { useState } from 'react'
 import { Button, cn, Dialog, DialogContent, DialogHeader, DialogTitle } from '@kn/ui'
 import { Star, Trash2, ChevronDown, ChevronRight } from '@kn/icon'
-import { useTranslation, useApi } from '@kn/common'
-import { APIS } from '../../../api'
+import { type PageSummary, useSpacePageService, useTranslation } from '@kn/common'
 import { PageItemIcon } from './PageItemIcon'
 
-interface FavoriteItem {
-    id: string
-    title: string
-    icon?: { type?: string; icon: string }
-}
+const getPageIcon = (page: PageSummary) =>
+    page.icon && typeof page.icon === 'object' && 'icon' in page.icon
+        ? page.icon as { type?: string; icon: string }
+        : undefined
 
 interface FavoritesSectionProps {
-    favorites: FavoriteItem[]
-    allFavorites?: FavoriteItem[]
+    favorites: PageSummary[]
     spaceId: string
     onPageClick: (pageId: string) => void
     onRemoveFavorite: (pageId: string) => void
@@ -31,17 +28,18 @@ export const FavoritesSection: React.FC<FavoritesSectionProps> = ({
     className,
 }) => {
     const { t } = useTranslation()
+    const service = useSpacePageService()
     const [collapsed, setCollapsed] = useState(false)
     const [dialogOpen, setDialogOpen] = useState(false)
-    const [allFavs, setAllFavs] = useState<FavoriteItem[]>([])
+    const [allFavs, setAllFavs] = useState<PageSummary[]>([])
     const [loadingAll, setLoadingAll] = useState(false)
 
     const handleViewAll = () => {
         setDialogOpen(true)
         setLoadingAll(true)
-        useApi(APIS.QUERY_FAVORITE, { scope: spaceId, pageSize: 100 })
-            .then((res) => {
-                setAllFavs(res.data || [])
+        service.pages.queryFavoritePages({ spaceId, pageSize: 100 })
+            .then((result) => {
+                setAllFavs(result.records)
             })
             .catch(() => {
                 setAllFavs(favorites)
@@ -90,8 +88,8 @@ export const FavoritesSection: React.FC<FavoritesSectionProps> = ({
                                 className="flex items-center gap-2 px-3 py-1.5 rounded-md text-xs sm:text-sm hover:bg-muted transition-colors cursor-pointer group relative"
                                 onClick={() => onPageClick(item.id)}
                             >
-                                {item.icon?.icon && (
-                                    <PageItemIcon icon={item.icon} />
+                                {getPageIcon(item)?.icon && (
+                                    <PageItemIcon icon={getPageIcon(item)!} />
                                 )}
                                 <span className="flex-1 truncate">{item.title || 'Untitled'}</span>
                                 <Button
@@ -143,8 +141,8 @@ export const FavoritesSection: React.FC<FavoritesSectionProps> = ({
                                             setDialogOpen(false)
                                         }}
                                     >
-                                        {item.icon?.icon && (
-                                            <PageItemIcon icon={item.icon} size={16} />
+                                        {getPageIcon(item)?.icon && (
+                                            <PageItemIcon icon={getPageIcon(item)!} size={16} />
                                         )}
                                         <span className="flex-1 text-sm truncate">{item.title || 'Untitled'}</span>
                                         <Button

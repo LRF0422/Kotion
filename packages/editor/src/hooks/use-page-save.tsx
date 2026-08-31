@@ -1,32 +1,27 @@
 import { useCallback, useRef } from 'react'
 import type { Editor } from '@tiptap/core'
-import { getBearerHeader, request } from '@kn/common'
-import type { ApplyOpsRequest, ApplyOpsResult, PageDocResult, ReconcileRequest } from './use-op-save'
+import type {
+    ApplyOpsRequest,
+    ApplyOpsResult,
+    PageDocResult,
+    PageDocumentOperations,
+    PageSessionState,
+    ReconcileRequest,
+} from '@kn/common'
 import { useOpSave } from './use-op-save'
-import type { PageSessionState, UsePageSessionReturn } from './use-page-session'
+import type { UsePageSessionReturn } from './use-page-session'
 import { usePageSession } from './use-page-session'
-import { toRev } from './rev'
 
-/**
- * HTTP + keepalive endpoints a page writer needs. Injected rather than
- * imported so this hook stays in the editor package while URL and transport
- * policy (which backend, which token) stay with the caller.
- */
-export interface PageSaveEndpoints {
-    claim: (pageId: string, clientId: string) => Promise<PageSessionState>
-    heartbeat: (pageId: string, clientId: string) => Promise<PageSessionState>
-    /** Fire-and-forget lease release; must survive `pagehide`. */
-    release: (pageId: string, clientId: string) => void
-    applyOps: (pageId: string, request: ApplyOpsRequest) => Promise<ApplyOpsResult>
-    reconcile: (pageId: string, request: ReconcileRequest) => Promise<ApplyOpsResult>
-    fetchDoc: (pageId: string) => Promise<PageDocResult>
-    /**
-     * Keepalive transport for `pagehide`, where a normal async request is
-     * killed by the browser. Returning the request lets the closing sequence
-     * release the write lease only once the write has landed.
-     */
-    flush: (pageId: string, request: ApplyOpsRequest) => void | Promise<unknown>
-}
+type PageSaveDocumentOperations = Pick<
+    PageDocumentOperations,
+    | 'claimPageSession'
+    | 'heartbeatPageSession'
+    | 'releasePageSession'
+    | 'applyPageOperations'
+    | 'reconcilePageDocument'
+    | 'getPageDocument'
+    | 'flushPageOperations'
+>
 
 export interface PageSavedInfo {
     /** Whether the acknowledged write touched the `title` node. */
@@ -48,7 +43,7 @@ export interface UsePageSaveOptions {
      * never synced, so this client's anchors cannot be trusted.
      */
     reconcileOnly: boolean
-    endpoints: PageSaveEndpoints
+    documents: PageSaveDocumentOperations
     /** Called after every acknowledged write; see {@link PageSavedInfo}. */
     onSaved?: (info: PageSavedInfo) => void
 }
@@ -73,12 +68,12 @@ export interface UsePageSaveReturn {
  * should go through this rather than owning its own copy.
  */
 export function usePageSave(options: UsePageSaveOptions): UsePageSaveReturn {
-    const { editor, pageId, enabled, clientId, presence, reconcileOnly, endpoints, onSaved } = options
+    const { editor, pageId, enabled, clientId, presence, reconcileOnly, documents, onSaved } = options
 
-    // Read at call time rather than captured, so the caller can hand in fresh
-    // closures (and stable ones) without this hook re-subscribing.
-    const endpointsRef = useRef(endpoints)
-    endpointsRef.current = endpoints
+    // Read at call time rather than captured, so the caller can hand in a fresh
+    // service capability (or a stable one) without this hook re-subscribing.
+    const documentsRef = useRef(documents)
+    documentsRef.current = documents
     const onSavedRef = useRef(onSaved)
     onSavedRef.current = onSaved
 
@@ -90,19 +85,20 @@ export function usePageSave(options: UsePageSaveOptions): UsePageSaveReturn {
 
     const handleClaim = useCallback(async (cid: string): Promise<PageSessionState> => {
         if (!pageId) throw new Error('No pageId')
-        return endpointsRef.current.claim(pageId, cid)
+        return documentsRef.current.claimPageSession({ pageId, clientId: cid })
     }, [pageId])
 
     const handleHeartbeat = useCallback(async (cid: string): Promise<PageSessionState> => {
         if (!pageId) throw new Error('No pageId')
-        return endpointsRef.current.heartbeat(pageId, cid)
+        return documentsRef.current.heartbeatPageSession({ pageId, clientId: cid })
     }, [pageId])
 
     // Sent from `pagehide` as well as unmount, so it has to survive the page
     // being dismissed — hence keepalive rather than the normal request path.
     const handleRelease = useCallback((cid: string) => {
         if (!pageId) return
-        endpointsRef.current.release(pageId, cid)
+        void Promise.resolve(documentsRef.current.releasePageSession({ pageId, clientId: cid }))
+            .catch(() => { /* best effort: the lease also expires by TTL */ })
     }, [pageId])
 
     // The final save has to land before the lease goes back, or the server
@@ -151,7 +147,7 @@ export function usePageSave(options: UsePageSaveOptions): UsePageSaveReturn {
 
     const handleApplyOps = useCallback(async (req: ApplyOpsRequest): Promise<ApplyOpsResult> => {
         if (!pageId) throw new Error('No pageId')
-        const data = await endpointsRef.current.applyOps(pageId, req)
+        const data = await documentsRef.current.applyPageOperations(pageId, req)
         assertApplied(data, editor)
         // The title lives in a block like any other, so a title edit is just an
         // op whose node happens to be of type `title`. Only claim "saved" when
@@ -162,7 +158,7 @@ export function usePageSave(options: UsePageSaveOptions): UsePageSaveReturn {
 
     const handleReconcile = useCallback(async (req: ReconcileRequest): Promise<ApplyOpsResult> => {
         if (!pageId) throw new Error('No pageId')
-        const data = await endpointsRef.current.reconcile(pageId, req)
+        const data = await documentsRef.current.reconcilePageDocument(pageId, req)
         assertApplied(data, editor)
         // A reconcile always carries the title, so "did the title change" is only
         // answerable by whether the server found anything to do at all. The first
@@ -178,13 +174,13 @@ export function usePageSave(options: UsePageSaveOptions): UsePageSaveReturn {
     // spinner on the sidebar every heartbeat.
     const handleFetchDoc = useCallback(async (): Promise<PageDocResult> => {
         if (!pageId) throw new Error('No pageId')
-        return endpointsRef.current.fetchDoc(pageId)
+        return documentsRef.current.getPageDocument(pageId)
     }, [pageId])
 
     const handleFlush = useCallback((req: ApplyOpsRequest) => {
         if (!pageId) return
         // Returned rather than discarded so the closing session can wait for it.
-        return endpointsRef.current.flush(pageId, req)
+        return documentsRef.current.flushPageOperations(pageId, req)
     }, [pageId])
 
     const save = useOpSave({
@@ -203,44 +199,4 @@ export function usePageSave(options: UsePageSaveOptions): UsePageSaveReturn {
     flushNowRef.current = save.flushNow
 
     return { ...save, session }
-}
-
-/** Read a `PageSessionVO` off the response envelope, defaulting to "no session". */
-export function toSessionState(data: any): PageSessionState {
-    const role = data?.role
-    return {
-        role: role === 'HOST' || role === 'COLLABORATOR' ? role : 'NONE',
-        alive: !!data?.alive,
-        hostUserId: data?.hostUserId ?? null,
-        hostName: data?.hostName ?? null,
-        hostSelf: !!data?.hostSelf,
-        rev: toRev(data?.rev),
-    }
-}
-
-/**
- * Fire-and-forget request that survives the page being dismissed.
- *
- * `pagehide` kills normal async requests, so the last save of a session and the
- * lease release both have to go out this way. Bodies are capped around 64KB;
- * oversized ones fall back to a normal request, which is a genuine best effort
- * rather than a guarantee.
- */
-export function keepaliveSend(template: string, method: string, pageId: string, body: unknown): Promise<unknown> {
-    const payload = JSON.stringify(body)
-    const base = (request as any)?.defaults?.baseURL ?? '/api'
-    const url = base + template.replace(':id', pageId)
-    if (payload.length > 60_000) {
-        return fetch(url, {
-            method,
-            headers: { 'Content-Type': 'application/json', ...getBearerHeader() },
-            body: payload,
-        }).catch(() => { /* best effort — page is going away */ })
-    }
-    return fetch(url, {
-        method,
-        keepalive: true,
-        headers: { 'Content-Type': 'application/json', ...getBearerHeader() },
-        body: payload,
-    }).catch(() => { /* best effort — page is going away */ })
 }

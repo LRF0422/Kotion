@@ -1,4 +1,3 @@
-import { APIS } from "../../../api";
 import { Avatar, AvatarFallback, AvatarImage } from "@kn/ui";
 import { Badge } from "@kn/ui";
 import { Button } from "@kn/ui";
@@ -7,27 +6,29 @@ import { Input } from "@kn/ui";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kn/ui";
 import { Separator } from "@kn/ui";
 import { Switch } from "@kn/ui";
-import { useApi, useSafeState, useDebounce } from "@kn/common";
+import {
+    type CreateCollaborationInvitationRequest,
+    type MemberRole,
+    type PageCollaborator,
+    type PagePermission,
+    type ShareLinkInfo,
+    type SpaceMember,
+    type UserSummary,
+    useDebounce,
+    useSafeState,
+    useSpacePageService,
+} from "@kn/common";
 import { Check, Copy, Globe, Link2, Loader2, Mail, RefreshCw, Search, Trash2, UserPlus, Users, X } from "@kn/icon";
 import React, { PropsWithChildren, useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useTranslation } from "@kn/common";
 import { toast } from "@kn/ui";
 import { cn } from "@kn/ui";
-import type { PagePermission, ShareLinkInfo, SpaceMember } from "../../../model/Space";
 
 // ==================== Types ====================
 
-interface CollaboratorUser {
-    id: string;
-    name: string;
-    email?: string;
-    avatar?: string;
-    permission?: PagePermission;
-}
-
 /** A pending invite entry in the unified input: a site user or a raw email */
 type InviteTarget =
-    | { type: 'user'; user: CollaboratorUser }
+    | { type: 'user'; user: UserSummary }
     | { type: 'email'; email: string };
 
 interface SharePanelProps extends PropsWithChildren {
@@ -46,18 +47,25 @@ export const SharePanel: React.FC<SharePanelProps> = (props) => {
     const { pageTitle, onInviteSuccess, open: controlledOpen, onOpenChange } = props;
     const { t } = useTranslation();
     const params = useParams();
+    const service = useSpacePageService();
+    const spaceId = params.id ? String(params.id) : '';
+    const pageId = params.pageId ? String(params.pageId) : '';
     const [internalOpen, setInternalOpen] = useState(false);
     const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
     const setOpen = onOpenChange || setInternalOpen;
 
     // Permission options - derived from i18n
-    const PERMISSIONS = useMemo(() => [
+    const PERMISSIONS = useMemo<Array<{
+        value: PagePermission;
+        label: string;
+        description: string;
+    }>>(() => [
         { value: 'READ', label: t('collaboration.permission-view'), description: t('collaboration.permission-view-desc') },
         { value: 'WRITE', label: t('collaboration.permission-edit'), description: t('collaboration.permission-edit-desc') },
         { value: 'ADMIN', label: t('collaboration.permission-admin'), description: t('collaboration.permission-admin-desc') },
     ], [t]);
 
-    const ROLE_LABELS: Record<string, string> = useMemo(() => ({
+    const ROLE_LABELS: Record<MemberRole, string> = useMemo(() => ({
         OWNER: t('share.role-owner'),
         ADMIN: t('share.role-admin'),
         MEMBER: t('share.role-member'),
@@ -66,15 +74,15 @@ export const SharePanel: React.FC<SharePanelProps> = (props) => {
 
     // Unified invite input state
     const [query, setQuery] = useState('');
-    const [searchResults, setSearchResults] = useSafeState<CollaboratorUser[]>([]);
+    const [searchResults, setSearchResults] = useSafeState<UserSummary[]>([]);
     const [isSearching, setIsSearching] = useState(false);
     const [targets, setTargets] = useSafeState<InviteTarget[]>([]);
-    const [invitePermission, setInvitePermission] = useState<string>('WRITE');
+    const [invitePermission, setInvitePermission] = useState<PagePermission>('WRITE');
     const [isInviting, setIsInviting] = useState(false);
 
     // People with access
     const [members, setMembers] = useSafeState<SpaceMember[]>([]);
-    const [collaborators, setCollaborators] = useSafeState<CollaboratorUser[]>([]);
+    const [collaborators, setCollaborators] = useSafeState<PageCollaborator[]>([]);
     const [loadingAccess, setLoadingAccess] = useState(false);
 
     // Share link state
@@ -85,6 +93,55 @@ export const SharePanel: React.FC<SharePanelProps> = (props) => {
     const debouncedQuery = useDebounce(query, { wait: 300 });
     const isEmailQuery = EMAIL_RE.test(query.trim());
 
+    const searchUsers = useCallback(async (keyword: string) => {
+        setIsSearching(true);
+        try {
+            const result = await service.members.searchUsers({ keyword, pageSize: 10 });
+            setSearchResults(result.records);
+        } catch (error) {
+            console.error('Failed to search users:', error);
+            setSearchResults([]);
+        } finally {
+            setIsSearching(false);
+        }
+    }, [service]);
+
+    const loadAccessList = useCallback(async () => {
+        if (!spaceId || !pageId) return;
+        setLoadingAccess(true);
+        try {
+            const [spaceMembers, pageCollaborators] = await Promise.all([
+                service.members.listSpaceMembers(spaceId).catch(() => [] as SpaceMember[]),
+                service.collaboration.getPageCollaborators(pageId).catch(() => [] as PageCollaborator[]),
+            ]);
+            setMembers(spaceMembers);
+            const memberIds = new Set(spaceMembers.map(member => member.id));
+            // Page collaborators section shows explicit page-level grants only;
+            // members with GUEST role still appear here via their page grant
+            setCollaborators(pageCollaborators.filter(user => {
+                const member = spaceMembers.find(item => item.id === user.id);
+                return !member || member.role === 'GUEST' || !memberIds.has(user.id);
+            }));
+        } catch (error) {
+            console.error('Failed to load access list:', error);
+        } finally {
+            setLoadingAccess(false);
+        }
+    }, [service, spaceId, pageId]);
+
+    const loadShareLink = useCallback(async () => {
+        if (!pageId) return;
+        setLinkLoading(true);
+        try {
+            setShareLink(await service.shares.getPageShareLink(pageId));
+        } catch (error) {
+            console.error('Failed to load share link:', error);
+            setShareLink(null);
+        } finally {
+            setLinkLoading(false);
+        }
+    }, [service, pageId]);
+
     // Search site users when query changes (skip pure email input)
     useEffect(() => {
         if (debouncedQuery.length >= 2 && !EMAIL_RE.test(debouncedQuery.trim())) {
@@ -92,7 +149,7 @@ export const SharePanel: React.FC<SharePanelProps> = (props) => {
         } else {
             setSearchResults([]);
         }
-    }, [debouncedQuery]);
+    }, [debouncedQuery, searchUsers]);
 
     // Load access list + share link when panel opens
     useEffect(() => {
@@ -100,68 +157,28 @@ export const SharePanel: React.FC<SharePanelProps> = (props) => {
             loadAccessList();
             loadShareLink();
         }
-    }, [open]);
+    }, [open, loadAccessList, loadShareLink]);
 
-    const searchUsers = async (keyword: string) => {
-        setIsSearching(true);
-        try {
-            const res = await useApi(APIS.SEARCH_USERS, { keyword, pageSize: 10 });
-            const users = (res.data?.records || res.data || []).map((user: any) => ({
-                id: user.id,
-                name: user.name || user.username || user.nickName,
-                email: user.email,
-                avatar: user.avatar || user.avatarUrl,
-            }));
-            setSearchResults(users);
-        } catch (error) {
-            console.error('Failed to search users:', error);
-            setSearchResults([]);
-        } finally {
-            setIsSearching(false);
-        }
-    };
+    useEffect(() => {
+        if (!open || !spaceId) return;
+        return service.changes.subscribe('space.members.changed', change => {
+            if (change.payload.spaceId === spaceId) loadAccessList();
+        });
+    }, [service, open, spaceId, loadAccessList]);
 
-    const loadAccessList = async () => {
-        setLoadingAccess(true);
-        try {
-            const [memberRes, collabRes] = await Promise.all([
-                useApi(APIS.LIST_SPACE_MEMBERS, { spaceId: params.id }).catch(() => ({ data: [] })),
-                useApi(APIS.GET_PAGE_COLLABORATORS, { pageId: params.pageId }).catch(() => ({ data: [] })),
-            ]);
-            setMembers(memberRes.data || []);
-            const memberIds = new Set((memberRes.data || []).map((m: any) => String(m.id)));
-            const users = (collabRes.data || []).map((user: any) => ({
-                id: user.id,
-                name: user.name || user.username || user.nickName,
-                email: user.email,
-                avatar: user.avatar || user.avatarUrl,
-                permission: (user.permission || 'READ') as PagePermission,
-            }));
-            // Page collaborators section shows explicit page-level grants only;
-            // members with GUEST role still appear here via their page grant
-            setCollaborators(users.filter((u: CollaboratorUser) => {
-                const member = (memberRes.data || []).find((m: any) => String(m.id) === String(u.id));
-                return !member || member.role === 'GUEST' || !memberIds.has(String(u.id));
-            }));
-        } catch (error) {
-            console.error('Failed to load access list:', error);
-        } finally {
-            setLoadingAccess(false);
-        }
-    };
+    useEffect(() => {
+        if (!open || !pageId) return;
+        return service.changes.subscribe('page.permissions.changed', change => {
+            if (change.payload.pageId === pageId) loadAccessList();
+        });
+    }, [service, open, pageId, loadAccessList]);
 
-    const loadShareLink = async () => {
-        setLinkLoading(true);
-        try {
-            const res = await useApi(APIS.GET_PAGE_SHARE_LINK, { pageId: params.pageId });
-            setShareLink(res.data || null);
-        } catch (error) {
-            console.error('Failed to load share link:', error);
-            setShareLink(null);
-        } finally {
-            setLinkLoading(false);
-        }
-    };
+    useEffect(() => {
+        if (!open || !pageId) return;
+        return service.changes.subscribe('share.changed', change => {
+            if (change.payload.pageId === pageId) setShareLink(change.payload.share ?? null);
+        });
+    }, [service, open, pageId]);
 
     // ==================== Invite handlers ====================
 
@@ -182,22 +199,22 @@ export const SharePanel: React.FC<SharePanelProps> = (props) => {
     }, []);
 
     const handleInvite = async () => {
-        if (targets.length === 0) {
+        if (!spaceId || !pageId || targets.length === 0) {
             toast.error(t('share.invite-empty'));
             return;
         }
         setIsInviting(true);
         try {
-            const collaboratorIds = targets.filter(x => x.type === 'user').map(x => (x as any).user.id);
-            const collaboratorEmails = targets.filter(x => x.type === 'email').map(x => (x as any).email);
-            const param: any = {
-                spaceId: params.id,
-                pageId: params.pageId,
+            const collaboratorIds = targets.flatMap(target => target.type === 'user' ? [target.user.id] : []);
+            const collaboratorEmails = targets.flatMap(target => target.type === 'email' ? [target.email] : []);
+            const request: CreateCollaborationInvitationRequest = {
+                spaceId,
+                pageId,
                 permissions: [invitePermission],
+                ...(collaboratorIds.length > 0 ? { collaboratorIds } : {}),
+                ...(collaboratorEmails.length > 0 ? { collaboratorEmails } : {}),
             };
-            if (collaboratorIds.length > 0) param.collaboratorIds = collaboratorIds;
-            if (collaboratorEmails.length > 0) param.collaboratorEmails = collaboratorEmails;
-            await useApi(APIS.CREATE_INVITATION, null, param);
+            await service.collaboration.createInvitation(request);
             toast.success(t('share.invite-success', { count: targets.length }));
             setTargets([]);
             onInviteSuccess?.();
@@ -211,10 +228,10 @@ export const SharePanel: React.FC<SharePanelProps> = (props) => {
 
     // ==================== Collaborator handlers ====================
 
-    const handleUpdatePermission = async (userId: string, permission: string) => {
+    const handleUpdatePermission = async (userId: string, permission: PagePermission) => {
+        if (!pageId) return;
         try {
-            await useApi(APIS.UPDATE_COLLABORATOR_PERMISSION, { pageId: params.pageId, userId }, { permission });
-            setCollaborators(prev => prev.map(c => c.id === userId ? { ...c, permission: permission as PagePermission } : c));
+            await service.collaboration.updateCollaboratorPermission({ pageId, userId, permission });
             toast.success(t('collaboration.permission-updated'));
         } catch (error) {
             console.error('Failed to update permission:', error);
@@ -223,9 +240,9 @@ export const SharePanel: React.FC<SharePanelProps> = (props) => {
     };
 
     const handleRemoveCollaborator = async (userId: string) => {
+        if (!pageId) return;
         try {
-            await useApi(APIS.REMOVE_PAGE_COLLABORATOR, { pageId: params.pageId, userId });
-            setCollaborators(prev => prev.filter(c => c.id !== userId));
+            await service.collaboration.removePageCollaborator(pageId, userId);
             toast.success(t('collaboration.collaborator-removed'));
         } catch (error) {
             console.error('Failed to remove collaborator:', error);
@@ -236,13 +253,16 @@ export const SharePanel: React.FC<SharePanelProps> = (props) => {
     // ==================== Share link handlers ====================
 
     /** (Re)generate the share link — backend keeps one active link per page */
-    const generateLink = async (permission: string, expiresIn: number | null) => {
+    const generateLink = async (permission: PagePermission, expiresIn: number | null) => {
+        if (!pageId) return;
         setLinkLoading(true);
         try {
-            const body: any = { isPublic: true, permission };
-            if (expiresIn) body.expiresIn = expiresIn;
-            const res = await useApi(APIS.GENERATE_SHARE_LINK, { pageId: params.pageId }, body);
-            setShareLink(res.data || null);
+            await service.shares.generateShareLink({
+                pageId,
+                isPublic: true,
+                permission,
+                ...(expiresIn ? { expiresIn } : {}),
+            });
             toast.success(t('share.link-updated'));
         } catch (error) {
             console.error('Failed to generate share link:', error);
@@ -253,11 +273,10 @@ export const SharePanel: React.FC<SharePanelProps> = (props) => {
     };
 
     const disableLink = async () => {
-        if (!shareLink) return;
+        if (!pageId || !shareLink) return;
         setLinkLoading(true);
         try {
-            await useApi(APIS.DISABLE_SHARE_LINK, { pageId: params.pageId, shortCode: shareLink.shortCode });
-            setShareLink(null);
+            await service.shares.disableShareLink(pageId, shareLink.shortCode);
             toast.success(t('share.link-disabled'));
         } catch (error) {
             console.error('Failed to disable share link:', error);
@@ -327,7 +346,7 @@ export const SharePanel: React.FC<SharePanelProps> = (props) => {
                                 <Loader2 className="absolute right-2.5 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
                             )}
                         </div>
-                        <Select value={invitePermission} onValueChange={setInvitePermission}>
+                        <Select value={invitePermission} onValueChange={value => setInvitePermission(value as PagePermission)}>
                             <SelectTrigger className="w-[110px] shrink-0">
                                 <SelectValue />
                             </SelectTrigger>
@@ -421,7 +440,7 @@ export const SharePanel: React.FC<SharePanelProps> = (props) => {
                         <div className="space-y-1 max-h-[220px] overflow-y-auto">
                             {/* Space members — permission inherited from role, read-only here */}
                             {members.filter(m => m.role !== 'GUEST').map(member => (
-                                <div key={String(member.id)} className="flex items-center gap-2 rounded-md p-1.5">
+                                <div key={member.id} className="flex items-center gap-2 rounded-md p-1.5">
                                     <Avatar className="h-7 w-7">
                                         <AvatarImage src={member.avatar} />
                                         <AvatarFallback className="text-xs">{getUserInitials(member.name)}</AvatarFallback>
@@ -448,7 +467,7 @@ export const SharePanel: React.FC<SharePanelProps> = (props) => {
                                     </div>
                                     <Select
                                         value={user.permission}
-                                        onValueChange={(value) => handleUpdatePermission(user.id, value)}
+                                        onValueChange={(value) => handleUpdatePermission(user.id, value as PagePermission)}
                                     >
                                         <SelectTrigger className="w-[100px] h-7 text-xs">
                                             <SelectValue />
@@ -515,7 +534,7 @@ export const SharePanel: React.FC<SharePanelProps> = (props) => {
                                 {/* Link permission */}
                                 <Select
                                     value={shareLink.permission}
-                                    onValueChange={(value) => generateLink(value, currentExpiry === '0' ? null : Number(currentExpiry))}
+                                    onValueChange={(value) => generateLink(value as PagePermission, currentExpiry === '0' ? null : Number(currentExpiry))}
                                 >
                                     <SelectTrigger className="w-[130px] h-8 text-xs">
                                         <SelectValue />

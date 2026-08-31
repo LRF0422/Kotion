@@ -3,8 +3,7 @@ import {
     Badge, Button, Input, cn, toast
 } from "@kn/ui"
 import { Plus, X, Tag } from "@kn/icon"
-import { useApi, useTranslation, useSafeState } from "@kn/common"
-import { APIS } from "../../../api"
+import { useSpacePageService, useTranslation, useSafeState } from "@kn/common"
 
 interface PageTagsEditorProps {
     pageId: string
@@ -22,6 +21,7 @@ export const PageTagsEditor: React.FC<PageTagsEditorProps> = ({
     className
 }) => {
     const { t } = useTranslation()
+    const spacePageService = useSpacePageService()
     const [tags, setTags] = useSafeState<string[]>(initialTags)
     const [newTag, setNewTag] = useSafeState('')
     const [spaceTags, setSpaceTags] = useSafeState<string[]>([])
@@ -30,10 +30,10 @@ export const PageTagsEditor: React.FC<PageTagsEditorProps> = ({
 
     // Fetch space tags for suggestions
     useEffect(() => {
-        useApi(APIS.GET_SPACE_TAGS, { spaceId })
-            .then(res => setSpaceTags(res.data || []))
+        spacePageService.tags.getSpaceTags(spaceId)
+            .then(result => setSpaceTags(result.map(tag => typeof tag === 'string' ? tag : tag.name)))
             .catch(() => { })
-    }, [spaceId])
+    }, [spaceId, spacePageService])
 
     // Sync initial tags
     useEffect(() => {
@@ -42,13 +42,13 @@ export const PageTagsEditor: React.FC<PageTagsEditorProps> = ({
 
     const saveTags = useCallback(async (updatedTags: string[]) => {
         try {
-            await useApi(APIS.UPDATE_PAGE_TAGS, { pageId }, updatedTags)
+            await spacePageService.tags.updatePageTags({ pageId, tags: updatedTags })
             setTags(updatedTags)
             onTagsChange?.(updatedTags)
         } catch {
             toast.error(t('tags.saveError', 'Failed to save tags'))
         }
-    }, [pageId, onTagsChange])
+    }, [pageId, onTagsChange, spacePageService, t])
 
     const handleAddTag = useCallback(() => {
         const tag = newTag.trim()

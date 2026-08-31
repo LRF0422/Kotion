@@ -1,7 +1,7 @@
 import React from 'react'
 import { Alert, AlertDescription, cn } from '@kn/ui'
 import { AlertCircle } from '@kn/icon'
-import { Space } from '../../../model/Space'
+import { Space } from '@kn/common'
 import { SpaceHeader } from './SpaceHeader'
 import { QuickActions } from './QuickActions'
 import { RecentPages } from './RecentPages'

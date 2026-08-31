@@ -1,14 +1,12 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useResponsive, Button, Sheet, SheetContent, SheetTitle, cn, toast } from "@kn/ui";
 import { Menu, PanelLeftClose, PanelLeftOpen } from "@kn/icon";
-import { useApi, useService, useNavigator, useToggle, useMobilePageHeader, useTranslation, usePageTabsStorage } from "@kn/common";
-import { APIS } from "../../api";
+import { type PageSummary, type PageTreeNode, type Space, useSpacePageService, useNavigator, useToggle, useMobilePageHeader, useTranslation, usePageTabsStorage } from "@kn/common";
 import { Outlet, useParams, useMatch } from "@kn/common";
-import { Space } from "../../model/Space";
 import { TabbedEditorArea } from "./PageEditor/TabbedEditorArea";
-import { event, ON_FAVORITE_CHANGE, ON_PAGE_REFRESH } from "../../event";
 import { TemplateSelector } from "../../components/TemplateSelector";
 import { SpaceSidebar, GlobalSearchDialog } from "./components";
+import { isPageIconData } from "./components/PageItemIcon";
 import { DockHost } from "../../components/Dock";
 import { useRecentPages } from "./hooks/useRecentPages";
 
@@ -30,10 +28,10 @@ export const SpaceDetail: React.FC = () => {
     }, [])
     const [visible, setVisible] = useState(false)
     const [space, setSpace] = useState<Space>()
-    const [pageTree, setPageTree] = useState([])
-    const [favorites, setFavorites] = useState([])
+    const [pageTree, setPageTree] = useState<PageTreeNode[]>([])
+    const [favorites, setFavorites] = useState<PageSummary[]>([])
     const [favoriteFlag, setFavoriteFlag] = useState(0)
-    const [trash, setTrash] = useState([])
+    const [trash, setTrash] = useState<PageSummary[]>([])
     const [open, { toggle }] = useToggle(false)
     const [flag, setFlag] = useState(0)
     const [restoreFlag, setRestoreFlag] = useState(0)
@@ -45,7 +43,7 @@ export const SpaceDetail: React.FC = () => {
     const [loading, { toggle: toggleLoading }] = useToggle(true)
     const [error, setError] = useState<string | null>(null)
     const { setHeaderInfo, clearHeaderInfo } = useMobilePageHeader()
-    const spaceService = useService("spaceService")
+    const service = useSpacePageService()
 
     // Recent pages hook
     const { recentPages, recordVisit } = useRecentPages(params.id)
@@ -54,8 +52,8 @@ export const SpaceDetail: React.FC = () => {
 
     useEffect(() => {
         if (params.id) {
-            spaceService.getSpaceInfo(params.id).then((res: any) => {
-                setSpace(res)
+            service.spaces.getSpace(params.id).then((result) => {
+                setSpace(result)
                 setError(null)
             }).catch((err: any) => {
                 setError('Failed to load space information')
@@ -65,16 +63,17 @@ export const SpaceDetail: React.FC = () => {
         return () => {
             setSpace(undefined)
         }
-    }, [params.id])
+    }, [params.id, service])
 
     useEffect(() => {
         if (!params.id) return
+        const spaceId = params.id
 
         const timeoutId = setTimeout(() => {
             toggleLoading()
-            spaceService.getPageTree(params.id!, searchValue)
-                .then((res: any) => {
-                    setPageTree(res)
+            service.pages.getPageTree({ spaceId, searchValue })
+                .then((result) => {
+                    setPageTree(result)
                     setError(null)
                 })
                 .catch((err: any) => {
@@ -87,49 +86,74 @@ export const SpaceDetail: React.FC = () => {
         }, 300)
 
         return () => clearTimeout(timeoutId)
-    }, [flag, searchValue, params.id])
+    }, [flag, searchValue, params.id, service, toggleLoading])
 
     useEffect(() => {
         if (!params.id) return
 
-        useApi(APIS.QUERY_PAGE, { spaceId: params.id, status: 'TRASH', pageSize: 20 })
-            .then((res) => {
-                setTrash(res.data.records)
+        service.pages.queryPages({ spaceId: params.id, status: 'TRASH', pageSize: 20 })
+            .then((result) => {
+                setTrash(result.records)
                 setError(null)
             })
             .catch(err => {
                 console.error('Error loading trash:', err)
             })
-    }, [restoreFlag, params.id])
+    }, [restoreFlag, params.id, service])
 
     useEffect(() => {
         if (!params.id) return
 
-        useApi(APIS.QUERY_FAVORITE, { scope: params.id, pageSize: 5 })
-            .then(res => {
-                setFavorites(res.data)
+        service.pages.queryFavoritePages({ spaceId: params.id, pageSize: 5 })
+            .then(result => {
+                setFavorites(result.records)
                 setError(null)
             })
             .catch(err => {
                 console.error('Error loading favorites:', err)
             })
-    }, [favoriteFlag, params.id])
+    }, [favoriteFlag, params.id, service])
 
     useEffect(() => {
-        const handler = () => {
-            setFlag(f => f + 1)
-            setFavoriteFlag(f => f + 1)
-        }
-        const onFavoriteChange = () => {
-            setFavoriteFlag(f => f + 1)
-        }
-        event.on(ON_PAGE_REFRESH, handler)
-        event.on(ON_FAVORITE_CHANGE, onFavoriteChange)
-        return () => {
-            event.off(ON_PAGE_REFRESH, handler)
-            event.off(ON_FAVORITE_CHANGE, onFavoriteChange)
-        }
-    }, [])
+        if (!params.id) return
+        const currentSpaceId = params.id
+        const refreshTree = () => setFlag(value => value + 1)
+        const refreshFavorites = () => setFavoriteFlag(value => value + 1)
+        const refreshTrash = () => setRestoreFlag(value => value + 1)
+        const matchesSpace = (spaceId?: string) => !spaceId || spaceId === currentSpaceId
+        const unsubscribers = [
+            service.changes.subscribe("space.updated", ({ payload }) => {
+                if (payload.space?.id === currentSpaceId) setSpace(payload.space)
+            }),
+            service.changes.subscribe("page.created", ({ payload }) => {
+                if (matchesSpace(payload.spaceId ?? payload.page.spaceId)) refreshTree()
+            }),
+            service.changes.subscribe("page.updated", ({ payload }) => {
+                if (matchesSpace(payload.spaceId ?? payload.page.spaceId)) refreshTree()
+            }),
+            service.changes.subscribe("page.deleted", ({ payload }) => {
+                if (matchesSpace(payload.spaceId)) refreshTree()
+            }),
+            service.changes.subscribe("page.moved", ({ payload }) => {
+                if (matchesSpace(payload.spaceId)) refreshTree()
+            }),
+            service.changes.subscribe("page.tree.changed", ({ payload }) => {
+                if (payload.spaceId === currentSpaceId) refreshTree()
+            }),
+            service.changes.subscribe("page.trashed", () => {
+                refreshTree()
+                refreshTrash()
+            }),
+            service.changes.subscribe("page.restoredFromTrash", () => {
+                refreshTree()
+                refreshTrash()
+            }),
+            service.changes.subscribe("page.favorite.changed", ({ payload }) => {
+                if (matchesSpace(payload.spaceId)) refreshFavorites()
+            }),
+        ]
+        return () => unsubscribers.forEach(unsubscribe => unsubscribe())
+    }, [params.id, service])
 
     useEffect(() => {
         if (!params.pageId && space) {
@@ -154,19 +178,17 @@ export const SpaceDetail: React.FC = () => {
     // --- Action handlers ---
 
     const handleCreatePage = useCallback((parentId: string = "0") => {
-        const param = {
+        if (!params.id) return
+        service.pages.createPage({
             spaceId: params.id,
-            parentId: parentId,
+            parentId,
             title: "Untitled",
-        }
-        useApi(APIS.CREATE_OR_SAVE_PAGE, null, param).then(res => {
-            const page = res.data
+        }).then(page => {
             navigator.go({
                 to: `/space-detail/${params.id}/page/edit/${page.id}`
             })
-            setFlag(f => f + 1)
         })
-    }, [params.id, navigator])
+    }, [params.id, navigator, service])
 
     // Create a page at the same level as the current page (i.e. under its parent).
     // Falls back to the space root when no page is open or the page is not in the tree.
@@ -178,14 +200,13 @@ export const SpaceDetail: React.FC = () => {
     }, [params.pageId, pageTree, handleCreatePage])
 
     const handleCreateByTemplate = useCallback((id: string, title?: string) => {
-        useApi(APIS.CREATE_OR_SAVE_PAGE, null, {
+        if (!params.id) return
+        service.pages.createPage({
             templateId: id,
             spaceId: params.id,
             parentId: params.pageId,
             title: title || '未命名文档'
-        }).then(res => {
-            const page = res?.data
-            setFlag(f => f + 1)
+        }).then(page => {
             setVisible(false)
             if (page?.id) {
                 navigator.go({
@@ -196,48 +217,37 @@ export const SpaceDetail: React.FC = () => {
             console.error('Failed to create page from template:', err)
             toast.error(t('template.useFailed'))
         })
-    }, [params.id, params.pageId, navigator, t])
+    }, [params.id, params.pageId, navigator, service, t])
 
     const handleGoToPersonalSpace = useCallback(() => {
-        useApi(APIS.PERSONAL_SPACE).then((res) => {
+        service.spaces.getPersonalSpace().then((personalSpace) => {
             navigator.go({
-                to: `/space-detail/${res.data.id}`
+                to: `/space-detail/${personalSpace.id}`
             })
             toggle()
         })
-    }, [navigator, toggle])
+    }, [navigator, service, toggle])
 
     const handleMoveToTrash = useCallback((pageId: string) => {
-        useApi(APIS.MOVE_TO_TRASH, { id: pageId }).then(() => {
-            setFlag(flag => flag + 1)
-            setRestoreFlag(f => f + 1)
-        })
-    }, [])
+        void service.pages.movePageToTrash(pageId)
+    }, [service])
 
     const handleRestorePage = useCallback((pageId: string) => {
-        useApi(APIS.RESTORE_PAGE, { id: pageId }).then(() => {
-            setFlag(f => f + 1)
-            setRestoreFlag(f => f + 1)
-        })
-    }, [])
+        void service.pages.restorePageFromTrash(pageId)
+    }, [service])
 
     const handleFavorite = useCallback(() => {
-        useApi(APIS.ADD_SPACE_FAVORITE, { id: params.id }).then(() => {
-            setFlag(f => f + 1)
-        })
-    }, [params.id])
+        if (!params.id) return
+        void service.spaces.toggleSpaceFavorite(params.id)
+    }, [params.id, service])
 
     const handleAddPageFavorite = useCallback((pageId: string) => {
-        useApi(APIS.ADD_FAVORITE_PAGE, { id: pageId }).then(() => {
-            event.emit(ON_FAVORITE_CHANGE)
-        })
-    }, [])
+        void service.pages.favoritePage(pageId)
+    }, [service])
 
     const handleRemoveFavorite = useCallback((pageId: string) => {
-        useApi(APIS.REMOVE_FAVORITE, { id: pageId }).then(() => {
-            event.emit(ON_FAVORITE_CHANGE)
-        })
-    }, [])
+        void service.pages.unfavoritePage(pageId)
+    }, [service])
 
     const handlePageClick = useCallback((pageId: string) => {
         navigator.go({
@@ -280,7 +290,7 @@ export const SpaceDetail: React.FC = () => {
         if (!isMobile || !space) return
         setHeaderInfo({
             title: space.name,
-            icon: space?.icon?.icon,
+            icon: isPageIconData(space.icon) ? space.icon.icon : undefined,
             actions: (
                 <Button
                     variant="ghost"

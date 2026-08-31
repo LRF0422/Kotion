@@ -9,7 +9,8 @@ import { resolveBlockMenuItems } from "./kit";
 import { ThemeProvider } from "styled-components";
 import light, { dark } from "../styles/theme";
 import { StyledEditor } from "../styles/editor";
-import { ExtensionWrapper, logger, request } from "@kn/common";
+import { ExtensionWrapper, logger, resolveService } from "@kn/common";
+import type { PageDocumentOperations } from "@kn/common";
 import { useSafeState } from "ahooks";
 import { NotionToC } from "./NotionToC";
 import { cn, useIsMobile, useTheme } from "@kn/ui";
@@ -31,6 +32,8 @@ import { Loader2 } from "@kn/icon";
 import "../styles/editor.css"
 
 
+type PageSeedDocumentOperations = Pick<PageDocumentOperations, "claimPageSeed" | "releasePageSeed">;
+
 export interface CollaborationEditorProps extends EditorRenderProps {
   token: string;
   header?: ReactNode,
@@ -39,6 +42,8 @@ export interface CollaborationEditorProps extends EditorRenderProps {
   className?: string
   onStatus?: (status: any) => void
   provider?: TiptapCollabProvider
+  /** Explicit document capability for collaborative seed arbitration. */
+  pageDocuments?: PageSeedDocumentOperations
   synced?: boolean
   onAwarenessUpdate?: (users: { clientId: number; user: { nickName: string } }[]) => void;
   /**
@@ -116,24 +121,43 @@ const waitForProviderSync = (provider: TiptapCollabProvider, timeoutMs = 5000): 
  *   blank document for a real page. That leaves the old race in place only for
  *   the window where the API is unreachable, rather than always.
  */
-const claimSeedRight = async (pageId: string, clientId: string): Promise<boolean> => {
+type SeedClaim = {
+  granted: boolean;
+  documents?: PageSeedDocumentOperations;
+};
+
+const claimSeedRight = async (
+  explicitDocuments: PageSeedDocumentOperations | undefined,
+  pageId: string,
+  clientId: string,
+): Promise<SeedClaim> => {
+  let documents: PageSeedDocumentOperations | undefined;
   try {
-    const res: any = await request.post(
-      `/knowledge-wiki/space/page/${pageId}/seed-claim`,
-      null,
-      { params: { clientId } },
-    );
-    return res?.data === true;
+    // Resolve lazily: editors without a provider, and populated collaborative
+    // documents that need no seed, must not require a bound space-page service.
+    documents = explicitDocuments ?? resolveService("spacePageService").documents;
+    return {
+      granted: await documents.claimPageSeed({ pageId, clientId }),
+      documents,
+    };
   } catch (e) {
     logger.warn("[CollaborationEditor] seed arbitration unavailable, seeding unarbitrated", e);
-    return true;
+    return { granted: true, documents };
   }
 };
 
-const releaseSeedRight = (pageId: string, clientId: string): void => {
-  request
-    .delete(`/knowledge-wiki/space/page/${pageId}/seed-claim`, { params: { clientId } })
-    .catch(() => { /* best-effort: the claim expires on its own */ });
+const releaseSeedRight = (
+  documents: PageSeedDocumentOperations | undefined,
+  pageId: string,
+  clientId: string,
+): void => {
+  if (!documents) return;
+  try {
+    void Promise.resolve(documents.releasePageSeed({ pageId, clientId }))
+      .catch(() => { /* best-effort: the claim expires on its own */ });
+  } catch {
+    // Best effort: synchronous transport failures also leave the TTL as fallback.
+  }
 };
 
 
@@ -468,6 +492,8 @@ export const CollaborationEditor = forwardRef<
   extensionsRef.current = extensions;
   const pageIdRef = React.useRef(props.id);
   pageIdRef.current = props.id;
+  const pageDocumentsRef = React.useRef(props.pageDocuments);
+  pageDocumentsRef.current = props.pageDocuments;
 
   React.useEffect(() => {
     let cancelled = false;
@@ -498,10 +524,10 @@ export const CollaborationEditor = forwardRef<
           // sees the same emptiness. The server decides who actually seeds.
           const clientId = String(provider.document.clientID);
           const pageId = pageIdRef.current;
-          const granted = await claimSeedRight(pageId, clientId);
+          const seedClaim = await claimSeedRight(pageDocumentsRef.current, pageId, clientId);
           if (cancelled) return;
 
-          if (granted) {
+          if (seedClaim.granted) {
             try {
               const exts = extensionsRef.current as AnyExtension[];
               const processed = rewriteUnknownContent(
@@ -521,7 +547,7 @@ export const CollaborationEditor = forwardRef<
               // Hand the claim back rather than making the next opener wait out
               // the TTL. Safe either way: by now the doc is either seeded or
               // known to be non-empty.
-              releaseSeedRight(pageId, clientId);
+              releaseSeedRight(seedClaim.documents, pageId, clientId);
             }
           }
           // Denied: another client is seeding this page right now. Its content

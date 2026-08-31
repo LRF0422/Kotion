@@ -1,9 +1,8 @@
-import { APIS } from "../../api";
 import { Badge } from "@kn/ui";
 import { Button } from "@kn/ui";
 import { Separator } from "@kn/ui";
 import { CollaborationEditor } from "@kn/editor";
-import { useApi, getAccessToken, getAppEnv } from "@kn/common";
+import { type PageMetadata, useSpacePageService, getAccessToken, getAppEnv } from "@kn/common";
 import { useNavigator } from "@kn/common";
 import { GlobalState } from "@kn/common";
 import { TiptapCollabProvider } from "@kn/editor";
@@ -16,8 +15,17 @@ import { useDispatch, useSelector } from "@kn/common";
 import { useParams } from "@kn/common";
 import * as Y from "@kn/editor"
 
+const parseDocumentContent = (content: unknown) => {
+    if (typeof content !== 'string') return content
+    try {
+        return JSON.parse(content)
+    } catch {
+        return content
+    }
+}
+
 export const PageRoom: React.FC = () => {
-    const [page, setPage] = useState<any>()
+    const [page, setPage] = useState<(PageMetadata & { content?: unknown }) | null>()
     const params = useParams()
     const { userInfo, rightCollpase } = useSelector((state: GlobalState) => state)
     const [loading, { toggle }] = useToggle(false)
@@ -30,15 +38,21 @@ export const PageRoom: React.FC = () => {
     const [users, setUsers] = useState<any[]>()
     const editor = useRef<Editor>(null)
     const navigator = useNavigator()
+    const spacePageService = useSpacePageService()
 
     useEffect(() => {
-        useApi(APIS.GET_PAGE_CONTENT, { id: params.pageId }).then((res) => {
-            setPage(res.data)
+        const pageId = params.pageId ? String(params.pageId) : undefined
+        if (!pageId) return
+        Promise.all([
+            spacePageService.pages.getPageMetadata(pageId),
+            spacePageService.documents.getPageDocument(pageId),
+        ]).then(([metadata, document]) => {
+            setPage({ ...metadata, content: document.doc ?? document.content ?? null })
         })
         return () => {
             setPage(null)
         }
-    }, [params.pageId])
+    }, [params.pageId, spacePageService])
 
     const handleCollpase = () => {
         dispatch({
@@ -107,7 +121,7 @@ export const PageRoom: React.FC = () => {
                     id={params.pageId as string}
                     user={userInfo}
                     token={params.pageId as string}
-                    content={JSON.parse(page.content)}
+                    content={parseDocumentContent(page.content)}
                     onStatus={(s) => {
                         setStatus(s)
                     }}

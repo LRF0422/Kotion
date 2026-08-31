@@ -1,57 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Editor } from '@tiptap/core'
-import type { JSONContent } from '@tiptap/core'
-import type { BlockOp, OpBatch, OpTrackerStorage, ReconcileSnapshot } from '../extensions/op-tracker'
+import type { Editor, JSONContent } from '@tiptap/core'
+import type { ApplyOpsRequest, ApplyOpsResult, PageDocResult, ReconcileRequest } from '@kn/common'
+import type { OpBatch, OpTrackerStorage, ReconcileSnapshot } from '../extensions/op-tracker'
 import { OP_TRACKER_ABSORB } from '../extensions/op-tracker'
 import { decideExitFlush } from './exit-flush'
 import { toRev } from './rev'
 
-export type { BlockOp, OpBatch, ReconcileSnapshot } from '../extensions/op-tracker'
-
-/** Payload of `POST /page/{id}/ops`. */
-export interface ApplyOpsRequest {
-  baseRev: number | null
-  idempotencyKey: string
-  clientId: string
-  ops: BlockOp[]
-}
-
-/** Payload of `POST /page/{id}/reconcile`. */
-export interface ReconcileRequest {
-  baseRev: number | null
-  clientId: string
-  doc: JSONContent
-}
-
-/** Per-op verdict as the server reports it; mirrors `OpResultVO`. */
-export interface OpVerdict {
-  op?: string
-  blockId?: string
-  /** `applied` | `stale` | `rejected`. */
-  status?: string
-  /** Machine-readable cause for `stale` / `rejected`. */
-  reason?: string
-}
-
-/** What both endpoints answer with; mirrors `ApplyOpsVO`. */
-export interface ApplyOpsResult {
-  /** A rev as it arrives: this backend spells 64-bit integers as JSON strings. */
-  rev?: number | string | null
-  opsApplied?: number
-  replayed?: boolean
-  /**
-   * Per-op verdicts. A `stale` or `rejected` entry means that part of the
-   * batch did NOT land even though the request succeeded — the writer must not
-   * treat its baseline as confirmed in that case.
-   */
-  results?: OpVerdict[]
-}
-
-/** What `GET /page/{id}/doc` answers with; mirrors `PageDocVO`. */
-export interface PageDocResult {
-  doc?: JSONContent | null
-  rev?: number | null
-}
+export type { ApplyOpsRequest, ApplyOpsResult, PageDocResult, ReconcileRequest } from '@kn/common'
+export type { OpBatch, ReconcileSnapshot } from '../extensions/op-tracker'
 
 export interface UseOpSaveOptions {
   editor: Editor | null
@@ -349,7 +305,7 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
       const result = await fetchDoc()
       if (!editor || editor.isDestroyed) return
 
-      const doc = result?.doc
+      const doc = result?.doc as JSONContent | null | undefined
       if (!doc) {
         // Refused, and specifically *not* treated as an empty document: doing so
         // would delete every clean block on the page because a response came
@@ -358,7 +314,7 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
         return
       }
 
-      const fetchedRev = result?.rev ?? null
+      const fetchedRev = toRev(result?.rev)
       if (fetchedRev == null) {
         console.warn('[useOpSave] catch-up returned no rev; not merging')
         return

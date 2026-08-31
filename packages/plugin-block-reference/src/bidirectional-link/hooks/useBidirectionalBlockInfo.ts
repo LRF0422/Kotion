@@ -1,60 +1,55 @@
-/**
- * useBidirectionalBlockInfo Hook
- * Fetches block info using useApi for bidirectional links.
- * 
- * @module @kn/plugin-block-reference/bidirectional-link/hooks
- */
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useSpacePageService } from "@kn/common";
+import type { BlockSummary } from "@kn/common";
 
-import { useEffect, useState, useCallback } from "react";
-import { useApi } from "@kn/common";
-import { APIS } from "../api";
-import { JSONContent } from "@kn/editor";
-
-export interface BlockInfoData {
-    id: string;
-    pageId: number;
-    spaceId: number;
-    type: string;
-    content: JSONContent;
-}
-
-/**
- * Custom hook to fetch block information for BlockLink
- * 
- * @param blockId - The ID of the block to fetch
- * @param shouldFetch - Whether to trigger fetch (defaults to true)
- * @returns Object containing blockInfo, loading state, error state, and refetch function
- */
+/** Fetch canonical block detail for a bidirectional block embed. */
 export function useBidirectionalBlockInfo(blockId: string | null, shouldFetch: boolean = true) {
-    const [blockInfo, setBlockInfo] = useState<BlockInfoData | null>(null);
+    const normalizedBlockId = blockId ? String(blockId) : null;
+    const service = useSpacePageService();
+    const [blockInfo, setBlockInfo] = useState<BlockSummary | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [version, setVersion] = useState(0);
+    const requestSeqRef = useRef(0);
 
     const fetchBlockInfo = useCallback(async () => {
-        if (!blockId) return;
-
+        if (!normalizedBlockId) return;
+        const requestId = ++requestSeqRef.current;
         setLoading(true);
         setError(null);
 
         try {
-            const res = await useApi(APIS.GET_BLOCK_INFO, { id: blockId });
-            if (res.data) {
-                setBlockInfo(res.data);
-            } else {
-                setError("Block not found");
-            }
+            const block = await service.relations.getBlock(normalizedBlockId);
+            if (requestId !== requestSeqRef.current) return;
+            setBlockInfo(block);
         } catch (err) {
+            if (requestId !== requestSeqRef.current) return;
+            setBlockInfo(null);
             setError(err instanceof Error ? err.message : "Failed to fetch block info");
         } finally {
-            setLoading(false);
+            if (requestId === requestSeqRef.current) setLoading(false);
         }
-    }, [blockId]);
+    }, [normalizedBlockId, service]);
 
     useEffect(() => {
-        if (shouldFetch && blockId) {
-            fetchBlockInfo();
-        }
-    }, [shouldFetch, blockId, fetchBlockInfo]);
+        if (shouldFetch && normalizedBlockId) void fetchBlockInfo();
+        return () => { requestSeqRef.current += 1; };
+    }, [shouldFetch, normalizedBlockId, fetchBlockInfo, version]);
+
+    useEffect(() => {
+        if (!normalizedBlockId) return;
+        const matchesPage = (pageId: string) => !blockInfo?.pageId || String(pageId) === String(blockInfo.pageId);
+        const unsubscribeDocument = service.changes.subscribe("page.document.changed", ({ payload }) => {
+            if (matchesPage(payload.pageId)) setVersion((value) => value + 1);
+        });
+        const unsubscribeRelations = service.changes.subscribe("page.relations.changed", ({ payload }) => {
+            if (matchesPage(payload.pageId)) setVersion((value) => value + 1);
+        });
+        return () => {
+            unsubscribeDocument();
+            unsubscribeRelations();
+        };
+    }, [blockInfo?.pageId, normalizedBlockId, service]);
 
     return { blockInfo, loading, error, refetch: fetchBlockInfo };
 }

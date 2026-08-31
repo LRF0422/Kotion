@@ -17,8 +17,7 @@ import {
 } from "@kn/editor";
 import { Skeleton } from "@kn/ui";
 import { FileText } from "@kn/icon";
-import { useApi, useTranslation } from "@kn/common";
-import { APIS } from "../api";
+import { useSpacePageService, useTranslation } from "@kn/common";
 
 /** Cover config persisted on the title node's attrs (see editor PageHeader). */
 interface CoverConfig {
@@ -86,6 +85,7 @@ export interface TemplatePreviewProps {
 
 export const TemplatePreview: React.FC<TemplatePreviewProps> = ({ templateId, className }) => {
     const { t } = useTranslation();
+    const service = useSpacePageService();
     const [content, setContent] = useState<Content | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(false);
@@ -94,11 +94,10 @@ export const TemplatePreview: React.FC<TemplatePreviewProps> = ({ templateId, cl
         let cancelled = false;
         setLoading(true);
         setError(false);
-        useApi(APIS.PAGE_DOC, { id: templateId })
-            .then((res) => {
+        service.documents.getPageDocument(templateId)
+            .then((document) => {
                 if (cancelled) return;
-                const data = res?.data;
-                setContent(data?.doc ?? null);
+                setContent((document.doc ?? null) as Content | null);
             })
             .catch(() => {
                 if (!cancelled) setError(true);
@@ -109,7 +108,7 @@ export const TemplatePreview: React.FC<TemplatePreviewProps> = ({ templateId, cl
         return () => {
             cancelled = true;
         };
-    }, [templateId]);
+    }, [service, templateId]);
 
     const { body } = useMemo(() => parsePage(content), [content]);
 

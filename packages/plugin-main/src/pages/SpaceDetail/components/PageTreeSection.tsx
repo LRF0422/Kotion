@@ -1,14 +1,14 @@
 import React, { useCallback, useMemo, useState } from 'react'
 import { Button, Input, TreeView, cn } from '@kn/ui'
 import { Plus, MoreHorizontal, Star, Trash2, Package, Link, AppWindow, LocateFixed } from '@kn/icon'
-import { useTranslation, PageEditWindow } from '@kn/common'
+import { type PageTreeNode, useTranslation, PageEditWindow } from '@kn/common'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@kn/ui'
 import { SiderMenuItemProps } from '../../../pages/components/SiderMenu'
 import { PageItemIcon } from './PageItemIcon'
 
 interface PageTreeSectionProps {
     spaceId: string
-    pageTree: any[]
+    pageTree: PageTreeNode[]
     loading: boolean
     searchValue?: string
     selectedPageId?: string
@@ -66,12 +66,12 @@ export const PageTreeSection: React.FC<PageTreeSectionProps> = ({
         }
     }, [spaceId])
 
-    const resolve = useCallback((treeNode: any): SiderMenuItemProps => {
+    const resolve = useCallback((treeNode: PageTreeNode): SiderMenuItemProps => {
         const name = (
             <div className="flex flex-row gap-1 items-center group w-full overflow-hidden text-ellipsis relative">
                 <div className="text-left text-ellipsis text-nowrap overflow-hidden flex-1 min-w-0 flex items-center w-full">
                     <PageItemIcon icon={treeNode.icon} className="mr-1.5" />
-                    <span className="text-xs sm:text-sm">{treeNode.name}</span>
+                    <span className="text-xs sm:text-sm">{treeNode.name || treeNode.title}</span>
                     {treeNode.isDraft && (
                         <span className="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" title="Draft" />
                     )}
@@ -161,7 +161,7 @@ export const PageTreeSection: React.FC<PageTreeSectionProps> = ({
         if (treeNode.children) {
             return {
                 ...baseItem,
-                children: treeNode.children.map((i: any) => resolve(i)),
+                children: treeNode.children.map(resolve),
             }
         }
 

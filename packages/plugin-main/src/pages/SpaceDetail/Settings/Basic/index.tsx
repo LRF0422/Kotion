@@ -10,8 +10,7 @@ import { SettingContext } from "..";
 import { z } from "@kn/ui";
 import { useForm } from "@kn/ui";
 import { zodResolver } from "@kn/ui";
-import { useApi, useUploadFile } from "@kn/common";
-import { APIS } from "../../../../api";
+import { useSpacePageService, useUploadFile } from "@kn/common";
 import { toast } from "@kn/ui";
 import { Separator } from "@kn/ui";
 import { useTranslation } from "@kn/common";
@@ -21,6 +20,7 @@ export const Basic: React.FC = () => {
 
     const { space } = useContext(SettingContext)
     const { upload, usePath } = useUploadFile()
+    const service = useSpacePageService()
     const [isSubmitting, setIsSubmitting] = useState(false)
     const { t } = useTranslation()
 
@@ -43,7 +43,7 @@ export const Basic: React.FC = () => {
     async function onSubmit(values: z.infer<typeof FormSchema>) {
         setIsSubmitting(true)
         try {
-            await useApi(APIS.CREATE_SPACE, null, values)
+            await service.spaces.updateSpace(values)
             toast.success(t("space-settings.basic.save"), {
                 description: t("space-settings.basic.basic-description"),
                 icon: <CheckCircle2 className="h-4 w-4" />

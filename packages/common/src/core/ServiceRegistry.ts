@@ -3,85 +3,196 @@ import { logger } from "../utils/logger";
 
 type ServiceChangeListener = (name: string) => void;
 
+export interface CoreServiceOwner {
+    type: "core";
+}
+
+export interface PluginServiceOwner {
+    type: "plugin";
+    pluginName: string;
+}
+
+export type ServiceOwner = CoreServiceOwner | PluginServiceOwner;
+
+export const CORE_SERVICE_OWNER: CoreServiceOwner = Object.freeze({ type: "core" });
+
+export const pluginServiceOwner = (pluginName: string): PluginServiceOwner => ({
+    type: "plugin",
+    pluginName,
+});
+
+const ownerKey = (owner: ServiceOwner): string =>
+    owner.type === "core" ? "core" : `plugin:${owner.pluginName}`;
+
+const ownerLabel = (owner: ServiceOwner): string =>
+    owner.type === "core" ? "core" : `plugin "${owner.pluginName}"`;
+
+export class ServiceRegistrationError extends Error {
+    constructor(
+        public readonly serviceName: keyof Services,
+        public readonly existingOwner: ServiceOwner,
+        public readonly requestedOwner: ServiceOwner
+    ) {
+        super(
+            `ServiceRegistry: Service "${String(serviceName)}" is owned by ${ownerLabel(existingOwner)} ` +
+            `and cannot be registered by ${ownerLabel(requestedOwner)}`
+        );
+        this.name = "ServiceRegistrationError";
+    }
+}
+
+interface ServiceEntry<K extends keyof Services = keyof Services> {
+    service: Services[K];
+    owner: ServiceOwner;
+}
+
+export interface ServiceRegistryView {
+    get<K extends keyof Services>(name: K): Services[K] | undefined;
+    getOwner(name: keyof Services): ServiceOwner | undefined;
+    has(name: keyof Services): boolean;
+    getAll(): Services;
+    subscribe(listener: ServiceChangeListener): () => void;
+}
+
 /**
- * ServiceRegistry - Centralized runtime service registration manager.
+ * Centralized runtime service registry with explicit ownership.
  *
- * Inspired by Tiptap's command system, this registry allows plugins to
- * register and unregister services at runtime. The useService hook
- * subscribes to change events so React components re-render when
- * services become available or are removed.
- *
- * Plugins augment the `Services` interface via TypeScript module augmentation:
- *
- * @example
- * ```typescript
- * declare module '@kn/common' {
- *     interface Services {
- *         myService: MyServiceType;
- *     }
- * }
- * ```
- *
- * Then register at runtime:
- * ```typescript
- * pluginManager.serviceRegistry.register('myService', myServiceImpl);
- * ```
+ * Services are atomic values: registration replaces the whole value only when
+ * the same owner re-registers it. A plugin can never overwrite a core service
+ * or another plugin's service.
  */
 export class ServiceRegistry {
-    private _services: Services = {} as Services;
+    private _entries = new Map<keyof Services, ServiceEntry>();
     private _listeners: Set<ServiceChangeListener> = new Set();
 
-    /**
-     * Register a service by name.
-     * If a service with the same name already exists, it will be overwritten
-     * and listeners will be notified.
-     */
-    register<K extends keyof Services>(name: K, service: Services[K]): void {
-        this._services[name] = service;
-        logger.debug(`ServiceRegistry: registered "${String(name)}"`);
-        this._notify(name);
-    }
-
-    /**
-     * Unregister a service by name.
-     * No-op if the service does not exist.
-     */
-    unregister(name: keyof Services): void {
-        if (name in this._services) {
-            delete this._services[name];
-            logger.debug(`ServiceRegistry: unregistered "${String(name)}"`);
-            this._notify(name);
+    constructor(initialCoreServices?: Partial<Services>) {
+        if (initialCoreServices) {
+            this.registerAll(initialCoreServices, CORE_SERVICE_OWNER);
         }
     }
 
-    /**
-     * Get a service by name.
-     * Returns undefined if the service is not registered.
-     */
-    get<K extends keyof Services>(name: K): Services[K] {
-        return this._services[name];
+    register<K extends keyof Services>(
+        name: K,
+        service: Services[K],
+        owner: ServiceOwner
+    ): void {
+        this._assertCanRegister(name, owner);
+        this._entries.set(name, { service, owner } as ServiceEntry);
+        logger.debug(`ServiceRegistry: registered "${String(name)}" for ${ownerLabel(owner)}`);
+        this._notify(name);
     }
 
-    /**
-     * Check if a service is registered.
-     */
+    unregister(name: keyof Services, owner: ServiceOwner): boolean {
+        const entry = this._entries.get(name);
+        if (!entry || ownerKey(entry.owner) !== ownerKey(owner)) {
+            return false;
+        }
+
+        this._entries.delete(name);
+        logger.debug(`ServiceRegistry: unregistered "${String(name)}" from ${ownerLabel(entry.owner)}`);
+        this._notify(name);
+        return true;
+    }
+
+    unregisterOwner(owner: ServiceOwner): Array<keyof Services> {
+        const key = ownerKey(owner);
+        const removed: Array<keyof Services> = [];
+        for (const [name, entry] of this._entries) {
+            if (ownerKey(entry.owner) !== key) continue;
+            this._entries.delete(name);
+            removed.push(name);
+        }
+
+        for (const name of removed) {
+            logger.debug(`ServiceRegistry: unregistered "${String(name)}" from ${ownerLabel(owner)}`);
+            this._notify(name);
+        }
+        return removed;
+    }
+
+    unregisterPluginServices(): Array<keyof Services> {
+        const removed: Array<keyof Services> = [];
+        for (const [name, entry] of this._entries) {
+            if (entry.owner.type !== "plugin") continue;
+            this._entries.delete(name);
+            removed.push(name);
+        }
+
+        for (const name of removed) {
+            this._notify(name);
+        }
+        return removed;
+    }
+
+    /** Atomically replace all plugin-owned services while preserving core services. */
+    replacePluginServices(
+        registrations: Array<{ owner: PluginServiceOwner; services: Partial<Services> }>
+    ): Set<string> {
+        const nextEntries = new Map<keyof Services, ServiceEntry>();
+        for (const [name, entry] of this._entries) {
+            if (entry.owner.type === "core") nextEntries.set(name, entry);
+        }
+
+        const conflicts = new Set<string>();
+        for (const { owner, services } of registrations) {
+            const entries = Object.entries(services)
+                .filter(([, service]) => service !== undefined) as Array<
+                    [keyof Services, Services[keyof Services]]
+                >;
+            const conflict = entries.some(([name]) => {
+                const existing = nextEntries.get(name);
+                return existing && ownerKey(existing.owner) !== ownerKey(owner);
+            });
+            if (conflict) {
+                conflicts.add(owner.pluginName);
+                continue;
+            }
+            for (const [name, service] of entries) {
+                nextEntries.set(name, { service, owner } as ServiceEntry);
+            }
+        }
+
+        const previousEntries = this._entries;
+        const changed = new Set<keyof Services>([
+            ...previousEntries.keys(),
+            ...nextEntries.keys(),
+        ]);
+        this._entries = nextEntries;
+        for (const name of changed) {
+            const previous = previousEntries.get(name);
+            const next = nextEntries.get(name);
+            if (
+                previous?.service !== next?.service
+                || (!previous && !!next)
+                || (!!previous && !next)
+                || (previous && next && ownerKey(previous.owner) !== ownerKey(next.owner))
+            ) {
+                this._notify(name);
+            }
+        }
+        return conflicts;
+    }
+
+    get<K extends keyof Services>(name: K): Services[K] | undefined {
+        return this._entries.get(name)?.service as Services[K] | undefined;
+    }
+
+    getOwner(name: keyof Services): ServiceOwner | undefined {
+        return this._entries.get(name)?.owner;
+    }
+
     has(name: keyof Services): boolean {
-        return name in this._services;
+        return this._entries.has(name);
     }
 
-    /**
-     * Get a snapshot of all registered services.
-     */
     getAll(): Services {
-        return { ...this._services };
+        const services = {} as Services;
+        for (const [name, entry] of this._entries) {
+            Reflect.set(services, name, entry.service);
+        }
+        return services;
     }
 
-    /**
-     * Subscribe to service changes.
-     * The listener is called whenever a service is registered or unregistered.
-     *
-     * @returns An unsubscribe function
-     */
     subscribe(listener: ServiceChangeListener): () => void {
         this._listeners.add(listener);
         return () => {
@@ -89,34 +200,57 @@ export class ServiceRegistry {
         };
     }
 
-    /**
-     * Register multiple services at once (bulk registration).
-     * Only fires one notification per service after all are registered.
-     */
-    registerAll(services: Partial<Services>): void {
-        // Use Object.assign for type-safe bulk registration
-        // TypeScript can't verify individual key-value pairs in a loop,
-        // but Object.assign preserves the structure correctly.
-        Object.assign(this._services, services);
-        // Notify for each registered key
-        const keys = Object.keys(services) as Array<keyof Services>;
-        for (const key of keys) {
-            if (services[key] !== undefined) {
-                logger.debug(`ServiceRegistry: registered "${String(key)}" (bulk)`);
-                this._notify(key);
-            }
+    /** Register a group atomically: either every service is accepted or none are. */
+    registerAll(
+        services: Partial<Services>,
+        owner: ServiceOwner
+    ): void {
+        const entries = Object.entries(services)
+            .filter(([, service]) => service !== undefined) as Array<
+                [keyof Services, Services[keyof Services]]
+            >;
+
+        for (const [name] of entries) {
+            this._assertCanRegister(name, owner);
+        }
+        for (const [name, service] of entries) {
+            this._entries.set(name, { service, owner } as ServiceEntry);
+            logger.debug(`ServiceRegistry: registered "${String(name)}" for ${ownerLabel(owner)} (bulk)`);
+        }
+        for (const [name] of entries) {
+            this._notify(name);
         }
     }
 
-    /**
-     * Remove all registered services and clear listeners.
-     * Useful for testing or full reset.
-     */
-    clear(): void {
-        const names = Object.keys(this._services) as Array<keyof Services>;
-        this._services = {} as Services;
+    canRegisterAll(services: Partial<Services>, owner: ServiceOwner): boolean {
+        try {
+            for (const name of Object.keys(services) as Array<keyof Services>) {
+                if (services[name] !== undefined) this._assertCanRegister(name, owner);
+            }
+            return true;
+        } catch (error) {
+            if (error instanceof ServiceRegistrationError) return false;
+            throw error;
+        }
+    }
+
+    /** Remove services. Core services are preserved when preserveCore is true. */
+    clear(options?: { preserveCore?: boolean }): void {
+        const names: Array<keyof Services> = [];
+        for (const [name, entry] of this._entries) {
+            if (options?.preserveCore && entry.owner.type === "core") continue;
+            this._entries.delete(name);
+            names.push(name);
+        }
         for (const name of names) {
             this._notify(name);
+        }
+    }
+
+    private _assertCanRegister(name: keyof Services, owner: ServiceOwner): void {
+        const existing = this._entries.get(name);
+        if (existing && ownerKey(existing.owner) !== ownerKey(owner)) {
+            throw new ServiceRegistrationError(name, existing.owner, owner);
         }
     }
 

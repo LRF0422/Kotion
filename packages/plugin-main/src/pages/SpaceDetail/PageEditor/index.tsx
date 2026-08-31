@@ -1,4 +1,3 @@
-import { APIS } from "../../../api";
 import { Button } from "@kn/ui";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger, DropdownMenuPortal } from "@kn/ui";
 import { Separator } from "@kn/ui";
@@ -9,16 +8,16 @@ import {
     AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@kn/ui";
 import {
-    CollaborationEditor, exportToPDF, usePageSave, keepaliveSend, toSessionState, useHostPresence,
+    CollaborationEditor, exportToPDF, usePageSave, useHostPresence,
     HOST_AWARENESS_FIELD, HOST_AWARENESS_HOST, TiptapCollabProvider, chooseSeed, toRev,
 } from "@kn/editor";
-import type { ApplyOpsRequest, BlockStoreRead, PageSaveEndpoints, ReconcileRequest } from "@kn/editor";
-import { event, ON_PAGE_REFRESH, ON_FAVORITE_CHANGE } from "../../../event";
-import { useApi, useService, deepEqual, useUploadFile, parseMarkdownToNodes, useTranslation, getAccessToken, getAppEnv } from "@kn/common";
+import type { BlockStoreRead } from "@kn/editor";
+import { deepEqual, useUploadFile, parseMarkdownToNodes, useTranslation, getAccessToken, getAppEnv, useSpacePageService } from "@kn/common";
+import type { PageRecord } from "@kn/common";
 import { useNavigator, usePageTabs } from "@kn/common";
-import { setPageBridge, clearPageBridge, type PageBridge } from "@kn/common";
+import { setPageNavigationBridge, clearPageNavigationBridge, type PageNavigationBridge } from "@kn/common";
 import { setActiveEditor, clearActiveEditor } from "@kn/common";
-// The host-wide bus, distinct from this plugin's local `event` emitter above.
+// Host-wide UI events remain separate from Space/Page domain changes.
 import { event as hostEvent, TOGGLE_DOCK_PANEL } from "@kn/common";
 import { GlobalState } from "@kn/common";
 import { Editor } from "@kn/editor";
@@ -86,6 +85,11 @@ const getStatusDisplay = (
     return { text: 'Saved', icon: <Check className="h-3 w-3 text-muted-foreground" />, className: 'text-muted-foreground' };
 };
 
+const toEditorPage = (record: PageRecord) => ({
+    ...(record.metadata ?? {}),
+    ...record,
+})
+
 export interface PageEditorProps {
     /** Explicit page id (tab mode). Falls back to the route `:pageId`. */
     pageId?: string
@@ -121,7 +125,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
     const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting')
     const editor = useRef<Editor>(null)
     const navigator = useNavigator()
-    const spaceService = useService("spaceService")
+    const service = useSpacePageService()
     const { usePath } = useUploadFile();
     const [editorContentReady, setEditorContentReady] = useState(false)
     const [versionHistoryOpen, setVersionHistoryOpen] = useState(false)
@@ -238,14 +242,18 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
 
     useEffect(() => {
         toggleLoading()
-        spaceService.getPage(pageId!).then((res: any) => {
+        service.pages.getPage(pageId!).then((record) => {
+            const res = toEditorPage(record)
             setPage(res)
             // Backfill the tab title + icon now that the page has loaded.
             // IMAGE icons store a file name; only emoji text is usable as a tab icon.
-            if (pageId) updateMeta(pageId, { title: res?.title, icon: res?.icon?.type === 'IMAGE' ? undefined : res?.icon?.icon })
+            if (pageId) updateMeta(pageId, { title: res?.title, icon: (res?.icon as any)?.type === 'IMAGE' ? undefined : (res?.icon as any)?.icon })
             // Enrich with author display info (name/avatar) for the PageHeader
             // metadata row. Non-blocking: the page renders first, names fill in.
-            Promise.all([resolveUserBrief(res?.createUser), resolveUserBrief(res?.updateUser)]).then(([creator, updater]) => {
+            Promise.all([
+                resolveUserBrief((res as any)?.createUser ?? res.createdById),
+                resolveUserBrief((res as any)?.updateUser ?? res.updatedById),
+            ]).then(([creator, updater]) => {
                 if (!creator && !updater) return
                 setPage((prev: any) => prev && prev.id === res.id ? {
                     ...prev,
@@ -265,7 +273,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
             setPage(null)
             setEditorContentReady(false)
         }
-    }, [pageId])
+    }, [pageId, service, toggleLoading, updateMeta])
 
     // ---- Seed content: read from the block store, which is the authority ----
 
@@ -276,13 +284,12 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         setBlockDoc(undefined)
         if (!pageId) return
         let cancelled = false
-        useApi(APIS.PAGE_DOC, { id: pageId })
-            .then((res: any) => {
+        service.documents.getPageDocument(pageId)
+            .then((document) => {
                 if (cancelled) return
-                const data = res?.data
                 setBlockDoc({
-                    doc: data?.doc ?? null,
-                    rev: toRev(data?.rev),
+                    doc: document.doc ?? document.content ?? null,
+                    rev: toRev(document.rev),
                 })
             })
             .catch((err: any) => {
@@ -291,18 +298,20 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                 setBlockDoc(null)
             })
         return () => { cancelled = true }
-    }, [pageId])
+    }, [pageId, service])
 
     // The legacy content column, parsed and HTML-unescaped off the render path.
     // No longer the authority — it survives only as the migration bridge below.
     const legacyContent = React.useMemo(() => {
-        if (!page?.content) return undefined;
+        const content = page?.legacyContent as PageRecord['legacyContent']
+        if (content == null) return undefined
+        if (typeof content !== 'string') return content
         try {
-            return JSON.parse((page.content as string).replaceAll("&lt;", "<").replaceAll("&gt;", ">"));
+            return JSON.parse(content.replaceAll("&lt;", "<").replaceAll("&gt;", ">"));
         } catch {
             return undefined;
         }
-    }, [page?.content]);
+    }, [page?.legacyContent]);
 
     /**
      * What to seed a fresh Y.Doc from, and whether the block store produced it.
@@ -328,68 +337,45 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
     const refreshFavoriteState = useCallback(async () => {
         if (!pageId) return
         try {
-            const res = await useApi(APIS.QUERY_FAVORITE, { pageSize: 1000 })
-            const data = res?.data
-            const list = Array.isArray(data) ? data : (data?.records || [])
+            const { records } = await service.pages.queryFavoritePages({ pageSize: 1000 })
             const pid = String(pageId)
-            setIsFavorited(list.some((item: any) => String(item.id) === pid))
+            setIsFavorited(records.some((item) => String(item.id) === pid))
         } catch (err) {
             console.error('Failed to load favorite state:', err)
         }
-    }, [pageId])
+    }, [pageId, service])
 
     useEffect(() => {
         refreshFavoriteState()
     }, [refreshFavoriteState])
 
-    useEffect(() => {
-        const handler = () => { refreshFavoriteState() }
-        event.on(ON_FAVORITE_CHANGE, handler)
-        return () => { event.off(ON_FAVORITE_CHANGE, handler) }
-    }, [refreshFavoriteState])
+    useEffect(() => service.changes.subscribe("page.favorite.changed", ({ payload }) => {
+        if (payload.pageId === pageId) refreshFavoriteState()
+    }), [pageId, refreshFavoriteState, service])
 
-    // Expose page-level capabilities (search/create/open pages) to the AI
-    // agent's page tools via the PageBridge registry. Only the active tab
-    // registers, so tools always act on the page the user is looking at.
+    // Expose active-page context and shell navigation. Persistent page search and
+    // creation now go through SpacePageService rather than an editor-owned bridge.
     useEffect(() => {
         if (props.active === false || !pageId) return
 
-        const bridge: PageBridge = {
+        const bridge: PageNavigationBridge = {
             getCurrentPage: () => ({
                 pageId: pageId ? String(pageId) : undefined,
                 spaceId: spaceId ? String(spaceId) : undefined,
                 title: page?.title,
                 parentId: page?.parentId ? String(page.parentId) : undefined
             }),
-            searchPages: async (query?: string) => {
-                const res: any = await spaceService.queryPage({ searchValue: query, pageSize: 30 })
-                const records = Array.isArray(res) ? res : res?.records ?? []
-                return records.map((p: any) => ({
-                    id: String(p.id),
-                    title: p.title,
-                    spaceId: p.spaceId !== undefined ? String(p.spaceId) : undefined,
-                    spaceName: p.spaceName
-                }))
-            },
-            createPage: async ({ spaceId: targetSpaceId, title, parentId }) => {
-                const created: any = await spaceService.createPage({
-                    spaceId: targetSpaceId,
-                    title,
-                    parentId
-                })
-                return { id: String(created?.id ?? created), title }
-            },
-            openPage: (targetPageId: string, targetSpaceId?: string) => {
+            openPage: (targetPageId, targetSpaceId) => {
                 navigator.go({ to: `/space-detail/${targetSpaceId ?? spaceId}/page/edit/${targetPageId}` })
             }
         }
 
-        setPageBridge(bridge)
-        return () => clearPageBridge(bridge)
-    }, [pageId, spaceId, page, props.active, spaceService, navigator])
+        setPageNavigationBridge(bridge)
+        return () => clearPageNavigationBridge(bridge)
+    }, [pageId, spaceId, page, props.active, navigator])
 
     // Publish this tab's editor for views living outside the editor subtree —
-    // dock panels such as the outline. Same rule as the PageBridge above: only
+    // dock panels such as the outline. Same rule as the navigation bridge above: only
     // the active tab publishes, so panels always follow the visible document.
     useEffect(() => {
         if (props.active === false || !pageId || !editorContentReady) return
@@ -408,13 +394,12 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         setIsFavorited(!prev)
         try {
             if (prev) {
-                await useApi(APIS.REMOVE_FAVORITE, { id: pageId })
+                await service.pages.unfavoritePage(pageId)
                 toast.success('Removed from favorites')
             } else {
-                await useApi(APIS.ADD_FAVORITE_PAGE, { id: pageId })
+                await service.pages.favoritePage(pageId)
                 toast.success('Added to favorites')
             }
-            event.emit(ON_FAVORITE_CHANGE)
         } catch (err) {
             // Revert on failure
             setIsFavorited(prev)
@@ -423,7 +408,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         } finally {
             setFavoriteToggling(false)
         }
-    }, [pageId, isFavorited, favoriteToggling])
+    }, [pageId, isFavorited, favoriteToggling, service])
 
     // Seed the wide/narrow toggle from the page's persisted state once the
     // editor content is ready (the title node attr is the source of truth,
@@ -513,7 +498,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         } : prev)
     }, [userInfo?.id, userInfo?.name])
 
-    // Throttle ON_PAGE_REFRESH emissions caused by rapid title typing.
+    // Throttle page-tree invalidation caused by rapid title typing.
     const titleRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     useEffect(() => {
         return () => {
@@ -530,38 +515,18 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                 clearTimeout(titleRefreshTimerRef.current)
             }
             titleRefreshTimerRef.current = setTimeout(() => {
-                event.emit(ON_PAGE_REFRESH)
+                if (spaceId && pageId) {
+                    service.changes.emit("page.tree.changed", { spaceId, pageId })
+                }
                 titleRefreshTimerRef.current = null
             }, 400)
         }
         handleSaved()
-    }, [handleSaved])
+    }, [handleSaved, pageId, service, spaceId])
 
     // Watch awareness for the host's presence. This is the fast half of noticing
     // a host leaving; the server still decides whether the session is over.
     const { hostPresent, hostSeen } = useHostPresence(provider?.awareness as any)
-
-    const endpoints = useMemo<PageSaveEndpoints>(() => ({
-        claim: async (pid: string, cid: string) => toSessionState((await useApi(APIS.PAGE_SESSION_CLAIM, { id: pid }, { clientId: cid }) as any)?.data),
-        heartbeat: async (pid: string, cid: string) => toSessionState((await useApi(APIS.PAGE_SESSION_HEARTBEAT, { id: pid }, { clientId: cid }) as any)?.data),
-        release: (pid: string, cid: string) => {
-            void keepaliveSend(APIS.PAGE_SESSION_RELEASE.url, 'DELETE', pid, { clientId: cid })
-        },
-        applyOps: async (pid: string, req: ApplyOpsRequest) => {
-            const res: any = await useApi(APIS.PAGE_APPLY_OPS, { id: pid }, req)
-            return res?.data ?? {}
-        },
-        reconcile: async (pid: string, req: ReconcileRequest) => {
-            const res: any = await useApi(APIS.PAGE_RECONCILE, { id: pid }, req)
-            return res?.data ?? {}
-        },
-        fetchDoc: async (pid: string) => {
-            const res: any = await useApi(APIS.PAGE_DOC, { id: pid })
-            const data = res?.data
-            return { doc: data?.doc ?? null, rev: toRev(data?.rev) }
-        },
-        flush: (pid: string, req: ApplyOpsRequest) => keepaliveSend(APIS.PAGE_APPLY_OPS.url, 'POST', pid, req),
-    }), [])
 
     const pageSave = usePageSave({
         editor: editor.current,
@@ -579,7 +544,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         // Sync never completed, so this client cannot claim its document matches
         // the server's; only a whole-document reconcile is safe from here.
         reconcileOnly: syncTimedOut && !syncStatus,
-        endpoints,
+        documents: service.documents,
         onSaved: notifySaved,
     })
     const { saving, dirty, error: saveError, progress: saveProgress, behindServer, session, saveNow } = pageSave
@@ -640,15 +605,14 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
     const handleMoveToTrash = useCallback(async () => {
         if (!pageId) return
         try {
-            await useApi(APIS.MOVE_TO_TRASH, { id: pageId })
+            await service.pages.movePageToTrash(pageId)
             toast.success(t('editor.movedToTrash', 'Moved to trash'))
-            event.emit(ON_PAGE_REFRESH)
             navigator.go({ to: `/space-detail/${spaceId}` })
         } catch (err) {
             console.error('Failed to move page to trash:', err)
             toast.error(t('editor.moveToTrashFailed', 'Failed to move to trash'))
         }
-    }, [pageId, spaceId, navigator, t])
+    }, [pageId, spaceId, navigator, service, t])
 
     // After a server-side rollback the editor's collab doc still holds the
     // pre-rollback content. Re-read the restored document from the block store and
@@ -663,12 +627,12 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
     const handleVersionRestored = useCallback(async (restoredRev?: number | string | null) => {
         if (!pageId) return
         try {
-            const [pageRes, docRes] = await Promise.all([
-                spaceService.getPage(pageId),
-                useApi(APIS.PAGE_DOC, { id: pageId }) as Promise<any>,
+            const [pageRecord, document] = await Promise.all([
+                service.pages.getPage(pageId),
+                service.documents.getPageDocument(pageId),
             ])
-            setPage(pageRes)
-            const restored = docRes?.data?.doc
+            setPage(toEditorPage(pageRecord))
+            const restored = document.doc ?? document.content
             const ed = editor.current
             if (ed && restored) {
                 ed.commands.setContent(restored)
@@ -677,14 +641,16 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                 // into a fresh set of ops and push the page forward again.
                 const opTracker = (ed.storage as any)?.opTracker
                 opTracker?.resetBaseline?.()
-                adoptRev(restoredRev ?? docRes?.data?.rev)
+                adoptRev(restoredRev ?? document.rev)
             }
-            event.emit(ON_PAGE_REFRESH)
+            if (spaceId) {
+                service.changes.emit("page.tree.changed", { spaceId, pageId })
+            }
         } catch (err) {
             console.error('Failed to refresh page after restore:', err)
             toast.error(t('editor.version.refreshFailed', 'Restored on server — reload the page to see it'))
         }
-    }, [pageId, spaceService, t, adoptRev])
+    }, [pageId, service, spaceId, t, adoptRev])
 
     // Markdown import handler
     const handleImportMarkdown = useCallback(() => {
@@ -767,7 +733,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
             }
 
             try {
-                await useApi(APIS.PAGE_CREATE_CHECKPOINT, { id: pageId }, { clientId })
+                await service.documents.createPageCheckpoint(pageId, clientId)
                 toast.success(t('editor.version.checkpointSuccess', 'Checkpoint created'))
             } catch (err) {
                 console.error('Failed to create page checkpoint:', err)
@@ -776,7 +742,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         } finally {
             checkpointInFlightRef.current = false
         }
-    }, [props.active, pageId, saveNow, clientId, t])
+    }, [props.active, pageId, saveNow, clientId, service, t])
 
     useKeyPress(["ctrl.s"], (e) => {
         e.preventDefault()
@@ -1092,6 +1058,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                     ref={editor}
                     synced={syncStatus}
                     provider={provider}
+                    pageDocuments={service.documents}
                     className="h-full"
                     id={pageId as string}
                     user={collaborationUser}

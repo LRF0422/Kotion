@@ -1,3 +1,4 @@
+import type { SpacePageService } from "../domain/space-page/operations";
 
 export type KeysWithTypeOf<T, Type> = { [P in keyof T]: T[P] extends Type ? P : never }[keyof T];
 export type ValuesOf<T> = T[keyof T];
@@ -136,4 +137,5 @@ export interface AIFoundation {
 export interface Services {
     fileService?: FileService;
     aiFoundation?: AIFoundation;
+    spacePageService?: SpacePageService;
 }

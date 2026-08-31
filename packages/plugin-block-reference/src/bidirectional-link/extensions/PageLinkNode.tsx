@@ -23,7 +23,7 @@ export interface PageLinkNodeAttributes {
 declare module '@kn/editor' {
     interface Commands<ReturnType> {
         pageLinkNode: {
-            setPageLink: (attrs: { pageId: number | string; title: string }) => ReturnType;
+            setPageLink: (attrs: { pageId: string; title: string }) => ReturnType;
         };
     }
 }
@@ -84,7 +84,7 @@ export const PageLinkNode = Node.create({
     addCommands() {
         return {
             setPageLink:
-                ({ pageId, title }: { pageId: number | string; title: string }) =>
+                ({ pageId, title }: { pageId: string; title: string }) =>
                     ({ chain }) => {
                         return chain()
                             .insertContent([

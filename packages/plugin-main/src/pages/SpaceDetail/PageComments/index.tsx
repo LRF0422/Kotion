@@ -8,9 +8,10 @@ import {
 import {
     MessageSquare, Send, Trash2, CheckCircle, SmilePlus, MoreHorizontal, Reply
 } from "@kn/icon"
-import { useApi, useTranslation, useSafeState } from "@kn/common"
-import { APIS } from "../../../api"
-import { PageComment, CreateCommentRequest, SpaceMember } from "../../../model/Space"
+import {
+    useSpacePageService, useTranslation, useSafeState,
+    type PageComment, type SpaceMember, type DateTimeValue
+} from "@kn/common"
 
 interface PageCommentsProps {
     pageId: string
@@ -19,7 +20,7 @@ interface PageCommentsProps {
     className?: string
 }
 
-function formatTime(dateStr?: string): string {
+function formatTime(dateStr?: DateTimeValue): string {
     if (!dateStr) return ''
     const date = new Date(dateStr)
     const now = new Date()
@@ -36,6 +37,7 @@ const QUICK_REACTIONS = ['👍', '❤️', '🎉', '😄', '🤔', '👀']
 
 export const PageComments: React.FC<PageCommentsProps> = ({ pageId, spaceId, members, className }) => {
     const { t } = useTranslation()
+    const spacePageService = useSpacePageService()
     const [comments, setComments] = useSafeState<PageComment[]>([])
     const [loading, setLoading] = useSafeState(true)
     const [newComment, setNewComment] = useSafeState('')
@@ -46,15 +48,15 @@ export const PageComments: React.FC<PageCommentsProps> = ({ pageId, spaceId, mem
 
     const fetchComments = useCallback(() => {
         setLoading(true)
-        useApi(APIS.GET_PAGE_COMMENTS, { pageId })
-            .then(res => setComments(res.data || []))
+        spacePageService.comments.getPageComments(pageId)
+            .then(setComments)
             .catch(() => setComments([]))
             .finally(() => setLoading(false))
-    }, [pageId])
+    }, [pageId, spacePageService])
 
     useEffect(() => {
         fetchComments()
-    }, [pageId])
+    }, [fetchComments])
 
     const handleSubmit = useCallback(async () => {
         if (!newComment.trim()) return
@@ -69,20 +71,21 @@ export const PageComments: React.FC<PageCommentsProps> = ({ pageId, spaceId, mem
         }
 
         // Resolve mention names to IDs
-        const mentionIds: (string | number)[] = []
+        const mentionIds: string[] = []
         if (members && mentionNames.length > 0) {
             for (const name of mentionNames) {
                 const member = members.find(m =>
                     m.name?.toLowerCase().includes(name.toLowerCase())
                 )
-                if (member) mentionIds.push(member.id)
+                if (member) mentionIds.push(String(member.id))
             }
         }
 
         try {
-            await useApi(APIS.ADD_PAGE_COMMENT, { pageId }, {
+            await spacePageService.comments.createPageComment({
+                pageId,
                 content: newComment,
-                parentId: replyTo?.id || null,
+                parentId: replyTo?.id ?? null,
                 mentions: mentionIds.length > 0 ? mentionIds : undefined
             })
             setNewComment('')
@@ -93,32 +96,32 @@ export const PageComments: React.FC<PageCommentsProps> = ({ pageId, spaceId, mem
         } finally {
             setSubmitting(false)
         }
-    }, [newComment, replyTo, pageId, members])
+    }, [newComment, replyTo, pageId, members, fetchComments, spacePageService, t])
 
-    const handleDelete = useCallback(async (commentId: string | number) => {
+    const handleDelete = useCallback(async (commentId: string) => {
         try {
-            await useApi(APIS.DELETE_PAGE_COMMENT, { pageId, commentId })
+            await spacePageService.comments.deletePageComment(pageId, commentId)
             fetchComments()
         } catch (e) {
             toast.error(t('comment.deleteError', 'Failed to delete comment'))
         }
-    }, [pageId])
+    }, [pageId, fetchComments, spacePageService, t])
 
-    const handleToggleResolved = useCallback(async (commentId: string | number) => {
+    const handleToggleResolved = useCallback(async (commentId: string) => {
         try {
-            await useApi(APIS.TOGGLE_COMMENT_RESOLVED, { pageId, commentId })
+            await spacePageService.comments.togglePageCommentResolved(pageId, commentId)
             fetchComments()
         } catch (e) {
             toast.error(t('comment.resolveError', 'Failed to update comment'))
         }
-    }, [pageId])
+    }, [pageId, fetchComments, spacePageService, t])
 
-    const handleReaction = useCallback(async (commentId: string | number, emoji: string) => {
+    const handleReaction = useCallback(async (commentId: string, emoji: string) => {
         try {
-            await useApi(APIS.ADD_COMMENT_REACTION, { pageId, commentId, emoji })
+            await spacePageService.comments.addCommentReaction({ pageId, commentId, emoji })
             fetchComments()
         } catch (e) { /* ignore */ }
-    }, [pageId])
+    }, [pageId, fetchComments, spacePageService])
 
     const handleInsertMention = useCallback((member: SpaceMember) => {
         setNewComment(prev => prev + `@${member.name} `)

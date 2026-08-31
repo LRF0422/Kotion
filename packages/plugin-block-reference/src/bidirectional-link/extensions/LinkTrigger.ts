@@ -34,7 +34,7 @@ export interface LinkSuggestionListHandle {
 
 /** Payload passed from the lists back to the suggestion `command`. */
 export interface LinkSuggestionCommandProps {
-    page?: { id: number | string; title: string };
+    page?: { id: string; title: string };
     block?: { id: string };
 }
 

@@ -28,9 +28,13 @@ import {
 } from "@kn/editor";
 import { Skeleton, cn } from "@kn/ui";
 import { FileText } from "@kn/icon";
-import { FileService, useApi, useOptionalService, useTranslation } from "@kn/common";
+import {
+    FileService,
+    useOptionalService,
+    useSpacePageService,
+    useTranslation,
+} from "@kn/common";
 import { PageIconData, PageItemIcon } from "../SpaceDetail/components/PageItemIcon";
-import { APIS } from "../../api";
 
 /** Page metadata supplied by the already-loaded Home row plus PAGE_DOC content. */
 interface PreviewPage {
@@ -132,6 +136,7 @@ const PreviewBody: React.FC<{
     icon?: PageIconData | null;
 }> = ({ pageId, title, spaceName, icon }) => {
     const { t } = useTranslation();
+    const service = useSpacePageService();
     const fileService = useOptionalService("fileService") as FileService | undefined;
     const [page, setPage] = useState<PreviewPage | null>(() => readCache(pageId));
     const [error, setError] = useState(false);
@@ -139,12 +144,12 @@ const PreviewBody: React.FC<{
     useEffect(() => {
         if (readCache(pageId)) return;
         let cancelled = false;
-        useApi(APIS.PAGE_DOC, { id: pageId })
-            .then((res) => {
+        service.documents.getPageDocument(pageId)
+            .then((document) => {
                 if (cancelled) return;
-                const data = res?.data;
-                if (data?.doc) {
-                    const preview = { id: pageId, title, spaceName, icon: icon || undefined, doc: data.doc };
+                const doc = (document.doc ?? null) as Content | null;
+                if (doc) {
+                    const preview = { id: pageId, title, spaceName, icon: icon || undefined, doc };
                     writeCache(pageId, preview);
                     setPage(preview);
                 } else {
@@ -157,7 +162,7 @@ const PreviewBody: React.FC<{
         return () => {
             cancelled = true;
         };
-    }, [pageId, title, spaceName, icon]);
+    }, [service, pageId, title, spaceName, icon]);
 
     const { body, cover } = useMemo(() => parsePage(page?.doc), [page?.doc]);
     // Prefer the icon the hovered row already knows (emoji/image/date all

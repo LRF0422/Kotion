@@ -1,67 +1,75 @@
 import { useEffect, useState } from "react";
-import { useToggle } from "@kn/common";
-import type { BlockInfo } from "../types";
-import { useSpaceService } from "./useSpaceService";
+import { useSpacePageService } from "@kn/common";
+import type { BlockSummary } from "@kn/common";
 import { blockCache } from "../utils/cache";
 
-/**
- * Custom hook to fetch and manage block information with caching
- * 
- * Features:
- * - Automatic caching with LRU eviction
- * - Cache bypass on refresh
- * - Proper loading and error states
- * 
- * @param blockId - The ID of the block to fetch
- * @param refreshFlag - Optional flag to trigger refresh and bypass cache
- * @returns Object containing blockInfo, loading state, and error state
- * 
- * @example
- * ```tsx
- * const { blockInfo, loading, error } = useBlockInfo(blockId);
- * const { blockInfo, loading } = useBlockInfo(blockId, refreshFlag); // With refresh
- * ```
- */
+/** Fetch and cache canonical block details. */
 export const useBlockInfo = (blockId: string | null, refreshFlag?: boolean) => {
-    const [blockInfo, setBlockInfo] = useState<BlockInfo | null>(null);
-    const [loading, { toggle }] = useToggle(false);
+    const normalizedBlockId = blockId ? String(blockId) : null;
+    const [blockInfo, setBlockInfo] = useState<BlockSummary | null>(null);
+    const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const spaceService = useSpaceService();
+    const [version, setVersion] = useState(0);
+    const service = useSpacePageService();
 
     useEffect(() => {
-        if (!spaceService || !blockId) return;
+        if (!normalizedBlockId) return;
+        const invalidate = () => {
+            blockCache.invalidate(normalizedBlockId);
+            setVersion((value) => value + 1);
+        };
+        const unsubscribeDocument = service.changes.subscribe("page.document.changed", ({ payload }) => {
+            if (!blockInfo?.pageId || String(payload.pageId) === String(blockInfo.pageId)) invalidate();
+        });
+        const unsubscribeRelations = service.changes.subscribe("page.relations.changed", ({ payload }) => {
+            if (!blockInfo?.pageId || String(payload.pageId) === String(blockInfo.pageId)) invalidate();
+        });
+        return () => {
+            unsubscribeDocument();
+            unsubscribeRelations();
+        };
+    }, [blockInfo?.pageId, normalizedBlockId, service]);
 
-        // Check cache first (unless refresh is requested)itt
+    useEffect(() => {
+        if (!normalizedBlockId) {
+            setBlockInfo(null);
+            setError(null);
+            setLoading(false);
+            return;
+        }
+
         if (!refreshFlag) {
-            const cached = blockCache.get(blockId);
+            const cached = blockCache.get(normalizedBlockId);
             if (cached) {
                 setBlockInfo(cached);
                 setError(null);
+                setLoading(false);
                 return;
             }
         }
 
+        let cancelled = false;
         const fetchBlockInfo = async () => {
-            toggle();
+            setLoading(true);
             setError(null);
 
             try {
-                const res = await spaceService.getBlockInfo(blockId);
-                if (res) {
-                    setBlockInfo(res);
-                    blockCache.set(blockId, res); // Cache the result
-                } else {
-                    setError("Block not found");
-                }
+                const block = await service.relations.getBlock(normalizedBlockId);
+                if (cancelled) return;
+                setBlockInfo(block);
+                blockCache.set(normalizedBlockId, block);
             } catch (err) {
+                if (cancelled) return;
+                setBlockInfo(null);
                 setError(err instanceof Error ? err.message : "Failed to fetch block info");
             } finally {
-                toggle();
+                if (!cancelled) setLoading(false);
             }
         };
 
-        fetchBlockInfo();
-    }, [spaceService, blockId, refreshFlag, toggle]);
+        void fetchBlockInfo();
+        return () => { cancelled = true; };
+    }, [service, normalizedBlockId, refreshFlag, version]);
 
     return { blockInfo, loading, error };
 };

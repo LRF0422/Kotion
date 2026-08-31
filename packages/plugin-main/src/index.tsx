@@ -12,7 +12,6 @@ import { KPlugin, PluginConfig } from '@kn/common'
 import React from 'react'
 import { LayoutGrid } from '@kn/icon'
 import "@kn/ui/globals.css"
-import { spaceService } from './service/space-service'
 import { mainDockPanels } from './dock'
 // export * from "./service"
 // @ts-ignore
@@ -116,9 +115,6 @@ export const DefaultPluginInstance = new DefaultPlugin({
     },
   ],
   dockPanels: mainDockPanels,
-  services: {
-    spaceService: spaceService
-  },
   locales: {
     "zh": {
       translation: {

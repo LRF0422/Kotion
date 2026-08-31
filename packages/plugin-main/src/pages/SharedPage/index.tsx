@@ -1,11 +1,17 @@
-import { APIS } from "../../api";
 import { Button } from "@kn/ui";
 import { EditorRender } from "@kn/editor";
-import { useApi, useNavigator, useSafeState, useTranslation, GlobalState } from "@kn/common";
+import {
+    GlobalState,
+    hasPermission,
+    type SharedPage as SharedPageModel,
+    useNavigator,
+    useSafeState,
+    useSpacePageService,
+    useTranslation,
+} from "@kn/common";
 import { AlertCircle, Clock, ExternalLink, Eye, Loader2 } from "@kn/icon";
 import React, { useEffect, useState } from "react";
 import { useParams, useSelector } from "@kn/common";
-import type { SharedPage as SharedPageModel } from "../../model/Space";
 
 type LoadStatus = 'loading' | 'ready' | 'error';
 
@@ -18,6 +24,8 @@ export const SharedPage: React.FC = () => {
     const { t } = useTranslation();
     const params = useParams();
     const navigator = useNavigator();
+    const service = useSpacePageService();
+    const shortCode = params.shortCode ? String(params.shortCode) : '';
     const { userInfo } = useSelector((state: GlobalState) => state);
 
     const [status, setStatus] = useState<LoadStatus>('loading');
@@ -25,16 +33,15 @@ export const SharedPage: React.FC = () => {
     const [errorMessage, setErrorMessage] = useState<string>('');
 
     useEffect(() => {
-        const shortCode = params.shortCode;
         if (!shortCode) {
             setStatus('error');
             setErrorMessage(t('sharedPage.invalid-link'));
             return;
         }
         setStatus('loading');
-        useApi(APIS.RESOLVE_SHARE_LINK, { shortCode })
-            .then(res => {
-                setPage(res.data);
+        service.shares.resolveShareLink(shortCode)
+            .then(resolvedPage => {
+                setPage(resolvedPage);
                 setStatus('ready');
             })
             .catch((error: any) => {
@@ -42,7 +49,7 @@ export const SharedPage: React.FC = () => {
                 setErrorMessage(error?.message || t('sharedPage.resolve-error'));
                 setStatus('error');
             });
-    }, [params.shortCode]);
+    }, [service, shortCode, t]);
 
     // Pre-parse page content for the read-only editor
     const parsedContent = React.useMemo(() => {
@@ -54,7 +61,7 @@ export const SharedPage: React.FC = () => {
         }
     }, [page?.content]);
 
-    const canEnterEdit = !!userInfo?.id && page?.permission === 'WRITE';
+    const canEnterEdit = !!userInfo?.id && hasPermission(page?.permission, 'WRITE');
 
     if (status === 'loading') {
         return (

@@ -7,10 +7,9 @@ import {
     forceSimulation,
     type Simulation,
 } from "d3-force";
-import { useApi, useNavigator, useParams, useSearchParams, useTranslation } from "@kn/common";
+import { useSpacePageService, useNavigator, useParams, useSearchParams, useTranslation } from "@kn/common";
 import { useResponsive, Button, Input, cn } from "@kn/ui";
 import { Network, Loader2, RefreshCw, Maximize2, X, ZoomIn, ZoomOut, Layers, LocateFixed } from "@kn/icon";
-import { APIS } from "../../api";
 import type { GraphEdge, GraphNode, SimLink, SimNode, ViewTransform } from "./types";
 
 /** Muted, Notion-like palette; spaces are colored by stable index into this list. */
@@ -74,6 +73,7 @@ export const SpaceGraph: React.FC<SpaceGraphProps> = ({
     const params = useParams();
     const [searchParams] = useSearchParams();
     const navigator = useNavigator();
+    const spacePageService = useSpacePageService();
     const { isMobile } = useResponsive();
 
     // Current space for node highlighting: explicit prop wins over the route param.
@@ -133,12 +133,22 @@ export const SpaceGraph: React.FC<SpaceGraphProps> = ({
         let cancelled = false;
         setLoading(true);
         setError(null);
-        useApi(APIS.GET_SPACE_GRAPH)
-            .then((res) => {
+        spacePageService.relations.getSpaceGraph()
+            .then((data) => {
                 if (cancelled) return;
-                const data = res.data || {};
-                const rawNodes: GraphNode[] = data.nodes || [];
-                const rawEdges: GraphEdge[] = data.edges || [];
+                const rawNodes: GraphNode[] = data.nodes.map((node) => ({
+                    id: node.id,
+                    title: node.title,
+                    spaceId: node.spaceId,
+                    spaceName: node.spaceName,
+                    icon: node.icon as GraphNode["icon"],
+                    status: node.status,
+                }));
+                const rawEdges: GraphEdge[] = data.edges.map((edge) => ({
+                    source: edge.source,
+                    target: edge.target,
+                    linkKind: edge.linkKind,
+                }));
 
                 // Degree (in+out) drives node radius.
                 const degree: Record<string, number> = {};
@@ -173,7 +183,7 @@ export const SpaceGraph: React.FC<SpaceGraphProps> = ({
         return () => {
             cancelled = true;
         };
-    }, [reloadFlag, t]);
+    }, [reloadFlag, spacePageService, t]);
 
     // Stable color per space id.
     const spaceColor = useMemo(() => {

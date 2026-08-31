@@ -25,7 +25,7 @@ interface UseLinkTriggersReturn {
     /** Close the block picker */
     closeBlockPicker: () => void;
     /** Handle page selection */
-    handlePageSelect: (page: { id: number; title: string }) => void;
+    handlePageSelect: (page: { id: string; title: string }) => void;
     /** Handle block selection */
     handleBlockSelect: (block: { id: string }) => void;
 }
@@ -97,7 +97,7 @@ export function useLinkTriggers({
     }, [editor]);
 
     // Handle page selection
-    const handlePageSelect = useCallback((page: { id: number; title: string }) => {
+    const handlePageSelect = useCallback((page: { id: string; title: string }) => {
         if (editor) {
             (editor.commands as any).setPageLink({ pageId: page.id, title: page.title });
         }

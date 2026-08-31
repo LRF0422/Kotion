@@ -28,6 +28,6 @@ export const bundledPlugins = [
   drawnix,
   DefaultPluginInstance,
   fileManager,
-  // mermaid,
+  mermaid,
   excalidraw,
 ];
