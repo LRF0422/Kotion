@@ -6,7 +6,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { TourHost } from "./components/Tour/TourHost"
 import { ChevronLeft } from "@kn/icon"
 import { MobileTabBar } from "./components/mobile/MobileTabBar"
-import { useApi, APIS, useNavigator, useUploadFile, getAccessToken, getRefreshToken, getTokenContextState, clearContextSensitiveClientState, clearTokens, normalizeTokenResponse, notifyContextChanged, saveTokens, useDispatch, AppContext, event, GO_TO_MARKETPLACE, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS, PLUGIN_INCOMPATIBLE, TOGGLE_AI_ASSISTANT, TOGGLE_DOCK_PANEL, dockRuntime, logger } from "@kn/common"
+import { useApi, APIS, useNavigator, useUploadFile, getAccessToken, getRefreshToken, getTokenContextState, clearContextSensitiveClientState, clearTokens, normalizeTokenResponse, notifyContextChanged, saveTokens, useDispatch, AppContext, event, GO_TO_MARKETPLACE, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS, TOGGLE_AI_ASSISTANT, TOGGLE_DOCK_PANEL, dockRuntime, logger } from "@kn/common"
 import { toast } from "@kn/ui"
 import React from "react"
 import { useAsyncEffect } from "ahooks"
@@ -131,17 +131,6 @@ export function Layout({ onPluginsReady }: LayoutProps) {
         }
     }, [])
 
-    // Surface plugins skipped by the API version handshake to the user
-    useEffect(() => {
-        const handleIncompatible = (payload: { name: string; apiVersion?: string }) => {
-            toast.warning(`插件 ${payload.name} 因 API 版本不兼容已被跳过${payload.apiVersion ? ` (插件 API 版本: ${payload.apiVersion})` : ''}`)
-        }
-        event.on(PLUGIN_INCOMPATIBLE, handleIncompatible)
-        return () => {
-            event.off(PLUGIN_INCOMPATIBLE, handleIncompatible)
-        }
-    }, [])
-
     // Load plugins asynchronously in Layout
     useAsyncEffect(async () => {
         if (!pluginManager) return
@@ -168,9 +157,12 @@ export function Layout({ onPluginsReady }: LayoutProps) {
                         logger.warn('Failed to load viewer plugins for public share; using compatibility plugins only', error)
                     }
                 }
-                const { failedPlugins } = await pluginManager.init(installedPlugins)
+                const { failedPlugins, incompatiblePlugins } = await pluginManager.init(installedPlugins)
                 if (failedPlugins.length > 0) {
                     logger.warn('Some viewer plugins failed on public share:', failedPlugins)
+                }
+                if (incompatiblePlugins.length > 0) {
+                    logger.warn('Some viewer plugins were skipped on public share because their API versions are incompatible:', incompatiblePlugins)
                 }
                 setPluginsLoaded(true)
                 onPluginsReady(true)
@@ -182,7 +174,10 @@ export function Layout({ onPluginsReady }: LayoutProps) {
             if (token) {
                 console.log('Loading plugins in Layout, refreshFlag:', refreshFlag)
                 const installedPlugins: any[] = (await useApi(APIS.GET_INSTALLED_PLUGINS)).data
-                const { failedPlugins } = await pluginManager.init(installedPlugins)
+                const { failedPlugins, incompatiblePlugins } = await pluginManager.init(installedPlugins)
+                if (incompatiblePlugins.length > 0) {
+                    logger.warn('Some installed plugins were skipped because their API versions are incompatible:', incompatiblePlugins)
+                }
                 if (failedPlugins.length > 0) {
                     throw new Error(`Failed to load required plugins: ${failedPlugins.join(', ')}`)
                 }

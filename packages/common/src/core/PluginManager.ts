@@ -136,6 +136,20 @@ export interface PluginManagerOptions {
     coreServices?: Partial<Services>
 }
 
+export interface PluginApiIncompatibility {
+    name: string
+    pluginKey?: string
+    versionId?: string | number
+    version?: string
+    apiVersion: string
+    hostApiVersion: string
+}
+
+export interface PluginInitResult {
+    failedPlugins: string[]
+    incompatiblePlugins: PluginApiIncompatibility[]
+}
+
 export class PluginManager {
 
     plugins: KPlugin<any>[] = []
@@ -163,6 +177,7 @@ export class PluginManager {
     private _cacheTours: TourConfig[] | null = null
     private _cacheDockPanels: ResolvedDockPanel[] | null = null
     private _pluginMap: Map<string, KPlugin<any>> = new Map()
+    private _incompatiblePlugins = new Map<string, PluginApiIncompatibility>()
 
     // Built-in dock panels contributed by the host itself (e.g. the AI agent
     // panel). Same contract as plugin-contributed panels; they simply cannot be
@@ -192,6 +207,10 @@ export class PluginManager {
      */
     get version(): number {
         return this._version
+    }
+
+    get incompatiblePlugins(): PluginApiIncompatibility[] {
+        return [...this._incompatiblePlugins.values()]
     }
 
     /**
@@ -273,25 +292,80 @@ export class PluginManager {
             + '&v=' + (plugin.id ?? plugin.version ?? '')
     }
 
+    private _pluginIdentity(plugin: {
+        pluginKey?: string
+        name?: string
+        id?: string | number
+        currentVersionId?: string | number
+        version?: string
+        currentVersion?: string | { version?: string }
+    }): string {
+        const key = plugin.pluginKey || plugin.name || 'unknown'
+        const currentVersion = typeof plugin.currentVersion === 'string'
+            ? plugin.currentVersion
+            : plugin.currentVersion?.version
+        const version = plugin.currentVersionId
+            ?? plugin.id
+            ?? currentVersion
+            ?? plugin.version
+            ?? 'unknown'
+        return `${key}:${version}`
+    }
+
+    private _clearPluginIncompatibility(plugin: { pluginKey?: string; name?: string }): boolean {
+        let cleared = false
+        for (const [key, issue] of this._incompatiblePlugins) {
+            const matches = plugin.pluginKey && issue.pluginKey
+                ? plugin.pluginKey === issue.pluginKey
+                : Boolean(plugin.name && plugin.name === issue.name)
+            if (matches) {
+                this._incompatiblePlugins.delete(key)
+                cleared = true
+            }
+        }
+        return cleared
+    }
+
     /**
      * Version handshake: a plugin built against a different MAJOR plugin-api
      * version than the host is skipped. Legacy bundles without metadata are
      * allowed through with a warning.
      */
-    private _checkApiCompat(meta: PluginMeta | undefined, name: string): boolean {
+    private _getApiIncompatibility(
+        meta: PluginMeta | undefined,
+        plugin: {
+            name?: string
+            pluginKey?: string
+            id?: string | number
+            currentVersionId?: string | number
+            version?: string
+            currentVersion?: string | { version?: string }
+        },
+    ): PluginApiIncompatibility | null {
+        const name = plugin.name || plugin.pluginKey || 'unknown'
+        const currentVersion = typeof plugin.currentVersion === 'string'
+            ? plugin.currentVersion
+            : plugin.currentVersion?.version
         const apiVersion = meta?.apiVersion
         if (!apiVersion) {
             logger.warn(`Plugin ${name} has no apiVersion metadata (legacy bundle), loading anyway`)
-            return true
+            return null
         }
         const pluginMajor = apiVersion.split('.')[0]
         const hostMajor = this._hostApiVersion.split('.')[0]
         if (pluginMajor !== hostMajor) {
             logger.warn(`Plugin ${name} is incompatible: built against plugin-api ${apiVersion}, host is ${this._hostApiVersion}. Skipping.`)
             event.emit(PLUGIN_INCOMPATIBLE, { name, apiVersion })
-            return false
+            return {
+                name,
+                pluginKey: plugin.pluginKey,
+                versionId: plugin.currentVersionId ?? plugin.id,
+                version: currentVersion ?? plugin.version,
+                apiVersion,
+                hostApiVersion: this._hostApiVersion,
+            }
         }
-        return true
+        return null
     }
 
     /**
@@ -320,7 +394,7 @@ export class PluginManager {
         return plugin
     }
 
-    public async init(remotePlugins: any[]): Promise<{ failedPlugins: string[] }> {
+    public async init(remotePlugins: any[]): Promise<PluginInitResult> {
         logger.info('Initializing remote plugins:', remotePlugins);
         logger.info('Current init status:', this._init);
 
@@ -352,11 +426,12 @@ export class PluginManager {
                     this._buildPluginMap(this.plugins)
                     this._rebuildServices()
                 }
+                this._incompatiblePlugins = new Map()
                 this._notifyChange()
                 this._init = true
                 logger.info('Plugins loaded:', this.plugins.length);
                 logger.debug('Services loaded:', this._serviceRegistry.getAll());
-                return { failedPlugins: [...conflicts] }
+                return { failedPlugins: [...conflicts], incompatiblePlugins: [] }
             }
 
             const loadableRemotePlugins = remotePlugins.filter(plugin => {
@@ -380,6 +455,7 @@ export class PluginManager {
             console.log('Load results:', loadResults);
 
             const failedPlugins = new Set<string>()
+            const incompatiblePlugins = new Map<string, PluginApiIncompatibility>()
             loadResults.forEach((result, index) => {
                 if (result.status === 'rejected') {
                     failedPlugins.add(loadableRemotePlugins[index]?.name || loadableRemotePlugins[index]?.pluginKey || 'unknown')
@@ -387,12 +463,14 @@ export class PluginManager {
             })
 
             const successfulPlugins: KPlugin<any>[] = []
+            const activatedPluginKeys = new Set<string>()
             const seenPluginNames = new Set(this._initialPlugins.map(plugin => plugin.name))
             for (const result of loadResults) {
                 if (result.status !== 'fulfilled') continue
                 const { plugin, registration } = result.value
-                if (!this._checkApiCompat(registration.meta, plugin.name)) {
-                    failedPlugins.add(plugin.name || plugin.pluginKey)
+                const incompatibility = this._getApiIncompatibility(registration.meta, plugin)
+                if (incompatibility) {
+                    incompatiblePlugins.set(this._pluginIdentity(plugin), incompatibility)
                     continue
                 }
                 const instance = this._extractPlugin(registration)
@@ -407,6 +485,13 @@ export class PluginManager {
                 }
                 seenPluginNames.add(instance.name)
                 successfulPlugins.push(instance)
+                if (plugin.pluginKey) activatedPluginKeys.add(plugin.pluginKey)
+            }
+
+            for (const [key, issue] of incompatiblePlugins) {
+                if (issue.pluginKey && activatedPluginKeys.has(issue.pluginKey)) {
+                    incompatiblePlugins.delete(key)
+                }
             }
 
             this.plugins = [...this._initialPlugins, ...successfulPlugins]
@@ -427,6 +512,7 @@ export class PluginManager {
                 }
             }
 
+            this._incompatiblePlugins = incompatiblePlugins
             this._notifyChange()
             this._init = true
 
@@ -436,13 +522,21 @@ export class PluginManager {
             if (failedPlugins.size > 0) {
                 logger.warn(`${failedPlugins.size} plugins failed to load or activate`)
             }
-            return { failedPlugins: [...failedPlugins] }
+            if (incompatiblePlugins.size > 0) {
+                logger.warn(`${incompatiblePlugins.size} plugins skipped because their API versions are incompatible`)
+            }
+            return {
+                failedPlugins: [...failedPlugins],
+                incompatiblePlugins: [...incompatiblePlugins.values()],
+            }
         } catch (error) {
             logger.error('Fatal error during plugin initialization:', error)
             this.plugins = [...this._initialPlugins]
             this._pluginMap.clear()
             this._buildPluginMap(this._initialPlugins)
             this._rebuildServices()
+            this._incompatiblePlugins = new Map()
+            this._notifyChange()
             this._init = true
             throw error
         }
@@ -466,20 +560,23 @@ export class PluginManager {
     uninstallPlugin(key: string) {
         logger.info('pluginStore ', this._pluginMap);
         const plugin = this._pluginMap.get(key)
-        if (!plugin) {
+        const clearedIncompatibility = this._clearPluginIncompatibility({ name: key })
+        if (!plugin && !clearedIncompatibility) {
             logger.warn(`Plugin ${key} not found, cannot uninstall`)
             return false
         }
 
-        this.plugins = this.plugins.filter(it => it.name !== key)
-        this._pluginMap.delete(key)
+        if (plugin) {
+            this.plugins = this.plugins.filter(it => it.name !== key)
+            this._pluginMap.delete(key)
+        }
 
         // Invalidate the script cache so that if the plugin is re-installed,
         // it will be freshly loaded instead of using the stale cached version
         this.clearPluginCache()
 
         // Atomically rebuild plugin-owned services from the remaining plugins.
-        this._rebuildServices()
+        if (plugin) this._rebuildServices()
 
         logger.info('Plugin uninstalled:', key);
         // Notify listeners (does NOT emit global events – callers do that)
@@ -511,7 +608,11 @@ export class PluginManager {
                 return false
             }
 
-            if (!this._checkApiCompat(registration.meta, plugin.name)) {
+            const incompatibility = this._getApiIncompatibility(registration.meta, plugin)
+            if (incompatibility) {
+                this._clearPluginIncompatibility(plugin)
+                this._incompatiblePlugins.set(this._pluginIdentity(plugin), incompatibility)
+                this._notifyChange()
                 return false
             }
 
@@ -534,6 +635,7 @@ export class PluginManager {
 
             this.plugins = [...this.plugins, loadedPlugin]
             this._pluginMap.set(loadedPlugin.name, loadedPlugin)
+            this._clearPluginIncompatibility(plugin)
 
             logger.info(`Plugin ${loadedPlugin.name} installed successfully`)
             // Notify listeners (does NOT emit global events – callers do that)
@@ -888,7 +990,7 @@ export class PluginManager {
                 const registration = await pluginScriptLoader.load(pluginUrl, plugin.pluginKey, plugin.name);
 
                 // Version handshake before extracting the KPlugin instance
-                if (!this._checkApiCompat(registration.meta, plugin.name)) {
+                if (this._getApiIncompatibility(registration.meta, plugin)) {
                     return null;
                 }
 

@@ -47,6 +47,9 @@ export const resources = {
         install: "安装",
         installed: "已安装",
         active: "已启用",
+        incompatible: "版本不兼容",
+        incompatibleHint:
+          "此插件已安装，但因插件 API 版本与当前 Kotion 不兼容而被跳过。",
         details: "详情",
         "load-more": "加载更多",
         category: {
@@ -95,6 +98,9 @@ export const resources = {
           active: "已启用",
           installed: "已安装",
           disabled: "已停用",
+          incompatible: "版本不兼容",
+          incompatibleHint:
+            "插件 API 版本与当前 Kotion 不兼容，已被跳过且未启用。",
           moreActions: "{{name}} 的更多操作",
           update: "更新",
           updating: "正在更新…",
@@ -107,8 +113,13 @@ export const resources = {
           active: "已启用",
           installed: "已安装",
           disabled: "已停用",
+          incompatible: "版本不兼容",
           installedHint: "插件已安装，重新加载后即可使用",
           disabledHint: "可在插件管理中重新启用",
+          incompatibleHint:
+            "插件 API 版本与当前 Kotion 不兼容。插件已被跳过，当前未启用。",
+          incompatibleHintVersions:
+            "插件 API {{pluginApiVersion}} 与当前 Kotion 支持的 {{hostApiVersion}} 不兼容。插件已被跳过，当前未启用。",
           packageUnavailable: "插件安装包暂不可用",
           installSuccess: "插件安装成功",
           installFailed: "插件安装失败，请稍后重试",
@@ -1078,6 +1089,9 @@ export const resources = {
         install: "Install",
         installed: "Installed",
         active: "Active",
+        incompatible: "Incompatible",
+        incompatibleHint:
+          "This plugin is installed but was skipped because its plugin API version is incompatible with this version of Kotion.",
         details: "Details",
         "load-more": "Load more",
         category: {
@@ -1126,6 +1140,9 @@ export const resources = {
           active: "Active",
           installed: "Installed",
           disabled: "Disabled",
+          incompatible: "Incompatible",
+          incompatibleHint:
+            "Its plugin API version is incompatible with this version of Kotion, so it was skipped and is not active.",
           moreActions: "More actions for {{name}}",
           update: "Update",
           updating: "Updating...",
@@ -1138,9 +1155,14 @@ export const resources = {
           active: "Active",
           installed: "Installed",
           disabled: "Disabled",
+          incompatible: "Incompatible",
           installedHint:
             "The plugin is installed and will be available after a reload",
           disabledHint: "Re-enable it from plugin management",
+          incompatibleHint:
+            "Its plugin API version is incompatible with this version of Kotion. The plugin was skipped and is not active.",
+          incompatibleHintVersions:
+            "This plugin uses plugin API {{pluginApiVersion}}, but this version of Kotion supports {{hostApiVersion}}. The plugin was skipped and is not active.",
           packageUnavailable: "The plugin package is currently unavailable",
           installSuccess: "Plugin installed",
           installFailed: "Installation failed. Please try again.",

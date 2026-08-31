@@ -51,7 +51,7 @@ export const Shop: React.FC = () => {
   const location = useLocation();
   const { usePath } = useUploadFile();
   const { pluginManager } = useContext(AppContext);
-  const { loadedPluginNames } = usePluginState();
+  const { loadedPluginNames, incompatiblePlugins } = usePluginState();
 
   const [installedPlugins, setInstalledPlugins] = useState<
     PluginVersionRecord[]
@@ -201,6 +201,7 @@ export const Shop: React.FC = () => {
       refreshing={refreshing}
       currentPluginId={currentPluginId}
       loadedPluginNames={loadedPluginNames}
+      incompatiblePlugins={incompatiblePlugins}
       pendingUpdateId={pendingUpdateId}
       pendingUninstallId={pendingUninstallId}
       collapsed={isTablet && sidebarCollapsed}

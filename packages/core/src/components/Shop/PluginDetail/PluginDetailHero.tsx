@@ -1,5 +1,12 @@
 import { useTranslation } from "@kn/common";
-import { CheckCircle2, DownloadIcon, Loader2, PowerIcon, Star } from "@kn/icon";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  DownloadIcon,
+  Loader2,
+  PowerIcon,
+  Star,
+} from "@kn/icon";
 import { Badge, Button, cn } from "@kn/ui";
 import React, { useMemo } from "react";
 import { PluginIcon } from "../PluginIcon";
@@ -35,9 +42,12 @@ export const PluginDetailHero: React.FC<PluginDetailHeroProps> = ({
   const rating = toFiniteNumber(plugin.rating);
   const statusKey = installState.disabled
     ? "disabled"
-    : installState.active
-      ? "active"
-      : "installed";
+    : installState.incompatible
+      ? "incompatible"
+      : installState.active
+        ? "active"
+        : "installed";
+  const incompatibility = installState.incompatibility;
 
   return (
     <section className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm">
@@ -126,6 +136,8 @@ export const PluginDetailHero: React.FC<PluginDetailHeroProps> = ({
                     "border-green-500/25 bg-green-500/5",
                   statusKey === "disabled" &&
                     "border-orange-500/25 bg-orange-500/5",
+                  statusKey === "incompatible" &&
+                    "border-amber-500/30 bg-amber-500/[0.07]",
                   statusKey === "installed" &&
                     "border-border/70 bg-background/70",
                 )}
@@ -137,10 +149,14 @@ export const PluginDetailHero: React.FC<PluginDetailHeroProps> = ({
                       "text-green-700 dark:text-green-400",
                     statusKey === "disabled" &&
                       "text-orange-700 dark:text-orange-400",
+                    statusKey === "incompatible" &&
+                      "text-amber-700 dark:text-amber-400",
                   )}
                 >
                   {statusKey === "disabled" ? (
                     <PowerIcon className="size-4" />
+                  ) : statusKey === "incompatible" ? (
+                    <AlertTriangle className="size-4" />
                   ) : (
                     <CheckCircle2 className="size-4" />
                   )}
@@ -148,11 +164,19 @@ export const PluginDetailHero: React.FC<PluginDetailHeroProps> = ({
                 </div>
                 {statusKey !== "active" && (
                   <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
-                    {t(
-                      statusKey === "disabled"
-                        ? "pluginHub.detail.disabledHint"
-                        : "pluginHub.detail.installedHint",
-                    )}
+                    {statusKey === "incompatible"
+                      ? incompatibility?.apiVersion &&
+                        incompatibility.hostApiVersion
+                        ? t("pluginHub.detail.incompatibleHintVersions", {
+                            pluginApiVersion: incompatibility.apiVersion,
+                            hostApiVersion: incompatibility.hostApiVersion,
+                          })
+                        : t("pluginHub.detail.incompatibleHint")
+                      : t(
+                          statusKey === "disabled"
+                            ? "pluginHub.detail.disabledHint"
+                            : "pluginHub.detail.installedHint",
+                        )}
                   </p>
                 )}
               </div>

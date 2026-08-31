@@ -224,7 +224,7 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
     const runBulk = useCallback(async (
         api: typeof APIS.ENABLE_PLUGIN,
         successKey: string,
-        sync: ((p: Plugin) => void | Promise<void>) | undefined,
+        sync: ((p: Plugin) => boolean | void | Promise<boolean | void>) | undefined,
     ) => {
         if (selectedPlugins.size === 0) return;
         const targets = processedPlugins.filter(p => selectedPlugins.has(p.id) && p.currentVersionId);
@@ -238,16 +238,17 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                 targets.map(p => useApi(api, { versionId: p.currentVersionId }))
             );
             const succeeded = targets.filter((_, i) => results[i].status === 'fulfilled');
-            if (sync) {
-                await Promise.all(succeeded.map(p => Promise.resolve(sync(p))));
-            }
+            const syncResults = sync
+                ? await Promise.all(succeeded.map(p => Promise.resolve(sync(p))))
+                : succeeded.map(() => true);
+            const activated = succeeded.filter((_, i) => syncResults[i] !== false);
             if (succeeded.length > 0) {
                 event.emit(PLUGIN_CHANGED, { source: 'bulk' });
             }
-            if (succeeded.length === targets.length) {
-                toast.success(`${succeeded.length} ${t(successKey)}`);
+            if (activated.length === targets.length) {
+                toast.success(`${activated.length} ${t(successKey)}`);
             } else {
-                toast.error(`${succeeded.length}/${targets.length} ${t(successKey)}`);
+                toast.error(`${activated.length}/${targets.length} ${t(successKey)}`);
             }
             setSelectedPlugins(new Set());
             props.onRefresh?.();
@@ -259,11 +260,11 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
     }, [selectedPlugins, processedPlugins, pluginManager, props.onRefresh, t]);
 
     const handleBulkEnable = useCallback(
-        // installPlugin resolves Promise<boolean>; runBulk expects Promise<void>
-        // — fire-and-forget keeps the bulk loop's void contract.
-        () => runBulk(APIS.ENABLE_PLUGIN, 'pluginManager.bulkEnableSuccess', p => {
-            void pluginManager?.installPlugin(p as any)
-        }),
+        () => runBulk(
+            APIS.ENABLE_PLUGIN,
+            'pluginManager.bulkEnableSuccess',
+            p => pluginManager ? pluginManager.installPlugin(p as any) : false,
+        ),
         [runBulk, pluginManager]
     );
 
@@ -327,9 +328,15 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                 toast.success(t('pluginManager.disableSuccess'));
             } else {
                 await useApi(APIS.ENABLE_PLUGIN, { versionId: plugin.currentVersionId });
-                await pluginManager?.installPlugin(plugin as any);
+                const activated = pluginManager
+                    ? await pluginManager.installPlugin(plugin as any)
+                    : false;
                 event.emit(PLUGIN_CHANGED, { source: 'enable' });
-                toast.success(t('pluginManager.enableSuccess'));
+                if (activated) {
+                    toast.success(t('pluginManager.enableSuccess'));
+                } else {
+                    toast.warning(t('pluginHub.detail.activationFailed'));
+                }
             }
             props.onRefresh?.();
         } catch (error) {

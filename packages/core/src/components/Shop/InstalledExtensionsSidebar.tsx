@@ -1,6 +1,7 @@
-import { useTranslation } from "@kn/common";
+import { PluginApiIncompatibility, useTranslation } from "@kn/common";
 import {
   AlertCircleIcon,
+  AlertTriangle,
   CheckCircleIcon,
   Loader2Icon,
   MoreVerticalIcon,
@@ -48,6 +49,7 @@ interface InstalledExtensionsSidebarProps {
   refreshing: boolean;
   currentPluginId?: string;
   loadedPluginNames: ReadonlySet<string>;
+  incompatiblePlugins: readonly PluginApiIncompatibility[];
   pendingUpdateId?: string;
   pendingUninstallId?: string;
   collapsed?: boolean;
@@ -76,6 +78,7 @@ export const InstalledExtensionsSidebar: React.FC<
   refreshing,
   currentPluginId,
   loadedPluginNames,
+  incompatiblePlugins,
   pendingUpdateId,
   pendingUninstallId,
   collapsed,
@@ -133,26 +136,51 @@ export const InstalledExtensionsSidebar: React.FC<
           <div className="flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto px-1">
             {plugins.map((plugin) => {
               const selected = String(plugin.subjectId) === currentPluginId;
+              const installState = getPluginInstallState(
+                {
+                  ...(plugin as PluginRecord),
+                  installeddVersions: [plugin],
+                },
+                loadedPluginNames,
+                incompatiblePlugins,
+              );
               return (
                 <Tooltip key={pluginKey(plugin)}>
                   <TooltipTrigger asChild>
                     <button
                       type="button"
                       className={cn(
-                        "flex size-11 shrink-0 items-center justify-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        "relative flex size-11 shrink-0 items-center justify-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                         selected ? "bg-accent" : "hover:bg-accent/70",
                       )}
                       onClick={() => onNavigate(plugin)}
                       aria-current={selected ? "page" : undefined}
+                      aria-label={
+                        installState.incompatible
+                          ? `${plugin.name}: ${t("pluginHub.sidebar.incompatible")}`
+                          : plugin.name
+                      }
                     >
                       <PluginIcon
                         src={resolveIcon(plugin.icon)}
                         name={plugin.name}
                         className="size-8 rounded-lg"
                       />
+                      {installState.incompatible && (
+                        <span className="absolute right-0.5 top-0.5 flex size-4 items-center justify-center rounded-full bg-amber-500 text-white shadow-sm">
+                          <AlertTriangle className="size-2.5" />
+                        </span>
+                      )}
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent side="right">{plugin.name}</TooltipContent>
+                  <TooltipContent side="right">
+                    <div>{plugin.name}</div>
+                    {installState.incompatible && (
+                      <div className="text-amber-600 dark:text-amber-400">
+                        {t("pluginHub.sidebar.incompatibleHint")}
+                      </div>
+                    )}
+                  </TooltipContent>
                 </Tooltip>
               );
             })}
@@ -309,6 +337,7 @@ export const InstalledExtensionsSidebar: React.FC<
                   installeddVersions: [plugin],
                 },
                 loadedPluginNames,
+                incompatiblePlugins,
               );
               const updateAvailable = Boolean(
                 plugin.activeVersionId &&
@@ -319,9 +348,11 @@ export const InstalledExtensionsSidebar: React.FC<
               const pending = updating || uninstalling;
               const statusKey = installState.disabled
                 ? "disabled"
-                : installState.active
-                  ? "active"
-                  : "installed";
+                : installState.incompatible
+                  ? "incompatible"
+                  : installState.active
+                    ? "active"
+                    : "installed";
 
               return (
                 <div
@@ -366,10 +397,21 @@ export const InstalledExtensionsSidebar: React.FC<
                             "text-green-600 dark:text-green-400",
                           statusKey === "disabled" &&
                             "text-orange-600 dark:text-orange-400",
+                          statusKey === "incompatible" &&
+                            "text-amber-600 dark:text-amber-400",
                           statusKey === "installed" && "text-muted-foreground",
                         )}
+                        title={
+                          installState.incompatible
+                            ? t("pluginHub.sidebar.incompatibleHint")
+                            : undefined
+                        }
                       >
-                        <CheckCircleIcon className="size-3" />
+                        {installState.incompatible ? (
+                          <AlertTriangle className="size-3" />
+                        ) : (
+                          <CheckCircleIcon className="size-3" />
+                        )}
                         {t(`pluginHub.sidebar.${statusKey}`)}
                       </span>
                     </div>

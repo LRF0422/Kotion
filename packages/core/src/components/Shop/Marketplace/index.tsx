@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   ArrowUpRight,
   BoxIcon,
   Check,
@@ -94,34 +95,50 @@ const PluginMeta: React.FC<MetaProps> = ({ rating, downloads }) => (
 interface InstallButtonProps {
   installed: boolean;
   active: boolean;
+  incompatible: boolean;
   installing: boolean;
   onInstall: () => void;
   installLabel: string;
   installedLabel: string;
   activeLabel: string;
+  incompatibleLabel: string;
+  incompatibleHint: string;
 }
 
 const InstallButton: React.FC<InstallButtonProps> = ({
   installed,
   active,
+  incompatible,
   installing,
   onInstall,
   installLabel,
   installedLabel,
   activeLabel,
+  incompatibleLabel,
+  incompatibleHint,
 }) => {
   if (installed) {
     return (
       <span
         className={cn(
           "inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11px] font-medium",
-          active
-            ? "text-green-600 dark:text-green-400"
-            : "text-muted-foreground",
+          active && "text-green-600 dark:text-green-400",
+          incompatible && "text-amber-600 dark:text-amber-400",
+          !active && !incompatible && "text-muted-foreground",
         )}
+        title={incompatible ? incompatibleHint : undefined}
+        aria-label={incompatible ? incompatibleHint : undefined}
       >
-        <Check className="h-3.5 w-3.5" />
-        {active ? activeLabel : installedLabel}
+        {incompatible ? (
+          <AlertTriangle className="h-3.5 w-3.5" />
+        ) : (
+          <Check className="h-3.5 w-3.5" />
+        )}
+        {incompatible
+          ? incompatibleLabel
+          : active
+            ? activeLabel
+            : installedLabel}
       </span>
     );
   }
@@ -291,7 +308,8 @@ export const Marketplace: React.FC = () => {
   const [refetchKey, setRefetchKey] = useState(0);
 
   // Runtime state for "Active" badge on loaded plugins
-  const { loadedPluginNames, pluginVersion } = usePluginState();
+  const { loadedPluginNames, incompatiblePlugins, pluginVersion } =
+    usePluginState();
 
   const debouncedKeyword = useDebounce(keyword, { wait: 300 });
 
@@ -452,12 +470,17 @@ export const Marketplace: React.FC = () => {
 
   // Shared per-plugin props for both card and row presentations.
   const cardProps = (plugin: PluginRecord): CardProps => {
-    const installState = getPluginInstallState(plugin, loadedPluginNames);
+    const installState = getPluginInstallState(
+      plugin,
+      loadedPluginNames,
+      incompatiblePlugins,
+    );
     return {
       plugin,
       iconUrl: plugin.icon ? resolveUrl(plugin.icon) : undefined,
       installed: installState.installed,
       active: installState.active,
+      incompatible: installState.incompatible,
       installing:
         installing &&
         installingPluginId ===
@@ -467,6 +490,11 @@ export const Marketplace: React.FC = () => {
       installLabel: t("marketplace.install", "Install"),
       installedLabel: t("marketplace.installed", "Installed"),
       activeLabel: t("marketplace.active", "Active"),
+      incompatibleLabel: t("marketplace.incompatible", "Incompatible"),
+      incompatibleHint: t(
+        "marketplace.incompatibleHint",
+        "This plugin is installed but was skipped because its API version is incompatible.",
+      ),
       detailsLabel: t("marketplace.details", "Details"),
     };
   };

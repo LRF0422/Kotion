@@ -129,13 +129,18 @@ export const PluginDetail: React.FC = () => {
   const navigator = useNavigator();
   const { usePath } = useUploadFile();
   const { pluginManager } = useContext(AppContext);
-  const { loadedPluginNames } = usePluginState();
+  const { loadedPluginNames, incompatiblePlugins } = usePluginState();
   const { status, plugin, retry } = usePluginDetail(pluginId);
   const [installing, setInstalling] = useState(false);
 
   const installState = useMemo(
-    () => getPluginInstallState(plugin ?? {}, loadedPluginNames),
-    [loadedPluginNames, plugin],
+    () =>
+      getPluginInstallState(
+        plugin ?? {},
+        loadedPluginNames,
+        incompatiblePlugins,
+      ),
+    [incompatiblePlugins, loadedPluginNames, plugin],
   );
   const runtimePayload = useMemo(
     () => (plugin ? buildPluginRuntimePayload(plugin) : null),

@@ -1,3 +1,4 @@
+import type { PluginApiIncompatibility } from "@kn/common";
 import type { JSONContent } from "@kn/editor";
 
 export type SerializedEnum<T extends string = string> =
@@ -60,13 +61,16 @@ export type PluginInstallState =
   | "not-installed"
   | "installed"
   | "active"
-  | "disabled";
+  | "disabled"
+  | "incompatible";
 
 export interface NormalizedPluginInstallState {
   state: PluginInstallState;
   installed: boolean;
   active: boolean;
   disabled: boolean;
+  incompatible: boolean;
+  incompatibility?: PluginApiIncompatibility;
 }
 
 export interface NormalizedDocumentationSection {
@@ -93,30 +97,83 @@ export const getPluginVersionId = (
 ): string | number | undefined =>
   plugin.currentVersionId ?? plugin.currentVersion?.id;
 
+const sameIdentityValue = (
+  left?: string | number,
+  right?: string | number,
+): boolean =>
+  left !== undefined && right !== undefined && String(left) === String(right);
+
+export const findPluginIncompatibility = (
+  plugin: PluginRecord,
+  incompatiblePlugins?: readonly PluginApiIncompatibility[],
+): PluginApiIncompatibility | undefined => {
+  if (!incompatiblePlugins?.length) return undefined;
+
+  const candidates = plugin.installeddVersions?.length
+    ? plugin.installeddVersions
+    : plugin.currentVersion
+      ? [plugin.currentVersion]
+      : [plugin as PluginVersionRecord];
+
+  return incompatiblePlugins.find((issue) =>
+    candidates.some((candidate) => {
+      const candidateKey = candidate.pluginKey ?? plugin.pluginKey;
+      const candidateName = candidate.name ?? plugin.name;
+
+      if (issue.pluginKey && candidateKey) {
+        if (issue.pluginKey !== candidateKey) return false;
+      } else if (!issue.name || issue.name !== candidateName) {
+        return false;
+      }
+
+      const issueHasVersion =
+        issue.versionId !== undefined || issue.version !== undefined;
+      const candidateHasVersion =
+        candidate.id !== undefined || candidate.version !== undefined;
+      if (!issueHasVersion || !candidateHasVersion) return true;
+
+      return (
+        sameIdentityValue(issue.versionId, candidate.id) ||
+        sameIdentityValue(issue.version, candidate.version)
+      );
+    }),
+  );
+};
+
 export const getPluginInstallState = (
   plugin: PluginRecord,
   loadedPluginNames?: ReadonlySet<string>,
+  incompatiblePlugins?: readonly PluginApiIncompatibility[],
 ): NormalizedPluginInstallState => {
   const status = enumValue(plugin.installStatus)?.toUpperCase();
   const installed =
     Boolean(status) || Boolean(plugin.installeddVersions?.length);
   const disabled = status === "DISABLED";
+  const incompatibility = installed
+    ? findPluginIncompatibility(plugin, incompatiblePlugins)
+    : undefined;
+  const incompatible = Boolean(incompatibility);
   const active =
     installed &&
     !disabled &&
+    !incompatible &&
     Boolean(plugin.name && loadedPluginNames?.has(plugin.name));
 
   return {
     state: disabled
       ? "disabled"
-      : active
-        ? "active"
-        : installed
-          ? "installed"
-          : "not-installed",
+      : incompatible
+        ? "incompatible"
+        : active
+          ? "active"
+          : installed
+            ? "installed"
+            : "not-installed",
     installed,
     active,
     disabled,
+    incompatible,
+    incompatibility,
   };
 };
 
