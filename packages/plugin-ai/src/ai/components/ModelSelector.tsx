@@ -32,6 +32,7 @@ export interface ModelSelectorProps {
     onModelParamsChange?: (params: ChatModelParams) => void
     density?: ModelSelectorDensity
     triggerClassName?: string
+    contentClassName?: string
 }
 
 export const ModelSelector: React.FC<ModelSelectorProps> = ({
@@ -42,6 +43,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     onModelParamsChange,
     density = 'compact',
     triggerClassName = '',
+    contentClassName = '',
 }) => {
     const { t } = useTranslation()
     const [models, setModels] = useState<ModelInfo[]>([])
@@ -118,7 +120,10 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
 
             <DropdownMenuContent
                 align="start"
-                className="w-[240px] max-w-[calc(100vw-24px)] border-border/40"
+                onPointerDown={(event) => event.stopPropagation()}
+                onMouseDown={(event) => event.stopPropagation()}
+                onClick={(event) => event.stopPropagation()}
+                className={`w-[240px] max-w-[calc(100vw-24px)] border-border/40 ${contentClassName}`}
             >
                 <DropdownMenuRadioGroup
                     value={model || DEFAULT_VALUE}

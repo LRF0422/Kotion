@@ -17,6 +17,8 @@ import {
     type AiActionMode,
     type AiToolsRunDetail,
 } from "../ai-actions";
+import { ModelSelector } from "../components/ModelSelector";
+import { useModelPreference } from "../model-preference";
 import { diffChars } from "./diff";
 
 // ─── virtual selection decoration (keeps the target highlighted while the
@@ -77,6 +79,7 @@ function placeBelow(anchorTop: number, anchorLeft: number): { top: number; left:
 export const AiToolsPanel: React.FC<{ editor: Editor }> = ({ editor }) => {
     const { t, i18n } = useTranslation();
     const lang = i18n.language?.startsWith("zh") ? "zh" : "en";
+    const [selectedModel, setSelectedModel] = useModelPreference();
 
     const [open, setOpen] = useState(false);
     const [title, setTitle] = useState("");
@@ -126,7 +129,10 @@ export const AiToolsPanel: React.FC<{ editor: Editor }> = ({ editor }) => {
 
         let acc = "";
         try {
-            const { textStream } = streamKnowledgeChat(messages, { signal: ac.signal });
+            const { textStream } = streamKnowledgeChat(messages, {
+                model: selectedModel || undefined,
+                signal: ac.signal,
+            });
             for await (const part of textStream) {
                 if (ac.signal.aborted) break;
                 acc += part;
@@ -140,7 +146,7 @@ export const AiToolsPanel: React.FC<{ editor: Editor }> = ({ editor }) => {
             if (abortRef.current === ac) abortRef.current = null;
             setIsLoading(false);
         }
-    }, [t]);
+    }, [selectedModel, t]);
 
     const close = useCallback(() => {
         stop();
@@ -408,68 +414,95 @@ export const AiToolsPanel: React.FC<{ editor: Editor }> = ({ editor }) => {
             )}
 
             {/* Footer */}
-            <div className="flex shrink-0 items-center justify-between gap-2 border-t bg-muted/30 px-3 py-2">
-                {/* left: icon-only utilities */}
-                <div className="flex items-center gap-0.5">
+            <div className="flex shrink-0 flex-wrap items-center gap-2 border-t bg-muted/30 px-3 py-2">
+                {/* left: model selector + icon-only utilities */}
+                <div className="flex min-w-0 flex-wrap items-center gap-0.5">
+                    <ModelSelector
+                        model={selectedModel}
+                        onModelChange={setSelectedModel}
+                        disabled={isLoading}
+                        density="compact"
+                        contentClassName="z-[10000]"
+                    />
                     {hasResult && (
                         <button
+                            type="button"
                             title={t("ai.copy", { defaultValue: "复制" })}
+                            aria-label={t("ai.copy", { defaultValue: "复制" })}
                             onClick={copy}
-                            className="flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                            className="flex h-11 w-11 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:h-7 lg:w-7"
                         >
-                            <Copy className="h-3.5 w-3.5" />
+                            <Copy aria-hidden="true" className="h-3.5 w-3.5" />
                         </button>
                     )}
                     {hasResult && applyMode === "replace" && (
                         <button
+                            type="button"
                             title={t("ai.diff", { defaultValue: "对比改动" })}
+                            aria-label={t("ai.diff", { defaultValue: "对比改动" })}
+                            aria-pressed={showDiff}
                             onClick={() => setShowDiff((v) => !v)}
-                            className={`flex h-7 w-7 items-center justify-center rounded-sm transition-colors hover:bg-accent hover:text-accent-foreground ${showDiff ? "bg-accent text-accent-foreground" : "text-muted-foreground"}`}
+                            className={`flex h-11 w-11 items-center justify-center rounded-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:h-7 lg:w-7 ${showDiff ? "bg-accent text-accent-foreground" : "text-muted-foreground"}`}
                         >
-                            <GitCompare className="h-3.5 w-3.5" />
+                            <GitCompare aria-hidden="true" className="h-3.5 w-3.5" />
                         </button>
                     )}
                     {(hasResult || error) && messagesRef.current.length > 0 && (
                         <button
+                            type="button"
                             title={t("ai.regenerate", { defaultValue: "重新生成" })}
+                            aria-label={t("ai.regenerate", { defaultValue: "重新生成" })}
                             onClick={regenerate}
-                            className="flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                            className="flex h-11 w-11 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:h-7 lg:w-7"
                         >
-                            <RotateCcw className="h-3.5 w-3.5" />
+                            <RotateCcw aria-hidden="true" className="h-3.5 w-3.5" />
                         </button>
                     )}
                 </div>
 
                 {/* right: discard / apply */}
-                <div className="flex items-center gap-1.5">
+                <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
                     {isLoading ? (
-                        <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2.5 text-xs" onClick={stop}>
-                            <Square className="h-3 w-3" />
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-11 gap-1.5 px-3 text-sm lg:h-7 lg:px-2.5 lg:text-xs"
+                            onClick={stop}
+                        >
+                            <Square aria-hidden="true" className="h-3 w-3" />
                             {t("ai.stop", { defaultValue: "停止" })}
                         </Button>
                     ) : (
                         <>
                             <Button
+                                type="button"
                                 size="sm"
                                 variant="ghost"
-                                className="h-7 px-2.5 text-xs text-muted-foreground"
+                                className="h-11 px-3 text-sm text-muted-foreground lg:h-7 lg:px-2.5 lg:text-xs"
                                 onClick={close}
                             >
                                 {t("ai.discard", { defaultValue: "丢弃" })}
                             </Button>
                             {hasResult && applyMode === "replace" && (
                                 <Button
+                                    type="button"
                                     size="sm"
                                     variant="outline"
-                                    className="h-7 px-2.5 text-xs"
+                                    className="h-11 px-3 text-sm lg:h-7 lg:px-2.5 lg:text-xs"
                                     onClick={() => apply("append")}
                                 >
                                     {t("ai.insertBelow", { defaultValue: "下方插入" })}
                                 </Button>
                             )}
                             {hasResult && (
-                                <Button size="sm" className="h-7 gap-1.5 px-2.5 text-xs" onClick={() => apply(applyMode)}>
-                                    <Check className="h-3 w-3" />
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    className="h-11 gap-1.5 px-3 text-sm lg:h-7 lg:px-2.5 lg:text-xs"
+                                    onClick={() => apply(applyMode)}
+                                >
+                                    <Check aria-hidden="true" className="h-3 w-3" />
                                     {applyMode === "append"
                                         ? t("ai.insert", { defaultValue: "插入" })
                                         : t("ai.replace", { defaultValue: "替换" })}
