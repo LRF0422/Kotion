@@ -1,13 +1,42 @@
 /* Inline highlight applied to the marked text of a sticky note. */
 .sticky-note-highlight {
     background-color: rgb(255 212 0 / 0.18);
-    border-bottom: 2px dashed rgb(245 197 24 / 0.55);
+    border-bottom: 1px solid rgb(245 197 24 / 0.7);
     padding-bottom: 1px;
     cursor: pointer;
     transition: background-color 0.15s ease;
 }
 
-/* Hovering the highlight intensifies the tint (was: opacity dim). */
+.sticky-note-highlight[data-color="yellow"] {
+    background-color: rgb(255 212 0 / 0.18);
+    border-bottom-color: rgb(245 197 24 / 0.7);
+}
+
+.sticky-note-highlight[data-color="pink"] {
+    background-color: rgb(240 98 146 / 0.18);
+    border-bottom-color: rgb(240 98 146 / 0.7);
+}
+
+.sticky-note-highlight[data-color="blue"] {
+    background-color: rgb(74 144 226 / 0.18);
+    border-bottom-color: rgb(74 144 226 / 0.7);
+}
+
+.sticky-note-highlight[data-color="green"] {
+    background-color: rgb(124 179 66 / 0.20);
+    border-bottom-color: rgb(124 179 66 / 0.7);
+}
+
+.sticky-note-highlight[data-color="purple"] {
+    background-color: rgb(156 106 222 / 0.18);
+    border-bottom-color: rgb(156 106 222 / 0.7);
+}
+
+.sticky-note-highlight[data-color="orange"] {
+    background-color: rgb(243 156 18 / 0.20);
+    border-bottom-color: rgb(243 156 18 / 0.7);
+}
+
 .sticky-note-highlight:hover {
     background-color: rgb(255 212 0 / 0.32);
 }
@@ -19,7 +48,6 @@
    outer mark span whenever any descendant carries the flag. */
 .sticky-note-highlight:has(.is-hovered) {
     background-color: rgb(255 212 0 / 0.35);
-    border-bottom-width: 3px;
 }
 
 /* Hovering the highlight intensifies the tint (was: opacity dim). */
@@ -158,56 +186,146 @@
     .sticky-note-gutter-marker {
         display: block;
         position: fixed;
-        right: 4px;
-        width: 6px;
-        height: 24px;
+        width: 44px;
+        height: 44px;
         padding: 0;
         border: none;
-        border-radius: 3px;
-        background-color: #f5c518;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+        background: transparent;
+        color: #f5c518;
         cursor: pointer;
         z-index: 30;
         -webkit-tap-highlight-color: transparent;
-        transition: transform 0.12s ease, box-shadow 0.12s ease;
     }
 
-    .sticky-note-gutter-marker:active {
-        transform: scale(0.94);
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    .sticky-note-gutter-marker::before {
+        content: "";
+        position: absolute;
+        top: 10px;
+        right: 4px;
+        width: 4px;
+        height: 24px;
+        border-radius: 2px;
+        background-color: currentColor;
+        transition: opacity 0.12s ease;
     }
 
-    .sticky-note-gutter-marker[data-color="yellow"] { background-color: #f5c518; }
-    .sticky-note-gutter-marker[data-color="pink"] { background-color: #f06292; }
-    .sticky-note-gutter-marker[data-color="blue"] { background-color: #4a90e2; }
-    .sticky-note-gutter-marker[data-color="green"] { background-color: #7cb342; }
-    .sticky-note-gutter-marker[data-color="purple"] { background-color: #9c6ade; }
-    .sticky-note-gutter-marker[data-color="orange"] { background-color: #f39c12; }
+    .sticky-note-gutter-marker:active::before {
+        opacity: 0.65;
+    }
+
+    .sticky-note-gutter-marker[data-color="yellow"] { color: #f5c518; }
+    .sticky-note-gutter-marker[data-color="pink"] { color: #f06292; }
+    .sticky-note-gutter-marker[data-color="blue"] { color: #4a90e2; }
+    .sticky-note-gutter-marker[data-color="green"] { color: #7cb342; }
+    .sticky-note-gutter-marker[data-color="purple"] { color: #9c6ade; }
+    .sticky-note-gutter-marker[data-color="orange"] { color: #f39c12; }
+}
+
+/* Compact palette. Keep its layout in plugin CSS instead of relying on the
+   host app's Tailwind content scan. Coarse pointers retain 44px targets; a
+   desktop pointer gets a compact single-row palette. */
+.sticky-note-color-pop {
+    position: absolute;
+    top: 32px;
+    right: 0;
+    z-index: 50;
+    display: grid;
+    grid-template-columns: repeat(3, 44px);
+    gap: 2px;
+    width: max-content;
+    padding: 6px;
+    border: 1px solid hsl(var(--border, 0 0% 24%));
+    border-radius: 10px;
+    background: hsl(var(--popover, 0 0% 13%));
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18), 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+/* The mobile sheet is bottom-anchored, so its palette must open upward to
+   remain inside the viewport. */
+.sticky-note-color-pop--sheet {
+    top: auto;
+    bottom: 32px;
+}
+
+.sticky-note-color-swatch {
+    position: relative;
+    display: grid;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    place-items: center;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    cursor: pointer;
+    transition: background-color 0.12s ease;
+}
+
+.sticky-note-color-swatch::before {
+    content: "";
+    width: 24px;
+    height: 24px;
+    border: 1px solid var(--sticky-note-swatch-border, currentColor);
+    border-radius: 6px;
+    background: var(--sticky-note-swatch-bg, transparent);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.sticky-note-color-swatch:hover {
+    background: hsl(var(--accent, 0 0% 18%));
+}
+
+.sticky-note-color-swatch:hover::before {
+    transform: scale(1.08);
+}
+
+.sticky-note-color-swatch[data-selected="true"]::before {
+    box-shadow:
+        0 0 0 2px hsl(var(--popover, 0 0% 13%)),
+        0 0 0 3px var(--sticky-note-swatch-border, currentColor);
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .sticky-note-color-pop {
+        grid-template-columns: repeat(6, 28px);
+        padding: 5px;
+    }
+
+    .sticky-note-color-swatch {
+        width: 28px;
+        height: 28px;
+    }
+
+    .sticky-note-color-swatch::before {
+        width: 18px;
+        height: 18px;
+        border-radius: 5px;
+    }
 }
 
 /* Card enter animation */
 .sticky-note-card-enter {
-    animation: sticky-note-slide-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    animation: sticky-note-slide-in 0.16s ease-out forwards;
 }
 
 @keyframes sticky-note-slide-in {
     from {
         opacity: 0;
-        transform: translateX(-8px) scale(0.96);
+        transform: translateX(-4px);
     }
 
     to {
         opacity: 1;
-        transform: translateX(0) scale(1);
+        transform: translateX(0);
     }
 }
 
-/* Sheet variant: the card fills a bottom sheet and looks like a post-it docked
-   to the bottom edge — rounded top only, square flush bottom, roomier editor,
-   and safe-area padding so content clears the home indicator. */
+/* Sheet variant: the card fills a bottom sheet and stays visually flush with
+   the bottom edge. */
 .sticky-note-card-shell--sheet {
-    border-radius: 16px 16px 0 0;
-    border: none;
+    border-radius: 10px 10px 0 0;
+    border-bottom: none;
     padding-bottom: env(safe-area-inset-bottom);
 }
 
@@ -216,54 +334,37 @@
     max-height: 60vh;
 }
 
-/* The Post-it style shell: subtle border + soft layered shadow for depth */
+/* Flat card shell: one border and one shallow shadow, with no lift effect. */
 .sticky-note-card-shell {
     position: relative;
-    border-radius: 8px;
+    border-radius: 6px;
     border: 1px solid transparent;
-    box-shadow:
-        0 1px 2px rgba(0, 0, 0, 0.04),
-        0 4px 14px rgba(0, 0, 0, 0.08),
-        0 0 0 1px rgba(0, 0, 0, 0.02);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
     overflow: visible;
-    transition: box-shadow 0.18s ease, transform 0.18s ease;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .sticky-note-card-shell:hover {
-    box-shadow:
-        0 1px 2px rgba(0, 0, 0, 0.05),
-        0 6px 20px rgba(0, 0, 0, 0.12),
-        0 0 0 1px rgba(0, 0, 0, 0.03);
-    transform: translateY(-1px);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-.dark .sticky-note-card-shell {
-    box-shadow:
-        0 1px 2px rgba(0, 0, 0, 0.5),
-        0 4px 16px rgba(0, 0, 0, 0.45);
-}
-
+.dark .sticky-note-card-shell,
 .dark .sticky-note-card-shell:hover {
-    box-shadow:
-        0 1px 2px rgba(0, 0, 0, 0.55),
-        0 8px 22px rgba(0, 0, 0, 0.55);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
-/* Active card (clicked highlight) — ring emphasis */
+/* Active card (clicked highlight) — compact ring emphasis. */
 .sticky-note-card-enter.is-active .sticky-note-card-shell {
-    box-shadow:
-        0 0 0 2px var(--primary, rgb(59 130 246)),
-        0 1px 2px rgba(0, 0, 0, 0.05),
-        0 6px 20px rgba(0, 0, 0, 0.12);
+    box-shadow: 0 0 0 2px var(--primary, rgb(59 130 246));
 }
 
-/* Hovered card (highlight hovered) — subtle ring + lift */
+/* Hovered card (highlight hovered) — subtle outline without movement. */
 .sticky-note-card-enter.is-hovered .sticky-note-card-shell {
-    box-shadow:
-        0 0 0 1px rgba(0, 0, 0, 0.12),
-        0 1px 2px rgba(0, 0, 0, 0.05),
-        0 8px 24px rgba(0, 0, 0, 0.14);
-    transform: translateY(-2px);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18);
+}
+
+.dark .sticky-note-card-enter.is-hovered .sticky-note-card-shell {
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.22);
 }
 
 /* Toolbar is always visible when the card is editable — the previous fade-in

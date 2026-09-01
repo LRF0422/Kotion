@@ -12,7 +12,8 @@ import React, { useMemo } from "react";
 
 
 const defaultTippyOptions: BuiltInTiptapBubbleMenuProps["options"] = {
-  placement: "bottom"
+  placement: "bottom",
+  strategy: "fixed"
 };
 
 export type BubbleMenuProps = BuiltInTiptapBubbleMenuProps & {
@@ -35,6 +36,7 @@ export const BubbleMenu: React.FC<BubbleMenuProps> = ({
   children,
   getReferenceClientRect,
   className,
+  appendTo,
   ...rest
 }) => {
   const wrapTippyOptions = useMemo(() => {
@@ -50,9 +52,20 @@ export const BubbleMenu: React.FC<BubbleMenuProps> = ({
     return { ...defaultTippyOptions };
   }, [editor, options]);
 
+  // Render menus at the document root so transformed editor ancestors cannot
+  // trap them below body-level overlays such as margin cards.
+  const defaultAppendTo = typeof document !== "undefined" ? document.body : undefined;
+  const builtInAppendTo = appendTo ?? defaultAppendTo;
+  // The custom menu is rendered by React and moved with appendChild rather than
+  // createPortal. Moving it outside the React root breaks delegated onClick
+  // handlers, so only move it when a caller explicitly provides a target.
+  const nodeAppendTo = typeof appendTo === "function"
+    ? (typeof document !== "undefined" ? appendTo() : undefined)
+    : appendTo;
+
   // Notion 风格：圆角更柔和、阴影更轻盈有层次、边框淡、半透明毛玻璃背景
   const surfaceClass = cn(
-    "flex items-center gap-0.5 p-1",
+    "flex items-center gap-0.5 p-1 z-[1000]",
     "bg-popover/95 text-popover-foreground backdrop-blur-md supports-[backdrop-filter]:bg-popover/80",
     "rounded-xl border border-border/60 shadow-lg ring-1 ring-black/5",
     className
@@ -64,6 +77,7 @@ export const BubbleMenu: React.FC<BubbleMenuProps> = ({
       <NodeBubbleMenu
         className={surfaceClass}
         editor={editor}
+        appendTo={nodeAppendTo}
         options={wrapTippyOptions}
         {...rest}>
         {children}
@@ -76,8 +90,12 @@ export const BubbleMenu: React.FC<BubbleMenuProps> = ({
       <BuiltInTiptapBubbleMenu
         className={surfaceClass}
         editor={editor}
+        appendTo={builtInAppendTo}
         options={wrapTippyOptions}
-        {...rest}>
+        {...rest}
+        ref={(element) => {
+          if (element) element.style.zIndex = "1000";
+        }}>
         {children}
       </BuiltInTiptapBubbleMenu>
     </>

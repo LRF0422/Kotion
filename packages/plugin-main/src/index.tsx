@@ -75,7 +75,8 @@ export const DefaultPluginInstance = new DefaultPlugin({
       icon: <LayoutGrid className="h-5 w-5" />,
       key: '/home',
       attachTabs: true,
-      id: '/home'
+      id: '/home',
+      activePaths: ['/', '/home', '/spaces', '/all-spaces', '/space-detail']
     }
   ]
   ,

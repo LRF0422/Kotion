@@ -26,6 +26,7 @@ export const BubbleMenu = (props: BubbleMenuProps) => {
     const {
       pluginKey = "bubbleMenu",
       editor,
+      appendTo,
       options = {},
       shouldShow = null
     } = props;
@@ -34,6 +35,7 @@ export const BubbleMenu = (props: BubbleMenuProps) => {
       pluginKey,
       editor,
       element,
+      appendTo,
       options,
       shouldShow
     });
@@ -43,7 +45,7 @@ export const BubbleMenu = (props: BubbleMenuProps) => {
       editor.unregisterPlugin(pluginKey)
     };
 
-  }, [props.editor, element]);
+  }, [props.editor, props.appendTo, element]);
 
   return (
     <div

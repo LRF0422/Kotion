@@ -38,7 +38,7 @@ export const fileManager = new FileManager({
     ],
     menus: [
         {
-            id: 'fileManager',
+            id: '/fileManager',
             name: 'fileManager',
             key: 'File Manager',
             icon: <Folder className="h-5 w-5" />

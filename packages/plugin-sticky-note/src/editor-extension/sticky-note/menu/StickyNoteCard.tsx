@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useEditor, EditorContent, Editor as InnerEditor, useEditorExtension } from "@kn/editor";
 import type { AnyExtension } from "@kn/editor";
-import { Button, Popover, PopoverContent, PopoverTrigger, ColorPicker, useTheme } from "@kn/ui";
+import { Button, Popover, PopoverContent, PopoverTrigger, useTheme } from "@kn/ui";
 import { Trash2, Palette, Bold, Italic, List, ListOrdered, Code } from "@kn/icon";
 import { useTranslation } from "@kn/common";
 import { findStickyNoteColor, STICKY_NOTE_COLORS } from "../constants";
@@ -131,12 +131,25 @@ export const StickyNoteCard: React.FC<StickyNoteCardProps> = ({
         };
     }, [showColors]);
 
-    // The latest content prop, kept in a ref to avoid re-creating the editor.
+    // Latest external values, kept in refs so the editor can stay mounted while
+    // debounced saves always use current callbacks and comparison content.
     const contentRef = useRef(content);
     contentRef.current = content;
+    const onContentChangeRef = useRef(onContentChange);
+    onContentChangeRef.current = onContentChange;
 
-    // Debounced save handle
     const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const pendingEditorRef = useRef<InnerEditor | null>(null);
+    const flushPendingContent = useCallback(() => {
+        const pendingEditor = pendingEditorRef.current;
+        pendingEditorRef.current = null;
+        if (!pendingEditor) return;
+
+        const pendingContent = pendingEditor.getHTML();
+        if (pendingContent !== contentRef.current) {
+            onContentChangeRef.current(pendingContent);
+        }
+    }, []);
 
     // Reuse a curated subset of the parent editor's extensions so formatting
     // works but the small note isn't infected with slash / bubble / floating
@@ -156,10 +169,11 @@ export const StickyNoteCard: React.FC<StickyNoteCardProps> = ({
             extensions: innerExtensions,
             content: content || "",
             onUpdate: ({ editor }) => {
+                pendingEditorRef.current = editor;
                 if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
                 saveTimerRef.current = setTimeout(() => {
-                    const html = editor.getHTML();
-                    if (html !== contentRef.current) onContentChange(html);
+                    saveTimerRef.current = null;
+                    flushPendingContent();
                 }, 250);
             },
             editorProps: {
@@ -190,8 +204,10 @@ export const StickyNoteCard: React.FC<StickyNoteCardProps> = ({
     useEffect(() => {
         return () => {
             if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+            saveTimerRef.current = null;
+            flushPendingContent();
         };
-    }, []);
+    }, [flushPendingContent]);
 
     // Auto-focus the mini editor once per "activation" (newly created note or
     // clicked highlight). We track the last focused noteId in a ref so the
@@ -246,7 +262,7 @@ export const StickyNoteCard: React.FC<StickyNoteCardProps> = ({
             className={
                 variant === "sheet"
                     ? "group/card w-full"
-                    : `fixed z-40 sticky-note-card-enter group/card${isActive ? " is-active" : ""}${isHovered ? " is-hovered" : ""}`
+                    : `fixed ${showColors ? "z-50" : "z-40"} sticky-note-card-enter group/card${isActive ? " is-active" : ""}${isHovered ? " is-hovered" : ""}`
             }
             style={
                 variant === "sheet"
@@ -265,9 +281,8 @@ export const StickyNoteCard: React.FC<StickyNoteCardProps> = ({
             <div
                 className={`sticky-note-card-shell${variant === "sheet" ? " sticky-note-card-shell--sheet" : ""}`}
                 style={{
-                    background: `linear-gradient(180deg, ${tone.bg} 0%, ${tone.bg} 100%)`,
-                    boxShadow: `inset 3px 0 0 0 ${tone.border}`,
-                    borderColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)",
+                    backgroundColor: tone.bg,
+                    borderColor: tone.border,
                 }}
             >
                 {/* Body */}
@@ -337,33 +352,26 @@ export const StickyNoteCard: React.FC<StickyNoteCardProps> = ({
                                 <Palette className="h-3 w-3" />
                             </ToolbarButton>
                             {showColors && (
-                                <div
-                                    className="sticky-note-color-pop absolute right-0 bottom-8 z-50 p-1 rounded-lg border bg-popover text-popover-foreground shadow-lg"
-                                >
-                                    <ColorPicker
-                                        value={(() => {
-                                            const p = findStickyNoteColor(color);
-                                            const tone = isDark ? p.dark : p.light;
-                                            return tone.bg;
-                                        })()}
-                                        onChange={(hex) => {
-                                            // Find closest matching sticky note color by bg
-                                            const match = STICKY_NOTE_COLORS.find((c) => {
-                                                const tone = isDark ? c.dark : c.light;
-                                                return tone.bg.toLowerCase() === hex.toLowerCase();
-                                            });
-                                            if (match) {
-                                                onColorChange(match.name);
-                                            }
-                                            setShowColors(false);
-                                        }}
-                                        swatches={STICKY_NOTE_COLORS.map((c) => {
-                                            const tone = isDark ? c.dark : c.light;
-                                            return tone.bg;
-                                        })}
-                                        trigger="button"
-                                        align="end"
-                                    />
+                                <div className={`sticky-note-color-pop${variant === "sheet" ? " sticky-note-color-pop--sheet" : ""}`}>
+                                    {STICKY_NOTE_COLORS.map((item) => {
+                                        const itemTone = isDark ? item.dark : item.light;
+                                        const selected = item.name === palette.name;
+                                        return (
+                                            <button
+                                                key={item.name}
+                                                type="button"
+                                                className="sticky-note-color-swatch"
+                                                data-selected={selected ? "true" : undefined}
+                                                style={{
+                                                    "--sticky-note-swatch-bg": itemTone.bg,
+                                                    "--sticky-note-swatch-border": itemTone.border,
+                                                } as React.CSSProperties}
+                                                aria-label={item.label}
+                                                aria-pressed={selected}
+                                                onClick={() => onColorChange(item.name)}
+                                            />
+                                        );
+                                    })}
                                 </div>
                             )}
                         </div>

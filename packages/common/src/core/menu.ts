@@ -11,6 +11,7 @@ export interface SiderMenuItemProps {
     icon: ReactNode,
     attachTabs?: boolean,
     id: string,
+    activePaths?: string[],
     isSelectable?: boolean,
     children?: SiderMenuItemProps[]
     indicator?: boolean,

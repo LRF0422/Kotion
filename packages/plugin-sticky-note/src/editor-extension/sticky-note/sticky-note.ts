@@ -442,9 +442,9 @@ const StickyNoteMark = Mark.create({
                             );
                             return false;
                         },
-                        // Pointer-based hover sync (pointerover/out is symmetric and
-                        // won't lie about "did we leave the element" the way
-                        // mouseover alone does when moving to a child).
+                        // Symmetric hover sync keeps the margin card and inline
+                        // highlight in step, including when the pointer leaves the
+                        // editor directly from a highlight.
                         mouseover: (view, event) => {
                             const target = event.target as HTMLElement | null;
                             const highlight = target?.closest?.(".sticky-note-highlight") as HTMLElement | null;
@@ -454,6 +454,24 @@ const StickyNoteMark = Mark.create({
                             view.dispatch(
                                 view.state.tr.setMeta(stickyNoteUIKey, {
                                     hoveredNoteId: noteId,
+                                } satisfies StickyNoteUIMeta)
+                            );
+                            return false;
+                        },
+                        mouseout: (view, event) => {
+                            const target = event.target as HTMLElement | null;
+                            const highlight = target?.closest?.(".sticky-note-highlight") as HTMLElement | null;
+                            if (!highlight) return false;
+
+                            const related = event.relatedTarget as HTMLElement | null;
+                            const nextHighlight = related?.closest?.(".sticky-note-highlight") as HTMLElement | null;
+                            const currentNoteId = highlight.getAttribute("data-note-id");
+                            const nextNoteId = nextHighlight?.getAttribute("data-note-id") ?? null;
+                            if (currentNoteId === nextNoteId) return false;
+
+                            view.dispatch(
+                                view.state.tr.setMeta(stickyNoteUIKey, {
+                                    hoveredNoteId: nextNoteId,
                                 } satisfies StickyNoteUIMeta)
                             );
                             return false;

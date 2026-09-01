@@ -43,31 +43,47 @@ export const StickyNoteExtension: ExtensionWrapper = {
                         }
                     });
 
-                    // If not found in a single node, try cross-node search.
+                    // If not found in a single node, map flattened text offsets
+                    // back to each text node's actual ProseMirror position. A
+                    // simple `from + length` is wrong across block boundaries.
                     if (from === null || to === null) {
-                        const fullText = doc.textContent;
+                        const segments: Array<{
+                            textStart: number;
+                            textEnd: number;
+                            docStart: number;
+                        }> = [];
+                        let fullText = "";
+
+                        doc.descendants((node, pos) => {
+                            if (!node.isText) return;
+                            const textStart = fullText.length;
+                            fullText += node.textContent;
+                            segments.push({
+                                textStart,
+                                textEnd: fullText.length,
+                                docStart: pos,
+                            });
+                        });
+
                         const textIdx = fullText.indexOf(searchText);
                         if (textIdx === -1) {
                             return { error: `未找到文本: "${searchText}"` };
                         }
 
-                        let charCount = 0;
-                        doc.descendants((node, pos) => {
-                            if (from !== null) return false;
-                            if (!node.isText) return;
-                            const nodeStart = charCount;
-                            charCount += node.textContent.length;
+                        const endTextIdx = textIdx + searchText.length - 1;
+                        const startSegment = segments.find(
+                            (segment) => textIdx >= segment.textStart && textIdx < segment.textEnd
+                        );
+                        const endSegment = segments.find(
+                            (segment) => endTextIdx >= segment.textStart && endTextIdx < segment.textEnd
+                        );
 
-                            if (textIdx >= nodeStart && textIdx < charCount) {
-                                from = pos + (textIdx - nodeStart);
-                            }
-                        });
-
-                        if (from !== null) {
-                            to = from + searchText.length;
-                        } else {
+                        if (!startSegment || !endSegment) {
                             return { error: `无法定位文本位置: "${searchText}"` };
                         }
+
+                        from = startSegment.docStart + (textIdx - startSegment.textStart);
+                        to = endSegment.docStart + (endTextIdx - endSegment.textStart) + 1;
                     }
 
                     // Select text and add sticky note.

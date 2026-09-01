@@ -34,6 +34,7 @@ const MenuItem = memo<MenuItemProps>(({ item, isActive, onClick, isMobile }) => 
     if (isMobile) {
         return (
             <button
+                type="button"
                 onClick={onClick}
                 data-tour={item.key}
                 className={cn(
@@ -58,15 +59,14 @@ const MenuItem = memo<MenuItemProps>(({ item, isActive, onClick, isMobile }) => 
         <Tooltip>
             <TooltipTrigger asChild>
                 <button
+                    type="button"
                     onClick={onClick}
                     data-tour={item.key}
+                    data-active={isActive}
+                    data-tone={item.id === '/ai-assistant' ? 'ai' : undefined}
                     className={cn(
-                        "h-9 w-9 rounded-lg flex items-center justify-center cursor-pointer",
-                        "text-muted-foreground transition-all duration-200 ease-in-out",
-                        "hover:bg-background hover:text-foreground hover:shadow-sm",
+                        "kn-rail-control flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg lg:h-9 lg:w-9",
                         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                        "active:scale-95",
-                        isActive && "bg-background text-foreground shadow-sm border border-border/60",
                         item.className
                     )}
                     aria-label={typeof item.name === 'string' ? item.name : item.key}
@@ -157,7 +157,7 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
             {
                 name: 'Setting',
                 icon: <SettingDlg>
-                    <button className="flex items-center justify-center" aria-label="Settings">
+                    <button type="button" className="flex items-center justify-center" aria-label="Settings">
                         <Settings className="h-5 w-5" />
                     </button>
                 </SettingDlg>,
@@ -186,15 +186,16 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
                 <button
+                    type="button"
                     className={cn(
-                        "rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                        isMobile ? "" : "hover:ring-2 hover:ring-muted-foreground/30 transition-all"
+                        "rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                        isMobile ? "" : "kn-rail-control flex h-11 w-11 items-center justify-center lg:h-8 lg:w-8"
                     )}
                     aria-label="User menu"
                 >
                     <Avatar className={cn(
-                        "border-2 hover:border-primary transition-colors",
-                        isMobile ? "h-8 w-8" : "kn-rail-avatar h-8 w-8"
+                        "transition-colors",
+                        isMobile ? "h-8 w-8 border-2" : "kn-rail-avatar h-8 w-8"
                     )}>
                         <AvatarImage src={usePath(userInfo?.avatar as string)} />
                         <AvatarFallback className="text-[10px] font-medium">{userInfo?.account?.slice(0, 2).toUpperCase()}</AvatarFallback>
@@ -267,7 +268,10 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
                         isMobile ? "items-stretch" : "items-center"
                     )}>
                         {menus.map((item, index) => {
-                            const isActive = location.pathname === item.id || location.pathname.startsWith(item.id + '/');
+                            const isActive = [item.id, ...(item.activePaths ?? [])].some(path =>
+                                location.pathname === path ||
+                                (path !== '/' && location.pathname.startsWith(`${path}/`))
+                            );
                             return (
                                 <MenuItem
                                     key={item.key || index}
@@ -286,15 +290,16 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
                     {/* Bottom section: controls + user avatar (compact to fit the narrow rail) */}
                     <div className={cn(
                         "flex flex-col items-center gap-2",
-                        !isMobile && "kn-rail-bottom"
+                        !isMobile && "kn-rail-bottom kn-rail-utilities"
                     )}>
                         <div className={cn(
-                            "flex gap-1.5 [&_button]:h-8 [&_button]:w-8",
+                            "flex gap-1.5 [&_button]:h-11 [&_button]:w-11 lg:[&_button]:h-8 lg:[&_button]:w-8",
                             isMobile ? "flex-row justify-center" : "flex-col items-center"
                         )}>
                             <ModeToggle />
                             <LanguageToggle />
                             <Button
+                                type="button"
                                 variant="outline"
                                 size="icon"
                                 className="rounded-full"

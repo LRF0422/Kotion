@@ -336,7 +336,7 @@ export class BubbleMenuView implements PluginView {
       return
     }
 
-    if (event?.relatedTarget && this.element.parentNode?.contains(event.relatedTarget as Node)) {
+    if (event?.relatedTarget && this.element.contains(event.relatedTarget as Node)) {
       return
     }
 
@@ -531,16 +531,16 @@ export class BubbleMenuView implements PluginView {
       this.hideTimer = undefined
     }
 
-    const needsAppend = !this.element.parentNode
+    const target = this.appendTo ?? this.view.dom.parentElement
+    const needsAppend = target && this.element.parentNode !== target
 
     if (needsAppend) {
-      // Set initial animation state before appending to DOM
+      // Set initial animation state before moving the menu into its portal host.
       this.element.style.opacity = '0'
       this.element.style.transform = 'scale(0.96)'
       // Ensure bubble menu renders above editor content
       this.element.style.zIndex = '1000'
-        // attach to appendTo or editor's parent element
-        ; (this.appendTo ?? this.view.dom.parentElement)?.appendChild(this.element)
+      target.appendChild(this.element)
     }
 
     this.element.style.visibility = 'visible'

@@ -65,12 +65,14 @@ function useStickyNoteUIState(editor: Editor): StickyNoteUIState {
     return state;
 }
 
+const MOBILE_MARKER_SIZE = 44;
+const MOBILE_MARKER_VISUAL_OFFSET = 10;
+
 /**
- * Mobile-only: compute the vertical viewport position of each sticky note's
- * anchor so we can render a small marker in the right gutter. Doesn't share
- * `useMarginCards` because we anchor to viewport-right (not the text column
- * edge), and we don't need overlap resolution — markers are 6×24 and can stack
- * pixel-tight if the doc happens to have overlapping notes.
+ * Mobile-only: compute non-overlapping viewport positions for each sticky
+ * note's right-gutter marker. The visible bar stays aligned near its text
+ * anchor, while the 44px touch targets are laid out so nearby notes cannot
+ * intercept one another's taps.
  */
 function useMobileMarkerAnchors(
     editor: Editor,
@@ -85,16 +87,47 @@ function useMobileMarkerAnchors(
         }
         const compute = () => {
             if (editor.isDestroyed) return;
-            const next: Record<string, number> = {};
+            const maxTop = Math.max(0, window.innerHeight - MOBILE_MARKER_SIZE);
+            const visible: Array<{ id: string; desiredTop: number }> = [];
             for (const n of notes) {
                 try {
                     const coords = editor.view.coordsAtPos(n.from);
                     if (coords.top < 0 || coords.top > window.innerHeight) continue;
-                    next[n.id] = coords.top;
+                    visible.push({
+                        id: n.id,
+                        desiredTop: Math.min(
+                            maxTop,
+                            Math.max(0, coords.top - MOBILE_MARKER_VISUAL_OFFSET)
+                        ),
+                    });
                 } catch {
                     /* skip */
                 }
             }
+
+            visible.sort((a, b) => a.desiredTop - b.desiredTop);
+
+            const next: Record<string, number> = {};
+            let nextTop = 0;
+            for (const marker of visible) {
+                const top = Math.max(marker.desiredTop, nextTop);
+                next[marker.id] = top;
+                nextTop = top + MOBILE_MARKER_SIZE;
+            }
+
+            // Pull an overflowing cluster back into the viewport while keeping
+            // the same document order and non-overlapping touch targets.
+            let previousTop = window.innerHeight;
+            for (let i = visible.length - 1; i >= 0; i -= 1) {
+                const marker = visible[i];
+                const top = Math.max(
+                    0,
+                    Math.min(next[marker.id], previousTop - MOBILE_MARKER_SIZE)
+                );
+                next[marker.id] = top;
+                previousTop = top;
+            }
+
             setTops(next);
         };
         compute();
@@ -222,7 +255,7 @@ export const StickyNoteMarginPanel: React.FC<{ editor: Editor }> = ({ editor }) 
                         <button
                             key={n.id}
                             type="button"
-                            className="sticky-note-gutter-marker"
+                            className="sticky-note-gutter-marker right-safe-right"
                             data-color={n.color}
                             style={{ top: `${top}px` }}
                             aria-label={t("stickyNote.open")}

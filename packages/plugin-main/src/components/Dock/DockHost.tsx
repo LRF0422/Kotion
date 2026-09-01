@@ -39,101 +39,46 @@ const DockRail: React.FC<{
     runningIds: Set<string>
     onToggle: (id: string) => void
     title: (panel: ResolvedDockPanel) => string
+    runningText: string
     side: 'left' | 'right'
-}> = ({ panels, activeId, runningIds, onToggle, title, side }) => (
+}> = ({ panels, activeId, runningIds, onToggle, title, runningText, side }) => (
     <TooltipProvider delayDuration={300}>
         <div className={cn(
-            "kn-dock-rail flex h-full w-10 flex-shrink-0 flex-col items-center gap-1 bg-muted/40 py-2",
+            "kn-dock-rail flex h-full w-11 flex-shrink-0 flex-col items-center gap-1 bg-muted/40 py-2 lg:w-10",
             side === 'right' ? "border-l" : "border-r"
         )}>
-            <style>{`
-                @keyframes dock-icon-pulse {
-                    0%, 100% { transform: scale(1); }
-                    50% { transform: scale(1.18); }
-                }
-                @keyframes dock-glow-breathe {
-                    0%, 100% { opacity: 0.12; transform: scale(0.9); }
-                    50% { opacity: 0.35; transform: scale(1.3); }
-                }
-                @keyframes dock-spark-1 {
-                    0% { opacity: 0; transform: scale(0); }
-                    30% { opacity: 1; transform: translate(5px, -5px) scale(1); }
-                    100% { opacity: 0; transform: translate(8px, -8px) scale(0.2); }
-                }
-                @keyframes dock-spark-2 {
-                    0% { opacity: 0; transform: scale(0); }
-                    30% { opacity: 1; transform: translate(-5px, 4px) scale(1); }
-                    100% { opacity: 0; transform: translate(-8px, 7px) scale(0.2); }
-                }
-                @keyframes dock-spark-3 {
-                    0% { opacity: 0; transform: scale(0); }
-                    30% { opacity: 1; transform: translate(4px, 5px) scale(1); }
-                    100% { opacity: 0; transform: translate(7px, 8px) scale(0.2); }
-                }
-            `}</style>
             {panels.map(panel => {
                 const label = title(panel)
                 const isActive = activeId === panel.id
                 const isRunning = runningIds.has(panel.id)
+                const statusLabel = isRunning ? `${label} · ${runningText}` : label
                 return (
                     <Tooltip key={panel.id}>
                         <TooltipTrigger asChild>
                             <Button
+                                type="button"
                                 variant="ghost"
                                 size="icon"
-                                className={cn(
-                                    "relative h-7 w-7 text-muted-foreground",
-                                    "transition-colors duration-200",
-                                    isActive && "bg-accent text-foreground",
-                                    isRunning && "text-primary"
-                                )}
-                                aria-label={label}
+                                data-active={isActive}
+                                data-tone={panel.id === 'agent' ? 'ai' : undefined}
+                                className="kn-rail-control relative h-11 w-11 rounded-lg lg:h-7 lg:w-7"
+                                aria-label={statusLabel}
                                 aria-pressed={isActive}
                                 aria-busy={isRunning || undefined}
                                 onClick={() => onToggle(panel.id)}
                             >
-                                {/* Running — glow halo that breathes behind the icon */}
                                 {isRunning && (
-                                    <span aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                                        <span
-                                            className="h-5 w-5 rounded-full bg-primary/30 blur-[2px]"
-                                            style={{ animation: 'dock-glow-breathe 1.8s ease-in-out infinite' }}
-                                        />
-                                    </span>
-                                )}
-                                {/* Running — sparkle particles emanating outward,
-                                    staggered so there's always one twinkling */}
-                                {isRunning && [0, 1, 2].map(i => (
                                     <span
-                                        key={i}
                                         aria-hidden
-                                        className="pointer-events-none absolute left-1/2 top-1/2 h-[3px] w-[3px] rounded-full bg-primary"
-                                        style={{
-                                            marginLeft: '-1.5px',
-                                            marginTop: '-1.5px',
-                                            animation: `dock-spark-${i + 1} 1.8s ease-out infinite`,
-                                            animationDelay: `${i * 0.5}s`,
-                                        }}
+                                        className="kn-rail-running-dot pointer-events-none absolute right-1 top-1 h-1.5 w-1.5 rounded-full animate-pulse motion-reduce:animate-none"
                                     />
-                                ))}
-                                {/* Icon — springs up on activation, pulses gently while running */}
-                                <span
-                                    className={cn(
-                                        "relative z-10 flex items-center justify-center transition-transform duration-200",
-                                        isActive ? "scale-110" : "scale-100",
-                                    )}
-                                    style={{
-                                        transitionTimingFunction: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
-                                        ...(isRunning && {
-                                            animation: 'dock-icon-pulse 1.8s ease-in-out infinite',
-                                        }),
-                                    }}
-                                >
+                                )}
+                                <span className="relative z-10 flex items-center justify-center">
                                     {panel.icon}
                                 </span>
                             </Button>
                         </TooltipTrigger>
-                        <TooltipContent side={side === 'right' ? 'left' : 'right'}>{label}</TooltipContent>
+                        <TooltipContent side={side === 'right' ? 'left' : 'right'}>{statusLabel}</TooltipContent>
                     </Tooltip>
                 )
             })}
@@ -172,7 +117,7 @@ export const DockHost: React.FC<DockHostProps> = ({
     )
 
     // Track which panels are currently running (e.g. the agent streaming a
-    // response) so the rail icon can show a spinning animation. Panels emit
+    // response) so the rail can show a compact status indicator. Panels emit
     // DOCK_PANEL_RUNNING; the host listens and flips the matching id in/out.
     const [runningIds, setRunningIds] = React.useState<Set<string>>(new Set)
     React.useEffect(() => {
@@ -304,6 +249,7 @@ export const DockHost: React.FC<DockHostProps> = ({
                 runningIds={runningIds}
                 onToggle={toggle}
                 title={panelTitle}
+                runningText={t('dock.running', 'Running')}
                 side={position}
             />
         </div>
