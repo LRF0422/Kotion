@@ -16,7 +16,13 @@ const shouldLoadBundledPlugins = webBootMode !== "main";
 
 const loadInitialPlugins = async () => {
   if (!shouldLoadBundledPlugins) {
-    return [DefaultPluginInstance];
+    try {
+      const { systemPlugins } = await import("./system-plugins");
+      return systemPlugins;
+    } catch (error) {
+      window.__KN__.common.logger.error("Failed to load system plugins:", error);
+      return [DefaultPluginInstance];
+    }
   }
 
   try {

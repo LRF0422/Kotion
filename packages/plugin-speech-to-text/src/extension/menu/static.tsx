@@ -2,9 +2,10 @@ import { Toggle, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from
 import { Editor } from "@kn/editor";
 import { useTranslation } from "@kn/common";
 import React from "react";
-import { Mic, MicOff } from "@kn/icon";
+import { FileAudio, Mic, MicOff } from "@kn/icon";
 import { cn } from "@kn/ui";
 import { useSpeechController } from "../../speech-controller";
+import { dispatchCreateMeetingPage } from "../../meeting-page";
 import { startSpeech } from "./RecordingToast";
 
 /** Map the app UI language to a speech-recognition locale (BCP-47). */
@@ -27,32 +28,48 @@ export const SpeechToTextStaticMenu: React.FC<{ editor: Editor }> = ({ editor })
         }
     };
 
-    if (!isSupported) {
-        return null;
-    }
-
     return (
         <TooltipProvider>
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <Toggle
-                        size="sm"
-                        pressed={isActive}
-                        onClick={handleToggle}
-                        aria-label="Toggle speech to text"
-                        className={cn(isActive && "text-destructive")}
-                        data-speech-to-text-trigger
-                    >
-                        {isActive
-                            ? <MicOff className="h-4 w-4 animate-pulse" />
-                            : <Mic className="h-4 w-4" />
-                        }
-                    </Toggle>
-                </TooltipTrigger>
-                <TooltipContent>
-                    <p>{isActive ? t('speechToText.stop') : t('speechToText.start')}</p>
-                </TooltipContent>
-            </Tooltip>
+            <div className="flex items-center gap-0.5">
+                {isSupported && (
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Toggle
+                                size="sm"
+                                pressed={isActive}
+                                onClick={handleToggle}
+                                aria-label="Toggle speech to text"
+                                className={cn(isActive && "text-destructive")}
+                                data-speech-to-text-trigger
+                            >
+                                {isActive
+                                    ? <MicOff className="h-4 w-4 animate-pulse" />
+                                    : <Mic className="h-4 w-4" />
+                                }
+                            </Toggle>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>{isActive ? t('speechToText.stop') : t('speechToText.start')}</p>
+                        </TooltipContent>
+                    </Tooltip>
+                )}
+
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Toggle
+                            size="sm"
+                            pressed={false}
+                            onClick={() => dispatchCreateMeetingPage({ language: resolveLang(i18n?.language) })}
+                            aria-label={t('meetingMinutes.newMeeting', 'New meeting')}
+                        >
+                            <FileAudio className="h-4 w-4" />
+                        </Toggle>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        <p>{t('meetingMinutes.newMeeting', 'New meeting')}</p>
+                    </TooltipContent>
+                </Tooltip>
+            </div>
         </TooltipProvider>
     );
 };

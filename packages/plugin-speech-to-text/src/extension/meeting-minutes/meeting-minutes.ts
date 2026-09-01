@@ -13,9 +13,9 @@ declare module "@kn/editor" {
 }
 
 // ─── Child Tab Nodes ────────────────────────────────────
-// Each tab is an independent ProseMirror node with its own content.
-// The parent meetingMinutes node contains exactly these two children
-// (Notes + Transcript), matching Notion's AI Meeting Notes block.
+// Each tab is an independent ProseMirror node with its own content. The summary
+// child is optional so persisted two-tab blocks (Notes + Transcript) remain
+// valid while newly inserted blocks use Notes + Summary + Transcript.
 // CSS visibility is controlled by the parent's data-active-tab attribute.
 
 export const MeetingTabNotesNode = Node.create({
@@ -32,6 +32,23 @@ export const MeetingTabNotesNode = Node.create({
 
     renderHTML({ HTMLAttributes }) {
         return ['div', mergeAttributes(HTMLAttributes, { 'data-tab': 'notes', class: 'meeting-tab-content' }), 0];
+    },
+});
+
+export const MeetingTabSummaryNode = Node.create({
+    name: "meetingTabSummary",
+    group: "block",
+    content: "block+",
+    inline: false,
+    defining: true,
+    isolating: true,
+
+    parseHTML() {
+        return [{ tag: 'div[data-tab="summary"]' }];
+    },
+
+    renderHTML({ HTMLAttributes }) {
+        return ['div', mergeAttributes(HTMLAttributes, { 'data-tab': 'summary', class: 'meeting-tab-content' }), 0];
     },
 });
 
@@ -57,7 +74,7 @@ export const MeetingTabTranscriptNode = Node.create({
 export const MeetingMinutesNode = Node.create({
     name: "meetingMinutes",
     group: "block",
-    content: "meetingTabNotes meetingTabTranscript",
+    content: "meetingTabNotes meetingTabSummary? meetingTabTranscript",
     inline: false,
     draggable: true,
     isolating: true,
@@ -70,24 +87,52 @@ export const MeetingMinutesNode = Node.create({
 
     addAttributes() {
         return {
-            // Recording state
+            // Durable recording / summary pipeline state.
+            recordingStatus: {
+                default: 'idle'
+            },
+            recordingError: {
+                default: null
+            },
+            summaryStatus: {
+                default: 'idle'
+            },
+            summaryError: {
+                default: null
+            },
+            duration: {
+                default: 0
+            },
+            // Stable file-center metadata. Playback URLs are resolved at runtime
+            // and are never persisted in the document.
+            audioFileId: {
+                default: null
+            },
+            audioName: {
+                default: null
+            },
+            audioMime: {
+                default: null
+            },
+            audioSize: {
+                default: null
+            },
+            folderId: {
+                default: null
+            },
+            // Legacy read compatibility. New recordings do not write these attrs.
             isRecording: {
                 default: false
             },
             isPaused: {
                 default: false
             },
-            duration: {
-                default: 0
-            },
-            // Audio data
             audioPath: {
                 default: null
             },
             audioUrl: {
                 default: null
             },
-            // Transcription (raw transcript text, stored as attribute for reference)
             transcript: {
                 default: ''
             },
@@ -179,12 +224,18 @@ export const MeetingMinutesNode = Node.create({
                         tags: [],
                         lang: options?.lang || 'zh-CN',
                         activeTab: 'notes',
+                        recordingStatus: 'idle',
+                        summaryStatus: 'idle',
                         createdAt: Date.now(),
                         updatedAt: Date.now()
                     },
                     content: [
                         {
                             type: 'meetingTabNotes',
+                            content: [{ type: 'paragraph' }]
+                        },
+                        {
+                            type: 'meetingTabSummary',
                             content: [{ type: 'paragraph' }]
                         },
                         {

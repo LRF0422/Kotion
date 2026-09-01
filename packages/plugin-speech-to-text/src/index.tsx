@@ -1,5 +1,8 @@
+import React from 'react';
 import { KPlugin, PluginConfig } from '@kn/common';
+import { FileAudio } from '@kn/icon';
 import { SpeechToTextExtension } from './extension';
+import { MeetingMinutesHome } from './pages/MeetingMinutesHome';
 
 interface SpeechToTextPluginConfig extends PluginConfig { }
 
@@ -9,6 +12,21 @@ export const speechToText = new SpeechToTextPlugin({
     status: 'ACTIVE',
     name: 'Speech to Text',
     editorExtension: [SpeechToTextExtension],
+    routes: [
+        {
+            name: 'meetingMinutes',
+            path: '/meeting-minutes',
+            element: <MeetingMinutesHome />,
+        },
+    ],
+    menus: [
+        {
+            id: '/meeting-minutes',
+            name: 'meetingMinutes.title',
+            key: 'Meeting Minutes',
+            icon: <FileAudio className="h-5 w-5" />,
+        },
+    ],
     locales: {
         zh: {
             translation: {
@@ -24,6 +42,17 @@ export const speechToText = new SpeechToTextPlugin({
                 },
                 meetingMinutes: {
                     title: '会议纪要',
+                    homeDescription: '一个会议对应一个独立页面，录音会自动归档到当前空间。',
+                    newMeeting: '新建会议',
+                    recentMeetings: '最近会议',
+                    noMeetings: '暂无会议',
+                    noMeetingsDescription: '创建会议页面后即可开始录音和记录。',
+                    untitledMeeting: '未命名会议',
+                    space: '空间',
+                    selectSpaceFirst: '请先选择空间',
+                    recordingFolderHint: '录音将自动保存到此空间的固定会议录音目录。',
+                    createFailed: '创建会议页面失败',
+                    loadFailed: '加载会议纪要失败',
                     meetingTitle: '会议',
                     today: '今天',
                     notes: '笔记',
@@ -85,7 +114,19 @@ export const speechToText = new SpeechToTextPlugin({
                     recordingPlayback: '录音回放',
                     aiSummary: 'AI 摘要',
                     insertToDocument: '插入到文档',
-                    summaryGenerationFailed: 'AI摘要生成失败，以下为转录内容预览',
+                    summaryGenerationFailed: 'AI 摘要生成失败',
+                    summaryPlaceholder: '会议结束后会自动生成摘要、决策和待办事项…',
+                    keyPoints: '讨论要点',
+                    decisions: '会议决策',
+                    owner: '负责人',
+                    dueDate: '截止日期',
+                    selectRecordingFolder: '选择会议录音文件夹',
+                    fileServiceUnavailable: '文件服务不可用，录音仅保存在当前浏览器中',
+                    folderNotSelected: '未选择录音文件夹，可下载本地副本或稍后重试',
+                    stopFailed: '停止录音失败',
+                    retrySummary: '重试摘要',
+                    retrySave: '重试保存',
+                    downloadLocalCopy: '下载本地副本',
                     recordingFilePrefix: '会议录音',
                     summaryPrompt: '请为以下会议录音转录内容生成会议摘要，包括：\n1. 会议主题/标题\n2. 主要讨论内容（按要点列出）\n3. 会议结论/决议\n4. 待办事项（如有）\n\n转录内容：\n{{transcript}}\n\n请用中文回复，格式清晰易读。',
                 },
@@ -105,6 +146,17 @@ export const speechToText = new SpeechToTextPlugin({
                 },
                 meetingMinutes: {
                     title: 'Meeting Minutes',
+                    homeDescription: 'Create one page per meeting and archive recordings automatically in the current space.',
+                    newMeeting: 'New meeting',
+                    recentMeetings: 'Recent meetings',
+                    noMeetings: 'No meetings yet',
+                    noMeetingsDescription: 'Create a meeting page to start recording and taking notes.',
+                    untitledMeeting: 'Untitled meeting',
+                    space: 'Space',
+                    selectSpaceFirst: 'Please select a space first',
+                    recordingFolderHint: 'Recordings are saved automatically to this space’s fixed meeting folder.',
+                    createFailed: 'Failed to create meeting page',
+                    loadFailed: 'Failed to load meeting minutes',
                     meetingTitle: 'Meeting',
                     today: 'Today',
                     notes: 'Notes',
@@ -166,7 +218,19 @@ export const speechToText = new SpeechToTextPlugin({
                     recordingPlayback: 'Recording playback',
                     aiSummary: 'AI Summary',
                     insertToDocument: 'Insert to document',
-                    summaryGenerationFailed: 'AI summary generation failed, showing transcript preview',
+                    summaryGenerationFailed: 'AI summary generation failed',
+                    summaryPlaceholder: 'A summary, decisions, and action items will be generated when the meeting ends…',
+                    keyPoints: 'Key points',
+                    decisions: 'Decisions',
+                    owner: 'Owner',
+                    dueDate: 'Due date',
+                    selectRecordingFolder: 'Choose meeting recordings folder',
+                    fileServiceUnavailable: 'File service is unavailable; the recording is only stored in this browser session',
+                    folderNotSelected: 'No recordings folder selected; download a local copy or retry later',
+                    stopFailed: 'Failed to stop recording',
+                    retrySummary: 'Retry summary',
+                    retrySave: 'Retry save',
+                    downloadLocalCopy: 'Download local copy',
                     recordingFilePrefix: 'Recording',
                     summaryPrompt: 'Please generate a meeting summary for the following transcript, including:\n1. Meeting topic/title\n2. Key discussion points (listed by item)\n3. Conclusions/decisions\n4. Action items (if any)\n\nTranscript:\n{{transcript}}\n\nPlease reply in Markdown format, clear and readable.',
                 },
