@@ -12,7 +12,7 @@ import {
 } from "@kn/ui";
 import { FolderIcon, ChevronRight, HomeIcon } from "@kn/icon";
 import { FileItem, BreadcrumbItem } from "../FileContext";
-import { useApi } from "@kn/common";
+import { logger, useApi } from "@kn/common";
 import { APIS } from "../../../api";
 import { useI18n } from "../../../i18n/use-i18n";
 
@@ -71,7 +71,7 @@ export const MoveDialog: React.FC<MoveDialogProps> = ({
 
             setFolders(folderItems);
         } catch (err) {
-            console.error('Failed to load folders:', err);
+            logger.error('Failed to load folders for move dialog', err);
         } finally {
             setLoading(false);
         }
@@ -154,14 +154,24 @@ export const MoveDialog: React.FC<MoveDialogProps> = ({
                             {t('move.noFolders')}
                         </div>
                     ) : (
-                        <div className="p-2 space-y-1">
+                        <div role="listbox" className="space-y-1 p-2">
                             {folders.map((folder) => (
                                 <div
                                     key={folder.id}
+                                    role="option"
+                                    tabIndex={0}
+                                    aria-selected={selectedFolderId === folder.id}
                                     onClick={() => handleFolderClick(folder)}
                                     onDoubleClick={() => handleFolderDoubleClick(folder)}
+                                    onKeyDown={(event) => {
+                                        if (event.key === 'Enter') handleFolderDoubleClick(folder);
+                                        if (event.key === ' ') {
+                                            event.preventDefault();
+                                            handleFolderClick(folder);
+                                        }
+                                    }}
                                     className={cn(
-                                        "flex items-center gap-2 p-2 rounded-md cursor-pointer transition-colors",
+                                        "flex min-h-11 items-center gap-2 rounded-md p-2 cursor-pointer outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
                                         "hover:bg-accent",
                                         selectedFolderId === folder.id && "bg-accent border border-primary"
                                     )}

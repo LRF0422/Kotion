@@ -10,7 +10,8 @@
   },
   "scripts": {
     "build": "rollup -c",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "check:selection": "tsc src/utils/file-selection.check.ts --outDir .tmp-check --module commonjs --target ES2020 --jsx react --skipLibCheck --esModuleInterop && node .tmp-check/utils/file-selection.check.js",
+    "test": "pnpm check:selection"
   },
   "dependencies": {
     "@kn/common": "workspace:*",

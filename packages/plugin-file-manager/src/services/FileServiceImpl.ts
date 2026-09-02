@@ -1,4 +1,4 @@
-import { FileService, UploadedFile, UploadOptions, FileSelectorOptions, SelectedFile, getAccessToken } from "@kn/common";
+import { FileService, UploadedFile, UploadOptions, FileSelectorOptions, SelectedFile, getAccessToken, logger } from "@kn/common";
 import { request, useApi, APIS as CORE_APIS } from "@kn/common";
 import { fileOpen } from "browser-fs-access";
 import { APIS } from "../api";
@@ -142,7 +142,7 @@ export class FileServiceImpl implements FileService {
      */
     async openFileSelector(options?: FileSelectorOptions, editor?: any): Promise<SelectedFile[] | null> {
         if (!editor) {
-            console.warn('Editor is required for file selector.');
+            logger.warn('Editor is required for file selector');
             return null;
         }
 

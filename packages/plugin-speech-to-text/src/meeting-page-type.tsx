@@ -33,6 +33,8 @@ export const createMeetingMinutesPageDocument = (
                 activeTab: 'notes',
                 recordingStatus: 'idle',
                 summaryStatus: 'idle',
+                generatedNotesFingerprint: null,
+                generatedSummaryFingerprint: null,
                 createdAt,
                 updatedAt: createdAt,
             },

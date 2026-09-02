@@ -8,12 +8,17 @@ import { FileItem } from "../component/FileContext";
 import { createT } from "../../i18n";
 
 // Helper function to show file manager dialog for attachments
-const showAttachmentDlg = (editor: Editor, onConfirm?: (files: FileItem[]) => void) => {
+const showAttachmentDlg = (
+    editor: Editor,
+    multiple: boolean,
+    onConfirm?: (files: FileItem[]) => void,
+) => {
     const component = new ReactRenderer(FolderDlg, {
         editor: editor,
         props: {
             open: true,
             selectable: true,
+            multiple,
             target: 'file',
             onCancel: () => {
                 component.updateProps({ open: false });
@@ -38,7 +43,7 @@ export const AttachmentExtension: ExtensionWrapper = {
             slash: '/attachment',
             icon: <FileIcon className="h-4 w-4" />,
             action: (editor) => {
-                showAttachmentDlg(editor, (files) => {
+                showAttachmentDlg(editor, false, (files) => {
                     if (files && files.length > 0) {
                         const file = files[0];
                         editor.commands.insertBlockAttachment({
@@ -57,7 +62,7 @@ export const AttachmentExtension: ExtensionWrapper = {
             slash: '/attachment-inline',
             icon: <FileTextIcon className="h-4 w-4" />,
             action: (editor) => {
-                showAttachmentDlg(editor, (files) => {
+                showAttachmentDlg(editor, true, (files) => {
                     if (files && files.length > 0) {
                         files.forEach((file) => {
                             editor.commands.insertInlineAttachment({

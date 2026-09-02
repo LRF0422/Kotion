@@ -5,6 +5,7 @@ import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.knowledge.core.common.base.BaseService;
@@ -103,15 +104,23 @@ public class FileServiceImpl extends BaseService<FileMapper, KnowledgeFile> impl
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void moveFile(Long sourceId, Long targetId) {
+        if (sourceId != null && sourceId.equals(targetId)) {
+            throw new IllegalArgumentException("Source and target must be different");
+        }
+
         KnowledgeFile source = this.getById(sourceId);
         if (source == null) {
             throw new IllegalArgumentException("Source file not found");
         }
 
         KnowledgeFile target = this.getById(targetId);
-        if (target == null || target.getType() != FileType.FOLDER) {
+        if (target == null || TRASHED.equals(target.getTrashed()) || target.getType() != FileType.FOLDER) {
             throw new IllegalArgumentException("Target must be a valid folder");
+        }
+        if (source.getType() == FileType.FOLDER && containsAncestor(target.getAncestors(), sourceId)) {
+            throw new IllegalArgumentException("Cannot move a folder into its descendant");
         }
 
         // Update parent and ancestors
@@ -124,6 +133,19 @@ public class FileServiceImpl extends BaseService<FileMapper, KnowledgeFile> impl
         if (source.getType() == FileType.FOLDER) {
             updateDescendantsAncestors(source);
         }
+    }
+
+    private boolean containsAncestor(String ancestors, Long ancestorId) {
+        if (StrUtil.isBlank(ancestors) || ancestorId == null) {
+            return false;
+        }
+        String expectedId = ancestorId.toString();
+        for (String id : ancestors.split(",")) {
+            if (expectedId.equals(id)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -172,8 +194,14 @@ public class FileServiceImpl extends BaseService<FileMapper, KnowledgeFile> impl
 
     @Override
     public List<KnowledgeFile> getChildren(Long fileId, boolean includeFolder, MediaType mediaType, String fileName) {
+        String repositoryKey = null;
+        if (TOP_FOLDER_PARENT_ID.equals(fileId)) {
+            KnowledgeFileRepository repository = getFileRepositoryService().getDefaultFileRepo();
+            repositoryKey = repository.getRepoKey();
+        }
         return this.lambdaQuery()
                 .eq(KnowledgeFile::getParentId, fileId)
+                .eq(StrUtil.isNotBlank(repositoryKey), KnowledgeFile::getRepositoryKey, repositoryKey)
                 .eq(KnowledgeFile::getTrashed, NOT_TRASHED)
                 .eq(!includeFolder, KnowledgeFile::getType, FileType.FILE)
                 .eq(mediaType != null, KnowledgeFile::getMediaType, mediaType)
@@ -280,13 +308,14 @@ public class FileServiceImpl extends BaseService<FileMapper, KnowledgeFile> impl
     }
 
     @Override
-    public void touchAccess(Long fileId) {
+    public KnowledgeFile touchAccess(Long fileId) {
         KnowledgeFile file = this.getById(fileId);
         if (file == null) {
-            return;
+            return null;
         }
         file.setLastAccessedTime(LocalDateTime.now());
         this.updateById(file);
+        return file;
     }
 
     @Override

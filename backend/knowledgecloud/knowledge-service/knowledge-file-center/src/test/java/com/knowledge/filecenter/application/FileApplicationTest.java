@@ -87,6 +87,31 @@ class FileApplicationTest {
     }
 
     @Test
+    void folderMetadataLookupDoesNotTouchRecentAccess() {
+        KnowledgeFile folder = new KnowledgeFile();
+        folder.setId(1L);
+        folder.setType(FileType.FOLDER);
+        folder.setName("Design");
+        when(fileService.getById(1L)).thenReturn(folder);
+
+        application.getById(1L);
+
+        verify(fileService, never()).touchAccess(1L);
+    }
+
+    @Test
+    void fileMetadataLookupStillTouchesRecentAccess() {
+        KnowledgeFile file = file(1L, "upload/object.webm", "application-record-key");
+        when(fileService.getById(1L)).thenReturn(file);
+        when(fileService.touchAccess(1L)).thenReturn(file);
+
+        KnowledgeFileVO result = application.getById(1L);
+
+        verify(fileService).touchAccess(1L);
+        assertEquals("meeting.webm", result.getName());
+    }
+
+    @Test
     void downloadUsesResolvedPathInsteadOfFileKey() {
         KnowledgeFile file = file(1L, "legacy-url", "application-record-key");
         when(fileService.getById(1L)).thenReturn(file);

@@ -1,5 +1,5 @@
 import type { JSONContent } from '@tiptap/core'
-import type { Schema } from '@tiptap/pm/model'
+import type { NodeType, Schema } from '@tiptap/pm/model'
 
 type RewriteUnknownContentOptions = {
     /**
@@ -36,7 +36,16 @@ type RewriteResult = {
 }
 
 const UNKNOWN_NODE_TYPE = 'unknownNode'
+const UNKNOWN_INLINE_NODE_TYPE = 'unknownInlineNode'
 const ORIGINAL_CONTENT_ATTR = 'originalContent'
+
+function getPlaceholderType(parentType?: NodeType): string {
+    return parentType?.inlineContent ? UNKNOWN_INLINE_NODE_TYPE : UNKNOWN_NODE_TYPE
+}
+
+function isUnknownPlaceholder(type?: string): boolean {
+    return type === UNKNOWN_NODE_TYPE || type === UNKNOWN_INLINE_NODE_TYPE
+}
 
 function cloneValue<T>(value: T): T {
     if (Array.isArray(value)) {
@@ -84,19 +93,23 @@ function rewriteUnknownContentInner({
     json,
     validMarks,
     validNodes,
+    schema,
+    parentType,
     options,
     rewrittenContent = [],
 }: {
     json: JSONContent
     validMarks: Set<string>
     validNodes: Set<string>
+    schema: Schema
+    parentType?: NodeType
     options?: RewriteUnknownContentOptions
     rewrittenContent?: RewrittenContent
 }): RewriteResult {
     const nodeType = json.attrs?.nodeType
 
     if (
-        json.type === UNKNOWN_NODE_TYPE
+        isUnknownPlaceholder(json.type)
         && typeof nodeType === 'string'
         && validNodes.has(nodeType)
     ) {
@@ -113,6 +126,8 @@ function rewriteUnknownContentInner({
             json: restored,
             validMarks,
             validNodes,
+            schema,
+            parentType,
             options,
             rewrittenContent,
         })
@@ -140,7 +155,7 @@ function rewriteUnknownContentInner({
 
         return {
             json: {
-                type: UNKNOWN_NODE_TYPE,
+                type: getPlaceholderType(parentType),
                 attrs: {
                     nodeType: json.type,
                     data: cloneValue(json.attrs?.data ?? null),
@@ -178,12 +193,15 @@ function rewriteUnknownContentInner({
 
     if (Array.isArray(json.content)) {
         const content: JSONContent[] = []
+        const currentType = json.type ? schema.nodes[json.type] : undefined
 
         json.content.forEach(value => {
             const childResult = rewriteUnknownContentInner({
                 json: value,
                 validMarks,
                 validNodes,
+                schema,
+                parentType: currentType,
                 options,
                 rewrittenContent,
             })
@@ -226,6 +244,7 @@ export function rewriteUnknownContent(
         json,
         validNodes: new Set(Object.keys(schema.nodes)),
         validMarks: new Set(Object.keys(schema.marks)),
+        schema,
         options,
     })
 }

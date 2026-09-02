@@ -26,7 +26,7 @@ export interface FileItem {
     }
     path?: string
     size?: number
-    mediaType?: string
+    mediaType?: string | { value?: string }
     /** 0/1 收藏标记 */
     favorite?: number
     /** 0/1 回收站标记 */
@@ -50,8 +50,12 @@ export type TranslateFn = (key: string, params?: Record<string, string | number>
 
 export interface FileManagerState {
     selectable?: boolean,
+    multiple: boolean,
+    target: 'folder' | 'file' | 'both',
+    accept: string[],
     /** selectable 模式下确认选择的回调(文件夹选择器) */
     onConfirmSelectable?: (files: FileItem[]) => void,
+    isItemSelectable: (item: FileItem) => boolean,
     /** i18n 翻译函数 */
     t: TranslateFn,
     /** 设备是否为触屏(mobile/tablet)—— 影响单击=打开 vs 单击=选中 */

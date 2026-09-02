@@ -1,73 +1,69 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import type { FileItem, SelectionModifiers } from '../editor-extensions/component/FileContext';
+import { resolveNextSelection } from '../utils/file-selection';
+
+interface UseFileSelectionOptions {
+    multiple?: boolean;
+    isItemSelectable?: (item: FileItem) => boolean;
+}
 
 /**
  * Finder / Explorer 风格的选择逻辑。
  *
- * - 单击           → 选中该项,清除其余
- * - Ctrl/Cmd+单击  → 切换该项的选中状态
- * - Shift+单击     → 以上一个锚点为起点,做范围选择
- *
- * 选中态本身由调用方持有的 `selectedFiles` 维护,本 hook 只负责计算下一份选择
- * 并通过 `setSelectFiles` 写回。范围选择以传入的 `orderedItems`(当前可见顺序)为准。
+ * 普通文件管理默认支持 Ctrl/Cmd 与 Shift 多选；选择器可通过 `multiple=false`
+ * 强制单选，并通过 `isItemSelectable` 阻止不符合 target/accept 的条目进入状态。
  */
 export const useFileSelection = (
     selectedFiles: FileItem[],
     setSelectFiles: React.Dispatch<React.SetStateAction<FileItem[]>>,
+    options: UseFileSelectionOptions = {},
 ) => {
-    // 上一次「锚点」条目 —— Shift 范围选择的起点
+    const { multiple = true, isItemSelectable = () => true } = options;
     const anchorId = useRef<string | null>(null);
+    const selectedIds = useMemo(
+        () => new Set(selectedFiles.map((file) => file.id)),
+        [selectedFiles],
+    );
 
     const isSelected = useCallback(
-        (id: string) => selectedFiles.some((f) => f.id === id),
-        [selectedFiles],
+        (id: string) => selectedIds.has(id),
+        [selectedIds],
     );
 
     const selectItem = useCallback(
         (item: FileItem, modifiers: SelectionModifiers, orderedItems: FileItem[]) => {
-            const multi = !!(modifiers.ctrlKey || modifiers.metaKey);
-            const range = !!modifiers.shiftKey;
+            if (!isItemSelectable(item)) return;
 
-            if (range && anchorId.current) {
-                const from = orderedItems.findIndex((it) => it.id === anchorId.current);
-                const to = orderedItems.findIndex((it) => it.id === item.id);
-                if (from !== -1 && to !== -1) {
-                    const [start, end] = from <= to ? [from, to] : [to, from];
-                    setSelectFiles(orderedItems.slice(start, end + 1));
-                    return;
-                }
-            }
+            setSelectFiles((current) => resolveNextSelection({
+                selectedFiles: current,
+                item,
+                modifiers,
+                orderedItems,
+                anchorId: anchorId.current,
+                multiple,
+                selectable: isItemSelectable,
+            }));
 
-            if (multi) {
+            if (!modifiers.shiftKey || !anchorId.current) {
                 anchorId.current = item.id;
-                setSelectFiles((prev) =>
-                    prev.some((f) => f.id === item.id)
-                        ? prev.filter((f) => f.id !== item.id)
-                        : [...prev, item],
-                );
-                return;
             }
-
-            // 普通单击:选中并替换
-            anchorId.current = item.id;
-            setSelectFiles([item]);
         },
-        [setSelectFiles],
+        [isItemSelectable, multiple, setSelectFiles],
     );
 
-    /** 复选框勾选 —— 始终为「累加/移除」语义,且更新锚点 */
     const toggleSelect = useCallback(
         (item: FileItem, checked: boolean) => {
+            if (!isItemSelectable(item)) return;
             anchorId.current = item.id;
-            setSelectFiles((prev) =>
-                checked
-                    ? prev.some((f) => f.id === item.id)
-                        ? prev
-                        : [...prev, item]
-                    : prev.filter((f) => f.id !== item.id),
-            );
+            setSelectFiles((current) => {
+                if (!checked) return current.filter((file) => file.id !== item.id);
+                if (!multiple) return [item];
+                return current.some((file) => file.id === item.id)
+                    ? current
+                    : [...current, item];
+            });
         },
-        [setSelectFiles],
+        [isItemSelectable, multiple, setSelectFiles],
     );
 
     const resetAnchor = useCallback(() => {

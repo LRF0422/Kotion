@@ -10,6 +10,7 @@ export interface FileSidebarProps {
     /** 已构建好的 TreeView 元素 */
     treeElements: any[];
     loading: boolean;
+    selectable?: boolean;
     /** 回到 Home(根目录) */
     onHome: () => void;
     /** 切换到 recent / favorites / trash */
@@ -41,10 +42,12 @@ const SectionLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 );
 
 export const FileSidebar: React.FC<FileSidebarProps> = ({
-    view, currentFolderId, treeElements, loading, onHome, onSelectView, onAfterNavigate,
+    view, currentFolderId, treeElements, loading, selectable, onHome, onSelectView, onAfterNavigate,
 }) => {
     const { t } = useI18n();
-    const libraryItems: LibraryView[] = ['home', 'recent', 'favorites', 'trash'];
+    const libraryItems: LibraryView[] = selectable
+        ? ['home', 'recent', 'favorites']
+        : ['home', 'recent', 'favorites', 'trash'];
 
     return (
         <div className="flex h-full flex-col bg-muted/30">
@@ -58,7 +61,7 @@ export const FileSidebar: React.FC<FileSidebarProps> = ({
                             variant="ghost"
                             size="sm"
                             className={cn(
-                                "h-8 w-full justify-start gap-2.5 rounded-md px-2.5 text-[13px] font-normal",
+                                "h-11 w-full justify-start gap-2.5 rounded-md px-2.5 text-[13px] font-normal lg:h-8",
                                 active
                                     ? "bg-accent font-medium text-accent-foreground"
                                     : "text-foreground/80 hover:text-foreground",

@@ -45,8 +45,8 @@ public interface IFileService extends IBaseService<KnowledgeFile> {
     /** 最近访问列表 */
     List<KnowledgeFile> listRecent(int limit);
 
-    /** 记录最近访问时间 */
-    void touchAccess(Long fileId);
+    /** 记录最近访问时间并返回更新后的文件 */
+    KnowledgeFile touchAccess(Long fileId);
 
     /** 复制文件/文件夹到目标目录(文件夹递归) */
     KnowledgeFile copyFile(Long fileId, Long targetParentId);

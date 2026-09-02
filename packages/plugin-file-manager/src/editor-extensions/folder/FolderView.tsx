@@ -29,8 +29,8 @@ export const FolderView: React.FC<NodeViewProps> = (props) => {
     }, [])
 
     const handleConfirm = useCallback((files: any[]) => {
-        if (files && files.length > 0) {
-            updateAttributes({ folderId: files[0].id })
+        if (files?.length === 1 && files[0].isFolder) {
+            updateAttributes({ folderId: String(files[0].id) })
         }
         setSelectorOpen(false)
     }, [updateAttributes])
@@ -80,6 +80,7 @@ export const FolderView: React.FC<NodeViewProps> = (props) => {
                         <FileManagerView
                             className="h-full border-0 rounded-none"
                             selectable
+                            multiple={false}
                             target="folder"
                             onCancel={handleCancel}
                             onConfirm={handleConfirm}

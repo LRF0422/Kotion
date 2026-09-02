@@ -11,7 +11,7 @@ export const showFileSelector = (
     editor: Editor,
     options?: FileSelectorOptions
 ): Promise<SelectedFile[] | null> => {
-    const { multiple = false, target = 'file', title } = options || {};
+    const { multiple = false, target = 'file', accept, title } = options || {};
 
     return new Promise((resolve) => {
         const component = new ReactRenderer(FolderDlg, {
@@ -19,8 +19,10 @@ export const showFileSelector = (
             props: {
                 open: true,
                 selectable: true,
-                multiple: multiple,
-                target: target,
+                multiple,
+                target,
+                accept,
+                title,
                 onCancel: () => {
                     component.updateProps({ open: false });
                     component.destroy();

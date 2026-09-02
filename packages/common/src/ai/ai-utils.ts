@@ -32,22 +32,47 @@ export function streamKnowledgeChat(
     const client = defaultClient
 
     async function* textStream(): AsyncGenerator<string> {
+        if (options.signal?.aborted) return
+
         const conversationId = 'inline-' + Math.random().toString(36).slice(2)
-        const run = await client.createRun({
-            conversationId,
-            model: options.model,
-            mode: 'execute',
-            messages,
-            tools: [],
-            skills: [],
-            noTools: true,
-        })
-        for await (const event of client.streamEvents(run.runId, 0, options.signal)) {
-            if (event.type === 'text.delta') {
-                yield event.content
-            } else if (event.type === 'run.failed') {
-                throw new Error(event.error ?? event.code ?? 'agent failed')
+        let runId: string | null = null
+        let cancellation: Promise<void> | null = null
+        const cancelRun = (): Promise<void> | null => {
+            if (!runId) return null
+            cancellation ??= client.cancelRun(runId).catch(() => undefined)
+            return cancellation
+        }
+        const handleAbort = () => {
+            void cancelRun()
+        }
+        options.signal?.addEventListener('abort', handleAbort, { once: true })
+
+        try {
+            const run = await client.createRun({
+                conversationId,
+                model: options.model,
+                mode: 'execute',
+                messages,
+                tools: [],
+                skills: [],
+                noTools: true,
+            })
+            runId = run.runId
+            if (options.signal?.aborted) {
+                await cancelRun()
+                return
             }
+
+            for await (const event of client.streamEvents(runId, 0, options.signal)) {
+                if (event.type === 'text.delta') {
+                    yield event.content
+                } else if (event.type === 'run.failed') {
+                    throw new Error(event.error ?? event.code ?? 'agent failed')
+                }
+            }
+        } finally {
+            options.signal?.removeEventListener('abort', handleAbort)
+            if (options.signal?.aborted) await cancelRun()
         }
     }
 

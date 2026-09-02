@@ -9,7 +9,9 @@ export const showFolderDlg = (editor: Editor, onConfirm?: (files: any[]) => void
         props: {
             open: true,
             selectable: true,
+            multiple: false,
             target: 'file',
+            accept: ['image/*'],
             onCancel: () => {
                 component.updateProps({ open: false })
                 component.destroy()

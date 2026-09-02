@@ -10,8 +10,8 @@ import {
     AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel,
     useResponsive,
 } from "@kn/ui";
-import React, { useCallback, useEffect, useState, useMemo } from "react";
-import { useSafeState, useApi } from "@kn/common";
+import React, { useCallback, useEffect, useState, useMemo, useRef } from "react";
+import { logger, useSafeState, useApi } from "@kn/common";
 import { APIS } from "../../api";
 import { Menu } from "./Menu";
 import { FileCardList } from "./FileCard";
@@ -25,6 +25,11 @@ import {
 import { useFileManager } from "../../hooks/useFileManager";
 import { useFileSelection } from "../../hooks/useFileSelection";
 import { isPreviewable } from "../../utils/fileUtils";
+import {
+    isItemSelectable as matchesSelectionPolicy,
+    normalizeConfirmedSelection,
+    reconcileSelectedFiles,
+} from "../../utils/file-selection";
 import { RenameDialog, MoveDialog, FileDetailsDialog, CreateFolderDialog, FilePreviewDialog } from "./dialogs";
 import { useI18n } from "../../i18n/use-i18n";
 
@@ -36,6 +41,7 @@ export interface FileManagerProps {
     onConfirm?: (files: FileItem[]) => void
     multiple?: boolean
     target?: 'folder' | 'file' | 'both'
+    accept?: string[]
     defaultViewMode?: ViewMode
     onViewModeChange?: (mode: ViewMode) => void
     showSidebar?: boolean
@@ -53,9 +59,20 @@ const VIEW_LABEL_KEY: Record<Exclude<FileView, 'home' | 'search'>, string> = {
     trash: 'views.trash',
 };
 
+const EMPTY_ACCEPT: string[] = [];
+
 export const FileManagerView: React.FC<FileManagerProps> = (props) => {
     const { isMobileOrTablet: isTouch } = useResponsive();
-    const { selectable = false, onCancel, onConfirm, onViewModeChange, showSidebar = true } = props;
+    const {
+        selectable = false,
+        onCancel,
+        onConfirm,
+        onViewModeChange,
+        showSidebar = true,
+        target = 'both',
+    } = props;
+    const accept = props.accept ?? EMPTY_ACCEPT;
+    const multiple = selectable ? (props.multiple ?? false) : true;
     const { t } = useI18n();
 
     const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -65,9 +82,9 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
 
     const [selectedFiles, setSelectFiles] = useSafeState<FileItem[]>([]);
     const [repoKey] = useState<string>("");
-    const [treeElements, setTreeElements] = useSafeState<any[]>([]);
-    const [sidebarLoading, setSidebarLoading] = useState(true);
-    const [isInitialLoad, setIsInitialLoad] = useState(true);
+    const [rawTreeItems, setRawTreeItems] = useState<any[]>([]);
+    const [sidebarLoading, setSidebarLoading] = useState(showSidebar);
+    const sidebarRequestVersion = useRef(0);
     const { folderId } = props;
 
     const {
@@ -82,10 +99,33 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
     } = useFileManager({ initialFolderId: props.folderId || "" });
 
     const isTrash = view === 'trash';
-    const canUpload = view === 'home';
-
-    const { isSelected, selectItem } = useFileSelection(selectedFiles, setSelectFiles);
+    const canUpload = !selectable && view === 'home';
+    const selectionPolicy = useMemo(
+        () => ({ target, accept, multiple }),
+        [target, accept, multiple],
+    );
+    const itemIsSelectable = useCallback(
+        (item: FileItem) => !selectable || matchesSelectionPolicy(item, selectionPolicy),
+        [selectable, selectionPolicy],
+    );
+    const { isSelected, selectItem } = useFileSelection(selectedFiles, setSelectFiles, {
+        multiple,
+        isItemSelectable: itemIsSelectable,
+    });
     const clearSelection = useCallback(() => setSelectFiles([]), [setSelectFiles]);
+    const confirmSelection = useCallback(
+        (files: FileItem[]) => onConfirm?.(normalizeConfirmedSelection(files, selectionPolicy)),
+        [onConfirm, selectionPolicy],
+    );
+
+    useEffect(() => {
+        setSelectFiles((current) => {
+            const reconciled = reconcileSelectedFiles(current, currentFolderItems);
+            const unchanged = reconciled.length === current.length
+                && reconciled.every((file, index) => file === current[index]);
+            return unchanged ? current : reconciled;
+        });
+    }, [currentFolderItems, setSelectFiles]);
 
     // ---- view mode / sorting ----
     const setViewMode = useCallback((mode: ViewMode) => {
@@ -112,7 +152,10 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
         return arr;
     }, [currentFolderItems, sortBy, sortOrder]);
 
-    const selectAll = useCallback(() => setSelectFiles([...sortedItems]), [sortedItems, setSelectFiles]);
+    const selectAll = useCallback(() => {
+        const selectableItems = sortedItems.filter(itemIsSelectable);
+        setSelectFiles(multiple ? selectableItems : selectableItems.slice(0, 1));
+    }, [itemIsSelectable, multiple, setSelectFiles, sortedItems]);
 
     // ---- navigation wrappers (clear selection on context change) ----
     const navigateToFolder = useCallback((id: string, name?: string) => {
@@ -226,42 +269,78 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
         }, 350);
     }, [searchFiles, navigateRaw, props.folderId, clearSelection, t]);
 
+    useEffect(() => () => {
+        if (searchTimer.current) clearTimeout(searchTimer.current);
+    }, []);
+
     // ---- build sidebar folder tree ----
     const resolveTree = useCallback((file: any): any => {
-        const node = {
-            id: file.id,
+        const children = Array.isArray(file.children)
+            ? file.children
+                .filter((child: any) => child.type?.value === 'FOLDER' || child.type === 'FOLDER')
+                .map(resolveTree)
+            : undefined;
+        return {
+            id: String(file.id),
             name: file.name,
-            isFolder: file.type?.value === 'FOLDER' || file.type === 'FOLDER',
-            icon: (file.type?.value === 'FOLDER' || file.type === 'FOLDER')
-                ? <FolderIcon className="h-4 w-4" /> : <FileIcon className="h-4 w-4" />,
-            onClick: () => {
-                if (file.type?.value === 'FOLDER' || file.type === 'FOLDER') navigateToFolder(file.id, file.name);
-            },
+            isFolder: true,
+            icon: <FolderIcon className="h-4 w-4" />,
+            onClick: () => navigateToFolder(String(file.id), file.name),
+            ...(children?.length ? { children } : {}),
         };
-        if (file.children) return { ...node, children: file.children.map(resolveTree) };
-        return node;
     }, [navigateToFolder]);
 
+    const treeElements = useMemo(
+        () => rawTreeItems
+            .filter((file) => file.type?.value === 'FOLDER' || file.type === 'FOLDER')
+            .map(resolveTree),
+        [rawTreeItems, resolveTree],
+    );
+
     useEffect(() => {
+        const requestVersion = ++sidebarRequestVersion.current;
+        if (!showSidebar) {
+            setRawTreeItems([]);
+            setSidebarLoading(false);
+            return;
+        }
+
+        setSidebarLoading(true);
         const fetchTree = async () => {
-            if (isInitialLoad) setSidebarLoading(true);
             try {
                 const api = folderId ? APIS.GET_CHILDREN : APIS.GET_ROOT_FOLDER;
                 const params = folderId ? { folderId } : undefined;
                 const res = await useApi(api, params);
-                setTreeElements((res.data || []).map(resolveTree));
+                if (requestVersion === sidebarRequestVersion.current) {
+                    setRawTreeItems(res.data || []);
+                }
             } catch (err) {
-                console.error('Failed to load folders:', err);
+                if (requestVersion === sidebarRequestVersion.current) {
+                    logger.error('Failed to load file-manager folders', err);
+                    setRawTreeItems([]);
+                }
             } finally {
-                if (isInitialLoad) { setSidebarLoading(false); setIsInitialLoad(false); }
+                if (requestVersion === sidebarRequestVersion.current) {
+                    setSidebarLoading(false);
+                }
             }
         };
         fetchTree();
-    }, [folderId, resolveTree, isInitialLoad, setTreeElements]);
+
+        return () => {
+            if (requestVersion === sidebarRequestVersion.current) {
+                sidebarRequestVersion.current += 1;
+            }
+        };
+    }, [folderId, showSidebar]);
 
     const contextValue = useMemo(() => ({
         selectable,
-        onConfirmSelectable: onConfirm,
+        multiple,
+        target,
+        accept,
+        onConfirmSelectable: confirmSelection,
+        isItemSelectable: itemIsSelectable,
         t,
         isTouch,
         currentFolderItems, sortedItems,
@@ -277,7 +356,8 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
         viewMode, setViewMode, sortBy, sortOrder, setSort,
         view, setView, toggleFavorite, restoreFiles, purgeFiles, emptyTrash, searchFiles, downloadFile,
     }), [
-        selectable, onConfirm, t, isTouch, currentFolderItems, sortedItems, selectedFiles, setSelectFiles,
+        selectable, multiple, target, accept, confirmSelection, itemIsSelectable, t, isTouch,
+        currentFolderItems, sortedItems, selectedFiles, setSelectFiles,
         currentFolderId, setCurrentFolderId, currentItem, setCurrentItem, repoKey, handleCreateFile, handleDelete,
         loading, error, breadcrumbPath, canGoBack, canGoForward, goBack, goForward, navigateToFolder,
         handleRename, handleMove, handleCopy, handleDuplicate, selectItem, isSelected, selectAll, clearSelection,
@@ -292,6 +372,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
             currentFolderId={currentFolderId}
             treeElements={treeElements}
             loading={sidebarLoading}
+            selectable={selectable}
             onHome={() => { goHome(); if (isTouch) setSidebarOpen(false); }}
             onSelectView={(v) => setView(v)}
             onAfterNavigate={() => { if (isTouch) setSidebarOpen(false); }}
@@ -302,13 +383,18 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
         <FileManageContext.Provider value={contextValue}>
             <div className={cn("flex flex-col rounded-lg border overflow-hidden not-prose bg-background", props.className)}>
                 {/* ===== Single command bar ===== */}
-                <div className="relative z-20 flex h-12 w-full items-center gap-1 border-b bg-background px-2">
+                <div className="relative z-20 flex min-h-14 w-full items-center gap-1 border-b bg-background px-2 lg:min-h-12">
                     {/* left: nav */}
                     <div className="flex min-w-0 flex-1 items-center gap-1">
                         {isTouch && showSidebar && (
                             <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
                                 <SheetTrigger asChild>
-                                    <Button size="icon" variant="ghost" className="h-8 w-8 flex-shrink-0">
+                                    <Button
+                                        size="icon"
+                                        variant="ghost"
+                                        className="h-11 w-11 flex-shrink-0 lg:h-8 lg:w-8"
+                                        aria-label={t('toolbar.fileNavigation')}
+                                    >
                                         <MenuIcon className="h-4 w-4" />
                                     </Button>
                                 </SheetTrigger>
@@ -319,10 +405,10 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                             </Sheet>
                         )}
                         <div className="flex flex-shrink-0 items-center">
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={goBack} disabled={!canGoBack || loading} title={t('toolbar.back')}>
+                            <Button variant="ghost" size="icon" className="h-11 w-11 lg:h-8 lg:w-8" onClick={goBack} disabled={!canGoBack || loading} aria-label={t('toolbar.back')}>
                                 <ArrowLeft className="h-4 w-4" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={goForward} disabled={!canGoForward || loading} title={t('toolbar.forward')}>
+                            <Button variant="ghost" size="icon" className="h-11 w-11 lg:h-8 lg:w-8" onClick={goForward} disabled={!canGoForward || loading} aria-label={t('toolbar.forward')}>
                                 <ArrowRight className="h-4 w-4" />
                             </Button>
                         </div>
@@ -347,7 +433,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                             <Input
                                 defaultValue={view === 'search' ? searchKeyword : ''}
                                 onChange={(e) => handleSearchInput(e.target.value)}
-                                className="h-8 w-[160px] rounded-md border-transparent bg-muted/60 pl-8 shadow-none transition-colors hover:bg-muted focus-visible:border-input focus-visible:bg-background lg:w-[220px]"
+                                className="h-11 w-[160px] rounded-md border-transparent bg-muted/60 pl-8 shadow-none transition-colors hover:bg-muted focus-visible:border-input focus-visible:bg-background lg:h-8 lg:w-[220px]"
                                 placeholder={t('toolbar.searchPlaceholder')}
                             />
                         </div>
@@ -358,13 +444,14 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                                 variant="ghost"
                                 size="icon"
                                 className={cn(
-                                    "h-7 w-7 rounded",
+                                    "h-11 w-11 rounded lg:h-7 lg:w-7",
                                     viewMode === 'grid'
                                         ? "bg-background text-foreground shadow-sm hover:bg-background"
                                         : "text-muted-foreground hover:text-foreground",
                                 )}
                                 onClick={() => setViewMode('grid')}
-                                title={t('toolbar.gridView')}
+                                aria-label={t('toolbar.gridView')}
+                                aria-pressed={viewMode === 'grid'}
                             >
                                 <LayoutGridIcon className="h-4 w-4" />
                             </Button>
@@ -372,22 +459,23 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                                 variant="ghost"
                                 size="icon"
                                 className={cn(
-                                    "h-7 w-7 rounded",
+                                    "h-11 w-11 rounded lg:h-7 lg:w-7",
                                     viewMode === 'list'
                                         ? "bg-background text-foreground shadow-sm hover:bg-background"
                                         : "text-muted-foreground hover:text-foreground",
                                 )}
                                 onClick={() => setViewMode('list')}
-                                title={t('toolbar.listView')}
+                                aria-label={t('toolbar.listView')}
+                                aria-pressed={viewMode === 'list'}
                             >
                                 <ListIcon className="h-4 w-4" />
                             </Button>
                         </div>
 
-                        {isTrash ? (
+                        {!selectable && (isTrash ? (
                             <Button
                                 size="sm" variant="ghost"
-                                className="h-8 gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                className="h-11 gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive lg:h-8"
                                 onClick={() => askConfirm({
                                     title: t('confirm.emptyTrashTitle'),
                                     description: t('confirm.emptyTrashDescription'),
@@ -403,7 +491,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                             <>
                                 <Button
                                     size="sm" variant="ghost"
-                                    className="h-8 gap-1.5 text-muted-foreground hover:text-foreground"
+                                    className="h-11 gap-1.5 text-muted-foreground hover:text-foreground lg:h-8"
                                     onClick={() => handleCreateFile('FILE')}
                                     disabled={loading}
                                 >
@@ -411,7 +499,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                                     <span className="hidden md:inline">{t('toolbar.upload')}</span>
                                 </Button>
                                 <Button
-                                    size="sm" className="h-8 gap-1.5"
+                                    size="sm" className="h-11 gap-1.5 lg:h-8"
                                     onClick={() => handleCreateFile('FOLDER')}
                                     disabled={loading}
                                 >
@@ -419,10 +507,10 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                                     <span className="hidden md:inline">{t('toolbar.newFolder')}</span>
                                 </Button>
                             </>
-                        )}
+                        ))}
 
                         {selectable && (
-                            <Button size="sm" variant="ghost" className="h-8" onClick={() => onCancel?.()}>
+                            <Button size="sm" variant="ghost" className="h-11 lg:h-8" onClick={() => onCancel?.()}>
                                 {t('toolbar.cancel')}
                             </Button>
                         )}
@@ -498,7 +586,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                                     title={isTrash ? t('emptyState.trashEmpty') : t('emptyState.noFiles')}
                                     description={isTrash ? "" : t('emptyState.noFilesDescription')}
                                     className="h-full w-full max-w-none rounded-none border-none"
-                                    action={!isTrash ? { label: t('emptyState.uploadFiles'), onClick: () => handleCreateFile('FILE') } : undefined}
+                                    action={!isTrash && !selectable ? { label: t('emptyState.uploadFiles'), onClick: () => handleCreateFile('FILE') } : undefined}
                                 />
                             )}
                         </div>

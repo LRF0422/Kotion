@@ -34,9 +34,9 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
     }]);
     const historyIndex = useRef<number>(0);
 
-    const reslove = useCallback((file: any): FileItem => {
+    const resolveFileItem = useCallback((file: any): FileItem => {
         const baseItem: FileItem = {
-            id: file.id,
+            id: String(file.id),
             name: file.name,
             isFolder: file.type?.value === 'FOLDER' || file.type === 'FOLDER',
             type: file.type,
@@ -56,7 +56,7 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
         if (file.children) {
             return {
                 ...baseItem,
-                children: file.children.map((item: any) => reslove(item)),
+                children: file.children.map((item: any) => resolveFileItem(item)),
             };
         }
 
@@ -65,6 +65,11 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
 
     /** 静默刷新标记:true 时本次刷新不切换全局 loading,避免列表闪烁 */
     const silentRefreshRef = useRef(false);
+    const requestVersionRef = useRef(0);
+
+    useEffect(() => () => {
+        requestVersionRef.current += 1;
+    }, []);
 
     const refresh = useCallback((opts?: { silent?: boolean }) => {
         silentRefreshRef.current = opts?.silent === true;
@@ -73,10 +78,10 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
 
     const fetchFolderContents = useCallback(
         async (folderId: string | null) => {
-            // 消费静默标记:仅本次有效;视图/文件夹切换仍展示 loading
+            const requestVersion = ++requestVersionRef.current;
             const silent = silentRefreshRef.current;
             silentRefreshRef.current = false;
-            if (!silent) setLoading(true);
+            setLoading(!silent);
             setError(null);
 
             try {
@@ -93,33 +98,37 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
                         break;
                     case 'search':
                         if (!searchKeyword.trim()) {
-                            setCurrentFolderItems([]);
+                            if (requestVersion === requestVersionRef.current) {
+                                setCurrentFolderItems([]);
+                            }
                             return [];
                         }
                         res = await useApi(APIS.SEARCH_FILES, { keyword: searchKeyword });
                         break;
                     case 'home':
                     default:
-                        if (folderId) {
-                            res = await useApi(APIS.GET_CHILDREN, { folderId });
-                        } else {
-                            res = await useApi(APIS.GET_ROOT_FOLDER);
-                        }
+                        res = await useApi(APIS.GET_CHILDREN, { folderId: folderId || '0' });
                         break;
                 }
-                const items = (res?.data || []).map((item: any) => reslove(item));
-                setCurrentFolderItems(items);
+                const items = (res?.data || []).map((item: any) => resolveFileItem(item));
+                if (requestVersion === requestVersionRef.current) {
+                    setCurrentFolderItems(items);
+                }
                 return items;
             } catch (err) {
-                const errorMessage = err instanceof Error ? err.message : 'Failed to load folder contents';
-                setError(errorMessage);
-                toast.error(errorMessage);
+                if (requestVersion === requestVersionRef.current) {
+                    const errorMessage = err instanceof Error ? err.message : 'Failed to load folder contents';
+                    setError(errorMessage);
+                    toast.error(errorMessage);
+                }
                 return [];
             } finally {
-                if (!silent) setLoading(false);
+                if (requestVersion === requestVersionRef.current) {
+                    setLoading(false);
+                }
             }
         },
-        [reslove, view, searchKeyword]
+        [resolveFileItem, view, searchKeyword]
     );
 
     const createFolder = useCallback(
@@ -127,7 +136,7 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
             try {
                 await useApi(APIS.CREATE_FILE, null, {
                     name,
-                    parentId: currentFolderId,
+                    parentId: currentFolderId || '0',
                     type: 'FOLDER',
                     repositoryKey: repoKey,
                 });
@@ -319,58 +328,57 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
 
     // Navigation functions
     const navigateToFolder = useCallback((folderId: string, folderName: string = 'Folder') => {
+        const normalizedFolderId = String(folderId);
         setView('home');
-        setCurrentFolderId(folderId);
+        setCurrentFolderId(normalizedFolderId);
 
-        const newHistoryItem = { id: folderId, name: folderName };
+        const newHistoryItem = { id: normalizedFolderId, name: folderName };
         const newHistory = navigationHistory.current.slice(0, historyIndex.current + 1);
         newHistory.push(newHistoryItem);
         navigationHistory.current = newHistory;
         historyIndex.current = newHistory.length - 1;
 
-        const existingIndex = breadcrumbPath.findIndex(item => item.id === folderId);
-        if (existingIndex >= 0) {
-            setBreadcrumbPath(breadcrumbPath.slice(0, existingIndex + 1));
-        } else {
-            setBreadcrumbPath([...breadcrumbPath, {
-                id: folderId,
+        setBreadcrumbPath((current) => {
+            const existingIndex = current.findIndex(item => item.id === normalizedFolderId);
+            if (existingIndex >= 0) return current.slice(0, existingIndex + 1);
+            return [...current, {
+                id: normalizedFolderId,
                 name: folderName,
-                path: folderId
-            }]);
-        }
-    }, [breadcrumbPath, setCurrentFolderId]);
+                path: normalizedFolderId,
+            }];
+        });
+    }, [setCurrentFolderId]);
 
     const goBack = useCallback(() => {
         if (historyIndex.current > 0) {
             historyIndex.current -= 1;
             const historyItem = navigationHistory.current[historyIndex.current];
+            setView('home');
             setCurrentFolderId(historyItem.id);
-
-            const breadcrumbIndex = breadcrumbPath.findIndex(item => item.id === historyItem.id);
-            if (breadcrumbIndex >= 0) {
-                setBreadcrumbPath(breadcrumbPath.slice(0, breadcrumbIndex + 1));
-            }
+            setBreadcrumbPath((current) => {
+                const breadcrumbIndex = current.findIndex(item => item.id === historyItem.id);
+                return breadcrumbIndex >= 0 ? current.slice(0, breadcrumbIndex + 1) : current;
+            });
         }
-    }, [breadcrumbPath, setCurrentFolderId]);
+    }, [setCurrentFolderId]);
 
     const goForward = useCallback(() => {
         if (historyIndex.current < navigationHistory.current.length - 1) {
             historyIndex.current += 1;
             const historyItem = navigationHistory.current[historyIndex.current];
+            setView('home');
             setCurrentFolderId(historyItem.id);
-
-            const existingIndex = breadcrumbPath.findIndex(item => item.id === historyItem.id);
-            if (existingIndex >= 0) {
-                setBreadcrumbPath(breadcrumbPath.slice(0, existingIndex + 1));
-            } else {
-                setBreadcrumbPath([...breadcrumbPath, {
+            setBreadcrumbPath((current) => {
+                const existingIndex = current.findIndex(item => item.id === historyItem.id);
+                if (existingIndex >= 0) return current.slice(0, existingIndex + 1);
+                return [...current, {
                     id: historyItem.id,
                     name: historyItem.name,
-                    path: historyItem.id
-                }]);
-            }
+                    path: historyItem.id,
+                }];
+            });
         }
-    }, [breadcrumbPath, setCurrentFolderId]);
+    }, [setCurrentFolderId]);
 
     const canGoBack = historyIndex.current > 0;
     const canGoForward = historyIndex.current < navigationHistory.current.length - 1;

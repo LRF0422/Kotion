@@ -4,12 +4,21 @@ export interface StructuredActionItem {
     dueDate?: string;
 }
 
+export interface StructuredMeetingNoteSection {
+    heading: string;
+    details: string[];
+}
+
 export interface StructuredMeetingSummary {
     title?: string;
     overview: string;
     keyPoints: string[];
     decisions: string[];
     actionItems: StructuredActionItem[];
+}
+
+export interface StructuredMeetingMinutes extends StructuredMeetingSummary {
+    notes: StructuredMeetingNoteSection[];
 }
 
 export interface SummarySectionLabels {
@@ -51,7 +60,7 @@ const asStringList = (value: unknown): string[] => {
 
 const findFirstJsonObject = (value: string): string => {
     const firstBrace = value.indexOf('{');
-    if (firstBrace < 0) throw new Error('Summary response did not contain a JSON object');
+    if (firstBrace < 0) throw new Error('Meeting-minutes response did not contain a JSON object');
 
     let depth = 0;
     let inString = false;
@@ -73,7 +82,15 @@ const findFirstJsonObject = (value: string): string => {
             if (depth === 0) return value.slice(firstBrace, index + 1);
         }
     }
-    throw new Error('Summary response contained incomplete JSON');
+    throw new Error('Meeting-minutes response contained incomplete JSON');
+};
+
+const parseJsonResponse = (response: string): unknown => {
+    const normalized = response
+        .trim()
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/\s*```$/i, '');
+    return JSON.parse(findFirstJsonObject(normalized));
 };
 
 export const normalizeStructuredMeetingSummary = (value: unknown): StructuredMeetingSummary => {
@@ -115,13 +132,63 @@ export const normalizeStructuredMeetingSummary = (value: unknown): StructuredMee
     return result;
 };
 
-export const parseStructuredMeetingSummary = (response: string): StructuredMeetingSummary => {
-    const normalized = response
-        .trim()
-        .replace(/^```(?:json)?\s*/i, '')
-        .replace(/\s*```$/i, '');
-    return normalizeStructuredMeetingSummary(JSON.parse(findFirstJsonObject(normalized)));
+export const normalizeStructuredMeetingMinutes = (value: unknown): StructuredMeetingMinutes => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw new Error('Meeting-minutes response must be a JSON object');
+    }
+    const record = value as Record<string, unknown>;
+    const validStringArray = (input: unknown): input is string[] => (
+        Array.isArray(input) && input.every((item) => typeof item === 'string')
+    );
+    const validActionItems = Array.isArray(record.actionItems) && record.actionItems.every((item) => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+        const action = item as Record<string, unknown>;
+        return typeof action.task === 'string'
+            && !!action.task.trim()
+            && (action.owner === undefined || typeof action.owner === 'string')
+            && (action.dueDate === undefined || typeof action.dueDate === 'string');
+    });
+    const validNotes = Array.isArray(record.notes) && record.notes.length > 0 && record.notes.every((item) => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+        const section = item as Record<string, unknown>;
+        return typeof section.heading === 'string'
+            && !!section.heading.trim()
+            && validStringArray(section.details)
+            && section.details.length > 0
+            && section.details.every((detail) => !!detail.trim());
+    });
+
+    if (
+        (record.title !== undefined && typeof record.title !== 'string')
+        || typeof record.overview !== 'string'
+        || !validStringArray(record.keyPoints)
+        || !validStringArray(record.decisions)
+        || !validActionItems
+        || !validNotes
+    ) {
+        throw new Error('Meeting-minutes response did not match the required schema');
+    }
+
+    const notes = (record.notes as Array<Record<string, unknown>>).slice(0, 50).map((section) => {
+        return {
+            heading: asTrimmedString(section.heading, 500),
+            details: asStringList(section.details),
+        };
+    });
+
+    return {
+        ...normalizeStructuredMeetingSummary(value),
+        notes,
+    };
 };
+
+export const parseStructuredMeetingSummary = (response: string): StructuredMeetingSummary => (
+    normalizeStructuredMeetingSummary(parseJsonResponse(response))
+);
+
+export const parseStructuredMeetingMinutes = (response: string): StructuredMeetingMinutes => (
+    normalizeStructuredMeetingMinutes(parseJsonResponse(response))
+);
 
 const textNode = (text: string): TiptapContentNode => ({ type: 'text', text });
 const paragraphNode = (text = ''): TiptapContentNode => ({
@@ -144,6 +211,14 @@ const bulletListNode = (items: string[]): TiptapContentNode => ({
 export const plainTextToTiptapNodes = (text: string): TiptapContentNode[] => {
     const lines = text.replace(/\r\n?/g, '\n').split('\n');
     const nodes = lines.map((line) => paragraphNode(line));
+    return nodes.length ? nodes : [paragraphNode()];
+};
+
+export const structuredNotesToTiptapNodes = (notes: StructuredMeetingNoteSection[]): TiptapContentNode[] => {
+    const nodes = notes.flatMap((section) => [
+        headingNode(section.heading, 3),
+        bulletListNode(section.details),
+    ]);
     return nodes.length ? nodes : [paragraphNode()];
 };
 
@@ -176,4 +251,23 @@ export const structuredSummaryToTiptapNodes = (
     }
 
     return nodes.length ? nodes : [paragraphNode()];
+};
+
+const stableSerialize = (value: unknown): string => {
+    if (Array.isArray(value)) return `[${value.map(stableSerialize).join(',')}]`;
+    if (value && typeof value === 'object') {
+        const record = value as Record<string, unknown>;
+        return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableSerialize(record[key])}`).join(',')}}`;
+    }
+    return JSON.stringify(value) ?? 'undefined';
+};
+
+export const createMeetingContentFingerprint = (value: unknown): string => {
+    const serialized = stableSerialize(value);
+    let hash = 0x811c9dc5;
+    for (let index = 0; index < serialized.length; index += 1) {
+        hash ^= serialized.charCodeAt(index);
+        hash = Math.imul(hash, 0x01000193);
+    }
+    return `${serialized.length}:${(hash >>> 0).toString(16).padStart(8, '0')}`;
 };

@@ -83,9 +83,11 @@ public class FileApplication {
     }
 
     public KnowledgeFileVO getById(Long fileId) {
-        fileService.touchAccess(fileId);
-        return KnowledgeFileConverter.INSTANCE.convertVO(
-                this.fileService.getById(fileId));
+        KnowledgeFile file = this.fileService.getById(fileId);
+        if (file != null && file.getType() == FileType.FILE) {
+            file = fileService.touchAccess(fileId);
+        }
+        return KnowledgeFileConverter.INSTANCE.convertVO(file);
     }
 
     public IPage<KnowledgeFileVO> getChildrenPage(QueryFileDTO dto) {

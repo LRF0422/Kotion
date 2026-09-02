@@ -35,7 +35,7 @@ export const SelectionBar: React.FC = () => {
                         key={a.key}
                         variant="ghost"
                         size="icon"
-                        className={cn("h-8 w-8 rounded-md", a.destructive && "text-destructive hover:bg-destructive/10 hover:text-destructive")}
+                        className={cn("h-11 w-11 rounded-md lg:h-8 lg:w-8", a.destructive && "text-destructive hover:bg-destructive/10 hover:text-destructive")}
                         title={a.label}
                         onClick={a.run}
                     >
@@ -44,13 +44,13 @@ export const SelectionBar: React.FC = () => {
                 ))}
 
                 {overflow.length > 0 && (
-                    <FileActionsMenu actions={overflow} align="end" triggerClassName="h-8 w-8 rounded-md" />
+                    <FileActionsMenu actions={overflow} align="end" triggerClassName="h-11 w-11 rounded-md lg:h-8 lg:w-8" />
                 )}
 
                 {selectable && onConfirmSelectable && (
                     <Button
                         size="sm"
-                        className="h-8 rounded-md"
+                        className="h-11 rounded-md lg:h-8"
                         onClick={() => onConfirmSelectable(selectedFiles)}
                     >
                         <Check className="mr-1 h-4 w-4" />
@@ -61,7 +61,7 @@ export const SelectionBar: React.FC = () => {
                 <Button
                     variant="ghost"
                     size="icon"
-                    className="h-8 w-8 rounded-md text-muted-foreground hover:text-foreground"
+                    className="h-11 w-11 rounded-md lg:h-8 lg:w-8 text-muted-foreground hover:text-foreground"
                     title={ctx.t('selection.clearSelection')}
                     onClick={clearSelection}
                 >

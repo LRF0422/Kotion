@@ -27,7 +27,7 @@ const FileSelectorDialogInner: React.FC<{
     onOpenChange: (open: boolean) => void;
 }> = ({ state, onConfirm, onCancel, onOpenChange }) => {
     const { open, options } = state;
-    const { multiple = false, target = 'file', title = 'Select Files' } = options;
+    const { multiple = false, target = 'file', accept, title = 'Select Files' } = options;
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -44,6 +44,7 @@ const FileSelectorDialogInner: React.FC<{
                         selectable={true}
                         multiple={multiple}
                         target={target}
+                        accept={accept}
                         onConfirm={onConfirm}
                         onCancel={onCancel}
                     />

@@ -20,7 +20,7 @@ export interface FileAction {
 
 /** 构建作用于 `files` 的操作列表 —— 卡片 / 列表 / 右键菜单 / 选择栏 共用此唯一来源 */
 export const getFileActions = (files: FileItem[], ctx: FileManagerState): FileAction[] => {
-    if (files.length === 0) return [];
+    if (files.length === 0 || ctx.selectable) return [];
 
     const single = files.length === 1 ? files[0] : null;
     const isTrash = ctx.view === 'trash';
@@ -99,7 +99,10 @@ export const getFileActions = (files: FileItem[], ctx: FileManagerState): FileAc
         label: allFavorited ? ctx.t('actions.removeFromFavorites') : ctx.t('actions.addToFavorites'),
         icon: <StarIcon className={allFavorited ? "h-4 w-4 fill-yellow-400 text-yellow-400" : "h-4 w-4"} />,
         separatorBefore: true,
-        run: () => files.forEach((f) => ctx.toggleFavorite(f)),
+        run: () => {
+            const targets = allFavorited ? files : files.filter((file) => file.favorite !== 1);
+            targets.forEach((file) => ctx.toggleFavorite(file));
+        },
     });
 
     if (hasFile) {

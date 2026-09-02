@@ -9,7 +9,8 @@
     "registry": "http://localhost:8081/repository/npm-hosted/"
   },
   "scripts": {
-    "build": "rollup -c",
+    "build": "pnpm check:meeting-minutes && rollup -c",
+    "check:meeting-minutes": "rm -rf .tmp-check/meeting-minutes && tsc src/extension/meeting-minutes/structured-summary.check.ts src/extension/meeting-minutes/structured-summary.ts --rootDir src/extension/meeting-minutes --outDir .tmp-check/meeting-minutes --module ES2022 --moduleResolution bundler --target ES2020 --lib ES2020,DOM --types node --skipLibCheck && node -e \"require('fs').writeFileSync('.tmp-check/meeting-minutes/package.json', '{\\\"type\\\":\\\"module\\\"}')\" && node .tmp-check/meeting-minutes/structured-summary.check.js",
     "clean": "rm -rf dist"
   },
   "keywords": [

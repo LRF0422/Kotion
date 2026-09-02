@@ -5,7 +5,7 @@ import { NodeViewProps } from "@tiptap/core";
 import { NodeViewWrapper } from "@tiptap/react";
 import React from "react";
 
-const formatPluginName = (nodeType: string) =>
+export const formatPluginName = (nodeType: string) =>
     nodeType
         .replace(/^plugin[-_]/i, "")
         .split(/[-_\s]+/)

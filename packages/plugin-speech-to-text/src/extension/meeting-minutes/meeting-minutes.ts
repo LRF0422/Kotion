@@ -87,7 +87,7 @@ export const MeetingMinutesNode = Node.create({
 
     addAttributes() {
         return {
-            // Durable recording / summary pipeline state.
+            // Durable recording / AI-generated meeting-minutes pipeline state.
             recordingStatus: {
                 default: 'idle'
             },
@@ -98,6 +98,12 @@ export const MeetingMinutesNode = Node.create({
                 default: 'idle'
             },
             summaryError: {
+                default: null
+            },
+            generatedNotesFingerprint: {
+                default: null
+            },
+            generatedSummaryFingerprint: {
                 default: null
             },
             duration: {
@@ -186,7 +192,7 @@ export const MeetingMinutesNode = Node.create({
                 parseHTML: (element: HTMLElement) => element.getAttribute('data-lang') || 'zh-CN',
                 renderHTML: (attributes: Record<string, any>) => ({ 'data-lang': attributes.lang || 'zh-CN' }),
             },
-            // AI model for summary generation ('' = backend default).
+            // AI model for notes and summary generation ('' = backend default).
             model: {
                 default: '',
                 parseHTML: (element: HTMLElement) => element.getAttribute('data-model') || '',
@@ -232,6 +238,8 @@ export const MeetingMinutesNode = Node.create({
                         activeTab: 'notes',
                         recordingStatus: 'idle',
                         summaryStatus: 'idle',
+                        generatedNotesFingerprint: null,
+                        generatedSummaryFingerprint: null,
                         createdAt: Date.now(),
                         updatedAt: Date.now()
                     },

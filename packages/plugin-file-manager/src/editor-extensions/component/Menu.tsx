@@ -9,7 +9,7 @@ import { getFileActions } from "./fileActions";
 
 export const Menu: React.FC<PropsWithChildren> = React.memo((props) => {
     const ctx = useFileManagerState();
-    const { handleUpload, selectedFiles, loading, selectAll, clearSelection, view } = ctx;
+    const { handleUpload, selectedFiles, loading, selectAll, clearSelection, view, selectable, multiple } = ctx;
 
     const fileActions = selectedFiles.length > 0 ? getFileActions(selectedFiles, ctx) : [];
 
@@ -19,17 +19,19 @@ export const Menu: React.FC<PropsWithChildren> = React.memo((props) => {
                 {props.children}
             </ContextMenuTrigger>
             <ContextMenuContent className="w-[220px]">
-                <ContextMenuItem onClick={selectAll} disabled={loading}>
-                    <CheckSquare className="mr-2 h-4 w-4" /> {ctx.t('contextMenu.selectAll')}
-                    <ContextMenuShortcut>⌘A</ContextMenuShortcut>
-                </ContextMenuItem>
+                {(!selectable || multiple) && (
+                    <ContextMenuItem onClick={selectAll} disabled={loading}>
+                        <CheckSquare className="mr-2 h-4 w-4" /> {ctx.t('contextMenu.selectAll')}
+                        <ContextMenuShortcut>⌘A</ContextMenuShortcut>
+                    </ContextMenuItem>
+                )}
                 {selectedFiles.length > 0 && (
                     <ContextMenuItem onClick={clearSelection} disabled={loading}>
                         <Square className="mr-2 h-4 w-4" /> {ctx.t('contextMenu.clear', { count: selectedFiles.length })}
                     </ContextMenuItem>
                 )}
 
-                {view !== 'trash' && (
+                {!selectable && view !== 'trash' && (
                     <>
                         <ContextMenuSeparator />
                         <ContextMenuItem onClick={() => handleUpload('FOLDER')} disabled={loading}>
