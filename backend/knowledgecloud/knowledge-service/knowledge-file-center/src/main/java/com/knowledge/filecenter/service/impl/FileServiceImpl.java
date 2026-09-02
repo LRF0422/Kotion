@@ -58,6 +58,7 @@ public class FileServiceImpl extends BaseService<FileMapper, KnowledgeFile> impl
             KnowledgeFileConverter.INSTANCE.update(file, db);
             this.updateById(db);
         } else {
+            // fileKey is the file-center record key. OSS lookup always uses path.
             file.setFileKey(UUID.fastUUID().toString());
             if (file.getTrashed() == null) {
                 file.setTrashed(NOT_TRASHED);
@@ -301,9 +302,8 @@ public class FileServiceImpl extends BaseService<FileMapper, KnowledgeFile> impl
         copy.setName(source.getName());
         copy.setPath(source.getPath());
         copy.setSuffix(source.getSuffix());
-        // 文件复用同一 OSS 对象(fileKey 指向同一存储);createOrSaveFile 会为新记录另生成 fileKey,
-        // 这里保留指向同一 OSS link 的 path 即可定位资源。
-        copy.setFileKey(source.getFileKey());
+        // Copies share the same OSS object path but keep independent file-center keys.
+        copy.setFileKey(UUID.fastUUID().toString());
         copy.setRepositoryKey(source.getRepositoryKey());
         copy.setParentId(targetParentId != null ? targetParentId : TOP_FOLDER_PARENT_ID);
         copy.setSize(source.getSize());

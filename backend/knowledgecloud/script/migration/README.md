@@ -92,3 +92,50 @@ Every returned data row is a review item. An empty result set for each numbered 
 5. legacy space permission rows that disagree with current member roles or point to missing spaces/members.
 
 The space checks detect both the current `wiki_space_permission(user_id, space_id, permissions)` shape and the oldest bootstrap `owner_id/space_key/operation/has_permission` shape. A `SKIPPED` diagnostic means the deployed schema is neither supported shape and must be inspected manually; it is not a pass.
+
+## V18 file-center OSS path migration
+
+`V18__knowledge_file_path_object_key.sql` converts legacy MinIO URLs stored in
+`knowledge_file.path` into provider-neutral object keys. Deploy the file-center
+compatibility code before applying V18 so both the old URL form and the new key
+form remain readable during rollout.
+
+Back up at least `knowledge_file(id, path, file_key)` before migration. Supply the
+exact endpoint and bucket used when the legacy rows were created:
+
+```bash
+mvn -N -Pdb-migrate flyway:info \
+  -Dflyway.placeholders.ossEndpoint='http://192.168.3.43:9000' \
+  -Dflyway.placeholders.ossBucket='knowledge'
+
+mvn -N -Pdb-migrate flyway:validate \
+  -Dflyway.placeholders.ossEndpoint='http://192.168.3.43:9000' \
+  -Dflyway.placeholders.ossBucket='knowledge'
+
+mvn -N -Pdb-migrate flyway:migrate \
+  -Dflyway.placeholders.ossEndpoint='http://192.168.3.43:9000' \
+  -Dflyway.placeholders.ossBucket='knowledge'
+```
+
+V18 fails before updating rows when an HTTP path does not match the configured
+endpoint/bucket or would produce an empty object key. Inspect and reconcile those
+rows instead of using `repair` or weakening the preflight.
+
+After migration, verify:
+
+```sql
+SELECT COUNT(*) AS remaining_http_paths
+FROM knowledge_file
+WHERE type = 'FILE'
+  AND (path LIKE 'http://%' OR path LIKE 'https://%');
+
+SELECT id, path, file_key
+FROM knowledge_file
+WHERE type = 'FILE'
+ORDER BY id DESC
+LIMIT 20;
+```
+
+Do not roll back to application code that downloads OSS objects through
+`file_key` after V18 has run. Restore the database backup if a full rollback is
+required.

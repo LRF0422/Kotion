@@ -1,5 +1,5 @@
 import { FileService, UploadedFile, UploadOptions, FileSelectorOptions, SelectedFile, getAccessToken } from "@kn/common";
-import { useApi, APIS as CORE_APIS } from "@kn/common";
+import { request, useApi, APIS as CORE_APIS } from "@kn/common";
 import { fileOpen } from "browser-fs-access";
 import { APIS } from "../api";
 import { showFileSelector } from "../editor-extensions/utils/showFileSelector";
@@ -76,6 +76,20 @@ export class FileServiceImpl implements FileService {
             return fileName;
         }
         return this.downloadBaseUrl + fileName + '&Authorization=' + getAccessToken();
+    }
+
+    /**
+     * Download a file-center record as an authenticated Blob.
+     * Media elements cannot attach Authorization headers themselves, so callers
+     * can create an object URL from this Blob for reliable playback after reload.
+     */
+    async getFileBlob(fileId: string): Promise<Blob> {
+        const blob = await request({
+            url: `/knowledge-file-center/file/${encodeURIComponent(fileId)}/download`,
+            method: 'GET',
+            responseType: 'blob',
+        }) as unknown as Blob;
+        return blob;
     }
 
     /**

@@ -66,6 +66,8 @@ export interface FileService {
     uploadFile: (file: File, options?: Omit<UploadOptions, 'mimeTypes' | 'multiple'>) => Promise<UploadedFile>;
     uploadFiles: (files: File[], options?: Omit<UploadOptions, 'mimeTypes' | 'multiple'>) => Promise<UploadedFile[]>;
     getDownloadUrl: (fileName: string) => string;
+    /** Download a file-center record through the authenticated API. */
+    getFileBlob?: (fileId: string) => Promise<Blob>;
     download: (fileName: string) => Promise<void>;
     deleteFile?: (fileId: string) => Promise<void>;
     createFolder?: (name: string, parentId?: string, repositoryKey?: string) => Promise<any>;

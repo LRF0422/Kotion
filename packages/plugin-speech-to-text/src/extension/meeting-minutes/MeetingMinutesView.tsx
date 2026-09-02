@@ -3,6 +3,7 @@ import React, { useCallback, useContext, useEffect, useRef, useState } from "rea
 import {
     DEFAULT_MODEL,
     fetchModels,
+    logger,
     streamKnowledgeText,
     useOptionalFileService,
     usePluginConfig,
@@ -472,11 +473,44 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = ({ node, editor, upda
 
     useEffect(() => {
         if (recorder.audioUrl || !fileService) return;
-        const path = node.attrs.audioPath || node.attrs.audioName || node.attrs.audioFileId;
-        if (!path) return;
-        const resolved = fileService.getDownloadUrl(String(path));
-        setRemoteAudioUrl(resolved || null);
-    }, [fileService, node.attrs.audioFileId, node.attrs.audioName, node.attrs.audioPath, recorder.audioUrl]);
+        let disposed = false;
+        let objectUrl: string | null = null;
+        setRemoteAudioUrl(null);
+
+        const loadRemoteAudio = async () => {
+            const fileId = node.attrs.audioFileId;
+            if (fileId && fileService.getFileBlob) {
+                try {
+                    const downloaded = await fileService.getFileBlob(String(fileId));
+                    const mimeType = typeof node.attrs.audioMime === "string" ? node.attrs.audioMime : "";
+                    const playableBlob = mimeType && (!downloaded.type || downloaded.type === "application/octet-stream")
+                        ? new Blob([downloaded], { type: mimeType })
+                        : downloaded;
+                    const nextObjectUrl = URL.createObjectURL(playableBlob);
+                    if (disposed) {
+                        URL.revokeObjectURL(nextObjectUrl);
+                        return;
+                    }
+                    objectUrl = nextObjectUrl;
+                    setRemoteAudioUrl(nextObjectUrl);
+                    return;
+                } catch (error) {
+                    logger.warn("Failed to load meeting recording from file center; falling back to the stored path", error);
+                }
+            }
+
+            const path = node.attrs.audioPath || node.attrs.audioName || node.attrs.audioFileId;
+            if (disposed || !path) return;
+            const resolved = fileService.getDownloadUrl(String(path));
+            setRemoteAudioUrl(resolved || null);
+        };
+
+        void loadRemoteAudio();
+        return () => {
+            disposed = true;
+            if (objectUrl) URL.revokeObjectURL(objectUrl);
+        };
+    }, [fileService, node.attrs.audioFileId, node.attrs.audioMime, node.attrs.audioName, node.attrs.audioPath, recorder.audioUrl]);
 
     const generateSummary = useCallback(async (transcriptOverride?: string) => {
         const transcript = (transcriptOverride ?? readTabText("meetingTabTranscript")).trim();

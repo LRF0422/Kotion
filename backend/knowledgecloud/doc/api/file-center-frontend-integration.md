@@ -90,10 +90,10 @@ const result = await response.json();
     "type": "FILE",
     "name": "document.pdf",
     "parentId": 123,
-    "path": "https://oss.example.com/files/abc123.pdf",
+    "path": "upload/20260208/abc123.pdf",
     "suffix": "pdf",
     "size": 1024000,
-    "fileKey": "abc123-uuid",
+    "fileKey": "file-record-uuid",
     "repositoryKey": "my-repo",
     "createTime": "2026-02-08T10:30:00",
     "updateTime": "2026-02-08T10:30:00"
@@ -170,11 +170,11 @@ const response = await fetch('http://192.168.3.43:1889/file-center/file/batch-up
 
 **Request Example:**
 
-```javascript
-// Direct download via link
-window.open(`http://192.168.3.43:1889/file-center/file/${fileId}/download`, '_blank');
+The backend resolves the stored OSS object key from `path`; clients should use
+the authenticated file-center endpoint instead of persisting or opening the OSS
+URL directly.
 
-// Or fetch and handle response
+```javascript
 const response = await fetch(`http://192.168.3.43:1889/file-center/file/${fileId}/download`, {
   method: 'GET',
   headers: {
@@ -499,10 +499,10 @@ interface KnowledgeFileVO {
   type: FileType;
   name: string;
   parentId: number;
-  path: string;              // OSS file URL
+  path: string;              // Non-HTTP OSS object key (for example upload/.../file.pdf)
   suffix: string;            // File extension
   size: number;              // File size in bytes
-  fileKey: string;           // OSS storage key
+  fileKey: string;           // File-center application UUID
   repositoryKey: string;     // Repository identifier
   ancestors: string;         // Ancestor path (e.g., "0,100,123")
   createTime: string;        // ISO 8601 format

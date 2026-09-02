@@ -33,6 +33,7 @@ import com.knowledge.filecenter.entity.KnowledgeFileRepository;
 import com.knowledge.filecenter.entity.vo.KnowledgeFileVO;
 import com.knowledge.filecenter.service.IFileRepositoryService;
 import com.knowledge.filecenter.service.IFileService;
+import com.knowledge.filecenter.storage.LegacyOssObjectKeyResolver;
 import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.lang.tree.Tree;
 import cn.hutool.core.util.StrUtil;
@@ -51,6 +52,8 @@ public class FileApplication {
     private OssClient ossClient;
     @Autowired(required = false)
     private OssProperties ossProperties;
+    @Autowired
+    private LegacyOssObjectKeyResolver ossObjectKeyResolver;
 
     public void createFileRepository(KnowledgeFileRepositoryDTO dto) {
         KnowledgeFileRepository repository = KnowledgeFileRepositoryConverter.INSTANCE.convertDO(dto);
@@ -143,8 +146,7 @@ public class FileApplication {
         knowledgeFile.setName(file.getOriginalFilename());
         knowledgeFile.setParentId(parentId);
         knowledgeFile.setSize((int) file.getSize());
-        knowledgeFile.setPath(ossFile.getLink());
-        knowledgeFile.setFileKey(ossFile.getName());
+        knowledgeFile.setPath(ossFile.getName());
 
         if (StrUtil.isBlank(repositoryKey)) {
             KnowledgeFileRepository repository = repositoryService.getDefaultFileRepo();
@@ -197,8 +199,9 @@ public class FileApplication {
             throw new IllegalStateException("OSS client is not configured");
         }
 
-        // Download file from OSS
-        InputStream inputStream = ossClient.downloadFile(file.getFileKey());
+        // Download file from OSS using the canonical object key stored in path.
+        String objectKey = ossObjectKeyResolver.resolve(file.getPath());
+        InputStream inputStream = ossClient.downloadFile(objectKey);
 
         // Set response headers
         response.setContentType("application/octet-stream");
@@ -278,12 +281,23 @@ public class FileApplication {
             throw new IllegalArgumentException("File not found");
         }
 
-        // If it's a file, delete from OSS
-        if (file.getType() == FileType.FILE && ossClient != null && StrUtil.isNotBlank(file.getFileKey())) {
-            try {
-                ossClient.removeFile(file.getFileKey());
-            } catch (Exception e) {
-                log.error("Failed to delete file from OSS: {}", file.getFileKey(), e);
+        // Delete the OSS object only when this is its final database reference.
+        if (file.getType() == FileType.FILE && ossClient != null) {
+            if (StrUtil.isBlank(file.getPath())) {
+                log.warn("Skip OSS deletion because file path is missing: fileId={}", file.getId());
+            } else {
+                long remainingReferences = fileService.lambdaQuery()
+                        .eq(KnowledgeFile::getPath, file.getPath())
+                        .ne(KnowledgeFile::getId, file.getId())
+                        .count();
+                if (remainingReferences == 0) {
+                    try {
+                        String objectKey = ossObjectKeyResolver.resolve(file.getPath());
+                        ossClient.removeFile(objectKey);
+                    } catch (Exception e) {
+                        log.error("Failed to delete file from OSS: fileId={}, path={}", file.getId(), file.getPath(), e);
+                    }
+                }
             }
         }
 
@@ -410,8 +424,7 @@ public class FileApplication {
         knowledgeFile.setName(fileName);
         knowledgeFile.setParentId(parentId != null ? parentId : 0L);
         knowledgeFile.setSize(fileBytes.length);
-        knowledgeFile.setPath(ossFile.getLink());
-        knowledgeFile.setFileKey(ossFile.getName());
+        knowledgeFile.setPath(ossFile.getName());
 
         if (StrUtil.isBlank(repositoryKey)) {
             KnowledgeFileRepository repository = repositoryService.getDefaultFileRepo();
