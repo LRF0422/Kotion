@@ -58,6 +58,7 @@ export interface PageMetadata {
     spaceId?: SpaceId;
     parentId?: PageId | null;
     title: string;
+    pageType?: string;
     name?: string;
     icon?: unknown;
     cover?: string | string[];
@@ -96,6 +97,7 @@ export interface PageTreeNode extends PageMetadata {
 export interface PageSummary {
     id: PageId;
     title: string;
+    pageType?: string;
     spaceId?: SpaceId;
     spaceName?: string;
     parentId?: PageId | null;
@@ -192,6 +194,7 @@ export interface CollaborationInvitation {
     spaceId?: SpaceId;
     pageId?: PageId;
     pageTitle?: string;
+    pageType?: string;
     inviteeId?: UserId;
     inviteeName?: string;
     inviteeEmail?: string;
@@ -230,6 +233,7 @@ export interface SharedPage {
     pageId: PageId;
     spaceId: SpaceId;
     title: string;
+    pageType?: string;
     content?: unknown;
     document?: PageDocumentContent;
     permission: PagePermission;
@@ -472,12 +476,18 @@ export interface QueryPagesRequest {
 export interface CreatePageRequest {
     spaceId: SpaceId;
     title: string;
+    pageType?: string;
     parentId?: PageId | null;
     templateId?: TemplateId;
     content?: PageDocumentContent;
     icon?: unknown;
     tags?: string[];
     [key: string]: unknown;
+}
+
+export interface UpdatePageTitleRequest {
+    pageId: PageId;
+    title: string;
 }
 
 export interface MovePageRequest {

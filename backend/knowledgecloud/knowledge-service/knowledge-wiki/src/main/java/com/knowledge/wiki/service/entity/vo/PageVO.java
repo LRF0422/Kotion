@@ -16,6 +16,8 @@ public class PageVO implements Serializable {
     private Long id;
     private Icon icon;
     private String title;
+    private String pageType;
+    private String permission;
     private String description;
     private String ancestors;
     private Long spaceId;

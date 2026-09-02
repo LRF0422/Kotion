@@ -262,6 +262,9 @@ importers:
       '@kn/plugin-mindmap-canvas':
         specifier: workspace:*
         version: link:../../packages/plugin-mindmap-canvas
+      '@kn/plugin-speech-to-text':
+        specifier: workspace:*
+        version: link:../../packages/plugin-speech-to-text
       '@kn/plugin-theme':
         specifier: workspace:*
         version: link:../../packages/plugin-theme

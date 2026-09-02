@@ -62,6 +62,8 @@ public interface IPageService extends ISubjectService<Page> {
 
     void copySpacePage(Long spaceId, Long targetSpaceId);
 
+    boolean hasComponentPages(Long spaceId);
+
     void refreshBlock(List<Long> versionIds);
 
     /**

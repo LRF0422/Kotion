@@ -67,6 +67,65 @@ const run = async (): Promise<void> => {
     "canonical version should take precedence over currentVersion",
   );
 
+  const directRenderer = {
+    type: "component" as const,
+    component: () => null,
+  };
+  const editorRenderer = {
+    type: "editor-component" as const,
+    createInitialDocument: () => ({ type: "doc", content: [] }),
+  };
+  const firstPageTypePlugin = new KPlugin({
+    name: "page-types-one",
+    status: "active",
+    pageTypes: [
+      { id: "one:late", label: "Late", order: 20, renderer: directRenderer },
+      { id: "shared:page", label: "First duplicate", order: 10, renderer: directRenderer },
+      { id: "not-namespaced", label: "Invalid id", renderer: directRenderer },
+      { id: "one:blank-label", label: "   ", renderer: directRenderer },
+      { id: "one:invalid-renderer", label: "Invalid renderer", renderer: { type: "unknown" } as any },
+    ],
+  });
+  const secondPageTypePlugin = new KPlugin({
+    name: "page-types-two",
+    status: "active",
+    pageTypes: [
+      { id: "two:stable", label: "Stable", order: 10, renderer: directRenderer },
+      { id: "shared:page", label: "Later duplicate", order: 0, renderer: directRenderer },
+      { id: "two:editor", label: "Editor", order: 20, renderer: editorRenderer },
+    ],
+  });
+  const pageTypeManager = new PluginManager(
+    { resolveUrl: (path) => path, hostApiVersion: "2.1.0" },
+    [firstPageTypePlugin, secondPageTypePlugin],
+  );
+  await pageTypeManager.init([]);
+  const resolvedPageTypes = pageTypeManager.resolvePageTypes();
+  assert(
+    resolvedPageTypes.map((pageType) => pageType.id).join(",") ===
+      "shared:page,two:stable,one:late,two:editor",
+    "page types should validate, de-duplicate first-wins, and retain stable order",
+  );
+  assert(
+    resolvedPageTypes[0]?.owner === "page-types-one" &&
+      resolvedPageTypes[0]?.source === "plugin",
+    "resolved page types should identify their contributing owner and source",
+  );
+  assert(
+    pageTypeManager.resolvePageType("two:editor")?.renderer.type === "editor-component",
+    "one page type should resolve by stable id",
+  );
+  assert(
+    pageTypeManager.remove("page-types-one"),
+    "page-type owner should be removable",
+  );
+  const afterPageTypeRemoval = pageTypeManager.resolvePageTypes();
+  assert(
+    afterPageTypeRemoval[0]?.id === "shared:page" &&
+      afterPageTypeRemoval[0]?.owner === "page-types-two",
+    "page-type cache invalidation should expose the next duplicate after removal",
+  );
+
   const originalLoad = pluginScriptLoader.load;
   const loadResults = new Map<string, PluginRegistration | Error>();
   let incompatibleEvents = 0;

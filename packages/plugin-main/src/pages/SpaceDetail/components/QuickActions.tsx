@@ -1,10 +1,11 @@
 import React from 'react'
 import { Button } from '@kn/ui'
 import { Plus, LayoutTemplate, FileUp } from '@kn/icon'
-import { useTranslation } from '@kn/common'
+import { type ResolvedPageType, useTranslation } from '@kn/common'
+import { CreatePageTypeMenu } from '../../../components/CreatePageTypeMenu'
 
 interface QuickActionsProps {
-    onCreatePage: () => void
+    onCreatePage: (pageType?: ResolvedPageType) => void
     onOpenTemplates: () => void
     onImportDocument?: () => void
 }
@@ -22,16 +23,17 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
 
     return (
         <div className="flex items-center gap-1 px-2 py-1.5 border-b flex-shrink-0">
-            <Button
-                variant="ghost"
-                size="sm"
-                className="flex-1 h-7 text-xs gap-1.5 justify-start"
-                onClick={onCreatePage}
-                title={t('page.create') || 'New Page'}
-            >
-                <Plus className="h-3.5 w-3.5" />
-                <span className="truncate">{t('page.create') || 'New Page'}</span>
-            </Button>
+            <CreatePageTypeMenu onCreate={onCreatePage}>
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    className="flex-1 h-7 text-xs gap-1.5 justify-start"
+                    title={t('page.create') || 'New Page'}
+                >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span className="truncate">{t('page.create') || 'New Page'}</span>
+                </Button>
+            </CreatePageTypeMenu>
             <Button
                 variant="ghost"
                 size="icon"

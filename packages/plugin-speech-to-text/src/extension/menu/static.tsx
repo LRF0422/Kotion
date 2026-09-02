@@ -5,7 +5,6 @@ import React from "react";
 import { FileAudio, Mic, MicOff } from "@kn/icon";
 import { cn } from "@kn/ui";
 import { useSpeechController } from "../../speech-controller";
-import { dispatchCreateMeetingPage } from "../../meeting-page";
 import { startSpeech } from "./RecordingToast";
 
 /** Map the app UI language to a speech-recognition locale (BCP-47). */
@@ -59,14 +58,14 @@ export const SpeechToTextStaticMenu: React.FC<{ editor: Editor }> = ({ editor })
                         <Toggle
                             size="sm"
                             pressed={false}
-                            onClick={() => dispatchCreateMeetingPage({ language: resolveLang(i18n?.language) })}
-                            aria-label={t('meetingMinutes.newMeeting', 'New meeting')}
+                            onClick={() => editor.commands.insertMeetingMinutes({ lang: resolveLang(i18n?.language) })}
+                            aria-label={t('meetingMinutes.newMeeting', 'Insert meeting minutes')}
                         >
                             <FileAudio className="h-4 w-4" />
                         </Toggle>
                     </TooltipTrigger>
                     <TooltipContent>
-                        <p>{t('meetingMinutes.newMeeting', 'New meeting')}</p>
+                        <p>{t('meetingMinutes.newMeeting', 'Insert meeting minutes')}</p>
                     </TooltipContent>
                 </Tooltip>
             </div>

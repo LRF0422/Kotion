@@ -31,6 +31,7 @@ export const SPACE_PAGE_ENDPOINTS = {
         recent: endpoint("/knowledge-wiki/space/page/recent", "GET"),
         favorites: endpoint("/knowledge-wiki/space/page/favorites", "GET"),
         createOrUpdate: endpoint("/knowledge-wiki/space/page", "POST"),
+        title: endpoint("/knowledge-wiki/space/page/:id/title", "PUT"),
         move: endpoint("/knowledge-wiki/space/page/:id/move", "PUT"),
         trash: endpoint("/knowledge-wiki/space/page/:id/trash", "DELETE"),
         restoreFromTrash: endpoint("/knowledge-wiki/space/page/:id/restore", "PUT"),

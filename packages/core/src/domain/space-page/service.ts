@@ -1,6 +1,7 @@
 import {
     createSpacePageChangeStream,
     normalizeId,
+    type PageMetadata,
     type SpacePageService,
     type SpacePageTemplate,
     type Space,
@@ -21,6 +22,7 @@ import {
     normalizeMember,
     normalizeOperationResult,
     normalizePageMetadata,
+    normalizePageType,
     normalizePageRecord,
     normalizePageSummary,
     normalizePageTreeNode,
@@ -38,6 +40,8 @@ import {
 import { createCommonSpacePageTransport, type SpacePageTransport } from "./transport";
 
 const params = (value: object): Record<string, unknown> => value as Record<string, unknown>;
+const serializePageContent = (content: unknown): unknown =>
+    content !== null && typeof content === "object" ? JSON.stringify(content) : content;
 
 export const createSpacePageService = (
     transport: SpacePageTransport = createCommonSpacePageTransport()
@@ -144,12 +148,18 @@ export const createSpacePageService = (
             return result;
         },
         async createPage(request) {
-            const body = { ...request, spaceId: normalizeId(request.spaceId, "spaceId") };
+            const body = {
+                ...request,
+                spaceId: normalizeId(request.spaceId, "spaceId"),
+                ...(request.pageType === undefined ? {} : { pageType: normalizePageType(request.pageType) }),
+                ...(request.content === undefined ? {} : { content: serializePageContent(request.content) }),
+            };
             const raw = await execute(E.pages.createOrUpdate, undefined, body);
             const page = typeof raw === "string" || typeof raw === "number" || typeof raw === "bigint"
                 ? {
                     id: normalizeId(raw, "page.id"),
                     title: body.title,
+                    pageType: body.pageType,
                     spaceId: body.spaceId,
                     parentId: body.parentId ?? null,
                     templateId: body.templateId,
@@ -160,6 +170,20 @@ export const createSpacePageService = (
             rememberPage(page);
             changes.emit("page.created", { page, spaceId: page.spaceId ?? body.spaceId });
             return page;
+        },
+        async updatePageTitle(request) {
+            const pageId = normalizeId(request.pageId, "pageId");
+            const knownSpaceId = pageSpaces.get(pageId);
+            const raw = await execute(E.pages.title, { id: pageId }, { title: request.title });
+            let page: PageMetadata;
+            if (raw && typeof raw === "object" && "id" in raw) {
+                const normalized = normalizePageMetadata(raw);
+                page = rememberPage({ ...normalized, spaceId: normalized.spaceId ?? knownSpaceId });
+            } else {
+                page = { id: pageId, title: request.title, spaceId: knownSpaceId };
+            }
+            changes.emit("page.updated", { page, spaceId: page.spaceId });
+            if (page.spaceId) changes.emit("page.tree.changed", { spaceId: page.spaceId, pageId });
         },
         async movePage(request) {
             const pageId = normalizeId(request.pageId, "pageId");

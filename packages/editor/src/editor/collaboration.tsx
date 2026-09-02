@@ -176,7 +176,26 @@ const CollaborationEditorInner = forwardRef<
   Editor | null,
   React.PropsWithChildren<CollaborationEditorInnerProps>
 >((props, ref) => {
-  const { content, user, provider, pageInfo, toc, tocContained, width = 'w-[calc(100vw-350px)]', fullWidth, withTitle = true, onContentReady, extensions, extensionWrappers } = props
+  const {
+    content,
+    user,
+    provider,
+    pageInfo,
+    toc,
+    tocContained,
+    width = 'w-[calc(100vw-350px)]',
+    fullWidth,
+    withTitle = true,
+    isEditable = true,
+    toolbar = true,
+    statusBar = true,
+    extensionPageFooters = true,
+    changeTrackerBar = true,
+    mobileToolbar = true,
+    onContentReady,
+    extensions,
+    extensionWrappers,
+  } = props
   const blockMenuItems = React.useMemo(() => resolveBlockMenuItems(extensionWrappers as ExtensionWrapper[]), [extensionWrappers])
   const [items, setItems] = useSafeState<any[]>([])
   const [contentReady, setContentReady] = useSafeState(false)
@@ -248,7 +267,7 @@ const CollaborationEditorInner = forwardRef<
 
   const editor = useEditor(
     {
-      editable: true,
+      editable: isEditable,
       immediatelyRender: false,
       shouldRerenderOnTransaction: false,
       onBlur: ({ editor }) => {
@@ -275,6 +294,14 @@ const CollaborationEditorInner = forwardRef<
   }, [editor, blockMenuItems])
 
   useImperativeHandle(ref, () => editor as Editor)
+
+  // Keep read-only shared views on the same live Tiptap/Yjs instance instead of
+  // rebuilding the collaboration binding when editability changes.
+  React.useEffect(() => {
+    if (editor && editor.isEditable !== isEditable) {
+      editor.setEditable(isEditable)
+    }
+  }, [editor, isEditable])
 
   // Load content into the editor.
   //
@@ -360,10 +387,12 @@ const CollaborationEditorInner = forwardRef<
     <PageContext.Provider value={pageInfo ?? {}}>
       <ThemeProvider theme={selectedTheme}>
         <div className={cn("flex flex-col relative", width, props.className)}>
-          {!isMobile && <EditorMenu editor={editor} extensionWrappers={extensionWrappers as ExtensionWrapper[]} />}
-          {/* Mobile: keep bubble/floating menus (toolbar={false}) and add a
+          {toolbar && !isMobile && (
+            <EditorMenu editor={editor} extensionWrappers={extensionWrappers as ExtensionWrapper[]} />
+          )}
+          {/* Mobile: keep bubble/floating menus and use the separately controlled
               keyboard-docked formatting toolbar in place of the hidden top bar. */}
-          {isMobile && (
+          {toolbar && isMobile && (
             <EditorMenu editor={editor} extensionWrappers={extensionWrappers as ExtensionWrapper[]} toolbar={false} />
           )}
           <div className="flex-1 min-h-0 w-full overflow-y-auto" id="editor-container">
@@ -372,7 +401,7 @@ const CollaborationEditorInner = forwardRef<
             {withTitle && contentReady && <PageHeader editor={editor} />}
             <StyledEditor $fullWidth={fullWidth}>
               <EditorContent editor={editor} />
-              {contentReady && (extensionWrappers as ExtensionWrapper[])
+              {extensionPageFooters && contentReady && (extensionWrappers as ExtensionWrapper[])
                 .filter((w) => w.pageFooter)
                 .map((w, i) => {
                   const Footer = w.pageFooter!;
@@ -407,9 +436,9 @@ const CollaborationEditorInner = forwardRef<
             </StyledEditor>
           </div>
           {/* Bottom status bar: character / word / block counts */}
-          {contentReady && <EditorStatusBar editor={editor} />}
+          {statusBar && contentReady && <EditorStatusBar editor={editor} />}
           {/* Change-tracker merge bar (visible only while tracking is on) */}
-          {contentReady && <ChangeTrackerBar editor={editor} />}
+          {changeTrackerBar && contentReady && <ChangeTrackerBar editor={editor} />}
           {/* ToC - Notion-style floating outline on the right edge */}
           {toc && contentReady && (
             <NotionToC
@@ -420,7 +449,7 @@ const CollaborationEditorInner = forwardRef<
             />
           )}
           {/* Mobile: formatting toolbar docked above the soft keyboard */}
-          {isMobile && contentReady && (
+          {mobileToolbar && isMobile && contentReady && (
             <MobileEditorToolbar editor={editor} extensionWrappers={extensionWrappers as ExtensionWrapper[]} />
           )}
         </div>

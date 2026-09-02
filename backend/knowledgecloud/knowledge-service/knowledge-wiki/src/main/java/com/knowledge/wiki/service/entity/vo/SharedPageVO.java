@@ -13,6 +13,7 @@ public class SharedPageVO {
     private Long pageId;
     private Long spaceId;
     private String title;
+    private String pageType;
     private String content;
     /** Permission granted by the share link: READ / WRITE */
     private String permission;

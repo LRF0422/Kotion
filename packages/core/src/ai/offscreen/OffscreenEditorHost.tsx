@@ -68,6 +68,12 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
             .then((record) => {
                 if (cancelled) return
                 setPage(record)
+                if (record.pageType) {
+                    offscreenSessionManager.markError(
+                        pageId,
+                        new Error('Component-backed pages cannot be edited through the document editor'),
+                    )
+                }
             })
             .catch((err: unknown) => {
                 if (cancelled) return
@@ -81,6 +87,10 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
 
     // ---- Collaboration provider (same room as any visible editor of this page) ----
     useEffect(() => {
+        if (!page || page.pageType) {
+            setProvider(undefined)
+            return
+        }
         const doc = new YDoc()
         const collabProvider = new TiptapCollabProvider({
             baseUrl: COLLAB_WS_BASE_URL,
@@ -107,13 +117,14 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
             collabProvider.disconnect()
             collabProvider.destroy()
         }
-    }, [pageId])
+    }, [pageId, page?.id, page?.pageType])
 
     useEffect(() => {
+        if (page?.pageType) return
         setSyncTimedOut(false)
         const timer = setTimeout(() => setSyncTimedOut(true), 8000)
         return () => clearTimeout(timer)
-    }, [pageId])
+    }, [pageId, page?.pageType])
 
     // ---- Legacy fallback pre-processing ----
     const legacyContent = useMemo(() => {
@@ -133,6 +144,7 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
 
     useEffect(() => {
         setBlockDoc(undefined)
+        if (!page || page.pageType) return
         let cancelled = false
         service.documents.getPageDocument(pageId)
             .then((document) => {
@@ -147,7 +159,7 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
                 setBlockDoc(null)
             })
         return () => { cancelled = true }
-    }, [pageId, service])
+    }, [pageId, page?.id, page?.pageType, service])
 
     const seed = useMemo(
         () => (page ? chooseSeed(blockDoc, legacyContent) : null),
@@ -179,7 +191,7 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
     const { session, flushNow } = usePageSave({
         editor: editorInstance,
         pageId,
-        enabled: !!page && contentReady && !!seed?.trusted,
+        enabled: !!page && !page.pageType && contentReady && !!seed?.trusted,
         clientId,
         presence: { connected: connectionStatus === 'connected', hostPresent, hostSeen },
         reconcileOnly: syncTimedOut && !synced,
@@ -233,7 +245,7 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
         return { name: userInfo?.name || 'Anonymous', color: CURSOR_COLORS[hash % CURSOR_COLORS.length], id: userInfo?.id }
     }, [userInfo?.id, userInfo?.name])
 
-    if (!page || !seed || !(synced || syncTimedOut)) return null
+    if (!page || page.pageType || !seed || !(synced || syncTimedOut)) return null
 
     return (
         <div style={{ width: 800, height: 600, overflow: 'hidden' }}>

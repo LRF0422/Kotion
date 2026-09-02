@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useResponsive, Button, Sheet, SheetContent, SheetTitle, cn, toast } from "@kn/ui";
 import { Menu, PanelLeftClose, PanelLeftOpen } from "@kn/icon";
-import { type PageSummary, type PageTreeNode, type Space, useSpacePageService, useNavigator, useToggle, useMobilePageHeader, useTranslation, usePageTabsStorage } from "@kn/common";
+import { type PageSummary, type PageTreeNode, type ResolvedPageType, type Space, useSpacePageService, useNavigator, useToggle, useMobilePageHeader, useTranslation, usePageTabsStorage } from "@kn/common";
 import { Outlet, useParams, useMatch } from "@kn/common";
 import { TabbedEditorArea } from "./PageEditor/TabbedEditorArea";
 import { TemplateSelector } from "../../components/TemplateSelector";
+import { createPageByType } from "../../components/CreatePageTypeMenu";
 import { SpaceSidebar, GlobalSearchDialog } from "./components";
 import { isPageIconData } from "./components/PageItemIcon";
 import { DockHost } from "../../components/Dock";
@@ -12,7 +13,7 @@ import { useRecentPages } from "./hooks/useRecentPages";
 
 export const SpaceDetail: React.FC = () => {
 
-    const { t } = useTranslation()
+    const { t, i18n } = useTranslation()
     const { isMobile, isTablet } = useResponsive()
     const [sidebarOpen, setSidebarOpen] = useState(false)
     // Tablet: the page-tree sidebar is collapsible. Persisted across reloads.
@@ -177,26 +178,32 @@ export const SpaceDetail: React.FC = () => {
 
     // --- Action handlers ---
 
-    const handleCreatePage = useCallback((parentId: string = "0") => {
+    const handleCreatePage = useCallback((parentId: string = "0", pageType?: ResolvedPageType) => {
         if (!params.id) return
-        service.pages.createPage({
+        createPageByType({
+            service,
             spaceId: params.id,
             parentId,
-            title: "Untitled",
+            pageType,
+            locale: i18n?.language,
+            translate: (key, fallback) => t(key, fallback),
         }).then(page => {
             navigator.go({
                 to: `/space-detail/${params.id}/page/edit/${page.id}`
             })
+        }).catch((createError) => {
+            console.error('Failed to create page:', createError)
+            toast.error(t('page.createFailed', 'Failed to create page'))
         })
-    }, [params.id, navigator, service])
+    }, [params.id, navigator, service, t, i18n?.language])
 
     // Create a page at the same level as the current page (i.e. under its parent).
     // Falls back to the space root when no page is open or the page is not in the tree.
-    const handleCreateSiblingPage = useCallback(() => {
+    const handleCreateSiblingPage = useCallback((pageType?: ResolvedPageType) => {
         const parentId = params.pageId
             ? findParentIdInTree(pageTree, params.pageId) ?? "0"
             : "0"
-        handleCreatePage(parentId)
+        handleCreatePage(parentId, pageType)
     }, [params.pageId, pageTree, handleCreatePage])
 
     const handleCreateByTemplate = useCallback((id: string, title?: string) => {
@@ -426,7 +433,7 @@ export const SpaceDetail: React.FC = () => {
                 spaceId={params.id}
                 pageTree={pageTree}
                 onNavigateToPage={handlePageClick}
-                onCreatePage={() => handleCreatePage(params.pageId || "0")}
+                onCreatePage={(pageType) => handleCreatePage(params.pageId || "0", pageType)}
                 onCreateSiblingPage={handleCreateSiblingPage}
                 onGoToPersonalSpace={handleGoToPersonalSpace}
             />

@@ -89,6 +89,7 @@ public class CollaborationApplication {
         Page page = pageService.getById(invitation.getPageId());
         if (page != null) {
             response.setPageTitle(page.getTitle());
+            response.setPageType(page.getPageType());
         }
 
         // Get space info
@@ -166,7 +167,8 @@ public class CollaborationApplication {
         response.setSuccess(true);
         response.setPageId(invitation.getPageId());
         response.setSpaceId(invitation.getSpaceId());
-        response.setPermission(invitation.getPermission());
+        response.setPageType(page.getPageType());
+        response.setPermission(permissionService.effectivePagePermission(SecurityContextUtil.getUserId(), page));
         response.setAcceptedAt(LocalDateTime.now());
         log.info("Invitation accepted successfully for pageId: {}", invitation.getPageId());
 
@@ -205,6 +207,7 @@ public class CollaborationApplication {
                 throw WikiException.PAGE_NOT_FOUND.newException();
             }
             PageVO vo = PageConverter.INSTANCE.convertVO(page);
+            vo.setPermission(permissionService.effectivePagePermission(SecurityContextUtil.getUserId(), pageRecord));
 
             Space space = spaceService.getById(pageRecord.getSpaceId());
             if (space != null) {

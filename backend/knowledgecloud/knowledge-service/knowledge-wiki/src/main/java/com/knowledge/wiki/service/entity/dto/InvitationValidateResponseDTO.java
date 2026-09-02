@@ -13,6 +13,7 @@ public class InvitationValidateResponseDTO {
     private Long pageId;
     private Long spaceId;
     private String pageTitle;
+    private String pageType;
     private String spaceName;
     private String inviterName;
     private Long inviterId;

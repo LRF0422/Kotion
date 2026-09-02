@@ -15,6 +15,7 @@ public class PendingInvitationVO {
     private Long spaceId;
     private Long pageId;
     private String pageTitle;
+    private String pageType;
     private Long inviteeId;
     private String inviteeName;
     private String inviteeEmail;

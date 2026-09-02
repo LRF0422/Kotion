@@ -1,6 +1,6 @@
 {
   "name": "@kn/plugin-api",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Plugin API contract package: versioned host/plugin handshake and shared contract types",
   "main": "src/index.ts",
   "types": "src/index.ts",

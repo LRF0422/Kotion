@@ -4,7 +4,7 @@ import {
     Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator
 } from "@kn/ui"
 import { FileText, Plus, FilePlus2, LayoutDashboard, Loader2, AlignLeft } from "@kn/icon"
-import { logger, type BlockSummary, type PageTreeNode, useSpacePageService, useTranslation } from "@kn/common"
+import { logger, type BlockSummary, type PageTreeNode, type ResolvedPageType, usePageTypes, useSpacePageService, useTranslation } from "@kn/common"
 
 interface FlatPage {
     id: string
@@ -17,8 +17,8 @@ interface GlobalSearchDialogProps {
     spaceId?: string
     pageTree: PageTreeNode[]
     onNavigateToPage: (pageId: string) => void
-    onCreatePage: () => void
-    onCreateSiblingPage: () => void
+    onCreatePage: (pageType?: ResolvedPageType) => void
+    onCreateSiblingPage: (pageType?: ResolvedPageType) => void
     onGoToPersonalSpace: () => void
 }
 
@@ -80,6 +80,7 @@ export const GlobalSearchDialog: React.FC<GlobalSearchDialogProps> = ({
 }) => {
     const { t } = useTranslation()
     const service = useSpacePageService()
+    const pageTypes = usePageTypes()
     const [query, setQuery] = useState('')
     const [blockResults, setBlockResults] = useState<BlockSummary[]>([])
     const [searching, setSearching] = useState(false)
@@ -220,6 +221,19 @@ export const GlobalSearchDialog: React.FC<GlobalSearchDialogProps> = ({
                                 <Plus className="mr-2" />
                                 <span>{t('page.create') || 'Create Page'}</span>
                             </CommandItem>
+                            {pageTypes.map((pageType) => (
+                                <CommandItem
+                                    key={`action-create-page-${pageType.id}`}
+                                    value={`action-create-page-${pageType.id}`}
+                                    onSelect={() => {
+                                        onCreatePage(pageType)
+                                        onOpenChange(false)
+                                    }}
+                                >
+                                    <span className="mr-2 flex h-4 w-4 items-center justify-center">{pageType.icon ?? <Plus className="h-4 w-4" />}</span>
+                                    <span>{t('page.create', 'Create Page')}: {t(pageType.label, pageType.label)}</span>
+                                </CommandItem>
+                            ))}
                             <CommandItem
                                 value="action-create-sibling-page"
                                 onSelect={() => {
@@ -230,6 +244,19 @@ export const GlobalSearchDialog: React.FC<GlobalSearchDialogProps> = ({
                                 <FilePlus2 className="mr-2" />
                                 <span>{t('page.createSibling') || 'New Sibling Page'}</span>
                             </CommandItem>
+                            {pageTypes.map((pageType) => (
+                                <CommandItem
+                                    key={`action-create-sibling-${pageType.id}`}
+                                    value={`action-create-sibling-${pageType.id}`}
+                                    onSelect={() => {
+                                        onCreateSiblingPage(pageType)
+                                        onOpenChange(false)
+                                    }}
+                                >
+                                    <span className="mr-2 flex h-4 w-4 items-center justify-center">{pageType.icon ?? <FilePlus2 className="h-4 w-4" />}</span>
+                                    <span>{t('page.createSibling', 'New Sibling Page')}: {t(pageType.label, pageType.label)}</span>
+                                </CommandItem>
+                            ))}
                             <CommandItem
                                 value="action-personal-space"
                                 onSelect={() => {

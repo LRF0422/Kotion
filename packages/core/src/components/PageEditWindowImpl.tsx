@@ -84,6 +84,7 @@ const MESSAGES = {
         statusEditing: 'Editing',
         statusSavedByHost: 'Saved by host',
         statusReadOnly: 'Read-only',
+        componentPage: 'This page type can only be opened in the full-page view.',
         minimize: 'Minimize',
         restore: 'Restore',
     },
@@ -99,6 +100,7 @@ const MESSAGES = {
         statusEditing: '编辑中',
         statusSavedByHost: '已由主机保存',
         statusReadOnly: '只读',
+        componentPage: '此页面类型只能在完整页面中打开。',
         minimize: '缩小',
         restore: '还原',
     },
@@ -414,6 +416,10 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose }) 
 
     // ---- Collaboration provider (same room as the main editor for this page) ----
     useEffect(() => {
+        if (!page || page.pageType) {
+            setProvider(undefined);
+            return;
+        }
         const doc = new YDoc();
         const collabProvider = new TiptapCollabProvider({
             // Env-configurable collab endpoint; auth token is the user's OAuth2
@@ -443,13 +449,14 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose }) 
             collabProvider.disconnect();
             collabProvider.destroy();
         };
-    }, [pageId]);
+    }, [pageId, page?.id, page?.pageType]);
 
     useEffect(() => {
+        if (page?.pageType) return;
         setSyncTimedOut(false);
         const timer = setTimeout(() => setSyncTimedOut(true), 8000);
         return () => clearTimeout(timer);
-    }, [pageId]);
+    }, [pageId, page?.pageType]);
 
     // ---- Legacy fallback pre-processing ----
     // PageRecord carries the old page-row content only as a migration fallback;
@@ -471,6 +478,7 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose }) 
 
     useEffect(() => {
         setBlockDoc(undefined)
+        if (!page || page.pageType) return
         let cancelled = false
         service.documents.getPageDocument(pageId)
             .then((document) => {
@@ -485,7 +493,7 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose }) 
                 setBlockDoc(null)
             })
         return () => { cancelled = true }
-    }, [pageId, service])
+    }, [pageId, page?.id, page?.pageType, service])
 
     // `null` means "not decided yet", holding the editor back from mounting so
     // the first reconcile cannot persist an unseeded document (see the main
@@ -507,7 +515,7 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose }) 
     const { saving, dirty, error: saveError, session, flushNow } = usePageSave({
         editor: editorInstance,
         pageId,
-        enabled: !!page && contentReady && !!seed?.trusted,
+        enabled: !!page && !page.pageType && contentReady && !!seed?.trusted,
         clientId,
         presence: { connected: connectionStatus === 'connected', hostPresent, hostSeen },
         reconcileOnly: syncTimedOut && !synced,
@@ -744,6 +752,15 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose }) 
                     <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
                         <CloudOff className="h-4 w-4" />
                         {t('loadPageFailed')}
+                    </div>
+                ) : page?.pageType ? (
+                    <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
+                        <FileText className="h-8 w-8 text-muted-foreground" />
+                        <p className="max-w-sm text-sm text-muted-foreground">{t('componentPage')}</p>
+                        <Button variant="outline" size="sm" onClick={handleOpenFullPage} disabled={!page.spaceId}>
+                            <ArrowUpRight className="mr-1 h-3.5 w-3.5" />
+                            {t('openFullPage')}
+                        </Button>
                     </div>
                 ) : page && seed && (synced || syncTimedOut) ? (
                     <CollaborationEditor

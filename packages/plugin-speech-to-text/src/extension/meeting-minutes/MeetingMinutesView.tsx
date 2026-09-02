@@ -27,7 +27,6 @@ import {
 } from "@kn/icon";
 import { useMeetingRecorder, type MeetingRecordingCapture } from "../../hooks/useMeetingRecorder";
 import { extensionForMeetingAudioMimeType } from "../../hooks/meeting-recorder-core";
-import { dispatchCreateMeetingPage } from "../../meeting-page";
 import { AttendeePicker, type Attendee } from "./AttendeePicker";
 import {
     parseStructuredMeetingSummary,
@@ -277,12 +276,12 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = ({ node, editor, upda
     }, [activeTab, node.attrs.activeTab, updateAttributes]);
 
     useEffect(() => {
-        if (!isEditable || recorder.audioUrl || !fileService) return;
+        if (recorder.audioUrl || !fileService) return;
         const path = node.attrs.audioPath || node.attrs.audioName || node.attrs.audioFileId;
         if (!path) return;
         const resolved = fileService.getDownloadUrl(String(path));
         setRemoteAudioUrl(resolved || null);
-    }, [fileService, isEditable, node.attrs.audioFileId, node.attrs.audioName, node.attrs.audioPath, recorder.audioUrl]);
+    }, [fileService, node.attrs.audioFileId, node.attrs.audioName, node.attrs.audioPath, recorder.audioUrl]);
 
     const generateSummary = useCallback(async (transcriptOverride?: string) => {
         const transcript = (transcriptOverride ?? readTabText("meetingTabTranscript")).trim();
@@ -456,6 +455,37 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = ({ node, editor, upda
         window.setTimeout(() => URL.revokeObjectURL(url), 0);
     }, [m, pendingCapture, recorder.audioBlob, recorder.duration, recorder.state.mimeType, recorder.state.transcript]);
 
+    const handleReset = useCallback(() => {
+        if (!window.confirm(m("confirmNewRecording", "Start a new recording and clear the current meeting content?"))) return;
+        recorder.resetRecording();
+        setPendingCapture(null);
+        setLiveTranscript("");
+        setRemoteAudioUrl(null);
+        setActiveTab("notes");
+
+        ["meetingTabTranscript", "meetingTabSummary", "meetingTabNotes"].forEach((tabType) => {
+            replaceTabContent(tabType, [{ type: "paragraph" }]);
+        });
+        updateAttributes({
+            activeTab: "notes",
+            recordingStatus: "idle",
+            recordingError: null,
+            summaryStatus: "idle",
+            summaryError: null,
+            duration: 0,
+            audioFileId: null,
+            audioName: null,
+            audioMime: null,
+            audioSize: null,
+            audioPath: null,
+            audioUrl: null,
+            transcript: "",
+            isRecording: false,
+            isPaused: false,
+            updatedAt: Date.now(),
+        });
+    }, [m, recorder.resetRecording, replaceTabContent, updateAttributes]);
+
     useEffect(() => {
         if (!isEditable || autoResumeRef.current || generatingSummary) return;
         if (node.attrs.summaryStatus !== "generating") return;
@@ -568,7 +598,7 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = ({ node, editor, upda
                                 <>
                                     {node.attrs.summaryStatus === "failed" && <button type="button" onClick={() => void generateSummary()} className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs text-muted-foreground hover:bg-muted"><Sparkles className="h-3.5 w-3.5" />{m("retrySummary", "重试摘要")}</button>}
                                     {persistedStatus === "captured" && pendingCapture && <button type="button" onClick={() => void saveCapture(pendingCapture)} className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs text-muted-foreground hover:bg-muted"><FileAudio className="h-3.5 w-3.5" />{m("retrySave", "重试保存")}</button>}
-                                    <button type="button" onClick={() => dispatchCreateMeetingPage({ language: lang })} className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted" title={m("newRecording", "新建录音")}><RotateCcw className="h-3.5 w-3.5" /></button>
+                                    <button type="button" onClick={handleReset} className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted" title={m("newRecording", "新建录音")}><RotateCcw className="h-3.5 w-3.5" /></button>
                                     <button type="button" onClick={() => {
                                         const transcript = readTabText("meetingTabTranscript");
                                         void navigator.clipboard.writeText(`# ${meetingTitle}\n\n${transcript}`).then(() => toast.success(m("copiedToClipboard", "已复制")));
@@ -597,7 +627,7 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = ({ node, editor, upda
                     </div>
                 )}
 
-                {audioUrl && isEditable && (
+                {audioUrl && (
                     <div contentEditable={false} suppressContentEditableWarning className="mx-5 mt-3 rounded-lg bg-muted/30 p-3">
                         <AudioPlayer audioUrl={audioUrl} />
                     </div>

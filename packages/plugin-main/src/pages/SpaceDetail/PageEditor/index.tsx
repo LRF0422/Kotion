@@ -97,6 +97,12 @@ export interface PageEditorProps {
     spaceId?: string
     /** Whether this editor is the visible/active tab. Inactive tabs skip auto-focus. */
     active?: boolean
+    /** Page metadata already loaded by PageHost; avoids a duplicate detail request. */
+    initialPage?: PageRecord
+    /** Component pages keep collaboration but hide generic document chrome. */
+    presentation?: 'document' | 'component'
+    /** Prevent local edits and persistence for read-only page permissions. */
+    readOnly?: boolean
 }
 
 export const PageEditor: React.FC<PageEditorProps> = (props) => {
@@ -112,6 +118,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
     // editing its own page even though the URL points at the active tab.
     const pageId = props.pageId ?? params.pageId
     const spaceId = props.spaceId ?? params.id
+    const componentPresentation = props.presentation === 'component'
     const { updateMeta } = usePageTabs(spaceId)
     const { userInfo } = useSelector((state: GlobalState) => state)
     const [pageLoading, { toggle: toggleLoading }] = useToggle(false)
@@ -241,8 +248,9 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
     }, [pageId])
 
     useEffect(() => {
-        toggleLoading()
-        service.pages.getPage(pageId!).then((record) => {
+        let cancelled = false
+        const applyRecord = (record: PageRecord) => {
+            if (cancelled) return
             const res = toEditorPage(record)
             setPage(res)
             // Backfill the tab title + icon now that the page has loaded.
@@ -254,7 +262,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                 resolveUserBrief((res as any)?.createUser ?? res.createdById),
                 resolveUserBrief((res as any)?.updateUser ?? res.updatedById),
             ]).then(([creator, updater]) => {
-                if (!creator && !updater) return
+                if (cancelled || (!creator && !updater)) return
                 setPage((prev: any) => prev && prev.id === res.id ? {
                     ...prev,
                     createUserName: creator?.name,
@@ -262,18 +270,30 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                     updateUserName: updater?.name,
                 } : prev)
             })
-        }).catch((err: any) => {
-            console.error('Failed to load page:', err)
-            toast.error('Failed to load page content')
-        }).finally(() => {
+        }
+
+        const initialPage = props.initialPage && String(props.initialPage.id) === String(pageId)
+            ? props.initialPage
+            : undefined
+        if (initialPage) {
+            applyRecord(initialPage)
+        } else {
             toggleLoading()
-        })
+            service.pages.getPage(pageId!).then(applyRecord).catch((err: any) => {
+                if (cancelled) return
+                console.error('Failed to load page:', err)
+                toast.error('Failed to load page content')
+            }).finally(() => {
+                if (!cancelled) toggleLoading()
+            })
+        }
 
         return () => {
+            cancelled = true
             setPage(null)
             setEditorContentReady(false)
         }
-    }, [pageId, service, toggleLoading, updateMeta])
+    }, [pageId, props.initialPage, service, toggleLoading, updateMeta])
 
     // ---- Seed content: read from the block store, which is the authority ----
 
@@ -378,13 +398,13 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
     // dock panels such as the outline. Same rule as the navigation bridge above: only
     // the active tab publishes, so panels always follow the visible document.
     useEffect(() => {
-        if (props.active === false || !pageId || !editorContentReady) return
+        if (componentPresentation || props.active === false || !pageId || !editorContentReady) return
         const instance = editor.current
         if (!instance) return
 
         setActiveEditor(instance, { pageId: String(pageId), spaceId: spaceId ? String(spaceId) : undefined })
         return () => clearActiveEditor(String(pageId))
-    }, [pageId, spaceId, props.active, editorContentReady])
+    }, [componentPresentation, pageId, spaceId, props.active, editorContentReady])
 
     const toggleFavorite = useCallback(async () => {
         if (!pageId || favoriteToggling) return
@@ -534,7 +554,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         // NOT gated on `active`: backgrounded tabs must keep auto-saving.
         // `seed.trusted` is part of the gate rather than a warning: the one thing
         // worse than not saving is saving content we could not verify.
-        enabled: !!page && !!pageId && editorContentReady && !!seed?.trusted,
+        enabled: !props.readOnly && !!page && !!pageId && editorContentReady && !!seed?.trusted,
         clientId,
         presence: {
             connected: connectionStatus === 'connected',
@@ -922,7 +942,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                 <DropdownMenu>
                     <DropdownMenuTrigger><Button variant="ghost" size="icon" className="h-7 w-7"><MoreHorizontal className="h-3.5 w-3.5" /></Button></DropdownMenuTrigger>
                     <DropdownMenuContent className="w-[260px]">
-                        <DropdownMenuGroup>
+                        <DropdownMenuGroup className={componentPresentation ? "hidden" : undefined}>
                             <DropdownMenuItem
                                 className="flex flex-row justify-between"
                                 onSelect={(e) => e.preventDefault()}
@@ -944,12 +964,12 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                                 <Switch checked={fullWidth} onCheckedChange={toggleFullWidth} />
                             </DropdownMenuItem>
                         </DropdownMenuGroup>
-                        <DropdownMenuSeparator />
+                        <DropdownMenuSeparator className={componentPresentation ? "hidden" : undefined} />
                         <DropdownMenuGroup>
-                            <TemplateCreator mode="page" pageId={pageId!} defaultName={page?.title} beforeSave={saveNow} getCoverContent={getTemplateCoverContent} className="flex flex-row items-center gap-2 w-full relative select-none rounded-sm px-2 py-1.5 text-sm outline-none cursor-default hover:bg-accent hover:text-accent-foreground">
+                            {!componentPresentation && <TemplateCreator mode="page" pageId={pageId!} defaultName={page?.title} beforeSave={saveNow} getCoverContent={getTemplateCoverContent} className="flex flex-row items-center gap-2 w-full relative select-none rounded-sm px-2 py-1.5 text-sm outline-none cursor-default hover:bg-accent hover:text-accent-foreground">
                                 <BookTemplate className="h-4 w-4" />
                                 <span>{t('editor.saveAsTemplate', 'Save as template')}</span>
-                            </TemplateCreator>
+                            </TemplateCreator>}
                             <DropdownMenuItem onClick={handleCopyLink}>
                                 <div className="flex flex-row items-center gap-2">
                                     <Link className="h-4 w-4" />
@@ -966,6 +986,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                                 </div>
                             </DropdownMenuItem>
                             <DropdownMenuItem
+                                className={componentPresentation ? "hidden" : undefined}
                                 onClick={() => setPresentationOpen(true)}
                                 disabled={!editorContentReady}
                             >
@@ -975,6 +996,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                                 </div>
                             </DropdownMenuItem>
                             <DropdownMenuItem
+                                className={componentPresentation ? "hidden" : undefined}
                                 onClick={() => setVersionHistoryOpen(true)}
                                 disabled={!pageId}
                             >
@@ -993,8 +1015,8 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                                 </div>
                             </DropdownMenuItem>
                         </DropdownMenuGroup>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuGroup>
+                        <DropdownMenuSeparator className={componentPresentation ? "hidden" : undefined} />
+                        <DropdownMenuGroup className={componentPresentation ? "hidden" : undefined}>
                             <DropdownMenuSub>
                                 <DropdownMenuSubTrigger>
                                     <div className="flex flex-row items-center gap-2">
@@ -1063,25 +1085,31 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                     id={pageId as string}
                     user={collaborationUser}
                     token={getAccessToken() || ''}
-                    toc={showToc}
-                    fullWidth={fullWidth}
+                    toc={!componentPresentation && showToc}
+                    fullWidth={componentPresentation || fullWidth}
                     withTitle={true}
+                    isEditable={!props.readOnly}
+                    toolbar={!componentPresentation}
+                    statusBar={!componentPresentation}
+                    extensionPageFooters={!componentPresentation}
+                    changeTrackerBar={!componentPresentation}
+                    mobileToolbar={!componentPresentation}
                     width="w-full"
                     content={seed.doc as any}
                     onContentReady={() => setEditorContentReady(true)}
                 />
             }
         </main>
-        <PageVersionHistory
+        {!componentPresentation && <PageVersionHistory
             open={versionHistoryOpen}
             onOpenChange={setVersionHistoryOpen}
             pageId={pageId}
             clientId={clientId}
             saveNow={saveNow}
             onRestored={handleVersionRestored}
-        />
+        />}
         {/* 放映模式：挂载即打开（内部自行请求浏览器全屏），关闭即卸载 */}
-        {presentationOpen && (
+        {!componentPresentation && presentationOpen && (
             <PresentationMode
                 editor={editor.current}
                 onClose={() => setPresentationOpen(false)}

@@ -48,6 +48,7 @@ import com.knowledge.wiki.service.entity.dto.QuerySpaceDTO;
 import com.knowledge.wiki.service.entity.dto.SaveTemplateDTO;
 import com.knowledge.wiki.service.entity.dto.SpaceDTO;
 import com.knowledge.wiki.service.entity.dto.TemplateDTO;
+import com.knowledge.wiki.service.entity.dto.UpdatePageTitleDTO;
 import com.knowledge.wiki.service.entity.dto.CollaborationInvitationRequestDTO;
 import com.knowledge.wiki.service.entity.dto.CollaborationInvitationResponseDTO;
 import com.knowledge.wiki.service.entity.dto.PatchResultDTO;
@@ -87,6 +88,7 @@ import com.knowledge.wiki.service.service.ISpaceService;
 import com.knowledge.wiki.service.service.IWikiLinkService;
 import com.knowledge.wiki.service.service.IBlockVersionService;
 import com.knowledge.wiki.service.service.IPermissionService;
+import com.knowledge.wiki.service.doc.PageDocCommandService;
 import com.knowledge.wiki.service.doc.PageDocService;
 import com.knowledge.wiki.service.doc.WikiBlockReadService;
 import com.knowledge.wiki.service.doc.WikiLinkProjectionService;
@@ -143,6 +145,8 @@ public class SpaceApplication {
     private WikiBlockReadService wikiBlockReadService;
     @Autowired
     private PageDocService pageDocService;
+    @Autowired
+    private PageDocCommandService pageDocCommandService;
     @Autowired
     private WikiLinkProjectionService wikiLinkProjectionService;
     @Autowired
@@ -483,11 +487,12 @@ public class SpaceApplication {
         if (page == null) {
             throw WikiException.PAGE_NOT_FOUND.newException();
         }
-        // Enforce unified permission model: viewer needs at least READ access
-        permissionService.checkPagePermission(SecurityContextUtil.getUserId(), page,
-                IPermissionService.PERMISSION_READ);
+        // Enforce unified permission model: viewer needs at least READ access.
+        Long userId = SecurityContextUtil.getUserId();
+        permissionService.checkPagePermission(userId, page, IPermissionService.PERMISSION_READ);
         PageVO vo = PageConverter.INSTANCE.convertVO(page);
-        vo.setFavorite(favoriteService.checkFavorite(pageId, SecurityContextUtil.getUserId()));
+        vo.setPermission(permissionService.effectivePagePermission(userId, page));
+        vo.setFavorite(favoriteService.checkFavorite(pageId, userId));
 
         // Get and set parent pages
         List<Page> parentPages = spaceService.getPageService().getParents(pageId);
@@ -765,6 +770,10 @@ public class SpaceApplication {
         if (dto.getId() != null) {
             throw WikiException.PAGE_WRITE_API_RETIRED.newException("已有页面内容只能通过 PageDoc 保存");
         }
+        dto.setPageType(StrUtil.isBlank(dto.getPageType()) ? null : dto.getPageType());
+        if (dto.getTemplateId() != null && dto.getPageType() != null) {
+            throw WikiException.INVALID_PARAMETER.newException("组件页面不能从页面模板创建");
+        }
         checkSpaceWritable(dto.getSpaceId());
         if (dto.getTemplateId() == null) {
             Page page = PageConverter.INSTANCE.convertDO(dto);
@@ -778,6 +787,22 @@ public class SpaceApplication {
                 IPermissionService.PERMISSION_READ);
         return PageConverter.INSTANCE.convertVO(spaceService.getPageService().createByTemplate(dto.getTemplateId(),
                 dto.getSpaceId(), dto.getParentId()));
+    }
+
+    /**
+     * Update a component page title without introducing a second metadata authority.
+     * The backend cannot distinguish direct-renderer and editor-renderer component
+     * types because pageType is intentionally opaque, so all nonblank page types are
+     * accepted here. The frontend only calls this endpoint for direct renderers.
+     */
+    public PageVO updateComponentPageTitle(Long pageId, UpdatePageTitleDTO dto) {
+        Page page = requirePagePermission(pageId, IPermissionService.PERMISSION_WRITE);
+        if (Boolean.TRUE.equals(page.getIsTemplate()) || StrUtil.isBlank(page.getPageType())) {
+            throw WikiException.INVALID_PARAMETER.newException("仅组件页面可通过此接口修改标题");
+        }
+        String title = dto.getTitle().trim();
+        pageDocCommandService.updateTitle(pageId, title, SecurityContextUtil.getUserId());
+        return getPageContent(pageId);
     }
 
     public void savePageAsTemplate(Long pageId, SaveTemplateDTO dto) {
@@ -1469,6 +1494,12 @@ public class SpaceApplication {
 
     public void saveAsTemplate(TemplateDTO dto) {
         Space space = spaceService.getById(dto.getSpaceId());
+        if (space == null) {
+            throw WikiException.SPACE_NOT_FOUND.newException();
+        }
+        if (pageService.hasComponentPages(dto.getSpaceId())) {
+            throw WikiException.INVALID_PARAMETER.newException("包含组件页面的空间不能保存为模板");
+        }
         Space newSpace = BeanUtil.copyProperties(space, Space.class, "id");
         newSpace.setScreenShot(dto.getScreenShot());
         newSpace.setDescription(dto.getDescription());
@@ -1684,6 +1715,7 @@ public class SpaceApplication {
         vo.setPageId(page.getId());
         vo.setSpaceId(page.getSpaceId());
         vo.setTitle(page.getTitle());
+        vo.setPageType(page.getPageType());
         vo.setContent(page.getContent());
         vo.setPermission(shareLink.getPermission());
         vo.setExpiresAt(shareLink.getExpiresAt());
@@ -1813,6 +1845,7 @@ public class SpaceApplication {
                     Page page = finalPageMap.get(inv.getPageId());
                     if (page != null) {
                         vo.setPageTitle(page.getTitle());
+                        vo.setPageType(page.getPageType());
                     }
                     return vo;
                 })
@@ -1932,6 +1965,7 @@ public class SpaceApplication {
                     vo.setId(page.getId());
                     vo.setIcon(page.getIcon());
                     vo.setTitle(page.getTitle());
+                    vo.setPageType(page.getPageType());
                     vo.setDescription(page.getDescription());
                     vo.setSpaceId(page.getSpaceId());
                     vo.setStatus(page.getStatus());
@@ -1945,8 +1979,9 @@ public class SpaceApplication {
                         vo.setSpaceName(space.getName());
                     }
 
-                    // Set collaboration info
-                    vo.setPermission(collab.getPermission());
+                    // Set collaboration info. Space membership can raise the
+                    // explicit invitation grant, so return the effective permission.
+                    vo.setPermission(permissionService.effectivePagePermission(currentUserId, page));
                     vo.setInvitedAt(collab.getCreatedAt());
 
                     // Set inviter info

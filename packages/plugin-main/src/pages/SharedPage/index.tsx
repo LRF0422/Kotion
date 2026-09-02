@@ -5,12 +5,14 @@ import {
     hasPermission,
     type SharedPage as SharedPageModel,
     useNavigator,
+    usePageType,
     useSafeState,
     useSpacePageService,
     useTranslation,
 } from "@kn/common";
 import { AlertCircle, Clock, ExternalLink, Eye, Loader2 } from "@kn/icon";
 import React, { useEffect, useState } from "react";
+import { PluginPageBoundary } from "../SpaceDetail/PageEditor/PageHost";
 import { useParams, useSelector } from "@kn/common";
 
 type LoadStatus = 'loading' | 'ready' | 'error';
@@ -31,6 +33,7 @@ export const SharedPage: React.FC = () => {
     const [status, setStatus] = useState<LoadStatus>('loading');
     const [page, setPage] = useSafeState<SharedPageModel | null>(null);
     const [errorMessage, setErrorMessage] = useState<string>('');
+    const pageType = usePageType(page?.pageType);
 
     useEffect(() => {
         if (!shortCode) {
@@ -122,15 +125,62 @@ export const SharedPage: React.FC = () => {
 
             {/* Read-only content */}
             <div className="flex-1 min-h-0 overflow-hidden">
-                <EditorRender
-                    id={String(page?.pageId)}
-                    content={parsedContent}
-                    isEditable={false}
-                    toc={true}
-                    withTitle={true}
-                    width="w-full"
-                    className="h-full"
-                />
+                {!page?.pageType ? (
+                    <EditorRender
+                        id={String(page?.pageId)}
+                        content={parsedContent}
+                        isEditable={false}
+                        toc={true}
+                        withTitle={true}
+                        width="w-full"
+                        className="h-full"
+                    />
+                ) : !pageType ? (
+                    <div className="flex h-full items-center justify-center p-6">
+                        <div className="max-w-lg rounded-xl border bg-card p-8 text-center">
+                            <AlertCircle className="mx-auto h-10 w-10 text-muted-foreground" />
+                            <h2 className="mt-4 font-semibold">{t('sharedPage.renderer-unavailable', 'Shared page renderer unavailable')}</h2>
+                            <p className="mt-2 text-sm text-muted-foreground">
+                                {t('sharedPage.renderer-unavailable-description', 'The required plugin is not available in this viewer.')}
+                            </p>
+                            <code className="mt-4 inline-block max-w-full overflow-auto rounded bg-muted px-3 py-2 text-xs">{page.pageType}</code>
+                        </div>
+                    </div>
+                ) : !pageType.publicShare ? (
+                    <div className="flex h-full items-center justify-center p-6">
+                        <div className="max-w-lg rounded-xl border bg-card p-8 text-center">
+                            <AlertCircle className="mx-auto h-10 w-10 text-muted-foreground" />
+                            <h2 className="mt-4 font-semibold">{t('sharedPage.type-not-shareable', 'This page type is not available in public shares')}</h2>
+                        </div>
+                    </div>
+                ) : pageType.renderer.type === 'editor-component' ? (
+                    <EditorRender
+                        id={String(page.pageId)}
+                        content={parsedContent}
+                        isEditable={false}
+                        toc={false}
+                        withTitle={true}
+                        toolbar={false}
+                        statusBar={false}
+                        extensionPageFooters={false}
+                        changeTrackerBar={false}
+                        mobileToolbar={false}
+                        fullWidth={true}
+                        width="w-full"
+                        className="h-full"
+                    />
+                ) : (
+                    <PluginPageBoundary pageType={pageType}>
+                        {React.createElement(pageType.renderer.component, {
+                            page,
+                            pageId: String(page.pageId),
+                            spaceId: String(page.spaceId),
+                            active: true,
+                            readOnly: true,
+                            mode: 'share',
+                        })}
+                    </PluginPageBoundary>
+                )}
             </div>
         </div>
     );

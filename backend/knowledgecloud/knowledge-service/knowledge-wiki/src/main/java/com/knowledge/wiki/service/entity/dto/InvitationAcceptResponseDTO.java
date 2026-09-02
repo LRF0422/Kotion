@@ -12,6 +12,7 @@ public class InvitationAcceptResponseDTO {
     private Boolean success;
     private Long pageId;
     private Long spaceId;
+    private String pageType;
     private String permission;
     private LocalDateTime acceptedAt;
 }

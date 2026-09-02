@@ -15,10 +15,11 @@ import { HocuspocusProvider } from "@hocuspocus/provider";
 import { ThemeProvider } from "styled-components";
 import light, { dark } from "../styles/theme";
 import { StyledEditor } from "../styles/editor";
-import { cn, useTheme } from "@kn/ui";
+import { cn, useIsMobile, useTheme } from "@kn/ui";
 import { NotionToC } from "./NotionToC";
 import { EditorStatusBar } from "./EditorStatusBar";
 import { ChangeTrackerBar } from "./ChangeTrackerBar";
+import { MobileEditorToolbar } from "./MobileEditorToolbar";
 import { PageHeader } from "./PageHeader";
 import { PageContext, PageContextProps } from "./context";
 import { rewriteUnknownContent } from "./rewriteUnknowContent";
@@ -38,7 +39,16 @@ export interface EditorRenderProps extends EditorProvider, EditorKit {
   isColl?: boolean
   provider?: HocuspocusProvider,
   className?: string,
+  /** Render the editor's generic toolbar and extension menus. */
   toolbar?: boolean,
+  /** Render the document statistics status bar. */
+  statusBar?: boolean,
+  /** Render page footers contributed by editor extensions. */
+  extensionPageFooters?: boolean,
+  /** Render the change-tracker review bar. */
+  changeTrackerBar?: boolean,
+  /** Render the keyboard-docked formatting toolbar on mobile. */
+  mobileToolbar?: boolean,
   width?: string,
   /** 全宽（宽幅）模式：去掉正文的默认阅读宽度限制，铺满编辑区。 */
   fullWidth?: boolean,
@@ -66,8 +76,18 @@ export const EditorRender = forwardRef<
     width = 'w-[calc(100vw-350px)]',
     fullWidth,
     toolbar = true,
+    statusBar,
+    extensionPageFooters = false,
+    changeTrackerBar,
+    mobileToolbar = false,
     onContentReady,
   } = props;
+
+  // EditorRender historically tied these bars to `toolbar`, while it did not
+  // render extension footers or a mobile toolbar. Keep those defaults while
+  // allowing component-backed and shared pages to control each surface.
+  const showStatusBar = statusBar ?? toolbar;
+  const showChangeTrackerBar = changeTrackerBar ?? toolbar;
 
   const [exts, extensionWrappers] = useEditorExtension(undefined, withTitle)
   const blockMenuItems = React.useMemo(() => resolveBlockMenuItems(extensionWrappers as ExtensionWrapper[]), [extensionWrappers])
@@ -173,6 +193,7 @@ export const EditorRender = forwardRef<
   // Get current theme from context
   const { theme: currentTheme } = useTheme();
   const selectedTheme = currentTheme === 'dark' ? dark : light;
+  const isMobile = useIsMobile();
 
   return (editor &&
     <PageContext.Provider value={pageInfo ?? {}}>
@@ -184,6 +205,12 @@ export const EditorRender = forwardRef<
             {withTitle && contentReady && <PageHeader editor={editor} />}
             <StyledEditor $fullWidth={fullWidth}>
               <EditorContent editor={editor} />
+              {extensionPageFooters && contentReady && extensionWrappers
+                .filter((wrapper) => wrapper.pageFooter)
+                .map((wrapper, index) => {
+                  const Footer = wrapper.pageFooter!;
+                  return <Footer key={`page-footer-${wrapper.name}-${index}`} editor={editor} />;
+                })}
               {!contentReady && (
                 <div className="space-y-3 p-4">
                   {isLargeDoc && (
@@ -213,8 +240,8 @@ export const EditorRender = forwardRef<
             </StyledEditor>
           </div>
           {/* Optional editor chrome. Static previews pass toolbar={false}. */}
-          {toolbar && contentReady && <EditorStatusBar editor={editor} />}
-          {toolbar && contentReady && <ChangeTrackerBar editor={editor} />}
+          {showStatusBar && contentReady && <EditorStatusBar editor={editor} />}
+          {showChangeTrackerBar && contentReady && <ChangeTrackerBar editor={editor} />}
           {toolbar && editor && extensionWrappers?.map((wrapper, idx) => {
             if (!wrapper.bubbleMenu) return null;
             const menus: ElementType[] = Array.isArray(wrapper.bubbleMenu) ? wrapper.bubbleMenu : [wrapper.bubbleMenu];
@@ -230,6 +257,9 @@ export const EditorRender = forwardRef<
           {/* ToC - Notion-style floating outline on the right edge */}
           {toc && contentReady && (
             <NotionToC editor={editor} items={items} />
+          )}
+          {mobileToolbar && isMobile && contentReady && (
+            <MobileEditorToolbar editor={editor} extensionWrappers={extensionWrappers} />
           )}
         </div>
       </ThemeProvider >

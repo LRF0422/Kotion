@@ -1,6 +1,7 @@
 import { isFunction, merge } from "lodash";
 import { ExtensionWrapper } from "./editor";
 import { DockPanelConfig, DockPosition, ResolvedDockPanel } from "./dock";
+import { PageTypeConfig, ResolvedPageType } from "./page-type";
 import { SiderMenuItemProps } from "./menu";
 import { TourConfig } from "./tour";
 import { RouteConfig } from "./route";
@@ -70,6 +71,11 @@ export interface PluginConfig {
      * the plugin adds/removes its rail icon at runtime.
      */
     dockPanels?: DockPanelConfig[]
+    /**
+     * Stable page renderers contributed by this plugin.
+     * Aggregated by PluginManager.resolvePageTypes().
+     */
+    pageTypes?: PageTypeConfig[]
 }
 
 export class KPlugin<T extends PluginConfig> {
@@ -85,6 +91,7 @@ export class KPlugin<T extends PluginConfig> {
     private _settings?: PluginSettingsConfig
     private _tours?: TourConfig[]
     private _dockPanels?: DockPanelConfig[]
+    private _pageTypes?: PageTypeConfig[]
 
     constructor(config: T) {
         this.name = config.name
@@ -97,6 +104,7 @@ export class KPlugin<T extends PluginConfig> {
         this._settings = config.settings
         this._tours = config.tours
         this._dockPanels = config.dockPanels
+        this._pageTypes = config.pageTypes
     }
 
     get routes(): RouteConfig[] {
@@ -129,6 +137,10 @@ export class KPlugin<T extends PluginConfig> {
 
     get dockPanels(): DockPanelConfig[] {
         return this._dockPanels || []
+    }
+
+    get pageTypes(): PageTypeConfig[] {
+        return this._pageTypes || []
     }
 
 }
@@ -182,6 +194,7 @@ export class PluginManager {
     private _cacheLocales: any | null = null
     private _cacheTours: TourConfig[] | null = null
     private _cacheDockPanels: ResolvedDockPanel[] | null = null
+    private _cachePageTypes: ResolvedPageType[] | null = null
     private _pluginMap: Map<string, KPlugin<any>> = new Map()
     private _incompatiblePlugins = new Map<string, PluginApiIncompatibility>()
 
@@ -249,6 +262,7 @@ export class PluginManager {
         this._cacheLocales = null
         this._cacheTours = null
         this._cacheDockPanels = null
+        this._cachePageTypes = null
         this._version++
         this._changeListeners.forEach(fn => fn())
     }
@@ -367,6 +381,7 @@ export class PluginManager {
             // Contract smoke test: getters must be accessible
             void plugin.routes
             void plugin.editorExtensions
+            void plugin.pageTypes
         } catch (error) {
             logger.error('Plugin contract getters are not accessible:', error)
             return null
@@ -877,6 +892,65 @@ export class PluginManager {
 
         if (!position) return this._cacheDockPanels
         return this._cacheDockPanels.filter(p => (p.position ?? 'right') === position)
+    }
+
+    /**
+     * Resolve all page types contributed by active plugins. Contributions must
+     * use a namespaced id (`namespace:name`); malformed entries and later
+     * duplicates are skipped. Equal-order entries retain contribution order.
+     */
+    resolvePageTypes(): ResolvedPageType[] {
+        if (!this._cachePageTypes) {
+            const pageTypes: Array<{ value: ResolvedPageType; index: number }> = []
+            const seen = new Set<string>()
+            let index = 0
+
+            const isNamespacedId = (id: unknown): id is string =>
+                typeof id === 'string' && /^[^\s:]+:[^\s:]+$/.test(id)
+            const isValidRenderer = (renderer: unknown): renderer is PageTypeConfig['renderer'] => {
+                if (!renderer || typeof renderer !== 'object') return false
+                const candidate = renderer as Record<string, unknown>
+                if (candidate.type === 'component') return typeof candidate.component === 'function'
+                if (candidate.type === 'editor-component') return typeof candidate.createInitialDocument === 'function'
+                return false
+            }
+
+            for (const plugin of this.plugins) {
+                for (const pageType of plugin.pageTypes) {
+                    if (!pageType
+                        || !isNamespacedId(pageType.id)
+                        || typeof pageType.label !== 'string'
+                        || !pageType.label.trim()
+                        || !isValidRenderer(pageType.renderer)) {
+                        logger.warn(`Invalid page type from ${plugin.name}, skipping`)
+                        continue
+                    }
+                    if (seen.has(pageType.id)) {
+                        logger.warn(`Page type ${pageType.id} already registered, skipping duplicate from ${plugin.name}`)
+                        continue
+                    }
+                    seen.add(pageType.id)
+                    pageTypes.push({
+                        value: { ...pageType, source: 'plugin', owner: plugin.name },
+                        index: index++,
+                    })
+                }
+            }
+
+            pageTypes.sort((a, b) => {
+                const aOrder = Number.isFinite(a.value.order) ? a.value.order! : 100
+                const bOrder = Number.isFinite(b.value.order) ? b.value.order! : 100
+                return aOrder - bOrder || a.index - b.index
+            })
+            this._cachePageTypes = pageTypes.map(({ value }) => value)
+        }
+
+        return this._cachePageTypes
+    }
+
+    /** Resolve one page type by its stable namespaced id. */
+    resolvePageType(id: string): ResolvedPageType | undefined {
+        return this.resolvePageTypes().find(pageType => pageType.id === id)
     }
 
     /**

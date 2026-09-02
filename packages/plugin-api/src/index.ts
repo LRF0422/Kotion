@@ -15,7 +15,7 @@
  * constant). Bump the MAJOR part on breaking contract changes; plugins built
  * against a different major version are skipped by the host at load time.
  */
-export const PLUGIN_API_VERSION = "2.0.0"
+export const PLUGIN_API_VERSION = "2.1.0"
 
 /**
  * Metadata a plugin bundle registers alongside its exports.
@@ -57,6 +57,16 @@ export type {
     DockPanelContext,
     DockPanelProps,
     DockPosition,
+    PageRenderMode,
+    PageRendererPage,
+    PageRendererProps,
+    PageInitialDocumentContext,
+    PageInitialDocumentFactory,
+    DirectPageRenderer,
+    EditorComponentPageRenderer,
+    PageTypeRenderer,
+    PageTypeConfig,
+    ResolvedPageType,
     SpacePageService,
     SpaceOperations,
     PageOperations,
@@ -80,8 +90,12 @@ export type {
     Space,
     UserSummary,
     PageMetadata,
+    PageRecord,
     PageSummary,
     PageTreeNode,
+    SharedPage,
+    CreatePageRequest,
+    UpdatePageTitleRequest,
     PageDocument,
     PageDocumentSnapshot,
     SpacePageChange,

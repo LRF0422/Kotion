@@ -32,6 +32,7 @@
         "@kn/plugin-excalidraw": "workspace:*",
         "@kn/plugin-main": "workspace:*",
         "@kn/plugin-mindmap-canvas": "workspace:*",
+        "@kn/plugin-speech-to-text": "workspace:*",
         "@kn/plugin-weaver-oa": "workspace:*",
         "@kn/plugin-theme": "workspace:*",
         "@kn/ui": "workspace:*",

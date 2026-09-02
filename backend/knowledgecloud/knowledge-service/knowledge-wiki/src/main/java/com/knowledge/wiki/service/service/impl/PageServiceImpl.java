@@ -298,9 +298,11 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
         if (StrUtil.isNotEmpty(searchValue)) {
             return allPage.stream().map(it -> {
                 Tree<Long> tree = new Tree<>();
-                return tree.setId(it.getId())
+                tree.setId(it.getId())
                         .setParentId(it.getParentId())
                         .setName(it.getTitle());
+                tree.putExtra("pageType", it.getPageType());
+                return tree;
             }).collect(Collectors.toList());
         }
         return TreeUtil.build(allPage, 0L, (object, node) -> {
@@ -310,6 +312,7 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
             node.putExtra("updateTime", object.getUpdateTime());
             node.putExtra("createUser", object.getCreateUser());
             node.putExtra("icon", object.getIcon());
+            node.putExtra("pageType", object.getPageType());
         });
     }
 
@@ -338,6 +341,9 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
         Page source = this.getById(pageId);
         if (source == null) {
             throw WikiException.PAGE_NOT_FOUND.newException();
+        }
+        if (StrUtil.isNotBlank(source.getPageType())) {
+            throw WikiException.INVALID_PARAMETER.newException("组件页面不能保存为页面模板");
         }
         // Audit fields are intentionally cleared so the template records when it
         // was created rather than inheriting the source page's timestamps.
@@ -725,6 +731,21 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
                 .eq(Page::getSpaceId, spaceId)
                 .eq(Page::getStatus, PageStatus.ACTIVE)
                 .list();
+    }
+
+    @Override
+    public boolean hasComponentPages(Long spaceId) {
+        if (spaceId == null) {
+            return false;
+        }
+        return this.lambdaQuery()
+                .eq(Page::getSpaceId, spaceId)
+                .eq(Page::getStatus, PageStatus.ACTIVE)
+                .eq(Page::getIsTemplate, false)
+                .isNotNull(Page::getPageType)
+                .list()
+                .stream()
+                .anyMatch(page -> StrUtil.isNotBlank(page.getPageType()));
     }
 
     @Override

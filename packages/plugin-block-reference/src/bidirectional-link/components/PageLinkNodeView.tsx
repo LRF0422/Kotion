@@ -89,10 +89,10 @@ export const PageLinkNodeView: React.FC<NodeViewProps> = React.memo((props) => {
     }, [deleteNode]);
 
     const handleEdit = useCallback(() => {
-        if (!pageId || isBroken) return;
+        if (!pageId || isBroken || pageInfo?.pageType) return;
         setCardOpen(false);
         setEditOpen(true);
-    }, [pageId, isBroken]);
+    }, [pageId, isBroken, pageInfo?.pageType]);
 
     const handleEditClose = useCallback(() => {
         setEditOpen(false);
@@ -161,7 +161,7 @@ export const PageLinkNodeView: React.FC<NodeViewProps> = React.memo((props) => {
                                     {t('bidirectionalLink.ctrlClickHint')}
                                 </span>
                                 <div className="flex items-center gap-0.5">
-                                    <Button
+                                    {!pageInfo?.pageType && <Button
                                         variant="ghost"
                                         size="sm"
                                         className="h-7 px-2 text-xs text-primary"
@@ -169,7 +169,7 @@ export const PageLinkNodeView: React.FC<NodeViewProps> = React.memo((props) => {
                                     >
                                         <Pencil className="mr-0.5 h-3 w-3" />
                                         {t('bidirectionalLink.edit')}
-                                    </Button>
+                                    </Button>}
                                     <Button
                                         variant="ghost"
                                         size="sm"
@@ -185,7 +185,7 @@ export const PageLinkNodeView: React.FC<NodeViewProps> = React.memo((props) => {
                     )}
                 </HoverCardContent>
             </HoverCard>
-            {editOpen && pageId && (
+            {editOpen && pageId && !pageInfo?.pageType && (
                 <PageEditWindow pageId={pageId} onClose={handleEditClose} />
             )}
         </NodeViewWrapper>

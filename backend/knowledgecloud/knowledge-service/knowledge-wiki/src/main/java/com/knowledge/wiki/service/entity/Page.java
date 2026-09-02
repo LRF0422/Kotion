@@ -24,6 +24,7 @@ public class Page extends BaseSubject {
     @TableField(typeHandler = JacksonTypeHandler.class)
     private Icon icon;
     private String title = UNTITLE;
+    private String pageType;
     private String description;
     private String ancestors;
     private Long spaceId;

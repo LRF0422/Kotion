@@ -45,6 +45,7 @@ async function main(): Promise<void> {
         spaceId: 202,
         parentId: null,
         title: "Page",
+        pageType: "   ",
         content: { type: "doc", content: [] },
         createUser: 303,
         updateUser: "404",
@@ -52,6 +53,7 @@ async function main(): Promise<void> {
     const page = await service.pages.getPage("101");
     assert(page.id === "101" && page.spaceId === "202", "page IDs normalize to strings", page);
     assert(page.createdById === "303" && page.updatedById === "404", "legacy author IDs normalize", page);
+    assert(page.pageType === undefined, "blank page types normalize to undefined", page);
     assert(page.legacyContent != null && !("content" in page), "page row content is legacy-only", page);
 
     fake.reply("/knowledge-wiki/space/page/favorites", [{ id: 11, spaceId: 22, title: "Favorite" }]);
@@ -101,13 +103,44 @@ async function main(): Promise<void> {
     const comments = await service.comments.getPageComments("710");
     assert(comments[0]?.pageId === "710" && comments[0]?.replies?.[0]?.pageId === "710", "page-scoped comments inherit pageId", comments);
 
+    fake.reply("/knowledge-wiki/share/public/:shortCode/resolve", {
+        pageId: "710",
+        spaceId: "711",
+        title: "Shared canvas",
+        pageType: "  acme:canvas  ",
+        permission: "READ",
+    });
+    const shared = await service.shares.resolveShareLink("share-code");
+    assert(shared.pageType === "acme:canvas", "shared page types are trimmed and preserved", shared);
+
     fake.reply("/knowledge-wiki/page/:id/history", [{ kind: "AUTO" }, { rev: "4", kind: "USER" }]);
     const history = await service.documents.getPageHistory({ pageId: "710" });
     assert(history.records.length === 1 && history.records[0]?.rev === "4", "history skips malformed rows without hiding valid revisions", history);
 
+    const initialDocument = { type: "doc", content: [{ type: "acmeCanvas" }] };
     fake.reply("/knowledge-wiki/space/page", "740");
-    const created = await service.pages.createPage({ spaceId: "711", title: "Created" });
+    const created = await service.pages.createPage({
+        spaceId: "711",
+        title: "Created",
+        pageType: "  acme:canvas  ",
+        content: initialDocument,
+    });
     assert(created.id === "740" && created.spaceId === "711", "page creation tolerates a bare ID response", created);
+    assert(created.pageType === "acme:canvas", "bare ID creation preserves the requested page type", created);
+    const objectCreate = fake.requests.at(-1)!;
+    assert((objectCreate.body as any).content === JSON.stringify(initialDocument), "object page content is serialized before POST", objectCreate);
+
+    fake.reply("/knowledge-wiki/space/page", "741");
+    await service.pages.createPage({ spaceId: "711", title: "String content", content: "already-json" });
+    const stringCreate = fake.requests.at(-1)!;
+    assert((stringCreate.body as any).content === "already-json", "string page content is posted unchanged", stringCreate);
+
+    fake.reply("/knowledge-wiki/space/page/:id/title", undefined);
+    await service.pages.updatePageTitle({ pageId: "740", title: "Renamed" });
+    const titleUpdate = fake.requests.at(-1)!;
+    assert(titleUpdate.endpoint.method === "PUT" && titleUpdate.params?.id === "740", "title update uses the page title endpoint", titleUpdate);
+    assert((titleUpdate.body as any).title === "Renamed", "title update sends JSON body content", titleUpdate);
+    assert(changes.slice(-2).join(",") === "page.updated,page.tree.changed", "title update emits metadata and tree changes", changes);
 
     await service.documents.releasePageSession({ pageId: "801", clientId: "client-a" });
     const release = fake.keepalives.at(-1)!;

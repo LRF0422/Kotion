@@ -134,7 +134,8 @@ const PreviewBody: React.FC<{
     title?: string;
     spaceName?: string;
     icon?: PageIconData | null;
-}> = ({ pageId, title, spaceName, icon }) => {
+    pageType?: string;
+}> = ({ pageId, title, spaceName, icon, pageType }) => {
     const { t } = useTranslation();
     const service = useSpacePageService();
     const fileService = useOptionalService("fileService") as FileService | undefined;
@@ -142,7 +143,7 @@ const PreviewBody: React.FC<{
     const [error, setError] = useState(false);
 
     useEffect(() => {
-        if (readCache(pageId)) return;
+        if (pageType || readCache(pageId)) return;
         let cancelled = false;
         service.documents.getPageDocument(pageId)
             .then((document) => {
@@ -162,7 +163,7 @@ const PreviewBody: React.FC<{
         return () => {
             cancelled = true;
         };
-    }, [service, pageId, title, spaceName, icon]);
+    }, [service, pageId, title, spaceName, icon, pageType]);
 
     const { body, cover } = useMemo(() => parsePage(page?.doc), [page?.doc]);
     // Prefer the icon the hovered row already knows (emoji/image/date all
@@ -213,7 +214,12 @@ const PreviewBody: React.FC<{
             </div>
             {/* Body: read-only editor clamped in height with a bottom fade */}
             <div className="relative max-h-[280px] overflow-hidden px-4 py-3">
-                {error ? (
+                {pageType ? (
+                    <div className="py-5 text-center">
+                        <p className="text-sm font-medium">{t("home.custom-page", "Custom page")}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{t("home.custom-page-open", "Open the page to view its plugin content")}</p>
+                    </div>
+                ) : error ? (
                     <p className="py-4 text-center text-xs text-muted-foreground">
                         {t("home.preview-error", "Failed to load preview")}
                     </p>
@@ -239,6 +245,8 @@ export interface PagePreviewCardProps {
     spaceName?: string;
     /** Row icon reused in the card header so it matches the list exactly. */
     icon?: PageIconData | null;
+    /** Component pages use a metadata-only preview and never mount plugin content. */
+    pageType?: string;
     /** Skip the hover card entirely (e.g. on touch devices). */
     disabled?: boolean;
     /** Invoked when the card body is clicked — callers navigate to the page. */
@@ -252,6 +260,7 @@ interface PreviewTarget {
     title?: string;
     spaceName?: string;
     icon?: PageIconData | null;
+    pageType?: string;
     rect: { top: number; left: number; right: number };
     onOpenPage?: () => void;
 }
@@ -414,6 +423,7 @@ export const PagePreviewProvider: React.FC<{ children: React.ReactNode }> = ({ c
                             title={target.title}
                             spaceName={target.spaceName}
                             icon={target.icon}
+                            pageType={target.pageType}
                         />
                     </div>
                 </div>
@@ -429,6 +439,7 @@ export const PagePreviewCard: React.FC<PagePreviewCardProps> = ({
     title,
     spaceName,
     icon,
+    pageType,
     disabled,
     onOpenPage,
     children,
@@ -447,6 +458,7 @@ export const PagePreviewCard: React.FC<PagePreviewCardProps> = ({
             title,
             spaceName,
             icon,
+            pageType,
             rect: { top: r.top, left: r.left, right: r.right },
             onOpenPage,
         });

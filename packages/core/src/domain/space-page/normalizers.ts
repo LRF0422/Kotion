@@ -39,6 +39,10 @@ const list = (value: unknown): unknown[] => {
     return Array.isArray(raw.records) ? raw.records : [];
 };
 const optionalString = (value: unknown): string | undefined => value == null ? undefined : String(value);
+export const normalizePageType = (value: unknown): string | undefined => {
+    const normalized = optionalString(value)?.trim();
+    return normalized || undefined;
+};
 const optionalBoolean = (value: unknown): boolean | undefined => value == null ? undefined : Boolean(value);
 const stringList = (value: unknown): string[] | undefined => Array.isArray(value) ? value.map(String) : undefined;
 
@@ -95,6 +99,7 @@ export const normalizePageMetadata = (value: unknown): PageMetadata => {
         spaceId: normalizeOptionalId(raw.spaceId, "page.spaceId"),
         parentId: raw.parentId == null ? null : normalizeNullableId(raw.parentId, "page.parentId"),
         title: String(raw.title ?? raw.name ?? ""),
+        pageType: normalizePageType(raw.pageType),
         name: optionalString(raw.name),
         icon: raw.icon,
         cover: raw.cover,
@@ -206,6 +211,7 @@ export const normalizeInvitation = (value: unknown): CollaborationInvitation => 
         spaceId: normalizeOptionalId(raw.spaceId, "invitation.spaceId"),
         pageId: normalizeOptionalId(raw.pageId, "invitation.pageId"),
         pageTitle: optionalString(raw.pageTitle),
+        pageType: normalizePageType(raw.pageType),
         inviteeId: normalizeOptionalId(raw.inviteeId, "invitation.inviteeId"),
         inviteeName: optionalString(raw.inviteeName), inviteeEmail: optionalString(raw.inviteeEmail),
         inviterId: normalizeOptionalId(raw.inviterId, "invitation.inviterId"), inviterName: optionalString(raw.inviterName),
@@ -244,7 +250,7 @@ export const normalizeShareLink = (value: unknown): ShareLinkInfo => {
 
 export const normalizeSharedPage = (value: unknown): SharedPage => {
     const raw = record(value);
-    return { pageId: normalizeId(raw.pageId, "sharedPage.pageId"), spaceId: normalizeId(raw.spaceId, "sharedPage.spaceId"), title: String(raw.title ?? ""), content: raw.content, document: raw.document, permission: raw.permission ?? "READ", expiresAt: raw.expiresAt, updateTime: raw.updateTime, metadata: raw };
+    return { pageId: normalizeId(raw.pageId, "sharedPage.pageId"), spaceId: normalizeId(raw.spaceId, "sharedPage.spaceId"), title: String(raw.title ?? ""), pageType: normalizePageType(raw.pageType), content: raw.content, document: raw.document, permission: raw.permission ?? "READ", expiresAt: raw.expiresAt, updateTime: raw.updateTime, metadata: raw };
 };
 
 export const normalizeComment = (value: unknown, fallbackPageId?: string): PageComment => {

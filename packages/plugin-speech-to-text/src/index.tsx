@@ -1,8 +1,6 @@
-import React from 'react';
 import { KPlugin, PluginConfig } from '@kn/common';
-import { FileAudio } from '@kn/icon';
 import { SpeechToTextExtension } from './extension';
-import { MeetingMinutesHome } from './pages/MeetingMinutesHome';
+import { meetingMinutesPageType } from './meeting-page-type';
 
 interface SpeechToTextPluginConfig extends PluginConfig { }
 
@@ -12,21 +10,7 @@ export const speechToText = new SpeechToTextPlugin({
     status: 'ACTIVE',
     name: 'Speech to Text',
     editorExtension: [SpeechToTextExtension],
-    routes: [
-        {
-            name: 'meetingMinutes',
-            path: '/meeting-minutes',
-            element: <MeetingMinutesHome />,
-        },
-    ],
-    menus: [
-        {
-            id: '/meeting-minutes',
-            name: 'meetingMinutes.title',
-            key: 'Meeting Minutes',
-            icon: <FileAudio className="h-5 w-5" />,
-        },
-    ],
+    pageTypes: [meetingMinutesPageType],
     locales: {
         zh: {
             translation: {
@@ -42,17 +26,10 @@ export const speechToText = new SpeechToTextPlugin({
                 },
                 meetingMinutes: {
                     title: '会议纪要',
-                    homeDescription: '一个会议对应一个独立页面，录音会自动归档到当前空间。',
-                    newMeeting: '新建会议',
-                    recentMeetings: '最近会议',
-                    noMeetings: '暂无会议',
-                    noMeetingsDescription: '创建会议页面后即可开始录音和记录。',
+                    pageType: '会议纪要',
+                    pageTypeDescription: '新建一个正文仅包含会议纪要组件的页面',
                     untitledMeeting: '未命名会议',
-                    space: '空间',
-                    selectSpaceFirst: '请先选择空间',
-                    recordingFolderHint: '录音将自动保存到此空间的固定会议录音目录。',
-                    createFailed: '创建会议页面失败',
-                    loadFailed: '加载会议纪要失败',
+                    newMeeting: '插入会议纪要',
                     meetingTitle: '会议',
                     today: '今天',
                     notes: '笔记',
@@ -85,6 +62,7 @@ export const speechToText = new SpeechToTextPlugin({
                     chars: '字符',
                     share: '分享',
                     newRecording: '新建录音',
+                    confirmNewRecording: '新建录音会清空当前会议的笔记、摘要、转录和录音引用，是否继续？',
                     saveRecording: '保存录音',
                     howItWorks: '使用方法：',
                     howItWorks1: '点击"开始转录"开始。',
@@ -146,17 +124,10 @@ export const speechToText = new SpeechToTextPlugin({
                 },
                 meetingMinutes: {
                     title: 'Meeting Minutes',
-                    homeDescription: 'Create one page per meeting and archive recordings automatically in the current space.',
-                    newMeeting: 'New meeting',
-                    recentMeetings: 'Recent meetings',
-                    noMeetings: 'No meetings yet',
-                    noMeetingsDescription: 'Create a meeting page to start recording and taking notes.',
+                    pageType: 'Meeting Minutes',
+                    pageTypeDescription: 'Create a page whose body contains only the meeting-minutes component',
                     untitledMeeting: 'Untitled meeting',
-                    space: 'Space',
-                    selectSpaceFirst: 'Please select a space first',
-                    recordingFolderHint: 'Recordings are saved automatically to this space’s fixed meeting folder.',
-                    createFailed: 'Failed to create meeting page',
-                    loadFailed: 'Failed to load meeting minutes',
+                    newMeeting: 'Insert meeting minutes',
                     meetingTitle: 'Meeting',
                     today: 'Today',
                     notes: 'Notes',
@@ -189,6 +160,7 @@ export const speechToText = new SpeechToTextPlugin({
                     chars: 'chars',
                     share: 'Share',
                     newRecording: 'New recording',
+                    confirmNewRecording: 'Starting a new recording clears the current notes, summary, transcript, and recording reference. Continue?',
                     saveRecording: 'Save recording',
                     howItWorks: 'How it works:',
                     howItWorks1: 'Click "Start transcribing" to get started.',

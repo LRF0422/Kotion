@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react"
 import { useNavigator, usePageTabs } from "@kn/common"
 import { cn, useResponsive } from "@kn/ui"
-import { PageEditor } from "./index"
+import { PageHost } from "./PageHost"
 import { TabBar } from "./TabBar"
 
 export interface TabbedEditorAreaProps {
@@ -147,7 +147,7 @@ export const TabbedEditorArea: React.FC<TabbedEditorAreaProps> = ({ spaceId }) =
                                 isActive ? "z-10 opacity-100" : "z-0 opacity-0 pointer-events-none"
                             )}
                         >
-                            <PageEditor pageId={pid} spaceId={spaceId} active={isActive} />
+                            <PageHost pageId={pid} spaceId={spaceId} active={isActive} />
                         </div>
                     )
                 })}

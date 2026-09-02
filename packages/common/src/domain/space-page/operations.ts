@@ -50,6 +50,7 @@ import type {
     SpacePageTemplate,
     UpdateCollaboratorPermissionRequest,
     UpdatePageTagsRequest,
+    UpdatePageTitleRequest,
     UpdateSpaceMemberRoleRequest,
     UpdateSpaceRequest,
     UserSummary,
@@ -88,6 +89,7 @@ export interface PageOperations {
     queryRecentPages(request?: QueryPagesRequest): Promise<PagedResult<PageSummary>>;
     queryFavoritePages(request?: QueryPagesRequest): Promise<PagedResult<PageSummary>>;
     createPage(request: CreatePageRequest): Promise<PageRecord>;
+    updatePageTitle(request: UpdatePageTitleRequest): Promise<void>;
     movePage(request: MovePageRequest): Promise<void>;
     movePageToTrash(pageId: PageId): Promise<void>;
     restorePageFromTrash(pageId: PageId): Promise<void>;

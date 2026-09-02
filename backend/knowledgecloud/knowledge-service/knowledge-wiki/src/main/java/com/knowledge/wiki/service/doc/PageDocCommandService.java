@@ -22,6 +22,7 @@ import com.knowledge.wiki.service.exception.WikiException;
 import com.knowledge.wiki.service.mapper.PageCheckpointMapper;
 import com.knowledge.wiki.service.mapper.PageOpMapper;
 
+import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 
 /**
@@ -60,6 +61,62 @@ public class PageDocCommandService {
         request.setDoc(doc);
         request.setBaseRev(expectedRev);
         return pageOpService.reconcile(pageId, request, actor);
+    }
+
+    /**
+     * Update only the title text in the authoritative PageDoc. Existing title and
+     * heading attrs (including their stable block IDs) remain untouched.
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public ApplyOpsVO updateTitle(Long pageId, String title, Long actor) {
+        String normalizedTitle = title == null ? null : title.trim();
+        if (pageId == null || StrUtil.isBlank(normalizedTitle)) {
+            throw WikiException.INVALID_PARAMETER.newException("页面标题不能为空");
+        }
+
+        PageDocVO current = pageDocService.readDoc(pageId);
+        Map<String, Object> titleNode = null;
+        for (Map<String, Object> node : BlockDocCodec.childrenOf(current.getDoc())) {
+            if (BlockDocCodec.TYPE_TITLE.equals(node.get("type"))) {
+                titleNode = node;
+                break;
+            }
+        }
+        if (titleNode == null) {
+            throw WikiException.CONTENT_PARSE_ERROR.newException("页面缺少标题块");
+        }
+
+        Map<String, Object> textContainer = null;
+        for (Map<String, Object> child : BlockDocCodec.childrenOf(titleNode)) {
+            if ("heading".equals(child.get("type"))) {
+                textContainer = child;
+                break;
+            }
+        }
+        if (textContainer == null) {
+            String headingId = IdUtil.fastSimpleUUID();
+            Map<String, Object> headingAttrs = new LinkedHashMap<>();
+            headingAttrs.put("id", headingId);
+            headingAttrs.put("level", 1);
+            headingAttrs.put("textAlign", null);
+            headingAttrs.put("data-toc-id", headingId);
+
+            textContainer = new LinkedHashMap<>();
+            textContainer.put("type", "heading");
+            textContainer.put("attrs", headingAttrs);
+            List<Map<String, Object>> titleContent = new ArrayList<>();
+            titleContent.add(textContainer);
+            titleNode.put("content", titleContent);
+        }
+
+        Map<String, Object> text = new LinkedHashMap<>();
+        text.put("type", "text");
+        text.put("text", normalizedTitle);
+        List<Map<String, Object>> content = new ArrayList<>();
+        content.add(text);
+        textContainer.put("content", content);
+
+        return reconcileTrusted(pageId, current.getDoc(), actor, current.getRev());
     }
 
     /**

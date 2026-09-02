@@ -37,6 +37,7 @@ import com.knowledge.wiki.service.entity.dto.SaveTemplateDTO;
 import com.knowledge.wiki.service.entity.dto.SpaceDTO;
 import com.knowledge.wiki.service.entity.dto.TemplateDTO;
 import com.knowledge.wiki.service.entity.dto.UpdateBlockDTO;
+import com.knowledge.wiki.service.entity.dto.UpdatePageTitleDTO;
 import com.knowledge.wiki.service.entity.vo.PageBlockDetailVO;
 import com.knowledge.wiki.service.entity.dto.UpdatePermissionRequestDTO;
 import com.knowledge.wiki.service.entity.vo.PageBlockVO;
@@ -192,6 +193,17 @@ public class SpaceController {
     @GetMapping("/page/list")
     public R<IPage<PageVO>> queryPage(QueryPageDTO dto) {
         return R.data(spaceApplication.queryPage(dto));
+    }
+
+    /**
+     * Update a direct-renderer component page title through its authoritative
+     * PageDoc. pageType is opaque to the backend, so every nonblank component type
+     * is accepted; editor-renderer components continue to edit title in PageDoc.
+     */
+    @PutMapping("/page/{pageId}/title")
+    public R<PageVO> updateComponentPageTitle(@PathVariable("pageId") Long pageId,
+            @Valid @RequestBody UpdatePageTitleDTO dto) {
+        return R.data(spaceApplication.updateComponentPageTitle(pageId, dto));
     }
 
     @PutMapping("/page/{id}/restore")

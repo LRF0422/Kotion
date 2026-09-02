@@ -18,6 +18,7 @@ public class InvitedPageVO implements Serializable {
     private Long id;
     private Icon icon;
     private String title;
+    private String pageType;
     private String description;
     private Long spaceId;
     private String spaceName;

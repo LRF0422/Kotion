@@ -1,7 +1,7 @@
 import React from 'react'
 import { Alert, AlertDescription, cn } from '@kn/ui'
 import { AlertCircle } from '@kn/icon'
-import { Space } from '@kn/common'
+import { type ResolvedPageType, Space } from '@kn/common'
 import { SpaceHeader } from './SpaceHeader'
 import { QuickActions } from './QuickActions'
 import { RecentPages } from './RecentPages'
@@ -28,7 +28,7 @@ interface SpaceSidebarProps {
     onFavorite: () => void
     onSearchFocus: () => void
     onSearchChange: (value: string) => void
-    onCreatePage: (parentId?: string) => void
+    onCreatePage: (parentId?: string, pageType?: ResolvedPageType) => void
     onOpenTemplates: () => void
     onMoveToTrash: (pageId: string) => void
     onAddFavorite: (pageId: string) => void
@@ -100,7 +100,7 @@ export const SpaceSidebar: React.FC<SpaceSidebarProps> = ({
 
             {/* Quick Actions */}
             <QuickActions
-                onCreatePage={() => onCreatePage()}
+                onCreatePage={(pageType) => onCreatePage(undefined, pageType)}
                 onOpenTemplates={onOpenTemplates}
                 onImportDocument={onImport}
             />

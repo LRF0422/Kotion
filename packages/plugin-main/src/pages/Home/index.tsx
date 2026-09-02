@@ -1,11 +1,12 @@
 import { Button, Card, CardContent, Dialog, DialogContent, DialogHeader, DialogTitle, Input, Skeleton, Tabs, TabsContent, TabsList, TabsTrigger, cn, useIsMobile } from "@kn/ui";
-import { type BlockSummary, type DateTimeValue, type PageSummary, type Space, useSpacePageService, useNavigator, useSelector, GlobalState, event, TOGGLE_AI_ASSISTANT, useDebounce } from "@kn/common";
+import { type BlockSummary, type DateTimeValue, type PageSummary, type ResolvedPageType, type Space, useSpacePageService, useNavigator, useSelector, GlobalState, event, TOGGLE_AI_ASSISTANT, useDebounce } from "@kn/common";
 import { ArrowRight, BanIcon, Book, Box, FileText, FilePlus, FolderPlus, LayoutGrid, Moon, Network, Plus, SearchIcon, Sparkles, Star, Sun, Sunset, Tag, Users, X, AlignLeft } from "@kn/icon";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { CreateSpaceDlg } from "../components/SpaceForm";
 import { PageItemIcon, type PageIconData } from "../SpaceDetail/components/PageItemIcon";
 import { PagePreviewCard, PagePreviewProvider } from "./PagePreviewCard";
 import { SpaceGraph } from "../SpaceGraph";
+import { CreatePageTypeMenu, createPageByType } from "../../components/CreatePageTypeMenu";
 import { useTranslation } from "@kn/common";
 import { format, parseISO, formatDistanceToNow } from "@kn/ui";
 
@@ -87,7 +88,7 @@ export const Home: React.FC = () => {
     const [currentHour, setCurrentHour] = useState(new Date().getHours())
     const navigator = useNavigator()
     const service = useSpacePageService()
-    const { t } = useTranslation()
+    const { t, i18n } = useTranslation()
     const { userInfo } = useSelector((state: GlobalState) => state)
 
     // Search + tag-filter state for the tab sections. Space/page queries are
@@ -302,16 +303,19 @@ export const Home: React.FC = () => {
     }, [])
 
     // Create a fresh page in the user's personal space, then open it.
-    const handleNewPage = async () => {
+    const handleNewPage = async (pageType?: ResolvedPageType) => {
         if (creatingPage) return
         setCreatingPage(true)
         try {
             const personal = await service.spaces.getPersonalSpace()
             const spaceId = personal.id
-            const page = await service.pages.createPage({
+            const page = await createPageByType({
+                service,
                 spaceId,
                 parentId: "0",
-                title: "Untitled",
+                pageType,
+                locale: i18n?.language,
+                translate: (key, fallback) => t(key, fallback),
             })
             navigator.go({ to: `/space-detail/${spaceId}/page/edit/${page.id}` })
         } catch (err) {
@@ -428,16 +432,18 @@ export const Home: React.FC = () => {
                         isMobile ? "flex-row" : "flex-wrap",
                         !isMobile && "-ml-2.5"
                     )}>
-                        <QuickAction
-                            icon={creatingPage
-                                ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                                : <FilePlus className="h-4 w-4" />}
-                            label={t("home.new-page") || "New Page"}
-                            hue={245}
-                            onClick={handleNewPage}
-                            loading={creatingPage}
-                            dataTour="home-new-page"
-                        />
+                        <CreatePageTypeMenu onCreate={handleNewPage} disabled={creatingPage}>
+                            <span className={cn(isMobile && "flex flex-1")} data-tour="home-new-page">
+                                <QuickAction
+                                    icon={creatingPage
+                                        ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                                        : <FilePlus className="h-4 w-4" />}
+                                    label={t("home.new-page") || "New Page"}
+                                    hue={245}
+                                    loading={creatingPage}
+                                />
+                            </span>
+                        </CreatePageTypeMenu>
                         <CreateSpaceDlg
                             trigger={
                                 // Wrapper must mirror the other direct flex children so all
@@ -700,6 +706,7 @@ export const Home: React.FC = () => {
                                                     title={page.title}
                                                     spaceName={page.spaceName}
                                                     icon={page.icon}
+                                                    pageType={page.pageType}
                                                     disabled={isMobile}
                                                     onOpenPage={() => navigator.go({ to: `/space-detail/${page.spaceId}/page/edit/${page.id}` })}
                                                 >
@@ -798,6 +805,7 @@ export const Home: React.FC = () => {
                                                     title={data.title}
                                                     spaceName={data.spaceName}
                                                     icon={data.icon}
+                                                    pageType={data.pageType}
                                                     disabled={isMobile}
                                                     onOpenPage={() => navigator.go({ to: `/space-detail/${data.spaceId}/page/edit/${data.id}` })}
                                                 >

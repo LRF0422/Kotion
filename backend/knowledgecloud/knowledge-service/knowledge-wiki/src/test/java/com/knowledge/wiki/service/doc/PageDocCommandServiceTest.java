@@ -1,7 +1,9 @@
 package com.knowledge.wiki.service.doc;
 
 import static com.knowledge.wiki.service.doc.BlockDocCodecTest.doc;
+import static com.knowledge.wiki.service.doc.BlockDocCodecTest.node;
 import static com.knowledge.wiki.service.doc.BlockDocCodecTest.paragraph;
+import static com.knowledge.wiki.service.doc.BlockDocCodecTest.text;
 import static com.knowledge.wiki.service.doc.BlockDocCodecTest.titleNode;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
@@ -10,6 +12,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -44,6 +47,60 @@ class PageDocCommandServiceTest {
 
     @InjectMocks
     private PageDocCommandService service;
+
+    @Test
+    void updatesTitleThroughReconcileWithoutChangingBlockIdsOrAttrs() {
+        Map<String, Object> heading = node("heading", "heading-id", Arrays.asList(text("Old title")));
+        BlockDocCodecTest.attrsOf(heading).put("level", 1);
+        BlockDocCodecTest.attrsOf(heading).put("data-toc-id", "heading-id");
+        Map<String, Object> title = node("title", "title-id", Arrays.asList(heading));
+        BlockDocCodecTest.attrsOf(title).put("icon", "keep-me");
+        Map<String, Object> source = doc(Arrays.asList(title, paragraph("body-id", "Body")));
+        Map<String, Object> expectedTitleAttrs = new LinkedHashMap<>(BlockDocCodecTest.attrsOf(title));
+        Map<String, Object> expectedHeadingAttrs = new LinkedHashMap<>(BlockDocCodecTest.attrsOf(heading));
+        PageDocVO current = new PageDocVO();
+        current.setRev(7L);
+        current.setDoc(source);
+        ApplyOpsVO applied = new ApplyOpsVO();
+        applied.setRev(8L);
+        when(pageDocService.readDoc(9L)).thenReturn(current);
+        when(pageOpService.reconcile(eq(9L), any(ReconcileDTO.class), eq(42L))).thenReturn(applied);
+
+        ApplyOpsVO result = service.updateTitle(9L, "  New title  ", 42L);
+
+        ArgumentCaptor<ReconcileDTO> request = ArgumentCaptor.forClass(ReconcileDTO.class);
+        verify(pageOpService).reconcile(eq(9L), request.capture(), eq(42L));
+        Map<String, Object> updatedTitle = BlockDocCodec.childrenOf(request.getValue().getDoc()).get(0);
+        Map<String, Object> updatedHeading = BlockDocCodec.childrenOf(updatedTitle).get(0);
+        assertEquals(expectedTitleAttrs, BlockDocCodecTest.attrsOf(updatedTitle));
+        assertEquals(expectedHeadingAttrs, BlockDocCodecTest.attrsOf(updatedHeading));
+        assertEquals("New title", BlockDocCodec.extractText(updatedHeading));
+        assertEquals("Body", BlockDocCodec.extractText(BlockDocCodec.childrenOf(request.getValue().getDoc()).get(1)));
+        assertEquals(7L, request.getValue().getBaseRev());
+        assertEquals(8L, result.getRev());
+    }
+
+    @Test
+    void repairsMissingHeadingWhenUpdatingTitle() {
+        Map<String, Object> title = node("title", "title-id", new ArrayList<Map<String, Object>>());
+        Map<String, Object> source = doc(Arrays.asList(title, paragraph("body-id", "Body")));
+        PageDocVO current = new PageDocVO();
+        current.setRev(3L);
+        current.setDoc(source);
+        when(pageDocService.readDoc(9L)).thenReturn(current);
+        when(pageOpService.reconcile(eq(9L), any(ReconcileDTO.class), eq(42L))).thenReturn(new ApplyOpsVO());
+
+        service.updateTitle(9L, "Repaired title", 42L);
+
+        ArgumentCaptor<ReconcileDTO> request = ArgumentCaptor.forClass(ReconcileDTO.class);
+        verify(pageOpService).reconcile(eq(9L), request.capture(), eq(42L));
+        Map<String, Object> updatedTitle = BlockDocCodec.childrenOf(request.getValue().getDoc()).get(0);
+        Map<String, Object> heading = BlockDocCodec.childrenOf(updatedTitle).get(0);
+        assertEquals("heading", heading.get("type"));
+        assertEquals("Repaired title", BlockDocCodec.extractText(heading));
+        assertEquals(1, BlockDocCodecTest.attrsOf(heading).get("level"));
+        assertEquals(BlockDocCodecTest.attrsOf(heading).get("id"), BlockDocCodecTest.attrsOf(heading).get("data-toc-id"));
+    }
 
     @Test
     void materializesFromNearestCheckpointAndOnlyLaterOps() {

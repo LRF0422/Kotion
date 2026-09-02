@@ -81,6 +81,7 @@ CREATE TABLE `wiki_page`
     `tenant_id`   varchar(100) NULL DEFAULT NULL COMMENT '租户id',
     `parent_id`   bigint(20)   NULL DEFAULT NULL COMMENT '父页面id',
     `title`       varchar(100) NOT NULL COMMENT '页面标题',
+    `page_type`   varchar(191) NULL DEFAULT NULL COMMENT '页面组件类型（不透明标识）',
     `description` varchar(255) NULL DEFAULT NULL COMMENT '页面描述',
     `ancestors`   text         NULL DEFAULT NULL COMMENT '祖先',
     PRIMARY KEY (`id`) USING BTREE

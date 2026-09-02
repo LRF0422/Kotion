@@ -1,10 +1,11 @@
 import React, { useCallback, useMemo, useState } from 'react'
 import { Button, Input, TreeView, cn } from '@kn/ui'
 import { Plus, MoreHorizontal, Star, Trash2, Package, Link, AppWindow, LocateFixed } from '@kn/icon'
-import { type PageTreeNode, useTranslation, PageEditWindow } from '@kn/common'
+import { type PageTreeNode, type ResolvedPageType, useTranslation, PageEditWindow } from '@kn/common'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@kn/ui'
 import { SiderMenuItemProps } from '../../../pages/components/SiderMenu'
 import { PageItemIcon } from './PageItemIcon'
+import { CreatePageTypeMenu } from '../../../components/CreatePageTypeMenu'
 
 interface PageTreeSectionProps {
     spaceId: string
@@ -13,7 +14,7 @@ interface PageTreeSectionProps {
     searchValue?: string
     selectedPageId?: string
     onSearchChange: (value: string) => void
-    onCreatePage: (parentId?: string) => void
+    onCreatePage: (parentId?: string, pageType?: ResolvedPageType) => void
     onMoveToTrash: (pageId: string) => void
     onAddFavorite: (pageId: string) => void
     onPageClick: (pageId: string) => void
@@ -80,18 +81,20 @@ export const PageTreeSection: React.FC<PageTreeSectionProps> = ({
                     )}
                 </div>
                 <div className="absolute right-0 left-auto flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-50 bg-muted">
-                    <Button
-                        size="sm"
-                        className="h-5 w-5 sm:h-6 sm:w-6 p-0"
-                        variant="ghost"
-                        onClick={(e) => {
-                            e.stopPropagation()
-                            onCreatePage(treeNode.id)
-                        }}
-                        title="Add subpage"
+                    <CreatePageTypeMenu
+                        side="right"
+                        onCreate={(pageType) => onCreatePage(treeNode.id, pageType)}
                     >
-                        <Plus className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                    </Button>
+                        <Button
+                            size="sm"
+                            className="h-5 w-5 sm:h-6 sm:w-6 p-0"
+                            variant="ghost"
+                            onClick={(event) => event.stopPropagation()}
+                            title="Add subpage"
+                        >
+                            <Plus className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
+                        </Button>
+                    </CreatePageTypeMenu>
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button
@@ -116,7 +119,7 @@ export const PageTreeSection: React.FC<PageTreeSectionProps> = ({
                             >
                                 <Star className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> {t('favorites.add') || 'Add to favorites'}
                             </DropdownMenuItem>
-                            <DropdownMenuItem
+                            {!treeNode.pageType && <DropdownMenuItem
                                 className="flex flex-row gap-2 text-xs sm:text-sm"
                                 onClick={(e) => {
                                     e.stopPropagation()
@@ -124,7 +127,7 @@ export const PageTreeSection: React.FC<PageTreeSectionProps> = ({
                                 }}
                             >
                                 <AppWindow className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> {t('page.editInWindow') || 'Edit in window'}
-                            </DropdownMenuItem>
+                            </DropdownMenuItem>}
                             <DropdownMenuItem
                                 className="flex flex-row gap-2 text-xs sm:text-sm"
                                 onClick={(e) => {
@@ -197,15 +200,16 @@ export const PageTreeSection: React.FC<PageTreeSectionProps> = ({
                     >
                         <LocateFixed className="h-3 w-3" />
                     </Button>
-                    <Button
-                        className="h-5 w-5 p-0"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => onCreatePage()}
-                        title={t('page.create') || 'New page'}
-                    >
-                        <Plus className="h-3 w-3" />
-                    </Button>
+                    <CreatePageTypeMenu align="end" onCreate={(pageType) => onCreatePage(undefined, pageType)}>
+                        <Button
+                            className="h-5 w-5 p-0"
+                            variant="ghost"
+                            size="icon"
+                            title={t('page.create') || 'New page'}
+                        >
+                            <Plus className="h-3 w-3" />
+                        </Button>
+                    </CreatePageTypeMenu>
                 </div>
             </div>
 
@@ -228,10 +232,12 @@ export const PageTreeSection: React.FC<PageTreeSectionProps> = ({
                         <p className="text-xs text-muted-foreground mb-2">
                             {t('pages.empty') || 'No pages yet'}
                         </p>
-                        <Button size="sm" onClick={() => onCreatePage()} className="h-7 text-xs">
-                            <Plus className="h-3 w-3 mr-1" />
-                            {t('page.create') || 'Create Page'}
-                        </Button>
+                        <CreatePageTypeMenu onCreate={(pageType) => onCreatePage(undefined, pageType)}>
+                            <Button size="sm" className="h-7 text-xs">
+                                <Plus className="h-3 w-3 mr-1" />
+                                {t('page.create') || 'Create Page'}
+                            </Button>
+                        </CreatePageTypeMenu>
                     </div>
                 ) : null}
             </div>

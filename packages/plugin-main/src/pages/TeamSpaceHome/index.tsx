@@ -10,15 +10,16 @@ import {
 } from "@kn/icon";
 import {
     useSpacePageService, useNavigator, useTranslation, useSafeState, useParams,
-    type Space, type SpaceMember, type PageSummary
+    type Space, type SpaceMember, type PageSummary, type ResolvedPageType
 } from "@kn/common";
 import { ActivityFeed } from "../SpaceDetail/ActivityFeed";
 import { PageItemIcon } from "../SpaceDetail/components/PageItemIcon";
+import { CreatePageTypeMenu, createPageByType } from "../../components/CreatePageTypeMenu";
 
 const getIcon = (icon: unknown) => icon as any
 
-export const TeamSpaceHome: React.FC<{ space?: Space; spaceId?: string; onCreatePage?: () => void; onNavigateSettings?: () => void }> = (props) => {
-    const { t } = useTranslation()
+export const TeamSpaceHome: React.FC<{ space?: Space; spaceId?: string; onCreatePage?: (pageType?: ResolvedPageType) => void; onNavigateSettings?: () => void }> = (props) => {
+    const { t, i18n } = useTranslation()
     const navigator = useNavigator()
     const params = useParams()
     const spacePageService = useSpacePageService()
@@ -90,21 +91,27 @@ export const TeamSpaceHome: React.FC<{ space?: Space; spaceId?: string; onCreate
         }
     }, [navigator, spaceId, props.onNavigateSettings])
 
-    const onCreatePage = useCallback(() => {
+    const onCreatePage = useCallback((pageType?: ResolvedPageType) => {
         if (props.onCreatePage) {
-            props.onCreatePage()
+            props.onCreatePage(pageType)
         } else {
             // Default: create a page in this space
             if (!spaceId) return
-            spacePageService.pages.createPage({
+            createPageByType({
+                service: spacePageService,
                 spaceId: String(spaceId),
                 parentId: "0",
-                title: "Untitled",
+                pageType,
+                locale: i18n?.language,
+                translate: (key, fallback) => t(key, fallback),
             }).then(page => {
                 if (page.id) navigator.go({ to: `/space-detail/${spaceId}/page/edit/${page.id}` })
+            }).catch((error) => {
+                console.error('Failed to create team-space page:', error)
+                toast.error(t('page.createFailed', 'Failed to create page'))
             })
         }
-    }, [spaceId, navigator, props.onCreatePage, spacePageService])
+    }, [spaceId, navigator, props.onCreatePage, spacePageService, t, i18n?.language])
 
     const handlePageClick = useCallback((pageId: string) => {
         navigator.go({ to: `/space-detail/${spaceId}/page/edit/${pageId}` })
@@ -159,10 +166,12 @@ export const TeamSpaceHome: React.FC<{ space?: Space; spaceId?: string; onCreate
 
                 {/* Quick Actions */}
                 <div className="flex items-center gap-3">
-                    <Button size="sm" onClick={onCreatePage} className="gap-1.5">
-                        <Plus className="h-4 w-4" />
-                        {t('teamSpace.newPage', 'New Page')}
-                    </Button>
+                    <CreatePageTypeMenu onCreate={onCreatePage}>
+                        <Button size="sm" className="gap-1.5">
+                            <Plus className="h-4 w-4" />
+                            {t('teamSpace.newPage', 'New Page')}
+                        </Button>
+                    </CreatePageTypeMenu>
                     <Button variant="outline" size="sm" onClick={handleNavigateMembers} className="gap-1.5">
                         <UserPlus className="h-4 w-4" />
                         {t('teamSpace.inviteMember', 'Invite Member')}
@@ -344,10 +353,12 @@ export const TeamSpaceHome: React.FC<{ space?: Space; spaceId?: string; onCreate
                                                 <p className="text-sm text-muted-foreground">
                                                     {t('teamSpace.noPages', 'No pages yet. Create your first page!')}
                                                 </p>
-                                                <Button variant="outline" size="sm" onClick={onCreatePage} className="mt-3">
-                                                    <Plus className="h-3.5 w-3.5 mr-1" />
-                                                    {t('teamSpace.createFirst', 'Create Page')}
-                                                </Button>
+                                                <CreatePageTypeMenu onCreate={onCreatePage}>
+                                                    <Button variant="outline" size="sm" className="mt-3">
+                                                        <Plus className="h-3.5 w-3.5 mr-1" />
+                                                        {t('teamSpace.createFirst', 'Create Page')}
+                                                    </Button>
+                                                </CreatePageTypeMenu>
                                             </div>
                                         )}
                                     </CardContent>

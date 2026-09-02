@@ -102,7 +102,7 @@ export interface PagePreviewPaneProps {
 }
 
 export const PagePreviewPane: React.FC<PagePreviewPaneProps> = ({ pageId, className }) => {
-    const { t } = useI18n();
+    const { t, lang } = useI18n();
     const fileService = useOptionalService('fileService') as FileService | undefined;
     const { pageInfo, loading, error } = usePageInfo(pageId);
 
@@ -151,7 +151,14 @@ export const PagePreviewPane: React.FC<PagePreviewPaneProps> = ({ pageId, classN
             </div>
             {/* Body: read-only editor clamped in height with a bottom fade */}
             <div className="relative min-h-0 flex-1 overflow-hidden px-4 py-3">
-                {error ? (
+                {pageInfo?.pageType ? (
+                    <div className="py-5 text-center">
+                        <p className="text-sm font-medium">{lang === 'zh' ? '自定义页面' : 'Custom page'}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                            {lang === 'zh' ? '打开完整页面以查看插件内容' : 'Open the full page to view its plugin content'}
+                        </p>
+                    </div>
+                ) : error ? (
                     <p className="py-4 text-center text-xs text-muted-foreground">
                         {t('bidirectionalLink.loadFailed')}
                     </p>
