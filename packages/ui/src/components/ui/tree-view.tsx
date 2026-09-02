@@ -115,7 +115,7 @@ export const TreeView = memo(({
                 onTreeSelected={onTreeSelected}
                 size={size}
                 locateTarget={locateTarget}
-                className="w-full h-full"
+                className="h-full w-full min-w-0 overflow-hidden"
             >
                 {treeItems}
             </Tree>
@@ -146,7 +146,7 @@ export const TreeItem = memo(forwardRef<
         if (!elements) return null;
 
         return elements.map((element: TreeViewElement) => (
-            <li key={element.id} className={element.isGroup ? element.className : "w-full block"}>
+            <li key={element.id} className={element.isGroup ? element.className : "block w-full min-w-0 overflow-hidden"}>
                 {element.children && element.children?.length > 0 ? (
                     element.isGroup ? <TreeItemGroup name={element.name} key={element.id} actions={element.actions} height={element.height} className={element.className}>
                         <TreeItem
@@ -191,14 +191,19 @@ export const TreeItem = memo(forwardRef<
                                 isSelectable={element.isSelectable}
                                 onClick={element.onClick}
                             >
-                                <span className="flex-1 text-left truncate">{element?.name}</span>
+                                <span
+                                    className="w-0 min-w-0 flex-1 truncate text-left"
+                                    title={typeof element?.name === "string" ? element.name : undefined}
+                                >
+                                    {element?.name}
+                                </span>
                             </File>
                 )}
             </li>
         ));
     }, [elements, indicator]);
 
-    return (<ul ref={ref} className="w-full space-y-1 flex flex-col" {...props}>
+    return (<ul ref={ref} className="flex w-full min-w-0 flex-col space-y-1 overflow-hidden" {...props}>
         {renderedElements}
     </ul>
     );

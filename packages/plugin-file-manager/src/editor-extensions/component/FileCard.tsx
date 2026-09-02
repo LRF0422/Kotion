@@ -102,13 +102,6 @@ export const FileCard: React.FC<FileItem> = React.memo((props) => {
                         triggerClassName="h-6 w-6 rounded-md bg-background/80 shadow-sm hover:bg-background opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100"
                     />
                 </div>
-
-                {/* 收藏角标(常驻) */}
-                {isFavorite && !isTrash && (
-                    <div className="absolute bottom-1.5 right-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-background/90 shadow-sm">
-                        <StarIcon className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                    </div>
-                )}
             </div>
 
             {/* 文件名 + 元信息 */}

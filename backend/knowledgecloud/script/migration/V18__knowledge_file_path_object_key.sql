@@ -16,8 +16,8 @@ BEGIN
     DECLARE invalid_count BIGINT DEFAULT 0;
     DECLARE empty_key_count BIGINT DEFAULT 0;
 
-    SET configured_endpoint = TRIM(TRAILING '/' FROM TRIM('${ossEndpoint}'));
-    SET configured_bucket = TRIM(BOTH '/' FROM TRIM('${ossBucket}'));
+    SET configured_endpoint = TRIM(TRAILING '/' FROM TRIM('http://192.168.3.43:9000'));
+    SET configured_bucket = TRIM(BOTH '/' FROM TRIM('knowledge'));
 
     IF configured_endpoint = '' OR configured_bucket = '' THEN
         SIGNAL SQLSTATE '45000'

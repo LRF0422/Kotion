@@ -1,5 +1,5 @@
 import React from "react";
-import { Button, cn, ScrollArea, TreeView, Skeleton } from "@kn/ui";
+import { Button, cn, TreeView, Skeleton } from "@kn/ui";
 import { HomeIcon, ClockIcon, StarIcon, Trash2 } from "@kn/icon";
 import type { FileView } from "./FileContext";
 import { useI18n } from "../../i18n/use-i18n";
@@ -79,7 +79,7 @@ export const FileSidebar: React.FC<FileSidebarProps> = ({
             </div>
 
             <SectionLabel>{t('sidebar.folders')}</SectionLabel>
-            <ScrollArea className="flex-1 min-h-0 px-1">
+            <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-1">
                 {loading ? (
                     <div className="space-y-1 p-2">
                         <Skeleton className="h-7 w-full" />
@@ -100,7 +100,7 @@ export const FileSidebar: React.FC<FileSidebarProps> = ({
                         onTreeSelected={() => onAfterNavigate?.()}
                     />
                 )}
-            </ScrollArea>
+            </div>
         </div>
     );
 };

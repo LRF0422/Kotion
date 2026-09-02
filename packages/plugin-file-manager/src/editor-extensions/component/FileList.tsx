@@ -69,9 +69,6 @@ const FileListRow: React.FC<FileItem> = React.memo((props) => {
             <div className="flex min-w-0 flex-1 items-center gap-2.5">
                 <FileThumb file={props} size={24} />
                 <span className="truncate text-sm" title={name}>{name}</span>
-                {isFavorite && !isTrash && (
-                    <StarIcon className="h-3.5 w-3.5 flex-shrink-0 fill-yellow-400 text-yellow-400" />
-                )}
             </div>
 
             <div className="w-20 flex-shrink-0 text-xs text-muted-foreground">

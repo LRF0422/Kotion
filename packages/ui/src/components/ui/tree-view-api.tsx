@@ -348,11 +348,11 @@ const Folder = memo(forwardRef<
             <AccordionPrimitive.Item
                 {...props}
                 value={value}
-                className="relative overflow-hidden h-full"
+                className="relative h-full w-full min-w-0 overflow-hidden"
             >
                 {
                     selectParent ? <div data-tree-item-id={value} className={cn(
-                        `flex items-center gap-2 text-base rounded-md w-full`,
+                        `flex w-full min-w-0 items-center gap-2 overflow-hidden rounded-md text-base`,
                         getSize(size),
                         className,
                         {
@@ -362,7 +362,7 @@ const Folder = memo(forwardRef<
                         },
                         " hover:bg-muted",
                     )}>
-                        <span className="w-full truncate flex flex-row items-center gap-3 px-1 py-1" onClick={handleClick}>
+                        <span className="flex w-full min-w-0 flex-row items-center gap-3 overflow-hidden px-1 py-1" onClick={handleClick}>
                             <AccordionPrimitive.Trigger
                                 disabled={!isSelectable}
                                 onClick={handleExpandClick}
@@ -373,16 +373,21 @@ const Folder = memo(forwardRef<
                                         : closeIcon ?? <ChevronRight className="h-4 w-4" />}
                                 </div>
                             </AccordionPrimitive.Trigger>
-                            <div className="flex items-center gap-2 flex-1 truncate">
+                            <div className="flex w-0 min-w-0 flex-1 items-center gap-2 overflow-hidden">
                                 {icon}
-                                {element}
+                                <span
+                                    className="w-0 min-w-0 flex-1 truncate"
+                                    title={typeof element === "string" ? element : undefined}
+                                >
+                                    {element}
+                                </span>
                             </div>
                         </span>
                     </div> : (
                         <AccordionPrimitive.Trigger
                             data-tree-item-id={value}
                             className={cn(
-                                `flex items-center gap-1 text-base rounded-md w-full px-1 py-1 relative`,
+                                `relative flex w-full min-w-0 items-center gap-1 overflow-hidden rounded-md px-1 py-1 text-base`,
                                 getSize(size),
                                 className,
                                 {
@@ -399,7 +404,15 @@ const Folder = memo(forwardRef<
                                 // onTreeSelected && onTreeSelected(value)
                             }}
                         >
-                            <span className="flex flex-row items-center gap-3 flex-1 truncate">{icon}{element}</span>
+                            <span className="flex w-0 min-w-0 flex-1 flex-row items-center gap-3 overflow-hidden">
+                                {icon}
+                                <span
+                                    className="w-0 min-w-0 flex-1 truncate"
+                                    title={typeof element === "string" ? element : undefined}
+                                >
+                                    {element}
+                                </span>
+                            </span>
                             <div className="flex-shrink-0">
                                 {isExpanded
                                     ? openIcon ?? <ChevronDown className="h-4 w-4" />
@@ -413,7 +426,7 @@ const Folder = memo(forwardRef<
                     <AccordionPrimitive.Root
                         dir={direction}
                         type="multiple"
-                        className="flex flex-col gap-1 py-1 ml-5 rtl:mr-5 "
+                        className="ml-5 flex min-w-0 flex-col gap-1 overflow-hidden py-1 rtl:mr-5"
                         defaultValue={expendedItems}
                         value={expendedItems}
                         onValueChange={(value) => {
@@ -475,7 +488,7 @@ const File = memo(forwardRef<
         }, [onClick, selectItem, value, onTreeSelected]);
 
         return (
-            <AccordionPrimitive.Item value={value} className="relative">
+            <AccordionPrimitive.Item value={value} className="relative w-full min-w-0 overflow-hidden">
                 <AccordionPrimitive.Trigger
                     ref={ref}
                     // {...props}
@@ -484,7 +497,7 @@ const File = memo(forwardRef<
                     disabled={!isSelectable}
                     aria-label="File"
                     className={cn(
-                        "flex items-center gap-2 cursor-pointer rtl:pl-1 rtl:pr-0 rounded-md duration-200 ease-in-out w-full py-1 px-1",
+                        "flex w-full min-w-0 items-center gap-2 overflow-hidden rounded-md px-1 py-1 duration-200 ease-in-out rtl:pl-1 rtl:pr-0",
                         getSize(size),
                         {
                             "bg-muted": isSelected && isSelectable,

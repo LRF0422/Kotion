@@ -9,7 +9,7 @@ import {
     DialogTitle,
     DialogDescription,
 } from "@kn/ui"
-import { FolderOpenIcon } from "@kn/icon"
+import { FileIcon, FileTextIcon, FolderOpenIcon } from "@kn/icon"
 import { ViewMode } from "../component/FileContext"
 import { useI18n } from "../../i18n/use-i18n"
 
@@ -40,7 +40,13 @@ export const FolderView: React.FC<NodeViewProps> = (props) => {
     }, [])
 
     return (
-        <NodeViewWrapper as="div" className="rounded-lg w-full my-2">
+        <NodeViewWrapper
+            as="div"
+            className={attrs.folderId
+                ? "not-prose my-2 w-full rounded-lg"
+                : "not-prose w-full rounded-xl"
+            }
+        >
             {attrs.folderId ? (
                 <FileManagerView
                     folderId={attrs.folderId}
@@ -52,9 +58,9 @@ export const FolderView: React.FC<NodeViewProps> = (props) => {
             ) : (
                 <EmptyState
                     title={t('folderView.noFolderSelected')}
-                    className="w-full max-w-none rounded-lg border-2"
+                    className="flex min-h-[220px] w-full max-w-none flex-col items-center justify-center rounded-xl border border-dashed border-border/60 bg-card/50 p-6 transition-all duration-200 hover:border-border hover:bg-muted/20 hover:shadow-sm sm:min-h-[250px] sm:p-10 [&>div:first-child>div]:bg-background/90 [&>div:first-child>div]:shadow-sm [&>div:first-child>div]:ring-border/70 [&>h2]:mt-5 [&>h2]:text-[15px] [&>h2]:font-semibold [&>h2]:leading-6 [&>p]:mx-auto [&>p]:mt-1.5 [&>p]:max-w-md [&>p]:text-[13px] [&>p]:leading-5 [&>button]:mt-5 [&>button]:h-11 [&>button]:rounded-lg [&>button]:bg-background/80 [&>button]:px-5 sm:[&>button]:h-10"
                     description={t('folderView.selectFolderDescription')}
-                    icons={[FolderOpenIcon]}
+                    icons={[FileIcon, FolderOpenIcon, FileTextIcon]}
                     action={editor.isEditable ? {
                         label: t('folderView.selectFolder'),
                         onClick: handleOpenSelector,
