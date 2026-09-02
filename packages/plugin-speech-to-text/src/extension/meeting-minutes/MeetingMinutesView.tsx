@@ -1,15 +1,36 @@
 import { NodeViewProps, NodeViewWrapper, NodeViewContent, Node as PMNode, PageContext } from "@kn/editor";
 import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
 import {
+    DEFAULT_MODEL,
+    fetchModels,
     streamKnowledgeText,
     useOptionalFileService,
     usePluginConfig,
     useTranslation,
+    type ModelInfo,
 } from "@kn/common";
-import { Calendar, Popover, PopoverContent, PopoverTrigger, cn, format, toast } from "@kn/ui";
 import {
+    Button,
+    Calendar,
+    ConfirmDialog,
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+    Slider,
+    cn,
+    format,
+    toast,
+} from "@kn/ui";
+import {
+    CalendarDays,
     Check,
     ChevronDown,
+    Cpu,
     Download,
     FileAudio,
     Languages,
@@ -17,6 +38,7 @@ import {
     ListTree,
     Loader2,
     Mic,
+    MoreHorizontal,
     Pause,
     PenLine,
     Play,
@@ -24,9 +46,11 @@ import {
     Share2,
     Sparkles,
     Square,
+    Trash2,
 } from "@kn/icon";
 import { useMeetingRecorder, type MeetingRecordingCapture } from "../../hooks/useMeetingRecorder";
 import { extensionForMeetingAudioMimeType } from "../../hooks/meeting-recorder-core";
+import { RecordingWaveform } from "../components/RecordingWaveform";
 import { AttendeePicker, type Attendee } from "./AttendeePicker";
 import {
     parseStructuredMeetingSummary,
@@ -45,10 +69,13 @@ interface RecordingFolderPreference {
 
 interface MeetingStorageConfig {
     recordingFolders: Record<string, RecordingFolderPreference>;
+    /** Last model picked for summary generation; new meetings inherit it. */
+    summaryModel?: string;
     [key: string]: unknown;
 }
 
 type MeetingTab = "notes" | "summary" | "transcript";
+type ConfirmAction = "newRecording" | "deleteMeeting";
 
 type PersistedRecordingStatus = "idle" | "recording" | "paused" | "captured" | "uploading" | "completed" | "failed";
 
@@ -67,14 +94,6 @@ function injectTabStyles() {
 .meeting-tabs-container[data-active-tab="notes"] [data-tab="notes"],
 .meeting-tabs-container[data-active-tab="summary"] [data-tab="summary"],
 .meeting-tabs-container[data-active-tab="transcript"] [data-tab="transcript"] { display: block; }
-.meeting-notes-placeholder p.is-empty:first-child::before {
-  content: attr(data-placeholder);
-  float: left;
-  height: 0;
-  pointer-events: none;
-  color: hsl(var(--muted-foreground));
-  opacity: 0.6;
-}
 `;
     document.head.appendChild(style);
 }
@@ -88,6 +107,25 @@ const formatDuration = (seconds: number): string => {
     const secs = Math.floor(seconds % 60);
     const base = `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
     return hrs > 0 ? `${hrs.toString().padStart(2, "0")}:${base}` : base;
+};
+
+const parseMeetingDate = (value: unknown): Date => {
+    const fallback = new Date();
+    let date: Date;
+
+    if (value instanceof Date) {
+        date = new Date(value.getTime());
+    } else if (typeof value === "number") {
+        date = new Date(value);
+    } else if (typeof value === "string" && value.trim()) {
+        const trimmed = value.trim();
+        const timestamp = Number(trimmed);
+        date = new Date(Number.isFinite(timestamp) ? timestamp : trimmed);
+    } else {
+        return fallback;
+    }
+
+    return Number.isNaN(date.getTime()) ? fallback : date;
 };
 
 const findTabChild = (
@@ -106,72 +144,220 @@ const findTabChild = (
     return null;
 };
 
-const DatePickerButton: React.FC<{ value: Date; onChange: (date: Date) => void }> = ({ value, onChange }) => (
-    <Popover>
-        <PopoverTrigger asChild>
-            <button type="button" className="flex h-7 items-center rounded-md bg-muted px-2 text-xs font-medium hover:bg-muted/80">
-                {format(value, "MMM d, yyyy")}
-            </button>
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start">
-            <Calendar mode="single" selected={value} onSelect={(date) => date && onChange(date)} initialFocus />
-        </PopoverContent>
-    </Popover>
-);
+const DatePickerButton: React.FC<{ value: Date; onChange: (date: Date) => void; disabled?: boolean }> = ({ value, onChange, disabled }) => {
+    const label = format(value, "MMM d, yyyy");
+    if (disabled) {
+        return (
+            <span className="inline-flex h-8 items-center gap-1.5 text-xs text-muted-foreground">
+                <CalendarDays className="h-3.5 w-3.5" />
+                {label}
+            </span>
+        );
+    }
 
-const AudioPlayer: React.FC<{ audioUrl: string }> = ({ audioUrl }) => {
+    return (
+        <Popover>
+            <PopoverTrigger asChild>
+                <button type="button" className="inline-flex h-11 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:h-8">
+                    <CalendarDays className="h-3.5 w-3.5" />
+                    {label}
+                    <ChevronDown className="h-3 w-3" />
+                </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+                <Calendar mode="single" selected={value} onSelect={(date) => date && onChange(date)} initialFocus />
+            </PopoverContent>
+        </Popover>
+    );
+};
+
+const AudioPlayer: React.FC<{ audioUrl: string; mimeType?: string; fallbackDuration?: number }> = ({ audioUrl, mimeType, fallbackDuration }) => {
+    const { t } = useTranslation();
     const audioRef = useRef<HTMLAudioElement>(null);
     const [playing, setPlaying] = useState(false);
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
+    const [playbackError, setPlaybackError] = useState<string | null>(null);
+    const playbackFailedMessage = t("meetingMinutes.audioPlaybackFailed", "录音播放失败，请检查录音文件是否可访问。");
 
     useEffect(() => {
         const audio = audioRef.current;
         if (!audio) return;
-        const onMetadata = () => setDuration(Number.isFinite(audio.duration) ? audio.duration : 0);
-        const onTime = () => setCurrentTime(audio.currentTime);
-        const onEnded = () => { setPlaying(false); setCurrentTime(0); };
-        audio.addEventListener("loadedmetadata", onMetadata);
-        audio.addEventListener("timeupdate", onTime);
-        audio.addEventListener("ended", onEnded);
-        return () => {
-            audio.removeEventListener("loadedmetadata", onMetadata);
-            audio.removeEventListener("timeupdate", onTime);
-            audio.removeEventListener("ended", onEnded);
+        const fallback = fallbackDuration && Number.isFinite(fallbackDuration) && fallbackDuration > 0 ? fallbackDuration : 0;
+
+        const syncDuration = () => {
+            const value = audio.duration;
+            // MediaRecorder-produced WebM carries no duration in its header, so
+            // the element reports Infinity until the browser has probed the
+            // whole stream; fall back to the recorder's persisted duration.
+            setDuration(Number.isFinite(value) && value > 0 ? value : fallback);
         };
-    }, [audioUrl]);
+        const onTime = () => setCurrentTime(Number.isFinite(audio.currentTime) ? audio.currentTime : 0);
+        const onPlaying = () => { setPlaying(true); setPlaybackError(null); };
+        const onPause = () => setPlaying(false);
+        const onEnded = () => { setPlaying(false); setCurrentTime(0); };
+        const onError = () => {
+            setPlaying(false);
+            setPlaybackError(playbackFailedMessage);
+            console.error("Failed to load meeting recording:", {
+                code: audio.error?.code,
+                message: audio.error?.message,
+                audioUrl,
+                mimeType,
+            });
+        };
+
+        setPlaying(false);
+        setCurrentTime(0);
+        setPlaybackError(null);
+        syncDuration();
+        audio.addEventListener("loadedmetadata", syncDuration);
+        audio.addEventListener("durationchange", syncDuration);
+        audio.addEventListener("timeupdate", onTime);
+        audio.addEventListener("playing", onPlaying);
+        audio.addEventListener("pause", onPause);
+        audio.addEventListener("ended", onEnded);
+        audio.addEventListener("error", onError);
+        audio.load();
+        return () => {
+            audio.removeEventListener("loadedmetadata", syncDuration);
+            audio.removeEventListener("durationchange", syncDuration);
+            audio.removeEventListener("timeupdate", onTime);
+            audio.removeEventListener("playing", onPlaying);
+            audio.removeEventListener("pause", onPause);
+            audio.removeEventListener("ended", onEnded);
+            audio.removeEventListener("error", onError);
+        };
+    }, [audioUrl, fallbackDuration, mimeType, playbackFailedMessage]);
+
+    const handleTogglePlayback = async () => {
+        const audio = audioRef.current;
+        if (!audio) return;
+        if (!audio.paused) {
+            audio.pause();
+            return;
+        }
+
+        setPlaybackError(null);
+        if (audio.ended || (duration > 0 && audio.currentTime >= duration)) audio.currentTime = 0;
+        try {
+            await audio.play();
+        } catch (error) {
+            setPlaying(false);
+            setPlaybackError(playbackFailedMessage);
+            console.error("Failed to play meeting recording:", error);
+            toast.error(playbackFailedMessage);
+        }
+    };
 
     return (
-        <div className="flex items-center gap-2.5">
-            <audio ref={audioRef} src={audioUrl} preload="metadata" />
-            <button
+        <div className="flex min-w-0 items-center gap-2.5" title={playbackError || undefined}>
+            <audio ref={audioRef} preload="metadata">
+                <source src={audioUrl} type={mimeType || undefined} />
+            </audio>
+            <Button
                 type="button"
-                onClick={() => {
-                    const audio = audioRef.current;
-                    if (!audio) return;
-                    if (playing) audio.pause();
-                    else void audio.play();
-                    setPlaying(!playing);
-                }}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
+                size="icon"
+                variant={playbackError ? "destructive" : "default"}
+                onClick={() => void handleTogglePlayback()}
+                aria-label={playing ? t("meetingMinutes.pausePlayback", "暂停播放") : t("meetingMinutes.playRecording", "播放录音")}
+                className="h-11 w-11 shrink-0 rounded-full lg:h-9 lg:w-9"
             >
                 {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="ml-px h-3.5 w-3.5" />}
-            </button>
+            </Button>
             <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">{formatDuration(currentTime)}</span>
-            <input
-                type="range"
+            <Slider
                 min={0}
                 max={duration || 0}
-                value={currentTime}
-                onChange={(event) => {
-                    const next = Number(event.target.value);
+                step={0.1}
+                value={[Math.min(currentTime, duration || 0)]}
+                disabled={!duration}
+                aria-label={t("meetingMinutes.playbackPosition", "录音播放进度")}
+                onValueChange={([next]) => {
                     if (audioRef.current) audioRef.current.currentTime = next;
                     setCurrentTime(next);
                 }}
-                className="h-1 flex-1 cursor-pointer accent-primary"
+                className="min-w-20 flex-1"
             />
             <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">{formatDuration(duration)}</span>
         </div>
+    );
+};
+
+const ModelPickerButton: React.FC<{ value: string; onChange: (model: string) => void }> = ({ value, onChange }) => {
+    const { t } = useTranslation();
+    const m = (key: string, fallback: string) => t(`meetingMinutes.${key}`, fallback);
+    const [open, setOpen] = useState(false);
+    // Lazy model catalog: null = not loaded yet, fetched on first open.
+    const [models, setModels] = useState<ModelInfo[] | null>(null);
+
+    useEffect(() => {
+        if (!open || models !== null) return;
+        let cancelled = false;
+        void fetchModels().then((items) => {
+            if (!cancelled) setModels(items);
+        });
+        return () => { cancelled = true; };
+    }, [open, models]);
+
+    const grouped: Array<[string, ModelInfo[]]> = [];
+    for (const item of models ?? []) {
+        const provider = item.provider || "other";
+        const existing = grouped.find(([key]) => key === provider);
+        if (existing) existing[1].push(item);
+        else grouped.push([provider, [item]]);
+    }
+
+    const unknownSelection = !!value && models !== null && !models.some((item) => item.id === value);
+    const displayLabel = (models ?? []).find((item) => item.id === value)?.name || value || DEFAULT_MODEL;
+
+    return (
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+                <button
+                    type="button"
+                    title={m("model", "模型")}
+                    className="flex h-11 max-w-[150px] items-center gap-1.5 rounded-md px-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground lg:h-8"
+                >
+                    <Cpu className="h-4 w-4 shrink-0" />
+                    <span className="truncate">{displayLabel}</span>
+                </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-56 p-1" align="end">
+                <button type="button" onClick={() => { onChange(""); setOpen(false); }} className="flex h-11 w-full items-center justify-between gap-2 rounded px-2 text-sm hover:bg-muted lg:h-8">
+                    <span className="truncate">{m("defaultModel", "默认模型")} ({DEFAULT_MODEL})</span>
+                    {!value && <Check className="h-3.5 w-3.5 shrink-0" />}
+                </button>
+                {unknownSelection && (
+                    <button type="button" onClick={() => setOpen(false)} className="flex h-11 w-full items-center justify-between gap-2 rounded px-2 text-sm hover:bg-muted lg:h-8">
+                        <span className="truncate">{value}</span>
+                        <Check className="h-3.5 w-3.5 shrink-0" />
+                    </button>
+                )}
+                <div className="max-h-60 overflow-y-auto">
+                    {models === null && (
+                        <div className="flex items-center gap-1.5 px-2 py-1.5 text-xs text-muted-foreground">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            {m("loadingModels", "加载模型中…")}
+                        </div>
+                    )}
+                    {models !== null && models.length === 0 && (
+                        <div className="px-2 py-1.5 text-xs text-muted-foreground">{m("noModels", "暂无可用模型")}</div>
+                    )}
+                    {grouped.map(([provider, providerModels]) => (
+                        <React.Fragment key={provider}>
+                            <div className="px-2 pb-0.5 pt-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">{provider}</div>
+                            {providerModels.map((item) => (
+                                <button key={item.id} type="button" onClick={() => { onChange(item.id); setOpen(false); }} className="flex h-11 w-full items-center justify-between gap-2 rounded px-2 text-sm hover:bg-muted lg:h-8">
+                                    <span className="truncate">{item.name || item.id}</span>
+                                    {value === item.id && <Check className="h-3.5 w-3.5 shrink-0" />}
+                                </button>
+                            ))}
+                        </React.Fragment>
+                    ))}
+                </div>
+            </PopoverContent>
+        </Popover>
     );
 };
 
@@ -191,7 +377,7 @@ Manual notes:\n${notes || "(empty)"}
 Transcript:\n${transcript}
 `.trim();
 
-export const MeetingMinutesView: React.FC<NodeViewProps> = ({ node, editor, updateAttributes, getPos }) => {
+export const MeetingMinutesView: React.FC<NodeViewProps> = ({ node, editor, updateAttributes, getPos, deleteNode }) => {
     const { t } = useTranslation();
     const m = useCallback((key: string, fallback?: string) => t(`meetingMinutes.${key}`, fallback ?? key), [t]);
     const pageInfo = useContext(PageContext);
@@ -206,12 +392,13 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = ({ node, editor, upda
     const [activeTab, setActiveTab] = useState<MeetingTab>(
         node.attrs.activeTab === "summary" || node.attrs.activeTab === "transcript" ? node.attrs.activeTab : "notes",
     );
-    const [meetingDate, setMeetingDate] = useState(() => node.attrs.createdAt ? new Date(node.attrs.createdAt) : new Date());
+    const [meetingDate, setMeetingDate] = useState(() => parseMeetingDate(node.attrs.createdAt));
     const [editingTitle, setEditingTitle] = useState(false);
     const [remoteAudioUrl, setRemoteAudioUrl] = useState<string | null>(null);
     const [pendingCapture, setPendingCapture] = useState<MeetingRecordingCapture | null>(null);
     const [uploading, setUploading] = useState(false);
     const [generatingSummary, setGeneratingSummary] = useState(false);
+    const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
     const titleInputRef = useRef<HTMLInputElement>(null);
     const autoResumeRef = useRef(false);
 
@@ -220,6 +407,14 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = ({ node, editor, upda
     const isEditable = editor.isEditable;
     const audioUrl = recorder.audioUrl || remoteAudioUrl;
     const persistedStatus = (node.attrs.recordingStatus || "idle") as PersistedRecordingStatus;
+    // Per-meeting model takes precedence; the plugin-level preference is the
+    // fallback so newly created meetings inherit the last picked model.
+    const summaryModel = (typeof node.attrs.model === "string" && node.attrs.model.trim()) || config.summaryModel || "";
+
+    const handleModelChange = useCallback((model: string) => {
+        updateAttributes({ model, updatedAt: Date.now() });
+        updateConfig({ summaryModel: model });
+    }, [updateAttributes, updateConfig]);
 
     const parentPosition = useCallback((): number | null => {
         const position = getPos();
@@ -293,8 +488,9 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = ({ node, editor, upda
         updateAttributes({ summaryStatus: "generating", summaryError: null, updatedAt: Date.now() });
 
         try {
+            const streamOptions = { model: summaryModel || undefined };
             let response = "";
-            const { textStream } = streamKnowledgeText(buildSummaryPrompt(notes, transcript, attendees, lang));
+            const { textStream } = streamKnowledgeText(buildSummaryPrompt(notes, transcript, attendees, lang), streamOptions);
             for await (const part of textStream) response += part;
 
             let summary;
@@ -302,7 +498,7 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = ({ node, editor, upda
                 summary = parseStructuredMeetingSummary(response);
             } catch {
                 let repaired = "";
-                const repair = streamKnowledgeText(`Convert the following output into the required meeting-minutes JSON schema. Return JSON only.\n\n${response}`);
+                const repair = streamKnowledgeText(`Convert the following output into the required meeting-minutes JSON schema. Return JSON only.\n\n${response}`, streamOptions);
                 for await (const part of repair.textStream) repaired += part;
                 summary = parseStructuredMeetingSummary(repaired);
             }
@@ -329,7 +525,7 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = ({ node, editor, upda
         } finally {
             setGeneratingSummary(false);
         }
-    }, [generatingSummary, lang, m, node.attrs.attendees, readTabText, replaceTabContent, updateAttributes]);
+    }, [generatingSummary, lang, m, node.attrs.attendees, readTabText, replaceTabContent, summaryModel, updateAttributes]);
 
     const chooseFolder = useCallback(async (): Promise<RecordingFolderPreference | null> => {
         const spaceId = pageInfo.spaceId;
@@ -456,7 +652,6 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = ({ node, editor, upda
     }, [m, pendingCapture, recorder.audioBlob, recorder.duration, recorder.state.mimeType, recorder.state.transcript]);
 
     const handleReset = useCallback(() => {
-        if (!window.confirm(m("confirmNewRecording", "Start a new recording and clear the current meeting content?"))) return;
         recorder.resetRecording();
         setPendingCapture(null);
         setLiveTranscript("");
@@ -499,6 +694,15 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = ({ node, editor, upda
     const meetingTitle = node.attrs.title || m("meetingTitle", "会议");
     const recorderBusy = ["requestingPermission", "recording", "paused", "stopping"].includes(recorder.status);
     const processing = uploading || generatingSummary || recorder.status === "stopping";
+    const deleteDisabled = recorderBusy || processing;
+    const handleDeleteMeeting = useCallback(() => {
+        if (deleteDisabled) return;
+        deleteNode();
+    }, [deleteDisabled, deleteNode]);
+    const handleConfirmAction = useCallback(() => {
+        if (confirmAction === "newRecording") handleReset();
+        if (confirmAction === "deleteMeeting") handleDeleteMeeting();
+    }, [confirmAction, handleDeleteMeeting, handleReset]);
     const hasTranscriptContent = !!readTabText("meetingTabTranscript");
     const completed = persistedStatus === "completed"
         || node.attrs.summaryStatus === "completed"
@@ -512,149 +716,312 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = ({ node, editor, upda
         { key: "summary", label: m("summary", "摘要"), icon: <Sparkles className="h-3.5 w-3.5" /> },
         { key: "transcript", label: m("transcript", "转录"), icon: <ListTree className="h-3.5 w-3.5" /> },
     ];
+    const activeTabNodeType = activeTab === "notes"
+        ? "meetingTabNotes"
+        : activeTab === "summary"
+            ? "meetingTabSummary"
+            : "meetingTabTranscript";
+    const activeTabPlaceholder = activeTab === "notes"
+        ? m("notesPlaceholder", "在此记录会议笔记…")
+        : activeTab === "summary"
+            ? m("summaryPlaceholder", "会议结束后将自动生成摘要、决策和待办事项…")
+            : m("transcriptWillAppear", "会议转录内容将显示在这里…");
+    const activeTabEmpty = !readTabText(activeTabNodeType);
+    const recordingActive = recorder.status === "recording";
+    const statusDuration = recorderBusy ? recorder.duration : Number(node.attrs.duration) || 0;
+    const statusLabel = recorder.status === "requestingPermission"
+        ? m("requestingPermission", "正在请求麦克风权限…")
+        : recorder.status === "recording"
+            ? m("transcribing", "转录中")
+            : recorder.status === "paused"
+                ? m("paused", "已暂停")
+                : recorder.status === "stopping"
+                    ? m("finalizingRecording", "正在结束录音…")
+                    : uploading && generatingSummary
+                        ? m("savingAndSummarizing", "正在保存录音并生成摘要…")
+                        : uploading
+                            ? m("savingRecording", "正在保存录音…")
+                            : generatingSummary
+                                ? m("generatingSummary", "正在生成摘要…")
+                                : recorder.error || node.attrs.recordingError
+                                    ? m("recordingFailed", "录音处理失败")
+                                    : completed || pendingCapture
+                                        ? m("meetingReady", "会议记录已就绪")
+                                        : m("readyToRecord", "准备开始会议记录");
+    const statusProcessing = recorder.status === "requestingPermission" || recorder.status === "stopping" || uploading || generatingSummary;
+    const handleShareMeeting = useCallback(() => {
+        const transcript = readTabText("meetingTabTranscript");
+        void navigator.clipboard.writeText(`# ${meetingTitle}\n\n${transcript}`)
+            .then(() => toast.success(m("copiedToClipboard", "已复制")))
+            .catch(() => toast.error(m("copyFailed", "复制失败")));
+    }, [m, meetingTitle, readTabText]);
 
     return (
-        <NodeViewWrapper as="div" className="my-4 not-prose">
-            <div className="w-full overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-                <div contentEditable={false} suppressContentEditableWarning className="flex items-center gap-2 px-5 pb-2 pt-4">
-                    <DatePickerButton value={meetingDate} onChange={(date) => {
-                        setMeetingDate(date);
-                        updateAttributes({ createdAt: date.getTime(), updatedAt: Date.now() });
-                    }} />
-                    <ChevronDown className="h-3 w-3 text-muted-foreground" />
-                    {editingTitle ? (
-                        <input
-                            ref={titleInputRef}
-                            value={node.attrs.title || ""}
-                            onChange={(event) => updateAttributes({ title: event.target.value, updatedAt: Date.now() })}
-                            onBlur={() => setEditingTitle(false)}
-                            onKeyDown={(event) => event.key === "Enter" && setEditingTitle(false)}
-                            className="min-w-0 flex-1 bg-transparent text-base font-semibold outline-none"
-                            placeholder={m("meetingTitlePlaceholder", "会议标题…")}
-                        />
-                    ) : (
-                        <button type="button" onClick={() => {
-                            if (!isEditable) return;
-                            setEditingTitle(true);
-                            window.setTimeout(() => titleInputRef.current?.focus(), 0);
-                        }} className="min-w-0 flex-1 truncate text-left text-base font-semibold">
-                            {meetingTitle}
-                        </button>
+        <NodeViewWrapper as="div" className="my-4">
+            <div className="w-full overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm transition-shadow duration-200 hover:shadow-md">
+                <div contentEditable={false} suppressContentEditableWarning className="flex items-start gap-3 border-b border-border/60 px-3 py-3 md:px-4">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                        <FileAudio className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                        {editingTitle ? (
+                            <input
+                                ref={titleInputRef}
+                                value={node.attrs.title || ""}
+                                onChange={(event) => updateAttributes({ title: event.target.value, updatedAt: Date.now() })}
+                                onBlur={() => setEditingTitle(false)}
+                                onKeyDown={(event) => event.key === "Enter" && setEditingTitle(false)}
+                                className="h-8 w-full bg-transparent text-base font-semibold outline-none ring-0"
+                                placeholder={m("meetingTitlePlaceholder", "会议标题…")}
+                            />
+                        ) : (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    if (!isEditable) return;
+                                    setEditingTitle(true);
+                                    window.setTimeout(() => titleInputRef.current?.focus(), 0);
+                                }}
+                                className={cn("block h-8 w-full truncate text-left text-base font-semibold", !isEditable && "cursor-default")}
+                            >
+                                {meetingTitle}
+                            </button>
+                        )}
+                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <DatePickerButton
+                                value={meetingDate}
+                                disabled={!isEditable}
+                                onChange={(date) => {
+                                    setMeetingDate(date);
+                                    updateAttributes({ createdAt: date.getTime(), updatedAt: Date.now() });
+                                }}
+                            />
+                            <AttendeePicker
+                                value={attendees}
+                                onChange={(value) => updateAttributes({ attendees: value, updatedAt: Date.now() })}
+                                disabled={!isEditable}
+                            />
+                        </div>
+                    </div>
+
+                    {(isEditable || (pendingCapture && persistedStatus !== "completed")) && (
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-11 w-11 shrink-0 text-muted-foreground lg:h-8 lg:w-8"
+                                    aria-label={m("moreActions", "更多操作")}
+                                >
+                                    <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-52">
+                                {pendingCapture && persistedStatus !== "completed" && (
+                                    <DropdownMenuItem className="h-11 lg:h-8" onSelect={() => handleLocalDownload()}>
+                                        <Download className="h-4 w-4" />
+                                        {m("downloadLocalCopy", "下载本地副本")}
+                                    </DropdownMenuItem>
+                                )}
+                                {isEditable && (
+                                    <>
+                                        <DropdownMenuItem className="h-11 lg:h-8" onSelect={handleShareMeeting}>
+                                            <Share2 className="h-4 w-4" />
+                                            {m("share", "分享")}
+                                        </DropdownMenuItem>
+                                        {(completed || pendingCapture) && (
+                                            <DropdownMenuItem className="h-11 lg:h-8" onSelect={() => setConfirmAction("newRecording")}>
+                                                <RotateCcw className="h-4 w-4" />
+                                                {m("newRecording", "新建录音")}
+                                            </DropdownMenuItem>
+                                        )}
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem
+                                            disabled={deleteDisabled}
+                                            onSelect={() => setConfirmAction("deleteMeeting")}
+                                            className="h-11 text-destructive focus:bg-destructive/10 focus:text-destructive lg:h-8"
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                            {m("deleteMeeting", "删除会议纪要组件")}
+                                        </DropdownMenuItem>
+                                    </>
+                                )}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     )}
                 </div>
 
-                <div contentEditable={false} suppressContentEditableWarning className="px-5 pb-3">
-                    <AttendeePicker value={attendees} onChange={(value) => updateAttributes({ attendees: value, updatedAt: Date.now() })} disabled={!isEditable} />
-                </div>
-
-                <div contentEditable={false} suppressContentEditableWarning className="flex flex-wrap items-center gap-1 border-y border-border/60 bg-muted/20 px-3 py-2">
-                    {tabs.map((tab) => (
-                        <button key={tab.key} type="button" onClick={() => setActiveTab(tab.key)} className={cn(
-                            "inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium transition-colors",
-                            activeTab === tab.key ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                        )}>
-                            {tab.icon}{tab.label}
-                        </button>
-                    ))}
-                    <div className="min-w-4 flex-1" />
-
-                    {recorderBusy && (
-                        <span className="mr-1 inline-flex items-center gap-2 text-xs tabular-nums text-muted-foreground">
-                            <span className={cn("h-2 w-2 rounded-full", recorder.status === "recording" ? "animate-pulse bg-destructive" : "bg-amber-500")} />
-                            {formatDuration(recorder.duration)}
-                        </span>
-                    )}
-
-                    {isEditable && (
-                        <div className="flex items-center gap-1">
-                            <Popover>
-                                <PopoverTrigger asChild>
-                                    <button type="button" className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground" title={m("language", "识别语言")}>
-                                        <Languages className="h-4 w-4" />
-                                    </button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-40 p-1" align="end">
-                                    {LANG_OPTIONS.map((option) => (
-                                        <button key={option.value} type="button" onClick={() => updateAttributes({ lang: option.value })} className="flex w-full items-center justify-between rounded px-2 py-1.5 text-sm hover:bg-muted">
-                                            {option.label}{lang === option.value && <Check className="h-3.5 w-3.5" />}
-                                        </button>
-                                    ))}
-                                </PopoverContent>
-                            </Popover>
-
-                            {recorder.status === "recording" ? (
-                                <>
-                                    <button type="button" onClick={() => recorder.pauseRecording() && updateAttributes({ recordingStatus: "paused" })} className="inline-flex h-8 items-center gap-1 rounded-md bg-muted px-2.5 text-xs"><Pause className="h-3.5 w-3.5" />{m("pause", "暂停")}</button>
-                                    <button type="button" onClick={handleStop} className="inline-flex h-8 items-center gap-1 rounded-md bg-destructive px-2.5 text-xs text-destructive-foreground"><Square className="h-3 w-3" />{m("stop", "停止")}</button>
-                                </>
-                            ) : recorder.status === "paused" ? (
-                                <>
-                                    <button type="button" onClick={() => recorder.resumeRecording() && updateAttributes({ recordingStatus: "recording" })} className="inline-flex h-8 items-center gap-1 rounded-md bg-muted px-2.5 text-xs"><Play className="h-3.5 w-3.5" />{m("resume", "继续")}</button>
-                                    <button type="button" onClick={handleStop} className="inline-flex h-8 items-center gap-1 rounded-md bg-destructive px-2.5 text-xs text-destructive-foreground"><Square className="h-3 w-3" />{m("stop", "停止")}</button>
-                                </>
-                            ) : processing ? (
-                                <span className="inline-flex h-8 items-center gap-1.5 px-2 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" />{m("processing", "处理中…")}</span>
-                            ) : completed || pendingCapture ? (
-                                <>
-                                    {node.attrs.summaryStatus === "failed" && <button type="button" onClick={() => void generateSummary()} className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs text-muted-foreground hover:bg-muted"><Sparkles className="h-3.5 w-3.5" />{m("retrySummary", "重试摘要")}</button>}
-                                    {persistedStatus === "captured" && pendingCapture && <button type="button" onClick={() => void saveCapture(pendingCapture)} className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs text-muted-foreground hover:bg-muted"><FileAudio className="h-3.5 w-3.5" />{m("retrySave", "重试保存")}</button>}
-                                    <button type="button" onClick={handleReset} className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted" title={m("newRecording", "新建录音")}><RotateCcw className="h-3.5 w-3.5" /></button>
-                                    <button type="button" onClick={() => {
-                                        const transcript = readTabText("meetingTabTranscript");
-                                        void navigator.clipboard.writeText(`# ${meetingTitle}\n\n${transcript}`).then(() => toast.success(m("copiedToClipboard", "已复制")));
-                                    }} className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted" title={m("share", "分享")}><Share2 className="h-3.5 w-3.5" /></button>
-                                </>
-                            ) : (
-                                <button type="button" onClick={handleStart} disabled={!recorder.speechSupported || recorder.status === "requestingPermission"} className="inline-flex h-8 items-center gap-1 rounded-md bg-primary px-3 text-xs text-primary-foreground disabled:opacity-50">
-                                    {recorder.status === "requestingPermission" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mic className="h-3.5 w-3.5" />}
-                                    {m("startTranscribing", "开始转录")}
+                <div contentEditable={false} suppressContentEditableWarning className="px-3 pt-3 md:px-4">
+                    <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                        <div role="tablist" aria-label={m("meetingSections", "会议内容")} className="grid w-full grid-cols-3 rounded-lg bg-muted/50 p-1 lg:w-auto lg:min-w-[310px]">
+                            {tabs.map((tab) => (
+                                <button
+                                    key={tab.key}
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={activeTab === tab.key}
+                                    onClick={() => setActiveTab(tab.key)}
+                                    className={cn(
+                                        "inline-flex h-11 items-center justify-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors lg:h-8",
+                                        activeTab === tab.key
+                                            ? "bg-background text-foreground shadow-sm"
+                                            : "text-muted-foreground hover:text-foreground",
+                                    )}
+                                >
+                                    {tab.icon}{tab.label}
                                 </button>
+                            ))}
+                        </div>
+
+                        {isEditable && (
+                            <div className="flex min-w-0 items-center justify-end gap-1">
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button type="button" variant="ghost" size="icon" className="h-11 w-11 text-muted-foreground lg:h-8 lg:w-8" aria-label={m("language", "识别语言")}>
+                                            <Languages className="h-4 w-4" />
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-40 p-1" align="end">
+                                        {LANG_OPTIONS.map((option) => (
+                                            <button key={option.value} type="button" onClick={() => updateAttributes({ lang: option.value })} className="flex h-11 w-full items-center justify-between rounded px-2 text-sm hover:bg-muted lg:h-8">
+                                                {option.label}{lang === option.value && <Check className="h-3.5 w-3.5" />}
+                                            </button>
+                                        ))}
+                                    </PopoverContent>
+                                </Popover>
+                                <ModelPickerButton value={summaryModel} onChange={handleModelChange} />
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div contentEditable={false} suppressContentEditableWarning className="mx-3 mt-3 rounded-xl border border-border/60 bg-muted/20 p-3 md:mx-4">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+                        <div className="flex min-w-0 items-center gap-2 lg:min-w-[150px]">
+                            {statusProcessing ? (
+                                <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
+                            ) : (
+                                <span className={cn(
+                                    "h-2 w-2 shrink-0 rounded-full",
+                                    recorder.status === "recording" && "animate-pulse bg-destructive",
+                                    recorder.status === "paused" && "bg-amber-500",
+                                    recorder.status !== "recording" && recorder.status !== "paused" && (
+                                        recorder.error || node.attrs.recordingError
+                                            ? "bg-destructive"
+                                            : completed || pendingCapture
+                                                ? "bg-emerald-500/80"
+                                                : "bg-muted-foreground/35"
+                                    ),
+                                )} />
                             )}
+                            <span className="truncate text-xs font-medium text-muted-foreground">{statusLabel}</span>
+                        </div>
+
+                        <div className="flex min-w-0 flex-1 items-center gap-3">
+                            <RecordingWaveform active={recordingActive} className="max-w-[260px]" />
+                            <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">{formatDuration(statusDuration)}</span>
+                        </div>
+
+                        {isEditable && (
+                            <div className="flex flex-wrap items-center justify-end gap-1.5">
+                                {recorder.status === "recording" ? (
+                                    <>
+                                        <Button type="button" variant="secondary" size="sm" onClick={() => recorder.pauseRecording() && updateAttributes({ recordingStatus: "paused" })} className="h-11 gap-1.5 lg:h-8">
+                                            <Pause className="h-3.5 w-3.5" />{m("pause", "暂停")}
+                                        </Button>
+                                        <Button type="button" variant="destructive" size="sm" onClick={handleStop} className="h-11 gap-1.5 lg:h-8">
+                                            <Square className="h-3 w-3" />{m("stop", "停止")}
+                                        </Button>
+                                    </>
+                                ) : recorder.status === "paused" ? (
+                                    <>
+                                        <Button type="button" variant="secondary" size="sm" onClick={() => recorder.resumeRecording() && updateAttributes({ recordingStatus: "recording" })} className="h-11 gap-1.5 lg:h-8">
+                                            <Play className="h-3.5 w-3.5" />{m("resume", "继续")}
+                                        </Button>
+                                        <Button type="button" variant="destructive" size="sm" onClick={handleStop} className="h-11 gap-1.5 lg:h-8">
+                                            <Square className="h-3 w-3" />{m("stop", "停止")}
+                                        </Button>
+                                    </>
+                                ) : statusProcessing ? null : completed || pendingCapture ? (
+                                    <>
+                                        {node.attrs.summaryStatus === "failed" && (
+                                            <Button type="button" variant="ghost" size="sm" onClick={() => void generateSummary()} className="h-11 gap-1.5 text-muted-foreground lg:h-8">
+                                                <Sparkles className="h-3.5 w-3.5" />{m("retrySummary", "重试摘要")}
+                                            </Button>
+                                        )}
+                                        {persistedStatus === "captured" && pendingCapture && (
+                                            <Button type="button" variant="ghost" size="sm" onClick={() => void saveCapture(pendingCapture)} className="h-11 gap-1.5 text-muted-foreground lg:h-8">
+                                                <FileAudio className="h-3.5 w-3.5" />{m("retrySave", "重试保存")}
+                                            </Button>
+                                        )}
+                                    </>
+                                ) : (
+                                    <Button type="button" size="sm" onClick={handleStart} disabled={!recorder.speechSupported || recorder.status === "requestingPermission"} className="h-11 gap-1.5 lg:h-8">
+                                        <Mic className="h-3.5 w-3.5" />{m("startTranscribing", "开始转录")}
+                                    </Button>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    {audioUrl && (
+                        <div className="mt-3 border-t border-border/60 pt-3">
+                            <AudioPlayer
+                                audioUrl={audioUrl}
+                                mimeType={typeof node.attrs.audioMime === "string" ? node.attrs.audioMime : undefined}
+                                fallbackDuration={Number(node.attrs.duration) || 0}
+                            />
+                        </div>
+                    )}
+
+                    {recorderBusy && activeTab === "transcript" && (
+                        <div aria-live="polite" className="mt-3 max-h-36 min-h-11 overflow-y-auto rounded-lg bg-background/70 px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap">
+                            {liveTranscript || <span className="italic text-muted-foreground">{m("listening", "聆听中…")}</span>}
                         </div>
                     )}
                 </div>
 
                 {!recorder.speechSupported && isEditable && (
-                    <div contentEditable={false} suppressContentEditableWarning className="flex items-center gap-1.5 px-5 pt-3 text-xs text-muted-foreground">
-                        <Lightbulb className="h-3.5 w-3.5" />
+                    <div contentEditable={false} suppressContentEditableWarning className="mx-3 mt-3 flex items-start gap-2 rounded-lg bg-muted/30 px-3 py-2 text-xs text-muted-foreground md:mx-4">
+                        <Lightbulb className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                         {m("transcriptionUnavailable", "会议自动转录需要 Chrome 或 Edge。")}
                     </div>
                 )}
 
                 {(recorder.error || node.attrs.recordingError || node.attrs.summaryError) && (
-                    <div contentEditable={false} suppressContentEditableWarning className="mx-5 mt-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                    <div contentEditable={false} suppressContentEditableWarning className="mx-3 mt-3 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2 text-xs text-destructive md:mx-4">
                         {recorder.error || node.attrs.recordingError || node.attrs.summaryError}
                     </div>
                 )}
 
-                {audioUrl && (
-                    <div contentEditable={false} suppressContentEditableWarning className="mx-5 mt-3 rounded-lg bg-muted/30 p-3">
-                        <AudioPlayer audioUrl={audioUrl} />
-                    </div>
-                )}
-
-                {pendingCapture && persistedStatus !== "completed" && (
-                    <div contentEditable={false} suppressContentEditableWarning className="mx-5 mt-2 flex justify-end">
-                        <button type="button" onClick={handleLocalDownload} className="inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground">
-                            <Download className="h-3.5 w-3.5" />{m("downloadLocalCopy", "下载本地副本")}
-                        </button>
-                    </div>
-                )}
-
-                {recorderBusy && activeTab === "transcript" && (
-                    <div contentEditable={false} suppressContentEditableWarning className="mx-5 mt-3 min-h-12 max-h-40 overflow-y-auto rounded-md bg-muted/40 p-3 text-sm leading-relaxed whitespace-pre-wrap">
-                        {liveTranscript || <span className="italic text-muted-foreground">{m("listening", "聆听中…")}</span>}
-                    </div>
-                )}
-
-                <div
-                    data-active-tab={activeTab}
-                    className="meeting-tabs-container meeting-notes-placeholder px-5 py-4"
-                    data-placeholder={activeTab === "notes" ? m("notesPlaceholder", "记录会议笔记…") : activeTab === "summary" ? m("summaryPlaceholder", "会议结束后自动生成摘要…") : m("transcriptWillAppear", "转录内容将显示在这里…")}
-                >
-                    <NodeViewContent className="min-h-[72px] max-w-none prose prose-sm dark:prose-invert focus:outline-none prose-p:my-1.5 prose-headings:mb-2 prose-headings:mt-4 prose-li:my-0.5 prose-ol:my-1.5 prose-ul:my-1.5" />
+                <div data-active-tab={activeTab} className="meeting-tabs-container relative px-3 py-4 md:px-4">
+                    {activeTabEmpty && (
+                        <span contentEditable={false} aria-hidden="true" className="pointer-events-none absolute left-3 top-4 text-sm text-muted-foreground/60 md:left-4">
+                            {activeTabPlaceholder}
+                        </span>
+                    )}
+                    <NodeViewContent className="relative min-h-[96px] max-w-none prose prose-sm dark:prose-invert focus:outline-none prose-p:my-1.5 prose-headings:mb-2 prose-headings:mt-4 prose-li:my-0.5 prose-ol:my-1.5 prose-ul:my-1.5" />
                 </div>
             </div>
+
+            <ConfirmDialog
+                open={confirmAction !== null}
+                onOpenChange={(open) => {
+                    if (!open) setConfirmAction(null);
+                }}
+                title={confirmAction === "deleteMeeting"
+                    ? m("deleteMeeting", "删除会议纪要组件")
+                    : m("newRecording", "新建录音")}
+                description={confirmAction === "deleteMeeting"
+                    ? m("confirmDeleteMeeting", "删除此会议纪要组件会移除其中的全部内容，是否继续？")
+                    : m("confirmNewRecording", "新建录音会清空当前会议内容，是否继续？")}
+                confirmLabel={confirmAction === "deleteMeeting" ? m("delete", "删除") : m("continue", "继续")}
+                cancelLabel={m("cancel", "取消")}
+                variant={confirmAction === "deleteMeeting" ? "destructive" : "default"}
+                confirmDisabled={deleteDisabled}
+                onConfirm={handleConfirmAction}
+            />
         </NodeViewWrapper>
     );
 };

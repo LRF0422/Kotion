@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { API, useApi, useDebounce, useTranslation } from "@kn/common";
 import {
-    Avatar, AvatarFallback, AvatarImage, AvatarGroup,
+    Avatar, AvatarFallback, AvatarImage, AvatarGroup, Button,
     Popover, PopoverContent, PopoverTrigger,
     Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem,
 } from "@kn/ui";
@@ -87,12 +87,12 @@ export const AttendeePicker: React.FC<AttendeePickerProps> = ({ value, onChange,
     }, [value, onChange]);
 
     return (
-        <div className="flex items-center gap-2 flex-wrap" contentEditable={false}>
-            <span className="text-xs text-muted-foreground select-none shrink-0">{m("attendees")}</span>
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5" contentEditable={false}>
+            <span className="flex h-8 shrink-0 select-none items-center text-xs text-muted-foreground">{m("attendees")}</span>
 
             {/* Selected avatars */}
             {value.length > 0 && (
-                <div className="flex items-center gap-1.5 flex-wrap">
+                <div className="flex min-w-0 flex-wrap items-center gap-1">
                     {value.length > 3 ? (
                         <AvatarGroup max={4} spacing={8} className="items-center">
                             {value.map((a) => (
@@ -106,9 +106,9 @@ export const AttendeePicker: React.FC<AttendeePickerProps> = ({ value, onChange,
                         value.map((a) => (
                             <span
                                 key={a.id}
-                                className="group inline-flex items-center gap-1 pl-0.5 pr-1.5 py-0.5 rounded-full bg-muted text-xs text-foreground"
+                                className="group inline-flex h-11 items-center gap-1 rounded-full bg-muted pl-1 text-xs text-foreground lg:h-7"
                             >
-                                <Avatar className="h-5 w-5 text-[9px]">
+                                <Avatar className="h-6 w-6 text-[9px] lg:h-5 lg:w-5">
                                     <AvatarImage src={a.avatar} />
                                     <AvatarFallback>{initials(a.name)}</AvatarFallback>
                                 </Avatar>
@@ -117,10 +117,11 @@ export const AttendeePicker: React.FC<AttendeePickerProps> = ({ value, onChange,
                                     <button
                                         type="button"
                                         onClick={() => remove(a.id)}
-                                        className="opacity-50 hover:opacity-100 transition-opacity"
+                                        className="flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground opacity-60 transition-colors hover:bg-background/70 hover:text-foreground hover:opacity-100 lg:h-7 lg:w-7"
                                         title={m("removeAttendee")}
+                                        aria-label={m("removeAttendee")}
                                     >
-                                        <X className="h-3 w-3" />
+                                        <X className="h-3.5 w-3.5" />
                                     </button>
                                 )}
                             </span>
@@ -133,13 +134,15 @@ export const AttendeePicker: React.FC<AttendeePickerProps> = ({ value, onChange,
             {!disabled && (
                 <Popover open={open} onOpenChange={setOpen}>
                     <PopoverTrigger asChild>
-                        <button
+                        <Button
                             type="button"
-                            className="inline-flex items-center gap-1 h-6 px-2 rounded-full border border-dashed border-border text-xs text-muted-foreground hover:text-foreground hover:border-foreground/40 transition-colors"
+                            variant="ghost"
+                            size="sm"
+                            className="h-11 gap-1 rounded-full border border-dashed border-border px-2.5 text-xs font-normal text-muted-foreground hover:border-foreground/40 hover:text-foreground lg:h-8"
                         >
-                            <Plus className="h-3 w-3" />
+                            <Plus className="h-3.5 w-3.5" />
                             {m("addAttendee")}
-                        </button>
+                        </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-64 p-0" align="start">
                         <Command shouldFilter={false}>
@@ -158,7 +161,7 @@ export const AttendeePicker: React.FC<AttendeePickerProps> = ({ value, onChange,
                                             key={user.id}
                                             value={user.id}
                                             onSelect={() => toggle(user)}
-                                            className="flex items-center gap-2"
+                                            className="flex min-h-11 items-center gap-2 lg:min-h-8"
                                         >
                                             <Avatar className="h-6 w-6 text-[10px]">
                                                 <AvatarImage src={user.avatar} />

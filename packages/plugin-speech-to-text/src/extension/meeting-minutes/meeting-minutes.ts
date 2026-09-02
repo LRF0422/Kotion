@@ -185,6 +185,12 @@ export const MeetingMinutesNode = Node.create({
                 default: 'zh-CN',
                 parseHTML: (element: HTMLElement) => element.getAttribute('data-lang') || 'zh-CN',
                 renderHTML: (attributes: Record<string, any>) => ({ 'data-lang': attributes.lang || 'zh-CN' }),
+            },
+            // AI model for summary generation ('' = backend default).
+            model: {
+                default: '',
+                parseHTML: (element: HTMLElement) => element.getAttribute('data-model') || '',
+                renderHTML: (attributes: Record<string, any>) => (attributes.model ? { 'data-model': attributes.model } : {}),
             }
         }
     },

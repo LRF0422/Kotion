@@ -1,9 +1,10 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { toast, cn, Button } from '@kn/ui';
 import { useTranslation } from '@kn/common';
 import { Mic, Pause, Play, Square } from '@kn/icon';
 import { Editor } from '@kn/editor';
 import { speechController, useSpeechController } from '../../speech-controller';
+import { RecordingWaveform } from '../components/RecordingWaveform';
 
 /** Id of the currently open recording toast, so we never open two at once. */
 let activeToastId: string | number | null = null;
@@ -13,63 +14,11 @@ const LANGS: { value: string; label: string }[] = [
     { value: 'en-US', label: 'EN' },
 ];
 
-const BAR_COUNT = 18;
-
 function formatDuration(totalSeconds: number): string {
     const m = Math.floor(totalSeconds / 60);
     const s = totalSeconds % 60;
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
-
-/**
- * Live equalizer. Heights are driven via rAF directly on the DOM (not React
- * state) so it stays smooth and never re-renders the toast. Monochrome to match
- * the app's restrained palette.
- */
-const Waveform: React.FC<{ active: boolean }> = ({ active }) => {
-    const containerRef = useRef<HTMLDivElement>(null);
-    const rafRef = useRef<number | null>(null);
-
-    useEffect(() => {
-        const stop = () => {
-            if (rafRef.current) {
-                cancelAnimationFrame(rafRef.current);
-                rafRef.current = null;
-            }
-        };
-        const bars = containerRef.current?.querySelectorAll<HTMLDivElement>('.wave-bar');
-        if (!active || !bars) {
-            bars?.forEach((b) => (b.style.transform = 'scaleY(0.12)'));
-            return stop;
-        }
-        const tick = () => {
-            bars.forEach((bar, i) => {
-                // Bell-ish envelope so the centre bars are taller.
-                const center = 1 - Math.abs(i - (BAR_COUNT - 1) / 2) / (BAR_COUNT / 2);
-                const h = 0.15 + Math.random() * (0.35 + center * 0.5);
-                bar.style.transform = `scaleY(${h.toFixed(3)})`;
-            });
-            rafRef.current = requestAnimationFrame(tick);
-        };
-        rafRef.current = requestAnimationFrame(tick);
-        return stop;
-    }, [active]);
-
-    return (
-        <div ref={containerRef} className="flex h-5 flex-1 items-center justify-center gap-[3px]">
-            {Array.from({ length: BAR_COUNT }).map((_, i) => (
-                <div
-                    key={i}
-                    className={cn(
-                        'wave-bar h-full w-[2px] origin-center transition-[transform] duration-100 ease-out',
-                        active ? 'bg-muted-foreground' : 'bg-muted-foreground/30'
-                    )}
-                    style={{ transform: 'scaleY(0.12)' }}
-                />
-            ))}
-        </div>
-    );
-};
 
 const RecordingToast: React.FC<{ toastId: string | number }> = ({ toastId }) => {
     const { t } = useTranslation();
@@ -127,7 +76,7 @@ const RecordingToast: React.FC<{ toastId: string | number }> = ({ toastId }) => 
                     </span>
                 </span>
 
-                <Waveform active={isRecording} />
+                <RecordingWaveform active={isRecording} />
 
                 <span className="whitespace-nowrap font-mono text-xs tabular-nums text-muted-foreground">
                     {formatDuration(duration)}

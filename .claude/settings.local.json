@@ -40,7 +40,8 @@
       "Bash(python3 *)",
       "mcp__ide__getDiagnostics",
       "Bash(curl *)",
-      "Bash(ps -axo pid,ppid,etime,%cpu,%mem,command)"
+      "Bash(ps -axo pid,ppid,etime,%cpu,%mem,command)",
+      "Skill(claude-api)"
     ]
   },
   "disabledMcpjsonServers": [
