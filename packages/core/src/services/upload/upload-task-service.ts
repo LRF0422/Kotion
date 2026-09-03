@@ -268,9 +268,17 @@ export class UploadTaskServiceImpl implements UploadTaskService {
     }
 
     clearTerminal(): void {
-        for (const task of this.tasks.values()) {
-            if (terminalStatuses.has(task.status) || (task.status === 'FAILED' && !task.retryable)) this.clear(task.id);
+        const taskIds = [...this.tasks.values()]
+            .filter((task) => terminalStatuses.has(task.status) || (task.status === 'FAILED' && !task.retryable))
+            .map((task) => task.id);
+        if (taskIds.length === 0) return;
+
+        for (const taskId of taskIds) {
+            this.tasks.delete(taskId);
+            this.sources.delete(taskId);
+            void this.store.remove(taskId).catch((error) => logger.warn('Failed to clear upload task', error));
         }
+        this.rebuildSnapshot();
     }
 
     waitForCompletion(taskId: string): Promise<unknown> {
