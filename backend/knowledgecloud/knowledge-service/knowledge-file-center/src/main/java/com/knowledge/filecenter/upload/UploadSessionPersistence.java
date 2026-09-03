@@ -39,7 +39,8 @@ public class UploadSessionPersistence {
 
     @Transactional(rollbackFor = Exception.class)
     public KnowledgeUploadSession create(KnowledgeUploadSession session, List<KnowledgeUploadPart> parts) {
-        Long lockedUserId = sessionMapper.lockUserForUploadQuota(session.getUserId());
+        sessionMapper.ensureOwnerQuotaLock(session.getTenantId(), session.getUserId());
+        Long lockedUserId = sessionMapper.lockOwnerForUploadQuota(session.getTenantId(), session.getUserId());
         if (!Objects.equals(lockedUserId, session.getUserId())) {
             throw new IllegalStateException("Authenticated upload owner no longer exists");
         }

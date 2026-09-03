@@ -4,7 +4,7 @@ Kotion uploads files up to 10 GiB directly from the browser to object storage us
 
 ## Deployment requirements
 
-1. Apply `backend/knowledgecloud/script/migration/V19__resumable_file_upload.sql` before deploying the new file-center service.
+1. Apply `backend/knowledgecloud/script/migration/V19__resumable_file_upload.sql` and `V20__upload_owner_quota_lock.sql` before deploying the new file-center service.
 2. Configure MinIO with both endpoints when its internal address is not browser-reachable:
 
 ```yaml

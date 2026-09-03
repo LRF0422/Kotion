@@ -3,6 +3,7 @@ package com.knowledge.filecenter.mapper;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -15,8 +16,13 @@ import com.knowledge.filecenter.entity.KnowledgeUploadSession;
 public interface UploadSessionMapper extends MPJBaseMapper<KnowledgeUploadSession> {
 
     @InterceptorIgnore(tenantLine = "true")
-    @Select("SELECT id FROM knowledge_user WHERE id = #{userId} AND is_deleted = 0 FOR UPDATE")
-    Long lockUserForUploadQuota(@Param("userId") Long userId);
+    @Insert("INSERT IGNORE INTO knowledge_upload_owner_lock (tenant_id, user_id) VALUES (#{tenantId}, #{userId})")
+    int ensureOwnerQuotaLock(@Param("tenantId") String tenantId, @Param("userId") Long userId);
+
+    @InterceptorIgnore(tenantLine = "true")
+    @Select("SELECT user_id FROM knowledge_upload_owner_lock WHERE tenant_id = #{tenantId} "
+            + "AND user_id = #{userId} FOR UPDATE")
+    Long lockOwnerForUploadQuota(@Param("tenantId") String tenantId, @Param("userId") Long userId);
 
     @InterceptorIgnore(tenantLine = "true")
     @Select("SELECT * FROM knowledge_upload_session WHERE id = #{id} AND tenant_id = #{tenantId} "
