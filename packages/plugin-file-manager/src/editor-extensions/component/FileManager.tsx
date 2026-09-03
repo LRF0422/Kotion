@@ -1,11 +1,12 @@
 import {
-    FileIcon, FolderIcon, FolderOpenIcon, FolderPlusIcon, UploadIcon, Trash2,
+    FolderIcon, FolderOpenIcon, FolderPlusIcon, UploadIcon, Trash2,
     ListIcon, LayoutGridIcon, ArrowLeft, ArrowRight, Menu as MenuIcon,
     Search, ClockIcon, StarIcon,
 } from "@kn/icon";
 import {
-    Button, EmptyState, Input, Separator, cn, Skeleton,
+    Button, Input, Separator, cn, Skeleton,
     Sheet, SheetContent, SheetTrigger, SheetTitle,
+    Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
     AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogFooter,
     AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel,
     useResponsive,
@@ -32,6 +33,7 @@ import {
 } from "../../utils/file-selection";
 import { RenameDialog, MoveDialog, FileDetailsDialog, CreateFolderDialog, FilePreviewDialog } from "./dialogs";
 import { useI18n } from "../../i18n/use-i18n";
+import { FileManagerEmptyState } from "./FileManagerEmptyState";
 
 export interface FileManagerProps {
     folderId?: string
@@ -62,7 +64,7 @@ const VIEW_LABEL_KEY: Record<Exclude<FileView, 'home' | 'search'>, string> = {
 const EMPTY_ACCEPT: string[] = [];
 
 export const FileManagerView: React.FC<FileManagerProps> = (props) => {
-    const { isMobileOrTablet: isTouch } = useResponsive();
+    const { isMobile, isTablet, isMobileOrTablet: isTouch } = useResponsive();
     const {
         selectable = false,
         onCancel,
@@ -76,6 +78,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
     const { t } = useI18n();
 
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [tabletSidebarCollapsed, setTabletSidebarCollapsed] = useState(false);
     const [viewMode, setViewModeState] = useState<ViewMode>(props.defaultViewMode || 'grid');
     const [sortBy, setSortBy] = useState<SortBy>('name');
     const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
@@ -366,162 +369,249 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
         purgeFiles, emptyTrash, searchFiles, downloadFile,
     ]);
 
-    const sidebar = (
+    const renderSidebar = (options?: { collapsed?: boolean; collapsible?: boolean }) => (
         <FileSidebar
             view={view}
             currentFolderId={currentFolderId}
+            rootFolderId={props.folderId || ''}
             treeElements={treeElements}
             loading={sidebarLoading}
             selectable={selectable}
-            onHome={() => { goHome(); if (isTouch) setSidebarOpen(false); }}
-            onSelectView={(v) => setView(v)}
-            onAfterNavigate={() => { if (isTouch) setSidebarOpen(false); }}
+            collapsed={options?.collapsed}
+            collapsible={options?.collapsible}
+            onToggleCollapsed={() => setTabletSidebarCollapsed((collapsed) => !collapsed)}
+            onHome={() => {
+                goHome();
+                if (isMobile) setSidebarOpen(false);
+            }}
+            onSelectView={(nextView) => setView(nextView)}
+            onAfterNavigate={() => {
+                if (isMobile) setSidebarOpen(false);
+            }}
         />
     );
 
     return (
         <FileManageContext.Provider value={contextValue}>
-            <div className={cn("flex flex-col rounded-lg border overflow-hidden not-prose bg-background", props.className)}>
-                {/* ===== Single command bar ===== */}
-                <div className="relative z-20 flex min-h-14 w-full items-center gap-1 border-b bg-background px-2 lg:min-h-12">
-                    {/* left: nav */}
-                    <div className="flex min-w-0 flex-1 items-center gap-1">
-                        {isTouch && showSidebar && (
-                            <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-                                <SheetTrigger asChild>
-                                    <Button
-                                        size="icon"
-                                        variant="ghost"
-                                        className="h-11 w-11 flex-shrink-0 lg:h-8 lg:w-8"
-                                        aria-label={t('toolbar.fileNavigation')}
-                                    >
-                                        <MenuIcon className="h-4 w-4" />
-                                    </Button>
-                                </SheetTrigger>
-                                <SheetContent side="left" className="w-[280px] p-0">
-                                    <SheetTitle className="sr-only">{t('toolbar.fileNavigation')}</SheetTitle>
-                                    {sidebar}
-                                </SheetContent>
-                            </Sheet>
-                        )}
-                        <div className="flex flex-shrink-0 items-center">
-                            <Button variant="ghost" size="icon" className="h-11 w-11 lg:h-8 lg:w-8" onClick={goBack} disabled={!canGoBack || loading} aria-label={t('toolbar.back')}>
-                                <ArrowLeft className="h-4 w-4" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-11 w-11 lg:h-8 lg:w-8" onClick={goForward} disabled={!canGoForward || loading} aria-label={t('toolbar.forward')}>
-                                <ArrowRight className="h-4 w-4" />
-                            </Button>
-                        </div>
-                        <Separator orientation="vertical" className="mx-1 h-5 flex-shrink-0" />
-                        <div className="min-w-0 flex-1 overflow-hidden">
-                            {view === 'home' ? (
-                                <Breadcrumb items={breadcrumbPath} onNavigate={navigateToFolder} />
-                            ) : (
-                                <div className="flex items-center gap-2 px-1 text-sm font-medium">
-                                    {view === 'search'
-                                        ? <><Search className="h-4 w-4" /><span className="truncate">“{searchKeyword}”</span></>
-                                        : <>{VIEW_META[view as keyof typeof VIEW_META]?.icon}<span>{t(VIEW_LABEL_KEY[view as keyof typeof VIEW_LABEL_KEY])}</span></>}
-                                </div>
+            <div className={cn("flex flex-col overflow-hidden rounded-lg border bg-background not-prose", props.className)}>
+                <TooltipProvider delayDuration={250}>
+                    <div className="relative z-20 grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 border-b bg-background px-2 py-1.5 lg:min-h-12 lg:grid-cols-[minmax(0,1fr)_220px_auto_auto] lg:gap-x-1.5 lg:py-1">
+                        <div className="col-start-1 row-start-1 flex min-w-0 items-center gap-0.5 lg:col-start-1 lg:row-start-1">
+                            {isMobile && showSidebar && (
+                                <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <SheetTrigger asChild>
+                                                <Button
+                                                    size="icon"
+                                                    variant="ghost"
+                                                    className="h-11 w-11 flex-shrink-0 rounded-lg transition-colors duration-150 active:bg-muted/70 motion-reduce:transition-none lg:h-8 lg:w-8"
+                                                    aria-label={t('toolbar.fileNavigation')}
+                                                >
+                                                    <MenuIcon className="h-4 w-4" />
+                                                </Button>
+                                            </SheetTrigger>
+                                        </TooltipTrigger>
+                                        <TooltipContent>{t('toolbar.fileNavigation')}</TooltipContent>
+                                    </Tooltip>
+                                    <SheetContent side="left" className="w-[min(84vw,288px)] p-0 [&>button]:h-11 [&>button]:w-11">
+                                        <SheetTitle className="sr-only">{t('toolbar.fileNavigation')}</SheetTitle>
+                                        <div className="h-full pb-safe pt-safe">{renderSidebar()}</div>
+                                    </SheetContent>
+                                </Sheet>
                             )}
+                            <div className="flex flex-shrink-0 items-center">
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-11 w-11 rounded-lg transition-colors duration-150 active:bg-muted/70 motion-reduce:transition-none lg:h-8 lg:w-8"
+                                            onClick={goBack}
+                                            disabled={!canGoBack || loading}
+                                            aria-label={t('toolbar.back')}
+                                        >
+                                            <ArrowLeft className="h-4 w-4" />
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>{t('toolbar.back')}</TooltipContent>
+                                </Tooltip>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-11 w-11 rounded-lg transition-colors duration-150 active:bg-muted/70 motion-reduce:transition-none lg:h-8 lg:w-8"
+                                            onClick={goForward}
+                                            disabled={!canGoForward || loading}
+                                            aria-label={t('toolbar.forward')}
+                                        >
+                                            <ArrowRight className="h-4 w-4" />
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>{t('toolbar.forward')}</TooltipContent>
+                                </Tooltip>
+                            </div>
+                            <Separator orientation="vertical" className="mx-1 hidden h-5 flex-shrink-0 md:block" />
+                            <div className="min-w-0 flex-1 overflow-hidden">
+                                {view === 'home' ? (
+                                    <Breadcrumb
+                                        items={breadcrumbPath}
+                                        onNavigate={navigateToFolder}
+                                        maxItems={isMobile ? 3 : isTablet ? 4 : 5}
+                                        showHomeLabel={!isMobile}
+                                    />
+                                ) : (
+                                    <div className="flex min-w-0 items-center gap-2 px-1 text-sm font-medium">
+                                        {view === 'search'
+                                            ? <><Search className="h-4 w-4 flex-shrink-0" /><span className="truncate">“{searchKeyword}”</span></>
+                                            : <>{VIEW_META[view as keyof typeof VIEW_META]?.icon}<span className="truncate">{t(VIEW_LABEL_KEY[view as keyof typeof VIEW_LABEL_KEY])}</span></>}
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                    </div>
 
-                    {/* right: search + view toggle + actions */}
-                    <div className="flex flex-shrink-0 items-center gap-1.5">
-                        <div className="relative hidden sm:block">
-                            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <div className="col-start-2 row-start-1 flex items-center gap-0.5 rounded-lg bg-muted/60 p-0.5 lg:col-start-3 lg:row-start-1">
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className={cn(
+                                            "h-11 w-11 rounded-md outline-none transition-colors duration-150 active:bg-muted/70 motion-reduce:transition-none lg:h-8 lg:w-8",
+                                            viewMode === 'grid'
+                                                ? "bg-background text-foreground ring-1 ring-inset ring-border hover:bg-background"
+                                                : "text-muted-foreground hover:text-foreground",
+                                        )}
+                                        onClick={() => setViewMode('grid')}
+                                        aria-label={t('toolbar.gridView')}
+                                        aria-pressed={viewMode === 'grid'}
+                                    >
+                                        <LayoutGridIcon className="h-4 w-4" />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>{t('toolbar.gridView')}</TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className={cn(
+                                            "h-11 w-11 rounded-md outline-none transition-colors duration-150 active:bg-muted/70 motion-reduce:transition-none lg:h-8 lg:w-8",
+                                            viewMode === 'list'
+                                                ? "bg-background text-foreground ring-1 ring-inset ring-border hover:bg-background"
+                                                : "text-muted-foreground hover:text-foreground",
+                                        )}
+                                        onClick={() => setViewMode('list')}
+                                        aria-label={t('toolbar.listView')}
+                                        aria-pressed={viewMode === 'list'}
+                                    >
+                                        <ListIcon className="h-4 w-4" />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>{t('toolbar.listView')}</TooltipContent>
+                            </Tooltip>
+                        </div>
+
+                        <div className="relative col-start-1 row-start-2 min-w-0 lg:col-start-2 lg:row-start-1">
+                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                             <Input
                                 defaultValue={view === 'search' ? searchKeyword : ''}
-                                onChange={(e) => handleSearchInput(e.target.value)}
-                                className="h-11 w-[160px] rounded-md border-transparent bg-muted/60 pl-8 shadow-none transition-colors hover:bg-muted focus-visible:border-input focus-visible:bg-background lg:h-8 lg:w-[220px]"
+                                onChange={(event) => handleSearchInput(event.target.value)}
+                                className="h-11 w-full rounded-lg border-transparent bg-muted/60 pl-9 shadow-none transition-colors duration-150 hover:bg-muted focus-visible:border-input focus-visible:bg-background motion-reduce:transition-none lg:h-8 lg:w-[220px] lg:rounded-md"
                                 placeholder={t('toolbar.searchPlaceholder')}
                             />
                         </div>
 
-                        {/* Notion 风格分段切换 */}
-                        <div className="flex items-center gap-0.5 rounded-md bg-muted/60 p-0.5">
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className={cn(
-                                    "h-11 w-11 rounded lg:h-7 lg:w-7",
-                                    viewMode === 'grid'
-                                        ? "bg-background text-foreground shadow-sm hover:bg-background"
-                                        : "text-muted-foreground hover:text-foreground",
-                                )}
-                                onClick={() => setViewMode('grid')}
-                                aria-label={t('toolbar.gridView')}
-                                aria-pressed={viewMode === 'grid'}
-                            >
-                                <LayoutGridIcon className="h-4 w-4" />
-                            </Button>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className={cn(
-                                    "h-11 w-11 rounded lg:h-7 lg:w-7",
-                                    viewMode === 'list'
-                                        ? "bg-background text-foreground shadow-sm hover:bg-background"
-                                        : "text-muted-foreground hover:text-foreground",
-                                )}
-                                onClick={() => setViewMode('list')}
-                                aria-label={t('toolbar.listView')}
-                                aria-pressed={viewMode === 'list'}
-                            >
-                                <ListIcon className="h-4 w-4" />
-                            </Button>
+                        <div className="col-start-2 row-start-2 flex flex-shrink-0 items-center justify-end gap-1 lg:col-start-4 lg:row-start-1">
+                            {!selectable && (isTrash ? (
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-11 w-11 gap-1.5 rounded-lg px-0 text-destructive transition-colors duration-150 hover:bg-destructive/10 hover:text-destructive active:bg-destructive/15 motion-reduce:transition-none lg:h-8 lg:w-auto lg:px-3"
+                                            onClick={() => askConfirm({
+                                                title: t('confirm.emptyTrashTitle'),
+                                                description: t('confirm.emptyTrashDescription'),
+                                                destructive: true,
+                                                onConfirm: () => emptyTrash(),
+                                            })}
+                                            disabled={loading || currentFolderItems.length === 0}
+                                            aria-label={t('toolbar.emptyTrash')}
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                            <span className="hidden lg:inline">{t('toolbar.emptyTrash')}</span>
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>{t('toolbar.emptyTrash')}</TooltipContent>
+                                </Tooltip>
+                            ) : (
+                                <>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                className="h-11 w-11 gap-1.5 rounded-lg px-0 text-muted-foreground transition-colors duration-150 hover:text-foreground active:bg-muted/70 motion-reduce:transition-none lg:h-8 lg:w-auto lg:px-3"
+                                                onClick={() => handleCreateFile('FILE')}
+                                                disabled={loading}
+                                                aria-label={t('toolbar.upload')}
+                                            >
+                                                <UploadIcon className="h-4 w-4" />
+                                                <span className="hidden lg:inline">{t('toolbar.upload')}</span>
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>{t('toolbar.upload')}</TooltipContent>
+                                    </Tooltip>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                className="h-11 w-11 gap-1.5 rounded-lg px-0 shadow-none transition-colors duration-150 active:bg-muted/70 motion-reduce:transition-none lg:h-8 lg:w-auto lg:px-3"
+                                                onClick={() => handleCreateFile('FOLDER')}
+                                                disabled={loading}
+                                                aria-label={t('toolbar.newFolder')}
+                                            >
+                                                <FolderPlusIcon className="h-4 w-4" />
+                                                <span className="hidden lg:inline">{t('toolbar.newFolder')}</span>
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>{t('toolbar.newFolder')}</TooltipContent>
+                                    </Tooltip>
+                                </>
+                            ))}
+
+                            {selectable && (
+                                <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-11 rounded-lg px-3 transition-colors duration-150 active:bg-muted/70 motion-reduce:transition-none lg:h-8"
+                                    onClick={() => onCancel?.()}
+                                >
+                                    {t('toolbar.cancel')}
+                                </Button>
+                            )}
                         </div>
-
-                        {!selectable && (isTrash ? (
-                            <Button
-                                size="sm" variant="ghost"
-                                className="h-11 gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive lg:h-8"
-                                onClick={() => askConfirm({
-                                    title: t('confirm.emptyTrashTitle'),
-                                    description: t('confirm.emptyTrashDescription'),
-                                    destructive: true,
-                                    onConfirm: () => emptyTrash(),
-                                })}
-                                disabled={loading || currentFolderItems.length === 0}
-                            >
-                                <Trash2 className="h-4 w-4" />
-                                <span className="hidden md:inline">{t('toolbar.emptyTrash')}</span>
-                            </Button>
-                        ) : (
-                            <>
-                                <Button
-                                    size="sm" variant="ghost"
-                                    className="h-11 gap-1.5 text-muted-foreground hover:text-foreground lg:h-8"
-                                    onClick={() => handleCreateFile('FILE')}
-                                    disabled={loading}
-                                >
-                                    <UploadIcon className="h-4 w-4" />
-                                    <span className="hidden md:inline">{t('toolbar.upload')}</span>
-                                </Button>
-                                <Button
-                                    size="sm" className="h-11 gap-1.5 lg:h-8"
-                                    onClick={() => handleCreateFile('FOLDER')}
-                                    disabled={loading}
-                                >
-                                    <FolderPlusIcon className="h-4 w-4" />
-                                    <span className="hidden md:inline">{t('toolbar.newFolder')}</span>
-                                </Button>
-                            </>
-                        ))}
-
-                        {selectable && (
-                            <Button size="sm" variant="ghost" className="h-11 lg:h-8" onClick={() => onCancel?.()}>
-                                {t('toolbar.cancel')}
-                            </Button>
-                        )}
                     </div>
-                </div>
+                </TooltipProvider>
 
-                {/* ===== Body: sidebar + content ===== */}
                 <div className="flex min-h-0 flex-1">
-                    {!isTouch && showSidebar && (
+                    {showSidebar && isTablet && (
+                        <div
+                            className={cn(
+                                "h-full flex-shrink-0 overflow-hidden border-r transition-[width] duration-150 ease-out motion-reduce:transition-none",
+                                tabletSidebarCollapsed ? "w-[52px]" : "w-56",
+                            )}
+                        >
+                            {renderSidebar({ collapsed: tabletSidebarCollapsed, collapsible: true })}
+                        </div>
+                    )}
+                    {showSidebar && !isMobile && !isTablet && (
                         <div className="h-full w-[230px] flex-shrink-0 border-r">
-                            {sidebar}
+                            {renderSidebar()}
                         </div>
                     )}
 
@@ -567,11 +657,12 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                                     </div>
                                 )
                             ) : error ? (
-                                <EmptyState
-                                    icons={[FolderOpenIcon]}
+                                <FileManagerEmptyState
+                                    icon={FolderOpenIcon}
                                     title={t('emptyState.errorLoading')}
                                     description={error}
-                                    className="h-full w-full max-w-none rounded-none border-none"
+                                    tone="error"
+                                    className="h-full rounded-none border-0"
                                     action={{ label: t('emptyState.retry'), onClick: refreshFolder }}
                                 />
                             ) : sortedItems.length > 0 ? (
@@ -581,11 +672,11 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                                     </div>
                                 </Menu>
                             ) : (
-                                <EmptyState
-                                    icons={[FolderOpenIcon]}
+                                <FileManagerEmptyState
+                                    icon={FolderOpenIcon}
                                     title={isTrash ? t('emptyState.trashEmpty') : t('emptyState.noFiles')}
-                                    description={isTrash ? "" : t('emptyState.noFilesDescription')}
-                                    className="h-full w-full max-w-none rounded-none border-none"
+                                    description={isTrash ? undefined : t('emptyState.noFilesDescription')}
+                                    className="h-full rounded-none border-0"
                                     action={!isTrash && !selectable ? { label: t('emptyState.uploadFiles'), onClick: () => handleCreateFile('FILE') } : undefined}
                                 />
                             )}

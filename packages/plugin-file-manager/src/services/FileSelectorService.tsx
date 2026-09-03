@@ -1,15 +1,9 @@
 import React from "react";
 import { createRoot, Root } from "react-dom/client";
 import { FileSelectorOptions, SelectedFile } from "@kn/common";
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogDescription,
-} from "@kn/ui";
 import { FileManagerView } from "../editor-extensions/component/FileManager";
 import { FileItem } from "../editor-extensions/component/FileContext";
+import { FileManagerDialogShell } from "../editor-extensions/component/FileManagerDialogShell";
 
 interface FileSelectorState {
     open: boolean;
@@ -30,27 +24,23 @@ const FileSelectorDialogInner: React.FC<{
     const { multiple = false, target = 'file', accept, title = 'Select Files' } = options;
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-4xl h-[80vh] flex flex-col p-0 gap-0">
-                <DialogHeader className="px-4 py-3 border-b">
-                    <DialogTitle>{title}</DialogTitle>
-                    <DialogDescription>
-                        {multiple ? 'Select one or more files' : 'Select a file'}
-                    </DialogDescription>
-                </DialogHeader>
-                <div className="flex-1 overflow-hidden">
-                    <FileManagerView
-                        className="h-full border-0 rounded-none"
-                        selectable={true}
-                        multiple={multiple}
-                        target={target}
-                        accept={accept}
-                        onConfirm={onConfirm}
-                        onCancel={onCancel}
-                    />
-                </div>
-            </DialogContent>
-        </Dialog>
+        <FileManagerDialogShell
+            open={open}
+            onOpenChange={onOpenChange}
+            title={title}
+            description={multiple ? 'Select one or more files' : 'Select a file'}
+            contentClassName="md:max-w-4xl"
+        >
+            <FileManagerView
+                className="h-full border-0 rounded-none"
+                selectable={true}
+                multiple={multiple}
+                target={target}
+                accept={accept}
+                onConfirm={onConfirm}
+                onCancel={onCancel}
+            />
+        </FileManagerDialogShell>
     );
 };
 

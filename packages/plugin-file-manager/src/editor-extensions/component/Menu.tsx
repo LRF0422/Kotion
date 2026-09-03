@@ -20,13 +20,13 @@ export const Menu: React.FC<PropsWithChildren> = React.memo((props) => {
             </ContextMenuTrigger>
             <ContextMenuContent className="w-[220px]">
                 {(!selectable || multiple) && (
-                    <ContextMenuItem onClick={selectAll} disabled={loading}>
+                    <ContextMenuItem className="h-11 lg:h-8" onClick={selectAll} disabled={loading}>
                         <CheckSquare className="mr-2 h-4 w-4" /> {ctx.t('contextMenu.selectAll')}
                         <ContextMenuShortcut>⌘A</ContextMenuShortcut>
                     </ContextMenuItem>
                 )}
                 {selectedFiles.length > 0 && (
-                    <ContextMenuItem onClick={clearSelection} disabled={loading}>
+                    <ContextMenuItem className="h-11 lg:h-8" onClick={clearSelection} disabled={loading}>
                         <Square className="mr-2 h-4 w-4" /> {ctx.t('contextMenu.clear', { count: selectedFiles.length })}
                     </ContextMenuItem>
                 )}
@@ -34,10 +34,10 @@ export const Menu: React.FC<PropsWithChildren> = React.memo((props) => {
                 {!selectable && view !== 'trash' && (
                     <>
                         <ContextMenuSeparator />
-                        <ContextMenuItem onClick={() => handleUpload('FOLDER')} disabled={loading}>
+                        <ContextMenuItem className="h-11 lg:h-8" onClick={() => handleUpload('FOLDER')} disabled={loading}>
                             <FolderPlusIcon className="mr-2 h-4 w-4" /> {ctx.t('contextMenu.newFolder')}
                         </ContextMenuItem>
-                        <ContextMenuItem onClick={() => handleUpload('FILE')} disabled={loading}>
+                        <ContextMenuItem className="h-11 lg:h-8" onClick={() => handleUpload('FILE')} disabled={loading}>
                             <UploadIcon className="mr-2 h-4 w-4" /> {ctx.t('contextMenu.uploadFile')}
                         </ContextMenuItem>
                     </>
@@ -46,13 +46,16 @@ export const Menu: React.FC<PropsWithChildren> = React.memo((props) => {
                 {fileActions.length > 0 && (
                     <>
                         <ContextMenuSeparator />
-                        {fileActions.map((action) => (
+                        {fileActions.map((action, index) => (
                             <React.Fragment key={action.key}>
-                                {action.separatorBefore && <ContextMenuSeparator />}
+                                {index > 0 && action.separatorBefore && <ContextMenuSeparator />}
                                 <ContextMenuItem
                                     onClick={action.run}
                                     disabled={loading}
-                                    className={cn(action.destructive && "text-destructive focus:text-destructive")}
+                                    className={cn(
+                                        "h-11 lg:h-8",
+                                        action.destructive && "text-destructive focus:text-destructive",
+                                    )}
                                 >
                                     <span className="mr-2 flex h-4 w-4 items-center justify-center">{action.icon}</span>
                                     {action.label}

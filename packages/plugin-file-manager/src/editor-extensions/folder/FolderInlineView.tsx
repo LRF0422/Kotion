@@ -2,17 +2,11 @@ import React, { useCallback, useEffect, useState } from "react";
 import { logger, useApi } from "@kn/common";
 import { NodeViewProps, NodeViewWrapper } from "@kn/editor";
 import { FolderIcon, Loader2 } from "@kn/icon";
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogHeader,
-    DialogTitle,
-    cn,
-} from "@kn/ui";
+import { cn } from "@kn/ui";
 import { APIS } from "../../api";
 import { useI18n } from "../../i18n/use-i18n";
 import { FileManagerView } from "../component/FileManager";
+import { FileManagerDialogShell } from "../component/FileManagerDialogShell";
 
 type FolderStatus = 'loading' | 'ready' | 'unavailable';
 
@@ -94,6 +88,7 @@ export const FolderInlineView: React.FC<NodeViewProps> = React.memo((props) => {
                 role="button"
                 tabIndex={0}
                 aria-disabled={unavailable}
+                aria-busy={status === 'loading'}
                 aria-label={status === 'loading'
                     ? t('inlineFolder.loading')
                     : unavailable
@@ -107,39 +102,36 @@ export const FolderInlineView: React.FC<NodeViewProps> = React.memo((props) => {
                 }}
                 onKeyDown={handleKeyDown}
                 className={cn(
-                    "inline-flex min-h-11 max-w-full cursor-pointer items-center gap-1.5 align-middle",
-                    "rounded-md border border-border/70 bg-muted/50 px-2 py-1 text-sm text-foreground",
-                    "transition-colors hover:border-border hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    "lg:min-h-7 lg:px-1.5 lg:py-0.5",
-                    selected && "border-primary/40 bg-primary/10 ring-1 ring-primary/20",
-                    unavailable && "cursor-not-allowed border-dashed text-muted-foreground line-through opacity-70",
+                    "relative inline-flex h-7 max-w-full cursor-pointer items-center gap-1.5 align-middle",
+                    "rounded-md border border-border/70 bg-muted/40 px-1.5 text-[13px] text-foreground",
+                    "outline-none transition-colors duration-150 hover:border-border hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring active:bg-muted/80 motion-reduce:transition-none",
+                    "before:absolute before:-inset-y-2 before:inset-x-0 before:content-['']",
+                    selected && "border-primary/40 bg-primary/10 ring-1 ring-primary/30 active:bg-primary/15",
+                    unavailable && "cursor-not-allowed border-dashed bg-muted/20 text-muted-foreground opacity-80",
                 )}
             >
                 {status === 'loading'
-                    ? <Loader2 className="h-4 w-4 flex-shrink-0 animate-spin" />
+                    ? <Loader2 className="h-4 w-4 flex-shrink-0 animate-spin motion-reduce:animate-none" />
                     : <FolderIcon className="h-4 w-4 flex-shrink-0 text-amber-500" />}
                 <span className="max-w-[280px] truncate">
                     {unavailable ? t('inlineFolder.unavailable') : label}
                 </span>
             </span>
 
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                <DialogContent className="flex h-[100dvh] w-full max-w-none flex-col gap-0 p-0 sm:h-[80vh] sm:w-[85vw] sm:max-w-5xl">
-                    <DialogHeader className="border-b px-4 py-3">
-                        <DialogTitle>{t('inlineFolder.dialogTitle', { name: label })}</DialogTitle>
-                        <DialogDescription>{t('inlineFolder.dialogDescription')}</DialogDescription>
-                    </DialogHeader>
-                    <div className="min-h-0 flex-1 overflow-hidden">
-                        {dialogOpen && folderId && (
-                            <FileManagerView
-                                folderId={folderId}
-                                showSidebar={false}
-                                className="h-full rounded-none border-0"
-                            />
-                        )}
-                    </div>
-                </DialogContent>
-            </Dialog>
+            <FileManagerDialogShell
+                open={dialogOpen}
+                onOpenChange={setDialogOpen}
+                title={t('inlineFolder.dialogTitle', { name: label })}
+                description={t('inlineFolder.dialogDescription')}
+            >
+                {dialogOpen && folderId && (
+                    <FileManagerView
+                        folderId={folderId}
+                        showSidebar={false}
+                        className="h-full rounded-none border-0"
+                    />
+                )}
+            </FileManagerDialogShell>
         </NodeViewWrapper>
     );
 });

@@ -14,6 +14,8 @@ export const translations = {
             recent: 'Recent',
             favorites: 'Favorites',
             trash: 'Trash',
+            expand: 'Expand sidebar',
+            collapse: 'Collapse sidebar',
         },
         toolbar: {
             back: 'Back',
@@ -41,6 +43,7 @@ export const translations = {
         breadcrumb: {
             home: 'Home',
             label: 'Breadcrumb',
+            more: 'More folders',
         },
         contextMenu: {
             selectAll: 'Select All',
@@ -49,6 +52,7 @@ export const translations = {
             uploadFile: 'Upload File',
         },
         actions: {
+            moreActions: 'More actions',
             restore: 'Restore',
             deleteForever: 'Delete forever',
             preview: 'Preview',
@@ -92,6 +96,7 @@ export const translations = {
             moveToCurrent: 'Move to current folder:',
             cancel: 'Cancel',
             confirm: 'Move Here',
+            openFolder: 'Open folder {{name}}',
         },
         details: {
             propertiesFile: 'File properties',
@@ -194,6 +199,8 @@ export const translations = {
             recent: '最近',
             favorites: '收藏',
             trash: '回收站',
+            expand: '展开侧栏',
+            collapse: '收起侧栏',
         },
         toolbar: {
             back: '后退',
@@ -221,6 +228,7 @@ export const translations = {
         breadcrumb: {
             home: '主页',
             label: '面包屑导航',
+            more: '更多文件夹',
         },
         contextMenu: {
             selectAll: '全选',
@@ -229,6 +237,7 @@ export const translations = {
             uploadFile: '上传文件',
         },
         actions: {
+            moreActions: '更多操作',
             restore: '恢复',
             deleteForever: '永久删除',
             preview: '预览',
@@ -272,6 +281,7 @@ export const translations = {
             moveToCurrent: '移动到当前文件夹：',
             cancel: '取消',
             confirm: '移动到此处',
+            openFolder: '打开文件夹 {{name}}',
         },
         details: {
             propertiesFile: '文件属性',

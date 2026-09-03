@@ -10,7 +10,7 @@ import {
     ScrollArea,
     cn,
 } from "@kn/ui";
-import { FolderIcon, ChevronRight, HomeIcon } from "@kn/icon";
+import { FolderIcon, ChevronRight, HomeIcon, Loader2 } from "@kn/icon";
 import { FileItem, BreadcrumbItem } from "../FileContext";
 import { logger, useApi } from "@kn/common";
 import { APIS } from "../../../api";
@@ -116,90 +116,108 @@ export const MoveDialog: React.FC<MoveDialogProps> = ({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[500px]">
-                <DialogHeader>
+            <DialogContent className="flex max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-[520px] flex-col gap-0 overflow-hidden p-0 pb-safe sm:max-h-[min(82dvh,680px)] [&>button]:h-11 [&>button]:w-11 lg:[&>button]:h-8 lg:[&>button]:w-8">
+                <DialogHeader className="shrink-0 border-b px-4 py-3 pr-14 text-left">
                     <DialogTitle>{t('move.title', { count: files.length })}</DialogTitle>
-                    <DialogDescription>
-                        {t('move.description')}
-                    </DialogDescription>
+                    <DialogDescription>{t('move.description')}</DialogDescription>
                 </DialogHeader>
 
-                {/* Breadcrumb navigation */}
-                <div className="flex items-center gap-1 text-sm text-muted-foreground py-2 border-b overflow-x-auto">
-                    {breadcrumb.map((item, index) => (
-                        <React.Fragment key={item.id || 'home'}>
-                            {index > 0 && <ChevronRight className="h-4 w-4 flex-shrink-0" />}
-                            <button
-                                onClick={() => handleBreadcrumbClick(index)}
-                                className={cn(
-                                    "hover:text-foreground transition-colors flex items-center gap-1 whitespace-nowrap",
-                                    index === breadcrumb.length - 1 && "text-foreground font-medium"
-                                )}
-                            >
-                                {index === 0 && <HomeIcon className="h-4 w-4" />}
-                                {item.name}
-                            </button>
-                        </React.Fragment>
-                    ))}
-                </div>
-
-                {/* Folder list */}
-                <ScrollArea className="h-[300px] border rounded-md">
-                    {loading ? (
-                        <div className="flex items-center justify-center h-full">
-                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                        </div>
-                    ) : folders.length === 0 ? (
-                        <div className="flex items-center justify-center h-full text-muted-foreground">
-                            {t('move.noFolders')}
-                        </div>
-                    ) : (
-                        <div role="listbox" className="space-y-1 p-2">
-                            {folders.map((folder) => (
-                                <div
-                                    key={folder.id}
-                                    role="option"
-                                    tabIndex={0}
-                                    aria-selected={selectedFolderId === folder.id}
-                                    onClick={() => handleFolderClick(folder)}
-                                    onDoubleClick={() => handleFolderDoubleClick(folder)}
-                                    onKeyDown={(event) => {
-                                        if (event.key === 'Enter') handleFolderDoubleClick(folder);
-                                        if (event.key === ' ') {
-                                            event.preventDefault();
-                                            handleFolderClick(folder);
-                                        }
-                                    }}
+                <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
+                    <div className="flex shrink-0 items-center gap-0.5 overflow-x-auto border-b pb-2 text-sm text-muted-foreground">
+                        {breadcrumb.map((item, index) => (
+                            <React.Fragment key={item.id || 'home'}>
+                                {index > 0 && <ChevronRight className="h-4 w-4 flex-shrink-0 text-muted-foreground/40" />}
+                                <button
+                                    onClick={() => handleBreadcrumbClick(index)}
                                     className={cn(
-                                        "flex min-h-11 items-center gap-2 rounded-md p-2 cursor-pointer outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
-                                        "hover:bg-accent",
-                                        selectedFolderId === folder.id && "bg-accent border border-primary"
+                                        "flex h-11 flex-shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-2 outline-none transition-colors duration-150 hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring active:bg-muted/70 motion-reduce:transition-none lg:h-8 lg:px-1.5",
+                                        index === breadcrumb.length - 1 && "font-medium text-foreground",
                                     )}
                                 >
-                                    <FolderIcon className="h-5 w-5 text-yellow-500" />
-                                    <span className="truncate">{folder.name}</span>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </ScrollArea>
+                                    {index === 0 && <HomeIcon className="h-4 w-4" />}
+                                    {item.name}
+                                </button>
+                            </React.Fragment>
+                        ))}
+                    </div>
 
-                <div className="text-sm text-muted-foreground">
-                    {selectedFolderId ? (
-                        <span>{t('move.moveTo')} <strong>{folders.find(f => f.id === selectedFolderId)?.name}</strong></span>
-                    ) : (
-                        <span>{t('move.moveToCurrent')} <strong>{breadcrumb[breadcrumb.length - 1].name}</strong></span>
-                    )}
+                    <ScrollArea className="min-h-48 flex-1 rounded-lg border bg-muted/10">
+                        {loading ? (
+                            <div className="flex h-full min-h-48 items-center justify-center text-muted-foreground">
+                                <Loader2 className="h-5 w-5 animate-spin motion-reduce:animate-none" aria-label={t('image.loading')} />
+                            </div>
+                        ) : folders.length === 0 ? (
+                            <div className="flex h-full min-h-48 items-center justify-center px-4 text-center text-sm text-muted-foreground">
+                                {t('move.noFolders')}
+                            </div>
+                        ) : (
+                            <div role="listbox" className="space-y-1 p-2">
+                                {folders.map((folder) => {
+                                    const selected = selectedFolderId === folder.id;
+                                    return (
+                                        <div
+                                            key={folder.id}
+                                            role="option"
+                                            tabIndex={0}
+                                            aria-selected={selected}
+                                            onClick={() => handleFolderClick(folder)}
+                                            onDoubleClick={() => handleFolderDoubleClick(folder)}
+                                            onKeyDown={(event) => {
+                                                if (event.key === 'Enter') handleFolderDoubleClick(folder);
+                                                if (event.key === ' ') {
+                                                    event.preventDefault();
+                                                    handleFolderClick(folder);
+                                                }
+                                            }}
+                                            className={cn(
+                                                "group flex min-h-11 cursor-pointer items-center gap-2 rounded-md px-2 outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring active:bg-muted/70 motion-reduce:transition-none lg:min-h-9",
+                                                selected
+                                                    ? "bg-primary/[0.06] ring-1 ring-inset ring-primary/30 active:bg-primary/10"
+                                                    : "hover:bg-muted/60",
+                                            )}
+                                        >
+                                            <FolderIcon className="h-5 w-5 flex-shrink-0 text-amber-500" />
+                                            <span className="min-w-0 flex-1 truncate text-sm">{folder.name}</span>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-11 w-11 flex-shrink-0 rounded-md text-muted-foreground transition-colors duration-150 hover:text-foreground active:bg-muted/70 motion-reduce:transition-none lg:h-8 lg:w-8"
+                                                aria-label={t('move.openFolder', { name: folder.name })}
+                                                onClick={(event) => {
+                                                    event.stopPropagation();
+                                                    if (event.detail > 1) return;
+                                                    handleFolderDoubleClick(folder);
+                                                }}
+                                                onDoubleClick={(event) => event.stopPropagation()}
+                                            >
+                                                <ChevronRight className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </ScrollArea>
                 </div>
 
-                <DialogFooter>
-                    <Button variant="outline" onClick={() => onOpenChange(false)}>
-                        {t('move.cancel')}
-                    </Button>
-                    <Button onClick={handleConfirm} disabled={!canMove || loading}>
-                        {t('move.confirm')}
-                    </Button>
-                </DialogFooter>
+                <div className="shrink-0 border-t bg-muted/20 px-4 py-3">
+                    <div className="mb-3 truncate text-sm text-muted-foreground">
+                        {selectedFolderId ? (
+                            <span>{t('move.moveTo')} <strong className="font-medium text-foreground">{folders.find(f => f.id === selectedFolderId)?.name}</strong></span>
+                        ) : (
+                            <span>{t('move.moveToCurrent')} <strong className="font-medium text-foreground">{breadcrumb[breadcrumb.length - 1].name}</strong></span>
+                        )}
+                    </div>
+                    <DialogFooter className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
+                        <Button className="h-11 w-full lg:h-9 lg:w-auto" variant="outline" onClick={() => onOpenChange(false)}>
+                            {t('move.cancel')}
+                        </Button>
+                        <Button className="h-11 w-full lg:h-9 lg:w-auto" onClick={handleConfirm} disabled={!canMove || loading}>
+                            {t('move.confirm')}
+                        </Button>
+                    </DialogFooter>
+                </div>
             </DialogContent>
         </Dialog>
     );
