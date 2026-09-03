@@ -476,6 +476,10 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                                     </div>
                                 )}
                             </div>
+                            <div
+                                data-file-manager-upload-task-slot=""
+                                className="ml-2 hidden h-8 flex-shrink-0 items-center justify-end lg:flex"
+                            />
                         </div>
 
                         <div className="col-start-2 row-start-1 flex items-center gap-0.5 rounded-lg bg-muted/60 p-0.5 lg:col-start-3 lg:row-start-1">
