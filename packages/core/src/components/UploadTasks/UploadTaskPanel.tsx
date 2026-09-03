@@ -2,7 +2,6 @@ import React, { useState, useSyncExternalStore } from 'react';
 import {
     Button,
     Progress,
-    ScrollArea,
     Sheet,
     SheetContent,
     SheetHeader,
@@ -76,18 +75,22 @@ const TaskRow: React.FC<{ task: UploadTask; zh: boolean; service: UploadTaskServ
     };
 
     return (
-        <div className="space-y-2 border-b px-3 py-3 last:border-b-0">
-            <div className="flex items-start gap-2">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <FileUp className="h-5 w-5" />
+        <div className="w-full min-w-0 space-y-1.5 overflow-hidden border-b px-3 py-2 last:border-b-0">
+            <div className="flex min-w-0 items-start gap-2 overflow-hidden">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <FileUp className="h-4 w-4" />
                 </div>
                 <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium" title={task.name}>{task.name}</p>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                    <div className="mt-0.5 flex min-w-0 items-center gap-x-2 overflow-hidden whitespace-nowrap text-[11px] text-muted-foreground">
                         <span>{statusLabel(task, zh)}</span>
                         <span>{formatBytes(task.uploadedBytes)} / {formatBytes(task.size)}</span>
                     </div>
-                    {task.errorMessage && <p className="mt-1 line-clamp-2 text-xs text-destructive">{task.errorMessage}</p>}
+                    {task.errorMessage && (
+                        <p className="mt-0.5 truncate text-[11px] text-destructive" title={task.errorMessage}>
+                            {task.errorMessage}
+                        </p>
+                    )}
                 </div>
                 <div className="flex shrink-0 items-center">
                     {canPause && (
@@ -122,7 +125,7 @@ const TaskRow: React.FC<{ task: UploadTask; zh: boolean; service: UploadTaskServ
                     )}
                 </div>
             </div>
-            <Progress value={task.progress} aria-label={`${task.name} ${Math.round(task.progress)}%`} />
+            <Progress className="h-1" value={task.progress} aria-label={`${task.name} ${Math.round(task.progress)}%`} />
         </div>
     );
 };
@@ -133,8 +136,8 @@ const TaskPanelContent: React.FC<{
     snapshot: UploadTaskSnapshot;
     onMinimize?: () => void;
 }> = ({ zh, service, snapshot, onMinimize }) => (
-        <div className="flex min-h-0 flex-1 flex-col">
-            <div className="shrink-0 space-y-2 border-b px-4 py-3">
+        <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+            <div className="shrink-0 space-y-1.5 border-b px-3 py-2.5">
                 <div className="flex items-center gap-2">
                     <UploadCloud className="h-5 w-5 text-primary" />
                     <div className="min-w-0 flex-1">
@@ -152,14 +155,14 @@ const TaskPanelContent: React.FC<{
                         <ChevronDown className="h-4 w-4" />
                     </Button>
                 </div>
-                <Progress value={snapshot.progress} aria-label={zh ? '总体上传进度' : 'Overall upload progress'} />
+                <Progress className="h-1" value={snapshot.progress} aria-label={zh ? '总体上传进度' : 'Overall upload progress'} />
             </div>
-            <ScrollArea className="min-h-0 flex-1">
+            <div className="min-h-0 max-h-[300px] flex-1 overflow-x-hidden overflow-y-auto">
                 {snapshot.tasks.map((task) => <TaskRow key={task.id} task={task} zh={zh} service={service} />)}
-            </ScrollArea>
+            </div>
             {(snapshot.completedCount > 0 || snapshot.tasks.some((task) =>
                 task.status === 'CANCELLED' || (task.status === 'FAILED' && !task.retryable))) && (
-                <div className="shrink-0 border-t p-2 text-right">
+                <div className="shrink-0 border-t px-2 py-1 text-right">
                     <Button variant="ghost" size="sm" className="h-11 lg:h-8" onClick={() => service.clearTerminal()}>
                         {zh ? '清除已完成' : 'Clear completed'}
                     </Button>
@@ -219,7 +222,7 @@ export const UploadTaskPanel: React.FC = () => {
 
     return (
         <section className={cn(
-            'fixed bottom-safe-bottom right-safe-right z-40 mb-4 mr-4 flex max-h-[60vh] w-[400px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-xl border bg-background shadow-2xl',
+            'fixed bottom-safe-bottom right-safe-right z-40 mb-3 mr-3 flex max-h-[420px] w-[360px] max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-xl border bg-background shadow-2xl',
         )} aria-label={zh ? '上传任务' : 'Uploads'}>
             <TaskPanelContent zh={zh} service={service} snapshot={snapshot} onMinimize={() => setMinimized(true)} />
         </section>

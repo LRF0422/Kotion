@@ -444,6 +444,7 @@ public class UploadSessionPersistence {
     }
 
     private void checkedUpdate(KnowledgeUploadSession session) {
+        session.setVersion(value(session.getVersion()) + 1L);
         if (!sessionService.updateById(session)) {
             throw new IllegalStateException("Concurrent upload session update detected");
         }
