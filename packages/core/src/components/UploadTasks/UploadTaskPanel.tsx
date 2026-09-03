@@ -184,7 +184,6 @@ export const UploadTaskPanel: React.FC = () => {
     const { t } = useTranslation();
     const translate = React.useCallback<Translate>((key) => t(key), [t]);
     const { isMobile, isDesktop } = useResponsive();
-    const [minimized, setMinimized] = useState(false);
     const [mobileOpen, setMobileOpen] = useState(false);
     const [desktopOpen, setDesktopOpen] = useState(false);
     const [toolbarSlot, setToolbarSlot] = useState<HTMLElement | null>(null);
@@ -265,6 +264,7 @@ export const UploadTaskPanel: React.FC = () => {
                     </Button>
                 </PopoverTrigger>
                 <PopoverContent
+                    data-upload-task-popover=""
                     align="end"
                     sideOffset={8}
                     className="flex max-h-[420px] w-[360px] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl p-0 shadow-2xl"
@@ -276,52 +276,5 @@ export const UploadTaskPanel: React.FC = () => {
         );
     }
 
-    const minimizedButton = (
-        <Button
-            type="button"
-            variant={toolbarTarget ? "secondary" : "default"}
-            onClick={() => setMinimized(false)}
-            tabIndex={minimized ? 0 : -1}
-            aria-hidden={!minimized}
-            className={cn(
-                "gap-2 transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none",
-                toolbarTarget
-                    ? "h-8 w-full justify-between rounded-md px-2.5 shadow-none"
-                    : "fixed bottom-safe-bottom right-safe-right z-40 mb-3 mr-3 h-11 rounded-full px-4 shadow-lg",
-                minimized
-                    ? "translate-y-0 scale-100 opacity-100"
-                    : "pointer-events-none translate-y-2 scale-95 opacity-0",
-                allCompleted && "bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-300",
-            )}
-        >
-            {allCompleted
-                ? <CheckCircle2 className="h-4 w-4 shrink-0" />
-                : <UploadCloud className="h-4 w-4 shrink-0" />}
-            <span className="min-w-0 flex-1 truncate text-left">
-                {allCompleted
-                    ? translate('uploadTasks.uploadComplete')
-                    : `${translate('uploadTasks.upload')} · ${Math.round(snapshot.progress)}%`}
-            </span>
-            <ChevronUp className="h-4 w-4 shrink-0" />
-        </Button>
-    );
-
-    return (
-        <>
-            {toolbarTarget ? createPortal(minimizedButton, toolbarTarget) : minimizedButton}
-
-            <section
-                className={cn(
-                    "fixed bottom-safe-bottom right-safe-right z-40 mb-3 mr-3 flex max-h-[420px] w-[360px] max-w-[calc(100vw-1.5rem)] origin-bottom-right flex-col overflow-hidden rounded-xl border bg-background shadow-2xl transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none",
-                    minimized
-                        ? "pointer-events-none translate-y-3 scale-95 opacity-0"
-                        : "translate-y-0 scale-100 opacity-100",
-                )}
-                aria-hidden={minimized}
-                aria-label={translate('uploadTasks.title')}
-            >
-                <TaskPanelContent service={service} snapshot={snapshot} t={translate} onMinimize={() => setMinimized(true)} />
-            </section>
-        </>
-    );
+    return null;
 };

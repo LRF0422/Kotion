@@ -29,6 +29,12 @@ export const FileManagerDialogShell: React.FC<FileManagerDialogShellProps> = ({
 }) => (
     <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
+            onInteractOutside={(event) => {
+                const target = event.target;
+                if (target instanceof Element && target.closest('[data-upload-task-popover]')) {
+                    event.preventDefault();
+                }
+            }}
             className={cn(
                 "flex h-[100dvh] max-h-[100dvh] w-screen max-w-none flex-col gap-0 overflow-hidden rounded-none border-0 p-0 shadow-none sm:rounded-none",
                 "md:h-[82dvh] md:max-h-[82dvh] md:w-[calc(100vw-3rem)] md:max-w-[1024px] md:rounded-xl md:border md:shadow-lg",
