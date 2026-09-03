@@ -119,21 +119,32 @@ public class MinioTemplate implements OssClient {
 	@Override
 	@SneakyThrows
 	public KnowledgeFile putFile(String bucketName, String fileName, MultipartFile file) {
-		return putFile(bucketName, fileName, file.getInputStream());
+		return putFile(bucketName, fileName, file.getInputStream(), file.getSize(), file.getContentType());
 	}
 
 	@Override
 	@SneakyThrows
 	public KnowledgeFile putFile(String bucketName, String fileName, InputStream stream) {
+		return putFile(bucketName, fileName, stream, -1L, null);
+	}
+
+	@SneakyThrows
+	private KnowledgeFile putFile(String bucketName, String fileName, InputStream stream,
+			long contentLength, String contentType) {
 		KnowledgeFile knowledgeFile = new KnowledgeFile();
 		knowledgeFile.setOriginalName(fileName);
 		knowledgeFile.setName(ossRule.fileName(fileName));
-		knowledgeFile.setSize(stream.available());
-		PutObjectArgs putObjectArgs = PutObjectArgs.builder()
+		knowledgeFile.setSize(contentLength >= 0 ? contentLength : null);
+
+		long multipartPartSize = contentLength >= 0 ? -1L : 10L * 1024 * 1024;
+		PutObjectArgs.Builder builder = PutObjectArgs.builder()
 				.object(knowledgeFile.getName())
-				.stream(stream, stream.available(), -1)
-				.bucket(bucketName).build();
-		ObjectWriteResponse res = minioClient.putObject(putObjectArgs);
+				.stream(stream, contentLength, multipartPartSize)
+				.bucket(bucketName);
+		if (contentType != null && !contentType.trim().isEmpty()) {
+			builder.contentType(contentType);
+		}
+		ObjectWriteResponse res = minioClient.putObject(builder.build());
 		knowledgeFile.setMd5Code(res.versionId());
 		knowledgeFile.setLink(fileLink(knowledgeFile.getName()));
 		return knowledgeFile;

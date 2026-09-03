@@ -116,6 +116,10 @@ const normalizeMediaTypeHint = (hint: MediaTypeHint): string => {
 /** Determine how a file should be previewed from metadata, then its extension. */
 export const getPreviewKind = (filename: string, mediaType?: MediaTypeHint): PreviewKind => {
     const hint = normalizeMediaTypeHint(mediaType);
+    const extension = getFileExtension(filename);
+    if (extension === 'webm') {
+        return hint.startsWith('audio/') || hint === 'audio' ? 'audio' : 'media';
+    }
     if (hint.startsWith('audio/') || hint === 'audio') return 'audio';
     if (hint.startsWith('video/') || hint === 'video') return 'video';
     if (hint.startsWith('image/') || hint === 'image') return 'image';

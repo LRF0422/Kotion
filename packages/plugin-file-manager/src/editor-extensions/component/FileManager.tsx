@@ -223,13 +223,14 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
 
     // ---- create / operations ----
     const handleCreateFile = useCallback((type: 'FOLDER' | 'FILE', name?: string) => {
+        if (!canUpload) return;
         if (type === 'FOLDER') {
             if (!name) { setCreateFolderOpen(true); return; }
             createFolder(name, repoKey);
         } else {
             uploadFile(repoKey);
         }
-    }, [createFolder, uploadFile, repoKey]);
+    }, [canUpload, createFolder, uploadFile, repoKey]);
 
     const handleDelete = useCallback((ids: string[]) => deleteFiles(ids), [deleteFiles]);
     const handleRename = useCallback((file: FileItem, newName: string) => renameFile(file, newName), [renameFile]);
@@ -241,21 +242,25 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
     const [isDragging, setIsDragging] = useState(false);
     const dragDepth = React.useRef(0);
     const handleDragEnter = useCallback((e: React.DragEvent) => {
-        if (!canUpload || !Array.from(e.dataTransfer.types || []).includes('Files')) return;
-        e.preventDefault(); dragDepth.current += 1; setIsDragging(true);
+        if (!Array.from(e.dataTransfer.types || []).includes('Files')) return;
+        e.preventDefault();
+        if (!canUpload) return;
+        dragDepth.current += 1; setIsDragging(true);
     }, [canUpload]);
     const handleDragOver = useCallback((e: React.DragEvent) => {
-        if (!canUpload) return;
-        if (Array.from(e.dataTransfer.types || []).includes('Files')) e.preventDefault();
-    }, [canUpload]);
+        if (!Array.from(e.dataTransfer.types || []).includes('Files')) return;
+        e.preventDefault();
+    }, []);
     const handleDragLeave = useCallback(() => {
         if (!canUpload) return;
         dragDepth.current -= 1;
         if (dragDepth.current <= 0) { dragDepth.current = 0; setIsDragging(false); }
     }, [canUpload]);
     const handleDrop = useCallback((e: React.DragEvent) => {
+        if (!Array.from(e.dataTransfer.types || []).includes('Files')) return;
+        e.preventDefault();
         if (!canUpload) return;
-        e.preventDefault(); dragDepth.current = 0; setIsDragging(false);
+        dragDepth.current = 0; setIsDragging(false);
         const files = Array.from(e.dataTransfer.files || []);
         if (files.length) uploadFile(repoKey, files);
     }, [canUpload, uploadFile, repoKey]);
@@ -558,7 +563,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                                                 variant="ghost"
                                                 className="h-11 w-11 gap-1.5 rounded-lg px-0 text-muted-foreground transition-colors duration-150 hover:text-foreground active:bg-muted/70 motion-reduce:transition-none lg:h-8 lg:w-auto lg:px-3"
                                                 onClick={() => handleCreateFile('FILE')}
-                                                disabled={loading}
+                                                disabled={loading || !canUpload}
                                                 aria-label={t('toolbar.upload')}
                                             >
                                                 <UploadIcon className="h-4 w-4" />
@@ -574,7 +579,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                                                 variant="outline"
                                                 className="h-11 w-11 gap-1.5 rounded-lg px-0 shadow-none transition-colors duration-150 active:bg-muted/70 motion-reduce:transition-none lg:h-8 lg:w-auto lg:px-3"
                                                 onClick={() => handleCreateFile('FOLDER')}
-                                                disabled={loading}
+                                                disabled={loading || !canUpload}
                                                 aria-label={t('toolbar.newFolder')}
                                             >
                                                 <FolderPlusIcon className="h-4 w-4" />
@@ -679,7 +684,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                                     title={isTrash ? t('emptyState.trashEmpty') : t('emptyState.noFiles')}
                                     description={isTrash ? undefined : t('emptyState.noFilesDescription')}
                                     className="h-full rounded-none border-0"
-                                    action={!isTrash && !selectable ? { label: t('emptyState.uploadFiles'), onClick: () => handleCreateFile('FILE') } : undefined}
+                                    action={canUpload ? { label: t('emptyState.uploadFiles'), onClick: () => handleCreateFile('FILE') } : undefined}
                                 />
                             )}
                         </div>

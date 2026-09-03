@@ -49,6 +49,12 @@ public class OssProperties {
 	private String endpoint;
 
 	/**
+	 * Browser-reachable endpoint used when generating direct-upload URLs.
+	 * Defaults to endpoint when not configured.
+	 */
+	private String publicEndpoint;
+
+	/**
 	 * Access key就像用户ID，可以唯一标识你的账户
 	 */
 	private String accessKey;

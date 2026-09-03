@@ -1,4 +1,13 @@
-import { FileService, UploadedFile, UploadOptions, FileSelectorOptions, SelectedFile, getAccessToken, logger } from "@kn/common";
+import {
+    FileService,
+    UploadedFile,
+    UploadOptions,
+    FileSelectorOptions,
+    SelectedFile,
+    getAccessToken,
+    logger,
+    resolveOptionalService,
+} from "@kn/common";
 import { request, useApi, APIS as CORE_APIS } from "@kn/common";
 import { fileOpen } from "browser-fs-access";
 import { APIS } from "../api";
@@ -21,7 +30,7 @@ export class FileServiceImpl implements FileService {
      */
     async upload(options?: UploadOptions): Promise<UploadedFile> {
         const blob = await fileOpen({
-            mimeTypes: options?.mimeTypes || ["**/*"],
+            mimeTypes: options?.mimeTypes || ["*/*"],
             multiple: false,
         });
         return this.uploadFile(blob as File, options);
@@ -32,7 +41,7 @@ export class FileServiceImpl implements FileService {
      */
     async pickFiles(options?: UploadOptions): Promise<File[]> {
         const blobs = await fileOpen({
-            mimeTypes: options?.mimeTypes || ["**/*"],
+            mimeTypes: options?.mimeTypes || ["*/*"],
             multiple: options?.multiple ?? true,
         });
         const arr = Array.isArray(blobs) ? blobs : [blobs];
@@ -163,20 +172,50 @@ export class FileServiceImpl implements FileService {
      * Upload file to file center in a single step.
      * Backend /file/upload handles OSS upload + DB record creation together.
      */
-    async uploadToFileCenter(file: File, parentId?: string, repositoryKey?: string): Promise<any> {
-        const formData = new FormData();
-        formData.append('file', file);
-        if (parentId) {
-            formData.append('parentId', parentId);
-        }
-        if (repositoryKey) {
-            formData.append('repositoryKey', repositoryKey);
+    async uploadToFileCenter(
+        file: File,
+        parentId?: string,
+        repositoryKey?: string,
+        options?: Omit<UploadOptions, 'mimeTypes' | 'multiple'>,
+    ): Promise<any> {
+        const uploadTasks = resolveOptionalService('uploadTaskService');
+        if (uploadTasks && !options?.forceLegacy) {
+            const [taskId] = await uploadTasks.enqueue([{ file }], {
+                parentId: parentId || '0',
+                repositoryKey,
+            });
+            const unsubscribe = options?.onProgress
+                ? uploadTasks.subscribe(() => {
+                    const task = uploadTasks.getSnapshot().tasks.find((candidate) => candidate.id === taskId);
+                    if (task) options.onProgress?.(task.progress);
+                })
+                : undefined;
+            let rejectAbort: ((reason: unknown) => void) | undefined;
+            const abortPromise = options?.signal
+                ? new Promise<never>((_, reject) => { rejectAbort = reject; })
+                : undefined;
+            const abort = () => {
+                void uploadTasks.cancel(taskId);
+                rejectAbort?.(new DOMException('Upload aborted', 'AbortError'));
+            };
+            options?.signal?.addEventListener('abort', abort, { once: true });
+            try {
+                if (options?.signal?.aborted) abort();
+                const completion = uploadTasks.waitForCompletion(taskId);
+                return await (abortPromise ? Promise.race([completion, abortPromise]) : completion);
+            } finally {
+                unsubscribe?.();
+                options?.signal?.removeEventListener('abort', abort);
+            }
         }
 
+        const formData = new FormData();
+        formData.append('file', file);
+        if (parentId) formData.append('parentId', parentId);
+        if (repositoryKey) formData.append('repositoryKey', repositoryKey);
         const res = await useApi(APIS.UPLOAD_FILE, null, formData, {
             'Content-Type': 'multipart/form-data',
         });
-
         return res.data;
     }
 }

@@ -30,6 +30,7 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
     const fileService = useFileService();
     const [loading, setLoading] = useState(true);
     const [errored, setErrored] = useState(false);
+    const [urlVersion, setUrlVersion] = useState(0);
     const { t } = useI18n();
 
     const kind: PreviewKind = file && !file.isFolder
@@ -40,7 +41,7 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
         if (urlOverride) return urlOverride;
         if (!file || !file.path) return "";
         return fileService.getDownloadUrl(file.path);
-    }, [file, fileService, urlOverride]);
+    }, [file, fileService, urlOverride, urlVersion]);
 
     const mediaResolution = useResolvedMediaKind(kind, url, open && !!file);
 
@@ -62,6 +63,12 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
         else openInNewTab();
     };
 
+    const retryMedia = () => setUrlVersion((version) => version + 1);
+    const retryClassification = () => {
+        retryMedia();
+        mediaResolution.retry();
+    };
+
     const renderBody = () => {
         if (!url) {
             return <FallbackBody message={t('preview.noPreview')} onDownload={handleDownload} />;
@@ -76,7 +83,7 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
                     <FallbackBody
                         message={t('preview.mediaIdentificationFailed')}
                         onDownload={handleDownload}
-                        onRetry={mediaResolution.retry}
+                        onRetry={retryClassification}
                     />
                 );
             }
@@ -86,11 +93,13 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
         if (resolvedMediaKind) {
             return (
                 <MediaPlayer
+                    key={`${url}:${urlVersion}`}
                     kind={resolvedMediaKind}
                     src={url}
                     label={file.name}
                     sizeLabel={file.size !== undefined ? formatFileSize(file.size) : undefined}
                     onDownload={handleDownload}
+                    onRetry={retryMedia}
                 />
             );
         }

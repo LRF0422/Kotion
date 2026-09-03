@@ -2,6 +2,8 @@ package com.knowledge.filecenter.controller;
 
 import java.util.List;
 
+import javax.validation.Valid;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,7 +22,17 @@ import com.knowledge.file.api.entity.dto.MoveFileDTO;
 import com.knowledge.file.api.entity.dto.QueryFileDTO;
 import com.knowledge.file.api.entity.dto.RenameFileDTO;
 import com.knowledge.filecenter.application.FileApplication;
+import com.knowledge.filecenter.application.UploadSessionApplication;
+import com.knowledge.filecenter.entity.dto.upload.AbortUploadSessionRequest;
+import com.knowledge.filecenter.entity.dto.upload.CompleteUploadSessionRequest;
+import com.knowledge.filecenter.entity.dto.upload.CreateUploadSessionRequest;
+import com.knowledge.filecenter.entity.dto.upload.SignUploadPartsRequest;
+import com.knowledge.filecenter.entity.dto.upload.UploadPartAcknowledgementRequest;
 import com.knowledge.filecenter.entity.vo.KnowledgeFileVO;
+import com.knowledge.filecenter.entity.vo.upload.SignedUploadPartVO;
+import com.knowledge.filecenter.entity.vo.upload.UploadCapabilitiesVO;
+import com.knowledge.filecenter.entity.vo.upload.UploadPartVO;
+import com.knowledge.filecenter.entity.vo.upload.UploadSessionVO;
 
 import cn.hutool.core.lang.tree.Tree;
 import io.swagger.annotations.Api;
@@ -35,6 +47,71 @@ public class FileController {
 
     @Autowired
     private FileApplication fileApplication;
+    @Autowired
+    private UploadSessionApplication uploadSessionApplication;
+
+    @GetMapping("/file/upload-capabilities")
+    @ApiOperation("Get resumable upload capabilities")
+    public R<UploadCapabilitiesVO> uploadCapabilities() {
+        return R.data(uploadSessionApplication.capabilities());
+    }
+
+    @PostMapping("/file/upload-sessions")
+    @ApiOperation("Create or resume an idempotent upload session")
+    public R<UploadSessionVO> createUploadSession(@Valid @RequestBody CreateUploadSessionRequest request) {
+        return R.data(uploadSessionApplication.create(request));
+    }
+
+    @PostMapping("/file/upload-sessions/{id}/parts/sign")
+    @ApiOperation("Create just-in-time upload targets for parts")
+    public R<List<SignedUploadPartVO>> signUploadParts(
+            @PathVariable("id") Long id,
+            @Valid @RequestBody SignUploadPartsRequest request) {
+        return R.data(uploadSessionApplication.signParts(id, request));
+    }
+
+    @PutMapping("/file/upload-sessions/{id}/parts/{partNumber}")
+    @ApiOperation("Acknowledge an uploaded part")
+    public R<UploadPartVO> acknowledgeUploadPart(
+            @PathVariable("id") Long id,
+            @PathVariable("partNumber") Integer partNumber,
+            @Valid @RequestBody UploadPartAcknowledgementRequest request) {
+        return R.data(uploadSessionApplication.acknowledgePart(id, partNumber, request));
+    }
+
+    @PostMapping("/file/upload-sessions/{id}/reconcile")
+    @ApiOperation("Reconcile uploaded parts with the storage provider")
+    public R<UploadSessionVO> reconcileUploadSession(@PathVariable("id") Long id) {
+        return R.data(uploadSessionApplication.reconcile(id));
+    }
+
+    @PostMapping("/file/upload-sessions/{id}/complete")
+    @ApiOperation("Complete a resumable upload")
+    public R<UploadSessionVO> completeUploadSession(
+            @PathVariable("id") Long id,
+            @Valid @RequestBody(required = false) CompleteUploadSessionRequest request) {
+        return R.data(uploadSessionApplication.complete(id, request));
+    }
+
+    @PostMapping("/file/upload-sessions/{id}/abort")
+    @ApiOperation("Abort a resumable upload")
+    public R<UploadSessionVO> abortUploadSession(
+            @PathVariable("id") Long id,
+            @Valid @RequestBody(required = false) AbortUploadSessionRequest request) {
+        return R.data(uploadSessionApplication.abort(id, request));
+    }
+
+    @GetMapping("/file/upload-sessions/{id}")
+    @ApiOperation("Get resumable upload status")
+    public R<UploadSessionVO> getUploadSession(@PathVariable("id") Long id) {
+        return R.data(uploadSessionApplication.get(id));
+    }
+
+    @GetMapping("/file/upload-sessions")
+    @ApiOperation("List active resumable uploads owned by the current user")
+    public R<List<UploadSessionVO>> activeUploadSessions() {
+        return R.data(uploadSessionApplication.active());
+    }
 
     @PostMapping("/file")
     @ApiOperation("Create file or folder")

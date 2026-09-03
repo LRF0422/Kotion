@@ -30,6 +30,7 @@ import ReactDOM from "react-dom";
 import { PLUGIN_API_VERSION } from "@kn/plugin-api";
 import { OrganizationInvitationAccept } from "./components/settings/OrganizationInvitationAccept";
 import { createSpacePageService } from "./domain/space-page";
+import { uploadTaskService } from "./services/upload/upload-task-service";
 
 const { createBrowserRouter,
     createRoutesFromElements, Route, RouterProvider, Provider,
@@ -269,7 +270,7 @@ export const App: React.FC<AppProps> = (props) => {
         resolveUrl: (resourcePath: string) => usePath(resourcePath)
             .replace('/oss/endpoint/download', '/oss/endpoint/public/plugin'),
         hostApiVersion: PLUGIN_API_VERSION,
-        coreServices: { spacePageService },
+        coreServices: { spacePageService, uploadTaskService },
     }, plugins), [])
     const [pluginsReady, setPluginsReady] = useState(false)
     const [refreshFlag, setRefreshFlag] = useState(0)

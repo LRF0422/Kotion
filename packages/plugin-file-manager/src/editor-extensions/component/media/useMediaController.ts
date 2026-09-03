@@ -23,6 +23,7 @@ export const useMediaController = <T extends HTMLMediaElement>({
     const mediaRef = useRef<T>(null);
     const playGenerationRef = useRef(0);
     const lastAudibleVolumeRef = useRef(1);
+    const labelRef = useRef(label);
     const [playing, setPlaying] = useState(false);
     const [ended, setEnded] = useState(false);
     const [loading, setLoading] = useState(true);
@@ -36,6 +37,10 @@ export const useMediaController = <T extends HTMLMediaElement>({
     const syncDuration = useCallback((media: HTMLMediaElement) => {
         setDuration(getEffectiveDuration(media.duration, getSeekableEnd(media), fallbackDuration));
     }, [fallbackDuration]);
+
+    useEffect(() => {
+        labelRef.current = label;
+    }, [label]);
 
     useEffect(() => {
         const media = mediaRef.current;
@@ -57,6 +62,7 @@ export const useMediaController = <T extends HTMLMediaElement>({
         };
         const onDuration = () => syncDuration(media);
         const onCanPlay = () => {
+            syncDuration(media);
             setLoading(false);
             setBuffering(false);
         };
@@ -67,7 +73,10 @@ export const useMediaController = <T extends HTMLMediaElement>({
             setBuffering(false);
             setError(null);
         };
-        const onPause = () => setPlaying(false);
+        const onPause = () => {
+            setPlaying(false);
+            setBuffering(false);
+        };
         const onWaiting = () => {
             if (!media.paused && !media.ended) setBuffering(true);
         };
@@ -91,12 +100,14 @@ export const useMediaController = <T extends HTMLMediaElement>({
             setLoading(false);
             setBuffering(false);
             setError('load');
-            logger.error('Failed to load media preview', { label, code: media.error?.code });
+            logger.error('Failed to load media preview', { label: labelRef.current, code: media.error?.code });
         };
 
         media.addEventListener('loadstart', onLoadStart);
         media.addEventListener('loadedmetadata', onMetadata);
+        media.addEventListener('loadeddata', onDuration);
         media.addEventListener('durationchange', onDuration);
+        media.addEventListener('progress', onDuration);
         media.addEventListener('canplay', onCanPlay);
         media.addEventListener('playing', onPlaying);
         media.addEventListener('pause', onPause);
@@ -115,7 +126,9 @@ export const useMediaController = <T extends HTMLMediaElement>({
             media.pause();
             media.removeEventListener('loadstart', onLoadStart);
             media.removeEventListener('loadedmetadata', onMetadata);
+            media.removeEventListener('loadeddata', onDuration);
             media.removeEventListener('durationchange', onDuration);
+            media.removeEventListener('progress', onDuration);
             media.removeEventListener('canplay', onCanPlay);
             media.removeEventListener('playing', onPlaying);
             media.removeEventListener('pause', onPause);
@@ -128,12 +141,13 @@ export const useMediaController = <T extends HTMLMediaElement>({
             media.removeAttribute('src');
             media.load();
         };
-    }, [label, src, syncDuration]);
+    }, [src, syncDuration]);
 
     const togglePlayback = useCallback(async () => {
         const media = mediaRef.current;
         if (!media) return;
         if (!media.paused) {
+            playGenerationRef.current += 1;
             media.pause();
             return;
         }
@@ -149,12 +163,13 @@ export const useMediaController = <T extends HTMLMediaElement>({
             await media.play();
         } catch (playError) {
             if (generation !== playGenerationRef.current) return;
+            if (playError instanceof DOMException && playError.name === 'AbortError') return;
             setPlaying(false);
             setBuffering(false);
             setError('playback');
-            logger.error('Failed to start media preview playback', { label, error: playError });
+            logger.error('Failed to start media preview playback', { label: labelRef.current, error: playError });
         }
-    }, [duration, ended, label]);
+    }, [duration, ended]);
 
     const seek = useCallback((value: number) => {
         const media = mediaRef.current;
@@ -162,6 +177,7 @@ export const useMediaController = <T extends HTMLMediaElement>({
         const next = clampMediaSeek(value, duration || getSeekableEnd(media));
         media.currentTime = next;
         setCurrentTime(next);
+        if (!duration || next < duration) setEnded(false);
     }, [duration]);
 
     const skip = useCallback((seconds: number) => {
@@ -193,6 +209,7 @@ export const useMediaController = <T extends HTMLMediaElement>({
     const retry = useCallback(() => {
         const media = mediaRef.current;
         if (!media) return;
+        playGenerationRef.current += 1;
         setError(null);
         setLoading(true);
         setBuffering(false);

@@ -3,8 +3,10 @@ package com.knowledge.filecenter;
 import com.knowledge.core.cloud.client.KnowledgeCloudApplication;
 import com.knowledge.core.launch.KnowledgeApplication;
 import com.knowledge.core.launch.constant.AppConstant;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 @KnowledgeCloudApplication
+@EnableScheduling
 public class FileCenterApplication {
 
     public static void main(String[] args) {

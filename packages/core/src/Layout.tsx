@@ -10,6 +10,7 @@ import { toast } from "@kn/ui"
 import React from "react"
 import { MobilePageHeaderProvider, useMobilePageHeader } from "@kn/common"
 import { OffscreenEditorHost } from "./ai/offscreen"
+import { UploadTaskHost } from "./components/UploadTasks/UploadTaskHost"
 import { toRemotePluginDescriptor, type PluginRecord } from "./components/Shop/plugin-model"
 
 interface LayoutProps {
@@ -345,6 +346,9 @@ export function Layout({ onPluginsReady }: LayoutProps) {
 
                     {/* Hidden collaborative editors for off-screen page editing (Chat @-page) */}
                     <OffscreenEditorHost />
+
+                    {/* App-lifetime resumable upload runtime and global progress panel. */}
+                    <UploadTaskHost />
 
                     {/* Show loading overlay while plugins are loading */}
                     {(!pluginsLoaded || Boolean(pluginLoadError)) && (

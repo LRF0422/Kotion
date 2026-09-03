@@ -15,7 +15,7 @@ public class KnowledgeFileDTO implements Serializable {
     private Long parentId;
     private String path;
     private String suffix;
-    private Integer size;
+    private Long size;
     private String fileKey;
     private String repositoryKey;
 

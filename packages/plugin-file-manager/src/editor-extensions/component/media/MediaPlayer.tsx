@@ -24,6 +24,7 @@ export interface MediaPlayerProps {
     label: string;
     sizeLabel?: string;
     onDownload: () => void;
+    onRetry?: () => void;
 }
 
 const isShortcutTarget = (target: EventTarget | null): boolean =>
@@ -59,7 +60,7 @@ const MediaErrorPanel: React.FC<{
     );
 };
 
-const AudioPreviewPlayer: React.FC<Omit<MediaPlayerProps, 'kind'>> = ({ src, label, sizeLabel, onDownload }) => {
+const AudioPreviewPlayer: React.FC<Omit<MediaPlayerProps, 'kind'>> = ({ src, label, sizeLabel, onDownload, onRetry }) => {
     const { t } = useI18n();
     const controller = useMediaController<HTMLAudioElement>({ src, label });
     const effectiveVolume = controller.muted ? 0 : controller.volume;
@@ -124,7 +125,7 @@ const AudioPreviewPlayer: React.FC<Omit<MediaPlayerProps, 'kind'>> = ({ src, lab
                 {controller.error ? (
                     <MediaErrorPanel
                         playbackError={controller.error === 'playback'}
-                        onRetry={controller.retry}
+                        onRetry={onRetry ?? controller.retry}
                         onDownload={onDownload}
                     />
                 ) : (
@@ -142,7 +143,7 @@ const AudioPreviewPlayer: React.FC<Omit<MediaPlayerProps, 'kind'>> = ({ src, lab
                                 aria-label={t('preview.seek')}
                                 aria-valuetext={`${formatMediaTime(controller.currentTime)} / ${controller.duration ? formatMediaTime(controller.duration) : '--:--'}`}
                                 onValueChange={([value]) => controller.seek(value)}
-                                className="min-w-0 flex-1"
+                                className="h-11 min-w-0 flex-1 lg:h-8"
                             />
                             <span className="w-11 shrink-0 text-xs tabular-nums text-muted-foreground">
                                 {controller.duration ? formatMediaTime(controller.duration) : '--:--'}
@@ -192,7 +193,7 @@ const AudioPreviewPlayer: React.FC<Omit<MediaPlayerProps, 'kind'>> = ({ src, lab
                                     onValueChange={([value]) => controller.setVolume(value)}
                                     aria-label={t('preview.volume')}
                                     aria-valuetext={`${Math.round(effectiveVolume * 100)}%`}
-                                    className="hidden w-28 sm:flex"
+                                    className="hidden h-11 w-28 md:flex lg:h-8"
                                 />
                             </div>
                         </div>
@@ -205,14 +206,17 @@ const AudioPreviewPlayer: React.FC<Omit<MediaPlayerProps, 'kind'>> = ({ src, lab
 
 type WebkitVideoElement = HTMLVideoElement & {
     webkitEnterFullscreen?: () => void;
+    webkitExitFullscreen?: () => void;
     webkitDisplayingFullscreen?: boolean;
 };
 
-const VideoPreviewPlayer: React.FC<Omit<MediaPlayerProps, 'kind'>> = ({ src, label, onDownload }) => {
+const VideoPreviewPlayer: React.FC<Omit<MediaPlayerProps, 'kind'>> = ({ src, label, onDownload, onRetry }) => {
     const { t } = useI18n();
     const controller = useMediaController<HTMLVideoElement>({ src, label });
     const containerRef = useRef<HTMLDivElement>(null);
     const hideTimerRef = useRef<number | null>(null);
+    const focusWithinRef = useRef(false);
+    const lastPointerWakeRef = useRef(0);
     const [controlsVisible, setControlsVisible] = useState(true);
     const [fullscreen, setFullscreen] = useState(false);
     const effectiveVolume = controller.muted ? 0 : controller.volume;
@@ -224,13 +228,37 @@ const VideoPreviewPlayer: React.FC<Omit<MediaPlayerProps, 'kind'>> = ({ src, lab
         }
     }, []);
 
-    const revealControls = useCallback(() => {
+    const scheduleHide = useCallback(() => {
         clearHideTimer();
-        setControlsVisible(true);
-        if (controller.playing && !controller.buffering && !controller.error) {
+        if (controller.playing && !controller.buffering && !controller.error && !focusWithinRef.current) {
             hideTimerRef.current = window.setTimeout(() => setControlsVisible(false), 2800);
         }
     }, [clearHideTimer, controller.buffering, controller.error, controller.playing]);
+
+    const revealControls = useCallback(() => {
+        setControlsVisible(true);
+        scheduleHide();
+    }, [scheduleHide]);
+
+    const handlePointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+        if (event.pointerType === 'touch') return;
+        const now = performance.now();
+        if (now - lastPointerWakeRef.current < 200) return;
+        lastPointerWakeRef.current = now;
+        revealControls();
+    }, [revealControls]);
+
+    const handleFocusCapture = useCallback(() => {
+        focusWithinRef.current = true;
+        clearHideTimer();
+        setControlsVisible(true);
+    }, [clearHideTimer]);
+
+    const handleBlurCapture = useCallback((event: React.FocusEvent<HTMLDivElement>) => {
+        if (containerRef.current?.contains(event.relatedTarget as Node | null)) return;
+        focusWithinRef.current = false;
+        scheduleHide();
+    }, [scheduleHide]);
 
     useEffect(() => {
         revealControls();
@@ -259,6 +287,8 @@ const VideoPreviewPlayer: React.FC<Omit<MediaPlayerProps, 'kind'>> = ({ src, lab
         try {
             if (document.fullscreenElement === container) {
                 await document.exitFullscreen();
+            } else if (video.webkitDisplayingFullscreen && video.webkitExitFullscreen) {
+                video.webkitExitFullscreen();
             } else if (container.requestFullscreen) {
                 await container.requestFullscreen();
             } else if (video.webkitEnterFullscreen) {
@@ -276,6 +306,7 @@ const VideoPreviewPlayer: React.FC<Omit<MediaPlayerProps, 'kind'>> = ({ src, lab
             void toggleFullscreen();
             return;
         }
+        revealControls();
         if (isShortcutTarget(event.target)) return;
         const key = event.key.toLowerCase();
         if (key === ' ' || key === 'k') {
@@ -306,10 +337,10 @@ const VideoPreviewPlayer: React.FC<Omit<MediaPlayerProps, 'kind'>> = ({ src, lab
             event.preventDefault();
             controller.seek(controller.duration);
         }
-        revealControls();
     };
 
     const handleVideoClick = () => {
+        containerRef.current?.focus({ preventScroll: true });
         if (!controlsVisible) {
             revealControls();
             return;
@@ -323,9 +354,9 @@ const VideoPreviewPlayer: React.FC<Omit<MediaPlayerProps, 'kind'>> = ({ src, lab
                 ref={containerRef}
                 tabIndex={0}
                 onKeyDown={handleKeyDown}
-                onPointerMove={revealControls}
-                onPointerDown={revealControls}
-                onFocusCapture={revealControls}
+                onPointerMove={handlePointerMove}
+                onFocusCapture={handleFocusCapture}
+                onBlurCapture={handleBlurCapture}
                 className={cn(
                     'group relative flex h-full max-h-full w-full items-center justify-center overflow-hidden bg-[#090c12] outline-none focus-visible:ring-2 focus-visible:ring-primary',
                     !controlsVisible && controller.playing && 'cursor-none',
@@ -343,7 +374,7 @@ const VideoPreviewPlayer: React.FC<Omit<MediaPlayerProps, 'kind'>> = ({ src, lab
                     <div className="absolute inset-0 flex items-center justify-center bg-[#090c12]/90">
                         <MediaErrorPanel
                             playbackError={controller.error === 'playback'}
-                            onRetry={controller.retry}
+                            onRetry={onRetry ?? controller.retry}
                             onDownload={onDownload}
                             dark
                         />
@@ -378,7 +409,7 @@ const VideoPreviewPlayer: React.FC<Omit<MediaPlayerProps, 'kind'>> = ({ src, lab
 
                         <div
                             className={cn(
-                                'absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/55 to-transparent px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-12 text-white transition-opacity duration-200 motion-reduce:transition-none md:px-5 md:pb-4',
+                                'absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/55 to-transparent px-3 pb-safe pt-12 text-white transition-opacity duration-200 motion-reduce:transition-none md:px-5',
                                 controlsVisible ? 'opacity-100' : 'pointer-events-none opacity-0',
                             )}
                         >
@@ -391,9 +422,9 @@ const VideoPreviewPlayer: React.FC<Omit<MediaPlayerProps, 'kind'>> = ({ src, lab
                                 aria-label={t('preview.seek')}
                                 aria-valuetext={`${formatMediaTime(controller.currentTime)} / ${controller.duration ? formatMediaTime(controller.duration) : '--:--'}`}
                                 onValueChange={([value]) => controller.seek(value)}
-                                className="mb-2"
+                                className="mb-1 h-11 lg:h-8"
                             />
-                            <div className="flex items-center gap-1.5">
+                            <div className="mb-3 flex items-center gap-1.5 md:mb-4">
                                 <Button
                                     type="button"
                                     variant="ghost"
@@ -433,7 +464,7 @@ const VideoPreviewPlayer: React.FC<Omit<MediaPlayerProps, 'kind'>> = ({ src, lab
                                         onValueChange={([value]) => controller.setVolume(value)}
                                         aria-label={t('preview.volume')}
                                         aria-valuetext={`${Math.round(effectiveVolume * 100)}%`}
-                                        className="hidden w-24 sm:flex"
+                                        className="hidden h-11 w-24 md:flex lg:h-8"
                                     />
                                     <Button
                                         type="button"

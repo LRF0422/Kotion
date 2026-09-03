@@ -45,5 +45,5 @@ public class KnowledgeFile {
 	/**
 	 * 文件大小
 	 */
-	private Integer size;
+	private Long size;
 }

@@ -27,6 +27,9 @@ export function setRequestToast(toastError: ToastFn) {
     _toastError = toastError
 }
 
+const isSensitiveResponse = (url?: string): boolean =>
+    !!url && /\/file\/upload-sessions\/[^/]+\/parts\/sign(?:\?|$)/.test(url)
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -87,7 +90,10 @@ axiosInstance.interceptors.response.use(
         const code: number = res.data?.code ?? 200
         const msg: string = res.data?.msg ?? ''
 
-        console.log('[Response Interceptor]', res.config.url, '| HTTP:', res.status, '| code:', code, '| data:', JSON.stringify(res.data)?.slice(0, 200))
+        const responsePreview = isSensitiveResponse(res.config.url)
+            ? '[REDACTED]'
+            : JSON.stringify(res.data)?.slice(0, 200)
+        console.log('[Response Interceptor]', res.config.url, '| HTTP:', res.status, '| code:', code, '| data:', responsePreview)
 
         if (code === 401) {
             if (shouldHandleUnauthorized(res.config.url)) handleSessionExpired()

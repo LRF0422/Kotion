@@ -31,7 +31,7 @@ export const Menu: React.FC<PropsWithChildren> = React.memo((props) => {
                     </ContextMenuItem>
                 )}
 
-                {!selectable && view !== 'trash' && (
+                {!selectable && view === 'home' && (
                     <>
                         <ContextMenuSeparator />
                         <ContextMenuItem className="h-11 lg:h-8" onClick={() => handleUpload('FOLDER')} disabled={loading}>

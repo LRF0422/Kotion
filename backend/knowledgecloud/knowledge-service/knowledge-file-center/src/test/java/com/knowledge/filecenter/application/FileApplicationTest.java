@@ -22,6 +22,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
 import com.knowledge.core.oss.OssClient;
@@ -69,7 +70,22 @@ class FileApplicationTest {
         KnowledgeFileVO result = application.uploadFile(multipart, 9L, "repo");
 
         assertEquals("upload/20260902/meeting.webm", result.getPath());
+        assertEquals(Long.valueOf(2L), result.getSize());
         assertEquals("application-record-key", result.getFileKey());
+    }
+
+    @Test
+    void uploadPreservesFileSizeBeyondIntegerRange() {
+        MultipartFile multipart = mock(MultipartFile.class);
+        when(multipart.isEmpty()).thenReturn(false);
+        when(multipart.getSize()).thenReturn(3_000_000_000L);
+        when(multipart.getOriginalFilename()).thenReturn("large.bin");
+        com.knowledge.core.oss.model.KnowledgeFile ossFile = ossFile("upload/large.bin", null);
+        when(ossClient.putFile(multipart)).thenReturn(ossFile);
+
+        KnowledgeFileVO result = application.uploadFile(multipart, 9L, "repo");
+
+        assertEquals(Long.valueOf(3_000_000_000L), result.getSize());
     }
 
     @Test

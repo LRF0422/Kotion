@@ -25,7 +25,8 @@ public class KnowledgeFile extends TenantEntity {
     private String fileKey;
     private String repositoryKey;
     private Long parentId;
-    private Integer size;
+    private Long size;
+    private Long uploadSessionId;
 
     /** 回收站标记:0=正常 1=已删除(可还原) */
     private Integer trashed;

@@ -27,7 +27,6 @@ import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Spring boot 控制器 请求日志，方便代码调试
@@ -74,45 +73,32 @@ public class RequestLogAspect {
 				paraMap.putAll(BeanUtil.toMap(value));
 				continue;
 			}
-			// 处理 List
-			if (value instanceof List) {
-				value = ((List) value).get(0);
-			}
-			// 处理 参数
+			// 处理参数，文件只记录元数据，绝不触发 getBytes()/流序列化。
+			RequestParam requestParam = methodParam.getParameterAnnotation(RequestParam.class);
+			String paraName = requestParam != null && StringUtil.isNotBlank(requestParam.value())
+					? requestParam.value() : parameterName;
 			if (value instanceof HttpServletRequest) {
 				paraMap.putAll(((HttpServletRequest) value).getParameterMap());
 			} else if (value instanceof WebRequest) {
 				paraMap.putAll(((WebRequest) value).getParameterMap());
 			} else if (value instanceof MultipartFile) {
-				MultipartFile multipartFile = (MultipartFile) value;
-				String name = multipartFile.getName();
-				String fileName = multipartFile.getOriginalFilename();
-				paraMap.put(name, fileName);
-			} else if (value instanceof HttpServletResponse) {
-			} else if (value instanceof InputStream) {
-			} else if (value instanceof InputStreamSource) {
-			} else if (value instanceof List) {
-				List<?> list = (List<?>) value;
-				AtomicBoolean isSkip = new AtomicBoolean(false);
-				for (Object o : list) {
-					if ("StandardMultipartFile".equalsIgnoreCase(o.getClass().getSimpleName())) {
-						isSkip.set(true);
-						break;
-					}
+				paraMap.put(paraName, summarizeMultipartFile((MultipartFile) value));
+			} else if (value instanceof MultipartFile[]) {
+				List<Map<String, Object>> files = new ArrayList<>();
+				for (MultipartFile file : (MultipartFile[]) value) {
+					files.add(summarizeMultipartFile(file));
 				}
-				if (isSkip.get()) {
-					paraMap.put(parameterName, "此参数不能序列化为json");
-					continue;
+				paraMap.put(paraName, files);
+			} else if (value instanceof Collection && containsMultipartFile((Collection<?>) value)) {
+				List<Map<String, Object>> files = new ArrayList<>();
+				for (Object item : (Collection<?>) value) {
+					if (item instanceof MultipartFile) files.add(summarizeMultipartFile((MultipartFile) item));
 				}
+				paraMap.put(paraName, files);
+			} else if (value instanceof HttpServletResponse || value instanceof InputStream
+					|| value instanceof InputStreamSource) {
+				// Infrastructure and stream values are intentionally omitted.
 			} else {
-				// 参数名
-				RequestParam requestParam = methodParam.getParameterAnnotation(RequestParam.class);
-				String paraName;
-				if (requestParam != null && StringUtil.isNotBlank(requestParam.value())) {
-					paraName = requestParam.value();
-				} else {
-					paraName = methodParam.getParameterName();
-				}
 				paraMap.put(paraName, value);
 			}
 		}
@@ -140,7 +126,7 @@ public class RequestLogAspect {
 		Enumeration<String> headers = request.getHeaderNames();
 		while (headers.hasMoreElements()) {
 			String headerName = headers.nextElement();
-			String headerValue = request.getHeader(headerName);
+			String headerValue = isSensitiveHeader(headerName) ? "[REDACTED]" : request.getHeader(headerName);
 			beforeReqLog.append("===Headers===  {} : {}\n");
 			beforeReqArgs.add(headerName);
 			beforeReqArgs.add(headerValue);
@@ -156,9 +142,9 @@ public class RequestLogAspect {
 		afterReqLog.append("\n\n================  Response Start  ================\n");
 		try {
 			Object result = point.proceed();
-			// 打印返回结构体
+			// Signed upload targets are bearer credentials and must never enter logs.
 			afterReqLog.append("===Result===  {}\n");
-			afterReqArgs.add(JsonUtil.toJson(result));
+			afterReqArgs.add(isSensitiveUploadResponse(requestURI) ? "[REDACTED]" : JsonUtil.toJson(result));
 			return result;
 		} finally {
 			long tookMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs);
@@ -169,6 +155,33 @@ public class RequestLogAspect {
 			afterReqLog.append("================  Response End   ================\n");
 			log.info(afterReqLog.toString(), afterReqArgs.toArray());
 		}
+	}
+
+	private static boolean isSensitiveHeader(String headerName) {
+		return "authorization".equalsIgnoreCase(headerName)
+				|| "cookie".equalsIgnoreCase(headerName)
+				|| "set-cookie".equalsIgnoreCase(headerName);
+	}
+
+	private static boolean isSensitiveUploadResponse(String requestURI) {
+		return requestURI != null
+				&& requestURI.matches(".*/file/upload-sessions/[^/]+/parts/sign/?$");
+	}
+
+	private static boolean containsMultipartFile(Collection<?> values) {
+		for (Object value : values) {
+			if (value instanceof MultipartFile) return true;
+		}
+		return false;
+	}
+
+	private static Map<String, Object> summarizeMultipartFile(MultipartFile file) {
+		Map<String, Object> summary = new LinkedHashMap<>();
+		summary.put("field", file.getName());
+		summary.put("filename", file.getOriginalFilename());
+		summary.put("size", file.getSize());
+		summary.put("contentType", file.getContentType());
+		return summary;
 	}
 
 }

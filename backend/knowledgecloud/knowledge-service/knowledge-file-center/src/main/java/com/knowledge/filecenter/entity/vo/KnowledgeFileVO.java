@@ -18,7 +18,8 @@ public class KnowledgeFileVO implements Serializable {
     private Long parentId;
     private String path;
     private String suffix;
-    private Integer size;
+    private Long size;
+    private Long uploadSessionId;
     private String key;
     private Long repositoryId;
     private String repositoryKey;

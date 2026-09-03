@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useState, useRef } from 'react';
-import { useApi, useFileService, useSafeState } from '@kn/common';
+import {
+    useApi,
+    useFileService,
+    useSafeState,
+    useOptionalUploadTaskService,
+    type UploadFileHandle,
+    type UploadSource,
+} from '@kn/common';
 import { toast } from '@kn/ui';
 import { APIS } from '../api';
 import { FileItem, BreadcrumbItem } from '../editor-extensions/component/FileContext';
@@ -7,6 +14,10 @@ import { normalizeFileName } from '../utils/fileUtils';
 
 interface UseFileManagerProps {
     initialFolderId?: string;
+}
+
+interface FilePickerWindow extends Window {
+    showOpenFilePicker?: (options: { multiple: boolean }) => Promise<UploadFileHandle[]>;
 }
 
 /** 侧栏视图:普通文件夹浏览 / 最近 / 收藏 / 回收站 / 搜索 */
@@ -22,6 +33,7 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
     const [view, setView] = useState<FileView>('home');
     const [searchKeyword, setSearchKeyword] = useState('');
     const fileService = useFileService();
+    const uploadTaskService = useOptionalUploadTaskService();
 
     // Navigation state
     const [breadcrumbPath, setBreadcrumbPath] = useState<BreadcrumbItem[]>([{
@@ -34,6 +46,8 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
         name: 'Home'
     }]);
     const historyIndex = useRef<number>(0);
+    const uploadRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const observedCompletedUploadsRef = useRef<Set<string>>(new Set());
 
     const resolveFileItem = useCallback((file: any): FileItem => {
         const baseItem: FileItem = {
@@ -70,12 +84,30 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
 
     useEffect(() => () => {
         requestVersionRef.current += 1;
+        if (uploadRefreshTimerRef.current) clearTimeout(uploadRefreshTimerRef.current);
     }, []);
 
     const refresh = useCallback((opts?: { silent?: boolean }) => {
         silentRefreshRef.current = opts?.silent === true;
         setUpdateFlag((prev) => prev + 1);
     }, []);
+
+    useEffect(() => {
+        if (!uploadTaskService) return;
+        uploadTaskService.getSnapshot().tasks
+            .filter((task) => task.status === 'COMPLETED')
+            .forEach((task) => observedCompletedUploadsRef.current.add(task.id));
+        return uploadTaskService.subscribe(() => {
+            const newlyCompleted = uploadTaskService.getSnapshot().tasks.filter((task) =>
+                task.status === 'COMPLETED'
+                && !observedCompletedUploadsRef.current.has(task.id)
+                && task.destination.parentId === (currentFolderId || '0'));
+            if (!newlyCompleted.length) return;
+            newlyCompleted.forEach((task) => observedCompletedUploadsRef.current.add(task.id));
+            if (uploadRefreshTimerRef.current) clearTimeout(uploadRefreshTimerRef.current);
+            uploadRefreshTimerRef.current = setTimeout(() => refresh({ silent: true }), 350);
+        });
+    }, [currentFolderId, refresh, uploadTaskService]);
 
     const fetchFolderContents = useCallback(
         async (folderId: string | null) => {
@@ -152,34 +184,65 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
         [currentFolderId, refresh]
     );
 
-    /** 上传:走后端单步 /file/upload(multipart),一次完成 OSS + 建记录。
-     *  files 为空时弹文件选择器(按钮触发);非空时直接上传(拖拽触发)。 */
+    /** Queue files for direct, resumable multipart upload. */
     const uploadFile = useCallback(
         async (repoKey: string, files?: File[]) => {
-            const toUpload = files && files.length > 0
-                ? files
-                : (fileService.pickFiles ? await fileService.pickFiles() : []);
+            let sources: UploadSource[] = [];
+            try {
+                if (files?.length) {
+                    sources = files.map((file) => ({ file }));
+                } else {
+                    const picker = (window as FilePickerWindow).showOpenFilePicker;
+                    if (picker) {
+                        const handles = await picker({ multiple: true });
+                        sources = await Promise.all(handles.map(async (handle) => ({
+                            file: await handle.getFile(),
+                            handle,
+                        })));
+                    } else if (fileService.pickFiles) {
+                        const picked = await fileService.pickFiles({ mimeTypes: ['*/*'], multiple: true });
+                        sources = picked.map((file) => ({ file }));
+                    }
+                }
+            } catch (pickerError) {
+                if (pickerError instanceof DOMException && pickerError.name === 'AbortError') return;
+                throw pickerError;
+            }
 
-            if (!toUpload.length) return;
+            if (!sources.length) return;
+            if (uploadTaskService) {
+                const taskIds = await uploadTaskService.enqueue(sources, {
+                    parentId: currentFolderId || '0',
+                    repositoryKey: repoKey,
+                });
+                const enqueuedTasks = uploadTaskService.getSnapshot().tasks
+                    .filter((task) => taskIds.includes(task.id));
+                const queuedCount = enqueuedTasks.filter((task) => task.status !== 'FAILED').length;
+                if (queuedCount > 0) {
+                    toast.success(`${queuedCount} file${queuedCount > 1 ? 's' : ''} queued for upload`);
+                    return;
+                }
+                const resumableUnavailable = enqueuedTasks.every((task) =>
+                    task.errorCode === 'RESUMABLE_UPLOAD_UNAVAILABLE');
+                if (!resumableUnavailable || sources.some(({ file }) => file.size > 64 * 1024 * 1024)) return;
+                await Promise.all(taskIds.map((taskId) => uploadTaskService.cancel(taskId)));
+                taskIds.forEach((taskId) => uploadTaskService.clear(taskId));
+                if (!fileService.uploadToFileCenter) throw new Error('uploadToFileCenter not available');
+                const legacy = await Promise.allSettled(sources.map(({ file }) =>
+                    fileService.uploadToFileCenter?.(file, currentFolderId, repoKey, { forceLegacy: true })));
+                if (legacy.some((result) => result.status === 'fulfilled')) refresh({ silent: true });
+                if (legacy.some((result) => result.status === 'rejected')) toast.error('One or more uploads failed');
+                return;
+            }
 
-            const promise = Promise.all(
-                toUpload.map((file) =>
-                    fileService.uploadToFileCenter
-                        ? fileService.uploadToFileCenter(file, currentFolderId, repoKey)
-                        : Promise.reject(new Error('uploadToFileCenter not available'))
-                )
-            );
-
-            toast.promise(promise, {
-                loading: `Uploading ${toUpload.length} file${toUpload.length > 1 ? 's' : ''}...`,
-                success: 'Uploaded successfully',
-                error: 'Upload failed',
-            });
-
-            await promise;
-            refresh({ silent: true });
+            if (!fileService.uploadToFileCenter) throw new Error('uploadToFileCenter not available');
+            const results = await Promise.allSettled(sources.map(({ file }) =>
+                fileService.uploadToFileCenter?.(file, currentFolderId, repoKey)));
+            const uploaded = results.filter((result) => result.status === 'fulfilled').length;
+            if (uploaded > 0) refresh({ silent: true });
+            if (uploaded < sources.length) toast.error(`${sources.length - uploaded} file upload(s) failed`);
         },
-        [currentFolderId, fileService, refresh]
+        [currentFolderId, fileService, refresh, uploadTaskService]
     );
 
     /** 删除 → 移入回收站(批量) */

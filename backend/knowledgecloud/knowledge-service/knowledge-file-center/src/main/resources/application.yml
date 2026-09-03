@@ -1,2 +1,14 @@
 server:
   port: 7004
+
+# Large files use direct multipart upload sessions. Keep legacy servlet uploads bounded.
+spring:
+  servlet:
+    multipart:
+      max-file-size: 64MB
+      max-request-size: 128MB
+
+file:
+  upload:
+    cleanup-enabled: true
+    reconcile-enabled: true

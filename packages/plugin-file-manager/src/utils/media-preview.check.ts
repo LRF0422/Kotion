@@ -23,7 +23,7 @@ console.log('\nMedia classification');
 check('WebM requires runtime media probing', getPreviewKind('meeting.webm', 'OTHER') === 'media');
 check('uppercase WebM requires runtime media probing', getPreviewKind('MEETING.WEBM') === 'media');
 check('audio MIME resolves WebM as audio', getPreviewKind('meeting.webm', 'audio/webm;codecs=opus') === 'audio');
-check('video MIME resolves WebM as video', getPreviewKind('screen.webm', 'video/webm') === 'video');
+check('container-only video MIME keeps WebM ambiguous', getPreviewKind('screen.webm', 'video/webm') === 'media');
 check('semantic audio hint resolves audio', getPreviewKind('recording.bin', { value: 'AUDIO' }) === 'audio');
 check('MP4 remains video', getPreviewKind('movie.mp4') === 'video');
 check('MP3 remains audio', getPreviewKind('voice.mp3') === 'audio');

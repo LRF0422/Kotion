@@ -147,7 +147,7 @@ public class FileApplication {
         knowledgeFile.setType(FileType.FILE);
         knowledgeFile.setName(file.getOriginalFilename());
         knowledgeFile.setParentId(parentId);
-        knowledgeFile.setSize((int) file.getSize());
+        knowledgeFile.setSize(file.getSize());
         knowledgeFile.setPath(ossFile.getName());
 
         if (StrUtil.isBlank(repositoryKey)) {
@@ -425,7 +425,7 @@ public class FileApplication {
         knowledgeFile.setType(FileType.FILE);
         knowledgeFile.setName(fileName);
         knowledgeFile.setParentId(parentId != null ? parentId : 0L);
-        knowledgeFile.setSize(fileBytes.length);
+        knowledgeFile.setSize((long) fileBytes.length);
         knowledgeFile.setPath(ossFile.getName());
 
         if (StrUtil.isBlank(repositoryKey)) {

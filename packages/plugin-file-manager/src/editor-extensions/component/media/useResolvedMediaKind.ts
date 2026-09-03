@@ -10,7 +10,13 @@ interface ResolvedMediaKindState {
     retry: () => void;
 }
 
-const PROBE_TIMEOUT_MS = 15_000;
+interface ResolutionSnapshot {
+    key: string;
+    kind: ResolvedMediaKind | null;
+    status: MediaResolutionStatus;
+}
+
+const PROBE_TIMEOUT_MS = 30_000;
 
 export const useResolvedMediaKind = (
     previewKind: PreviewKind,
@@ -18,68 +24,59 @@ export const useResolvedMediaKind = (
     enabled: boolean,
 ): ResolvedMediaKindState => {
     const directKind = previewKind === 'audio' || previewKind === 'video' ? previewKind : null;
-    const [kind, setKind] = useState<ResolvedMediaKind | null>(directKind);
-    const [status, setStatus] = useState<MediaResolutionStatus>(directKind ? 'resolved' : 'idle');
     const [retryVersion, setRetryVersion] = useState(0);
+    const key = `${previewKind}:${src}:${retryVersion}`;
+    const [resolution, setResolution] = useState<ResolutionSnapshot>({ key: '', kind: null, status: 'idle' });
     const generationRef = useRef(0);
 
     const retry = useCallback(() => setRetryVersion((version) => version + 1), []);
 
     useEffect(() => {
         const generation = ++generationRef.current;
-        if (!enabled || !src) {
-            setKind(directKind);
-            setStatus(directKind ? 'resolved' : 'idle');
-            return;
-        }
-        if (directKind) {
-            setKind(directKind);
-            setStatus('resolved');
-            return;
-        }
-        if (previewKind !== 'media') {
-            setKind(null);
-            setStatus('idle');
-            return;
-        }
+        if (!enabled || !src || directKind || previewKind !== 'media') return;
 
         const probe = document.createElement('video');
         let settled = false;
-        setKind(null);
-        setStatus('probing');
+        let timeout: number | null = null;
+        setResolution({ key, kind: null, status: 'probing' });
 
-        const finish = (nextKind: ResolvedMediaKind | null) => {
-            if (settled || generation !== generationRef.current) return;
-            settled = true;
-            setKind(nextKind);
-            setStatus(nextKind ? 'resolved' : 'error');
-        };
-        const onMetadata = () => finish(resolveMediaKindFromDimensions(probe.videoWidth, probe.videoHeight));
-        const onError = () => finish(null);
-        const timeout = window.setTimeout(() => finish(null), PROBE_TIMEOUT_MS);
-
-        probe.preload = 'metadata';
-        probe.muted = true;
-        probe.playsInline = true;
-        probe.addEventListener('loadedmetadata', onMetadata);
-        probe.addEventListener('error', onError);
-        probe.src = src;
-        probe.load();
-
-        return () => {
-            settled = true;
-            window.clearTimeout(timeout);
+        const release = () => {
+            if (timeout !== null) {
+                window.clearTimeout(timeout);
+                timeout = null;
+            }
             probe.removeEventListener('loadedmetadata', onMetadata);
             probe.removeEventListener('error', onError);
             probe.pause();
             probe.removeAttribute('src');
             probe.load();
         };
-    }, [directKind, enabled, previewKind, retryVersion, src]);
+        const finish = (nextKind: ResolvedMediaKind | null) => {
+            if (settled || generation !== generationRef.current) return;
+            settled = true;
+            release();
+            setResolution({ key, kind: nextKind, status: nextKind ? 'resolved' : 'error' });
+        };
+        const onMetadata = () => finish(resolveMediaKindFromDimensions(probe.videoWidth, probe.videoHeight));
+        const onError = () => finish(null);
 
-    return {
-        kind: directKind ?? (previewKind === 'media' ? kind : null),
-        status: directKind ? 'resolved' : previewKind === 'media' ? status : 'idle',
-        retry,
-    };
+        probe.preload = 'metadata';
+        probe.muted = true;
+        probe.playsInline = true;
+        probe.addEventListener('loadedmetadata', onMetadata);
+        probe.addEventListener('error', onError);
+        timeout = window.setTimeout(() => finish(null), PROBE_TIMEOUT_MS);
+        probe.src = src;
+        probe.load();
+
+        return () => {
+            settled = true;
+            release();
+        };
+    }, [directKind, enabled, key, previewKind, src]);
+
+    if (directKind) return { kind: directKind, status: 'resolved', retry };
+    if (!enabled || !src || previewKind !== 'media') return { kind: null, status: 'idle', retry };
+    if (resolution.key !== key) return { kind: null, status: 'probing', retry };
+    return { kind: resolution.kind, status: resolution.status, retry };
 };

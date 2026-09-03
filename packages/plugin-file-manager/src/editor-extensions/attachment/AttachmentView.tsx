@@ -154,7 +154,6 @@ export const AttachmentView: React.FC<NodeViewProps> = (props) => {
             open={previewOpen}
             onOpenChange={setPreviewOpen}
             file={previewFile}
-            url={downloadUrl}
         />
     ) : null;
 

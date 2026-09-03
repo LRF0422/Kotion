@@ -29,6 +29,98 @@ export interface UploadOptions {
     multiple?: boolean;
     /** Progress callback */
     onProgress?: (progress: number) => void;
+    /** Cancel an active upload */
+    signal?: AbortSignal;
+    /** Internal compatibility escape hatch for the bounded legacy multipart endpoint. */
+    forceLegacy?: boolean;
+}
+
+export type UploadTaskStatus =
+    | 'QUEUED'
+    | 'CHECKSUMMING'
+    | 'UPLOADING'
+    | 'PAUSED'
+    | 'WAITING_FOR_NETWORK'
+    | 'NEEDS_PERMISSION'
+    | 'NEEDS_RESELECT'
+    | 'FINALIZING'
+    | 'COMPLETED'
+    | 'FAILED'
+    | 'CANCELLING'
+    | 'CANCELLED';
+
+export interface UploadDestination {
+    parentId: string;
+    repositoryKey?: string;
+    label?: string;
+}
+
+/** File System Access API-compatible handle that can be persisted in IndexedDB. */
+export interface UploadFileHandle {
+    kind: 'file';
+    name: string;
+    getFile(): Promise<File>;
+    queryPermission?(descriptor?: { mode?: 'read' }): Promise<PermissionState>;
+    requestPermission?(descriptor?: { mode?: 'read' }): Promise<PermissionState>;
+}
+
+export interface UploadSource {
+    file: File;
+    handle?: UploadFileHandle;
+}
+
+export interface UploadTask {
+    id: string;
+    batchId: string;
+    clientUploadId: string;
+    sessionId?: string;
+    scopeKey: string;
+    name: string;
+    size: number;
+    contentType: string;
+    lastModified: number;
+    sourceFingerprint?: string;
+    destination: UploadDestination;
+    status: UploadTaskStatus;
+    uploadedBytes: number;
+    confirmedBytes: number;
+    progress: number;
+    partSize?: number;
+    partCount?: number;
+    completedParts: number;
+    retryCount: number;
+    retryable: boolean;
+    errorCode?: string;
+    errorMessage?: string;
+    result?: unknown;
+    createdAt: number;
+    updatedAt: number;
+}
+
+export interface UploadTaskSnapshot {
+    tasks: readonly UploadTask[];
+    totalBytes: number;
+    uploadedBytes: number;
+    progress: number;
+    activeCount: number;
+    completedCount: number;
+    failedCount: number;
+    initialized: boolean;
+}
+
+export interface UploadTaskService {
+    initialize(): Promise<void>;
+    enqueue(sources: UploadSource[], destination: UploadDestination): Promise<string[]>;
+    getSnapshot(): UploadTaskSnapshot;
+    subscribe(listener: () => void): () => void;
+    pause(taskId: string): void;
+    resume(taskId: string): Promise<void>;
+    cancel(taskId: string): Promise<void>;
+    retry(taskId: string): Promise<void>;
+    reselect(taskId: string, source: UploadSource): Promise<void>;
+    clear(taskId: string): void;
+    clearTerminal(): void;
+    waitForCompletion(taskId: string): Promise<unknown>;
 }
 
 /**
@@ -78,7 +170,12 @@ export interface FileService {
     /** Open the OS file picker and return the selected File objects (no upload) */
     pickFiles?: (options?: UploadOptions) => Promise<File[]>;
     /** Upload a file to the file center (single-step: OSS + DB record) under a folder */
-    uploadToFileCenter?: (file: File, parentId?: string, repositoryKey?: string) => Promise<any>;
+    uploadToFileCenter?: (
+        file: File,
+        parentId?: string,
+        repositoryKey?: string,
+        options?: Omit<UploadOptions, 'mimeTypes' | 'multiple'>,
+    ) => Promise<any>;
 }
 
 /**
@@ -138,6 +235,7 @@ export interface AIFoundation {
  */
 export interface Services {
     fileService?: FileService;
+    uploadTaskService?: UploadTaskService;
     aiFoundation?: AIFoundation;
     spacePageService?: SpacePageService;
 }

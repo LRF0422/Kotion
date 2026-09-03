@@ -17,14 +17,16 @@ export * from "./locales"
 // Services type is exported for module augmentation by plugins
 export type {
     KeysWithTypeOf, ValuesOf,
-    UploadedFile, UploadOptions, FileSelectorOptions, SelectedFile, FileService,
-    AIFoundation, Services
+    UploadedFile, UploadOptions, UploadTaskStatus, UploadDestination, UploadFileHandle,
+    UploadSource, UploadTask, UploadTaskSnapshot, UploadTaskService,
+    FileSelectorOptions, SelectedFile, FileService, AIFoundation, Services
 } from "./core/types"
 export * from "./entity"
 export * from "./domain/space-page"
 export * from "./utils/logger"
 export * from "./utils/env-utils"
 export * from "./utils/auth"
+export { authorizedFetch } from "./utils/session"
 export * from "./api"
 export * from "./hooks/use-navigator"
 export * from "./hooks/use-upload-file"
