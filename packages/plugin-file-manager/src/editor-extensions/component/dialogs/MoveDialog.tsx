@@ -15,6 +15,7 @@ import { FileItem, BreadcrumbItem } from "../FileContext";
 import { logger, useApi } from "@kn/common";
 import { APIS } from "../../../api";
 import { useI18n } from "../../../i18n/use-i18n";
+import { normalizeFileName } from "../../../utils/fileUtils";
 
 export interface MoveDialogProps {
     open: boolean;
@@ -63,10 +64,10 @@ export const MoveDialog: React.FC<MoveDialogProps> = ({
             // Filter only folders and exclude files being moved
             const movingIds = files.map(f => f.id);
             const folderItems: FolderTreeItem[] = res.data
-                .filter((item: any) => item.type.value === 'FOLDER' && !movingIds.includes(item.id))
+                .filter((item: any) => item.type?.value === 'FOLDER' && !movingIds.includes(String(item.id)))
                 .map((item: any) => ({
-                    id: item.id,
-                    name: item.name,
+                    id: String(item.id),
+                    name: normalizeFileName(item.name, item.id),
                 }));
 
             setFolders(folderItems);

@@ -16,7 +16,7 @@ import { excalidraw } from "@kn/plugin-excalidraw";
 // set. Host-owned system plugins are shared with the production main boot.
 export const bundledPlugins = [
   ai,
-  bitable,
+  // bitable,
   blockReference,
   chart,
   comment,

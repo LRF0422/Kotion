@@ -14,7 +14,7 @@ import {
     FileCode,
 } from "@kn/icon";
 import type { FileItem } from "./FileContext";
-import { getPreviewKind, getFileExtension } from "../../utils/fileUtils";
+import { getPreviewKind, getFileExtension, type MediaTypeHint } from "../../utils/fileUtils";
 
 type ThumbIcon = React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
 
@@ -32,7 +32,7 @@ const VISUAL_GROUPS: Array<{ exts: string[] } & FileVisual> = [
     { exts: ['xls', 'xlsx', 'csv', 'ods'], icon: FileSpreadsheet, tile: 'bg-emerald-500/10', fg: 'text-emerald-600 dark:text-emerald-400' },
     { exts: ['ppt', 'pptx', 'odp', 'key'], icon: Presentation, tile: 'bg-orange-500/10', fg: 'text-orange-600 dark:text-orange-400' },
     { exts: ['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz'], icon: FileArchive, tile: 'bg-amber-500/10', fg: 'text-amber-600 dark:text-amber-400' },
-    { exts: ['mp4', 'avi', 'mov', 'wmv', 'flv', 'mkv', 'webm'], icon: FileVideo, tile: 'bg-purple-500/10', fg: 'text-purple-600 dark:text-purple-400' },
+    { exts: ['mp4', 'avi', 'mov', 'wmv', 'flv', 'mkv', 'm4v', 'ogv', 'mpg', 'mpeg', '3gp'], icon: FileVideo, tile: 'bg-purple-500/10', fg: 'text-purple-600 dark:text-purple-400' },
     { exts: ['mp3', 'wav', 'ogg', 'aac', 'flac', 'm4a'], icon: FileMusic, tile: 'bg-pink-500/10', fg: 'text-pink-600 dark:text-pink-400' },
     { exts: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg', 'webp'], icon: FileImage, tile: 'bg-teal-500/10', fg: 'text-teal-600 dark:text-teal-400' },
     { exts: ['js', 'jsx', 'ts', 'tsx', 'css', 'scss', 'less', 'html', 'htm', 'json', 'xml', 'yaml', 'yml', 'java', 'py', 'go', 'rs', 'c', 'cpp', 'h', 'sh', 'sql', 'vue'], icon: FileCode, tile: 'bg-indigo-500/10', fg: 'text-indigo-600 dark:text-indigo-400' },
@@ -45,8 +45,16 @@ const DEFAULT_VISUAL: FileVisual = {
     fg: 'text-muted-foreground',
 };
 
-/** 按扩展名解析文件的视觉呈现(图标 + 磁贴配色) */
-export const getFileVisual = (filename: string): FileVisual => {
+const AMBIGUOUS_MEDIA_VISUAL: FileVisual = {
+    icon: FileIcon,
+    tile: 'bg-violet-500/10',
+    fg: 'text-violet-600 dark:text-violet-400',
+};
+
+/** 按文件元数据解析视觉呈现(图标 + 磁贴配色) */
+export const getFileVisual = (filename: string, mediaType?: MediaTypeHint): FileVisual => {
+    if (getPreviewKind(filename, mediaType) === 'media') return AMBIGUOUS_MEDIA_VISUAL;
+
     const ext = getFileExtension(filename);
     for (const group of VISUAL_GROUPS) {
         if (group.exts.includes(ext)) {
@@ -75,7 +83,7 @@ export const FileThumb: React.FC<FileThumbProps> = ({ file, size = 56, className
     const fileService = useFileService();
     const [errored, setErrored] = useState(false);
 
-    const isImage = !file.isFolder && getPreviewKind(file.name) === "image";
+    const isImage = !file.isFolder && getPreviewKind(file.name, file.mediaType) === "image";
     const url = isImage && file.path && !errored ? fileService.getDownloadUrl(file.path) : "";
 
     if (file.isFolder) {
@@ -103,7 +111,7 @@ export const FileThumb: React.FC<FileThumbProps> = ({ file, size = 56, className
         );
     }
 
-    const visual = getFileVisual(file.name);
+    const visual = getFileVisual(file.name, file.mediaType);
     const Icon = visual.icon;
     const iconSize = Math.max(12, Math.round(size * 0.55));
 

@@ -39,7 +39,7 @@ export const FileManagerDialogShell: React.FC<FileManagerDialogShellProps> = ({
             )}
         >
             <DialogHeader className="relative z-10 shrink-0 border-b bg-background pb-3 pl-[calc(env(safe-area-inset-left)+1rem)] pr-[calc(env(safe-area-inset-right)+3.75rem)] pt-[calc(env(safe-area-inset-top)+0.75rem)] text-left md:px-4 md:py-3 md:pr-14">
-                <DialogTitle>{title}</DialogTitle>
+                <DialogTitle className="truncate" title={title}>{title}</DialogTitle>
                 {description && (
                     <DialogDescription>{description}</DialogDescription>
                 )}

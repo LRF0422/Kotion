@@ -3,6 +3,7 @@ import { useApi, useFileService, useSafeState } from '@kn/common';
 import { toast } from '@kn/ui';
 import { APIS } from '../api';
 import { FileItem, BreadcrumbItem } from '../editor-extensions/component/FileContext';
+import { normalizeFileName } from '../utils/fileUtils';
 
 interface UseFileManagerProps {
     initialFolderId?: string;
@@ -37,7 +38,7 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
     const resolveFileItem = useCallback((file: any): FileItem => {
         const baseItem: FileItem = {
             id: String(file.id),
-            name: file.name,
+            name: normalizeFileName(file.name, file.id),
             isFolder: file.type?.value === 'FOLDER' || file.type === 'FOLDER',
             type: file.type,
             // path may be null when OSS link is unavailable; fall back to fileKey

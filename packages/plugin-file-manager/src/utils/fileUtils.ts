@@ -17,12 +17,22 @@ export const formatFileSize = (bytes: number): string => {
     return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
 };
 
+/** Keep malformed API records visible and safe to operate on. */
+export const normalizeFileName = (name: unknown, id: unknown): string => {
+    if (typeof name === 'string' && name.trim()) return name;
+
+    const normalizedId = id === null || id === undefined ? '' : String(id).trim();
+    return normalizedId ? `#${normalizedId}` : 'Unnamed';
+};
+
 /**
  * Get file extension from filename
  * @param filename File name
  * @returns File extension without dot
  */
-export const getFileExtension = (filename: string): string => {
+export const getFileExtension = (filename: string | null | undefined): string => {
+    if (typeof filename !== 'string') return '';
+
     const parts = filename.split('.');
     return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : '';
 };
@@ -43,7 +53,7 @@ export const isImageFile = (filename: string): boolean => {
  * @returns True if file is a video
  */
 export const isVideoFile = (filename: string): boolean => {
-    const videoExtensions = ['mp4', 'avi', 'mov', 'wmv', 'flv', 'mkv', 'webm'];
+    const videoExtensions = ['mp4', 'avi', 'mov', 'wmv', 'flv', 'mkv', 'm4v', 'ogv', 'mpg', 'mpeg', '3gp'];
     return videoExtensions.includes(getFileExtension(filename));
 };
 
@@ -63,7 +73,7 @@ export const isDocumentFile = (filename: string): boolean => {
  * @returns True if file is audio
  */
 export const isAudioFile = (filename: string): boolean => {
-    const audioExtensions = ['mp3', 'wav', 'ogg', 'aac', 'flac', 'm4a'];
+    const audioExtensions = ['mp3', 'wav', 'ogg', 'aac', 'flac', 'm4a', 'weba', 'opus', 'oga', 'aiff', 'aif', 'amr', 'wma'];
     return audioExtensions.includes(getFileExtension(filename));
 };
 
@@ -92,16 +102,27 @@ export const isTextFile = (filename: string): boolean => {
 
 /**
  * Kind of inline preview a file supports.
+ * 'media' is an ambiguous audio/video container that needs metadata probing.
  * 'none' means the file cannot be previewed in the browser.
  */
-export type PreviewKind = 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'none';
+export type PreviewKind = 'image' | 'video' | 'audio' | 'media' | 'pdf' | 'text' | 'none';
+export type MediaTypeHint = string | { value?: string } | null | undefined;
 
-/**
- * Determine how a file should be previewed based on its name.
- * @param filename File name
- * @returns The preview kind
- */
-export const getPreviewKind = (filename: string): PreviewKind => {
+const normalizeMediaTypeHint = (hint: MediaTypeHint): string => {
+    const value = typeof hint === 'string' ? hint : hint?.value;
+    return value?.split(';', 1)[0].trim().toLowerCase() || '';
+};
+
+/** Determine how a file should be previewed from metadata, then its extension. */
+export const getPreviewKind = (filename: string, mediaType?: MediaTypeHint): PreviewKind => {
+    const hint = normalizeMediaTypeHint(mediaType);
+    if (hint.startsWith('audio/') || hint === 'audio') return 'audio';
+    if (hint.startsWith('video/') || hint === 'video') return 'video';
+    if (hint.startsWith('image/') || hint === 'image') return 'image';
+    if (hint === 'application/pdf' || hint === 'pdf') return 'pdf';
+    if (hint.startsWith('text/')) return 'text';
+
+    if (getFileExtension(filename) === 'webm') return 'media';
     if (isImageFile(filename)) return 'image';
     if (isVideoFile(filename)) return 'video';
     if (isAudioFile(filename)) return 'audio';
@@ -110,12 +131,9 @@ export const getPreviewKind = (filename: string): PreviewKind => {
     return 'none';
 };
 
-/**
- * Whether a file can be previewed inline in the browser.
- * @param filename File name
- * @returns True if previewable
- */
-export const isPreviewable = (filename: string): boolean => getPreviewKind(filename) !== 'none';
+/** Whether a file can be previewed inline in the browser. */
+export const isPreviewable = (filename: string, mediaType?: MediaTypeHint): boolean =>
+    getPreviewKind(filename, mediaType) !== 'none';
 
 /**
  * Truncate filename if too long
@@ -156,7 +174,7 @@ export const sortFiles = <T extends { name: string; isFolder: boolean; createdAt
 
         switch (sortBy) {
             case 'name':
-                comparison = a.name.localeCompare(b.name);
+                comparison = normalizeFileName(a.name, '').localeCompare(normalizeFileName(b.name, ''));
                 break;
             case 'type':
                 const extA = getFileExtension(a.name);
@@ -186,7 +204,7 @@ export const filterFiles = <T extends { name: string }>(files: T[], query: strin
     if (!query.trim()) return files;
 
     const lowerQuery = query.toLowerCase();
-    return files.filter(file => file.name.toLowerCase().includes(lowerQuery));
+    return files.filter(file => normalizeFileName(file.name, '').toLowerCase().includes(lowerQuery));
 };
 
 /**

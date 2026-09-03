@@ -31,7 +31,6 @@ import {
     CalendarDays,
     Check,
     ChevronDown,
-    Cpu,
     Download,
     FileAudio,
     Languages,
@@ -322,7 +321,7 @@ const ModelPickerButton: React.FC<{ value: string; onChange: (model: string) => 
                     title={m("model", "模型")}
                     className="flex h-11 max-w-[150px] items-center gap-1.5 rounded-md px-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground lg:h-8"
                 >
-                    <Cpu className="h-4 w-4 shrink-0" />
+                    <Sparkles className="h-4 w-4 shrink-0" />
                     <span className="truncate">{displayLabel}</span>
                 </button>
             </PopoverTrigger>

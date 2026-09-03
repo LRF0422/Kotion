@@ -11,7 +11,8 @@
   "scripts": {
     "build": "rollup -c",
     "check:selection": "tsc src/utils/file-selection.check.ts --outDir .tmp-check --module commonjs --target ES2020 --jsx react --skipLibCheck --esModuleInterop && node .tmp-check/utils/file-selection.check.js",
-    "test": "pnpm check:selection"
+    "check:media": "rm -rf .tmp-check/media && tsc src/utils/media-preview.check.ts --rootDir src --outDir .tmp-check/media --module commonjs --target ES2020 --jsx react --skipLibCheck --esModuleInterop && node .tmp-check/media/utils/media-preview.check.js",
+    "test": "pnpm check:selection && pnpm check:media"
   },
   "dependencies": {
     "@kn/common": "workspace:*",

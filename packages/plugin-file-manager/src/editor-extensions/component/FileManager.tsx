@@ -25,7 +25,7 @@ import {
 } from "./FileContext";
 import { useFileManager } from "../../hooks/useFileManager";
 import { useFileSelection } from "../../hooks/useFileSelection";
-import { isPreviewable } from "../../utils/fileUtils";
+import { isPreviewable, normalizeFileName } from "../../utils/fileUtils";
 import {
     isItemSelectable as matchesSelectionPolicy,
     normalizeConfirmedSelection,
@@ -147,7 +147,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
             if (a.isFolder && !b.isFolder) return -1;
             if (!a.isFolder && b.isFolder) return 1;
             let c = 0;
-            if (sortBy === 'name') c = a.name.localeCompare(b.name);
+            if (sortBy === 'name') c = normalizeFileName(a.name, a.id).localeCompare(normalizeFileName(b.name, b.id));
             else if (sortBy === 'size') c = (a.size || 0) - (b.size || 0);
             else c = new Date(a.updatedAt || a.createdAt || 0).getTime() - new Date(b.updatedAt || b.createdAt || 0).getTime();
             return sortOrder === 'asc' ? c : -c;
@@ -217,7 +217,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
     const openItem = useCallback((item: FileItem) => {
         if (isTrash) return;
         if (item.isFolder) navigateToFolder(item.id, item.name);
-        else if (isPreviewable(item.name)) setPreviewTarget(item);
+        else if (isPreviewable(item.name, item.mediaType)) setPreviewTarget(item);
         else downloadFile(item);
     }, [isTrash, navigateToFolder, downloadFile]);
 
@@ -283,12 +283,14 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                 .filter((child: any) => child.type?.value === 'FOLDER' || child.type === 'FOLDER')
                 .map(resolveTree)
             : undefined;
+        const id = String(file.id);
+        const name = normalizeFileName(file.name, file.id);
         return {
-            id: String(file.id),
-            name: file.name,
+            id,
+            name,
             isFolder: true,
             icon: <FolderIcon className="h-4 w-4" />,
-            onClick: () => navigateToFolder(String(file.id), file.name),
+            onClick: () => navigateToFolder(id, name),
             ...(children?.length ? { children } : {}),
         };
     }, [navigateToFolder]);

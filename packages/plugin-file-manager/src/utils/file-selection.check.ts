@@ -5,6 +5,7 @@ import {
     reconcileSelectedFiles,
     resolveNextSelection,
 } from './file-selection';
+import { normalizeFileName } from './fileUtils';
 
 let passed = 0;
 let failed = 0;
@@ -37,6 +38,11 @@ const png = item('png', 'cover.PNG', false, { value: 'IMAGE' });
 const pdf = item('pdf', 'notes.pdf', false, 'PDF');
 const text = item('text', 'notes.txt', false, 'OTHER');
 const trashedFolder = { ...folder, id: 'trashed-folder', trashed: 1 };
+
+console.log('\nFile name normalization');
+check('keeps a valid file name', normalizeFileName('report.pdf', 'file-1') === 'report.pdf');
+check('replaces a null name with a visible id', normalizeFileName(null, 'file-1') === '#file-1');
+check('replaces a blank name with a visible id', normalizeFileName('   ', 42) === '#42');
 
 console.log('\nSelection policy');
 check('folder target accepts folders', isItemSelectable(folder, { target: 'folder' }));

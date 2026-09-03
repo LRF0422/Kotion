@@ -75,7 +75,7 @@ const FILE_VISUALS: Record<string, FileVisual> = {
     tar: { Icon: BsFileEarmarkZip, tint: "bg-amber-500/10", icon: "text-amber-600" },
     mp4: { Icon: BsFiletypeMp4, tint: "bg-rose-500/10", icon: "text-rose-500" },
     mov: { Icon: BsFiletypeMov, tint: "bg-rose-500/10", icon: "text-rose-500" },
-    webm: { Icon: BsFiletypeMp4, tint: "bg-rose-500/10", icon: "text-rose-500" },
+    webm: { Icon: BsFileEarmark, tint: "bg-violet-500/10", icon: "text-violet-500" },
     mp3: { Icon: BsFiletypeMp3, tint: "bg-pink-500/10", icon: "text-pink-500" },
     wav: { Icon: BsFiletypeWav, tint: "bg-pink-500/10", icon: "text-pink-500" },
     json: { Icon: BsFiletypeJson, tint: "bg-cyan-500/10", icon: "text-cyan-600" },

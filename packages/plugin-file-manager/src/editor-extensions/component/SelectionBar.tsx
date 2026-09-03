@@ -19,7 +19,7 @@ export const SelectionBar: React.FC = () => {
     return (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
             <div className={cn(
-                "pointer-events-auto grid w-full max-w-3xl grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1 rounded-xl border bg-popover p-1.5 shadow-md",
+                "pointer-events-auto grid w-fit max-w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1 rounded-xl border bg-popover p-1.5 shadow-md",
                 "animate-in fade-in slide-in-from-bottom-2 duration-150 motion-reduce:animate-none",
             )}>
                 <span className="whitespace-nowrap rounded-md bg-primary/10 px-2 py-1 text-xs font-medium tabular-nums text-primary">

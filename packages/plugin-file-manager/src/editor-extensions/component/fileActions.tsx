@@ -47,7 +47,7 @@ export const getFileActions = (files: FileItem[], ctx: FileManagerState): FileAc
     }
 
     const actions: FileAction[] = [];
-    const canPreview = !!single && !single.isFolder && isPreviewable(single.name);
+    const canPreview = !!single && !single.isFolder && isPreviewable(single.name, single.mediaType);
     const hasFile = files.some((f) => !f.isFolder);
     const allFavorited = files.every((f) => f.favorite === 1);
 
