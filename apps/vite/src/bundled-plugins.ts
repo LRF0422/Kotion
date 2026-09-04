@@ -27,5 +27,5 @@ export const bundledPlugins = [
   ...systemPlugins,
   fileManager,
   mermaid,
-  excalidraw,
+  // excalidraw,
 ];

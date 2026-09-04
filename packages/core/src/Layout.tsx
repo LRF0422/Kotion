@@ -5,7 +5,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { TourHost } from "./components/Tour/TourHost"
 import { ChevronLeft } from "@kn/icon"
 import { MobileTabBar } from "./components/mobile/MobileTabBar"
-import { useApi, APIS, useAsyncEffect, useLocation, Outlet, useNavigator, useUploadFile, getAccessToken, getRefreshToken, getTokenContextState, clearContextSensitiveClientState, clearTokens, normalizeTokenResponse, notifyContextChanged, saveTokens, useDispatch, AppContext, event, GO_TO_MARKETPLACE, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS, TOGGLE_AI_ASSISTANT, TOGGLE_DOCK_PANEL, dockRuntime, logger } from "@kn/common"
+import { useApi, APIS, useAsyncEffect, useLocation, Outlet, useNavigator, useUploadFile, getAccessToken, getRefreshToken, getTokenContextState, clearContextSensitiveClientState, clearTokens, normalizeTokenResponse, notifyContextChanged, saveTokens, useDispatch, AppContext, event, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS, TOGGLE_AI_ASSISTANT, TOGGLE_DOCK_PANEL, dockRuntime, logger } from "@kn/common"
 import { toast } from "@kn/ui"
 import React from "react"
 import { MobilePageHeaderProvider, useMobilePageHeader } from "@kn/common"
@@ -245,17 +245,6 @@ export function Layout({ onPluginsReady }: LayoutProps) {
             onPluginsReady(true)
         }
     }, [pluginManager, refreshFlag])
-
-    useEffect(() => {
-        event.on(GO_TO_MARKETPLACE, () => {
-            navigator.go({
-                to: '/plugin-hub'
-            })
-        })
-        return () => {
-            event.off(GO_TO_MARKETPLACE)
-        }
-    }, [])
 
     useEffect(() => {
         if (requestPluginId) {

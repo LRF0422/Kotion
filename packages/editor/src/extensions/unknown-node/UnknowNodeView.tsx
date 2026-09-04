@@ -1,4 +1,4 @@
-import { GO_TO_MARKETPLACE, event, useTranslation } from "@kn/common";
+import { useNavigator, useTranslation } from "@kn/common";
 import { Puzzle, ShieldCheck, ShoppingBag } from "@kn/icon";
 import { Button, cn } from "@kn/ui";
 import { NodeViewProps } from "@tiptap/core";
@@ -15,12 +15,9 @@ export const formatPluginName = (nodeType: string) =>
 
 export const UnknownNodeView: React.FC<NodeViewProps> = (props) => {
     const { t } = useTranslation();
+    const navigator = useNavigator();
     const nodeType = String(props.node.attrs.nodeType || "Unknown");
     const pluginName = formatPluginName(nodeType);
-
-    const openMarketplace = () => {
-        event.emit(GO_TO_MARKETPLACE);
-    };
 
     return (
         <NodeViewWrapper
@@ -29,7 +26,7 @@ export const UnknownNodeView: React.FC<NodeViewProps> = (props) => {
         >
             <div
                 className={cn(
-                    "flex w-full max-w-xl flex-col gap-3 rounded-lg border border-border/60 bg-card p-3",
+                    "flex w-full max-w-none flex-col gap-3 rounded-lg border border-border/60 bg-card p-3",
                     "transition-[border-color,background-color,box-shadow] duration-150 md:flex-row md:items-center",
                     props.selected && "border-ring/40 bg-accent/20 ring-1 ring-ring/10"
                 )}
@@ -61,7 +58,7 @@ export const UnknownNodeView: React.FC<NodeViewProps> = (props) => {
                     onMouseDown={event => event.preventDefault()}
                     onClick={event => {
                         event.stopPropagation();
-                        openMarketplace();
+                        navigator.go({ to: "/plugin-hub" });
                     }}
                 >
                     <ShoppingBag className="size-4" />
