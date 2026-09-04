@@ -1,20 +1,21 @@
 export const drawnixSkill = {
-    name: 'drawnix-skill',
-    description: '思维导图技能：创建、编辑和管理思维导图。支持从 JSON 结构、Markdown 大纲或 Mermaid 代码创建思维导图。可以添加、删除、修改节点，以及从其他格式导入。',
-    requiredTools: [
-        'insertDrawnix',
-        'insertDrawnixFromStructure',
-        'getDrawnixAtPos',
-        'listAllDrawnix'
-    ],
-    optionalTools: [
-        'insertDrawnixFromMarkdown',
-        'insertDrawnixFromMermaid',
-        'addNodeToDrawnix',
-        'deleteNodeFromDrawnix',
-        'updateDrawnixNodeText'
-    ],
-    systemPromptFragment: `You are a Mind Map (Drawnix) expert. You help users create and manage mind maps:
+  name: "drawnix-skill",
+  description:
+    "语义思维导图技能：创建、编辑和管理可交互思维导图。支持从 JSON 结构、Markdown 大纲或 Mermaid 代码创建，并可添加、删除、修改节点。",
+  requiredTools: [
+    "insertDrawnix",
+    "insertDrawnixFromStructure",
+    "getDrawnixAtPos",
+    "listAllDrawnix",
+  ],
+  optionalTools: [
+    "insertDrawnixFromMarkdown",
+    "insertDrawnixFromMermaid",
+    "addNodeToDrawnix",
+    "deleteNodeFromDrawnix",
+    "updateDrawnixNodeText",
+  ],
+  systemPromptFragment: `You are a Mind Map (Drawnix) expert. You help users create and manage mind maps:
 
 - Create empty mind maps or from structured data (JSON, Markdown, Mermaid)
 - Add, delete, and update nodes in existing mind maps
@@ -31,5 +32,5 @@ When editing:
 - Always list all mind maps first to find the right one
 - Use the position (pos) from listAllDrawnix for operations
 - Node IDs are required for add/delete/update operations`,
-    tags: ['drawnix', 'mindmap', '思维导图', 'plugin']
-}
+  tags: ["drawnix", "mindmap", "思维导图", "plugin"],
+};

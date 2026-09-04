@@ -1281,36 +1281,9 @@ importers:
       '@kn/ui':
         specifier: workspace:*
         version: link:../ui
-      '@plait-board/markdown-to-drawnix':
-        specifier: ^0.0.8
-        version: 0.0.8
-      '@plait-board/mermaid-to-drawnix':
-        specifier: ^0.0.7
-        version: 0.0.7
-      '@plait-board/react-board':
-        specifier: ^0.4.0-2
-        version: 0.4.0-2(immer@10.2.0)(is-hotkey@0.2.0)(react-dom@18.3.1(react@19.2.4))(react@19.2.4)
-      '@plait-board/react-text':
-        specifier: ^0.4.0-2
-        version: 0.4.0-2(react-dom@18.3.1(react@19.2.4))(react@19.2.4)
-      '@plait/common':
-        specifier: ^0.92.1
-        version: 0.92.3
-      '@plait/core':
-        specifier: ^0.92.1
-        version: 0.92.3(immer@10.2.0)(is-hotkey@0.2.0)
-      '@plait/draw':
-        specifier: ^0.92.1
-        version: 0.92.3
-      '@plait/layouts':
-        specifier: ^0.92.1
-        version: 0.92.3
-      '@plait/mind':
-        specifier: ^0.92.1
-        version: 0.92.3
-      '@plait/text-plugins':
-        specifier: ^0.92.1
-        version: 0.92.3
+      '@xyflow/react':
+        specifier: ^12.11.6
+        version: 12.11.6(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(immer@10.2.0)(react-dom@18.3.1(react@19.2.4))(react@19.2.4)
       autoprefixer:
         specifier: ^10.4.20
         version: 10.4.27(postcss@8.5.6)
@@ -1320,22 +1293,16 @@ importers:
       postcss:
         specifier: ^8.4.47
         version: 8.5.6
-      slate:
-        specifier: ^0.116.0
-        version: 0.116.0
-      slate-dom:
-        specifier: ^0.116.0
-        version: 0.116.0(slate@0.116.0)
-      slate-history:
-        specifier: ^0.115.0
-        version: 0.115.0(slate@0.116.0)
-      slate-react:
-        specifier: ^0.116.0
-        version: 0.116.0(react-dom@18.3.1(react@19.2.4))(react@19.2.4)(slate-dom@0.116.0(slate@0.116.0))(slate@0.116.0)
     devDependencies:
       '@kn/rollup-config':
         specifier: workspace:*
         version: link:../rollup-config
+      '@types/react':
+        specifier: ^18.3.12
+        version: 18.3.28
+      '@types/react-dom':
+        specifier: ^18.3.1
+        version: 18.3.7(@types/react@18.3.28)
 
   packages/plugin-excalidraw:
     dependencies:
@@ -3023,9 +2990,6 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@juggle/resize-observer@3.4.0':
-    resolution: {integrity: sha512-dfLbk+PwWvFzSxwk3n5ySL0hfBog779o8h68wK/7/APo/7cgyWp5jcXockbxdk5kFRkbeXWm4Fbi9FrdN381sA==}
-
   '@lezer/common@1.5.1':
     resolution: {integrity: sha512-6YRVG9vBkaY7p1IVxL4s44n5nUnaNnGM2/AckNgYOnxTG2kWh1vR8BMxPseWPjRNpb5VtXnMpeYAEAADoRV1Iw==}
 
@@ -3368,41 +3332,8 @@ packages:
     resolution: {integrity: sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg==}
     engines: {node: '>=14'}
 
-  '@plait-board/markdown-to-drawnix@0.0.8':
-    resolution: {integrity: sha512-9HXhNryB94JmqHj0+Sx/poECj6cHTdAg2Qtfdxr5xx9A0NH26ObVMkQDWOJT3o3xThE9XkD5zr/6kVR2SvKOyw==}
-
   '@plait-board/mermaid-to-drawnix@0.0.3':
     resolution: {integrity: sha512-xvYBjRta3hJd/oWy4efKMJBcLEm4yHytdejALsJ4QfeIyYuMHIhxwmGIvnDWk3ZqSMCVCjt0yM+CLFlIJMozWQ==}
-
-  '@plait-board/mermaid-to-drawnix@0.0.7':
-    resolution: {integrity: sha512-Z3ETJA34o5G/rjaR2kl9ifirFUp1yDq9shxFcgXNTuI6aOmgLafnNtB4m9IsNQDsfsjlzt44oIXeUQdOCj2Bqw==}
-
-  '@plait-board/react-board@0.4.0-2':
-    resolution: {integrity: sha512-yXiMumj6Ie4mUezLwdMjjT5R53xGw6YviP8BOdc1YX9mZzHB4JvcmbvCgpM8mZT5kdaEFppJ8STP26V8jwtI9A==}
-
-  '@plait-board/react-text@0.4.0-2':
-    resolution: {integrity: sha512-cPumV6q7Xz4bRjf6EKZ1cYWTbKQKjH0u2vi+8X8PsbTLhLONRQ3iYmVXXBFo7HEPWI2899sP6N0TgKg+iDKJgw==}
-
-  '@plait/common@0.92.3':
-    resolution: {integrity: sha512-rNQXpjpJNHP9/93+M25Gy2yw8mRNfF7RdOZuSsS0aBrG3rWp0jWFr23M0OhbM8+bFS2pkzkxqNRbDmKkm89zZQ==}
-
-  '@plait/core@0.92.3':
-    resolution: {integrity: sha512-TRk1XNkePLGvGTQqe7scDu/C9millFnTFrM+tjZmDWscE9y+4IaMp+RcRZ/e6LGzGyRaTYMPD69twLzRQc8J3g==}
-    peerDependencies:
-      immer: ^10.0.3
-      is-hotkey: ^0.2.0
-
-  '@plait/draw@0.92.3':
-    resolution: {integrity: sha512-SlKvJvB3VvusiBV7cVB64Tz8krD8EFYKtlASnva/H21MZciS8dx//4jbGQk5R9O3RGvY79TpZwBlYEzw4ypxDw==}
-
-  '@plait/layouts@0.92.3':
-    resolution: {integrity: sha512-RSTDBoTNuRmQ5t6xdPuH11gkQTo29bO1SRjwfM0PtZfAN6FODUDMtGlt5pXfSaGUjXzjFPNGYs1vnWQMznGoTw==}
-
-  '@plait/mind@0.92.3':
-    resolution: {integrity: sha512-0i1ewmz7WZEQyon9YBIJcPVn2vsku0orXxeRIjKNNgET4I4Ee25GJ+yS31WsHC4O+JEt4jGph/OozhFrcl5G6g==}
-
-  '@plait/text-plugins@0.92.3':
-    resolution: {integrity: sha512-Zci+vj3wA+yjjil+7BnWOPdxEB8gvjy3iyZDXoZDd3tATuRSZgK5dtBSNd4OIl/g7dq2Y8aFhoeCGDSYplzOdQ==}
 
   '@popperjs/core@2.11.8':
     resolution: {integrity: sha512-P1st0aksCrn9sGZhp8GMYwBnQsbvAWsZAX44oXNNvLHGqAOcoVxmjZiohstwQ7SqKnbR47akdNi+uleWD8+g6A==}
@@ -7003,6 +6934,22 @@ packages:
     engines: {node: '>=10.0.0'}
     deprecated: this version has critical issues, please update to the latest version
 
+  '@xyflow/react@12.11.6':
+    resolution: {integrity: sha512-9XsEJNHjatKYndszKTF/bsU7FOP9dJ6V/EQwzy3oMdtqgBuUq7BjKSwkEo+C7s4qHstHQfwwoHA3E8QfpPxZZQ==}
+    peerDependencies:
+      '@types/react': '>=17'
+      '@types/react-dom': '>=17'
+      react: '>=17'
+      react-dom: '>=17'
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
+      '@types/react-dom':
+        optional: true
+
+  '@xyflow/system@0.0.82':
+    resolution: {integrity: sha512-4DKnL3CGtCGLRSmgDqaajRVgeksMXq/Yw4wPfdMfm7JvdIiWHGzVYOfFUztiATwdBXZqUU6HhehwUdbV9G23PQ==}
+
   abbrev@1.1.1:
     resolution: {integrity: sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q==}
 
@@ -7556,6 +7503,9 @@ packages:
 
   class-variance-authority@0.7.1:
     resolution: {integrity: sha512-Ka+9Trutv7G8M6WT6SeiRWz792K5qEqIGEGzXKhAE6xOWAY6pPH8U+9IY3oCMv6kqTmLsv7Xh/2w2RigkePMsg==}
+
+  classcat@5.0.5:
+    resolution: {integrity: sha512-JhZUT7JFcQy/EzW605k/ktHtncoo9vnyW/2GspNYwFlN1C/WmjuV/xtS04e9SOkL2sTdw0VAZ2UGCcQ9lR6p6w==}
 
   classnames@2.5.1:
     resolution: {integrity: sha512-saHYOzhIQs6wy2sVxTM6bUDsQO4F50V9RQ22qBpEdCW+I+/Wmke2HOl6lS6dTpdxVhb88/I6+Hs+438c3lfUow==}
@@ -8162,10 +8112,6 @@ packages:
   dir-glob@3.0.1:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
     engines: {node: '>=8'}
-
-  direction@1.0.4:
-    resolution: {integrity: sha512-GYqKi1aH7PJXxdhTeZBFrg8vUBeKXi+cNprXsC1kpJcbcVnV9wBsrOu1cQEdG0WeQwlfHiy3XvnKfIrJ2R0NzQ==}
-    hasBin: true
 
   dlv@1.1.3:
     resolution: {integrity: sha512-+HlytyjlPKnIG8XuRG8WvmBP8xs8P71y+SKKS6ZXWoEgLuePxtDoUEiH7WkdePWrQ5JBpE6aoVqfZfJUQkjXwA==}
@@ -9434,9 +9380,6 @@ packages:
   is-hexadecimal@2.0.1:
     resolution: {integrity: sha512-DgZQp241c8oO6cA1SbTEWiXeoxV42vlcJxgH+B3hi1AiqqKruZR3ZGF8In3fj4+/y/7rHvlOZLZtgJ/4ttYGZg==}
 
-  is-hotkey@0.2.0:
-    resolution: {integrity: sha512-UknnZK4RakDmTgz4PI1wIph5yxSs/mvChWs9ifnlXsKuXgWmOkY/hAE0H/k2MIqH0RlRye0i1oC07MCRSD28Mw==}
-
   is-interactive@1.0.0:
     resolution: {integrity: sha512-2HvIEKRoqS62guEC+qBjpvRubdX910WCMuJTZ+I9yvqKU2/12eSL549HMwtabb4oupdj2sMP50k+XJfB/8JE6w==}
     engines: {node: '>=8'}
@@ -9473,10 +9416,6 @@ packages:
 
   is-plain-object@2.0.4:
     resolution: {integrity: sha512-h5PpgXkWitc38BBMYawTYMWJHFZJVnBquFE57xFpjB8pJFiF6gZ+bU+WyI/yqXiFR5mdLsgYNaPe8uao6Uv9Og==}
-    engines: {node: '>=0.10.0'}
-
-  is-plain-object@5.0.0:
-    resolution: {integrity: sha512-VRSzKkbMm5jMDoKLbltAkFQ5Qr7VDiTFGXxYFXXowVj387GeGNOCsOH6Msy00SGZ3Fp84b1Naa1psqgcCIEP5Q==}
     engines: {node: '>=0.10.0'}
 
   is-reference@1.2.1:
@@ -12365,27 +12304,6 @@ packages:
     resolution: {integrity: sha512-g9Q1haeby36OSStwb4ntCGGGaKsaVSjQ68fBxoQcutl5fS1vuY18H3wSt3jFyFtrkx+Kz0V1G85A4MyAdDMi2Q==}
     engines: {node: '>=8'}
 
-  slate-dom@0.116.0:
-    resolution: {integrity: sha512-ZyyPdT4zY4d/P/gfqMWBaAWWqV3N2BbAiDqEfOtZwPLcy7vvC02PsVvSZLaGun7DvaM2EIqdN7tTq3REbQkYgA==}
-    peerDependencies:
-      slate: '>=0.99.0'
-
-  slate-history@0.115.0:
-    resolution: {integrity: sha512-QdUm9aVyQFz6JG4a84Z6Um+tJpZJmsh9bjXwTVTvYiN4rdKbqL6+/4HT94on1WYxe10Q4vY6mA6BCpoYxgF3tQ==}
-    peerDependencies:
-      slate: '>=0.114.3'
-
-  slate-react@0.116.0:
-    resolution: {integrity: sha512-wyM41C/qnzfovqOWnjReM5aojLlGxogL/yzMg+ZaZIdEERSJTKjpgt0iIxy4pdIu5GQkF3mwFNNc1/Zy+C/Uwg==}
-    peerDependencies:
-      react: '>=18.2.0'
-      react-dom: '>=18.2.0'
-      slate: '>=0.114.0'
-      slate-dom: '>=0.116.0'
-
-  slate@0.116.0:
-    resolution: {integrity: sha512-CpI6S0PTFDjFsYKah3geR7X5O/38tjxVlwkYGpfQ583yYkSbt/pyEldTB1CJE3MK4htfn2D/wPkwWtDV06ZqWA==}
-
   slice-ansi@3.0.0:
     resolution: {integrity: sha512-pSyv7bSTC7ig9Dcgbw9AuRNUb5k5V6oDudjZoMBSr13qpLBG7tB+zgCkARjq7xIUgdz5P1Qe8u+rSGdouOOIyQ==}
     engines: {node: '>=8'}
@@ -12773,14 +12691,8 @@ packages:
   tiny-inflate@1.0.3:
     resolution: {integrity: sha512-pkY1fj1cKHb2seWDy0B16HeWyczlJA9/WW3u3c4z/NiWDsO3DOU5D7nhTLE9CF0yXv/QZFY7sEJmj24dK+Rrqw==}
 
-  tiny-invariant@1.3.1:
-    resolution: {integrity: sha512-AD5ih2NlSssTCwsMznbvwMZpJ1cbhkGd2uueNxzv2jDlEeZdU04JQfRnggJQ8DrcVBGjAsCKwFBbDlVNtEMlzw==}
-
   tiny-invariant@1.3.3:
     resolution: {integrity: sha512-+FbBPE1o9QAYvviau/qC5SE3caw21q3xkvWKBtja5vgqOWIHHJ3ioaq1VPfn/Szqctz2bU/oYeKd9/z5BL+PVg==}
-
-  tiny-warning@1.0.3:
-    resolution: {integrity: sha512-lBN9zLN/oAf68o3zNXYrdCt1kP8WsiGW8Oo2ka41b2IM5JL/S1CTyX1rW0mb/zSuJun0ZUrDxx4sqvYS2FWzPA==}
 
   tinycolor2@1.6.0:
     resolution: {integrity: sha512-XPaBkWQJdsf3pLKJV9p4qN/S+fm2Oj8AIPo1BTUhg5oxkvm9+SVEGFdhyOz7tTdUTfvxMiAs4sp6/eZO2Ew+pw==}
@@ -14664,8 +14576,6 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@juggle/resize-observer@3.4.0': {}
-
   '@lezer/common@1.5.1': {}
 
   '@lezer/common@1.5.2': {}
@@ -15013,81 +14923,11 @@ snapshots:
   '@pkgjs/parseargs@0.11.0':
     optional: true
 
-  '@plait-board/markdown-to-drawnix@0.0.8':
-    dependencies:
-      remark-parse: 11.0.0
-      unified: 11.0.5
-    transitivePeerDependencies:
-      - supports-color
-
   '@plait-board/mermaid-to-drawnix@0.0.3':
     dependencies:
       mermaid: 10.9.3
     transitivePeerDependencies:
       - supports-color
-
-  '@plait-board/mermaid-to-drawnix@0.0.7':
-    dependencies:
-      mermaid: 10.9.3
-    transitivePeerDependencies:
-      - supports-color
-
-  '@plait-board/react-board@0.4.0-2(immer@10.2.0)(is-hotkey@0.2.0)(react-dom@18.3.1(react@19.2.4))(react@19.2.4)':
-    dependencies:
-      '@plait/common': 0.92.3
-      '@plait/core': 0.92.3(immer@10.2.0)(is-hotkey@0.2.0)
-      '@plait/draw': 0.92.3
-      '@plait/layouts': 0.92.3
-      '@plait/mind': 0.92.3
-      '@plait/text-plugins': 0.92.3
-      ahooks: 3.9.6(react-dom@18.3.1(react@19.2.4))(react@19.2.4)
-      classnames: 2.5.1
-    transitivePeerDependencies:
-      - immer
-      - is-hotkey
-      - react
-      - react-dom
-
-  '@plait-board/react-text@0.4.0-2(react-dom@18.3.1(react@19.2.4))(react@19.2.4)':
-    dependencies:
-      '@plait/common': 0.92.3
-      '@plait/text-plugins': 0.92.3
-      is-hotkey: 0.2.0
-      slate: 0.116.0
-      slate-dom: 0.116.0(slate@0.116.0)
-      slate-history: 0.115.0(slate@0.116.0)
-      slate-react: 0.116.0(react-dom@18.3.1(react@19.2.4))(react@19.2.4)(slate-dom@0.116.0(slate@0.116.0))(slate@0.116.0)
-    transitivePeerDependencies:
-      - react
-      - react-dom
-
-  '@plait/common@0.92.3':
-    dependencies:
-      tslib: 2.8.1
-
-  '@plait/core@0.92.3(immer@10.2.0)(is-hotkey@0.2.0)':
-    dependencies:
-      immer: 10.2.0
-      is-hotkey: 0.2.0
-      points-on-curve: 1.0.1
-      roughjs: 4.6.6
-      tslib: 2.8.1
-
-  '@plait/draw@0.92.3':
-    dependencies:
-      tslib: 2.8.1
-
-  '@plait/layouts@0.92.3':
-    dependencies:
-      tslib: 2.8.1
-
-  '@plait/mind@0.92.3':
-    dependencies:
-      tslib: 2.8.1
-
-  '@plait/text-plugins@0.92.3':
-    dependencies:
-      tslib: 2.8.1
 
   '@popperjs/core@2.11.8': {}
 
@@ -20149,6 +19989,31 @@ snapshots:
 
   '@xmldom/xmldom@0.8.11': {}
 
+  '@xyflow/react@12.11.6(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(immer@10.2.0)(react-dom@18.3.1(react@19.2.4))(react@19.2.4)':
+    dependencies:
+      '@xyflow/system': 0.0.82
+      classcat: 5.0.5
+      react: 19.2.4
+      react-dom: 18.3.1(react@19.2.4)
+      zustand: 4.5.7(@types/react@18.3.28)(immer@10.2.0)(react@19.2.4)
+    optionalDependencies:
+      '@types/react': 18.3.28
+      '@types/react-dom': 18.3.7(@types/react@18.3.28)
+    transitivePeerDependencies:
+      - immer
+
+  '@xyflow/system@0.0.82':
+    dependencies:
+      '@types/d3-drag': 3.0.7
+      '@types/d3-interpolate': 3.0.4
+      '@types/d3-selection': 3.0.11
+      '@types/d3-transition': 3.0.9
+      '@types/d3-zoom': 3.0.8
+      d3-drag: 3.0.0
+      d3-interpolate: 3.0.1
+      d3-selection: 3.0.0
+      d3-zoom: 3.0.0
+
   abbrev@1.1.1: {}
 
   abbrev@3.0.1: {}
@@ -20873,6 +20738,8 @@ snapshots:
     dependencies:
       clsx: 2.1.1
 
+  classcat@5.0.5: {}
+
   classnames@2.5.1: {}
 
   clean-regexp@1.0.0:
@@ -21520,8 +21387,6 @@ snapshots:
     dependencies:
       path-type: 4.0.0
 
-  direction@1.0.4: {}
-
   dlv@1.1.3: {}
 
   dmg-builder@25.1.8(electron-builder-squirrel-windows@25.1.8):
@@ -21927,7 +21792,7 @@ snapshots:
       eslint: 9.39.3(jiti@1.21.7)
       eslint-import-resolver-node: 0.3.9
       eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.56.1(eslint@9.39.3(jiti@1.21.7))(typescript@5.9.3))(eslint@9.39.3(jiti@1.21.7)))(eslint@9.39.3(jiti@1.21.7))
-      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.56.1(eslint@9.39.3(jiti@1.21.7))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.3(jiti@1.21.7))
+      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.56.1(eslint@9.39.3(jiti@1.21.7))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.56.1(eslint@9.39.3(jiti@1.21.7))(typescript@5.9.3))(eslint@9.39.3(jiti@1.21.7)))(eslint@9.39.3(jiti@1.21.7)))(eslint@9.39.3(jiti@1.21.7))
       eslint-plugin-jsx-a11y: 6.10.2(eslint@9.39.3(jiti@1.21.7))
       eslint-plugin-react: 7.37.5(eslint@9.39.3(jiti@1.21.7))
       eslint-plugin-react-hooks: 7.0.1(eslint@9.39.3(jiti@1.21.7))
@@ -21974,7 +21839,7 @@ snapshots:
       tinyglobby: 0.2.15
       unrs-resolver: 1.11.1
     optionalDependencies:
-      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.56.1(eslint@9.39.3(jiti@1.21.7))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.3(jiti@1.21.7))
+      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.56.1(eslint@9.39.3(jiti@1.21.7))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.56.1(eslint@9.39.3(jiti@1.21.7))(typescript@5.9.3))(eslint@9.39.3(jiti@1.21.7)))(eslint@9.39.3(jiti@1.21.7)))(eslint@9.39.3(jiti@1.21.7))
     transitivePeerDependencies:
       - supports-color
 
@@ -22050,7 +21915,7 @@ snapshots:
       - eslint-import-resolver-webpack
       - supports-color
 
-  eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.56.1(eslint@9.39.3(jiti@1.21.7))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.3(jiti@1.21.7)):
+  eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.56.1(eslint@9.39.3(jiti@1.21.7))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.56.1(eslint@9.39.3(jiti@1.21.7))(typescript@5.9.3))(eslint@9.39.3(jiti@1.21.7)))(eslint@9.39.3(jiti@1.21.7)))(eslint@9.39.3(jiti@1.21.7)):
     dependencies:
       '@rtsao/scc': 1.1.0
       array-includes: 3.1.9
@@ -23074,7 +22939,8 @@ snapshots:
 
   immediate@3.0.6: {}
 
-  immer@10.2.0: {}
+  immer@10.2.0:
+    optional: true
 
   immutable@4.3.7: {}
 
@@ -23275,8 +23141,6 @@ snapshots:
 
   is-hexadecimal@2.0.1: {}
 
-  is-hotkey@0.2.0: {}
-
   is-interactive@1.0.0: {}
 
   is-lambda@1.0.1: {}
@@ -23301,8 +23165,6 @@ snapshots:
   is-plain-object@2.0.4:
     dependencies:
       isobject: 3.0.1
-
-  is-plain-object@5.0.0: {}
 
   is-reference@1.2.1:
     dependencies:
@@ -27051,39 +26913,6 @@ snapshots:
 
   slash@3.0.0: {}
 
-  slate-dom@0.116.0(slate@0.116.0):
-    dependencies:
-      '@juggle/resize-observer': 3.4.0
-      direction: 1.0.4
-      is-hotkey: 0.2.0
-      is-plain-object: 5.0.0
-      lodash: 4.17.23
-      scroll-into-view-if-needed: 3.1.0
-      slate: 0.116.0
-      tiny-invariant: 1.3.1
-
-  slate-history@0.115.0(slate@0.116.0):
-    dependencies:
-      slate: 0.116.0
-
-  slate-react@0.116.0(react-dom@18.3.1(react@19.2.4))(react@19.2.4)(slate-dom@0.116.0(slate@0.116.0))(slate@0.116.0):
-    dependencies:
-      '@juggle/resize-observer': 3.4.0
-      direction: 1.0.4
-      is-hotkey: 0.2.0
-      lodash: 4.17.23
-      react: 19.2.4
-      react-dom: 18.3.1(react@19.2.4)
-      scroll-into-view-if-needed: 3.1.0
-      slate: 0.116.0
-      slate-dom: 0.116.0(slate@0.116.0)
-      tiny-invariant: 1.3.1
-
-  slate@0.116.0:
-    dependencies:
-      immer: 10.2.0
-      tiny-warning: 1.0.3
-
   slice-ansi@3.0.0:
     dependencies:
       ansi-styles: 4.3.0
@@ -27579,11 +27408,7 @@ snapshots:
 
   tiny-inflate@1.0.3: {}
 
-  tiny-invariant@1.3.1: {}
-
   tiny-invariant@1.3.3: {}
-
-  tiny-warning@1.0.3: {}
 
   tinycolor2@1.6.0: {}
 

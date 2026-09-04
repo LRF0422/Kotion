@@ -42,7 +42,9 @@
       "Bash(curl *)",
       "Bash(ps -axo pid,ppid,etime,%cpu,%mem,command)",
       "Skill(claude-api)",
-      "Bash(chromium-cli *)"
+      "Bash(chromium-cli *)",
+      "Bash(/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge *)",
+      "Agent"
     ]
   },
   "disabledMcpjsonServers": [

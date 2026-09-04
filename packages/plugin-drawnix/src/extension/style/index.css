@@ -1,346 +1,307 @@
-/* ============================================================
-   Native Drawnix (Mindmap-only) Component Styles
-   ============================================================ */
-
-.drawnix-native {
-    position: relative;
-    width: 100%;
-    overflow: hidden;
-    border: 1px solid #e5e5e5;
-    border-radius: 8px;
+/* React Flow mind-map styles are scoped to the Drawnix node view. */
+.drawnix-root {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid hsl(var(--border, 214 32% 91%));
+  border-radius: 10px;
+  color: hsl(var(--foreground, 222 47% 11%));
+  background: hsl(var(--background, 0 0% 100%));
+  outline: none;
 }
 
-/* ============================================================
-   Mindmap Toolbar
-   ============================================================ */
+.drawnix-root:focus-visible {
+  box-shadow: 0 0 0 2px hsl(var(--ring, 221 83% 53%) / 0.35);
+}
 
 .drawnix-toolbar {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-    padding: 6px 8px;
-    border-bottom: 1px solid #e5e5e5;
-    background-color: #ffffff;
-    user-select: none;
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  z-index: 20;
+  display: flex;
+  width: max-content;
+  max-width: calc(100% - 24px);
+  min-height: 44px;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  overflow-x: auto;
+  transform: translateX(-50%);
+  border: 1px solid hsl(var(--border, 214 32% 91%));
+  border-radius: 10px;
+  background: hsl(var(--background, 0 0% 100%) / 0.92);
+  box-shadow: 0 10px 30px hsl(var(--foreground, 222 47% 11%) / 0.12);
+  backdrop-filter: blur(12px);
+  user-select: none;
+  scrollbar-width: thin;
 }
 
 .drawnix-toolbar-group {
-    display: flex;
-    align-items: center;
-    gap: 2px;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
 }
 
 .drawnix-toolbar-sep {
-    width: 1px;
-    align-self: stretch;
-    margin: 2px 2px;
-    background-color: #e5e5e5;
+  width: 1px;
+  min-height: 28px;
+  flex: 0 0 1px;
+  background: hsl(var(--border, 214 32% 91%));
+}
+
+.drawnix-tool-btn,
+.drawnix-tool-zoom {
+  display: inline-flex;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  color: hsl(var(--muted-foreground, 215 16% 47%));
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    opacity 120ms ease;
 }
 
 .drawnix-tool-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 30px;
-    height: 30px;
-    border: none;
-    border-radius: 6px;
-    background: transparent;
-    color: #444;
-    cursor: pointer;
-    transition: background-color 0.12s ease, color 0.12s ease;
-}
-
-.drawnix-tool-btn:hover:not(:disabled) {
-    background-color: #f0f0f0;
-    color: #111;
-}
-
-.drawnix-tool-btn:disabled {
-    opacity: 0.35;
-    cursor: not-allowed;
+  width: 32px;
 }
 
 .drawnix-tool-zoom {
-    min-width: 46px;
-    height: 30px;
-    padding: 0 6px;
-    border: none;
-    border-radius: 6px;
-    background: transparent;
-    color: #444;
-    font-size: 12px;
-    font-variant-numeric: tabular-nums;
-    cursor: pointer;
+  min-width: 48px;
+  padding: 0 6px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
+.drawnix-tool-btn:hover:not(:disabled),
 .drawnix-tool-zoom:hover {
-    background-color: #f0f0f0;
-    color: #111;
+  color: hsl(var(--foreground, 222 47% 11%));
+  background: hsl(var(--accent, 210 40% 96%));
+}
+
+.drawnix-tool-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.drawnix-collapse-symbol {
+  font-size: 18px;
+  line-height: 1;
 }
 
 .drawnix-toolbar-layout {
-    height: 30px;
-    padding: 0 8px;
-    border: 1px solid #e0e0e0;
-    border-radius: 6px;
-    background-color: #fff;
-    color: #444;
-    font-size: 12px;
-    cursor: pointer;
+  height: 32px;
+  flex: 0 0 auto;
+  padding: 0 26px 0 9px;
+  border: 1px solid hsl(var(--border, 214 32% 91%));
+  border-radius: 6px;
+  color: hsl(var(--foreground, 222 47% 11%));
+  background: hsl(var(--background, 0 0% 100%));
+  font-size: 12px;
+  cursor: pointer;
 }
 
-/* Dark theme — toolbar */
-.drawnix-dark .drawnix-native {
-    border-color: #333;
-}
-
-.drawnix-dark .drawnix-toolbar {
-    background-color: #232323;
-    border-bottom-color: #383838;
-}
-
-.drawnix-dark .drawnix-toolbar-sep {
-    background-color: #3a3a3a;
-}
-
-.drawnix-dark .drawnix-tool-btn,
-.drawnix-dark .drawnix-tool-zoom {
-    color: #ccc;
-}
-
-.drawnix-dark .drawnix-tool-btn:hover:not(:disabled),
-.drawnix-dark .drawnix-tool-zoom:hover {
-    background-color: #3a3a3a;
-    color: #fff;
-}
-
-.drawnix-dark .drawnix-toolbar-layout {
-    background-color: #2c2c2c;
-    border-color: #444;
-    color: #ccc;
-}
-
-/* Board area — full height */
 .drawnix-board-area {
-    width: 100%;
-    height: 500px;
-    position: relative;
+  position: relative;
+  width: 100%;
+  height: clamp(420px, 58vh, 720px);
+  min-height: 360px;
+  background: hsl(var(--background, 0 0% 100%));
 }
 
-/* Ensure viewport fills the board area */
-.drawnix-board-area .plait-board-container {
-    width: 100% !important;
-    height: 100% !important;
+.drawnix-board-area .react-flow {
+  background: hsl(var(--background, 0 0% 100%));
 }
 
-.drawnix-board-area .viewport-container {
-    width: 100% !important;
-    height: 100% !important;
-    overflow: auto !important;
+.drawnix-board-area .react-flow__pane {
+  cursor: grab;
 }
 
-/* ============================================================
-   Board Canvas - Light Theme (default)
-   ============================================================ */
-
-.drawnix-native:not(.drawnix-dark) {
-    background-color: #fafafa;
+.drawnix-board-area .react-flow__pane.dragging {
+  cursor: grabbing;
 }
 
-.drawnix-native:not(.drawnix-dark) .drawnix-board-area {
-    background-color: #fafafa;
+.drawnix-board-area .react-flow__background pattern circle {
+  fill: hsl(var(--muted-foreground, 215 16% 47%) / 0.28);
 }
 
-.drawnix-native:not(.drawnix-dark) .drawnix-board-area .plait-board-container {
-    background-color: #fafafa;
-    background-image: radial-gradient(#e5e5e5 1px, transparent 1px);
-    background-size: 20px 20px;
+.drawnix-mind-node {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 14px;
+  border: 1px solid hsl(var(--border, 214 32% 91%));
+  border-radius: 9px;
+  color: hsl(var(--foreground, 222 47% 11%));
+  background: hsl(var(--background, 0 0% 100%));
+  box-shadow:
+    0 1px 2px hsl(var(--foreground, 222 47% 11%) / 0.05),
+    0 6px 18px hsl(var(--foreground, 222 47% 11%) / 0.04);
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
-.drawnix-native:not(.drawnix-dark) .drawnix-board-area .plait-board {
-    background-color: #fafafa;
+.drawnix-mind-node:hover {
+  border-color: hsl(var(--primary, 221 83% 53%) / 0.55);
 }
 
-/* Light mode scrollbars inside board */
-.drawnix-native:not(.drawnix-dark) .drawnix-board-area .viewport-container::-webkit-scrollbar-track {
-    background: #f1f1f1;
+.drawnix-mind-node.is-selected {
+  border-color: hsl(var(--primary, 221 83% 53%));
+  box-shadow:
+    0 0 0 2px hsl(var(--primary, 221 83% 53%) / 0.16),
+    0 8px 22px hsl(var(--foreground, 222 47% 11%) / 0.08);
 }
 
-.drawnix-native:not(.drawnix-dark) .drawnix-board-area .viewport-container::-webkit-scrollbar-thumb {
-    background: #c1c1c1;
-    border-radius: 5px;
+.drawnix-mind-node.is-root {
+  border-color: hsl(var(--primary, 221 83% 53%) / 0.72);
+  color: hsl(var(--primary-foreground, 210 40% 98%));
+  background: hsl(var(--primary, 221 83% 53%));
+  font-weight: 600;
 }
 
-.drawnix-native:not(.drawnix-dark) .drawnix-board-area .viewport-container::-webkit-scrollbar-thumb:hover {
-    background: #a1a1a1;
+.drawnix-node-text {
+  width: 100%;
+  overflow: hidden;
+  text-align: center;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 20px;
+  user-select: none;
 }
 
-/* ============================================================
-   Dark Theme
-   ============================================================ */
-
-.drawnix-dark .drawnix-board-area,
-.drawnix-dark .drawnix-native {
-    background-color: #1a1a1a;
+.drawnix-mind-node.is-root .drawnix-node-text {
+  font-size: 14px;
 }
 
-.drawnix-dark .drawnix-board-area .plait-board-container {
-    background-color: #1a1a1a;
-    background-image: radial-gradient(#333 1px, transparent 1px);
-    background-size: 20px 20px;
+.drawnix-node-input {
+  width: 100%;
+  min-height: 24px;
+  max-height: 120px;
+  resize: none;
+  overflow-y: auto;
+  border: 0;
+  outline: 0;
+  color: inherit;
+  background: transparent;
+  text-align: center;
+  font: inherit;
+  line-height: 20px;
 }
 
-.drawnix-dark .drawnix-board-area .plait-board {
-    background-color: #1a1a1a;
+.drawnix-collapse-button {
+  position: absolute;
+  right: -11px;
+  bottom: -11px;
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid hsl(var(--border, 214 32% 91%));
+  border-radius: 999px;
+  color: hsl(var(--muted-foreground, 215 16% 47%));
+  background: hsl(var(--background, 0 0% 100%));
+  box-shadow: 0 1px 4px hsl(var(--foreground, 222 47% 11%) / 0.1);
+  font-size: 11px;
+  cursor: pointer;
 }
 
-/* Dark mode - Board host SVG: coordinate with Plait's theme-dark (#141414) */
-.drawnix-dark .drawnix-board-area .board-host-svg {
-    background-color: #141414 !important;
+.drawnix-collapse-button:hover:not(:disabled) {
+  color: hsl(var(--primary, 221 83% 53%));
+  border-color: hsl(var(--primary, 221 83% 53%) / 0.6);
 }
 
-/* Dark mode scrollbars */
-.drawnix-dark .drawnix-board-area .viewport-container::-webkit-scrollbar-track {
-    background: #1a1a1a;
+.drawnix-collapse-button:disabled {
+  display: none;
 }
 
-.drawnix-dark .drawnix-board-area .viewport-container::-webkit-scrollbar-thumb {
-    background: #444;
-    border-radius: 5px;
+.drawnix-handle {
+  width: 1px !important;
+  height: 1px !important;
+  min-width: 1px !important;
+  min-height: 1px !important;
+  opacity: 0;
+  pointer-events: none;
 }
 
-.drawnix-dark .drawnix-board-area .viewport-container::-webkit-scrollbar-thumb:hover {
-    background: #555;
+.drawnix-edge .react-flow__edge-path {
+  stroke: hsl(var(--muted-foreground, 215 16% 47%) / 0.58);
+  stroke-width: 1.6;
 }
 
-/* ============================================================
-   Dark Theme - Text Editing (foreignObject / Slate)
-   When double-clicking a mindmap node to edit text, the Slate
-   editor is rendered inside a foreignObject. These rules ensure
-   proper dark-mode text and background colors.
-   ============================================================ */
-
-.drawnix-dark .drawnix-board-area .slate-editable-container {
-    color: #e0e0e0;
-    caret-color: #60a5fa;
+.drawnix-root:fullscreen,
+.drawnix-root.is-fallback-fullscreen {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100dvh;
+  border: 0;
+  border-radius: 0;
+  background: hsl(var(--background, 0 0% 100%));
 }
 
-.drawnix-dark .drawnix-board-area .slate-editable-container[contenteditable="true"] {
-    color: #e0e0e0;
+.drawnix-root.is-fallback-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
 }
 
-/* Dark mode - node text container override for non-root nodes */
-.drawnix-dark .drawnix-board-area .plait-text-container {
-    color: #e0e0e0;
+.drawnix-root:fullscreen .drawnix-board-area,
+.drawnix-root.is-fallback-fullscreen .drawnix-board-area {
+  height: auto;
+  min-height: 0;
+  flex: 1 1 auto;
 }
 
-/* ============================================================
-   Dark Theme - Plait Board Internal UI Elements
-   Islands (floating popups), buttons, tool icons, etc.
-   ============================================================ */
-
-.drawnix-dark .drawnix-board-area .island {
-    background-color: #2c2c2c;
-    border-color: #444;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+html[data-device="mobile"] .drawnix-toolbar {
+  top: max(8px, env(safe-area-inset-top));
+  left: max(8px, env(safe-area-inset-left));
+  right: max(8px, env(safe-area-inset-right));
+  width: auto;
+  max-width: none;
+  min-height: 56px;
+  padding: 6px;
+  transform: none;
 }
 
-.drawnix-dark .drawnix-board-area svg text {
-    fill: #e0e0e0;
+html[data-device="mobile"] .drawnix-tool-btn,
+html[data-device="mobile"] .drawnix-tool-zoom {
+  height: 44px;
 }
 
-.drawnix-dark .drawnix-board-area .drawnix-button {
-    background-color: #3a3a3a;
-    color: #ccc;
-    border-color: #555;
+html[data-device="mobile"] .drawnix-tool-btn {
+  width: 44px;
 }
 
-.drawnix-dark .drawnix-board-area .drawnix-button:hover {
-    background-color: #484848;
+html[data-device="mobile"] .drawnix-board-area {
+  height: clamp(380px, 62dvh, 640px);
 }
 
-.drawnix-dark .drawnix-board-area .tool-icon__icon {
-    color: #ccc;
+html[data-device="tablet"] .drawnix-tool-btn,
+html[data-device="tablet"] .drawnix-tool-zoom {
+  min-height: 40px;
 }
 
-.drawnix-dark .drawnix-board-area .tool-icon__icon:hover {
-    background-color: rgba(59, 130, 246, 0.15);
-    color: #60a5fa;
+@media (prefers-reduced-motion: reduce) {
+  .drawnix-mind-node,
+  .drawnix-tool-btn,
+  .drawnix-tool-zoom {
+    transition: none;
+  }
 }
 
-/* Dark mode - Plait toolbar (if rendered by mind plugin) */
-.drawnix-dark .drawnix-board-area .plait-toolbar {
-    background-color: #2c2c2c;
-    border-color: #444;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+.node-drawnix {
 }
-
-/* Dark mode - Plait popup/dropdown menus */
-.drawnix-dark .drawnix-board-area .plait-popup {
-    background-color: #2c2c2c;
-    border-color: #444;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-}
-
-/* Dark mode - Mind node selection highlight */
-.drawnix-dark .drawnix-board-area .active-element {
-    stroke: #60a5fa;
-}
-
-/* Dark mode - Mind plugin's add/collapse buttons on nodes */
-.drawnix-dark .drawnix-board-area .add-button circle,
-.drawnix-dark .drawnix-board-area .collapse-button circle {
-    fill: #3a3a3a;
-    stroke: #555;
-}
-
-.drawnix-dark .drawnix-board-area .add-button:hover circle,
-.drawnix-dark .drawnix-board-area .collapse-button:hover circle {
-    fill: #484848;
-    stroke: #60a5fa;
-}
-
-/* Dark mode - Mind plugin's add/collapse button icons */
-.drawnix-dark .drawnix-board-area .add-button path,
-.drawnix-dark .drawnix-board-area .add-button line,
-.drawnix-dark .drawnix-board-area .collapse-button path,
-.drawnix-dark .drawnix-board-area .collapse-button line {
-    stroke: #ccc;
-}
-
-.drawnix-dark .drawnix-board-area .add-button:hover path,
-.drawnix-dark .drawnix-board-area .add-button:hover line,
-.drawnix-dark .drawnix-board-area .collapse-button:hover path,
-.drawnix-dark .drawnix-board-area .collapse-button:hover line {
-    stroke: #60a5fa;
-}
-
-/* Dark mode - Mind plugin's expanded button */
-.drawnix-dark .drawnix-board-area .expanded-button circle {
-    fill: #3a3a3a;
-    stroke: #555;
-}
-
-.drawnix-dark .drawnix-board-area .expanded-button:hover circle {
-    fill: #484848;
-    stroke: #60a5fa;
-}
-
-/* Dark mode - Color picker panel (if shown by mind plugin) */
-.drawnix-dark .drawnix-board-area .color-picker {
-    background-color: #2c2c2c;
-    border-color: #444;
-}
-
-/* Dark mode - Drag preview ghost */
-.drawnix-dark .drawnix-board-area .dragging-node {
-    opacity: 0.7;
-}
-
-/* ============================================================
-   Legacy compatibility (ProseMirror node rendering)
-   ============================================================ */
-
-.node-drawnix {}

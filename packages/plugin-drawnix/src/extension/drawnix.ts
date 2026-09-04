@@ -1,233 +1,206 @@
-import { PMNode as Node, ReactNodeViewRenderer, mergeAttributes, withNodeViewErrorBoundary } from "@kn/editor"
-import { DrawnixView } from "./DrawnixView"
-import type { PlaitElement } from '@plait/core'
+import {
+  PMNode as Node,
+  ReactNodeViewRenderer,
+  mergeAttributes,
+  withNodeViewErrorBoundary,
+} from "@kn/editor";
+import { DrawnixView } from "./DrawnixView";
+import { createDefaultMindmapDocument } from "./data";
+import { normalizeDrawnixData } from "./model/normalize";
+import {
+  addMindmapChild,
+  createMindmapNode,
+  deleteMindmapNode,
+  extractMindmapStructure as extractSemanticStructure,
+  findMindmapNode,
+  updateMindmapNodeText,
+} from "./model/operations";
+import {
+  semanticNodeToLegacyElement,
+  serializeDrawnixDocument,
+} from "./model/serialize";
+import type {
+  DrawnixData,
+  LegacyPlaitElement,
+  MindmapNode,
+  MindmapNodeData,
+} from "./model/types";
 
-// Type for drawnix data structure
-export interface DrawnixData {
-    children: PlaitElement[]
-    viewport?: { zoom: number; offsetX: number; offsetY: number }
-}
+export type { DrawnixData, MindmapNodeData } from "./model/types";
 
-// Type for mindmap node
-export interface MindmapNodeData {
-    id: string
-    text: string
-    children?: MindmapNodeData[]
+export interface UpdateDrawnixOptions {
+  addToHistory?: boolean;
 }
 
 declare module "@kn/editor" {
-    interface Commands<ReturnType> {
-        drawnix: {
-            insertDrawnix: () => ReturnType
-            insertDrawnixWithData: (data: DrawnixData) => ReturnType
-            updateDrawnixAtPos: (pos: number, data: DrawnixData) => ReturnType
-        }
-    }
+  interface Commands<ReturnType> {
+    drawnix: {
+      insertDrawnix: () => ReturnType;
+      insertDrawnixWithData: (data: DrawnixData) => ReturnType;
+      updateDrawnixAtPos: (
+        pos: number,
+        data: DrawnixData,
+        options?: UpdateDrawnixOptions,
+      ) => ReturnType;
+    };
+  }
 }
 
-/**
- * Helper: Convert simple mindmap structure to PlaitElement format
- */
-export function convertToPlaitElement(node: MindmapNodeData, isRoot: boolean = false): PlaitElement {
-    const element: any = {
-        id: node.id,
-        data: {
-            topic: {
-                children: [{ text: node.text }]
-            }
-        },
-        children: (node.children || []).map(child => convertToPlaitElement(child, false)),
-        width: isRoot ? 72 : (node.text.length > 4 ? node.text.length * 12 : 42),
-        height: isRoot ? 25 : 20
-    }
-
-    if (isRoot) {
-        element.type = 'mindmap'
-        element.isRoot = true
-        element.rightNodeCount = element.children.length
-        element.points = [[248, 470]]
-    }
-
-    return element
+function fromNodeData(node: MindmapNodeData): MindmapNode {
+  return createMindmapNode(
+    node.id,
+    node.text,
+    (node.children ?? []).map(fromNodeData),
+  );
 }
 
-/**
- * Helper: Convert PlaitElement back to simple structure for reading
- */
-export function extractMindmapStructure(element: PlaitElement): MindmapNodeData {
-    const any = element as any
-    const text = any.data?.topic?.children?.[0]?.text || ''
-    return {
-        id: any.id || '',
-        text,
-        children: (any.children || []).map((child: PlaitElement) => extractMindmapStructure(child))
-    }
+/** @deprecated Compatibility helper for integrations that still expect Plait-shaped JSON. */
+export function convertToPlaitElement(
+  node: MindmapNodeData,
+  isRoot = false,
+): LegacyPlaitElement {
+  return semanticNodeToLegacyElement(fromNodeData(node), isRoot);
 }
 
-/**
- * Helper: Find a node by id in the tree
- */
-export function findNodeById(elements: PlaitElement[], id: string): PlaitElement | null {
-    for (const element of elements) {
-        const any = element as any
-        if (any.id === id) return element
-        if (any.children && any.children.length > 0) {
-            const found = findNodeById(any.children, id)
-            if (found) return found
-        }
-    }
-    return null
+/** @deprecated Compatibility helper for reading a Plait-shaped node. */
+export function extractMindmapStructure(
+  element: LegacyPlaitElement,
+): MindmapNodeData {
+  return extractSemanticStructure(
+    normalizeDrawnixData({ children: [element] }).document.root,
+  );
 }
 
-/**
- * Helper: Add a child node to a parent
- */
+/** @deprecated Compatibility helper for searching a Plait-shaped tree. */
+export function findNodeById(
+  elements: LegacyPlaitElement[],
+  id: string,
+): LegacyPlaitElement | null {
+  for (const element of elements) {
+    if (element.id === id) return element;
+    if (Array.isArray(element.children)) {
+      const found = findNodeById(element.children as LegacyPlaitElement[], id);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+/** @deprecated Prefer semantic operations over legacy arrays. */
 export function addChildToNode(
-    elements: PlaitElement[],
-    parentId: string,
-    newNode: MindmapNodeData
-): PlaitElement[] | null {
-    const cloned = JSON.parse(JSON.stringify(elements))
-
-    const addToParent = (nodes: any[], targetId: string): boolean => {
-        for (const node of nodes) {
-            if (node.id === targetId) {
-                if (!node.children) node.children = []
-                node.children.push(convertToPlaitElement(newNode, false))
-                // Update rightNodeCount for root
-                if (node.isRoot) {
-                    node.rightNodeCount = node.children.length
-                }
-                return true
-            }
-            if (node.children && node.children.length > 0) {
-                if (addToParent(node.children, targetId)) return true
-            }
-        }
-        return false
-    }
-
-    if (addToParent(cloned, parentId)) {
-        return cloned
-    }
-    return null
+  elements: LegacyPlaitElement[],
+  parentId: string,
+  newNode: MindmapNodeData,
+): LegacyPlaitElement[] | null {
+  const normalized = normalizeDrawnixData({ children: elements }).document;
+  const updated = addMindmapChild(normalized, parentId, fromNodeData(newNode));
+  return updated ? serializeDrawnixDocument(updated).children : null;
 }
 
-/**
- * Helper: Delete a node by id
- */
+/** @deprecated Prefer semantic operations over legacy arrays. */
 export function deleteNodeById(
-    elements: PlaitElement[],
-    nodeId: string
-): PlaitElement[] | null {
-    const cloned = JSON.parse(JSON.stringify(elements))
-
-    const deleteFromParent = (nodes: any[], targetId: string): boolean => {
-        for (let i = 0; i < nodes.length; i++) {
-            if (nodes[i].id === targetId) {
-                // Don't allow deleting root
-                if (nodes[i].isRoot) return false
-                nodes.splice(i, 1)
-                return true
-            }
-            if (nodes[i].children && nodes[i].children.length > 0) {
-                if (deleteFromParent(nodes[i].children, targetId)) {
-                    // Update rightNodeCount for root after deletion
-                    if (nodes[i].isRoot) {
-                        nodes[i].rightNodeCount = nodes[i].children.length
-                    }
-                    return true
-                }
-            }
-        }
-        return false
-    }
-
-    if (deleteFromParent(cloned, nodeId)) {
-        return cloned
-    }
-    return null
+  elements: LegacyPlaitElement[],
+  nodeId: string,
+): LegacyPlaitElement[] | null {
+  const normalized = normalizeDrawnixData({ children: elements }).document;
+  const updated = deleteMindmapNode(normalized, nodeId);
+  return updated ? serializeDrawnixDocument(updated).children : null;
 }
 
-/**
- * Helper: Update a node's text by id
- */
+/** @deprecated Prefer semantic operations over legacy arrays. */
 export function updateNodeText(
-    elements: PlaitElement[],
-    nodeId: string,
-    newText: string
-): PlaitElement[] | null {
-    const cloned = JSON.parse(JSON.stringify(elements))
-
-    const updateInTree = (nodes: any[], targetId: string): boolean => {
-        for (const node of nodes) {
-            if (node.id === targetId) {
-                if (node.data?.topic?.children?.[0]) {
-                    node.data.topic.children[0].text = newText
-                }
-                return true
-            }
-            if (node.children && node.children.length > 0) {
-                if (updateInTree(node.children, targetId)) return true
-            }
-        }
-        return false
-    }
-
-    if (updateInTree(cloned, nodeId)) {
-        return cloned
-    }
-    return null
+  elements: LegacyPlaitElement[],
+  nodeId: string,
+  newText: string,
+): LegacyPlaitElement[] | null {
+  const normalized = normalizeDrawnixData({ children: elements }).document;
+  if (!findMindmapNode(normalized.root, nodeId)) return null;
+  const updated = updateMindmapNodeText(normalized, nodeId, newText);
+  return updated ? serializeDrawnixDocument(updated).children : null;
 }
 
 export const Drawnix = Node.create({
-    name: "drawnix",
-    group: "block",
-    atom: true,
-    defining: true,
-    addAttributes() {
-        return {
-            data: {
-                default: null
+  name: "drawnix",
+  group: "block",
+  atom: true,
+  defining: true,
+  addAttributes() {
+    return {
+      data: {
+        default: serializeDrawnixDocument(createDefaultMindmapDocument()),
+      },
+    };
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ["div", mergeAttributes(HTMLAttributes, { class: "node-drawnix" })];
+  },
+  addNodeView() {
+    return ReactNodeViewRenderer(
+      withNodeViewErrorBoundary(DrawnixView, "drawnix"),
+      {
+        stopEvent: (eventWrapper) => {
+          const event = eventWrapper.event;
+          if (event instanceof MouseEvent && event.type === "mousedown")
+            return false;
+          if (event instanceof KeyboardEvent) {
+            const modifier = event.ctrlKey || event.metaKey;
+            if (
+              modifier &&
+              (event.key.toLowerCase() === "z" ||
+                event.key.toLowerCase() === "y")
+            ) {
+              return false;
             }
-        }
-    },
-
-    renderHTML({ HTMLAttributes }) {
-        return ["div", mergeAttributes(HTMLAttributes, { class: "node-drawnix" })]
-    },
-    addNodeView() {
-        return ReactNodeViewRenderer(withNodeViewErrorBoundary(DrawnixView), {
-            stopEvent: () => true
-        })
-    },
-    addCommands() {
-        return {
-            insertDrawnix: () => ({ commands }) => {
-                return commands.insertContent({
-                    type: this.name
-                })
+          }
+          if (event instanceof InputEvent) {
+            if (
+              event.inputType === "historyUndo" ||
+              event.inputType === "historyRedo"
+            )
+              return false;
+          }
+          return true;
+        },
+      },
+    );
+  },
+  addCommands() {
+    return {
+      insertDrawnix:
+        () =>
+        ({ commands }) =>
+          commands.insertContent({
+            type: this.name,
+            attrs: {
+              data: serializeDrawnixDocument(createDefaultMindmapDocument()),
             },
-
-            insertDrawnixWithData: (data: DrawnixData) => ({ commands }) => {
-                return commands.insertContent({
-                    type: this.name,
-                    attrs: { data }
-                })
+          }),
+      insertDrawnixWithData:
+        (data: DrawnixData) =>
+        ({ commands }) =>
+          commands.insertContent({
+            type: this.name,
+            attrs: {
+              data: serializeDrawnixDocument(
+                normalizeDrawnixData(data).document,
+              ),
             },
-
-            updateDrawnixAtPos: (pos: number, data: DrawnixData) => ({ tr, dispatch }) => {
-                if (!dispatch) return false
-
-                const node = tr.doc.nodeAt(pos)
-                if (!node || node.type.name !== 'drawnix') {
-                    return false
-                }
-
-                tr.setNodeMarkup(pos, undefined, { data })
-                dispatch(tr)
-                return true
-            }
-        }
-    }
-})
+          }),
+      updateDrawnixAtPos:
+        (pos: number, data: DrawnixData, options?: UpdateDrawnixOptions) =>
+        ({ tr, dispatch }) => {
+          if (!dispatch) return false;
+          const node = tr.doc.nodeAt(pos);
+          if (!node || node.type.name !== this.name) return false;
+          tr.setNodeMarkup(pos, undefined, {
+            ...node.attrs,
+            data: serializeDrawnixDocument(normalizeDrawnixData(data).document),
+          });
+          if (options?.addToHistory === false)
+            tr.setMeta("addToHistory", false);
+          dispatch(tr);
+          return true;
+        },
+    };
+  },
+});

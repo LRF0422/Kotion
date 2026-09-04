@@ -1,212 +1,24 @@
-import type { PlaitElement } from '@plait/core';
+import type { MindmapDocument } from "./model/types";
+import { serializeDrawnixDocument } from "./model/serialize";
 
-export const initializeData: PlaitElement[] = [
-    {
-        type: 'mindmap',
-        id: 'rzdDJ',
-        rightNodeCount: 4,
-        data: {
-            topic: {
-                children: [
-                    {
-                        text: '思维导图',
-                    },
-                ],
-            },
-        },
-        children: [
-            {
-                id: 'WKQyj',
-                data: {
-                    topic: {
-                        children: [
-                            {
-                                text: '观点一',
-                            },
-                        ],
-                    },
-                },
-                children: [
-                    {
-                        id: 'RYSRd',
-                        data: {
-                            topic: {
-                                children: [
-                                    {
-                                        text: '',
-                                    },
-                                ],
-                            },
-                        },
-                        children: [
-                            {
-                                id: 'nDBRj',
-                                data: {
-                                    topic: {
-                                        children: [
-                                            {
-                                                text: '',
-                                            },
-                                        ],
-                                    },
-                                },
-                                children: [],
-                                width: 14,
-                                height: 20,
-                            },
-                        ],
-                        width: 14,
-                        height: 20,
-                    },
-                ],
-                width: 42,
-                height: 20,
-            },
-            {
-                id: 'PWzAD',
-                data: {
-                    topic: {
-                        children: [
-                            {
-                                text: '观点二',
-                            },
-                        ],
-                    },
-                },
-                children: [
-                    {
-                        id: 'bTRmh',
-                        data: {
-                            topic: {
-                                children: [
-                                    {
-                                        text: '',
-                                    },
-                                ],
-                            },
-                        },
-                        children: [
-                            {
-                                id: 'bnZEJ',
-                                data: {
-                                    topic: {
-                                        children: [
-                                            {
-                                                text: '',
-                                            },
-                                        ],
-                                    },
-                                },
-                                children: [],
-                                width: 14,
-                                height: 20,
-                            },
-                        ],
-                        width: 14,
-                        height: 20,
-                    },
-                ],
-                width: 42,
-                height: 20,
-            },
-            {
-                id: 'nJTYp',
-                data: {
-                    topic: {
-                        children: [
-                            {
-                                text: '观点三',
-                            },
-                        ],
-                    },
-                },
-                children: [
-                    {
-                        id: 'GtyaH',
-                        data: {
-                            topic: {
-                                children: [
-                                    {
-                                        text: '',
-                                    },
-                                ],
-                            },
-                        },
-                        children: [
-                            {
-                                id: 'JsPEN',
-                                data: {
-                                    topic: {
-                                        children: [
-                                            {
-                                                text: '',
-                                            },
-                                        ],
-                                    },
-                                },
-                                children: [],
-                                width: 14,
-                                height: 20,
-                            },
-                        ],
-                        width: 14,
-                        height: 20,
-                    },
-                ],
-                width: 42,
-                height: 20,
-            },
-            {
-                id: 'aCpyY',
-                data: {
-                    topic: {
-                        children: [
-                            {
-                                text: '观点四',
-                            },
-                        ],
-                    },
-                },
-                children: [
-                    {
-                        id: 'iHynm',
-                        data: {
-                            topic: {
-                                children: [
-                                    {
-                                        text: '',
-                                    },
-                                ],
-                            },
-                        },
-                        children: [
-                            {
-                                id: 'TiZGR',
-                                data: {
-                                    topic: {
-                                        children: [
-                                            {
-                                                text: '',
-                                            },
-                                        ],
-                                    },
-                                },
-                                children: [],
-                                width: 14,
-                                height: 20,
-                            },
-                        ],
-                        width: 14,
-                        height: 20,
-                    },
-                ],
-                width: 42,
-                height: 20,
-            },
-        ],
-        width: 72,
-        height: 25,
-        isRoot: true,
-        points: [[248.24308817248368, 470.83369157012714]],
-    }
-];
+export function createDefaultMindmapDocument(): MindmapDocument {
+  return {
+    schemaVersion: 2,
+    layout: "standard",
+    root: {
+      id: "root",
+      text: "思维导图",
+      children: [
+        { id: "idea-1", text: "观点一", side: "right", children: [] },
+        { id: "idea-2", text: "观点二", side: "right", children: [] },
+        { id: "idea-3", text: "观点三", side: "left", children: [] },
+        { id: "idea-4", text: "观点四", side: "left", children: [] },
+      ],
+    },
+  };
+}
+
+/** @deprecated Legacy projection retained for older Drawnix clients. */
+export const initializeData = serializeDrawnixDocument(
+  createDefaultMindmapDocument(),
+).children;

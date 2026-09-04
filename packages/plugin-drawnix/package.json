@@ -10,35 +10,25 @@
   },
   "scripts": {
     "build": "rollup -c",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "check:logic": "tsc src/extension/model/model.check.ts src/extension/layout/tree-layout.check.ts src/extension/importers/importers.check.ts --rootDir src/extension --outDir .tmp-check --module commonjs --moduleResolution node --target ES2022 --lib ES2022,DOM --skipLibCheck --esModuleInterop && node -e \"require('fs').writeFileSync('.tmp-check/package.json', '{\\\"type\\\":\\\"commonjs\\\"}')\" && node .tmp-check/model/model.check.js && node .tmp-check/layout/tree-layout.check.js && node .tmp-check/importers/importers.check.js",
+    "check": "pnpm check:logic"
   },
   "dependencies": {
     "@kn/common": "workspace:*",
     "@kn/editor": "workspace:*",
     "@kn/icon": "workspace:*",
     "@kn/ui": "workspace:*",
-    "@plait-board/markdown-to-drawnix": "^0.0.8",
-    "@plait-board/mermaid-to-drawnix": "^0.0.7",
-    "@plait-board/react-board": "^0.4.0-2",
-    "@plait-board/react-text": "^0.4.0-2",
-    "@plait/common": "^0.92.1",
-    "@plait/core": "^0.92.1",
-    "@plait/draw": "^0.92.1",
-    "@plait/layouts": "^0.92.1",
-    "@plait/mind": "^0.92.1",
-    "@plait/text-plugins": "^0.92.1",
+    "@xyflow/react": "^12.11.6",
     "autoprefixer": "^10.4.20",
     "nanoid": "^5.0.7",
-    "postcss": "^8.4.47",
-    "slate": "^0.116.0",
-    "slate-dom": "^0.116.0",
-    "slate-history": "^0.115.0",
-    "slate-react": "^0.116.0"
+    "postcss": "^8.4.47"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@kn/rollup-config": "workspace:*"
+    "@kn/rollup-config": "workspace:*",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1"
   }
 }
