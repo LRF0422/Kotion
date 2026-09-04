@@ -31,17 +31,62 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
     const [loading, setLoading] = useState(true);
     const [errored, setErrored] = useState(false);
     const [urlVersion, setUrlVersion] = useState(0);
+    const [pdfObjectUrl, setPdfObjectUrl] = useState("");
     const { t } = useI18n();
 
     const kind: PreviewKind = file && !file.isFolder
         ? getPreviewKind(file.name, file.mediaType)
         : "none";
+    const shouldLoadPdfBlob = kind === "pdf"
+        && !urlOverride
+        && !!file?.id
+        && !!fileService.getFileBlob;
 
-    const url = useMemo(() => {
+    const remoteUrl = useMemo(() => {
         if (urlOverride) return urlOverride;
         if (!file || !file.path) return "";
         return fileService.getDownloadUrl(file.path);
     }, [file, fileService, urlOverride, urlVersion]);
+    const url = shouldLoadPdfBlob ? pdfObjectUrl : remoteUrl;
+
+    useEffect(() => {
+        if (!open || !shouldLoadPdfBlob || !file?.id || !fileService.getFileBlob) {
+            setPdfObjectUrl("");
+            return;
+        }
+
+        let disposed = false;
+        let objectUrl = "";
+        setPdfObjectUrl("");
+        setLoading(true);
+        setErrored(false);
+
+        const loadPdf = async () => {
+            try {
+                const downloaded = await fileService.getFileBlob!(String(file.id));
+                const pdfBlob = !downloaded.type || downloaded.type === "application/octet-stream"
+                    ? new Blob([downloaded], { type: "application/pdf" })
+                    : downloaded;
+                objectUrl = URL.createObjectURL(pdfBlob);
+                if (disposed) {
+                    URL.revokeObjectURL(objectUrl);
+                    return;
+                }
+                setPdfObjectUrl(objectUrl);
+            } catch {
+                if (!disposed) {
+                    setLoading(false);
+                    setErrored(true);
+                }
+            }
+        };
+
+        void loadPdf();
+        return () => {
+            disposed = true;
+            if (objectUrl) URL.revokeObjectURL(objectUrl);
+        };
+    }, [file?.id, fileService, open, shouldLoadPdfBlob, urlVersion]);
 
     const mediaResolution = useResolvedMediaKind(kind, url, open && !!file);
 
@@ -59,8 +104,18 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
     };
 
     const handleDownload = () => {
+        if (shouldLoadPdfBlob && pdfObjectUrl) {
+            const anchor = document.createElement("a");
+            anchor.href = pdfObjectUrl;
+            anchor.download = file.name;
+            document.body.appendChild(anchor);
+            anchor.click();
+            anchor.remove();
+            return;
+        }
         if (onDownload) onDownload(file);
-        else openInNewTab();
+        else if (url) openInNewTab();
+        else if (remoteUrl) window.open(remoteUrl, "_blank", "noopener,noreferrer");
     };
 
     const retryMedia = () => setUrlVersion((version) => version + 1);
@@ -70,6 +125,21 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
     };
 
     const renderBody = () => {
+        if (kind === "pdf" && shouldLoadPdfBlob) {
+            if (errored) {
+                return (
+                    <FallbackBody
+                        message={t('preview.mediaLoadFailed')}
+                        onDownload={handleDownload}
+                        onRetry={retryMedia}
+                    />
+                );
+            }
+            if (!url) {
+                return <LoadingSpinner message={t('preview.loadingMedia')} />;
+            }
+        }
+
         if (!url) {
             return <FallbackBody message={t('preview.noPreview')} onDownload={handleDownload} />;
         }
@@ -136,6 +206,10 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
                             title={file.name}
                             className="h-full w-full rounded-md border bg-white"
                             onLoad={() => setLoading(false)}
+                            onError={() => {
+                                setLoading(false);
+                                setErrored(true);
+                            }}
                         />
                     </div>
                 );
