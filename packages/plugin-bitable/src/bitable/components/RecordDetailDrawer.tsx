@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef } from "react";
-import { Sheet, SheetContent } from "@kn/ui";
+import { Sheet, SheetContent, cn, useResolvedTheme } from "@kn/ui";
 import { useTranslation } from "@kn/common";
 import { X, ChevronLeft, ChevronRight, Plus } from "@kn/icon";
 import { FieldConfig, RecordData, FieldType } from "../../types";
@@ -22,7 +22,7 @@ interface RecordDetailDrawerProps {
 
 /**
  * Notion-style side drawer for viewing/editing a single record.
- * Slides in from right, 480px wide, full height.
+ * Slides in from right, 640px wide, full height.
  * - Header: inline editable title, ID badge, prev/next nav, close button
  * - Properties: two-column label/value layout, click to edit
  * - Content: Tiptap rich text editor
@@ -40,6 +40,7 @@ export const RecordDetailDrawer: React.FC<RecordDetailDrawerProps> = ({
     editable = true,
 }) => {
     const { t } = useTranslation();
+    const resolvedTheme = useResolvedTheme();
     const titleRef = useRef<HTMLDivElement>(null);
 
     // Keep last non-null record so content stays mounted during close animation.
@@ -93,7 +94,10 @@ export const RecordDetailDrawer: React.FC<RecordDetailDrawerProps> = ({
         >
             <SheetContent
                 side="right"
-                className="p-0 flex flex-col"
+                className={cn(
+                    "bitable flex min-w-0 max-w-full flex-col overflow-x-hidden p-0",
+                    resolvedTheme === "dark" && "bitable--dark"
+                )}
                 style={{ width: "var(--bt-drawer-w)", maxWidth: "90vw" }}
             >
                 {/* Header */}

@@ -10,13 +10,12 @@ import { drawnix } from "@kn/plugin-drawnix";
 import { fileManager } from "@kn/file-manager";
 import { systemPlugins } from "./system-plugins";
 import { mermaid } from "@kn/mermaid-plugin";
-import { excalidraw } from "@kn/plugin-excalidraw";
 
 // Development and public shares load the complete source-plugin compatibility
 // set. Host-owned system plugins are shared with the production main boot.
 export const bundledPlugins = [
   ai,
-  // bitable,
+  bitable,
   blockReference,
   chart,
   comment,
@@ -27,5 +26,4 @@ export const bundledPlugins = [
   ...systemPlugins,
   fileManager,
   mermaid,
-  // excalidraw,
 ];
