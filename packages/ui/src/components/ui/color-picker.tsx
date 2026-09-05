@@ -220,7 +220,6 @@ const OpacitySlider: React.FC<{
       ref={sliderRef}
       className="relative w-full h-3 rounded-full cursor-pointer select-none touch-none"
       style={{
-        background: `linear-gradient(to right, transparent, ${color})`,
         backgroundImage: `linear-gradient(to right, ${hexToRgba(color, 0)}, ${color}), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8'%3E%3Crect width='4' height='4' fill='%23ccc'/%3E%3Crect x='4' y='4' width='4' height='4' fill='%23ccc'/%3E%3C/svg%3E")`,
         backgroundSize: '100% 100%, 8px 8px',
       }}
@@ -247,6 +246,10 @@ export interface ColorPickerProps {
   value?: string
   /** Callback when color changes */
   onChange?: (color: string) => void
+  /** Callback when the color popover opens or closes */
+  onOpenChange?: (open: boolean) => void
+  /** Accessible label for the trigger control */
+  triggerAriaLabel?: string
   /** Preset color swatches */
   swatches?: string[]
   /** Show opacity slider */
@@ -270,6 +273,8 @@ export interface ColorPickerProps {
 export function ColorPicker({
   value = '#3b82f6',
   onChange,
+  onOpenChange,
+  triggerAriaLabel,
   swatches = DEFAULT_SWATCHES,
   showOpacity = false,
   onUnset,
@@ -284,6 +289,10 @@ export function ColorPicker({
   const [hsb, setHsb] = useState<HSB>(() => hexToHsb(value || '#3b82f6'))
   const [opacity, setOpacity] = useState(100)
   const [hexInput, setHexInput] = useState(value || '#3b82f6')
+  const handleOpenChange = useCallback((nextOpen: boolean) => {
+    setOpen(nextOpen)
+    onOpenChange?.(nextOpen)
+  }, [onOpenChange])
 
   // Sync external value -> internal state
   useEffect(() => {
@@ -357,6 +366,7 @@ export function ColorPicker({
     <Button
       variant="outline"
       disabled={disabled}
+      aria-label={triggerAriaLabel}
       className={cn(
         'w-[220px] justify-start text-left font-normal',
         !value && 'text-muted-foreground',
@@ -364,14 +374,14 @@ export function ColorPicker({
       )}
     >
       <div className="w-full flex items-center gap-2">
-        {value ? (
+        {triggerIcon || (value ? (
           <div
             className="h-4 w-4 rounded !bg-center !bg-cover transition-all border border-black/10 dark:border-white/10"
             style={{ background: value }}
           />
         ) : (
-          triggerIcon || <Paintbrush className="h-4 w-4" />
-        )}
+          <Paintbrush className="h-4 w-4" />
+        ))}
         <div className="truncate flex-1">
           {value || 'Pick a color'}
         </div>
@@ -382,21 +392,22 @@ export function ColorPicker({
       size="sm"
       pressed={false}
       disabled={disabled}
+      aria-label={triggerAriaLabel}
       className={triggerClassName}
     >
-      {value ? (
+      {triggerIcon || (value ? (
         <div
           className="h-4 w-4 rounded !bg-center !bg-cover transition-all border border-black/10 dark:border-white/10"
           style={{ background: value }}
         />
       ) : (
-        triggerIcon || <Paintbrush className="h-4 w-4" />
-      )}
+        <Paintbrush className="h-4 w-4" />
+      ))}
     </Toggle>
   )
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         {triggerElement}
       </PopoverTrigger>
@@ -465,7 +476,7 @@ export function ColorPicker({
             <button
               type="button"
               className="w-full flex items-center justify-center gap-1 text-xs text-muted-foreground hover:text-foreground py-1.5 rounded-md hover:bg-muted transition-colors"
-              onClick={() => { onUnset(); setOpen(false) }}
+              onClick={() => { onUnset(); handleOpenChange(false) }}
             >
               <X className="h-3 w-3" />
               Remove Color

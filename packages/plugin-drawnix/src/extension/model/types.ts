@@ -20,6 +20,13 @@ export interface MindmapViewport extends MindmapPoint {
   zoom: number;
 }
 
+export interface MindmapNodeStyle {
+  fontSize?: number;
+  textColor?: string;
+  borderColor?: string;
+  backgroundColor?: string;
+}
+
 export interface MindmapNode {
   id: string;
   text: string;
@@ -27,6 +34,8 @@ export interface MindmapNode {
   side?: MindmapBranchSide;
   collapsed?: boolean;
   manualOffset?: MindmapPoint;
+  style?: MindmapNodeStyle;
+  href?: string;
 }
 
 export interface MindmapDocument {
@@ -48,6 +57,8 @@ export interface LegacyPlaitElement {
   width?: unknown;
   height?: unknown;
   points?: unknown;
+  fill?: unknown;
+  strokeColor?: unknown;
   [key: string]: unknown;
 }
 
@@ -79,6 +90,8 @@ export interface MindmapNodeData {
   id: string;
   text: string;
   children?: MindmapNodeData[];
+  style?: MindmapNodeStyle;
+  href?: string;
 }
 
 export interface NormalizedDrawnixData {
@@ -93,6 +106,8 @@ export const MINDMAP_LIMITS = {
   maxNodes: 500,
   maxDepth: 24,
   maxTextLength: 2_000,
+  minFontSize: 10,
+  maxFontSize: 48,
   minZoom: 0.2,
   maxZoom: 2.5,
 } as const;

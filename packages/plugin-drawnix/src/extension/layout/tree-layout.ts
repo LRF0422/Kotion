@@ -3,6 +3,7 @@ import type {
   MindmapDocument,
   MindmapNode,
   MindmapPoint,
+  MindmapViewport,
 } from "../model/types";
 
 export const MINDMAP_NODE_SIZE = {
@@ -18,17 +19,25 @@ export const MINDMAP_NODE_SIZE = {
   siblingGap: 20,
 } as const;
 
+export const MINDMAP_FONT_SIZE = {
+  root: 14,
+  node: 13,
+} as const;
+
 export type MindmapDirection = "left" | "right" | "up" | "down";
 
 export interface MindmapNodeMeasurement {
   width: number;
   height: number;
+  fontSize: number;
+  lineHeight: number;
 }
 
 export interface PositionedMindmapNode extends MindmapNodeMeasurement {
   id: string;
   node: MindmapNode;
   parentId: string | null;
+  branchId: string | null;
   position: MindmapPoint;
   basePosition: MindmapPoint;
   depth: number;
@@ -40,12 +49,31 @@ export interface PositionedMindmapEdge {
   id: string;
   source: string;
   target: string;
+  branchId: string;
   direction: MindmapDirection;
 }
 
 export interface MindmapLayoutResult {
   nodes: PositionedMindmapNode[];
   edges: PositionedMindmapEdge[];
+}
+
+export function compensateViewportForNodeTopCenter(
+  viewport: MindmapViewport,
+  previousNode: PositionedMindmapNode,
+  nextNode: PositionedMindmapNode,
+): MindmapViewport {
+  const deltaX =
+    previousNode.position.x +
+    previousNode.width / 2 -
+    (nextNode.position.x + nextNode.width / 2);
+  const deltaY = previousNode.position.y - nextNode.position.y;
+  if (deltaX === 0 && deltaY === 0) return viewport;
+  return {
+    x: viewport.x + deltaX * viewport.zoom,
+    y: viewport.y + deltaY * viewport.zoom,
+    zoom: viewport.zoom,
+  };
 }
 
 function characterWeight(character: string): number {
@@ -56,6 +84,7 @@ function characterWeight(character: string): number {
 export function measureMindmapNode(
   text: string,
   isRoot: boolean,
+  customFontSize?: number,
 ): MindmapNodeMeasurement {
   const width = isRoot
     ? MINDMAP_NODE_SIZE.rootWidth
@@ -63,22 +92,31 @@ export function measureMindmapNode(
   const minHeight = isRoot
     ? MINDMAP_NODE_SIZE.rootMinHeight
     : MINDMAP_NODE_SIZE.nodeMinHeight;
+  const defaultFontSize = isRoot
+    ? MINDMAP_FONT_SIZE.root
+    : MINDMAP_FONT_SIZE.node;
+  const fontSize = customFontSize ?? defaultFontSize;
+  const lineHeight = Math.max(
+    MINDMAP_NODE_SIZE.lineHeight,
+    Math.ceil(fontSize * 1.4),
+  );
   const weightedLines = text.split("\n").reduce((lineCount, line) => {
     const weight = [...line].reduce(
       (total, character) => total + characterWeight(character),
       0,
     );
     const available = width - MINDMAP_NODE_SIZE.horizontalPadding;
-    const estimatedLineWidth = weight * 8;
+    const estimatedLineWidth = weight * 8 * (fontSize / defaultFontSize);
     return lineCount + Math.max(1, Math.ceil(estimatedLineWidth / available));
   }, 0);
   return {
     width,
     height: Math.max(
       minHeight,
-      weightedLines * MINDMAP_NODE_SIZE.lineHeight +
-        MINDMAP_NODE_SIZE.verticalPadding,
+      weightedLines * lineHeight + MINDMAP_NODE_SIZE.verticalPadding,
     ),
+    fontSize,
+    lineHeight,
   };
 }
 
@@ -108,7 +146,11 @@ function getMeasurement(
 ): MindmapNodeMeasurement {
   const cached = context.measurements.get(node.id);
   if (cached) return cached;
-  const measurement = measureMindmapNode(node.text, node.id === rootId);
+  const measurement = measureMindmapNode(
+    node.text,
+    node.id === rootId,
+    node.style?.fontSize,
+  );
   context.measurements.set(node.id, measurement);
   return measurement;
 }
@@ -172,6 +214,7 @@ function addOffset(
 function layoutBranch(
   node: MindmapNode,
   parentId: string,
+  branchId: string,
   parentMainCenter: number,
   crossCenter: number,
   parentMeasurement: MindmapNodeMeasurement,
@@ -204,10 +247,13 @@ function layoutBranch(
     id: node.id,
     node,
     parentId,
+    branchId,
     position: addOffset(basePosition, node.manualOffset),
     basePosition,
     width: measurement.width,
     height: measurement.height,
+    fontSize: measurement.fontSize,
+    lineHeight: measurement.lineHeight,
     depth,
     direction,
     isRoot: false,
@@ -216,6 +262,7 @@ function layoutBranch(
     id: `${parentId}:${node.id}`,
     source: parentId,
     target: node.id,
+    branchId,
     direction,
   });
 
@@ -235,6 +282,7 @@ function layoutBranch(
     layoutBranch(
       child,
       node.id,
+      branchId,
       mainCenter,
       childCrossCenter,
       measurement,
@@ -268,6 +316,7 @@ function layoutRootChildren(
     layoutBranch(
       child,
       root.id,
+      child.id,
       0,
       cursor + childSpan / 2,
       rootMeasurement,
@@ -304,10 +353,13 @@ export function layoutMindmap(document: MindmapDocument): MindmapLayoutResult {
     id: document.root.id,
     node: document.root,
     parentId: null,
+    branchId: null,
     position: rootBasePosition,
     basePosition: rootBasePosition,
     width: rootMeasurement.width,
     height: rootMeasurement.height,
+    fontSize: rootMeasurement.fontSize,
+    lineHeight: rootMeasurement.lineHeight,
     depth: 0,
     direction:
       document.layout === "left"

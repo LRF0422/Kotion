@@ -1,7 +1,9 @@
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import React, { memo, useEffect, useRef, useState } from "react";
 import type { MindmapDirection } from "../layout/tree-layout";
+import type { MindmapNodeStylePatch } from "../model/operations";
 import type { MindmapNode as SemanticMindmapNode } from "../model/types";
+import { MindmapNodeToolbar } from "./MindmapNodeToolbar";
 
 export interface MindmapFlowNodeData extends Record<string, unknown> {
   semanticNode: SemanticMindmapNode;
@@ -14,6 +16,10 @@ export interface MindmapFlowNodeData extends Record<string, unknown> {
   onStartEdit: (nodeId: string) => void;
   onCommitEdit: (value?: string) => void;
   onCancelEdit: () => void;
+  onPreviewStyle: (nodeId: string, patch: MindmapNodeStylePatch) => void;
+  onCommitStylePreview: () => void;
+  onSetStyle: (nodeId: string, patch: MindmapNodeStylePatch | null) => void;
+  onUpdateHref: (nodeId: string, href: string | null) => boolean;
   onToggleCollapsed: (nodeId: string) => void;
 }
 
@@ -53,6 +59,16 @@ function MindmapNodeComponent({ data, selected }: NodeProps<MindmapFlowNode>) {
       className={`drawnix-mind-node direction-${data.direction} ${data.isRoot ? "is-root" : ""} ${selected ? "is-selected" : ""}`}
       onDoubleClick={() => data.onStartEdit(node.id)}
     >
+      <MindmapNodeToolbar
+        node={node}
+        selected={selected}
+        isEditable={data.isEditable}
+        isEditing={data.isEditing}
+        onPreviewStyle={(patch) => data.onPreviewStyle(node.id, patch)}
+        onCommitStylePreview={data.onCommitStylePreview}
+        onSetStyle={(patch) => data.onSetStyle(node.id, patch)}
+        onUpdateHref={(href) => data.onUpdateHref(node.id, href)}
+      />
       {HANDLE_POSITIONS.map(([id, type, position]) => (
         <Handle
           key={id}

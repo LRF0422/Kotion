@@ -51,6 +51,7 @@ function fromNodeData(node: MindmapNodeData): MindmapNode {
     node.id,
     node.text,
     (node.children ?? []).map(fromNodeData),
+    { style: node.style, href: node.href },
   );
 }
 

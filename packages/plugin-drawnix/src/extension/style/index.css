@@ -30,11 +30,16 @@
   transform: translateX(-50%);
   border: 1px solid hsl(var(--border, 214 32% 91%));
   border-radius: 10px;
-  background: hsl(var(--background, 0 0% 100%) / 0.92);
-  box-shadow: 0 10px 30px hsl(var(--foreground, 222 47% 11%) / 0.12);
-  backdrop-filter: blur(12px);
+  background: hsl(var(--popover, 0 0% 100%) / 0.98);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  backdrop-filter: blur(10px);
   user-select: none;
   scrollbar-width: thin;
+}
+
+.drawnix-dark .drawnix-toolbar {
+  background: hsl(var(--popover, 0 0% 13%) / 0.98);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.48);
 }
 
 .drawnix-toolbar-group {
@@ -83,6 +88,14 @@
 .drawnix-tool-zoom:hover {
   color: hsl(var(--foreground, 222 47% 11%));
   background: hsl(var(--accent, 210 40% 96%));
+}
+
+.drawnix-tool-btn:focus-visible,
+.drawnix-tool-zoom:focus-visible,
+.drawnix-node-format-button:focus-visible,
+.drawnix-node-font-size:focus-visible {
+  outline: 2px solid hsl(var(--ring, 221 83% 53%));
+  outline-offset: 2px;
 }
 
 .drawnix-tool-btn:disabled {
@@ -140,34 +153,115 @@
   align-items: center;
   justify-content: center;
   padding: 9px 14px;
-  border: 1px solid hsl(var(--border, 214 32% 91%));
+  border: 2px solid
+    var(
+      --drawnix-node-border-color-light,
+      var(--drawnix-branch-color-light, hsl(var(--border, 214 32% 91%)))
+    );
   border-radius: 9px;
-  color: hsl(var(--foreground, 222 47% 11%));
-  background: hsl(var(--background, 0 0% 100%));
+  color: var(
+    --drawnix-node-text-color-light,
+    hsl(var(--foreground, 222 47% 11%))
+  );
+  background: var(
+    --drawnix-node-background-color-light,
+    hsl(var(--background, 0 0% 100%))
+  );
   box-shadow:
-    0 1px 2px hsl(var(--foreground, 222 47% 11%) / 0.05),
-    0 6px 18px hsl(var(--foreground, 222 47% 11%) / 0.04);
+    0 1px 2px rgba(0, 0, 0, 0.08),
+    0 6px 18px rgba(0, 0, 0, 0.06);
   transition:
     border-color 120ms ease,
     box-shadow 120ms ease;
 }
 
+.drawnix-dark .drawnix-mind-node {
+  border-color: var(
+    --drawnix-node-border-color-dark,
+    var(--drawnix-branch-color-dark, hsl(var(--border, 214 32% 91%)))
+  );
+  color: var(
+    --drawnix-node-text-color-dark,
+    hsl(var(--foreground, 222 47% 11%))
+  );
+  background: var(
+    --drawnix-node-background-color-dark,
+    hsl(var(--background, 0 0% 100%))
+  );
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.28),
+    0 7px 20px rgba(0, 0, 0, 0.24);
+}
+
 .drawnix-mind-node:hover {
-  border-color: hsl(var(--primary, 221 83% 53%) / 0.55);
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.1),
+    0 9px 24px rgba(0, 0, 0, 0.1);
+}
+
+.drawnix-dark .drawnix-mind-node:hover {
+  box-shadow:
+    0 2px 5px rgba(0, 0, 0, 0.36),
+    0 10px 26px rgba(0, 0, 0, 0.32);
 }
 
 .drawnix-mind-node.is-selected {
-  border-color: hsl(var(--primary, 221 83% 53%));
   box-shadow:
-    0 0 0 2px hsl(var(--primary, 221 83% 53%) / 0.16),
-    0 8px 22px hsl(var(--foreground, 222 47% 11%) / 0.08);
+    0 0 0 3px hsl(var(--ring, 221 83% 53%) / 0.2),
+    0 9px 24px rgba(0, 0, 0, 0.12);
+}
+
+.drawnix-dark .drawnix-mind-node.is-selected {
+  box-shadow:
+    0 0 0 3px hsl(var(--ring, 221 83% 53%) / 0.24),
+    0 10px 26px rgba(0, 0, 0, 0.38);
 }
 
 .drawnix-mind-node.is-root {
-  border-color: hsl(var(--primary, 221 83% 53%) / 0.72);
-  color: hsl(var(--primary-foreground, 210 40% 98%));
-  background: hsl(var(--primary, 221 83% 53%));
+  border: 1px solid
+    var(--drawnix-node-border-color-light, hsl(var(--border, 214 32% 91%)));
+  color: var(
+    --drawnix-node-text-color-light,
+    hsl(var(--foreground, 222 47% 11%))
+  );
+  background: var(
+    --drawnix-node-background-color-light,
+    hsl(var(--muted, 210 40% 96%))
+  );
+  box-shadow:
+    0 2px 5px rgba(0, 0, 0, 0.08),
+    0 8px 24px rgba(0, 0, 0, 0.08);
   font-weight: 600;
+}
+
+.drawnix-dark .drawnix-mind-node.is-root {
+  border-color: var(
+    --drawnix-node-border-color-dark,
+    hsl(var(--border, 214 32% 91%))
+  );
+  color: var(
+    --drawnix-node-text-color-dark,
+    hsl(var(--foreground, 222 47% 11%))
+  );
+  background: var(
+    --drawnix-node-background-color-dark,
+    hsl(var(--muted, 210 40% 96%))
+  );
+  box-shadow:
+    0 2px 5px rgba(0, 0, 0, 0.32),
+    0 9px 26px rgba(0, 0, 0, 0.3);
+}
+
+.drawnix-mind-node.is-root.is-selected {
+  box-shadow:
+    0 0 0 3px hsl(var(--ring, 221 83% 53%) / 0.18),
+    0 8px 24px rgba(0, 0, 0, 0.1);
+}
+
+.drawnix-dark .drawnix-mind-node.is-root.is-selected {
+  box-shadow:
+    0 0 0 3px hsl(var(--ring, 221 83% 53%) / 0.22),
+    0 9px 26px rgba(0, 0, 0, 0.38);
 }
 
 .drawnix-node-text {
@@ -176,13 +270,13 @@
   text-align: center;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  font-size: 13px;
-  line-height: 20px;
+  font-size: var(--drawnix-node-font-size, 13px);
+  line-height: var(--drawnix-node-line-height, 20px);
   user-select: none;
 }
 
 .drawnix-mind-node.is-root .drawnix-node-text {
-  font-size: 14px;
+  font-size: var(--drawnix-node-font-size, 14px);
 }
 
 .drawnix-node-input {
@@ -196,8 +290,103 @@
   color: inherit;
   background: transparent;
   text-align: center;
-  font: inherit;
-  line-height: 20px;
+  font-family: inherit;
+  font-size: var(--drawnix-node-font-size, 13px);
+  font-weight: inherit;
+  line-height: var(--drawnix-node-line-height, 20px);
+}
+
+.drawnix-node-format-toolbar {
+  display: flex;
+  max-width: min(680px, calc(100vw - 24px));
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  overflow-x: auto;
+  border: 1px solid hsl(var(--border, 214 32% 91%));
+  border-radius: 10px;
+  color: hsl(var(--foreground, 222 47% 11%));
+  background: hsl(var(--popover, 0 0% 100%) / 0.98);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  scrollbar-width: thin;
+}
+
+.drawnix-dark .drawnix-node-format-toolbar {
+  background: hsl(var(--popover, 0 0% 13%) / 0.98);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.48);
+}
+
+.drawnix-node-format-button {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  padding: 0;
+}
+
+.drawnix-node-format-button.is-destructive:hover {
+  color: hsl(var(--destructive, 0 84% 60%));
+  background: hsl(var(--destructive, 0 84% 60%) / 0.12);
+}
+
+.drawnix-node-font-size {
+  display: inline-flex;
+  width: 78px;
+  height: 32px;
+  flex: 0 0 78px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 0 8px;
+  border: 1px solid hsl(var(--border, 214 32% 91%));
+  border-radius: 6px;
+  color: hsl(var(--foreground, 222 47% 11%));
+  background: hsl(var(--background, 0 0% 100%));
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.drawnix-node-font-size-popover {
+  z-index: 10000;
+  width: 96px;
+  padding: 4px;
+  border-color: hsl(var(--border, 214 32% 91%));
+  background: hsl(var(--popover, 0 0% 100%));
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+}
+
+.dark .drawnix-node-font-size-popover {
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.52);
+}
+
+.drawnix-node-font-size-option {
+  display: flex;
+  width: 100%;
+  min-height: 32px;
+  align-items: center;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 5px;
+  color: hsl(var(--foreground, 222 47% 11%));
+  background: transparent;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.drawnix-node-font-size-option:hover,
+.drawnix-node-font-size-option[aria-selected="true"] {
+  background: hsl(var(--accent, 210 40% 96%));
+}
+
+.drawnix-node-link-popover {
+  width: min(320px, calc(100vw - 24px));
+  border-color: hsl(var(--border, 214 32% 91%));
+  background: hsl(var(--popover, 0 0% 100%));
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+}
+
+.dark .drawnix-node-link-popover {
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.52);
 }
 
 .drawnix-collapse-button {
@@ -214,7 +403,7 @@
   border-radius: 999px;
   color: hsl(var(--muted-foreground, 215 16% 47%));
   background: hsl(var(--background, 0 0% 100%));
-  box-shadow: 0 1px 4px hsl(var(--foreground, 222 47% 11%) / 0.1);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
   font-size: 11px;
   cursor: pointer;
 }
@@ -238,8 +427,22 @@
 }
 
 .drawnix-edge .react-flow__edge-path {
-  stroke: hsl(var(--muted-foreground, 215 16% 47%) / 0.58);
-  stroke-width: 1.6;
+  stroke: var(
+    --drawnix-branch-color-light,
+    hsl(var(--muted-foreground, 215 16% 47%) / 0.58)
+  );
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: none !important;
+  stroke-dashoffset: 0 !important;
+}
+
+.drawnix-dark .drawnix-edge .react-flow__edge-path {
+  stroke: var(
+    --drawnix-branch-color-dark,
+    hsl(var(--muted-foreground, 215 16% 47%) / 0.64)
+  );
 }
 
 .drawnix-root:fullscreen,
@@ -284,6 +487,28 @@ html[data-device="mobile"] .drawnix-tool-zoom {
 
 html[data-device="mobile"] .drawnix-tool-btn {
   width: 44px;
+}
+
+html[data-device="mobile"] .drawnix-node-format-toolbar {
+  max-width: calc(100vw - 16px);
+  padding: 4px;
+}
+
+html[data-device="mobile"] .drawnix-node-format-button {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  flex-basis: 44px;
+}
+
+html[data-device="mobile"] .drawnix-node-font-size {
+  width: 92px;
+  height: 44px;
+  flex-basis: 92px;
+}
+
+html[data-device="mobile"] .drawnix-node-font-size-option {
+  min-height: 44px;
 }
 
 html[data-device="mobile"] .drawnix-board-area {

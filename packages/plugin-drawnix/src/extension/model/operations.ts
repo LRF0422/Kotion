@@ -4,8 +4,14 @@ import type {
   MindmapLayout,
   MindmapNode,
   MindmapNodeData,
+  MindmapNodeStyle,
   MindmapPoint,
 } from "./types";
+import {
+  normalizeMindmapColor,
+  normalizeMindmapFontSize,
+  normalizeMindmapHref,
+} from "./normalize";
 
 export function findMindmapNode(
   root: MindmapNode,
@@ -36,7 +42,10 @@ function updateNode(
   nodeId: string,
   updater: (node: MindmapNode) => MindmapNode,
 ): [MindmapNode, boolean] {
-  if (node.id === nodeId) return [updater(node), true];
+  if (node.id === nodeId) {
+    const next = updater(node);
+    return [next, next !== node];
+  }
   for (let index = 0; index < node.children.length; index += 1) {
     const [nextChild, changed] = updateNode(
       node.children[index],
@@ -135,11 +144,97 @@ export function updateMindmapNodeText(
   nodeId: string,
   text: string,
 ): MindmapDocument | null {
-  const [root, changed] = updateNode(document.root, nodeId, (node) => ({
-    ...node,
-    text,
-  }));
+  const [root, changed] = updateNode(document.root, nodeId, (node) =>
+    node.text === text ? node : { ...node, text },
+  );
   return changed ? { ...document, root } : null;
+}
+
+export type MindmapNodeStylePatch = {
+  [Key in keyof MindmapNodeStyle]?: MindmapNodeStyle[Key] | null;
+};
+
+const STYLE_KEYS = [
+  "fontSize",
+  "textColor",
+  "borderColor",
+  "backgroundColor",
+] as const satisfies ReadonlyArray<keyof MindmapNodeStyle>;
+
+function sameNodeStyle(
+  left: MindmapNodeStyle | undefined,
+  right: MindmapNodeStyle | undefined,
+): boolean {
+  return STYLE_KEYS.every((key) => left?.[key] === right?.[key]);
+}
+
+function normalizeStyleValue(
+  key: keyof MindmapNodeStyle,
+  value: unknown,
+): number | string | undefined {
+  return key === "fontSize"
+    ? normalizeMindmapFontSize(value)
+    : normalizeMindmapColor(value);
+}
+
+export function updateMindmapNodeStyle(
+  document: MindmapDocument,
+  nodeId: string,
+  patch: MindmapNodeStylePatch | null,
+): MindmapDocument | null {
+  if (!findMindmapNode(document.root, nodeId)) return null;
+  const [root, changed] = updateNode(document.root, nodeId, (node) => {
+    if (patch === null) {
+      if (!node.style) return node;
+      const { style: _style, ...withoutStyle } = node;
+      return withoutStyle;
+    }
+
+    const nextStyle: MindmapNodeStyle = { ...node.style };
+    for (const key of STYLE_KEYS) {
+      if (!Object.prototype.hasOwnProperty.call(patch, key)) continue;
+      const value = patch[key];
+      if (value === null || value === undefined) {
+        delete nextStyle[key];
+        continue;
+      }
+      const normalized = normalizeStyleValue(key, value);
+      if (normalized === undefined) continue;
+      if (key === "fontSize") nextStyle.fontSize = normalized as number;
+      else nextStyle[key] = normalized as string;
+    }
+
+    const normalizedStyle =
+      Object.keys(nextStyle).length > 0 ? nextStyle : undefined;
+    if (sameNodeStyle(node.style, normalizedStyle)) return node;
+    if (!normalizedStyle) {
+      const { style: _style, ...withoutStyle } = node;
+      return withoutStyle;
+    }
+    return { ...node, style: normalizedStyle };
+  });
+  return changed ? { ...document, root } : document;
+}
+
+export function updateMindmapNodeHref(
+  document: MindmapDocument,
+  nodeId: string,
+  href: string | null,
+): MindmapDocument | null {
+  if (!findMindmapNode(document.root, nodeId)) return null;
+  const remove = href === null || href.trim() === "";
+  const normalizedHref = remove ? undefined : normalizeMindmapHref(href);
+  if (!remove && !normalizedHref) return null;
+
+  const [root, changed] = updateNode(document.root, nodeId, (node) => {
+    if (node.href === normalizedHref) return node;
+    if (!normalizedHref) {
+      const { href: _href, ...withoutHref } = node;
+      return withoutHref;
+    }
+    return { ...node, href: normalizedHref };
+  });
+  return changed ? { ...document, root } : document;
 }
 
 export function toggleMindmapNodeCollapsed(
@@ -189,6 +284,8 @@ export function extractMindmapStructure(node: MindmapNode): MindmapNodeData {
     id: node.id,
     text: node.text,
     children: node.children.map(extractMindmapStructure),
+    ...(node.style ? { style: { ...node.style } } : {}),
+    ...(node.href ? { href: node.href } : {}),
   };
 }
 
@@ -196,6 +293,13 @@ export function createMindmapNode(
   id: string,
   text: string,
   children: MindmapNode[] = [],
+  attributes: Pick<MindmapNode, "style" | "href"> = {},
 ): MindmapNode {
-  return { id, text, children };
+  return {
+    id,
+    text,
+    children,
+    ...(attributes.style ? { style: { ...attributes.style } } : {}),
+    ...(attributes.href ? { href: attributes.href } : {}),
+  };
 }

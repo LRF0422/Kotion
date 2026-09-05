@@ -9,6 +9,7 @@ import {
   type MindmapDocument,
   type MindmapLayout,
   type MindmapNode,
+  type MindmapNodeStyle,
   type MindmapViewport,
   type NormalizedDrawnixData,
 } from "./types";
@@ -41,6 +42,73 @@ function normalizeText(value: unknown): string {
   return value.slice(0, MINDMAP_LIMITS.maxTextLength);
 }
 
+export function normalizeMindmapColor(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const color = value.trim();
+  return /^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(color)
+    ? color.toLowerCase()
+    : undefined;
+}
+
+export function normalizeMindmapFontSize(
+  value: unknown,
+  allowString = false,
+): number | undefined {
+  let numericValue = value;
+  if (allowString && typeof value === "string") {
+    const normalized = value.trim().replace(/px$/i, "");
+    if (!/^\d+(\.\d+)?$/.test(normalized)) return undefined;
+    numericValue = Number(normalized);
+  }
+  if (typeof numericValue !== "number" || !Number.isFinite(numericValue))
+    return undefined;
+  return clamp(
+    Math.round(numericValue),
+    MINDMAP_LIMITS.minFontSize,
+    MINDMAP_LIMITS.maxFontSize,
+  );
+}
+
+export function normalizeMindmapNodeStyle(
+  value: unknown,
+  allowStringFontSize = false,
+): MindmapNodeStyle | undefined {
+  if (!isRecord(value)) return undefined;
+  const style: MindmapNodeStyle = {};
+  const fontSize = normalizeMindmapFontSize(
+    value.fontSize,
+    allowStringFontSize,
+  );
+  const textColor = normalizeMindmapColor(value.textColor);
+  const borderColor = normalizeMindmapColor(value.borderColor);
+  const backgroundColor = normalizeMindmapColor(value.backgroundColor);
+  if (fontSize !== undefined) style.fontSize = fontSize;
+  if (textColor) style.textColor = textColor;
+  if (borderColor) style.borderColor = borderColor;
+  if (backgroundColor) style.backgroundColor = backgroundColor;
+  return Object.keys(style).length > 0 ? style : undefined;
+}
+
+export function normalizeMindmapHref(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const scheme = trimmed.match(/^([a-z][a-z\d+.-]*):/i)?.[1]?.toLowerCase();
+  if (scheme && scheme !== "http" && scheme !== "https") return undefined;
+  if (!scheme && /^(?:[/?#]|\.\.?\/)/.test(trimmed)) return undefined;
+  try {
+    const url = new URL(scheme ? trimmed : `https://${trimmed}`);
+    if (
+      (url.protocol !== "http:" && url.protocol !== "https:") ||
+      !url.hostname
+    )
+      return undefined;
+    return url.toString();
+  } catch {
+    return undefined;
+  }
+}
+
 function collectInlineText(value: unknown): string {
   if (!isRecord(value)) return "";
   if (typeof value.text === "string") return value.text;
@@ -58,6 +126,38 @@ export function extractLegacyTopicText(element: LegacyPlaitElement): string {
   return normalizeText(
     topic.children.map(collectInlineText).join(hasBlockChildren ? "\n" : ""),
   );
+}
+
+function extractLegacyNodeStyle(
+  element: LegacyPlaitElement,
+): MindmapNodeStyle | undefined {
+  const style: MindmapNodeStyle = {};
+  const backgroundColor = normalizeMindmapColor(element.fill);
+  const borderColor = normalizeMindmapColor(element.strokeColor);
+  if (backgroundColor) style.backgroundColor = backgroundColor;
+  if (borderColor) style.borderColor = borderColor;
+
+  const visitTextLeaf = (value: unknown): void => {
+    if (!isRecord(value)) return;
+    if (typeof value.text === "string") {
+      if (!style.textColor) {
+        const textColor = normalizeMindmapColor(value.color);
+        if (textColor) style.textColor = textColor;
+      }
+      if (style.fontSize === undefined) {
+        const fontSize = normalizeMindmapFontSize(value["font-size"], true);
+        if (fontSize !== undefined) style.fontSize = fontSize;
+      }
+    }
+    if (Array.isArray(value.children)) value.children.forEach(visitTextLeaf);
+  };
+
+  if (isRecord(element.data)) {
+    const topic = element.data.topic;
+    if (isRecord(topic) && Array.isArray(topic.children))
+      topic.children.forEach(visitTextLeaf);
+  }
+  return Object.keys(style).length > 0 ? style : undefined;
 }
 
 function deterministicId(path: number[]): string {
@@ -122,6 +222,10 @@ function sanitizeSemanticNode(
       y: finiteNumber(value.manualOffset.y, 0),
     };
   }
+  const style = normalizeMindmapNodeStyle(value.style);
+  const href = normalizeMindmapHref(value.href);
+  if (style) node.style = style;
+  if (href) node.href = href;
 
   const children = Array.isArray(value.children) ? value.children : [];
   node.children = children
@@ -157,6 +261,8 @@ function sanitizeLegacyNode(
   };
 
   if (element.isCollapsed === true) node.collapsed = true;
+  const style = extractLegacyNodeStyle(element);
+  if (style) node.style = style;
   const children = Array.isArray(element.children) ? element.children : [];
   node.children = children
     .map((child, index) =>
