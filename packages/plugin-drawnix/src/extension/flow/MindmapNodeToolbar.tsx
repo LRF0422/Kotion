@@ -5,6 +5,7 @@ import {
   ExternalLink,
   Link2,
   PaintBucket,
+  Plus,
   RotateCcw,
   Trash2,
 } from "@kn/icon";
@@ -23,6 +24,7 @@ import {
 } from "@kn/ui";
 import { NodeToolbar, Position } from "@xyflow/react";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useDrawnixI18n } from "../../i18n";
 import { normalizeMindmapHref } from "../model/normalize";
 import type { MindmapNode, MindmapNodeStyle } from "../model/types";
 import type { MindmapNodeStylePatch } from "../model/operations";
@@ -35,6 +37,7 @@ interface MindmapNodeToolbarProps {
   selected: boolean;
   isEditable: boolean;
   isEditing: boolean;
+  onAddChild: () => void;
   onPreviewStyle: (patch: MindmapNodeStylePatch) => void;
   onCommitStylePreview: () => void;
   onSetStyle: (patch: MindmapNodeStylePatch | null) => void;
@@ -97,11 +100,13 @@ export function MindmapNodeToolbar({
   selected,
   isEditable,
   isEditing,
+  onAddChild,
   onPreviewStyle,
   onCommitStylePreview,
   onSetStyle,
   onUpdateHref,
 }: MindmapNodeToolbarProps) {
+  const { t } = useDrawnixI18n();
   const [fontOpen, setFontOpen] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
   const [draftHref, setDraftHref] = useState(node.href ?? "");
@@ -176,6 +181,12 @@ export function MindmapNodeToolbar({
       <TooltipProvider delayDuration={300}>
         {isEditable ? (
           <>
+            <ToolbarButton label={t("toolbar.addChild")} onClick={onAddChild}>
+              <Plus size={ICON_SIZE} />
+            </ToolbarButton>
+
+            <Separator orientation="vertical" className="h-6" />
+
             <Popover open={fontOpen} onOpenChange={setFontOpen}>
               <PopoverTrigger asChild>
                 <Button

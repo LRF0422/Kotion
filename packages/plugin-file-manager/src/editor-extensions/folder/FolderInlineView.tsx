@@ -123,7 +123,6 @@ export const FolderInlineView: React.FC<NodeViewProps> = React.memo((props) => {
                 onOpenChange={setDialogOpen}
                 title={t('inlineFolder.dialogTitle', { name: label })}
                 description={t('inlineFolder.dialogDescription')}
-                contentClassName="md:max-w-[1400px]"
             >
                 {dialogOpen && folderId && (
                     <FileManagerView

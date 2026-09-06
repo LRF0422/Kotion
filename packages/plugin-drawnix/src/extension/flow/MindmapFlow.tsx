@@ -149,6 +149,7 @@ export function MindmapFlow({ controller, onActionsReady }: MindmapFlowProps) {
               item.id === controller.editingId
                 ? controller.draftText
                 : item.node.text,
+            onAddChild: controller.addChild,
             onDraftTextChange: controller.setDraftText,
             onStartEdit: controller.startEditing,
             onCommitEdit: controller.commitEditing,
@@ -163,6 +164,7 @@ export function MindmapFlow({ controller, onActionsReady }: MindmapFlowProps) {
       }),
     [
       branchAssignments,
+      controller.addChild,
       controller.cancelEditing,
       controller.commitEditing,
       controller.commitNodeStylePreview,
