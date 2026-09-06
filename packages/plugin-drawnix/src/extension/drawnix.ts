@@ -6,7 +6,7 @@ import {
 } from "@kn/editor";
 import { DrawnixView } from "./DrawnixView";
 import { createDefaultMindmapDocument } from "./data";
-import { normalizeDrawnixData } from "./model/normalize";
+import { normalizeDrawnixData, stableStringify } from "./model/normalize";
 import {
   addMindmapChild,
   createMindmapNode,
@@ -139,27 +139,10 @@ export const Drawnix = Node.create({
     return ReactNodeViewRenderer(
       withNodeViewErrorBoundary(DrawnixView, "drawnix"),
       {
-        stopEvent: (eventWrapper) => {
-          const event = eventWrapper.event;
-          if (event instanceof MouseEvent && event.type === "mousedown")
-            return false;
-          if (event instanceof KeyboardEvent) {
-            const modifier = event.ctrlKey || event.metaKey;
-            if (
-              modifier &&
-              (event.key.toLowerCase() === "z" ||
-                event.key.toLowerCase() === "y")
-            ) {
-              return false;
-            }
-          }
-          if (event instanceof InputEvent) {
-            if (
-              event.inputType === "historyUndo" ||
-              event.inputType === "historyRedo"
-            )
-              return false;
-          }
+        stopEvent: () => true,
+        update: ({ oldNode, newNode, updateProps }) => {
+          if (oldNode.eq(newNode)) return true;
+          updateProps();
           return true;
         },
       },
@@ -193,9 +176,14 @@ export const Drawnix = Node.create({
           if (!dispatch) return false;
           const node = tr.doc.nodeAt(pos);
           if (!node || node.type.name !== this.name) return false;
+          const serialized = serializeDrawnixDocument(
+            normalizeDrawnixData(data).document,
+          );
+          if (stableStringify(node.attrs.data) === stableStringify(serialized))
+            return true;
           tr.setNodeMarkup(pos, undefined, {
             ...node.attrs,
-            data: serializeDrawnixDocument(normalizeDrawnixData(data).document),
+            data: serialized,
           });
           if (options?.addToHistory === false)
             tr.setMeta("addToHistory", false);

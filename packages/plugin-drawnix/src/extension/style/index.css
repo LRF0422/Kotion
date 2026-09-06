@@ -26,7 +26,7 @@
   align-items: center;
   gap: 6px;
   padding: 6px 8px;
-  overflow-x: auto;
+  overflow: visible;
   transform: translateX(-50%);
   border: 1px solid hsl(var(--border, 214 32% 91%));
   border-radius: 10px;
@@ -40,6 +40,40 @@
 .drawnix-dark .drawnix-toolbar {
   background: hsl(var(--popover, 0 0% 13%) / 0.98);
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.48);
+}
+
+.drawnix-tooltip {
+  position: relative;
+}
+
+.drawnix-tooltip::after {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  z-index: 200;
+  padding: 4px 8px;
+  transform: translateX(-50%);
+  border: 1px solid hsl(var(--border, 214 32% 91%));
+  border-radius: 5px;
+  color: hsl(var(--popover-foreground, 222 47% 11%));
+  background: hsl(var(--popover, 0 0% 100%));
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.14);
+  content: attr(data-tooltip);
+  font-size: 12px;
+  line-height: 20px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 120ms ease,
+    visibility 120ms ease;
+}
+
+.drawnix-tooltip:hover::after,
+.drawnix-tooltip:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
 }
 
 .drawnix-toolbar-group {
@@ -92,6 +126,8 @@
 
 .drawnix-tool-btn:focus-visible,
 .drawnix-tool-zoom:focus-visible,
+.drawnix-toolbar-layout:focus-visible,
+.drawnix-toolbar-layout-option:focus-visible,
 .drawnix-node-format-button:focus-visible,
 .drawnix-node-font-size:focus-visible {
   outline: 2px solid hsl(var(--ring, 221 83% 53%));
@@ -108,16 +144,61 @@
   line-height: 1;
 }
 
-.drawnix-toolbar-layout {
-  height: 32px;
+.drawnix-toolbar.is-layout-menu-open {
+  overflow: visible;
+}
+
+.drawnix-toolbar-layout-wrap {
+  position: relative;
   flex: 0 0 auto;
-  padding: 0 26px 0 9px;
+}
+
+.drawnix-toolbar-layout {
+  display: flex;
+  width: 72px;
+  height: 32px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 0 8px;
   border: 1px solid hsl(var(--border, 214 32% 91%));
   border-radius: 6px;
   color: hsl(var(--foreground, 222 47% 11%));
   background: hsl(var(--background, 0 0% 100%));
   font-size: 12px;
   cursor: pointer;
+}
+
+.drawnix-toolbar-layout-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 100;
+  width: 80px;
+  padding: 4px;
+  border: 1px solid hsl(var(--border, 214 32% 91%));
+  border-radius: 6px;
+  background: hsl(var(--popover, 0 0% 100%));
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
+}
+
+.drawnix-toolbar-layout-option {
+  display: flex;
+  width: 100%;
+  height: 30px;
+  align-items: center;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 4px;
+  color: hsl(var(--popover-foreground, 222 47% 11%));
+  background: transparent;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.drawnix-toolbar-layout-option:hover,
+.drawnix-toolbar-layout-option[aria-selected="true"] {
+  background: hsl(var(--accent, 210 40% 96%));
 }
 
 .drawnix-board-area {
@@ -477,6 +558,8 @@ html[data-device="mobile"] .drawnix-toolbar {
   max-width: none;
   min-height: 56px;
   padding: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
   transform: none;
 }
 

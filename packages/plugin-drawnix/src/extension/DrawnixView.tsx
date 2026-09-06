@@ -3,13 +3,49 @@ import { NodeViewWrapper } from "@kn/editor";
 import { useResolvedTheme } from "@kn/ui";
 import { ReactFlowProvider } from "@xyflow/react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import "@xyflow/react/dist/style.css";
 import { MindmapFlow, type MindmapFlowActions } from "./flow/MindmapFlow";
-import { useDrawnixController } from "./hooks/useDrawnixController";
+import {
+  type DrawnixController,
+  useDrawnixController,
+} from "./hooks/useDrawnixController";
 import { MindmapToolbar } from "./MindmapToolbar";
 import "./style/index.css";
 
-export function DrawnixView(props: NodeViewProps) {
+function DetachedMindmapFlow({
+  controller,
+  onActionsReady,
+}: {
+  controller: DrawnixController;
+  onActionsReady: (actions: MindmapFlowActions) => void;
+}) {
+  const hostRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<Root | null>(null);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const root = createRoot(host);
+    rootRef.current = root;
+    return () => {
+      rootRef.current = null;
+      root.unmount();
+    };
+  }, []);
+
+  useEffect(() => {
+    rootRef.current?.render(
+      <ReactFlowProvider>
+        <MindmapFlow controller={controller} onActionsReady={onActionsReady} />
+      </ReactFlowProvider>,
+    );
+  }, [controller, onActionsReady]);
+
+  return <div ref={hostRef} className="h-full w-full" />;
+}
+
+function DrawnixViewComponent(props: NodeViewProps) {
   const resolvedTheme = useResolvedTheme();
   const controller = useDrawnixController(props);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -108,14 +144,20 @@ export function DrawnixView(props: NodeViewProps) {
           onSetLayout={controller.setLayout}
         />
         <div className="drawnix-board-area">
-          <ReactFlowProvider>
-            <MindmapFlow
-              controller={controller}
-              onActionsReady={handleActionsReady}
-            />
-          </ReactFlowProvider>
+          <DetachedMindmapFlow
+            controller={controller}
+            onActionsReady={handleActionsReady}
+          />
         </div>
       </div>
     </NodeViewWrapper>
   );
 }
+
+export const DrawnixView: React.FC<NodeViewProps> = React.memo(
+  DrawnixViewComponent,
+  (previous, next) =>
+    previous.editor === next.editor && previous.node.eq(next.node),
+);
+
+DrawnixView.displayName = "DrawnixView";

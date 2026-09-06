@@ -97,6 +97,7 @@ function nodeVisualStyle(
 export function MindmapFlow({ controller, onActionsReady }: MindmapFlowProps) {
   const flow = useReactFlow<MindmapFlowNode>();
   const fitViewOnInitRef = useRef(!controller.document.viewport);
+  const isViewportInteractionRef = useRef(false);
   const branchAssignmentsRef = useRef(
     new Map<string, MindmapBranchColorAssignment>(),
   );
@@ -230,11 +231,19 @@ export function MindmapFlow({ controller, onActionsReady }: MindmapFlowProps) {
       edges={edges}
       nodeTypes={nodeTypes}
       onNodesChange={onNodesChange}
-      viewport={controller.viewport}
+      defaultViewport={controller.viewport}
       fitView={fitViewOnInitRef.current}
       fitViewOptions={{ padding: 0.22 }}
       minZoom={0.2}
       maxZoom={2.5}
+      deleteKeyCode={null}
+      selectionKeyCode={null}
+      multiSelectionKeyCode={null}
+      panActivationKeyCode={null}
+      zoomActivationKeyCode={null}
+      disableKeyboardA11y
+      nodesFocusable={false}
+      edgesFocusable={false}
       nodesConnectable={false}
       autoPanOnNodeFocus={false}
       elementsSelectable
@@ -243,10 +252,16 @@ export function MindmapFlow({ controller, onActionsReady }: MindmapFlowProps) {
       zoomOnScroll
       zoomOnDoubleClick={false}
       preventScrolling
-      onViewportChange={controller.updateViewport}
-      onMoveEnd={(_, viewport: Viewport) =>
-        controller.persistViewport(viewport)
-      }
+      onMoveStart={(event) => {
+        isViewportInteractionRef.current =
+          event instanceof MouseEvent || event instanceof TouchEvent;
+      }}
+      onMoveEnd={(_, viewport: Viewport) => {
+        if (isViewportInteractionRef.current) {
+          controller.persistViewport(viewport);
+        }
+        isViewportInteractionRef.current = false;
+      }}
       onNodeClick={(_, node) => controller.selectNode(node.id)}
       onNodeDoubleClick={(_, node) => controller.startEditing(node.id)}
       onNodeDragStop={(_, node) =>

@@ -43,10 +43,8 @@ export function useDrawnixController(props: NodeViewProps) {
   const [selectedId, setSelectedId] = useState(normalized.document.root.id);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftText, setDraftText] = useState("");
-  const migratedSourcesRef = useRef(new Set<string>());
   const lastPersistedFingerprintRef = useRef<string | null>(null);
   const stylePreviewFingerprintRef = useRef<string | null>(null);
-  const [historyVersion, setHistoryVersion] = useState(0);
   const isEditable = props.editor.isEditable;
 
   useEffect(() => {
@@ -104,40 +102,10 @@ export function useDrawnixController(props: NodeViewProps) {
     }
   }, [editingId, normalized, selectedId]);
 
-  useEffect(() => {
-    if (!isEditable || !normalized.migrated || !normalized.canWriteBack) return;
-    if (migratedSourcesRef.current.has(normalized.sourceFingerprint)) return;
-    if (stableStringify(props.node.attrs.data) !== normalized.sourceFingerprint)
-      return;
-    migratedSourcesRef.current.add(normalized.sourceFingerprint);
-    persistDocument(normalized.document, false);
-  }, [isEditable, normalized, persistDocument, props.node.attrs.data]);
-
-  useEffect(() => {
-    const updateHistory = () => setHistoryVersion((value) => value + 1);
-    props.editor.on("transaction", updateHistory);
-    return () => {
-      props.editor.off("transaction", updateHistory);
-    };
-  }, [props.editor]);
-
-  useEffect(
-    () => () => {
-      commitNodeStylePreview();
-    },
-    [commitNodeStylePreview],
-  );
-
   const layoutResult = useMemo(() => layoutMindmap(document), [document]);
   const selectedNode = findMindmapNode(document.root, selectedId);
-  const canUndo = useMemo(
-    () => props.editor.can().undo(),
-    [props.editor, historyVersion],
-  );
-  const canRedo = useMemo(
-    () => props.editor.can().redo(),
-    [props.editor, historyVersion],
-  );
+  const canUndo = props.editor.can().undo();
+  const canRedo = props.editor.can().redo();
 
   const selectNode = useCallback(
     (nodeId: string) => {
@@ -331,11 +299,6 @@ export function useDrawnixController(props: NodeViewProps) {
     [commitNodeStylePreview, isEditable, persistDocument],
   );
 
-  const updateViewport = useCallback((next: Viewport) => {
-    viewportRef.current = next;
-    setViewport(next);
-  }, []);
-
   const persistViewport = useCallback(
     (next = viewportRef.current) => {
       commitNodeStylePreview();
@@ -405,7 +368,6 @@ export function useDrawnixController(props: NodeViewProps) {
     toggleCollapsed,
     setLayout,
     commitNodePosition,
-    updateViewport,
     persistViewport,
     undo,
     redo,

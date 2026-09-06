@@ -1,9 +1,12 @@
 import {
-  CornerDownRight,
-  Maximize2,
+  ChevronDown,
+  Expand,
+  GitBranchPlus,
   Pencil,
   Plus,
   Redo2,
+  Scan,
+  Shrink,
   Trash2,
   Undo2,
   ZoomIn,
@@ -11,6 +14,7 @@ import {
 } from "@kn/icon";
 import { useResponsive } from "@kn/ui";
 import React from "react";
+import { type DrawnixI18nKey, useDrawnixI18n } from "../i18n";
 import type { MindmapLayout } from "./model/types";
 
 export interface MindmapToolbarProps {
@@ -39,12 +43,15 @@ export interface MindmapToolbarProps {
   onSetLayout: (layout: MindmapLayout) => void;
 }
 
-const LAYOUT_OPTIONS: Array<{ value: MindmapLayout; label: string }> = [
-  { value: "standard", label: "标准" },
-  { value: "right", label: "向右" },
-  { value: "left", label: "向左" },
-  { value: "downward", label: "向下" },
-  { value: "upward", label: "向上" },
+const LAYOUT_OPTIONS: Array<{
+  value: MindmapLayout;
+  labelKey: DrawnixI18nKey;
+}> = [
+  { value: "standard", labelKey: "toolbar.layout.standard" },
+  { value: "right", labelKey: "toolbar.layout.right" },
+  { value: "left", labelKey: "toolbar.layout.left" },
+  { value: "downward", labelKey: "toolbar.layout.downward" },
+  { value: "upward", labelKey: "toolbar.layout.upward" },
 ];
 
 const ICON_SIZE = 16;
@@ -53,18 +60,20 @@ function ToolButton({
   title,
   onClick,
   disabled,
+  className = "drawnix-tool-btn",
   children,
 }: {
   title: string;
   onClick: () => void;
   disabled?: boolean;
+  className?: string;
   children: React.ReactNode;
 }) {
   return (
     <button
       type="button"
-      className="drawnix-tool-btn"
-      title={title}
+      className={`${className} drawnix-tooltip`}
+      data-tooltip={title}
       aria-label={title}
       disabled={disabled}
       onClick={onClick}
@@ -76,30 +85,38 @@ function ToolButton({
 
 export function MindmapToolbar(props: MindmapToolbarProps) {
   const { isMobile } = useResponsive();
+  const { t } = useDrawnixI18n();
+  const [isLayoutMenuOpen, setIsLayoutMenuOpen] = React.useState(false);
+  const selectedLayoutLabel = t(
+    LAYOUT_OPTIONS.find((option) => option.value === props.layout)?.labelKey ??
+      "toolbar.layout.standard",
+  );
 
   return (
-    <div className="drawnix-toolbar">
+    <div
+      className={`drawnix-toolbar ${isLayoutMenuOpen ? "is-layout-menu-open" : ""}`}
+    >
       {props.isEditable && (
         <div className="drawnix-toolbar-group">
-          <ToolButton title="添加子节点 (Tab)" onClick={props.onAddChild}>
+          <ToolButton title={t("toolbar.addChild")} onClick={props.onAddChild}>
             <Plus size={ICON_SIZE} />
           </ToolButton>
           <ToolButton
-            title="添加同级节点 (Enter)"
+            title={t("toolbar.addSibling")}
             onClick={props.onAddSibling}
             disabled={!props.hasSelection}
           >
-            <CornerDownRight size={ICON_SIZE} />
+            <GitBranchPlus size={ICON_SIZE} />
           </ToolButton>
           <ToolButton
-            title="编辑节点 (双击)"
+            title={t("toolbar.editNode")}
             onClick={props.onEdit}
             disabled={!props.hasSelection}
           >
             <Pencil size={ICON_SIZE} />
           </ToolButton>
           <ToolButton
-            title="删除节点 (Delete)"
+            title={t("toolbar.deleteNode")}
             onClick={props.onDelete}
             disabled={!props.canDelete}
           >
@@ -107,7 +124,11 @@ export function MindmapToolbar(props: MindmapToolbarProps) {
           </ToolButton>
           {props.canCollapse && (
             <ToolButton
-              title={props.isCollapsed ? "展开子节点" : "折叠子节点"}
+              title={
+                props.isCollapsed
+                  ? t("toolbar.expandChildren")
+                  : t("toolbar.collapseChildren")
+              }
               onClick={props.onToggleCollapse}
             >
               <span className="drawnix-collapse-symbol">
@@ -125,14 +146,14 @@ export function MindmapToolbar(props: MindmapToolbarProps) {
       {props.isEditable && !isMobile && (
         <div className="drawnix-toolbar-group">
           <ToolButton
-            title="撤销 (Ctrl+Z)"
+            title={t("toolbar.undo")}
             onClick={props.onUndo}
             disabled={!props.canUndo}
           >
             <Undo2 size={ICON_SIZE} />
           </ToolButton>
           <ToolButton
-            title="重做 (Ctrl+Y)"
+            title={t("toolbar.redo")}
             onClick={props.onRedo}
             disabled={!props.canRedo}
           >
@@ -144,48 +165,92 @@ export function MindmapToolbar(props: MindmapToolbarProps) {
       <span className="drawnix-toolbar-sep" />
 
       <div className="drawnix-toolbar-group">
-        <ToolButton title="缩小" onClick={props.onZoomOut}>
+        <ToolButton title={t("toolbar.zoomOut")} onClick={props.onZoomOut}>
           <ZoomOut size={ICON_SIZE} />
         </ToolButton>
-        <button
-          type="button"
+        <ToolButton
+          title={t("toolbar.resetZoom")}
           className="drawnix-tool-zoom"
-          title="重置缩放"
           onClick={props.onZoomReset}
         >
           {Math.round(props.zoom)}%
-        </button>
-        <ToolButton title="放大" onClick={props.onZoomIn}>
+        </ToolButton>
+        <ToolButton title={t("toolbar.zoomIn")} onClick={props.onZoomIn}>
           <ZoomIn size={ICON_SIZE} />
         </ToolButton>
-        <ToolButton title="适应画布" onClick={props.onFit}>
-          <Maximize2 size={ICON_SIZE} />
+        <ToolButton title={t("toolbar.fitView")} onClick={props.onFit}>
+          <Scan size={ICON_SIZE} />
         </ToolButton>
         <ToolButton
-          title={props.isFullscreen ? "退出全屏" : "全屏"}
+          title={
+            props.isFullscreen
+              ? t("toolbar.exitFullscreen")
+              : t("toolbar.fullscreen")
+          }
           onClick={props.onToggleFullscreen}
         >
-          <Maximize2 size={ICON_SIZE} />
+          {props.isFullscreen ? (
+            <Shrink size={ICON_SIZE} />
+          ) : (
+            <Expand size={ICON_SIZE} />
+          )}
         </ToolButton>
       </div>
 
       {props.isEditable && (
         <>
           <span className="drawnix-toolbar-sep" />
-          <select
-            className="drawnix-toolbar-layout"
-            title="布局"
-            value={props.layout}
-            onChange={(event) =>
-              props.onSetLayout(event.target.value as MindmapLayout)
-            }
+          <div
+            className="drawnix-toolbar-layout-wrap"
+            onBlur={(event) => {
+              const nextTarget = event.relatedTarget;
+              if (
+                !(nextTarget instanceof Node) ||
+                !event.currentTarget.contains(nextTarget)
+              ) {
+                setIsLayoutMenuOpen(false);
+              }
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setIsLayoutMenuOpen(false);
+            }}
           >
-            {LAYOUT_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+            <button
+              type="button"
+              className="drawnix-toolbar-layout drawnix-tooltip"
+              data-tooltip={t("toolbar.changeLayout")}
+              aria-label={t("toolbar.changeLayout")}
+              aria-haspopup="listbox"
+              aria-expanded={isLayoutMenuOpen}
+              onClick={() => setIsLayoutMenuOpen((open) => !open)}
+            >
+              <span>{selectedLayoutLabel}</span>
+              <ChevronDown size={14} aria-hidden="true" />
+            </button>
+            {isLayoutMenuOpen && (
+              <div
+                className="drawnix-toolbar-layout-menu"
+                role="listbox"
+                aria-label={t("toolbar.layout")}
+              >
+                {LAYOUT_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="option"
+                    aria-selected={option.value === props.layout}
+                    className="drawnix-toolbar-layout-option"
+                    onClick={() => {
+                      props.onSetLayout(option.value);
+                      setIsLayoutMenuOpen(false);
+                    }}
+                  >
+                    {t(option.labelKey)}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </>
       )}
     </div>
