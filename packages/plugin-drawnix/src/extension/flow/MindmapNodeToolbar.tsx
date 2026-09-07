@@ -3,12 +3,14 @@ import {
   ChevronDown,
   Circle,
   ExternalLink,
+  GitBranchPlus,
   Link2,
   PaintBucket,
   Plus,
   RotateCcw,
   Trash2,
 } from "@kn/icon";
+import { useTranslation } from "@kn/common";
 import {
   Button,
   ColorPicker,
@@ -24,7 +26,6 @@ import {
 } from "@kn/ui";
 import { NodeToolbar, Position } from "@xyflow/react";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useDrawnixI18n } from "../../i18n";
 import { normalizeMindmapHref } from "../model/normalize";
 import type { MindmapNode, MindmapNodeStyle } from "../model/types";
 import type { MindmapNodeStylePatch } from "../model/operations";
@@ -38,6 +39,7 @@ interface MindmapNodeToolbarProps {
   isEditable: boolean;
   isEditing: boolean;
   onAddChild: () => void;
+  onAddSibling: () => void;
   onPreviewStyle: (patch: MindmapNodeStylePatch) => void;
   onCommitStylePreview: () => void;
   onSetStyle: (patch: MindmapNodeStylePatch | null) => void;
@@ -101,12 +103,13 @@ export function MindmapNodeToolbar({
   isEditable,
   isEditing,
   onAddChild,
+  onAddSibling,
   onPreviewStyle,
   onCommitStylePreview,
   onSetStyle,
   onUpdateHref,
 }: MindmapNodeToolbarProps) {
-  const { t } = useDrawnixI18n();
+  const { t } = useTranslation();
   const [fontOpen, setFontOpen] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
   const [draftHref, setDraftHref] = useState(node.href ?? "");
@@ -156,16 +159,16 @@ export function MindmapNodeToolbar({
   const saveHref = useCallback(() => {
     const normalized = normalizeMindmapHref(draftHref);
     if (!normalized) {
-      setLinkError("请输入有效的 http 或 https 链接");
+      setLinkError(t("drawnix.toolbar.invalidLink"));
       return;
     }
     if (!onUpdateHref(normalized)) {
-      setLinkError("链接保存失败");
+      setLinkError(t("drawnix.toolbar.linkSaveFailed"));
       return;
     }
     setLinkOpen(false);
     setLinkError("");
-  }, [draftHref, onUpdateHref]);
+  }, [draftHref, onUpdateHref, t]);
 
   return (
     <NodeToolbar
@@ -173,7 +176,7 @@ export function MindmapNodeToolbar({
       position={Position.Top}
       offset={12}
       role="toolbar"
-      aria-label="节点格式"
+      aria-label={t("drawnix.toolbar.nodeFormat")}
       className="drawnix-node-format-toolbar nodrag nopan nowheel"
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
@@ -181,26 +184,42 @@ export function MindmapNodeToolbar({
       <TooltipProvider delayDuration={300}>
         {isEditable ? (
           <>
-            <ToolbarButton label={t("toolbar.addChild")} onClick={onAddChild}>
+            <ToolbarButton
+              label={t("drawnix.toolbar.addChild")}
+              onClick={onAddChild}
+            >
               <Plus size={ICON_SIZE} />
+            </ToolbarButton>
+            <ToolbarButton
+              label={t("drawnix.toolbar.addSibling")}
+              onClick={onAddSibling}
+            >
+              <GitBranchPlus size={ICON_SIZE} />
             </ToolbarButton>
 
             <Separator orientation="vertical" className="h-6" />
 
             <Popover open={fontOpen} onOpenChange={setFontOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  aria-label="字体大小"
-                  className="drawnix-node-font-size nodrag nopan nowheel"
-                >
-                  <span>
-                    {node.style?.fontSize ? `${node.style.fontSize}px` : "默认"}
-                  </span>
-                  <ChevronDown size={14} aria-hidden />
-                </Button>
-              </PopoverTrigger>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      aria-label={t("drawnix.toolbar.fontSize")}
+                      className="drawnix-node-font-size nodrag nopan nowheel"
+                    >
+                      <span>
+                        {node.style?.fontSize ?? t("drawnix.toolbar.default")}
+                      </span>
+                      <ChevronDown size={12} aria-hidden />
+                    </Button>
+                  </PopoverTrigger>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  {t("drawnix.toolbar.fontSize")}
+                </TooltipContent>
+              </Tooltip>
               <PopoverContent
                 side="bottom"
                 align="start"
@@ -211,7 +230,11 @@ export function MindmapNodeToolbar({
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={(event) => event.stopPropagation()}
               >
-                <div role="listbox" aria-label="字体大小" className="space-y-1">
+                <div
+                  role="listbox"
+                  aria-label={t("drawnix.toolbar.fontSize")}
+                  className="space-y-0.5"
+                >
                   <button
                     type="button"
                     role="option"
@@ -219,7 +242,7 @@ export function MindmapNodeToolbar({
                     className="drawnix-node-font-size-option"
                     onClick={() => selectFontSize("default")}
                   >
-                    默认
+                    {t("drawnix.toolbar.default")}
                   </button>
                   {fontSizes.map((fontSize) => (
                     <button
@@ -239,53 +262,77 @@ export function MindmapNodeToolbar({
 
             <Separator orientation="vertical" className="h-6" />
 
-            <span title="文字颜色">
-              <ColorPicker
-                value={node.style?.textColor}
-                showOpacity
-                triggerIcon={colorIcon("textColor", node.style?.textColor)}
-                triggerAriaLabel="文字颜色"
-                triggerClassName="drawnix-node-format-button"
-                onChange={(textColor) => onPreviewStyle({ textColor })}
-                onUnset={() => onPreviewStyle({ textColor: null })}
-                onOpenChange={handleColorOpenChange}
-                align="center"
-              />
-            </span>
-            <span title="边框颜色">
-              <ColorPicker
-                value={node.style?.borderColor}
-                showOpacity
-                triggerIcon={colorIcon("borderColor", node.style?.borderColor)}
-                triggerAriaLabel="边框颜色"
-                triggerClassName="drawnix-node-format-button"
-                onChange={(borderColor) => onPreviewStyle({ borderColor })}
-                onUnset={() => onPreviewStyle({ borderColor: null })}
-                onOpenChange={handleColorOpenChange}
-                align="center"
-              />
-            </span>
-            <span title="背景颜色">
-              <ColorPicker
-                value={node.style?.backgroundColor}
-                showOpacity
-                triggerIcon={colorIcon(
-                  "backgroundColor",
-                  node.style?.backgroundColor,
-                )}
-                triggerAriaLabel="背景颜色"
-                triggerClassName="drawnix-node-format-button"
-                onChange={(backgroundColor) =>
-                  onPreviewStyle({ backgroundColor })
-                }
-                onUnset={() => onPreviewStyle({ backgroundColor: null })}
-                onOpenChange={handleColorOpenChange}
-                align="center"
-              />
-            </span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex">
+                  <ColorPicker
+                    value={node.style?.textColor}
+                    showOpacity
+                    triggerIcon={colorIcon("textColor", node.style?.textColor)}
+                    triggerAriaLabel={t("drawnix.toolbar.textColor")}
+                    triggerClassName="drawnix-node-format-button"
+                    onChange={(textColor) => onPreviewStyle({ textColor })}
+                    onUnset={() => onPreviewStyle({ textColor: null })}
+                    onOpenChange={handleColorOpenChange}
+                    align="center"
+                  />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                {t("drawnix.toolbar.textColor")}
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex">
+                  <ColorPicker
+                    value={node.style?.borderColor}
+                    showOpacity
+                    triggerIcon={colorIcon(
+                      "borderColor",
+                      node.style?.borderColor,
+                    )}
+                    triggerAriaLabel={t("drawnix.toolbar.borderColor")}
+                    triggerClassName="drawnix-node-format-button"
+                    onChange={(borderColor) => onPreviewStyle({ borderColor })}
+                    onUnset={() => onPreviewStyle({ borderColor: null })}
+                    onOpenChange={handleColorOpenChange}
+                    align="center"
+                  />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                {t("drawnix.toolbar.borderColor")}
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex">
+                  <ColorPicker
+                    value={node.style?.backgroundColor}
+                    showOpacity
+                    triggerIcon={colorIcon(
+                      "backgroundColor",
+                      node.style?.backgroundColor,
+                    )}
+                    triggerAriaLabel={t("drawnix.toolbar.backgroundColor")}
+                    triggerClassName="drawnix-node-format-button"
+                    onChange={(backgroundColor) =>
+                      onPreviewStyle({ backgroundColor })
+                    }
+                    onUnset={() => onPreviewStyle({ backgroundColor: null })}
+                    onOpenChange={handleColorOpenChange}
+                    align="center"
+                  />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                {t("drawnix.toolbar.backgroundColor")}
+              </TooltipContent>
+            </Tooltip>
 
             <ToolbarButton
-              label="恢复默认样式"
+              label={t("drawnix.toolbar.resetStyle")}
               disabled={!node.style}
               onClick={() => onSetStyle(null)}
             >
@@ -298,7 +345,7 @@ export function MindmapNodeToolbar({
 
         {node.href ? (
           <ToolbarButton
-            label="打开链接"
+            label={t("drawnix.toolbar.openLink")}
             onClick={() => openNodeHref(node.href!)}
           >
             <ExternalLink size={ICON_SIZE} />
@@ -314,7 +361,11 @@ export function MindmapNodeToolbar({
                     type="button"
                     variant="ghost"
                     size="icon"
-                    aria-label={node.href ? "编辑链接" : "添加链接"}
+                    aria-label={
+                      node.href
+                        ? t("drawnix.toolbar.editLink")
+                        : t("drawnix.toolbar.addLink")
+                    }
                     className="drawnix-node-format-button"
                   >
                     <Link2 size={ICON_SIZE} />
@@ -322,7 +373,9 @@ export function MindmapNodeToolbar({
                 </PopoverTrigger>
               </TooltipTrigger>
               <TooltipContent side="top">
-                {node.href ? "编辑链接" : "添加链接"}
+                {node.href
+                  ? t("drawnix.toolbar.editLink")
+                  : t("drawnix.toolbar.addLink")}
               </TooltipContent>
             </Tooltip>
             <PopoverContent
@@ -338,7 +391,7 @@ export function MindmapNodeToolbar({
                   htmlFor={`drawnix-node-link-${node.id}`}
                   className="text-xs font-medium"
                 >
-                  节点链接
+                  {t("drawnix.toolbar.nodeLink")}
                 </label>
                 <Input
                   id={`drawnix-node-link-${node.id}`}
@@ -370,10 +423,10 @@ export function MindmapNodeToolbar({
                     size="sm"
                     onClick={() => setLinkOpen(false)}
                   >
-                    取消
+                    {t("drawnix.toolbar.cancel")}
                   </Button>
                   <Button type="button" size="sm" onClick={saveHref}>
-                    保存
+                    {t("drawnix.toolbar.save")}
                   </Button>
                 </div>
               </div>
@@ -383,7 +436,7 @@ export function MindmapNodeToolbar({
 
         {isEditable && node.href ? (
           <ToolbarButton
-            label="移除链接"
+            label={t("drawnix.toolbar.removeLink")}
             destructive
             onClick={() => onUpdateHref(null)}
           >

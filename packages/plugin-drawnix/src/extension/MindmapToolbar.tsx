@@ -12,9 +12,15 @@ import {
   ZoomIn,
   ZoomOut,
 } from "@kn/icon";
-import { useResponsive } from "@kn/ui";
+import { useTranslation } from "@kn/common";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+  useResponsive,
+} from "@kn/ui";
 import React from "react";
-import { type DrawnixI18nKey, useDrawnixI18n } from "../i18n";
 import type { MindmapLayout } from "./model/types";
 
 export interface MindmapToolbarProps {
@@ -45,13 +51,13 @@ export interface MindmapToolbarProps {
 
 const LAYOUT_OPTIONS: Array<{
   value: MindmapLayout;
-  labelKey: DrawnixI18nKey;
+  labelKey: string;
 }> = [
-  { value: "standard", labelKey: "toolbar.layout.standard" },
-  { value: "right", labelKey: "toolbar.layout.right" },
-  { value: "left", labelKey: "toolbar.layout.left" },
-  { value: "downward", labelKey: "toolbar.layout.downward" },
-  { value: "upward", labelKey: "toolbar.layout.upward" },
+  { value: "standard", labelKey: "drawnix.toolbar.layouts.standard" },
+  { value: "right", labelKey: "drawnix.toolbar.layouts.right" },
+  { value: "left", labelKey: "drawnix.toolbar.layouts.left" },
+  { value: "downward", labelKey: "drawnix.toolbar.layouts.downward" },
+  { value: "upward", labelKey: "drawnix.toolbar.layouts.upward" },
 ];
 
 const ICON_SIZE = 16;
@@ -70,189 +76,213 @@ function ToolButton({
   children: React.ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      className={`${className} drawnix-tooltip`}
-      data-tooltip={title}
-      aria-label={title}
-      disabled={disabled}
-      onClick={onClick}
-    >
-      {children}
-    </button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          className={className}
+          aria-label={title}
+          disabled={disabled}
+          onClick={onClick}
+        >
+          {children}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">{title}</TooltipContent>
+    </Tooltip>
   );
 }
 
 export function MindmapToolbar(props: MindmapToolbarProps) {
   const { isMobile } = useResponsive();
-  const { t } = useDrawnixI18n();
+  const { t } = useTranslation();
   const [isLayoutMenuOpen, setIsLayoutMenuOpen] = React.useState(false);
   const selectedLayoutLabel = t(
     LAYOUT_OPTIONS.find((option) => option.value === props.layout)?.labelKey ??
-      "toolbar.layout.standard",
+      "drawnix.toolbar.layouts.standard",
   );
 
   return (
-    <div
-      className={`drawnix-toolbar ${isLayoutMenuOpen ? "is-layout-menu-open" : ""}`}
-    >
-      {props.isEditable && (
-        <div className="drawnix-toolbar-group">
-          <ToolButton title={t("toolbar.addChild")} onClick={props.onAddChild}>
-            <Plus size={ICON_SIZE} />
-          </ToolButton>
-          <ToolButton
-            title={t("toolbar.addSibling")}
-            onClick={props.onAddSibling}
-            disabled={!props.hasSelection}
-          >
-            <GitBranchPlus size={ICON_SIZE} />
-          </ToolButton>
-          <ToolButton
-            title={t("toolbar.editNode")}
-            onClick={props.onEdit}
-            disabled={!props.hasSelection}
-          >
-            <Pencil size={ICON_SIZE} />
-          </ToolButton>
-          <ToolButton
-            title={t("toolbar.deleteNode")}
-            onClick={props.onDelete}
-            disabled={!props.canDelete}
-          >
-            <Trash2 size={ICON_SIZE} />
-          </ToolButton>
-          {props.canCollapse && (
+    <TooltipProvider delayDuration={300}>
+      <div
+        className={`drawnix-toolbar ${isLayoutMenuOpen ? "is-layout-menu-open" : ""}`}
+      >
+        {props.isEditable && (
+          <div className="drawnix-toolbar-group">
             <ToolButton
-              title={
-                props.isCollapsed
-                  ? t("toolbar.expandChildren")
-                  : t("toolbar.collapseChildren")
-              }
-              onClick={props.onToggleCollapse}
+              title={t("drawnix.toolbar.addChild")}
+              onClick={props.onAddChild}
             >
-              <span className="drawnix-collapse-symbol">
-                {props.isCollapsed ? "+" : "−"}
-              </span>
+              <Plus size={ICON_SIZE} />
             </ToolButton>
-          )}
-        </div>
-      )}
-
-      {props.isEditable && !isMobile && (
-        <span className="drawnix-toolbar-sep" />
-      )}
-
-      {props.isEditable && !isMobile && (
-        <div className="drawnix-toolbar-group">
-          <ToolButton
-            title={t("toolbar.undo")}
-            onClick={props.onUndo}
-            disabled={!props.canUndo}
-          >
-            <Undo2 size={ICON_SIZE} />
-          </ToolButton>
-          <ToolButton
-            title={t("toolbar.redo")}
-            onClick={props.onRedo}
-            disabled={!props.canRedo}
-          >
-            <Redo2 size={ICON_SIZE} />
-          </ToolButton>
-        </div>
-      )}
-
-      <span className="drawnix-toolbar-sep" />
-
-      <div className="drawnix-toolbar-group">
-        <ToolButton title={t("toolbar.zoomOut")} onClick={props.onZoomOut}>
-          <ZoomOut size={ICON_SIZE} />
-        </ToolButton>
-        <ToolButton
-          title={t("toolbar.resetZoom")}
-          className="drawnix-tool-zoom"
-          onClick={props.onZoomReset}
-        >
-          {Math.round(props.zoom)}%
-        </ToolButton>
-        <ToolButton title={t("toolbar.zoomIn")} onClick={props.onZoomIn}>
-          <ZoomIn size={ICON_SIZE} />
-        </ToolButton>
-        <ToolButton title={t("toolbar.fitView")} onClick={props.onFit}>
-          <Scan size={ICON_SIZE} />
-        </ToolButton>
-        <ToolButton
-          title={
-            props.isFullscreen
-              ? t("toolbar.exitFullscreen")
-              : t("toolbar.fullscreen")
-          }
-          onClick={props.onToggleFullscreen}
-        >
-          {props.isFullscreen ? (
-            <Shrink size={ICON_SIZE} />
-          ) : (
-            <Expand size={ICON_SIZE} />
-          )}
-        </ToolButton>
-      </div>
-
-      {props.isEditable && (
-        <>
-          <span className="drawnix-toolbar-sep" />
-          <div
-            className="drawnix-toolbar-layout-wrap"
-            onBlur={(event) => {
-              const nextTarget = event.relatedTarget;
-              if (
-                !(nextTarget instanceof Node) ||
-                !event.currentTarget.contains(nextTarget)
-              ) {
-                setIsLayoutMenuOpen(false);
-              }
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") setIsLayoutMenuOpen(false);
-            }}
-          >
-            <button
-              type="button"
-              className="drawnix-toolbar-layout drawnix-tooltip"
-              data-tooltip={t("toolbar.changeLayout")}
-              aria-label={t("toolbar.changeLayout")}
-              aria-haspopup="listbox"
-              aria-expanded={isLayoutMenuOpen}
-              onClick={() => setIsLayoutMenuOpen((open) => !open)}
+            <ToolButton
+              title={t("drawnix.toolbar.addSibling")}
+              onClick={props.onAddSibling}
+              disabled={!props.hasSelection}
             >
-              <span>{selectedLayoutLabel}</span>
-              <ChevronDown size={14} aria-hidden="true" />
-            </button>
-            {isLayoutMenuOpen && (
-              <div
-                className="drawnix-toolbar-layout-menu"
-                role="listbox"
-                aria-label={t("toolbar.layout")}
+              <GitBranchPlus size={ICON_SIZE} />
+            </ToolButton>
+            <ToolButton
+              title={t("drawnix.toolbar.editNode")}
+              onClick={props.onEdit}
+              disabled={!props.hasSelection}
+            >
+              <Pencil size={ICON_SIZE} />
+            </ToolButton>
+            <ToolButton
+              title={t("drawnix.toolbar.deleteNode")}
+              onClick={props.onDelete}
+              disabled={!props.canDelete}
+            >
+              <Trash2 size={ICON_SIZE} />
+            </ToolButton>
+            {props.canCollapse && (
+              <ToolButton
+                title={
+                  props.isCollapsed
+                    ? t("drawnix.toolbar.expandChildren")
+                    : t("drawnix.toolbar.collapseChildren")
+                }
+                onClick={props.onToggleCollapse}
               >
-                {LAYOUT_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    role="option"
-                    aria-selected={option.value === props.layout}
-                    className="drawnix-toolbar-layout-option"
-                    onClick={() => {
-                      props.onSetLayout(option.value);
-                      setIsLayoutMenuOpen(false);
-                    }}
-                  >
-                    {t(option.labelKey)}
-                  </button>
-                ))}
-              </div>
+                <span className="drawnix-collapse-symbol">
+                  {props.isCollapsed ? "+" : "−"}
+                </span>
+              </ToolButton>
             )}
           </div>
-        </>
-      )}
-    </div>
+        )}
+
+        {props.isEditable && !isMobile && (
+          <span className="drawnix-toolbar-sep" />
+        )}
+
+        {props.isEditable && !isMobile && (
+          <div className="drawnix-toolbar-group">
+            <ToolButton
+              title={t("drawnix.toolbar.undo")}
+              onClick={props.onUndo}
+              disabled={!props.canUndo}
+            >
+              <Undo2 size={ICON_SIZE} />
+            </ToolButton>
+            <ToolButton
+              title={t("drawnix.toolbar.redo")}
+              onClick={props.onRedo}
+              disabled={!props.canRedo}
+            >
+              <Redo2 size={ICON_SIZE} />
+            </ToolButton>
+          </div>
+        )}
+
+        <span className="drawnix-toolbar-sep" />
+
+        <div className="drawnix-toolbar-group">
+          <ToolButton
+            title={t("drawnix.toolbar.zoomOut")}
+            onClick={props.onZoomOut}
+          >
+            <ZoomOut size={ICON_SIZE} />
+          </ToolButton>
+          <ToolButton
+            title={t("drawnix.toolbar.resetZoom")}
+            className="drawnix-tool-zoom"
+            onClick={props.onZoomReset}
+          >
+            {Math.round(props.zoom)}%
+          </ToolButton>
+          <ToolButton
+            title={t("drawnix.toolbar.zoomIn")}
+            onClick={props.onZoomIn}
+          >
+            <ZoomIn size={ICON_SIZE} />
+          </ToolButton>
+          <ToolButton
+            title={t("drawnix.toolbar.fitView")}
+            onClick={props.onFit}
+          >
+            <Scan size={ICON_SIZE} />
+          </ToolButton>
+          <ToolButton
+            title={
+              props.isFullscreen
+                ? t("drawnix.toolbar.exitFullscreen")
+                : t("drawnix.toolbar.fullscreen")
+            }
+            onClick={props.onToggleFullscreen}
+          >
+            {props.isFullscreen ? (
+              <Shrink size={ICON_SIZE} />
+            ) : (
+              <Expand size={ICON_SIZE} />
+            )}
+          </ToolButton>
+        </div>
+
+        {props.isEditable && (
+          <>
+            <span className="drawnix-toolbar-sep" />
+            <div
+              className="drawnix-toolbar-layout-wrap"
+              onBlur={(event) => {
+                const nextTarget = event.relatedTarget;
+                if (
+                  !(nextTarget instanceof Node) ||
+                  !event.currentTarget.contains(nextTarget)
+                ) {
+                  setIsLayoutMenuOpen(false);
+                }
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") setIsLayoutMenuOpen(false);
+              }}
+            >
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="drawnix-toolbar-layout"
+                    aria-label={t("drawnix.toolbar.changeLayout")}
+                    aria-haspopup="listbox"
+                    aria-expanded={isLayoutMenuOpen}
+                    onClick={() => setIsLayoutMenuOpen((open) => !open)}
+                  >
+                    <span>{selectedLayoutLabel}</span>
+                    <ChevronDown size={14} aria-hidden="true" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  {t("drawnix.toolbar.changeLayout")}
+                </TooltipContent>
+              </Tooltip>
+              {isLayoutMenuOpen && (
+                <div
+                  className="drawnix-toolbar-layout-menu"
+                  role="listbox"
+                  aria-label={t("drawnix.toolbar.layout")}
+                >
+                  {LAYOUT_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="option"
+                      aria-selected={option.value === props.layout}
+                      className="drawnix-toolbar-layout-option"
+                      onClick={() => {
+                        props.onSetLayout(option.value);
+                        setIsLayoutMenuOpen(false);
+                      }}
+                    >
+                      {t(option.labelKey)}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </TooltipProvider>
   );
 }

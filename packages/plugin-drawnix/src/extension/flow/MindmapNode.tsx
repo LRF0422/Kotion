@@ -11,8 +11,10 @@ export interface MindmapFlowNodeData extends Record<string, unknown> {
   isRoot: boolean;
   isEditable: boolean;
   isEditing: boolean;
+  toolbarVisible: boolean;
   draftText: string;
   onAddChild: (nodeId: string) => void;
+  onAddSibling: (nodeId: string) => void;
   onDraftTextChange: (value: string) => void;
   onStartEdit: (nodeId: string) => void;
   onCommitEdit: (value?: string) => void;
@@ -62,10 +64,11 @@ function MindmapNodeComponent({ data, selected }: NodeProps<MindmapFlowNode>) {
     >
       <MindmapNodeToolbar
         node={node}
-        selected={selected}
+        selected={selected && data.toolbarVisible}
         isEditable={data.isEditable}
         isEditing={data.isEditing}
         onAddChild={() => data.onAddChild(node.id)}
+        onAddSibling={() => data.onAddSibling(node.id)}
         onPreviewStyle={(patch) => data.onPreviewStyle(node.id, patch)}
         onCommitStylePreview={data.onCommitStylePreview}
         onSetStyle={(patch) => data.onSetStyle(node.id, patch)}

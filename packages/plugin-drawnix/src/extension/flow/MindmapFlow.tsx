@@ -2,6 +2,7 @@ import {
   Background,
   BackgroundVariant,
   ReactFlow,
+  useEdgesState,
   useNodesState,
   useReactFlow,
   type Edge,
@@ -9,7 +10,13 @@ import {
   type Viewport,
 } from "@xyflow/react";
 import { createThemeAwareColor } from "@kn/ui";
-import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { DrawnixController } from "../hooks/useDrawnixController";
 import type { MindmapDirection } from "../layout/tree-layout";
 import type { MindmapNodeStyle } from "../model/types";
@@ -96,6 +103,9 @@ function nodeVisualStyle(
 
 export function MindmapFlow({ controller, onActionsReady }: MindmapFlowProps) {
   const flow = useReactFlow<MindmapFlowNode>();
+  const [toolbarNodeId, setToolbarNodeId] = useState<string | null>(
+    controller.selectedId,
+  );
   const fitViewOnInitRef = useRef(!controller.document.viewport);
   const isViewportInteractionRef = useRef(false);
   const branchAssignmentsRef = useRef(
@@ -113,6 +123,10 @@ export function MindmapFlow({ controller, onActionsReady }: MindmapFlowProps) {
   useEffect(() => {
     branchAssignmentsRef.current = branchAssignments;
   }, [branchAssignments]);
+
+  useEffect(() => {
+    setToolbarNodeId(controller.selectedId);
+  }, [controller.selectedId]);
 
   const projectedNodes = useMemo<MindmapFlowNode[]>(
     () =>
@@ -145,11 +159,13 @@ export function MindmapFlow({ controller, onActionsReady }: MindmapFlowProps) {
             isRoot: item.isRoot,
             isEditable: controller.isEditable,
             isEditing: item.id === controller.editingId,
+            toolbarVisible: item.id === toolbarNodeId,
             draftText:
               item.id === controller.editingId
                 ? controller.draftText
                 : item.node.text,
             onAddChild: controller.addChild,
+            onAddSibling: controller.addSibling,
             onDraftTextChange: controller.setDraftText,
             onStartEdit: controller.startEditing,
             onCommitEdit: controller.commitEditing,
@@ -165,6 +181,7 @@ export function MindmapFlow({ controller, onActionsReady }: MindmapFlowProps) {
     [
       branchAssignments,
       controller.addChild,
+      controller.addSibling,
       controller.cancelEditing,
       controller.commitEditing,
       controller.commitNodeStylePreview,
@@ -179,16 +196,10 @@ export function MindmapFlow({ controller, onActionsReady }: MindmapFlowProps) {
       controller.startEditing,
       controller.updateNodeHref,
       controller.toggleCollapsed,
+      toolbarNodeId,
     ],
   );
-  const [nodes, setNodes, onNodesChange] =
-    useNodesState<MindmapFlowNode>(projectedNodes);
-
-  useEffect(() => {
-    setNodes(projectedNodes);
-  }, [projectedNodes, setNodes]);
-
-  const edges = useMemo<Edge[]>(
+  const projectedEdges = useMemo<Edge[]>(
     () =>
       controller.layoutResult.edges.map((edge) => {
         const assignment = branchAssignments.get(edge.branchId);
@@ -204,6 +215,14 @@ export function MindmapFlow({ controller, onActionsReady }: MindmapFlowProps) {
       }),
     [branchAssignments, controller.layoutResult.edges],
   );
+  const [nodes, setNodes, onNodesChange] =
+    useNodesState<MindmapFlowNode>(projectedNodes);
+  const [edges, setEdges] = useEdgesState(projectedEdges);
+
+  useEffect(() => {
+    setNodes(projectedNodes);
+    setEdges(projectedEdges);
+  }, [projectedEdges, projectedNodes, setEdges, setNodes]);
 
   const persistInstanceViewport = useCallback(
     (instance: ReactFlowInstance<MindmapFlowNode, Edge>) => {
@@ -264,12 +283,15 @@ export function MindmapFlow({ controller, onActionsReady }: MindmapFlowProps) {
         }
         isViewportInteractionRef.current = false;
       }}
-      onNodeClick={(_, node) => controller.selectNode(node.id)}
+      onNodeClick={(_, node) => {
+        controller.selectNode(node.id);
+        setToolbarNodeId(node.id);
+      }}
       onNodeDoubleClick={(_, node) => controller.startEditing(node.id)}
       onNodeDragStop={(_, node) =>
         controller.commitNodePosition(node.id, node.position)
       }
-      onPaneClick={() => controller.selectNode(controller.document.root.id)}
+      onPaneClick={() => setToolbarNodeId(null)}
       proOptions={{ hideAttribution: true }}
     >
       <Background variant={BackgroundVariant.Dots} gap={20} size={1.2} />
