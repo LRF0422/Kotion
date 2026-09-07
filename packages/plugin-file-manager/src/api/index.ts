@@ -80,6 +80,11 @@ export const APIS = {
         method: 'GET',
         name: 'Download File'
     } as API,
+    GET_FILE_ACCESS_URLS: {
+        url: '/knowledge-file-center/file/:fileId/access-urls',
+        method: 'GET',
+        name: 'Get File Access URLs'
+    } as API,
 
     // ===== 删除 / 回收站 =====
     DELETE_FILE: {

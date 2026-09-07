@@ -2,7 +2,7 @@ import type { FileService } from "../core/types";
 import { useService, useOptionalService } from "../hooks/use-service";
 
 /** @deprecated Import these contracts from the @kn/common root. */
-export type { FileService, UploadedFile, UploadOptions } from "../core/types";
+export type { FileAccessUrls, FileService, UploadedFile, UploadOptions } from "../core/types";
 
 /**
  * Hook to access FileService from plugin services.

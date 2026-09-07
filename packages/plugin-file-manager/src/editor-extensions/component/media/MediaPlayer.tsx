@@ -16,7 +16,7 @@ import {
 } from '@kn/icon';
 import { useI18n } from '../../../i18n/use-i18n';
 import { formatMediaTime, type ResolvedMediaKind } from './media-utils';
-import { useMediaController } from './useMediaController';
+import { useMediaController, type MediaPlaybackError } from './useMediaController';
 
 export interface MediaPlayerProps {
     kind: ResolvedMediaKind;
@@ -32,16 +32,22 @@ const isShortcutTarget = (target: EventTarget | null): boolean =>
     && !!target.closest('button, input, textarea, select, [role="slider"], [contenteditable="true"]');
 
 const MediaErrorPanel: React.FC<{
-    playbackError: boolean;
+    error: Exclude<MediaPlaybackError, null>;
+    kind: ResolvedMediaKind;
     onRetry: () => void;
     onDownload: () => void;
     dark?: boolean;
-}> = ({ playbackError, onRetry, onDownload, dark = false }) => {
+}> = ({ error, kind, onRetry, onDownload, dark = false }) => {
     const { t } = useI18n();
+    const messageKey = error === 'playback'
+        ? 'preview.playbackFailed'
+        : error === 'unsupported' && kind === 'video'
+            ? 'preview.unsupportedVideoCodec'
+            : 'preview.mediaLoadFailed';
     return (
         <div className={cn('flex flex-col items-center justify-center gap-3 px-5 py-8 text-center', dark && 'text-white')} role="alert">
             <p className={cn('text-sm font-medium', !dark && 'text-foreground')}>
-                {t(playbackError ? 'preview.playbackFailed' : 'preview.mediaLoadFailed')}
+                {t(messageKey)}
             </p>
             <p className={cn('max-w-sm text-xs', dark ? 'text-slate-300' : 'text-muted-foreground')}>
                 {t('preview.downloadFallback')}
@@ -124,7 +130,8 @@ const AudioPreviewPlayer: React.FC<Omit<MediaPlayerProps, 'kind'>> = ({ src, lab
 
                 {controller.error ? (
                     <MediaErrorPanel
-                        playbackError={controller.error === 'playback'}
+                        error={controller.error}
+                        kind="audio"
                         onRetry={onRetry ?? controller.retry}
                         onDownload={onDownload}
                     />
@@ -373,7 +380,8 @@ const VideoPreviewPlayer: React.FC<Omit<MediaPlayerProps, 'kind'>> = ({ src, lab
                 {controller.error ? (
                     <div className="absolute inset-0 flex items-center justify-center bg-[#090c12]/90">
                         <MediaErrorPanel
-                            playbackError={controller.error === 'playback'}
+                            error={controller.error}
+                            kind="video"
                             onRetry={onRetry ?? controller.retry}
                             onDownload={onDownload}
                             dark

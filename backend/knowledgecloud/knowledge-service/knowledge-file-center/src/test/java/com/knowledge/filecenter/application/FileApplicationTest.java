@@ -1,6 +1,8 @@
 package com.knowledge.filecenter.application;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Answers.RETURNS_SELF;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -12,16 +14,18 @@ import static org.mockito.Mockito.when;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.net.URI;
+import java.time.Instant;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
@@ -29,10 +33,19 @@ import com.knowledge.core.oss.OssClient;
 import com.knowledge.core.oss.props.OssProperties;
 import com.knowledge.file.api.entity.enums.FileType;
 import com.knowledge.filecenter.entity.KnowledgeFile;
+import com.knowledge.filecenter.entity.vo.FileAccessUrlsVO;
 import com.knowledge.filecenter.entity.vo.KnowledgeFileVO;
 import com.knowledge.filecenter.service.IFileRepositoryService;
 import com.knowledge.filecenter.service.IFileService;
 import com.knowledge.filecenter.storage.LegacyOssObjectKeyResolver;
+import com.knowledge.filecenter.upload.UploadOwner;
+import com.knowledge.filecenter.upload.UploadOwnerProvider;
+
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.S3Configuration;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
 @ExtendWith(MockitoExtension.class)
 class FileApplicationTest {
@@ -47,6 +60,8 @@ class FileApplicationTest {
     private OssProperties ossProperties;
     @Mock
     private LegacyOssObjectKeyResolver ossObjectKeyResolver;
+    @Mock
+    private UploadOwnerProvider ownerProvider;
     @InjectMocks
     private FileApplication application;
 
@@ -143,6 +158,60 @@ class FileApplicationTest {
     }
 
     @Test
+    void createsSignedPreviewAndDownloadUrlsFromResolvedPath() {
+        KnowledgeFile file = file(1L, "legacy-url", "application-record-key");
+        when(fileService.getById(1L)).thenReturn(file);
+        when(ownerProvider.currentOwner()).thenReturn(new UploadOwner("tenant-a", 7L));
+        when(ossProperties.getBucketName()).thenReturn("knowledge");
+        when(ossObjectKeyResolver.resolve("legacy-url")).thenReturn("upload/object.webm");
+
+        try (S3Presigner presigner = presigner()) {
+            ReflectionTestUtils.setField(application, "s3Presigner", presigner);
+
+            FileAccessUrlsVO result = application.createAccessUrls(1L);
+
+            URI preview = URI.create(result.getPreviewUrl());
+            URI download = URI.create(result.getDownloadUrl());
+            assertEquals("/knowledge/upload/object.webm", preview.getPath());
+            assertTrue(preview.getRawQuery().contains("X-Amz-Expires=3600"));
+            assertTrue(preview.getRawQuery().contains("response-content-disposition=inline"));
+            assertTrue(download.getRawQuery().contains("response-content-disposition=attachment"));
+            assertTrue(result.getExpiresAt().isAfter(Instant.now().plusSeconds(3500)));
+            verify(fileService).touchAccess(1L);
+        }
+    }
+
+    @Test
+    void rejectsAccessUrlForAnotherTenant() {
+        KnowledgeFile file = file(1L, "upload/object.webm", "application-record-key");
+        file.setTenantId("tenant-b");
+        when(fileService.getById(1L)).thenReturn(file);
+        when(ownerProvider.currentOwner()).thenReturn(new UploadOwner("tenant-a", 7L));
+
+        assertThrows(IllegalArgumentException.class, () -> application.createAccessUrls(1L));
+    }
+
+    @Test
+    void rejectsAccessUrlForFolder() {
+        KnowledgeFile folder = file(1L, "folder", "application-record-key");
+        folder.setType(FileType.FOLDER);
+        when(fileService.getById(1L)).thenReturn(folder);
+        when(ownerProvider.currentOwner()).thenReturn(new UploadOwner("tenant-a", 7L));
+
+        assertThrows(IllegalArgumentException.class, () -> application.createAccessUrls(1L));
+    }
+
+    @Test
+    void rejectsAccessUrlWhenPresignerIsUnavailable() {
+        KnowledgeFile file = file(1L, "upload/object.webm", "application-record-key");
+        when(fileService.getById(1L)).thenReturn(file);
+        when(ownerProvider.currentOwner()).thenReturn(new UploadOwner("tenant-a", 7L));
+        ReflectionTestUtils.setField(application, "s3Presigner", null);
+
+        assertThrows(IllegalStateException.class, () -> application.createAccessUrls(1L));
+    }
+
+    @Test
     void purgeDeletesUnsharedObjectByResolvedPath() {
         KnowledgeFile file = file(1L, "legacy-url", "application-record-key");
         when(fileService.getById(1L)).thenReturn(file);
@@ -177,6 +246,16 @@ class FileApplicationTest {
         return file;
     }
 
+    private static S3Presigner presigner() {
+        return S3Presigner.builder()
+                .endpointOverride(URI.create("https://objects.example.com"))
+                .credentialsProvider(StaticCredentialsProvider.create(
+                        AwsBasicCredentials.create("access-key", "secret-key")))
+                .region(Region.US_EAST_1)
+                .serviceConfiguration(S3Configuration.builder().pathStyleAccessEnabled(true).build())
+                .build();
+    }
+
     private static KnowledgeFile file(Long id, String path, String fileKey) {
         KnowledgeFile file = new KnowledgeFile();
         file.setId(id);
@@ -184,6 +263,7 @@ class FileApplicationTest {
         file.setName("meeting.webm");
         file.setPath(path);
         file.setFileKey(fileKey);
+        file.setTenantId("tenant-a");
         return file;
     }
 }

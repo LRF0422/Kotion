@@ -1,4 +1,8 @@
 export type ResolvedMediaKind = 'audio' | 'video';
+export type NativeMediaLoadError = 'load' | 'unsupported';
+
+export const classifyNativeMediaError = (code?: number): NativeMediaLoadError =>
+    code === 3 || code === 4 ? 'unsupported' : 'load';
 
 export const formatMediaTime = (seconds: number): string => {
     if (!Number.isFinite(seconds) || seconds < 0) return '00:00';

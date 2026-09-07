@@ -149,6 +149,12 @@ export interface SelectedFile {
     url?: string;
 }
 
+export interface FileAccessUrls {
+    previewUrl: string;
+    downloadUrl: string;
+    expiresAt: string;
+}
+
 /**
  * FileService interface - centralized file operations for the entire application
  * All plugins must use this interface for file operations instead of direct API calls
@@ -158,6 +164,8 @@ export interface FileService {
     uploadFile: (file: File, options?: Omit<UploadOptions, 'mimeTypes' | 'multiple'>) => Promise<UploadedFile>;
     uploadFiles: (files: File[], options?: Omit<UploadOptions, 'mimeTypes' | 'multiple'>) => Promise<UploadedFile[]>;
     getDownloadUrl: (fileName: string) => string;
+    /** Create short-lived direct URLs for previewing and downloading a file-center record. */
+    getFileAccessUrls?: (fileId: string) => Promise<FileAccessUrls>;
     /** Download a file-center record through the authenticated API. */
     getFileBlob?: (fileId: string) => Promise<Blob>;
     download: (fileName: string) => Promise<void>;

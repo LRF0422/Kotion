@@ -28,6 +28,7 @@ import com.knowledge.filecenter.entity.dto.upload.CompleteUploadSessionRequest;
 import com.knowledge.filecenter.entity.dto.upload.CreateUploadSessionRequest;
 import com.knowledge.filecenter.entity.dto.upload.SignUploadPartsRequest;
 import com.knowledge.filecenter.entity.dto.upload.UploadPartAcknowledgementRequest;
+import com.knowledge.filecenter.entity.vo.FileAccessUrlsVO;
 import com.knowledge.filecenter.entity.vo.KnowledgeFileVO;
 import com.knowledge.filecenter.entity.vo.upload.SignedUploadPartVO;
 import com.knowledge.filecenter.entity.vo.upload.UploadCapabilitiesVO;
@@ -146,6 +147,13 @@ public class FileController {
             @ApiParam("File ID") @PathVariable("fileId") Long fileId,
             HttpServletResponse response) {
         fileApplication.downloadFile(fileId, response);
+    }
+
+    @GetMapping("/file/{fileId}/access-urls")
+    @ApiOperation("Create short-lived preview and download URLs")
+    public R<FileAccessUrlsVO> createAccessUrls(
+            @ApiParam("File ID") @PathVariable("fileId") Long fileId) {
+        return R.data(fileApplication.createAccessUrls(fileId));
     }
 
     @PutMapping("/file/{fileId}")

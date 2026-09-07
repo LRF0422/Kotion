@@ -243,6 +243,7 @@ const DetailDate: React.FC<{ value: any; field: FieldConfig; onChange: (v: strin
     const locale = i18n.language?.startsWith('zh') ? zhCN : enUS;
     const dateFormat = field.format || 'yyyy-MM-dd';
     const hasTime = dateFormat.includes('HH');
+    const granularity = hasTime ? (dateFormat.includes('ss') ? 'second' : 'minute') : 'day';
 
     if (!editable) {
         if (!value) return <span className="text-sm text-muted-foreground">-</span>;
@@ -273,7 +274,7 @@ const DetailDate: React.FC<{ value: any; field: FieldConfig; onChange: (v: strin
             weekStartsOn={1}
             showOutsideDays
             showWeekNumber={undefined}
-            granularity={hasTime ? 'second' : 'day'}
+            granularity={granularity}
             displayFormat={{ hour24: dateFormat, hour12: dateFormat }}
         />
     );

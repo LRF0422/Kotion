@@ -1,4 +1,5 @@
 import {
+    FileAccessUrls,
     FileService,
     UploadedFile,
     UploadOptions,
@@ -88,9 +89,16 @@ export class FileServiceImpl implements FileService {
     }
 
     /**
+     * Create short-lived direct URLs so native media elements can use storage-level
+     * byte-range requests without exposing the application's access token.
+     */
+    async getFileAccessUrls(fileId: string): Promise<FileAccessUrls> {
+        const res = await useApi(APIS.GET_FILE_ACCESS_URLS, { fileId });
+        return res.data as FileAccessUrls;
+    }
+
+    /**
      * Download a file-center record as an authenticated Blob.
-     * Media elements cannot attach Authorization headers themselves, so callers
-     * can create an object URL from this Blob for reliable playback after reload.
      */
     async getFileBlob(fileId: string): Promise<Blob> {
         const blob = await request({

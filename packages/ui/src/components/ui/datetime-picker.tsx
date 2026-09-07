@@ -241,35 +241,35 @@ function Calendar({
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
-      className={cn('p-3', className)}
+      className={cn('p-2.5', className)}
       classNames={{
-        months: 'flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0 justify-center',
-        month: 'space-y-4',
-        caption: 'flex justify-center pt-1 relative items-center',
+        months: 'flex flex-col justify-center sm:flex-row',
+        month: 'space-y-3',
+        caption: 'relative flex h-9 items-center justify-center',
         caption_label: 'text-sm font-medium',
-        nav: 'space-x-1 flex items-center',
+        nav: 'flex items-center',
         nav_button: cn(
-          buttonVariants({ variant: 'outline' }),
-          'h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100',
+          buttonVariants({ variant: 'ghost' }),
+          'h-8 w-8 rounded-lg bg-transparent p-0 text-muted-foreground shadow-none hover:bg-accent hover:text-foreground',
         ),
-        nav_button_previous: 'absolute left-1',
-        nav_button_next: 'absolute right-1',
-        table: 'w-full border-collapse space-y-1',
+        nav_button_previous: 'absolute left-0',
+        nav_button_next: 'absolute right-0',
+        table: 'w-full border-collapse',
         head_row: 'flex',
-        head_cell: 'text-muted-foreground rounded-md w-9 font-normal text-[0.8rem]',
-        row: 'flex w-full mt-2',
-        cell: 'h-9 w-9 text-center text-sm p-0 relative [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected])]:bg-accent first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20',
+        head_cell: 'w-9 rounded-md text-center text-[0.7rem] font-medium text-muted-foreground/70',
+        row: 'mt-1 flex w-full',
+        cell: 'relative h-9 w-9 p-0 text-center text-sm focus-within:relative focus-within:z-20',
         day: cn(
           buttonVariants({ variant: 'ghost' }),
-          'h-9 w-9 p-0 font-normal aria-selected:opacity-100',
+          'h-9 w-9 rounded-lg p-0 text-sm font-normal shadow-none aria-selected:opacity-100',
         ),
         day_range_end: 'day-range-end',
         day_selected:
-          'bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground',
-        day_today: 'bg-accent text-accent-foreground',
+          'rounded-lg bg-primary text-primary-foreground shadow-sm hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground',
+        day_today: 'rounded-lg bg-accent text-accent-foreground ring-1 ring-inset ring-border',
         day_outside:
-          'day-outside text-muted-foreground opacity-50 aria-selected:bg-accent/50 aria-selected:text-muted-foreground aria-selected:opacity-30',
-        day_disabled: 'text-muted-foreground opacity-50',
+          'day-outside text-muted-foreground/40 aria-selected:bg-accent/40 aria-selected:text-muted-foreground',
+        day_disabled: 'text-muted-foreground/30',
         day_range_middle: 'aria-selected:bg-accent aria-selected:text-accent-foreground',
         day_hidden: 'invisible',
         ...classNames,
@@ -288,7 +288,7 @@ function Calendar({
                   props.onMonthChange?.(newDate);
                 }}
               >
-                <SelectTrigger className="w-fit border-none p-0 focus:bg-accent focus:text-accent-foreground">
+                <SelectTrigger className="h-8 w-fit rounded-md border-0 bg-muted/40 px-2 text-sm font-medium shadow-none focus:ring-0">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -307,7 +307,7 @@ function Calendar({
                   props.onMonthChange?.(newDate);
                 }}
               >
-                <SelectTrigger className="w-fit border-none p-0 focus:bg-accent focus:text-accent-foreground">
+                <SelectTrigger className="h-8 w-fit rounded-md border-0 bg-muted/40 px-2 text-sm font-medium shadow-none focus:ring-0">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -361,11 +361,11 @@ const TimePeriodSelect = React.forwardRef<HTMLButtonElement, PeriodSelectorProps
     };
 
     return (
-      <div className="flex h-10 items-center">
+      <div className="flex h-9 items-center">
         <Select defaultValue={period} onValueChange={(value: Period) => handleValueChange(value)}>
           <SelectTrigger
             ref={ref}
-            className="w-[65px] focus:bg-accent focus:text-accent-foreground"
+            className="h-9 w-[58px] rounded-md bg-muted/40 px-2 text-sm shadow-none focus:ring-1"
             onKeyDown={handleKeyDown}
           >
             <SelectValue />
@@ -451,8 +451,6 @@ const TimePickerInput = React.forwardRef<HTMLInputElement, TimePickerInputProps>
       if (e.key === 'ArrowRight') onRightFocus?.();
       if (e.key === 'ArrowLeft') onLeftFocus?.();
       if (['ArrowUp', 'ArrowDown'].includes(e.key)) {
-        console.log('key', e.key);
-
         const step = e.key === 'ArrowUp' ? 1 : -1;
         const newValue = getArrowByType(calculatedValue, step, picker);
         if (flag) setFlag(false);
@@ -476,7 +474,7 @@ const TimePickerInput = React.forwardRef<HTMLInputElement, TimePickerInputProps>
         id={id || picker}
         name={name || picker}
         className={cn(
-          ' w-[80px] text-center font-mono text-base tabular-nums caret-transparent [&::-webkit-inner-spin-button]:appearance-none',
+          'h-9 w-14 rounded-md border-border/60 bg-muted/40 px-2 !pe-2 text-center font-mono text-sm tabular-nums shadow-none caret-transparent hover:bg-muted/60 focus-visible:bg-background [&::-webkit-inner-spin-button]:appearance-none',
           className,
         )}
         value={value || calculatedValue}
@@ -537,9 +535,12 @@ const TimePicker = React.forwardRef<TimePickerRef, TimePickerProps>(
     );
 
     return (
-      <div className="flex items-center justify-center gap-2">
-        <label htmlFor="datetime-picker-hour-input" className="cursor-pointer">
-          <Clock className="mr-2 h-4 w-4" />
+      <div className="flex items-center justify-center gap-1">
+        <label
+          htmlFor="datetime-picker-hour-input"
+          className="mr-1 flex h-9 w-9 cursor-pointer items-center justify-center rounded-md text-muted-foreground"
+        >
+          <Clock className="h-4 w-4" />
         </label>
         <TimePickerInput
           picker={hourCycle === 24 ? 'hours' : '12hours'}
@@ -552,7 +553,7 @@ const TimePicker = React.forwardRef<TimePickerRef, TimePickerProps>(
         />
         {(granularity === 'minute' || granularity === 'second') && (
           <>
-            :
+            <span className="px-0.5 text-sm text-muted-foreground">:</span>
             <TimePickerInput
               picker="minutes"
               date={date}
@@ -565,7 +566,7 @@ const TimePicker = React.forwardRef<TimePickerRef, TimePickerProps>(
         )}
         {granularity === 'second' && (
           <>
-            :
+            <span className="px-0.5 text-sm text-muted-foreground">:</span>
             <TimePickerInput
               picker="seconds"
               date={date}
@@ -708,7 +709,11 @@ const DateTimePicker = React.forwardRef<DateTimePickerRef, DateTimePickerProps>(
             )}
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-0">
+        <PopoverContent
+          align="start"
+          sideOffset={6}
+          className="w-[320px] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl border-border/70 p-0 shadow-xl"
+        >
           <Calendar
             mode="single"
             selected={value}
@@ -722,7 +727,7 @@ const DateTimePicker = React.forwardRef<DateTimePickerRef, DateTimePickerProps>(
             className=''
           />
           {granularity !== 'day' && (
-            <div className="border-t border-border p-3">
+            <div className="border-t border-border/60 bg-muted/20 p-2.5">
               <TimePicker
                 onChange={onChange}
                 date={value}

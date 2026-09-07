@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { logger } from '@kn/common';
-import { clampMediaSeek, getEffectiveDuration } from './media-utils';
+import { clampMediaSeek, classifyNativeMediaError, getEffectiveDuration } from './media-utils';
 
-export type MediaPlaybackError = 'load' | 'playback' | null;
+export type MediaPlaybackError = 'load' | 'unsupported' | 'playback' | null;
 
 interface UseMediaControllerOptions {
     src: string;
@@ -99,7 +99,7 @@ export const useMediaController = <T extends HTMLMediaElement>({
             setPlaying(false);
             setLoading(false);
             setBuffering(false);
-            setError('load');
+            setError(classifyNativeMediaError(media.error?.code));
             logger.error('Failed to load media preview', { label: labelRef.current, code: media.error?.code });
         };
 

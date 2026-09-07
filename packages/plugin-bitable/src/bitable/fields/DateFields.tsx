@@ -23,6 +23,7 @@ export const DateEditor: React.FC<FieldEditorProps> = ({ value, onChange, field 
     const locale = useDateLocale();
     const dateFormat = field?.format || "yyyy-MM-dd";
     const hasTime = dateFormat.includes("HH");
+    const granularity = hasTime ? (dateFormat.includes("ss") ? "second" : "minute") : "day";
 
     const handleChange = (date: Date | undefined) => {
         if (!date) {
@@ -55,7 +56,7 @@ export const DateEditor: React.FC<FieldEditorProps> = ({ value, onChange, field 
             weekStartsOn={1}
             showWeekNumber={true}
             showOutsideDays={true}
-            granularity={hasTime ? "second" : "day"}
+            granularity={granularity}
             displayFormat={
                 hasTime
                     ? { hour24: dateFormat, hour12: dateFormat }

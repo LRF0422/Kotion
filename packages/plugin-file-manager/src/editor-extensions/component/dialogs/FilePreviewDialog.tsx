@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Button, cn } from "@kn/ui";
-import { useFileService } from "@kn/common";
+import { useFileService, type FileAccessUrls } from "@kn/common";
 import { Download, ExternalLink, FileQuestion, Loader2, RefreshCw } from "@kn/icon";
 import { FileItem } from "../FileContext";
 import { FileManagerDialogShell } from "../FileManagerDialogShell";
@@ -32,6 +32,9 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
     const [errored, setErrored] = useState(false);
     const [urlVersion, setUrlVersion] = useState(0);
     const [pdfObjectUrl, setPdfObjectUrl] = useState("");
+    const [fileAccess, setFileAccess] = useState<FileAccessUrls | null>(null);
+    const [accessLoading, setAccessLoading] = useState(false);
+    const [accessErrored, setAccessErrored] = useState(false);
     const { t } = useI18n();
 
     const kind: PreviewKind = file && !file.isFolder
@@ -41,12 +44,17 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
         && !urlOverride
         && !!file?.id
         && !!fileService.getFileBlob;
+    const shouldLoadFileAccess = (kind === "video" || kind === "audio" || kind === "media")
+        && !urlOverride
+        && !!file?.id
+        && !!fileService.getFileAccessUrls;
 
     const remoteUrl = useMemo(() => {
         if (urlOverride) return urlOverride;
+        if (shouldLoadFileAccess) return fileAccess?.previewUrl ?? "";
         if (!file || !file.path) return "";
         return fileService.getDownloadUrl(file.path);
-    }, [file, fileService, urlOverride, urlVersion]);
+    }, [file, fileAccess?.previewUrl, fileService, shouldLoadFileAccess, urlOverride, urlVersion]);
     const url = shouldLoadPdfBlob ? pdfObjectUrl : remoteUrl;
 
     useEffect(() => {
@@ -88,6 +96,36 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
         };
     }, [file?.id, fileService, open, shouldLoadPdfBlob, urlVersion]);
 
+    useEffect(() => {
+        if (!open || !shouldLoadFileAccess || !file?.id || !fileService.getFileAccessUrls) {
+            setFileAccess(null);
+            setAccessLoading(false);
+            setAccessErrored(false);
+            return;
+        }
+
+        let disposed = false;
+        setFileAccess(null);
+        setAccessLoading(true);
+        setAccessErrored(false);
+
+        const loadFileAccess = async () => {
+            try {
+                const access = await fileService.getFileAccessUrls!(String(file.id));
+                if (!disposed) setFileAccess(access);
+            } catch {
+                if (!disposed) setAccessErrored(true);
+            } finally {
+                if (!disposed) setAccessLoading(false);
+            }
+        };
+
+        void loadFileAccess();
+        return () => {
+            disposed = true;
+        };
+    }, [file?.id, fileService, open, shouldLoadFileAccess, urlVersion]);
+
     const mediaResolution = useResolvedMediaKind(kind, url, open && !!file);
 
     useEffect(() => {
@@ -104,6 +142,10 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
     };
 
     const handleDownload = () => {
+        if (fileAccess?.downloadUrl) {
+            window.open(fileAccess.downloadUrl, "_blank", "noopener,noreferrer");
+            return;
+        }
         if (shouldLoadPdfBlob && pdfObjectUrl) {
             const anchor = document.createElement("a");
             anchor.href = pdfObjectUrl;
@@ -136,6 +178,21 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
                 );
             }
             if (!url) {
+                return <LoadingSpinner message={t('preview.loadingMedia')} />;
+            }
+        }
+
+        if (shouldLoadFileAccess) {
+            if (accessErrored) {
+                return (
+                    <FallbackBody
+                        message={t('preview.mediaLoadFailed')}
+                        onDownload={handleDownload}
+                        onRetry={retryMedia}
+                    />
+                );
+            }
+            if (accessLoading || !fileAccess) {
                 return <LoadingSpinner message={t('preview.loadingMedia')} />;
             }
         }

@@ -19,7 +19,7 @@ export type {
     KeysWithTypeOf, ValuesOf,
     UploadedFile, UploadOptions, UploadTaskStatus, UploadDestination, UploadFileHandle,
     UploadSource, UploadTask, UploadTaskSnapshot, UploadTaskService,
-    FileSelectorOptions, SelectedFile, FileService, AIFoundation, Services
+    FileSelectorOptions, SelectedFile, FileAccessUrls, FileService, AIFoundation, Services
 } from "./core/types"
 export * from "./entity"
 export * from "./domain/space-page"

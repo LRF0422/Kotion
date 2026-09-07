@@ -1,6 +1,7 @@
 import { getPreviewKind, isPreviewable } from './fileUtils';
 import {
     clampMediaSeek,
+    classifyNativeMediaError,
     formatMediaTime,
     getEffectiveDuration,
     resolveMediaKindFromDimensions,
@@ -50,6 +51,10 @@ check('seek passes through valid value', clampMediaSeek(30, 60) === 30);
 check('formats minutes and seconds', formatMediaTime(65) === '01:05');
 check('formats hours', formatMediaTime(3661) === '01:01:01');
 check('formats invalid time safely', formatMediaTime(Number.NaN) === '00:00');
+check('decode error reports unsupported codec', classifyNativeMediaError(3) === 'unsupported');
+check('unsupported source reports unsupported codec', classifyNativeMediaError(4) === 'unsupported');
+check('network error remains a load failure', classifyNativeMediaError(2) === 'load');
+check('missing native error remains a load failure', classifyNativeMediaError() === 'load');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

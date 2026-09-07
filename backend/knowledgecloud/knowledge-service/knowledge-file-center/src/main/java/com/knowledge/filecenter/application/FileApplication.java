@@ -5,8 +5,11 @@ import java.io.ByteArrayInputStream;
 import java.net.URLEncoder;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import javax.servlet.http.HttpServletResponse;
@@ -30,19 +33,27 @@ import com.knowledge.filecenter.converter.KnowledgeFileConverter;
 import com.knowledge.filecenter.converter.KnowledgeFileRepositoryConverter;
 import com.knowledge.filecenter.entity.KnowledgeFile;
 import com.knowledge.filecenter.entity.KnowledgeFileRepository;
+import com.knowledge.filecenter.entity.vo.FileAccessUrlsVO;
 import com.knowledge.filecenter.entity.vo.KnowledgeFileVO;
 import com.knowledge.filecenter.service.IFileRepositoryService;
 import com.knowledge.filecenter.service.IFileService;
 import com.knowledge.filecenter.storage.LegacyOssObjectKeyResolver;
+import com.knowledge.filecenter.upload.UploadOwner;
+import com.knowledge.filecenter.upload.UploadOwnerProvider;
 import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.lang.tree.Tree;
 import cn.hutool.core.util.StrUtil;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 
 @Service
 @Slf4j
 public class FileApplication {
+
+    private static final Duration FILE_ACCESS_URL_EXPIRY = Duration.ofHours(1);
 
     @Autowired
     private IFileService fileService;
@@ -52,8 +63,12 @@ public class FileApplication {
     private OssClient ossClient;
     @Autowired(required = false)
     private OssProperties ossProperties;
+    @Autowired(required = false)
+    private S3Presigner s3Presigner;
     @Autowired
     private LegacyOssObjectKeyResolver ossObjectKeyResolver;
+    @Autowired
+    private UploadOwnerProvider ownerProvider;
 
     public void createFileRepository(KnowledgeFileRepositoryDTO dto) {
         KnowledgeFileRepository repository = KnowledgeFileRepositoryConverter.INSTANCE.convertDO(dto);
@@ -217,6 +232,60 @@ public class FileApplication {
 
         // 记录最近访问
         fileService.touchAccess(fileId);
+    }
+
+    /**
+     * Create short-lived direct access URLs for native media playback and downloads.
+     */
+    @SneakyThrows
+    public FileAccessUrlsVO createAccessUrls(Long fileId) {
+        KnowledgeFile file = requireAccessibleFile(fileId);
+        if (s3Presigner == null || ossProperties == null || StrUtil.isBlank(ossProperties.getBucketName())) {
+            throw new IllegalStateException("OSS presigner is not configured");
+        }
+
+        String objectKey = ossObjectKeyResolver.resolve(file.getPath());
+        if (StrUtil.isBlank(objectKey)) {
+            throw new IllegalStateException("File object key is not available");
+        }
+
+        String encodedFileName = URLEncoder.encode(file.getName(), StandardCharsets.UTF_8.name())
+                .replace("+", "%20");
+        String inlineDisposition = "inline; filename*=UTF-8''" + encodedFileName;
+        String attachmentDisposition = "attachment; filename*=UTF-8''" + encodedFileName;
+        Instant expiresAt = Instant.now().plus(FILE_ACCESS_URL_EXPIRY);
+
+        FileAccessUrlsVO result = FileAccessUrlsVO.builder()
+                .previewUrl(signGetUrl(objectKey, inlineDisposition))
+                .downloadUrl(signGetUrl(objectKey, attachmentDisposition))
+                .expiresAt(expiresAt)
+                .build();
+        fileService.touchAccess(fileId);
+        return result;
+    }
+
+    private KnowledgeFile requireAccessibleFile(Long fileId) {
+        UploadOwner owner = ownerProvider.currentOwner();
+        KnowledgeFile file = fileService.getById(fileId);
+        if (file == null
+                || file.getType() != FileType.FILE
+                || Integer.valueOf(1).equals(file.getTrashed())
+                || !Objects.equals(owner.getTenantId(), file.getTenantId())) {
+            throw new IllegalArgumentException("File not found");
+        }
+        return file;
+    }
+
+    private String signGetUrl(String objectKey, String contentDisposition) {
+        GetObjectRequest objectRequest = GetObjectRequest.builder()
+                .bucket(ossProperties.getBucketName())
+                .key(objectKey)
+                .responseContentDisposition(contentDisposition)
+                .build();
+        return s3Presigner.presignGetObject(GetObjectPresignRequest.builder()
+                .signatureDuration(FILE_ACCESS_URL_EXPIRY)
+                .getObjectRequest(objectRequest)
+                .build()).url().toString();
     }
 
     /**

@@ -28,7 +28,10 @@ export function setRequestToast(toastError: ToastFn) {
 }
 
 const isSensitiveResponse = (url?: string): boolean =>
-    !!url && /\/file\/upload-sessions\/[^/]+\/parts\/sign(?:\?|$)/.test(url)
+    !!url && (
+        /\/file\/upload-sessions\/[^/]+\/parts\/sign(?:\?|$)/.test(url)
+        || /\/file\/[^/]+\/access-urls(?:\?|$)/.test(url)
+    )
 
 // ---------------------------------------------------------------------------
 // Constants
