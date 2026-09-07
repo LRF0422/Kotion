@@ -103,8 +103,20 @@ export const DockHost: React.FC<DockHostProps> = ({
     const { t } = useTranslation()
     const { isMobile } = useResponsive()
     const {
-        panels, activePanel, activeId, context, width, resizing, toggle, close, startResize,
+        panels,
+        activePanel,
+        activeId,
+        context,
+        width,
+        minWidth,
+        maxWidth,
+        resizing,
+        toggle,
+        close,
+        startResize,
+        resizeTo,
     } = useDockState({ position, spaceId, pageId, restoreActive: !isMobile })
+    const panelId = React.useId()
 
     // Let out-of-dock entry points know whether emitting TOGGLE_DOCK_PANEL will
     // reach a host, so they can fall back to a full page instead.
@@ -115,6 +127,31 @@ export const DockHost: React.FC<DockHostProps> = ({
         (panel: ResolvedDockPanel) => t(panel.title, panel.title),
         [t]
     )
+
+    const handleResizeKeyDown = React.useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+        const step = e.shiftKey ? 40 : 10
+        let nextWidth: number | undefined
+
+        switch (e.key) {
+            case 'ArrowLeft':
+                nextWidth = width + (position === 'right' ? step : -step)
+                break
+            case 'ArrowRight':
+                nextWidth = width + (position === 'right' ? -step : step)
+                break
+            case 'Home':
+                nextWidth = minWidth
+                break
+            case 'End':
+                nextWidth = maxWidth
+                break
+            default:
+                return
+        }
+
+        e.preventDefault()
+        resizeTo(nextWidth)
+    }, [maxWidth, minWidth, position, resizeTo, width])
 
     // Track which panels are currently running (e.g. the agent streaming a
     // response) so the rail can show a compact status indicator. Panels emit
@@ -175,7 +212,7 @@ export const DockHost: React.FC<DockHostProps> = ({
 
     return (
         <div
-            className={cn("flex h-full", className)}
+            className={cn("relative flex h-full", className)}
             data-expanded={!!activePanel}
             data-position={position}
         >
@@ -199,6 +236,7 @@ export const DockHost: React.FC<DockHostProps> = ({
             >
                 {rendered && RenderedComponent && (
                     <div
+                        id={panelId}
                         className={cn(
                             "kn-dock-panel absolute top-0 flex h-full flex-col border-l bg-background",
                             // Anchored to the edge the rail sits on, so the clipped
@@ -210,17 +248,6 @@ export const DockHost: React.FC<DockHostProps> = ({
                         style={{ width }}
                         aria-hidden={!activePanel}
                     >
-                        {/* Drag handle: sits on the panel's outer edge, 4px hit area. */}
-                        <div
-                            role="separator"
-                            aria-orientation="vertical"
-                            className={cn(
-                                "absolute top-0 z-10 h-full w-1 cursor-col-resize hover:bg-primary/30",
-                                resizing && "bg-primary/40",
-                                position === 'right' ? "left-0" : "right-0"
-                            )}
-                            onMouseDown={startResize}
-                        />
                         {/* Panels that own their header (hideHeader) skip this
                             generic bar so their title/actions don't stack twice. */}
                         {!rendered.hideHeader && (
@@ -243,6 +270,37 @@ export const DockHost: React.FC<DockHostProps> = ({
                     </div>
                 )}
             </div>
+            {activePanel && (
+                <div
+                    role="separator"
+                    aria-orientation="vertical"
+                    aria-label={t('dock.resize', 'Resize panel')}
+                    aria-controls={panelId}
+                    aria-valuemin={minWidth}
+                    aria-valuemax={maxWidth}
+                    aria-valuenow={Math.round(width)}
+                    aria-valuetext={`${Math.round(width)}px`}
+                    tabIndex={0}
+                    className="group absolute top-0 z-30 h-full w-3 -translate-x-1/2 cursor-col-resize touch-none outline-none"
+                    style={{
+                        left: position === 'right'
+                            ? 'calc(var(--kn-workspace-gap, 0px) * -0.5)'
+                            : `calc(${width}px + var(--kn-workspace-gap, 0px) * 0.5)`,
+                    }}
+                    onMouseDown={startResize}
+                    onKeyDown={handleResizeKeyDown}
+                >
+                    <span
+                        aria-hidden
+                        className={cn(
+                            "pointer-events-none absolute left-1/2 top-1/2 h-8 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full border border-muted-foreground/40 bg-muted-foreground/30 opacity-20 shadow-sm transition-[color,background-color,border-color,opacity]",
+                            "group-hover:border-primary/70 group-hover:bg-primary/60 group-hover:opacity-100",
+                            "group-focus-visible:border-primary group-focus-visible:bg-primary group-focus-visible:opacity-100 group-focus-visible:ring-2 group-focus-visible:ring-ring group-focus-visible:ring-offset-2",
+                            resizing && "border-primary bg-primary opacity-100"
+                        )}
+                    />
+                </div>
+            )}
             <DockRail
                 panels={panels}
                 activeId={activeId}

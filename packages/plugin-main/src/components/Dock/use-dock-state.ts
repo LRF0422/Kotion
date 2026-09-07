@@ -79,6 +79,8 @@ export const useDockState = ({ position, spaceId, pageId, restoreActive = true }
         () => panels.find(panel => panel.id === activeId),
         [panels, activeId]
     )
+    const minWidth = activePanel?.minWidth ?? DOCK_MIN_WIDTH
+    const maxWidth = activePanel?.maxWidth ?? DOCK_MAX_WIDTH
 
     const activate = useCallback((id: string | null) => {
         setActiveId(id)
@@ -111,6 +113,10 @@ export const useDockState = ({ position, spaceId, pageId, restoreActive = true }
         })
     }, [activePanel])
 
+    const resizeTo = useCallback((nextWidth: number) => {
+        setWidth(clampWidth(nextWidth, activePanel))
+    }, [activePanel])
+
     const dragRef = useRef<{ startX: number; startWidth: number } | null>(null)
 
     const startResize = useCallback((e: ReactMouseEvent) => {
@@ -136,13 +142,16 @@ export const useDockState = ({ position, spaceId, pageId, restoreActive = true }
 
         document.addEventListener('mousemove', onMove)
         document.addEventListener('mouseup', onUp)
-        // Suppress text selection / iframe hijacking of the pointer while dragging.
+        // Keep the resize interaction stable while the pointer crosses document content.
         const previousUserSelect = document.body.style.userSelect
+        const previousCursor = document.body.style.cursor
         document.body.style.userSelect = 'none'
+        document.body.style.cursor = 'col-resize'
         return () => {
             document.removeEventListener('mousemove', onMove)
             document.removeEventListener('mouseup', onUp)
             document.body.style.userSelect = previousUserSelect
+            document.body.style.cursor = previousCursor
         }
     }, [resizing, position, activePanel])
 
@@ -151,5 +160,18 @@ export const useDockState = ({ position, spaceId, pageId, restoreActive = true }
         writeStored(position, 'width', String(width))
     }, [resizing, width, position])
 
-    return { panels, activePanel, activeId, context, width, resizing, toggle, close, startResize }
+    return {
+        panels,
+        activePanel,
+        activeId,
+        context,
+        width,
+        minWidth,
+        maxWidth,
+        resizing,
+        toggle,
+        close,
+        startResize,
+        resizeTo,
+    }
 }
