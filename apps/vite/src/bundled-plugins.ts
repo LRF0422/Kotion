@@ -22,7 +22,7 @@ export const bundledPlugins = [
   stickyNote,
   theme,
   office,
-  drawnix,
+  // drawnix,
   ...systemPlugins,
   fileManager,
   mermaid,

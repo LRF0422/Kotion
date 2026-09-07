@@ -95,7 +95,7 @@ export const RecordDetailDrawer: React.FC<RecordDetailDrawerProps> = ({
             <SheetContent
                 side="right"
                 className={cn(
-                    "bitable flex min-w-0 max-w-full flex-col overflow-x-hidden p-0",
+                    "bitable flex min-w-0 max-w-full flex-col overflow-x-hidden p-0 [&>button]:hidden",
                     resolvedTheme === "dark" && "bitable--dark"
                 )}
                 style={{ width: "var(--bt-drawer-w)", maxWidth: "90vw" }}
