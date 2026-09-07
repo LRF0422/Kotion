@@ -7,21 +7,21 @@ import type {
 } from "../model/types";
 
 export const MINDMAP_NODE_SIZE = {
-  rootWidth: 190,
-  nodeWidth: 164,
-  rootMinHeight: 52,
-  nodeMinHeight: 44,
-  horizontalPadding: 28,
-  verticalPadding: 18,
+  rootWidth: 184,
+  nodeWidth: 132,
+  rootMinHeight: 54,
+  nodeMinHeight: 40,
+  horizontalPadding: 24,
+  verticalPadding: 14,
   lineHeight: 20,
-  horizontalLevelGap: 84,
-  verticalLevelGap: 68,
-  siblingGap: 20,
+  horizontalLevelGap: 72,
+  verticalLevelGap: 64,
+  siblingGap: 18,
 } as const;
 
 export const MINDMAP_FONT_SIZE = {
-  root: 14,
-  node: 13,
+  root: 16,
+  node: 14,
 } as const;
 
 export type MindmapDirection = "left" | "right" | "up" | "down";
