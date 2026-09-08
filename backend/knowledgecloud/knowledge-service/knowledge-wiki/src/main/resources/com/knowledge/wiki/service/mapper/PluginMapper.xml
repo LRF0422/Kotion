@@ -5,6 +5,8 @@
     <!--
         One row per plugin. The correlated subquery selects the current review
         candidate without joining historical versions into the paginated result.
+        subject_id is globally unique; do not require tenant_id equality because
+        legacy plugin/version rows may have null or mismatched tenant IDs.
     -->
     <select id="selectAdminReviewPage" resultType="com.knowledge.wiki.service.entity.Plugin">
         SELECT p.*
@@ -13,7 +15,6 @@
             SELECT pv.id
             FROM wiki_plugin_version pv
             WHERE pv.subject_id = p.id
-              AND pv.tenant_id = p.tenant_id
               AND pv.is_deleted = 0
               AND (
                   (pv.status = 'PENDING' AND pv.review_status IN ('PENDING', 'IN_PROGRESS'))
