@@ -9,7 +9,8 @@
     "registry": "http://localhost:8081/repository/npm-hosted/"
   },
   "scripts": {
-    "build": "rollup -c",
+    "build": "rollup -c && pnpm check:dist-styles",
+    "check:dist-styles": "node scripts/check-dist-styles.mjs",
     "check:logic": "tsc src/extension/model/model.check.ts src/extension/layout/tree-layout.check.ts src/extension/importers/importers.check.ts --rootDir src/extension --outDir .tmp-check --module commonjs --moduleResolution node --target ES2022 --lib ES2022,DOM --skipLibCheck --esModuleInterop && node -e \"require('fs').writeFileSync('.tmp-check/package.json', '{\\\"type\\\":\\\"commonjs\\\"}')\" && node .tmp-check/model/model.check.js && node .tmp-check/layout/tree-layout.check.js && node .tmp-check/importers/importers.check.js",
     "check": "pnpm check:logic"
   },

@@ -50,8 +50,12 @@ postcss({
   plugins: [
     tailwindcss(),     // ✅ 添加了 Tailwind 处理
     autoprefixer(),    // ✅ 添加了 autoprefixer
-    cssnext(), 
-    nested(), 
+    cssnext({
+      features: {
+        customProperties: false,
+      },
+    }),
+    nested(),
     postcssCascadeLayers()
   ],
   extensions: [".css"],
@@ -59,6 +63,8 @@ postcss({
   minimize: true,
 }),
 ```
+
+宿主主题变量和插件自定义变量属于运行时 CSS API。必须保留 `var(--token, fallback)`，不能在构建时将其替换为 fallback，否则动态安装的插件将无法响应主题切换和运行时样式。
 
 ## 编写代码时的最佳实践
 

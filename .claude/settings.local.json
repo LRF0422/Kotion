@@ -44,7 +44,8 @@
       "Skill(claude-api)",
       "Bash(chromium-cli *)",
       "Bash(/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge *)",
-      "Agent"
+      "Agent",
+      "Bash(node *)"
     ]
   },
   "disabledMcpjsonServers": [

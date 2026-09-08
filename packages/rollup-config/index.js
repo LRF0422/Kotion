@@ -106,7 +106,13 @@ export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
     postcss({
       plugins: [
         postcssCascadeLayers(),
-        cssnext(),
+        cssnext({
+          features: {
+            // CSS custom properties are resolved at runtime between the host
+            // and dynamically loaded plugins, so keep var() references intact.
+            customProperties: false,
+          },
+        }),
         nested(),
         tailwindcss(),
         autoprefixer(),
