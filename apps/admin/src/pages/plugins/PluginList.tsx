@@ -60,7 +60,7 @@ const CATEGORY_LABEL: Record<string, string> = {
   CONNECTOR: '连接器',
 }
 
-const STATUS_META: Record<PluginStatus, { label: string; variant: 'warning' | 'info' | 'danger' | 'success' }> = {
+const STATUS_META: Record<string, { label: string; variant: 'warning' | 'info' | 'danger' | 'success' }> = {
   PENDING: { label: '待审核', variant: 'warning' },
   IN_PROGRESS: { label: '审核中', variant: 'info' },
   REJECTED: { label: '已驳回', variant: 'danger' },
@@ -74,7 +74,35 @@ const VERSION_STATUS_LABEL: Record<string, string> = {
   IN_ACTIVE: '已停用',
 }
 
-const getReviewStatus = (plugin?: PluginVO | null) => plugin?.candidateVersion?.reviewStatus ?? plugin?.status
+const getEnumValue = (value: unknown) => {
+  if (typeof value === 'string') return value
+  if (value && typeof value === 'object' && 'value' in value) {
+    const enumValue = (value as { value?: unknown }).value
+    return typeof enumValue === 'string' ? enumValue : undefined
+  }
+  return undefined
+}
+
+const getEnumDescription = (value: unknown) => {
+  if (value && typeof value === 'object' && 'desc' in value) {
+    const description = (value as { desc?: unknown }).desc
+    return typeof description === 'string' ? description : undefined
+  }
+  return undefined
+}
+
+const getCategoryLabel = (category: unknown) => {
+  const value = getEnumValue(category)
+  return getEnumDescription(category) || CATEGORY_LABEL[value || ''] || value || '-'
+}
+
+const getVersionStatusLabel = (status: unknown) => {
+  const value = getEnumValue(status)
+  return getEnumDescription(status) || VERSION_STATUS_LABEL[value || ''] || value || '-'
+}
+
+const getReviewStatus = (plugin?: PluginVO | null) =>
+  getEnumValue(plugin?.candidateVersion?.reviewStatus ?? plugin?.status)
 
 const getSubmittedVersion = (plugin: PluginVO) => plugin.candidateVersion ?? plugin.currentVersion
 
@@ -89,8 +117,8 @@ const formatVersionContent = (content?: string) => {
 
 const ReviewStatus = ({ plugin }: { plugin: PluginVO }) => {
   const status = getReviewStatus(plugin)
-  if (!status) return <StatusBadge variant="muted">未知</StatusBadge>
-  const meta = STATUS_META[status]
+  const meta = status ? STATUS_META[status] : undefined
+  if (!meta) return <StatusBadge variant="muted">{status || '未知'}</StatusBadge>
   return <StatusBadge variant={meta.variant}>{meta.label}</StatusBadge>
 }
 
@@ -105,7 +133,7 @@ const VersionSummary = ({ version, title }: { version?: PluginVersionVO; title: 
         </div>
         <div className="flex items-center justify-between gap-4">
           <span className="text-muted-foreground">版本状态</span>
-          <span>{VERSION_STATUS_LABEL[version.status || ''] || version.status || '-'}</span>
+          <span>{getVersionStatusLabel(version.status)}</span>
         </div>
         <div className="flex items-center justify-between gap-4">
           <span className="text-muted-foreground">更新时间</span>
@@ -346,7 +374,7 @@ export const PluginList = () => {
                         <div className="text-xs text-muted-foreground">ID: {plugin.developerId}</div>
                       )}
                     </TableCell>
-                    <TableCell>{CATEGORY_LABEL[plugin.category || ''] || plugin.category || '-'}</TableCell>
+                    <TableCell>{getCategoryLabel(plugin.category)}</TableCell>
                     <TableCell><ReviewStatus plugin={plugin} /></TableCell>
                     <TableCell className="text-right text-muted-foreground">
                       {formatDateTime(submittedVersion?.updateTime || submittedVersion?.createTime || plugin.updateTime)}
@@ -451,7 +479,7 @@ export const PluginList = () => {
                   </div>
                   <div className="flex justify-between gap-4">
                     <span className="text-muted-foreground">分类</span>
-                    <span>{CATEGORY_LABEL[detail.category || ''] || detail.category || '-'}</span>
+                    <span>{getCategoryLabel(detail.category)}</span>
                   </div>
                   <div className="flex justify-between gap-4">
                     <span className="text-muted-foreground">插件创建时间</span>
