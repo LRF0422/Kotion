@@ -83,6 +83,18 @@ export function PageTabs({
 
   return (
     <div className="logicflow-page-tabs">
+      {editable && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-11 w-11 shrink-0"
+          title="新建页面"
+          onClick={onAdd}
+        >
+          <FilePlus2 className="h-4 w-4" />
+        </Button>
+      )}
       {canLeft && (
         <Button
           type="button"
@@ -177,18 +189,6 @@ export function PageTabs({
           }
         >
           <ChevronRight className="h-4 w-4" />
-        </Button>
-      )}
-      {editable && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="h-11 w-11 shrink-0"
-          title="新建页面"
-          onClick={onAdd}
-        >
-          <FilePlus2 className="h-4 w-4" />
         </Button>
       )}
     </div>
