@@ -32,6 +32,7 @@ import com.knowledge.wiki.service.entity.InstalledPlugin;
 import com.knowledge.wiki.service.entity.Plugin;
 import com.knowledge.wiki.service.entity.PluginVersion;
 import com.knowledge.wiki.service.entity.VersionDesc;
+import com.knowledge.wiki.service.entity.dto.PluginDTO;
 import com.knowledge.wiki.service.entity.dto.PluginReviewDTO;
 import com.knowledge.wiki.service.entity.dto.PluginVersionPublishDTO;
 import com.knowledge.wiki.service.entity.dto.QueryAdminPluginDTO;
@@ -148,8 +149,36 @@ class PluginApplicationTest {
     }
 
     @Test
-    void reviewerCanListPublishedPluginWithPendingCandidate() {
-        authenticate(1L, "admin");
+    void readPermissionCannotReviewSubmissions() {
+        authenticate(42L, "PLATFORM_OPERATOR,platform.plugins.read");
+
+        assertThrows(BusinessException.class,
+                () -> application.review(7L, review(PluginReviewDecision.START)));
+        verify(pluginService, never()).getById(any());
+    }
+
+    @Test
+    void reviewPermissionCannotOpenAdminReviewData() {
+        authenticate(42L, "PLATFORM_OPERATOR,platform.plugins.review");
+
+        assertThrows(BusinessException.class,
+                () -> application.adminReviewList(new QueryAdminPluginDTO()));
+        assertThrows(BusinessException.class, () -> application.adminReviewDetail(7L));
+        verify(pluginService, never()).pageAdminReviewPlugins(any());
+        verify(pluginService, never()).getById(any());
+    }
+
+    @Test
+    void reviewPermissionCannotCreateInnerPlugin() {
+        authenticate(42L, "PLATFORM_OPERATOR,platform.plugins.review");
+
+        assertThrows(BusinessException.class, () -> application.createInnerPlugin(new PluginDTO()));
+        verify(pluginService, never()).getByKey(any());
+    }
+
+    @Test
+    void readPermissionCanListPublishedPluginWithPendingCandidate() {
+        authenticate(1L, "PLATFORM_OPERATOR,platform.plugins.read");
         Plugin plugin = plugin(7L, PluginStatus.DONE);
         PluginVersion active = pluginVersion(8L, 7L, "1.0.0", VersionStatus.ACTIVE, PluginStatus.DONE);
         PluginVersion candidate = pluginVersion(9L, 7L, "1.1.0", VersionStatus.PENDING, PluginStatus.PENDING);
@@ -171,8 +200,8 @@ class PluginApplicationTest {
     }
 
     @Test
-    void reviewerCanOpenInitialPendingSubmission() {
-        authenticate(1L, "administrator");
+    void readPermissionCanOpenInitialPendingSubmission() {
+        authenticate(1L, "PLATFORM_AUDITOR,platform.plugins.read");
         Plugin plugin = plugin(7L, PluginStatus.PENDING);
         PluginVersion candidate = pluginVersion(9L, 7L, "1.0.0", VersionStatus.PENDING, PluginStatus.PENDING);
 
@@ -203,8 +232,8 @@ class PluginApplicationTest {
     }
 
     @Test
-    void reviewerCanStartInitialSubmission() {
-        authenticate(1L, "admin");
+    void reviewPermissionCanStartInitialSubmission() {
+        authenticate(1L, "PLATFORM_OPERATOR,platform.plugins.review");
         Plugin plugin = plugin(7L, PluginStatus.PENDING);
         PluginVersion candidate = pluginVersion(9L, 7L, "1.0.0", VersionStatus.PENDING, PluginStatus.PENDING);
         LambdaUpdateChainWrapper<PluginVersion> versionUpdate = successfulVersionUpdate();

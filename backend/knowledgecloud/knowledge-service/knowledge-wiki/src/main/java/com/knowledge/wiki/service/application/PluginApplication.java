@@ -73,7 +73,7 @@ public class PluginApplication {
 
     @Transactional(rollbackFor = Exception.class)
     public void createInnerPlugin(PluginDTO dto) {
-        requireReviewer();
+        requireAdministrator();
         createLegacyPlugin(dto, true);
     }
 
@@ -139,7 +139,7 @@ public class PluginApplication {
 
     @Transactional(rollbackFor = Exception.class)
     public PluginVO review(Long id, PluginReviewDTO dto) {
-        requireReviewer();
+        requirePermission("platform.plugins.review");
         Plugin plugin = requirePlugin(id);
         PluginReviewDecision decision = dto.getDecision();
         if (decision == PluginReviewDecision.START) {
@@ -168,12 +168,12 @@ public class PluginApplication {
     }
 
     public IPage<PluginVO> adminReviewList(QueryAdminPluginDTO dto) {
-        requireReviewer();
+        requirePermission("platform.plugins.read");
         return pluginService.pageAdminReviewPlugins(dto).convert(this::toSubmissionVO);
     }
 
     public PluginVO adminReviewDetail(Long id) {
-        requireReviewer();
+        requirePermission("platform.plugins.read");
         return toSubmissionVO(requirePlugin(id));
     }
 
@@ -563,14 +563,24 @@ public class PluginApplication {
         }
     }
 
-    private void requireReviewer() {
+    private void requireAdministrator() {
+        requireAuthority(null);
+    }
+
+    private void requirePermission(String permission) {
+        requireAuthority("ROLE_" + permission);
+    }
+
+    private void requireAuthority(String expectedAuthority) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        boolean reviewer = authentication != null && authentication.isAuthenticated()
+        boolean allowed = authentication != null && authentication.isAuthenticated()
                 && authentication.getAuthorities().stream().anyMatch(authority -> {
                     String name = authority.getAuthority();
-                    return "ROLE_administrator".equalsIgnoreCase(name) || "ROLE_admin".equalsIgnoreCase(name);
+                    return "ROLE_administrator".equalsIgnoreCase(name)
+                            || "ROLE_admin".equalsIgnoreCase(name)
+                            || expectedAuthority != null && expectedAuthority.equalsIgnoreCase(name);
                 });
-        if (!reviewer) {
+        if (!allowed) {
             throw WikiException.PLUGIN_FORBIDDEN.newException();
         }
     }
