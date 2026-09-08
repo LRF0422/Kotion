@@ -1,0 +1,352 @@
+.logicflow-editor-root {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.75rem;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
+.logicflow-editor-root.is-inline {
+  height: 22rem;
+}
+
+.logicflow-editor-root.is-fallback-fullscreen,
+.logicflow-editor-root:fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  width: 100vw;
+  height: 100dvh;
+  max-width: none;
+  border: 0;
+  border-radius: 0;
+}
+
+.logicflow-inline-canvas {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+}
+
+.logicflow-inline-actions {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 12;
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.5rem;
+  background: hsl(var(--background) / 0.9);
+  box-shadow: 0 4px 16px rgb(15 23 42 / 0.12);
+  backdrop-filter: blur(8px);
+}
+
+.logicflow-workspace {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  background: hsl(var(--background));
+  outline: none;
+}
+
+.logicflow-toolbar {
+  display: flex;
+  height: 2.75rem;
+  flex: none;
+  align-items: center;
+  border-bottom: 1px solid hsl(var(--border));
+  background: hsl(var(--background));
+}
+
+.logicflow-workspace-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+}
+
+.logicflow-left-panel {
+  width: 15rem;
+  flex: none;
+  overflow: hidden;
+  border-right: 1px solid hsl(var(--border));
+  background: hsl(var(--muted) / 0.25);
+}
+
+.logicflow-right-panel {
+  width: 17rem;
+  flex: none;
+  overflow: hidden;
+  border-left: 1px solid hsl(var(--border));
+  background: hsl(var(--background));
+}
+
+.logicflow-canvas-shell {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+  background-color: hsl(var(--background));
+  background-image: radial-gradient(
+    hsl(var(--muted-foreground) / 0.18) 1px,
+    transparent 1px
+  );
+  background-size: 20px 20px;
+}
+
+.logicflow-shape-library {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.logicflow-category-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.25rem;
+  padding: 0.5rem;
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.logicflow-shape-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  padding: 0.75rem;
+}
+
+.logicflow-shape-item {
+  display: flex;
+  min-height: 5rem;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 0.5rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.5rem;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-size: 0.75rem;
+  cursor: grab;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease,
+    transform 120ms ease;
+}
+
+.logicflow-shape-item:hover {
+  border-color: hsl(var(--primary));
+  background: hsl(var(--accent));
+  transform: translateY(-1px);
+}
+
+.logicflow-shape-item:active {
+  cursor: grabbing;
+}
+
+.logicflow-statusbar {
+  display: flex;
+  min-height: 2.75rem;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid hsl(var(--border));
+  padding: 0 0.75rem;
+  background: hsl(var(--background));
+  color: hsl(var(--muted-foreground));
+  font-size: 0.6875rem;
+}
+
+.logicflow-mobile-actions {
+  position: absolute;
+  z-index: 15;
+  left: 50%;
+  bottom: max(0.75rem, env(safe-area-inset-bottom));
+  display: flex;
+  transform: translateX(-50%);
+  gap: 0.5rem;
+  padding: 0.375rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.75rem;
+  background: hsl(var(--background) / 0.94);
+  box-shadow: 0 8px 28px rgb(15 23 42 / 0.18);
+  backdrop-filter: blur(10px);
+}
+
+.logicflow-panel-overlay {
+  position: absolute;
+  z-index: 30;
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--background));
+  box-shadow: 0 16px 48px rgb(15 23 42 / 0.2);
+}
+
+.logicflow-panel-overlay.is-mobile {
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: min(75%, 36rem);
+  padding-bottom: env(safe-area-inset-bottom);
+  border-radius: 1rem 1rem 0 0;
+}
+
+.logicflow-panel-overlay.is-tablet {
+  top: 5.5rem;
+  right: 0;
+  bottom: 5.5rem;
+  width: 19rem;
+  border-radius: 0.75rem 0 0 0.75rem;
+}
+
+.logicflow-collaboration-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.logicflow-remote-cursor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: flex-start;
+  will-change: transform;
+}
+
+.logicflow-remote-cursor span {
+  margin-left: -0.125rem;
+  margin-top: 0.875rem;
+  max-width: 10rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 0.25rem;
+  padding: 0.125rem 0.375rem;
+  color: white;
+  font-size: 0.625rem;
+  box-shadow: 0 2px 6px rgb(15 23 42 / 0.22);
+}
+
+.logicflow-remote-selection {
+  position: absolute;
+  border: 2px solid;
+  border-radius: 0.375rem;
+  box-shadow: 0 0 0 2px rgb(255 255 255 / 0.6);
+}
+
+.logicflow-remote-edge-selection {
+  position: absolute;
+  width: 0.65rem;
+  height: 0.65rem;
+  transform: translate(-50%, -50%);
+  border: 2px solid white;
+  border-radius: 9999px;
+  box-shadow: 0 1px 4px rgb(15 23 42 / 0.25);
+}
+
+.logicflow-grid-disabled .lf-grid {
+  display: none;
+}
+
+.logicflow-solid-background .lf-graph {
+  background: hsl(var(--background));
+}
+
+.logicflow-workspace .lf-mini-map {
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.5rem;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgb(15 23 42 / 0.12);
+}
+
+.logicflow-workspace .lf-control,
+.logicflow-workspace .lf-mini-map-close {
+  display: none;
+}
+
+.logicflow-menubar {
+  display: flex;
+  height: 2.75rem;
+  flex: none;
+  align-items: center;
+  overflow-x: auto;
+  border-bottom: 1px solid hsl(var(--border));
+  padding: 0 0.5rem;
+  background: hsl(var(--background));
+}
+
+.logicflow-page-tabs {
+  display: flex;
+  height: 2.75rem;
+  flex: none;
+  align-items: center;
+  border-top: 1px solid hsl(var(--border));
+  background: hsl(var(--background));
+}
+
+.logicflow-page-tabs-scroll {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-self: stretch;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.logicflow-page-tabs-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.logicflow-page-tab {
+  position: relative;
+  display: flex;
+  min-width: 7rem;
+  max-width: 12rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border-right: 1px solid hsl(var(--border));
+  padding: 0 0.9rem;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.75rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.logicflow-page-tab:hover {
+  background: hsl(var(--accent));
+  color: hsl(var(--foreground));
+}
+
+.logicflow-page-tab.is-active {
+  background: hsl(var(--accent));
+  color: hsl(var(--foreground));
+  font-weight: 500;
+}
+
+.logicflow-page-tab.is-active::after {
+  position: absolute;
+  right: 0.5rem;
+  bottom: 0;
+  left: 0.5rem;
+  height: 2px;
+  border-radius: 9999px;
+  background: hsl(var(--primary));
+  content: "";
+}

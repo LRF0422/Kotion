@@ -29,6 +29,7 @@
         "@kn/plugin-drawio": "workspace:*",
         "@kn/plugin-drawio-v2": "workspace:*",
         "@kn/plugin-drawnix": "workspace:*",
+        "@kn/plugin-logicflow": "workspace:*",
         "@kn/plugin-excalidraw": "workspace:*",
         "@kn/plugin-main": "workspace:*",
         "@kn/plugin-mindmap-canvas": "workspace:*",

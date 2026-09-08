@@ -2,6 +2,7 @@ import React, { ReactNode, forwardRef, useImperativeHandle } from "react";
 import { AnyExtension, Editor, JSONContent, getSchema } from "@tiptap/core";
 
 import { EditorRenderProps } from "./render";
+import { CollaborationRuntime } from "./collaboration-runtime";
 import { TiptapCollabProvider } from "@hocuspocus/provider";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { useEditorExtension } from "./use-extension";
@@ -223,6 +224,9 @@ const CollaborationEditorInner = forwardRef<
     // Add collaboration extensions if provider is available
     if (provider) {
       baseExtensions.push(
+        CollaborationRuntime.configure({
+          provider,
+        }),
         Collaboration.configure({
           document: provider.document,
         }),

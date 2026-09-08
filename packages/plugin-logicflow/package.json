@@ -1,0 +1,40 @@
+{
+  "name": "@kn/plugin-logicflow",
+  "version": "0.0.1",
+  "description": "Collaborative LogicFlow diagrams for Kotion",
+  "main": "src/index.tsx",
+  "publishConfig": {
+    "main": "dist/index.js",
+    "types": "dist/plugin-logicflow/src/index.d.ts",
+    "registry": "http://localhost:8081/repository/npm-hosted/"
+  },
+  "scripts": {
+    "build": "rollup -c && pnpm check:dist-styles",
+    "check:dist-styles": "node scripts/check-dist-styles.mjs",
+    "check:logic": "tsc src/model/model.check.ts src/model/pages.check.ts src/model/layers.check.ts src/model/fragments.check.ts src/model/rich-text.check.ts src/commands/alignment.check.ts src/commands/commands.check.ts src/collaboration/yjs-codec.check.ts src/collaboration/awareness.check.ts src/io/io.check.ts --rootDir src --outDir .tmp-check --module commonjs --moduleResolution node --target ES2022 --lib ES2022,DOM --jsx react-jsx --skipLibCheck --esModuleInterop && node -e \"require('fs').writeFileSync('.tmp-check/package.json', '{\\\"type\\\":\\\"commonjs\\\"}')\" && node .tmp-check/model/model.check.js && node .tmp-check/model/pages.check.js && node .tmp-check/model/layers.check.js && node .tmp-check/model/fragments.check.js && node .tmp-check/model/rich-text.check.js && node .tmp-check/commands/alignment.check.js && node .tmp-check/commands/commands.check.js && node .tmp-check/collaboration/yjs-codec.check.js && node .tmp-check/collaboration/awareness.check.js && node .tmp-check/io/io.check.js && node -e \"require('fs').rmSync('.tmp-check', { recursive: true, force: true })\"",
+    "check": "pnpm check:logic"
+  },
+  "dependencies": {
+    "@kn/common": "workspace:*",
+    "@kn/editor": "workspace:*",
+    "@kn/icon": "workspace:*",
+    "@kn/ui": "workspace:*",
+    "@logicflow/core": "2.2.5",
+    "@logicflow/extension": "2.3.1",
+    "jspdf": "2.5.2",
+    "nanoid": "^5.0.7",
+    "yjs": "^13.6.21"
+  },
+  "keywords": [
+    "logicflow",
+    "diagram",
+    "flowchart"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@kn/rollup-config": "workspace:*",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1"
+  }
+}

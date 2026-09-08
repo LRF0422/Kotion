@@ -1,4 +1,10 @@
 export * from "./editor"
+export {
+    CollaborationRuntime,
+    getCollaborationRuntime,
+    type CollaborationRuntimeOptions,
+    type CollaborationRuntimeStorage,
+} from "./editor/collaboration-runtime"
 export * from "./editor/utilities"
 export * from "./utilities"
 export * from "./hooks"

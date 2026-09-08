@@ -256,6 +256,9 @@ importers:
       '@kn/plugin-excalidraw':
         specifier: workspace:*
         version: link:../../packages/plugin-excalidraw
+      '@kn/plugin-logicflow':
+        specifier: workspace:*
+        version: link:../../packages/plugin-logicflow
       '@kn/plugin-main':
         specifier: workspace:*
         version: link:../../packages/plugin-main
@@ -496,6 +499,9 @@ importers:
       '@kn/plugin-github':
         specifier: workspace:*
         version: link:../../packages/plugin-github
+      '@kn/plugin-logicflow':
+        specifier: workspace:*
+        version: link:../../packages/plugin-logicflow
       '@kn/plugin-main':
         specifier: workspace:*
         version: link:../../packages/plugin-main
@@ -1379,6 +1385,46 @@ importers:
         specifier: ^18.2.0
         version: 18.3.7(@types/react@18.3.28)
 
+  packages/plugin-logicflow:
+    dependencies:
+      '@kn/common':
+        specifier: workspace:*
+        version: link:../common
+      '@kn/editor':
+        specifier: workspace:*
+        version: link:../editor
+      '@kn/icon':
+        specifier: workspace:*
+        version: link:../icon
+      '@kn/ui':
+        specifier: workspace:*
+        version: link:../ui
+      '@logicflow/core':
+        specifier: 2.2.5
+        version: 2.2.5
+      '@logicflow/extension':
+        specifier: 2.3.1
+        version: 2.3.1(@logicflow/core@2.2.5)
+      jspdf:
+        specifier: 2.5.2
+        version: 2.5.2
+      nanoid:
+        specifier: ^5.0.7
+        version: 5.1.6
+      yjs:
+        specifier: ^13.6.21
+        version: 13.6.29
+    devDependencies:
+      '@kn/rollup-config':
+        specifier: workspace:*
+        version: link:../rollup-config
+      '@types/react':
+        specifier: ^18.3.12
+        version: 18.3.28
+      '@types/react-dom':
+        specifier: ^18.3.1
+        version: 18.3.7(@types/react@18.3.28)
+
   packages/plugin-main:
     dependencies:
       '@kn/common':
@@ -1900,6 +1946,9 @@ packages:
 
   '@antfu/install-pkg@1.1.0':
     resolution: {integrity: sha512-MGQsmw10ZyI+EJo45CdSER4zEb+p31LpDAFp2Z3gkSd1yqVZGi0Ebx++YTEMonJy4oChEMLsxZ64j8FH6sSqtQ==}
+
+  '@antv/hierarchy@0.6.14':
+    resolution: {integrity: sha512-V3uknf7bhynOqQDw2sg+9r9DwZ9pc6k/EcqyTFdfXB1+ydr7urisP0MipIuimucvQKN+Qkd+d6w601r1UIroqQ==}
 
   '@autoform/core@3.0.0':
     resolution: {integrity: sha512-wBBJgqhw2lDc8VCf4Om/ONZH7RyvaLoqkAcNaU+c8Qo+U5kfY7Fke1mltW6CV0njoWMLarQ+0ZKnWdPRulDpgA==}
@@ -3026,6 +3075,14 @@ packages:
   '@linaria/utils@4.5.3':
     resolution: {integrity: sha512-tSpxA3Zn0DKJ2n/YBnYAgiDY+MNvkmzAHrD8R9PKrpGaZ+wz1jQEmE1vGn1cqh8dJyWK0NzPAA8sf1cqa+RmAg==}
     engines: {node: ^12.16.0 || >=13.7.0}
+
+  '@logicflow/core@2.2.5':
+    resolution: {integrity: sha512-EO5oL67dJIW9LkyZldemxV2ZRKHIZ31hi0n9z3mditxJflSQ7iMzG5HVeiMrlNvgotI6yH0W5hnVOOmkm3QavA==}
+
+  '@logicflow/extension@2.3.1':
+    resolution: {integrity: sha512-ml75ezT4oSs1W7arf/5uNNNPGkTsLyani8dijh+rOnXHao6P1w30xHwrO6ZeTF7mo/Lk/pJ/Qnqm4+2L5mPeCQ==}
+    peerDependencies:
+      '@logicflow/core': ^2.2.5
 
   '@malept/cross-spawn-promise@2.0.0':
     resolution: {integrity: sha512-1DpKU0Z5ThltBwjNySMC14g0CkbyhCaz9FkhxqNsZI6uAPJXFS8cMXlBKo26FJ8ZuW6S9GCMcR9IO5k2X5/9Fg==}
@@ -5199,6 +5256,9 @@ packages:
   '@sindresorhus/is@4.6.0':
     resolution: {integrity: sha512-t09vSN3MdfsyCHoFcTRCH/iUtG7OJ0CsjzB8cjAmKc/va/kIgeDI/TxsigdncE/4be734m0cvIYwNaV4i2XqAw==}
     engines: {node: '>=10'}
+
+  '@sphinxxxx/color-conversion@2.2.2':
+    resolution: {integrity: sha512-XExJS3cLqgrmNBIP3bBw6+1oQ1ksGjFh0+oClDKFYpCCqx/hlqwWO5KO/S63fzUo67SxI9dMrF0y5T/Ey7h8Zw==}
 
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
@@ -9091,6 +9151,9 @@ packages:
     resolution: {integrity: sha512-Xwwo44whKBVCYoliBQwaPvtd/2tYFkRQtXDWj1nackaV2JPXx3L0+Jvd8/qCJ2p+ML0/XVkJ2q+Mr+UVdpJK5w==}
     engines: {node: '>=12.0.0'}
 
+  hoist-non-react-statics@2.5.5:
+    resolution: {integrity: sha512-rqcy4pJo55FTTLWt+bU8ukscqHeE/e9KWvsOW2b/a3afxQZhwkQdT1rPPCJ0rYXdj4vNcasY8zHTH+jF/qStxw==}
+
   hoist-non-react-statics@3.3.2:
     resolution: {integrity: sha512-/gGivxi8JPKWNm/W0jSmzcMPpfpPLc3dY/6GxhX2hQ9iGj3aDfklV4ET7NjKpSinLpJ5vafa9iiGIEZg10SfBw==}
 
@@ -10025,6 +10088,9 @@ packages:
   mdurl@2.0.0:
     resolution: {integrity: sha512-Lf+9+2r+Tdp5wXDXC4PcIBjTDtq4UKjCPMQhKIuzpJNW0b96kVqSwW0bT7FhRSfmAiFYgP+SCRvdrDozfh0U5w==}
 
+  medium-editor@5.23.3:
+    resolution: {integrity: sha512-he9/TdjX8f8MGdXGfCs8AllrYnqXJJvjNkDKmPg3aPW/uoIrlRqtkFthrwvmd+u4QyzEiadhCCM0EwTiRdUCJw==}
+
   memoize-one@5.2.1:
     resolution: {integrity: sha512-zYiwtZUcYyXKo/np96AGZAckk+FWWsUdJ3cHGGmld7+AhvcWmQyGCYUh1hc4Q/pkOhb65dQR/pqCyK0cOaHz4Q==}
 
@@ -10355,6 +10421,20 @@ packages:
   mobile-detect@1.4.5:
     resolution: {integrity: sha512-yc0LhH6tItlvfLBugVUEtgawwFU2sIe+cSdmRJJCTMZ5GEJyLxNyC/NIOAOGk67Fa8GNpOttO3Xz/1bHpXFD/g==}
 
+  mobx-preact@3.0.0:
+    resolution: {integrity: sha512-ijan/cBs3WmRye87E5+3JmoFBB00KDAwNA3pm7bMwYLPHBAXlN86aC3gdrXw8aKzM5RI8V3a993PphzPv6P4FA==}
+    peerDependencies:
+      mobx: 5.x
+      preact: '>=8'
+
+  mobx-utils@5.6.2:
+    resolution: {integrity: sha512-a/WlXyGkp6F12b01sTarENpxbmlRgPHFyR1Xv2bsSjQBm5dcOtd16ONb40/vOqck8L99NHpI+C9MXQ+SZ8f+yw==}
+    peerDependencies:
+      mobx: ^4.13.1 || ^5.13.1
+
+  mobx@5.15.7:
+    resolution: {integrity: sha512-wyM3FghTkhmC+hQjyPGGFdpehrcX1KOXsDuERhfK2YbJemkUhEB+6wzEN639T21onxlfYBmriA1PFnvxTUhcKw==}
+
   moment-timezone@0.5.48:
     resolution: {integrity: sha512-f22b8LV1gbTO2ms2j2z13MuPogNoh5UzxL3nzNAYKGraILnbGc9NEE6dyiiiLv46DGRb8A4kg8UKWLjPthxBHw==}
 
@@ -10383,6 +10463,9 @@ packages:
         optional: true
       react-dom:
         optional: true
+
+  mousetrap@1.6.5:
+    resolution: {integrity: sha512-QNo4kEepaIBwiT8CDhP98umTetp+JNfQYBWvC1pc6/OAibuXtRcxZ58Qz8skvEHYvURne/7R8T5VoOI7rDsEUA==}
 
   mri@1.2.0:
     resolution: {integrity: sha512-tzzskb3bG8LvYGFF/mDTpq3jpI6Q9wc3LEmBaghu+DdCssd1FakN7Bc0hVNmEyGq1bq3RgfkCb3cmQLpNPOroA==}
@@ -11275,6 +11358,14 @@ packages:
     resolution: {integrity: sha512-3Ybi1tAuwAP9s0r1UQ2J4n5Y0G05bJkpUIO0/bI9MhwmD70S5aTWbXGBwxHrelT+XM1k6dM0pk+SwNkpTRN7Pg==}
     engines: {node: ^10 || ^12 || >=14}
 
+  preact@10.29.8:
+    resolution: {integrity: sha512-ej2aVZ+vZ8WO7tvlQWRM9N63A0KzF9q4mWJfDUHgYaIofWY9hu74QdnQrjoPMmZi2/nZ5gN0bJCQF49xQqx09Q==}
+    peerDependencies:
+      preact-render-to-string: '>=5'
+    peerDependenciesMeta:
+      preact-render-to-string:
+        optional: true
+
   prebuild-install@7.1.3:
     resolution: {integrity: sha512-8Mf2cbV7x1cXPUILADGI3wuhfqWvtiLA1iclTDbFRZkgRQS0NqsPZphna9V+HyTEadheuPmjaJMsbzKQFOzLug==}
     engines: {node: '>=10'}
@@ -11470,6 +11561,9 @@ packages:
 
   randombytes@2.1.0:
     resolution: {integrity: sha512-vYl3iOX+4CKUWuxGi9Ukhie6fsqXqS9FE2Zaic4tNFD2N2QQaXOMFbuKK4QmDHC0JO6B1Zp41J0LpT0oR68amQ==}
+
+  rangy@1.3.2:
+    resolution: {integrity: sha512-fS1C4MOyk8T+ZJZdLcgrukPWxkyDXa+Hd2Kj+Zg4wIK71yrWgmjzHubzPMY1G+WD9EgGxMp3fIL0zQ1ickmSWA==}
 
   rbush@4.0.1:
     resolution: {integrity: sha512-IP0UpfeWQujYC8Jg162rMNc01Rf0gWMMAb2Uxus/Q0qOFw4lCcq6ZnQEZwUoJqWyUGJ9th7JjwI4yIWo+uvoAQ==}
@@ -13069,6 +13163,9 @@ packages:
     resolution: {integrity: sha512-r5zA1cQBEOgYlesRmSEwc9LkbfNLTtji+vWyaHzRZUxCTHdsX3bd+sdHfs5tGZ2W6ILGGsxWxCNwT/h3IY/3ng==}
     engines: {node: '>= 0.10'}
 
+  vanilla-picker@2.12.3:
+    resolution: {integrity: sha512-qVkT1E7yMbUsB2mmJNFmaXMWE2hF8ffqzMMwe9zdAikd8u2VfnsVY2HQcOUi2F38bgbxzlJBEdS1UUhOXdF9GQ==}
+
   vaul@0.9.9:
     resolution: {integrity: sha512-7afKg48srluhZwIkaU+lgGtFCUsYBSGOl8vcc8N/M3YQlZFlynHD15AE+pwrYdc826o7nrIND4lL9Y6b9WWZZQ==}
     peerDependencies:
@@ -13389,6 +13486,8 @@ snapshots:
     dependencies:
       package-manager-detector: 1.6.0
       tinyexec: 1.0.2
+
+  '@antv/hierarchy@0.6.14': {}
 
   '@autoform/core@3.0.0': {}
 
@@ -14642,6 +14741,33 @@ snapshots:
       minimatch: 9.0.9
     transitivePeerDependencies:
       - supports-color
+
+  '@logicflow/core@2.2.5':
+    dependencies:
+      classnames: 2.5.1
+      lodash-es: 4.17.23
+      mobx: 5.15.7
+      mobx-preact: 3.0.0(mobx@5.15.7)(preact@10.29.8)
+      mobx-utils: 5.6.2(mobx@5.15.7)
+      mousetrap: 1.6.5
+      preact: 10.29.8
+      uuid: 9.0.1
+    transitivePeerDependencies:
+      - preact-render-to-string
+
+  '@logicflow/extension@2.3.1(@logicflow/core@2.2.5)':
+    dependencies:
+      '@antv/hierarchy': 0.6.14
+      '@logicflow/core': 2.2.5
+      classnames: 2.5.1
+      lodash-es: 4.17.23
+      medium-editor: 5.23.3
+      mobx: 5.15.7
+      preact: 10.29.8
+      rangy: 1.3.2
+      vanilla-picker: 2.12.3
+    transitivePeerDependencies:
+      - preact-render-to-string
 
   '@malept/cross-spawn-promise@2.0.0':
     dependencies:
@@ -17170,6 +17296,8 @@ snapshots:
   '@sinclair/typebox@0.34.48': {}
 
   '@sindresorhus/is@4.6.0': {}
+
+  '@sphinxxxx/color-conversion@2.2.2': {}
 
   '@standard-schema/spec@1.1.0': {}
 
@@ -22823,6 +22951,8 @@ snapshots:
 
   highlight.js@11.11.1: {}
 
+  hoist-non-react-statics@2.5.5: {}
+
   hoist-non-react-statics@3.3.2:
     dependencies:
       react-is: 16.13.1
@@ -23904,6 +24034,8 @@ snapshots:
 
   mdurl@2.0.0: {}
 
+  medium-editor@5.23.3: {}
+
   memoize-one@5.2.1: {}
 
   memoize-one@6.0.0: {}
@@ -24451,6 +24583,18 @@ snapshots:
 
   mobile-detect@1.4.5: {}
 
+  mobx-preact@3.0.0(mobx@5.15.7)(preact@10.29.8):
+    dependencies:
+      hoist-non-react-statics: 2.5.5
+      mobx: 5.15.7
+      preact: 10.29.8
+
+  mobx-utils@5.6.2(mobx@5.15.7):
+    dependencies:
+      mobx: 5.15.7
+
+  mobx@5.15.7: {}
+
   moment-timezone@0.5.48:
     dependencies:
       moment: 2.30.1
@@ -24476,6 +24620,8 @@ snapshots:
       '@emotion/is-prop-valid': 1.4.0
       react: 19.2.4
       react-dom: 18.3.1(react@19.2.4)
+
+  mousetrap@1.6.5: {}
 
   mri@1.2.0: {}
 
@@ -25453,7 +25599,7 @@ snapshots:
 
   postcss@8.4.49:
     dependencies:
-      nanoid: 3.3.11
+      nanoid: 3.3.18
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
@@ -25474,6 +25620,8 @@ snapshots:
       nanoid: 3.3.11
       picocolors: 1.1.1
       source-map-js: 1.2.1
+
+  preact@10.29.8: {}
 
   prebuild-install@7.1.3:
     dependencies:
@@ -25716,6 +25864,8 @@ snapshots:
   randombytes@2.1.0:
     dependencies:
       safe-buffer: 5.2.1
+
+  rangy@1.3.2: {}
 
   rbush@4.0.1:
     dependencies:
@@ -27806,6 +27956,10 @@ snapshots:
       spdx-expression-parse: 3.0.1
 
   validator@12.0.0: {}
+
+  vanilla-picker@2.12.3:
+    dependencies:
+      '@sphinxxxx/color-conversion': 2.2.2
 
   vaul@0.9.9(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-dom@18.3.1(react@19.2.4))(react@19.2.4):
     dependencies:

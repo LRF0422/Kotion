@@ -1,4 +1,5 @@
 export * from "./collaboration";
+export * from "./collaboration-runtime";
 export * from "./render";
 export * from "./provider";
 export * from "./ToC"

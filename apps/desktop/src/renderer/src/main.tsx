@@ -9,6 +9,7 @@ import { bitable } from "@kn/plugin-bitable"
 import { weaverOA } from "@kn/plugin-weaver-oa"
 import { theme } from "@kn/plugin-theme"
 import { speechToText } from "@kn/plugin-speech-to-text"
+import { logicFlow } from "@kn/plugin-logicflow"
 import './index.css'
 import React from 'react'
 
@@ -69,6 +70,6 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
     <ErrorBoundary>
-        <App plugins={[DefaultPluginInstance, fileManager, bitable, blockReference, ai, weaverOA, theme, speechToText]} />
+        <App plugins={[DefaultPluginInstance, fileManager, bitable, blockReference, ai, weaverOA, theme, speechToText, logicFlow]} />
     </ErrorBoundary>
 )
