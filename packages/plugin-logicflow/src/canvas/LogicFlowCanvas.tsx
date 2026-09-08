@@ -20,8 +20,14 @@ import type {
   LogicFlowNodeData,
   Page,
 } from "../model/types";
-import { registerCustomShapes } from "../shapes";
-import type { ShapeDefinition } from "../shapes";
+import {
+  canonicalizeShapeThemeColor,
+  getShapeDefinition,
+  registerCustomShapes,
+  resolveShapeThemeColor,
+  type ShapeDefinition,
+  type ShapeThemeColorKey,
+} from "../shapes";
 import "@logicflow/core/dist/index.css";
 import "@logicflow/extension/lib/style/index.css";
 
@@ -87,9 +93,78 @@ interface LogicFlowCanvasProps {
   onReady?: (instance: LogicFlow) => void;
 }
 
+const THEME_COLOR_PROPERTIES = [
+  ["fill", "fill"],
+  ["stroke", "stroke"],
+  ["textColor", "text"],
+  ["accentColor", "accent"],
+] as const satisfies ReadonlyArray<readonly [string, ShapeThemeColorKey]>;
+
+function themedNodeProperties(
+  type: string,
+  source: Record<string, unknown> | undefined,
+  dark: boolean,
+  canonical = false,
+): Record<string, unknown> {
+  if (!getShapeDefinition(type)) return { ...(source ?? {}) };
+  const properties = { ...(source ?? {}) };
+  const sourceStyle =
+    properties.style && typeof properties.style === "object"
+      ? (properties.style as Record<string, unknown>)
+      : {};
+  const style = { ...sourceStyle };
+
+  for (const [propertyKey, themeKey] of THEME_COLOR_PROPERTIES) {
+    const resolve = canonical
+      ? canonicalizeShapeThemeColor(type, themeKey, properties[propertyKey])
+      : resolveShapeThemeColor(type, themeKey, properties[propertyKey], dark);
+    if (resolve) properties[propertyKey] = resolve;
+
+    if (propertyKey === "fill" || propertyKey === "stroke") {
+      const styled = canonical
+        ? canonicalizeShapeThemeColor(
+            type,
+            themeKey,
+            style[propertyKey] ?? properties[propertyKey],
+          )
+        : resolveShapeThemeColor(
+            type,
+            themeKey,
+            style[propertyKey] ?? properties[propertyKey],
+            dark,
+          );
+      if (styled) style[propertyKey] = styled;
+    }
+  }
+  properties.style = style;
+  return properties;
+}
+
+function applyShapeThemeDefaults(lf: LogicFlow, dark: boolean): void {
+  for (const model of lf.graphModel.nodes) {
+    const current = model.properties as Record<string, unknown>;
+    const next = themedNodeProperties(model.type, current, dark);
+    if (stableStringify(current) !== stableStringify(next)) {
+      model.setProperties(next);
+    }
+  }
+}
+
 function graphFromInstance(lf: LogicFlow): LogicFlowGraphData {
   const raw = lf.getGraphRawData();
-  return normalizeLogicFlowData(raw).document.pages[0].graph;
+  const graph = normalizeLogicFlowData(raw).document.pages[0].graph;
+  return {
+    ...graph,
+    nodes: graph.nodes.map((node) => ({
+      ...node,
+      properties: themedNodeProperties(
+        node.type,
+        node.properties as Record<string, unknown> | undefined,
+        false,
+        true,
+      ) as LogicFlowNodeData["properties"],
+    })),
+  };
 }
 
 function applyLayerState(lf: LogicFlow, page: Page, readOnly: boolean): void {
@@ -338,7 +413,20 @@ export const LogicFlowCanvas = forwardRef<
     const lf = new LogicFlow({
       container,
       plugins: [Snapshot, MiniMap, SelectionSelect, BpmnElement, PoolElements],
-      grid: sourceDocument.settings.grid,
+      grid: sourceDocument.settings.grid
+        ? {
+            visible: true,
+            type: "dot",
+            size: 24,
+            config: {
+              color: dark
+                ? "rgba(148, 163, 184, 0.28)"
+                : "rgba(71, 85, 105, 0.18)",
+              thickness: 1,
+            },
+            majorBold: false,
+          }
+        : false,
       snapline: sourceDocument.settings.snapline,
       keyboard: { enabled: false },
       history: false,
@@ -353,6 +441,7 @@ export const LogicFlowCanvas = forwardRef<
     registerCustomShapes(lf);
     applyingExternalRef.current = true;
     lf.render(sourceDocument.graph as LogicFlow.GraphConfigData);
+    applyShapeThemeDefaults(lf, dark);
     applyLayerState(lf, sourceDocument, readOnly);
     emittedFingerprintRef.current = stableStringify(sourceDocument);
     documentRef.current = sourceDocument;
@@ -432,42 +521,71 @@ export const LogicFlowCanvas = forwardRef<
   useEffect(() => {
     const lf = instanceRef.current;
     if (!lf) return;
-    lf.setTheme(
-      {
-        rect: {
-          stroke: dark ? "#94a3b8" : "#475569",
-          fill: dark ? "#172033" : "#ffffff",
-          radius: 8,
-        },
-        circle: {
-          stroke: dark ? "#94a3b8" : "#475569",
-          fill: dark ? "#172033" : "#ffffff",
-        },
-        ellipse: {
-          stroke: dark ? "#94a3b8" : "#475569",
-          fill: dark ? "#172033" : "#ffffff",
-        },
-        diamond: {
-          stroke: dark ? "#94a3b8" : "#475569",
-          fill: dark ? "#172033" : "#ffffff",
-        },
-        nodeText: { color: dark ? "#f8fafc" : "#0f172a", fontSize: 13 },
-        edgeText: {
-          color: dark ? "#e2e8f0" : "#334155",
-          background: { fill: dark ? "#0f172a" : "#ffffff" },
-        },
-        polyline: { stroke: dark ? "#94a3b8" : "#64748b", strokeWidth: 2 },
-        arrow: {
-          fill: dark ? "#94a3b8" : "#64748b",
-          stroke: dark ? "#94a3b8" : "#64748b",
-        },
-        outline: { stroke: dark ? "#60a5fa" : "#2563eb", strokeWidth: 2 },
-        anchor: { fill: dark ? "#0f172a" : "#ffffff", stroke: "#3b82f6", r: 4 },
-        snapline: { stroke: "#f43f5e", strokeWidth: 1 },
-      } as Partial<LogicFlow.Theme>,
-      dark ? "dark" : "default",
-    );
-  }, [dark]);
+    const theme = {
+      background: {
+        background:
+          sourceDocument.settings.background === "solid"
+            ? "hsl(var(--background))"
+            : "transparent",
+      },
+      grid: sourceDocument.settings.grid
+        ? {
+            visible: true,
+            type: "dot",
+            size: 24,
+            config: {
+              color: dark
+                ? "rgba(148, 163, 184, 0.28)"
+                : "rgba(71, 85, 105, 0.18)",
+              thickness: 1,
+            },
+            majorBold: false,
+          }
+        : false,
+      rect: {
+        stroke: dark ? "#94a3b8" : "#475569",
+        fill: dark ? "#172033" : "#ffffff",
+        radius: 8,
+      },
+      circle: {
+        stroke: dark ? "#94a3b8" : "#475569",
+        fill: dark ? "#172033" : "#ffffff",
+      },
+      ellipse: {
+        stroke: dark ? "#94a3b8" : "#475569",
+        fill: dark ? "#172033" : "#ffffff",
+      },
+      diamond: {
+        stroke: dark ? "#94a3b8" : "#475569",
+        fill: dark ? "#172033" : "#ffffff",
+      },
+      nodeText: { color: dark ? "#f8fafc" : "#0f172a", fontSize: 13 },
+      edgeText: {
+        color: dark ? "#e2e8f0" : "#334155",
+        background: { fill: dark ? "#0f172a" : "#ffffff" },
+      },
+      polyline: { stroke: dark ? "#94a3b8" : "#64748b", strokeWidth: 2 },
+      arrow: {
+        fill: dark ? "#94a3b8" : "#64748b",
+        stroke: dark ? "#94a3b8" : "#64748b",
+      },
+      outline: { stroke: dark ? "#60a5fa" : "#2563eb", strokeWidth: 2 },
+      anchor: { fill: dark ? "#0f172a" : "#ffffff", stroke: "#3b82f6", r: 4 },
+      snapline: { stroke: "#f43f5e", strokeWidth: 1 },
+    } as unknown as Partial<LogicFlow.Theme>;
+    const themeMode = dark ? "dark" : "default";
+    lf.setTheme(theme, themeMode);
+    applyingExternalRef.current = true;
+    applyShapeThemeDefaults(lf, dark);
+    const miniMap = lf.extension.miniMap as unknown as
+      | { lfMap?: LogicFlow }
+      | undefined;
+    if (miniMap?.lfMap) {
+      miniMap.lfMap.setTheme(theme, themeMode);
+      applyShapeThemeDefaults(miniMap.lfMap, dark);
+    }
+    applyingExternalRef.current = false;
+  }, [dark, sourceDocument.settings.background, sourceDocument.settings.grid]);
 
   useEffect(() => {
     const nextFingerprint = stableStringify(sourceDocument);
@@ -503,6 +621,7 @@ export const LogicFlowCanvas = forwardRef<
         transform.TRANSLATE_Y,
       );
     }
+    applyShapeThemeDefaults(lf, dark);
     applyLayerState(lf, sourceDocument, readOnly);
     lf.clearSelectElements();
     for (const id of selectedIds) {
@@ -525,6 +644,7 @@ export const LogicFlowCanvas = forwardRef<
         if (!lf) return;
         applyingExternalRef.current = true;
         lf.render(document.graph as LogicFlow.GraphConfigData);
+        applyShapeThemeDefaults(lf, dark);
         applyLayerState(lf, document, readOnly);
         applyingExternalRef.current = false;
       },

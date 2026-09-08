@@ -5,7 +5,11 @@ import * as Y from "yjs";
 import { normalizeLogicFlowData } from "../model/normalize";
 import { updatePage } from "../model/pages";
 import { stableStringify } from "../model/stable-stringify";
-import type { LogicFlowDocument, Page } from "../model/types";
+import type {
+  LogicFlowDocument,
+  LogicFlowViewport,
+  Page,
+} from "../model/types";
 import type { DiagramPresenceView } from "./CollaborationOverlay";
 import {
   getLogicFlowCheckpointLeader,
@@ -27,6 +31,7 @@ const ROOT_MAP = "logicflow-diagrams";
 const CHECKPOINT_DELAY_MS = 500;
 const POINTER_INTERVAL_MS = 40;
 const PRESENCE_HEARTBEAT_MS = 10_000;
+const VIEW_ORIGIN = Symbol("logicflow-view");
 
 interface LocalPresence {
   cursor: { x: number; y: number } | null;
@@ -383,6 +388,31 @@ export function useLogicFlowCollaboration(props: NodeViewProps) {
     [updateDocument],
   );
 
+  const updatePageViewport = useCallback(
+    (pageId: string, viewport: LogicFlowViewport) => {
+      const current = documentRef.current;
+      const page = current.pages.find((item) => item.id === pageId);
+      if (!page) return;
+      const previous = page.settings.viewport;
+      if (
+        previous &&
+        Math.abs(previous.scale - viewport.scale) < 0.001 &&
+        Math.abs(previous.x - viewport.x) < 0.5 &&
+        Math.abs(previous.y - viewport.y) < 0.5
+      )
+        return;
+      replaceLogicFlowDocument(
+        diagramMap,
+        updatePage(current, pageId, {
+          ...page,
+          settings: { ...page.settings, viewport },
+        }),
+        VIEW_ORIGIN,
+      );
+    },
+    [diagramMap],
+  );
+
   const setActivePageId = useCallback(
     (pageId: string) => {
       if (!documentRef.current.pages.some((page) => page.id === pageId)) return;
@@ -457,6 +487,7 @@ export function useLogicFlowCollaboration(props: NodeViewProps) {
     dirtyPageIds,
     updateDocument,
     updateActivePage,
+    updatePageViewport,
     replaceDocument,
     undo: () => undoManager.undo(),
     redo: () => undoManager.redo(),

@@ -29,6 +29,7 @@ import {
   TabsContent,
   TabsList,
   TabsTrigger,
+  useResolvedTheme,
 } from "@kn/ui";
 import React from "react";
 import type { DiagramCommandService } from "../commands";
@@ -42,6 +43,7 @@ import type {
   LogicFlowNodeData,
   Page,
 } from "../model/types";
+import { resolveShapeThemeColor } from "../shapes";
 
 function textValue(element: LogicFlowNodeData | LogicFlowEdgeData): string {
   return typeof element.text === "string"
@@ -60,17 +62,48 @@ export function InspectorPanel({
   commands: DiagramCommandService;
   onUpdatePage: (page: Page) => void;
 }) {
+  const dark = useResolvedTheme() === "dark";
   const state = createSelectionState(page, selection);
   const primary = state.elements[0];
   const primaryNode = page.graph.nodes.find((node) => node.id === primary?.id);
   const primaryEdge = page.graph.edges.find((edge) => edge.id === primary?.id);
   const properties = primary?.properties ?? {};
-  const fill =
-    typeof properties.fill === "string" ? properties.fill : "#ffffff";
-  const stroke =
-    typeof properties.stroke === "string" ? properties.stroke : "#64748b";
-  const textColor =
-    typeof properties.textColor === "string" ? properties.textColor : "#0f172a";
+  const elementStyle =
+    properties.style &&
+    typeof properties.style === "object" &&
+    !Array.isArray(properties.style)
+      ? properties.style
+      : {};
+  const fill = primaryNode
+    ? (resolveShapeThemeColor(
+        primaryNode.type,
+        "fill",
+        properties.fill,
+        dark,
+      ) ?? (dark ? "#172033" : "#ffffff"))
+    : dark
+      ? "#172033"
+      : "#ffffff";
+  const stroke = primaryNode
+    ? (resolveShapeThemeColor(
+        primaryNode.type,
+        "stroke",
+        properties.stroke,
+        dark,
+      ) ?? (dark ? "#94a3b8" : "#64748b"))
+    : dark
+      ? "#94a3b8"
+      : "#64748b";
+  const textColor = primaryNode
+    ? (resolveShapeThemeColor(
+        primaryNode.type,
+        "text",
+        properties.textColor,
+        dark,
+      ) ?? (dark ? "#f8fafc" : "#0f172a"))
+    : dark
+      ? "#f8fafc"
+      : "#0f172a";
   const opacity =
     typeof properties.opacity === "number" ? properties.opacity : 100;
 
@@ -149,16 +182,28 @@ export function InspectorPanel({
                 onChange={(color) =>
                   commands.patchProperties({
                     fill: color,
-                    style: {
-                      ...(typeof properties.style === "object" &&
-                      properties.style
-                        ? properties.style
-                        : {}),
-                      fill: color,
-                    } as JsonValue,
+                    style: { ...elementStyle, fill: color } as JsonValue,
                   })
                 }
-                onUnset={() => commands.patchProperties({ fill: undefined })}
+                onUnset={() => {
+                  const defaultFill = primaryNode
+                    ? (resolveShapeThemeColor(
+                        primaryNode.type,
+                        "fill",
+                        undefined,
+                        dark,
+                      ) ?? (dark ? "#172033" : "#ffffff"))
+                    : dark
+                      ? "#172033"
+                      : "#ffffff";
+                  commands.patchProperties({
+                    fill: defaultFill,
+                    style: {
+                      ...elementStyle,
+                      fill: defaultFill,
+                    } as JsonValue,
+                  });
+                }}
               />
               <span className="text-xs text-muted-foreground">{fill}</span>
             </div>
@@ -169,7 +214,12 @@ export function InspectorPanel({
               value={stroke}
               trigger="button"
               triggerAriaLabel="描边颜色"
-              onChange={(color) => commands.patchProperties({ stroke: color })}
+              onChange={(color) =>
+                commands.patchProperties({
+                  stroke: color,
+                  style: { ...elementStyle, stroke: color } as JsonValue,
+                })
+              }
             />
             <div className="grid grid-cols-2 gap-2">
               <Input

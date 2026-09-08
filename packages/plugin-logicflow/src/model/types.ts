@@ -65,10 +65,17 @@ export interface LogicFlowGroup {
   nodeIds: string[];
 }
 
+export interface LogicFlowViewport {
+  scale: number;
+  x: number;
+  y: number;
+}
+
 export interface LogicFlowSettings {
   grid: boolean;
   snapline: boolean;
   background: "transparent" | "solid";
+  viewport?: LogicFlowViewport;
 }
 
 export interface Layer {

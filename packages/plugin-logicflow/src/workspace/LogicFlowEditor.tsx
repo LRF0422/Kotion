@@ -1,7 +1,15 @@
 import type LogicFlow from "@logicflow/core";
 import type { NodeViewProps } from "@kn/editor";
 import { Maximize2 } from "@kn/icon";
-import { Button, useResolvedTheme } from "@kn/ui";
+import {
+  Button,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  useResolvedTheme,
+} from "@kn/ui";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   LogicFlowCanvas,
@@ -103,6 +111,7 @@ export function LogicFlowEditor(props: NodeViewProps) {
           saveError={collaboration.saveError}
           onDocumentChange={collaboration.updateDocument}
           onPageChange={collaboration.updateActivePage}
+          onViewportChange={collaboration.updatePageViewport}
           onReplaceDocument={collaboration.replaceDocument}
           onActivePageChange={collaboration.setActivePageId}
           onUndo={collaboration.undo}
@@ -115,52 +124,76 @@ export function LogicFlowEditor(props: NodeViewProps) {
           onClose={() => void toggleFullscreen()}
         />
       ) : (
-        <div className="logicflow-inline-canvas">
-          <LogicFlowCanvas
-            key={`${activePage.id}-${activePage.settings.grid}-${activePage.settings.snapline}-${activePage.settings.background}`}
-            ref={inlineCanvasRef}
-            document={activePage}
-            readOnly
-            dark={dark}
-            showMiniMap={false}
-            className={`h-full w-full ${activePage.settings.grid ? "" : "logicflow-grid-disabled"} ${activePage.settings.background === "solid" ? "logicflow-solid-background" : ""}`}
-            onSelectionChange={collaboration.setSelection}
-            onPointerMove={collaboration.setPointer}
-            onReady={handleInlineReady}
-          />
-          <CollaborationOverlay
-            canvas={inlineReady ? inlineCanvasRef.current : null}
-            document={activePage}
-            presences={collaboration.presences}
-            revision={inlineRevision}
-          />
-          <div className="logicflow-inline-actions">
-            <span className="self-center px-2 text-xs text-muted-foreground">
-              {collaboration.document.title} · {activePage.name}
+        <>
+          <div
+            className="logicflow-inline-header"
+            onDoubleClick={(event) => event.stopPropagation()}
+          >
+            <span
+              className="logicflow-inline-title"
+              title={collaboration.document.title}
+            >
+              {collaboration.document.title}
             </span>
+            <Select
+              value={collaboration.activePageId}
+              onValueChange={collaboration.setActivePageId}
+            >
+              <SelectTrigger
+                className="logicflow-inline-page-trigger"
+                aria-label="切换流程图页面"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {collaboration.document.pages.map((page) => (
+                  <SelectItem key={page.id} value={page.id}>
+                    {page.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {readOnly && (
-              <span className="self-center px-2 text-xs text-muted-foreground">
-                只读
-              </span>
+              <span className="logicflow-inline-readonly">只读</span>
             )}
             <Button
               type="button"
-              variant="secondary"
+              variant="ghost"
               size="sm"
-              className="h-11 gap-1.5"
+              className="logicflow-inline-open"
               onClick={() => void toggleFullscreen()}
               onDoubleClick={(event) => event.stopPropagation()}
             >
               <Maximize2 className="h-3.5 w-3.5" />
-              打开工作台
+              工作台
             </Button>
           </div>
-          {!activePage.graph.nodes.length && (
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
-              {readOnly ? "空白流程图" : "打开工作台添加图形"}
-            </div>
-          )}
-        </div>
+          <div className="logicflow-inline-canvas">
+            <LogicFlowCanvas
+              key={`${activePage.id}-${activePage.settings.grid}-${activePage.settings.snapline}-${activePage.settings.background}`}
+              ref={inlineCanvasRef}
+              document={activePage}
+              readOnly
+              dark={dark}
+              showMiniMap={false}
+              className={`h-full w-full ${activePage.settings.grid ? "" : "logicflow-grid-disabled"} ${activePage.settings.background === "solid" ? "logicflow-solid-background" : ""}`}
+              onSelectionChange={collaboration.setSelection}
+              onPointerMove={collaboration.setPointer}
+              onReady={handleInlineReady}
+            />
+            <CollaborationOverlay
+              canvas={inlineReady ? inlineCanvasRef.current : null}
+              document={activePage}
+              presences={collaboration.presences}
+              revision={inlineRevision}
+            />
+            {!activePage.graph.nodes.length && (
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
+                {readOnly ? "空白流程图" : "打开工作台添加图形"}
+              </div>
+            )}
+          </div>
+        </>
       )}
     </div>
   );

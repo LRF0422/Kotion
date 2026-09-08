@@ -68,6 +68,7 @@ import type {
   Layer,
   LogicFlowDocument,
   LogicFlowPoint,
+  LogicFlowViewport,
   Page,
   ScratchpadItem,
 } from "../model/types";
@@ -98,6 +99,7 @@ export interface LogicFlowWorkspaceProps {
   saveError: string | null;
   onDocumentChange: (document: LogicFlowDocument) => void;
   onPageChange: (page: Page) => void;
+  onViewportChange: (pageId: string, viewport: LogicFlowViewport) => void;
   onReplaceDocument: (document: LogicFlowDocument) => void;
   onActivePageChange: (pageId: string) => void;
   onUndo: () => void;
@@ -117,6 +119,18 @@ function sameIds(left: readonly string[], right: readonly string[]) {
   );
 }
 
+function sameViewport(
+  left: LogicFlowViewport | undefined,
+  right: LogicFlowViewport,
+): boolean {
+  return Boolean(
+    left &&
+    Math.abs(left.scale - right.scale) < 0.001 &&
+    Math.abs(left.x - right.x) < 0.5 &&
+    Math.abs(left.y - right.y) < 0.5,
+  );
+}
+
 export function LogicFlowWorkspace({
   document,
   activePage,
@@ -133,6 +147,7 @@ export function LogicFlowWorkspace({
   saveError,
   onDocumentChange,
   onPageChange,
+  onViewportChange,
   onReplaceDocument,
   onActivePageChange,
   onUndo,
@@ -149,8 +164,21 @@ export function LogicFlowWorkspace({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pointerRef = useRef<LogicFlowPoint | null>(null);
   const viewportByPageRef = useRef(
-    new Map<string, { scale: number; x: number; y: number }>(),
+    new Map<string, LogicFlowViewport>(
+      document.pages.flatMap((page) =>
+        page.settings.viewport
+          ? ([[page.id, page.settings.viewport]] as const)
+          : [],
+      ),
+    ),
   );
+  const viewportSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const pendingViewportRef = useRef<{
+    pageId: string;
+    viewport: LogicFlowViewport;
+  } | null>(null);
   const documentRef = useRef(document);
   const pageRef = useRef(activePage);
   const selectionRef = useRef<string[]>([]);
@@ -235,11 +263,53 @@ export function LogicFlowWorkspace({
 
   useEffect(() => setShowMiniMap(!isMobile), [isMobile]);
 
+  const persistViewport = useCallback(
+    (pageId: string, viewport: LogicFlowViewport) => {
+      viewportByPageRef.current.set(pageId, viewport);
+      const page = documentRef.current.pages.find((item) => item.id === pageId);
+      if (!page || sameViewport(page.settings.viewport, viewport)) return;
+      onViewportChange(pageId, viewport);
+    },
+    [onViewportChange],
+  );
+
+  const scheduleViewportSave = useCallback(
+    (pageId: string, viewport: LogicFlowViewport) => {
+      viewportByPageRef.current.set(pageId, viewport);
+      pendingViewportRef.current = { pageId, viewport };
+      if (viewportSaveTimerRef.current)
+        clearTimeout(viewportSaveTimerRef.current);
+      viewportSaveTimerRef.current = setTimeout(() => {
+        const pending = pendingViewportRef.current;
+        pendingViewportRef.current = null;
+        viewportSaveTimerRef.current = null;
+        if (pending) persistViewport(pending.pageId, pending.viewport);
+      }, 350);
+    },
+    [persistViewport],
+  );
+
+  useEffect(
+    () => () => {
+      if (viewportSaveTimerRef.current)
+        clearTimeout(viewportSaveTimerRef.current);
+      const pending = pendingViewportRef.current;
+      if (pending) persistViewport(pending.pageId, pending.viewport);
+    },
+    [persistViewport],
+  );
+
   const handleCanvasReady = (lf: LogicFlow) => {
     setCanvasReady(true);
     const updateTransform = () => {
-      setZoom(`${Math.round(lf.getTransform().SCALE_X * 100)}%`);
+      const transform = lf.getTransform();
+      setZoom(`${Math.round(transform.SCALE_X * 100)}%`);
       setTransformRevision((value) => value + 1);
+      scheduleViewportSave(activePageId, {
+        scale: transform.SCALE_X,
+        x: transform.TRANSLATE_X,
+        y: transform.TRANSLATE_Y,
+      });
     };
     lf.on("graph:transform", updateTransform);
     updateTransform();
@@ -257,15 +327,24 @@ export function LogicFlowWorkspace({
     onPointerMove(point);
   };
 
-  const updateSettings = (patch: Partial<Page["settings"]>) =>
-    onPageChange({
-      ...activePage,
-      settings: { ...activePage.settings, ...patch },
-    });
+  const persistCurrentViewport = () => {
+    const viewport = canvasRef.current?.getViewport();
+    if (viewport) persistViewport(activePageId, viewport);
+  };
+
+  const handleFullscreen = () => {
+    persistCurrentViewport();
+    onToggleFullscreen();
+  };
+
+  const handleClose = () => {
+    persistCurrentViewport();
+    onClose?.();
+  };
 
   const switchPage = (pageId: string) => {
     const viewport = canvasRef.current?.getViewport();
-    if (viewport) viewportByPageRef.current.set(activePageId, viewport);
+    if (viewport) persistViewport(activePageId, viewport);
     onActivePageChange(pageId);
   };
 
@@ -471,44 +550,8 @@ export function LogicFlowWorkspace({
     >
       <MenuBar
         title={document.title}
-        grid={activePage.settings.grid}
-        snapline={activePage.settings.snapline}
-        minimap={showMiniMap}
-        hasSelection={Boolean(selectedIds.length)}
-        selectionLocked={Boolean(selectionState.lockedIds.length)}
-        canUndo={canUndo}
-        canRedo={canRedo}
         onTitleChange={(title) =>
           onDocumentChange({ ...documentRef.current, title })
-        }
-        onNewPage={addNewPage}
-        onImport={() => fileInputRef.current?.click()}
-        onExport={openExport}
-        onUndo={onUndo}
-        onRedo={onRedo}
-        onCut={() => void commands.cut()}
-        onCopy={() => void commands.copy()}
-        onPaste={() => void commands.paste()}
-        onDuplicate={commands.duplicate}
-        onDelete={commands.delete}
-        onSelectAll={commands.selectAll}
-        onToggleGrid={() => updateSettings({ grid: !activePage.settings.grid })}
-        onToggleSnapline={() =>
-          updateSettings({ snapline: !activePage.settings.snapline })
-        }
-        onToggleMinimap={() => setShowMiniMap((value) => !value)}
-        onToggleLayers={() => setShowLayers((value) => !value)}
-        onFullscreen={onToggleFullscreen}
-        onGroup={commands.group}
-        onUngroup={commands.ungroup}
-        onSetLocked={commands.setLocked}
-        onRotate={commands.rotate}
-        onFlip={commands.flip}
-        onReorder={commands.reorder}
-        onAlign={commands.align}
-        onDistribute={commands.distribute}
-        onShowShortcuts={() =>
-          window.alert("⌘C/X/V/D/A · ⌘G/⇧⌘G · ⌘L · 方向键 · Space · +/-/0")
         }
       />
       <TopToolbar
@@ -536,8 +579,8 @@ export function LogicFlowWorkspace({
         onZoomOut={() => canvasRef.current?.zoomOut()}
         onZoomReset={() => canvasRef.current?.resetZoom()}
         onFit={() => canvasRef.current?.fitView()}
-        onFullscreen={onToggleFullscreen}
-        onClose={onClose}
+        onFullscreen={handleFullscreen}
+        onClose={handleClose}
       />
       <input
         ref={fileInputRef}

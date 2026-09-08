@@ -294,6 +294,16 @@ function normalizeGroups(
 function normalizeSettings(value: unknown): LogicFlowSettings {
   const source = isRecord(value) ? value : {};
   const defaults = createDefaultLogicFlowSettings();
+  const viewport = isRecord(source.viewport)
+    ? {
+        scale: Math.max(
+          0.1,
+          Math.min(4, finiteNumber(source.viewport.scale, 1)),
+        ),
+        x: finiteNumber(source.viewport.x),
+        y: finiteNumber(source.viewport.y),
+      }
+    : undefined;
   return {
     grid: typeof source.grid === "boolean" ? source.grid : defaults.grid,
     snapline:
@@ -301,6 +311,7 @@ function normalizeSettings(value: unknown): LogicFlowSettings {
         ? source.snapline
         : defaults.snapline,
     background: source.background === "solid" ? "solid" : "transparent",
+    ...(viewport ? { viewport } : {}),
   };
 }
 
