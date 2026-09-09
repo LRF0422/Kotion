@@ -40,6 +40,7 @@ import {
   deletePage,
   deleteScratchpadItem,
   duplicatePage,
+  expandGroupedSelection,
   moveElementsToLayer,
   renameLayer,
   renamePage,
@@ -229,16 +230,9 @@ export function LogicFlowWorkspace({
     (ids: string[]) => {
       const nodeIds = new Set(activePage.graph.nodes.map((node) => node.id));
       const selectedNodes = ids.filter((id) => nodeIds.has(id));
-      const expandedNodes = activePage.groups.reduce<Set<string>>(
-        (result, group) => {
-          if (group.nodeIds.some((id) => result.has(id)))
-            group.nodeIds.forEach((id) => result.add(id));
-          return result;
-        },
-        new Set(selectedNodes),
-      );
+      const expandedNodes = expandGroupedSelection(activePage, selectedNodes);
       const expanded = [
-        ...expandedNodes,
+        ...new Set(expandedNodes),
         ...ids.filter((id) => !nodeIds.has(id)),
       ];
       if (!sameIds(expanded, ids)) {

@@ -1,6 +1,7 @@
 import { Eye, EyeOff, Layers3, Lock, LockOpen, Plus, Trash2 } from "@kn/icon";
 import { Button, Input, ScrollArea } from "@kn/ui";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
+import { getContainerParent } from "../composites";
 import type { Layer, Page } from "../model/types";
 
 export function LayersPanel({
@@ -28,6 +29,10 @@ export function LayersPanel({
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
+  const nodeById = useMemo(
+    () => new Map(page.graph.nodes.map((node) => [node.id, node])),
+    [page.graph.nodes],
+  );
   const save = () => {
     if (editingId && name.trim()) onRename(editingId, name.trim());
     setEditingId(null);
@@ -122,16 +127,23 @@ export function LayersPanel({
                 )}
               </div>
               <div className="border-t px-2 py-1">
-                {[...layer.elementIds].reverse().map((id) => (
-                  <button
-                    key={id}
-                    type="button"
-                    className="flex min-h-11 w-full items-center truncate rounded px-2 text-left text-[11px] text-muted-foreground hover:bg-accent"
-                    onClick={() => onSelectElement(id)}
-                  >
-                    {id}
-                  </button>
-                ))}
+                {[...layer.elementIds].reverse().map((id) => {
+                  const node = nodeById.get(id);
+                  const parentId = node ? getContainerParent(node) : undefined;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      className="flex min-h-11 w-full items-center truncate rounded px-2 text-left text-[11px] text-muted-foreground hover:bg-accent"
+                      style={{ paddingLeft: parentId ? "1.5rem" : "0.5rem" }}
+                      title={parentId ? `${id} · ${parentId}` : id}
+                      onClick={() => onSelectElement(id)}
+                    >
+                      {parentId && <span className="mr-1 opacity-50">↳</span>}
+                      {id}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           ))}

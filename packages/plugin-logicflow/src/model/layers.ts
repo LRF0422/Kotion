@@ -1,4 +1,5 @@
 import type { Layer, LogicFlowGraphData, Page } from "./types";
+import { physicalContainerIds } from "../composites";
 
 export const DEFAULT_LAYER_ID = "layer-1";
 export const DEFAULT_LAYER_NAME = "Layer-1";
@@ -195,7 +196,11 @@ export function moveElementsToLayer(
 ): Page {
   if (!page.layers.some((layer) => layer.id === targetLayerId)) return page;
   const valid = new Set(elementIds(page.graph));
-  const moved = new Set(ids.filter((id) => valid.has(id)));
+  const moved = new Set(
+    physicalContainerIds(page.graph, ids, "move-layer").filter((id) =>
+      valid.has(id),
+    ),
+  );
   if (!moved.size) return page;
   return {
     ...page,

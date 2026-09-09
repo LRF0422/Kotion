@@ -1,5 +1,10 @@
 import { normalizeLayers } from "./layers";
 import {
+  allocateContainerId,
+  physicalContainerIds,
+  remapContainerReferences,
+} from "../composites";
+import {
   DIAGRAM_FRAGMENT_VERSION,
   type DiagramFragment,
   type LogicFlowEdgeData,
@@ -81,7 +86,9 @@ export function extractDiagramFragment(
   page: Page,
   selectedNodeIds: readonly string[],
 ): DiagramFragment {
-  const selected = new Set(selectedNodeIds);
+  const selected = new Set(
+    physicalContainerIds(page.graph, selectedNodeIds, "copy"),
+  );
   const nodes = page.graph.nodes.filter((node) => selected.has(node.id));
   const includedNodeIds = new Set(nodes.map((node) => node.id));
   const edges = page.graph.edges.filter(
@@ -130,19 +137,6 @@ export function offsetDiagramFragment(
   };
 }
 
-function allocateId(requested: string, used: Set<string>): string {
-  const base = requested || "copy";
-  if (!used.has(base)) {
-    used.add(base);
-    return base;
-  }
-  let suffix = 2;
-  while (used.has(`${base}-${suffix}`)) suffix += 1;
-  const id = `${base}-${suffix}`;
-  used.add(id);
-  return id;
-}
-
 export function remapDiagramFragmentWithMap(
   fragment: DiagramFragment,
   idFactory: FragmentIdFactory = (_kind, sourceId) => `${sourceId}-copy`,
@@ -157,34 +151,41 @@ export function remapDiagramFragmentWithMap(
   fragment.nodes.forEach((node, index) => {
     elementIds.set(
       node.id,
-      allocateId(idFactory("node", node.id, index), usedElements),
+      allocateContainerId(idFactory("node", node.id, index), usedElements),
     );
   });
   fragment.edges.forEach((edge, index) => {
     elementIds.set(
       edge.id,
-      allocateId(idFactory("edge", edge.id, index), usedElements),
+      allocateContainerId(idFactory("edge", edge.id, index), usedElements),
     );
   });
   fragment.groups.forEach((group, index) => {
     groupIds.set(
       group.id,
-      allocateId(idFactory("group", group.id, index), usedGroups),
+      allocateContainerId(idFactory("group", group.id, index), usedGroups),
     );
   });
   fragment.layers.forEach((layer, index) => {
     layerIds.set(
       layer.id,
-      allocateId(idFactory("layer", layer.id, index), usedLayers),
+      allocateContainerId(idFactory("layer", layer.id, index), usedLayers),
     );
   });
 
+  const includedNodeIds = new Set(fragment.nodes.map((node) => node.id));
   const remapped: DiagramFragment = {
     version: DIAGRAM_FRAGMENT_VERSION,
-    nodes: fragment.nodes.map((node) => ({
-      ...node,
-      id: elementIds.get(node.id)!,
-    })),
+    nodes: fragment.nodes.map((node) =>
+      remapContainerReferences(
+        {
+          ...node,
+          id: elementIds.get(node.id)!,
+        },
+        elementIds,
+        includedNodeIds,
+      ),
+    ),
     edges: fragment.edges.map((edge) => ({
       ...edge,
       id: elementIds.get(edge.id)!,

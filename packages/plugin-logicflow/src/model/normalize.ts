@@ -6,6 +6,7 @@ import {
 } from "./data";
 import { normalizeLayers } from "./layers";
 import { stableStringify } from "./stable-stringify";
+import { normalizeContainerNodes, orderContainerLayers } from "../composites";
 import {
   DIAGRAM_FRAGMENT_VERSION,
   LOGICFLOW_LIMITS,
@@ -249,13 +250,26 @@ function normalizeEdges(
 function normalizeGraph(
   value: unknown,
   warnings: string[],
-): LogicFlowGraphData {
+): { graph: LogicFlowGraphData; migrated: boolean } {
   const source = isRecord(value) ? value : {};
   const usedElementIds = new Set<string>();
-  const nodes = normalizeNodes(source.nodes, warnings, usedElementIds);
-  const nodeIds = new Set(nodes.map((node) => node.id));
+  const normalizedNodes = normalizeNodes(
+    source.nodes,
+    warnings,
+    usedElementIds,
+  );
+  const migratedNodes = normalizeContainerNodes(
+    normalizedNodes,
+    LOGICFLOW_LIMITS.maxNodes,
+    warnings,
+  );
+  for (const node of migratedNodes.nodes) usedElementIds.add(node.id);
+  const nodeIds = new Set(migratedNodes.nodes.map((node) => node.id));
   const edges = normalizeEdges(source.edges, nodeIds, warnings, usedElementIds);
-  return { nodes, edges };
+  return {
+    graph: { nodes: migratedNodes.nodes, edges },
+    migrated: migratedNodes.migrated,
+  };
 }
 
 function normalizeGroups(
@@ -320,46 +334,55 @@ function normalizePage(
   index: number,
   usedPageIds: Set<string>,
   warnings: string[],
-): Page {
+): { page: Page; migrated: boolean } {
   const source = isRecord(value) ? value : {};
   const graphSource = isRecord(source.graph) ? source.graph : {};
-  const graph = normalizeGraph(graphSource, warnings);
-  const nodeIds = new Set(graph.nodes.map((node) => node.id));
+  const normalizedGraph = normalizeGraph(graphSource, warnings);
+  const nodeIds = new Set(normalizedGraph.graph.nodes.map((node) => node.id));
+  const layers = normalizeLayers(source.layers, normalizedGraph.graph);
   return {
-    id: normalizeId(source.id, "page", index, usedPageIds),
-    name:
-      typeof source.name === "string" && source.name.trim()
-        ? source.name.slice(0, 200)
-        : `Page-${index + 1}`,
-    graph,
-    groups: normalizeGroups(source.groups, nodeIds, warnings),
-    layers: normalizeLayers(source.layers, graph),
-    settings: normalizeSettings(source.settings),
+    page: {
+      id: normalizeId(source.id, "page", index, usedPageIds),
+      name:
+        typeof source.name === "string" && source.name.trim()
+          ? source.name.slice(0, 200)
+          : `Page-${index + 1}`,
+      graph: normalizedGraph.graph,
+      groups: normalizeGroups(source.groups, nodeIds, warnings),
+      layers: orderContainerLayers(layers, normalizedGraph.graph),
+      settings: normalizeSettings(source.settings),
+    },
+    migrated: normalizedGraph.migrated,
   };
 }
 
 function normalizeFragment(
   value: unknown,
   warnings: string[],
-): DiagramFragment {
+): { fragment: DiagramFragment; migrated: boolean } {
   const source = isRecord(value) ? value : {};
-  const graph = normalizeGraph(
+  const normalizedGraph = normalizeGraph(
     { nodes: source.nodes, edges: source.edges },
     warnings,
   );
-  const nodeIds = new Set(graph.nodes.map((node) => node.id));
+  const nodeIds = new Set(normalizedGraph.graph.nodes.map((node) => node.id));
+  const layers = normalizeLayers(source.layers, normalizedGraph.graph);
   return {
-    version: DIAGRAM_FRAGMENT_VERSION,
-    nodes: graph.nodes,
-    edges: graph.edges,
-    groups: normalizeGroups(source.groups, nodeIds, warnings),
-    layers: normalizeLayers(source.layers, graph),
+    fragment: {
+      version: DIAGRAM_FRAGMENT_VERSION,
+      nodes: normalizedGraph.graph.nodes,
+      edges: normalizedGraph.graph.edges,
+      groups: normalizeGroups(source.groups, nodeIds, warnings),
+      layers: orderContainerLayers(layers, normalizedGraph.graph),
+    },
+    migrated: normalizedGraph.migrated,
   };
 }
 
 function normalizeScratchpad(
   value: unknown,
   warnings: string[],
+  migration: { composites: boolean },
 ): ScratchpadItem[] {
   if (!Array.isArray(value)) return [];
   if (value.length > LOGICFLOW_LIMITS.maxScratchpadItems)
@@ -371,13 +394,15 @@ function normalizeScratchpad(
     .slice(0, LOGICFLOW_LIMITS.maxScratchpadItems)
     .map((item, index): ScratchpadItem | null => {
       if (!isRecord(item) || !isRecord(item.fragment)) return null;
+      const normalizedFragment = normalizeFragment(item.fragment, warnings);
+      if (normalizedFragment.migrated) migration.composites = true;
       return {
         id: normalizeId(item.id, "scratchpad", index, used),
         name:
           typeof item.name === "string" && item.name.trim()
             ? item.name.slice(0, 200)
             : `Fragment-${index + 1}`,
-        fragment: normalizeFragment(item.fragment, warnings),
+        fragment: normalizedFragment.fragment,
       };
     })
     .filter((item): item is ScratchpadItem => item !== null);
@@ -425,9 +450,14 @@ export function normalizeLogicFlowData(
   if (pageSources.length > LOGICFLOW_LIMITS.maxPages)
     warnings.push(`页面数量超过 ${LOGICFLOW_LIMITS.maxPages}，已截断`);
   const usedPageIds = new Set<string>();
+  const migration = { composites: false };
   let pages = pageSources
     .slice(0, LOGICFLOW_LIMITS.maxPages)
-    .map((page, index) => normalizePage(page, index, usedPageIds, warnings));
+    .map((page, index) => normalizePage(page, index, usedPageIds, warnings))
+    .map((result) => {
+      if (result.migrated) migration.composites = true;
+      return result.page;
+    });
   if (!pages.length) pages = [createDefaultLogicFlowDocument().pages[0]];
 
   const document: LogicFlowDocument = {
@@ -437,12 +467,12 @@ export function normalizeLogicFlowData(
         ? source.title.slice(0, 500)
         : DEFAULT_DOCUMENT_TITLE,
     pages,
-    scratchpad: normalizeScratchpad(source.scratchpad, warnings),
+    scratchpad: normalizeScratchpad(source.scratchpad, warnings, migration),
     defaultStyles: normalizeDefaultStyles(source.defaultStyles),
   };
   return {
     document,
-    migrated: !isV2,
+    migrated: !isV2 || migration.composites,
     warnings,
     sourceFingerprint: stableStringify(parsed),
   };

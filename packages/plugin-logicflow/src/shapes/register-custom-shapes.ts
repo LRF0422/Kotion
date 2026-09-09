@@ -5,6 +5,7 @@ import LogicFlow, {
   type GraphModel,
 } from "@logicflow/core";
 import type { RichCardContent } from "../model/types";
+import { registerContainers } from "../composites/runtime";
 import {
   createDefaultRichCardContent,
   layoutRichCardSvgLines,
@@ -92,7 +93,6 @@ const CUSTOM_TYPES = new Set([
   "flowchart-card",
   "er-entity",
   "er-relationship",
-  "uml-class",
   "uml-interface",
   "uml-actor",
   "uml-component",
@@ -1015,65 +1015,6 @@ function renderDiamond(model: RectNodeModel, style: NodeVisualStyle) {
   );
 }
 
-function renderUmlClass(model: RectNodeModel, style: NodeVisualStyle) {
-  const { x, y, width: w, height: hgt } = model;
-  const left = x - w / 2;
-  const top = y - hgt / 2;
-  const rawLines = nodeText(model)
-    .split(/\r?\n/)
-    .filter((line) => !/^[-─\s]+$/.test(line));
-  const title = rawLines[0] || "Class";
-  const details = rawLines.slice(1);
-  const header = Math.min(32, hgt * 0.28);
-  const split = top + header + Math.max(24, (hgt - header) * 0.45);
-  return h(
-    "g",
-    null,
-    h("rect", {
-      x: left,
-      y: top,
-      width: w,
-      height: hgt,
-      rx: 2,
-      ...baseAttributes(style),
-    }),
-    h("line", {
-      x1: left,
-      y1: top + header,
-      x2: left + w,
-      y2: top + header,
-      stroke: style.stroke,
-      strokeWidth: style.strokeWidth,
-    }),
-    h("line", {
-      x1: left,
-      y1: split,
-      x2: left + w,
-      y2: split,
-      stroke: style.stroke,
-      strokeWidth: Math.max(1, style.strokeWidth * 0.75),
-    }),
-    svgText(
-      x,
-      top + header / 2,
-      truncate(title, Math.max(8, Math.floor(w / 9))),
-      style,
-      { weight: 700 },
-    ),
-    ...details
-      .slice(0, 3)
-      .map((line, index) =>
-        svgText(
-          left + 10,
-          top + header + 16 + index * 16,
-          truncate(line, Math.max(8, Math.floor(w / 8))),
-          style,
-          { size: 11, anchor: "start" },
-        ),
-      ),
-  );
-}
-
 function renderUmlInterface(model: RectNodeModel, style: NodeVisualStyle) {
   const { x, y, width: w, height: hgt } = model;
   const left = x - w / 2;
@@ -1514,8 +1455,6 @@ function renderCustomShape(type: string, model: RectNodeModel) {
       return renderErEntity(model, style);
     case "er-relationship":
       return renderDiamond(model, style);
-    case "uml-class":
-      return renderUmlClass(model, style);
     case "uml-interface":
       return renderUmlInterface(model, style);
     case "uml-component":
@@ -1663,6 +1602,8 @@ function createView(type: string) {
 }
 
 export function registerCustomShapes(lf: LogicFlow): void {
+  registerContainers(lf);
+
   for (const shape of SHAPE_DEFINITIONS) {
     if (!CUSTOM_TYPES.has(shape.type)) continue;
     if (shape.type === "rich-card") {

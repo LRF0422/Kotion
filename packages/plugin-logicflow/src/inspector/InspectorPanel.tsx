@@ -1,3 +1,4 @@
+import { useTranslation } from "@kn/common";
 import {
   AlignCenter,
   AlignLeft,
@@ -37,6 +38,7 @@ import { createSelectionState, isElementLocked } from "../commands";
 import { moveElementsToLayer } from "../model/layers";
 import { RichTextEditor } from "../rich-text";
 import { sanitizeRichCardContent } from "../rich-text/rich-card-content";
+import { buildContainerIndex } from "../composites";
 import type {
   JsonValue,
   LogicFlowEdgeData,
@@ -62,6 +64,7 @@ export function InspectorPanel({
   commands: DiagramCommandService;
   onUpdatePage: (page: Page) => void;
 }) {
+  const { t } = useTranslation();
   const dark = useResolvedTheme() === "dark";
   const state = createSelectionState(page, selection);
   const primary = state.elements[0];
@@ -106,6 +109,10 @@ export function InspectorPanel({
       : "#0f172a";
   const opacity =
     typeof properties.opacity === "number" ? properties.opacity : 100;
+  const containerIndex = buildContainerIndex(page.graph);
+  const containerInstance = primaryNode
+    ? containerIndex.instanceForRoot(primaryNode.id)
+    : undefined;
 
   const updateText = (value: string) => {
     if (!primary) return;
@@ -135,6 +142,14 @@ export function InspectorPanel({
     key: "x" | "y" | "width" | "height" | "rotate",
     value: number,
   ) => {
+    if (
+      primaryNode &&
+      containerInstance?.root.id === primaryNode.id &&
+      key !== "rotate"
+    ) {
+      commands.updateContainerBounds(primaryNode.id, { [key]: value });
+      return;
+    }
     const ids = new Set(state.nodeIds);
     onUpdatePage({
       ...page,
@@ -152,7 +167,7 @@ export function InspectorPanel({
   if (!primary) {
     return (
       <div className="flex h-full items-center justify-center p-6 text-center text-xs text-muted-foreground">
-        选择节点或连线后编辑样式、文字和排列属性
+        {t("logicflow.inspector.noSelection")}
       </div>
     );
   }
@@ -161,24 +176,24 @@ export function InspectorPanel({
     <Tabs defaultValue="style" className="flex h-full min-h-0 flex-col">
       <TabsList className="h-11 w-full shrink-0 justify-start rounded-none border-b bg-transparent px-1">
         <TabsTrigger value="style" className="h-9 flex-1 text-xs">
-          样式
+          {t("logicflow.inspector.tabs.style")}
         </TabsTrigger>
         <TabsTrigger value="text" className="h-9 flex-1 text-xs">
-          文字
+          {t("logicflow.inspector.tabs.text")}
         </TabsTrigger>
         <TabsTrigger value="arrange" className="h-9 flex-1 text-xs">
-          排列
+          {t("logicflow.inspector.tabs.arrange")}
         </TabsTrigger>
       </TabsList>
       <ScrollArea className="min-h-0 flex-1">
         <TabsContent value="style" className="m-0 space-y-5 p-4">
           <section className="space-y-3">
-            <Label className="text-xs">填充</Label>
+            <Label className="text-xs">{t("logicflow.inspector.fill")}</Label>
             <div className="flex items-center gap-2">
               <ColorPicker
                 value={fill}
                 trigger="button"
-                triggerAriaLabel="填充颜色"
+                triggerAriaLabel={t("logicflow.inspector.fillColor")}
                 onChange={(color) =>
                   commands.patchProperties({
                     fill: color,
@@ -209,11 +224,11 @@ export function InspectorPanel({
             </div>
           </section>
           <section className="space-y-3">
-            <Label className="text-xs">描边</Label>
+            <Label className="text-xs">{t("logicflow.inspector.stroke")}</Label>
             <ColorPicker
               value={stroke}
               trigger="button"
-              triggerAriaLabel="描边颜色"
+              triggerAriaLabel={t("logicflow.inspector.strokeColor")}
               onChange={(color) =>
                 commands.patchProperties({
                   stroke: color,
@@ -252,16 +267,22 @@ export function InspectorPanel({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="solid">实线</SelectItem>
-                  <SelectItem value="8 4">虚线</SelectItem>
-                  <SelectItem value="2 4">点线</SelectItem>
+                  <SelectItem value="solid">
+                    {t("logicflow.inspector.lineStyles.solid")}
+                  </SelectItem>
+                  <SelectItem value="8 4">
+                    {t("logicflow.inspector.lineStyles.dashed")}
+                  </SelectItem>
+                  <SelectItem value="2 4">
+                    {t("logicflow.inspector.lineStyles.dotted")}
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </section>
           <section className="space-y-3">
             <div className="flex justify-between text-xs">
-              <span>透明度</span>
+              <span>{t("logicflow.inspector.opacity")}</span>
               <span>{opacity}%</span>
             </div>
             <Slider
@@ -276,7 +297,7 @@ export function InspectorPanel({
           </section>
           {primaryEdge && (
             <section className="space-y-3 border-t pt-4">
-              <Label className="text-xs">连接线</Label>
+              <Label className="text-xs">{t("logicflow.inspector.edge")}</Label>
               <Select
                 value={primaryEdge.type}
                 onValueChange={(value) => commands.changeEdgeType(value)}
@@ -285,9 +306,15 @@ export function InspectorPanel({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="line">直线</SelectItem>
-                  <SelectItem value="polyline">折线</SelectItem>
-                  <SelectItem value="bezier">曲线</SelectItem>
+                  <SelectItem value="line">
+                    {t("logicflow.inspector.edgeTypes.line")}
+                  </SelectItem>
+                  <SelectItem value="polyline">
+                    {t("logicflow.inspector.edgeTypes.polyline")}
+                  </SelectItem>
+                  <SelectItem value="bezier">
+                    {t("logicflow.inspector.edgeTypes.bezier")}
+                  </SelectItem>
                 </SelectContent>
               </Select>
               <div className="grid grid-cols-2 gap-2">
@@ -302,13 +329,23 @@ export function InspectorPanel({
                   }
                 >
                   <SelectTrigger className="h-11">
-                    <SelectValue placeholder="起点" />
+                    <SelectValue
+                      placeholder={t("logicflow.inspector.arrows.start")}
+                    />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">无起点</SelectItem>
-                    <SelectItem value="solid">箭头</SelectItem>
-                    <SelectItem value="circle">圆点</SelectItem>
-                    <SelectItem value="diamond">菱形</SelectItem>
+                    <SelectItem value="none">
+                      {t("logicflow.inspector.arrows.noStart")}
+                    </SelectItem>
+                    <SelectItem value="solid">
+                      {t("logicflow.inspector.arrows.arrow")}
+                    </SelectItem>
+                    <SelectItem value="circle">
+                      {t("logicflow.inspector.arrows.circle")}
+                    </SelectItem>
+                    <SelectItem value="diamond">
+                      {t("logicflow.inspector.arrows.diamond")}
+                    </SelectItem>
                   </SelectContent>
                 </Select>
                 <Select
@@ -322,13 +359,23 @@ export function InspectorPanel({
                   }
                 >
                   <SelectTrigger className="h-11">
-                    <SelectValue placeholder="终点" />
+                    <SelectValue
+                      placeholder={t("logicflow.inspector.arrows.end")}
+                    />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">无终点</SelectItem>
-                    <SelectItem value="solid">箭头</SelectItem>
-                    <SelectItem value="circle">圆点</SelectItem>
-                    <SelectItem value="diamond">菱形</SelectItem>
+                    <SelectItem value="none">
+                      {t("logicflow.inspector.arrows.noEnd")}
+                    </SelectItem>
+                    <SelectItem value="solid">
+                      {t("logicflow.inspector.arrows.arrow")}
+                    </SelectItem>
+                    <SelectItem value="circle">
+                      {t("logicflow.inspector.arrows.circle")}
+                    </SelectItem>
+                    <SelectItem value="diamond">
+                      {t("logicflow.inspector.arrows.diamond")}
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -337,13 +384,13 @@ export function InspectorPanel({
                 variant="outline"
                 onClick={commands.reverseEdges}
               >
-                反转方向
+                {t("logicflow.inspector.reverseDirection")}
               </Button>
             </section>
           )}
         </TabsContent>
         <TabsContent value="text" className="m-0 space-y-4 p-4">
-          <Label className="text-xs">内容</Label>
+          <Label className="text-xs">{t("logicflow.inspector.content")}</Label>
           <textarea
             value={textValue(primary)}
             className="min-h-24 w-full rounded-md border bg-background p-3 text-sm outline-none focus:ring-1 focus:ring-ring"
@@ -355,6 +402,7 @@ export function InspectorPanel({
               variant={properties.bold === true ? "secondary" : "outline"}
               size="icon"
               className="h-11 w-11"
+              aria-label={t("logicflow.inspector.textFormatting.bold")}
               onClick={() =>
                 commands.patchProperties({ bold: properties.bold !== true })
               }
@@ -366,6 +414,7 @@ export function InspectorPanel({
               variant={properties.italic === true ? "secondary" : "outline"}
               size="icon"
               className="h-11 w-11"
+              aria-label={t("logicflow.inspector.textFormatting.italic")}
               onClick={() =>
                 commands.patchProperties({ italic: properties.italic !== true })
               }
@@ -377,6 +426,7 @@ export function InspectorPanel({
               variant="outline"
               size="icon"
               className="h-11 w-11"
+              aria-label={t("logicflow.inspector.textFormatting.alignLeft")}
               onClick={() => commands.patchProperties({ textAlign: "left" })}
             >
               <AlignLeft className="h-4 w-4" />
@@ -386,6 +436,7 @@ export function InspectorPanel({
               variant="outline"
               size="icon"
               className="h-11 w-11"
+              aria-label={t("logicflow.inspector.textFormatting.alignCenter")}
               onClick={() => commands.patchProperties({ textAlign: "center" })}
             >
               <AlignCenter className="h-4 w-4" />
@@ -395,6 +446,7 @@ export function InspectorPanel({
               variant="outline"
               size="icon"
               className="h-11 w-11"
+              aria-label={t("logicflow.inspector.textFormatting.alignRight")}
               onClick={() => commands.patchProperties({ textAlign: "right" })}
             >
               <AlignRight className="h-4 w-4" />
@@ -418,7 +470,7 @@ export function InspectorPanel({
             <ColorPicker
               value={textColor}
               trigger="button"
-              triggerAriaLabel="文字颜色"
+              triggerAriaLabel={t("logicflow.inspector.textColor")}
               onChange={(color) =>
                 commands.patchProperties({ textColor: color })
               }
@@ -439,36 +491,47 @@ export function InspectorPanel({
         <TabsContent value="arrange" className="m-0 space-y-4 p-4">
           {primaryNode && (
             <div className="grid grid-cols-2 gap-2">
-              {(["x", "y", "width", "height", "rotate"] as const).map((key) => (
-                <label
-                  key={key}
-                  className="space-y-1 text-xs text-muted-foreground"
-                >
-                  <span>{key.toUpperCase()}</span>
-                  <Input
-                    type="number"
-                    className="h-11"
-                    value={
-                      typeof primaryNode[key] === "number"
-                        ? primaryNode[key]
-                        : key === "width"
-                          ? 100
-                          : key === "height"
-                            ? 60
-                            : 0
-                    }
-                    onChange={(event) =>
-                      updateNodeNumber(key, Number(event.target.value))
-                    }
-                  />
-                </label>
-              ))}
+              {(["x", "y", "width", "height", "rotate"] as const)
+                .filter(
+                  (key) =>
+                    key !== "rotate" ||
+                    !containerInstance ||
+                    containerInstance.definition.capabilities.rotatable,
+                )
+                .map((key) => (
+                  <label
+                    key={key}
+                    className="space-y-1 text-xs text-muted-foreground"
+                  >
+                    <span>{key.toUpperCase()}</span>
+                    <Input
+                      type="number"
+                      className="h-11"
+                      value={
+                        typeof primaryNode[key] === "number"
+                          ? primaryNode[key]
+                          : key === "width"
+                            ? 100
+                            : key === "height"
+                              ? 60
+                              : 0
+                      }
+                      onChange={(event) =>
+                        updateNodeNumber(key, Number(event.target.value))
+                      }
+                    />
+                  </label>
+                ))}
             </div>
           )}
           <div className="grid grid-cols-2 gap-2">
             <Button
               className="h-11"
               variant="outline"
+              disabled={
+                Boolean(containerInstance) &&
+                !containerInstance?.definition.capabilities.rotatable
+              }
               onClick={() => commands.rotate(-90)}
             >
               <RotateCcw className="mr-2 h-4 w-4" />
@@ -477,6 +540,10 @@ export function InspectorPanel({
             <Button
               className="h-11"
               variant="outline"
+              disabled={
+                Boolean(containerInstance) &&
+                !containerInstance?.definition.capabilities.rotatable
+              }
               onClick={() => commands.rotate(90)}
             >
               <RotateCw className="mr-2 h-4 w-4" />
@@ -485,24 +552,32 @@ export function InspectorPanel({
             <Button
               className="h-11"
               variant="outline"
+              disabled={
+                Boolean(containerInstance) &&
+                !containerInstance?.definition.capabilities.flippable
+              }
               onClick={() => commands.flip("horizontal")}
             >
               <FlipHorizontal2 className="mr-2 h-4 w-4" />
-              水平
+              {t("logicflow.inspector.flipHorizontal")}
             </Button>
             <Button
               className="h-11"
               variant="outline"
+              disabled={
+                Boolean(containerInstance) &&
+                !containerInstance?.definition.capabilities.flippable
+              }
               onClick={() => commands.flip("vertical")}
             >
               <FlipVertical2 className="mr-2 h-4 w-4" />
-              垂直
+              {t("logicflow.inspector.flipVertical")}
             </Button>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <Button className="h-11" variant="outline" onClick={commands.group}>
               <Group className="mr-2 h-4 w-4" />
-              分组
+              {t("logicflow.inspector.group")}
             </Button>
             <Button
               className="h-11"
@@ -510,7 +585,7 @@ export function InspectorPanel({
               onClick={commands.ungroup}
             >
               <Ungroup className="mr-2 h-4 w-4" />
-              取消
+              {t("logicflow.inspector.ungroup")}
             </Button>
           </div>
           <Button
@@ -523,7 +598,11 @@ export function InspectorPanel({
             ) : (
               <Lock className="mr-2 h-4 w-4" />
             )}
-            {state.lockedIds.length ? "解锁选择" : "锁定选择"}
+            {t(
+              state.lockedIds.length
+                ? "logicflow.inspector.unlockSelection"
+                : "logicflow.inspector.lockSelection",
+            )}
           </Button>
           <Select
             onValueChange={(layerId) =>
@@ -531,7 +610,7 @@ export function InspectorPanel({
             }
           >
             <SelectTrigger className="h-11">
-              <SelectValue placeholder="移动到图层" />
+              <SelectValue placeholder={t("logicflow.inspector.moveToLayer")} />
             </SelectTrigger>
             <SelectContent>
               {page.layers.map((layer) => (

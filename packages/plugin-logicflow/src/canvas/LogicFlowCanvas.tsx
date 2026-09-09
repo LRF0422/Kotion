@@ -14,6 +14,18 @@ import React, {
 } from "react";
 import { normalizeLogicFlowData } from "../model/normalize";
 import { stableStringify } from "../model/stable-stringify";
+import {
+  buildContainerIndex,
+  containerRegistry,
+  getContainerChildren,
+  getContainerMetadata,
+  getContainerParent,
+} from "../composites";
+import {
+  canonicalizeContainerNode,
+  installContainerRuntime,
+  materializeContainerAfterAdd,
+} from "../composites/runtime";
 import type {
   LogicFlowEdgeData,
   LogicFlowGraphData,
@@ -33,6 +45,9 @@ import "@logicflow/extension/lib/style/index.css";
 
 const MUTATION_EVENTS = [
   "node:add",
+  "node:dnd-add",
+  "group:add-node",
+  "group:remove-node",
   "node:delete",
   "node:drag",
   "node:drop",
@@ -155,19 +170,23 @@ function graphFromInstance(lf: LogicFlow): LogicFlowGraphData {
   const graph = normalizeLogicFlowData(raw).document.pages[0].graph;
   return {
     ...graph,
-    nodes: graph.nodes.map((node) => ({
-      ...node,
-      properties: themedNodeProperties(
-        node.type,
-        node.properties as Record<string, unknown> | undefined,
-        false,
-        true,
-      ) as LogicFlowNodeData["properties"],
-    })),
+    nodes: graph.nodes.map((node) => {
+      const canonical = canonicalizeContainerNode(node);
+      return {
+        ...canonical,
+        properties: themedNodeProperties(
+          canonical.type,
+          canonical.properties as Record<string, unknown> | undefined,
+          false,
+          true,
+        ) as LogicFlowNodeData["properties"],
+      };
+    }),
   };
 }
 
 function applyLayerState(lf: LogicFlow, page: Page, readOnly: boolean): void {
+  const containerIndex = buildContainerIndex(page.graph);
   const elements = new Map<string, LogicFlowNodeData | LogicFlowEdgeData>([
     ...page.graph.nodes.map((node) => [node.id, node] as const),
     ...page.graph.edges.map((edge) => [edge.id, edge] as const),
@@ -178,13 +197,14 @@ function applyLayerState(lf: LogicFlow, page: Page, readOnly: boolean): void {
       const model = lf.graphModel.getElement(id);
       const element = elements.get(id);
       if (!model || !element) continue;
+      const root = containerIndex.instanceForRoot(id);
       const locked =
         readOnly || layer.locked || element.properties?.locked === true;
       model.visible = layer.visible;
       Object.assign(model, {
         draggable: !locked,
-        resizable: !locked,
-        rotatable: !locked,
+        resizable: !locked && (root?.definition.capabilities.resizable ?? true),
+        rotatable: !locked && (root?.definition.capabilities.rotatable ?? true),
         isHitable: layer.visible,
       });
       if (model.text) model.text.editable = !locked;
@@ -271,6 +291,16 @@ function updateElementAttributes(
   lf.graphModel.updateAttributes(id, attributes);
 }
 
+function sameStringArray(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
+}
+
 function applyGraphIncrementally(
   lf: LogicFlow,
   next: LogicFlowGraphData,
@@ -280,11 +310,28 @@ function applyGraphIncrementally(
   const nextNodes = new Map(next.nodes.map((node) => [node.id, node]));
   const currentEdges = new Map(current.edges.map((edge) => [edge.id, edge]));
   const nextEdges = new Map(next.edges.map((edge) => [edge.id, edge]));
-
+  const related = (node: LogicFlowNodeData) =>
+    Boolean(
+      containerRegistry.getByRootType(node.type) || getContainerParent(node),
+    );
+  for (const node of current.nodes) {
+    if (!nextNodes.has(node.id) && related(node)) return false;
+  }
   for (const node of next.nodes) {
     const previous = currentNodes.get(node.id);
-    if (!previous) continue;
+    if (!previous) {
+      if (related(node)) return false;
+      continue;
+    }
     if (previous.type !== node.type) return false;
+    if (
+      !sameStringArray(
+        getContainerChildren(previous),
+        getContainerChildren(node),
+      ) ||
+      getContainerParent(previous) !== getContainerParent(node)
+    )
+      return false;
     if (
       (node.type === "pool" || node.type === "lane") &&
       stableStringify(previous) !== stableStringify(node)
@@ -439,6 +486,7 @@ export const LogicFlowCanvas = forwardRef<
     });
     instanceRef.current = lf;
     registerCustomShapes(lf);
+    const uninstallContainerRuntime = installContainerRuntime(lf);
     applyingExternalRef.current = true;
     lf.render(sourceDocument.graph as LogicFlow.GraphConfigData);
     applyShapeThemeDefaults(lf, dark);
@@ -453,6 +501,11 @@ export const LogicFlowCanvas = forwardRef<
       lf.extension.selectionSelect as SelectionSelect | undefined
     )?.openSelectionSelect();
 
+    const onNodeDndAdd = ({ data }: { data: LogicFlow.NodeData }) => {
+      materializeContainerAfterAdd(lf, data);
+    };
+
+    lf.on("node:dnd-add", onNodeDndAdd);
     for (const event of MUTATION_EVENTS) lf.on(event, scheduleGraphChange);
     for (const event of SELECTION_EVENTS) lf.on(event, emitSelection);
 
@@ -487,6 +540,8 @@ export const LogicFlowCanvas = forwardRef<
       container.removeEventListener("mousemove", onMouseMove);
       container.removeEventListener("mouseleave", onMouseLeave);
       latestCallbacksRef.current.onPointerMove?.(null);
+      lf.off("node:dnd-add", onNodeDndAdd);
+      uninstallContainerRuntime();
       lf.destroy();
       instanceRef.current = null;
     };
@@ -650,9 +705,12 @@ export const LogicFlowCanvas = forwardRef<
       },
       startDrag: (shape) => {
         if (readOnly) return;
+        const containerDefinition = shape.containerId
+          ? containerRegistry.getById(shape.containerId)
+          : containerRegistry.getByRootType(shape.type);
         instanceRef.current?.dnd.startDrag({
           type: shape.type,
-          text: shape.defaultText,
+          text: containerDefinition ? undefined : shape.defaultText,
           ...shapeSizeConfig(shape, dark),
         });
       },
@@ -666,13 +724,18 @@ export const LogicFlowCanvas = forwardRef<
           x: rect.left + rect.width / 2,
           y: rect.top + rect.height / 2,
         }).canvasOverlayPosition;
+        const containerDefinition = shape.containerId
+          ? containerRegistry.getById(shape.containerId)
+          : containerRegistry.getByRootType(shape.type);
         const node = lf.addNode({
           type: shape.type,
           x: point.x,
           y: point.y,
-          text: shape.defaultText,
+          text: containerDefinition ? undefined : shape.defaultText,
           ...shapeSizeConfig(shape, dark),
         });
+        if (containerDefinition)
+          materializeContainerAfterAdd(lf, node.getData());
         lf.clearSelectElements();
         lf.selectElementById(node.id, false, true);
         scheduleGraphChange();

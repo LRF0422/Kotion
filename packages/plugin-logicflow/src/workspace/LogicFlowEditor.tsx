@@ -1,4 +1,5 @@
 import type LogicFlow from "@logicflow/core";
+import { useTranslation } from "@kn/common";
 import type { NodeViewProps } from "@kn/editor";
 import { Maximize2 } from "@kn/icon";
 import {
@@ -21,6 +22,7 @@ import "../style/index.css";
 import { LogicFlowWorkspace } from "./LogicFlowWorkspace";
 
 export function LogicFlowEditor(props: NodeViewProps) {
+  const { t } = useTranslation();
   const resolvedTheme = useResolvedTheme();
   const dark = resolvedTheme === "dark";
   const rootRef = useRef<HTMLDivElement>(null);
@@ -129,33 +131,37 @@ export function LogicFlowEditor(props: NodeViewProps) {
             className="logicflow-inline-header"
             onDoubleClick={(event) => event.stopPropagation()}
           >
-            <span
-              className="logicflow-inline-title"
-              title={collaboration.document.title}
-            >
-              {collaboration.document.title}
-            </span>
-            <Select
-              value={collaboration.activePageId}
-              onValueChange={collaboration.setActivePageId}
-            >
-              <SelectTrigger
-                className="logicflow-inline-page-trigger"
-                aria-label="切换流程图页面"
+            <div className="logicflow-inline-meta">
+              <span
+                className="logicflow-inline-title"
+                title={collaboration.document.title}
               >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {collaboration.document.pages.map((page) => (
-                  <SelectItem key={page.id} value={page.id}>
-                    {page.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {readOnly && (
-              <span className="logicflow-inline-readonly">只读</span>
-            )}
+                {collaboration.document.title}
+              </span>
+              <Select
+                value={collaboration.activePageId}
+                onValueChange={collaboration.setActivePageId}
+              >
+                <SelectTrigger
+                  className="logicflow-inline-page-trigger"
+                  aria-label={t("logicflow.inline.switchPage")}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {collaboration.document.pages.map((page) => (
+                    <SelectItem key={page.id} value={page.id}>
+                      {page.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {readOnly && (
+                <span className="logicflow-inline-readonly">
+                  {t("logicflow.inline.readOnly")}
+                </span>
+              )}
+            </div>
             <Button
               type="button"
               variant="ghost"
@@ -165,7 +171,7 @@ export function LogicFlowEditor(props: NodeViewProps) {
               onDoubleClick={(event) => event.stopPropagation()}
             >
               <Maximize2 className="h-3.5 w-3.5" />
-              工作台
+              {t("logicflow.inline.workspace")}
             </Button>
           </div>
           <div className="logicflow-inline-canvas">
@@ -189,7 +195,11 @@ export function LogicFlowEditor(props: NodeViewProps) {
             />
             {!activePage.graph.nodes.length && (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
-                {readOnly ? "空白流程图" : "打开工作台添加图形"}
+                {t(
+                  readOnly
+                    ? "logicflow.inline.empty"
+                    : "logicflow.inline.openWorkspaceHint",
+                )}
               </div>
             )}
           </div>

@@ -125,6 +125,7 @@ export interface ShapeDefinition {
   width?: number;
   height?: number;
   defaultProperties?: Record<string, unknown>;
+  containerId?: string;
 }
 
 export const SHAPE_CATEGORIES: {
@@ -1486,13 +1487,14 @@ export const SHAPE_DEFINITIONS: ShapeDefinition[] = [
     height: 88,
   },
   {
-    type: "uml-class",
+    type: "uml-class-group",
     category: "uml",
     label: "Class",
     icon: Square,
     defaultText: "Class\n────────\n+ property\n+ method()",
     keywords: ["object", "attribute", "method", "类", "属性", "方法"],
     aliases: ["class diagram", "object class"],
+    containerId: "uml-class",
     defaultStyle: DEFAULT_STYLES.uml,
     preview: preview(
       { kind: "rect", x: 9, y: 4, width: 46, height: 40, rx: 1 },
@@ -1508,8 +1510,8 @@ export const SHAPE_DEFINITIONS: ShapeDefinition[] = [
         anchor: "middle",
       },
     ),
-    width: 160,
-    height: 110,
+    width: 240,
+    height: 200,
   },
   {
     type: "uml-interface",

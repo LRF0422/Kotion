@@ -14,6 +14,8 @@ import type {
 
 export const LOCAL_ORIGIN = Symbol("logicflow-local-origin");
 
+const migratedV2Maps = new WeakSet<Y.Map<unknown>>();
+
 export type LogicFlowDiagramMap = Y.Map<unknown>;
 export type LogicFlowDiagramsMap = Y.Map<LogicFlowDiagramMap>;
 
@@ -352,11 +354,40 @@ function hasV2Pages(source: LogicFlowDiagramMap): boolean {
   return source.get(ROOT_KEYS.pages) instanceof Y.Map;
 }
 
+function v2Snapshot(diagramMap: LogicFlowDiagramMap) {
+  return {
+    schemaVersion: diagramMap.get(ROOT_KEYS.schemaVersion),
+    title: diagramMap.get(ROOT_KEYS.title),
+    defaultStyles: decodeYValue(diagramMap.get(ROOT_KEYS.defaultStyles)),
+    pages: readOrderedCollection<Page>(
+      diagramMap,
+      ROOT_KEYS.pages,
+      ROOT_KEYS.pageOrder,
+      readPage,
+    ),
+    scratchpad: readOrderedCollection<ScratchpadItem>(
+      diagramMap,
+      ROOT_KEYS.scratchpad,
+      ROOT_KEYS.scratchpadOrder,
+      (_id, value) => decodeYValue(value) as ScratchpadItem,
+    ),
+  };
+}
+
 export function migrateLogicFlowDiagramMap(
   diagramMap: LogicFlowDiagramMap,
   origin: unknown = "logicflow-v2-migration",
 ): boolean {
-  if (hasV2Pages(diagramMap)) return false;
+  if (hasV2Pages(diagramMap)) {
+    if (migratedV2Maps.has(diagramMap)) return false;
+    const normalized = normalizeLogicFlowData(v2Snapshot(diagramMap));
+    migratedV2Maps.add(diagramMap);
+    if (!normalized.migrated) return false;
+    runTransaction(diagramMap, origin, () =>
+      writeDocument(diagramMap, normalized.document),
+    );
+    return true;
+  }
   if (!diagramMap.has(LEGACY_KEYS.nodes) && diagramMap.size !== 0) return false;
   const normalized = normalizeLogicFlowData(
     diagramMap.size === 0 ? null : legacySnapshot(diagramMap),
@@ -399,24 +430,7 @@ export function readLogicFlowDocument(
 ): LogicFlowDocument {
   if (!hasV2Pages(diagramMap))
     return normalizeLogicFlowData(legacySnapshot(diagramMap)).document;
-  const raw = {
-    schemaVersion: diagramMap.get(ROOT_KEYS.schemaVersion),
-    title: diagramMap.get(ROOT_KEYS.title),
-    defaultStyles: decodeYValue(diagramMap.get(ROOT_KEYS.defaultStyles)),
-    pages: readOrderedCollection<Page>(
-      diagramMap,
-      ROOT_KEYS.pages,
-      ROOT_KEYS.pageOrder,
-      readPage,
-    ),
-    scratchpad: readOrderedCollection<ScratchpadItem>(
-      diagramMap,
-      ROOT_KEYS.scratchpad,
-      ROOT_KEYS.scratchpadOrder,
-      (_id, value) => decodeYValue(value) as ScratchpadItem,
-    ),
-  };
-  return normalizeLogicFlowData(raw).document;
+  return normalizeLogicFlowData(v2Snapshot(diagramMap)).document;
 }
 
 export function seedLogicFlowDocument(

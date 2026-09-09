@@ -1,5 +1,6 @@
 import LogicFlow from "@logicflow/core";
 import { BpmnElement, PoolElements, Snapshot } from "@logicflow/extension";
+import { physicalContainerIds } from "../composites";
 import { registerCustomShapes } from "../shapes";
 import type { LogicFlowGraphData, Page } from "../model/types";
 
@@ -18,7 +19,9 @@ function visibleGraph(page: Page, selectedIds?: string[]): LogicFlowGraphData {
       .filter((layer) => layer.visible)
       .flatMap((layer) => layer.elementIds),
   );
-  const selected = selectedIds?.length ? new Set(selectedIds) : null;
+  const selected = selectedIds?.length
+    ? new Set(physicalContainerIds(page.graph, selectedIds, "export"))
+    : null;
   const nodeIds = new Set<string>();
   for (const node of page.graph.nodes) {
     if (visible.has(node.id) && (!selected || selected.has(node.id)))

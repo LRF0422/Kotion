@@ -1,4 +1,5 @@
 import { nanoid } from "nanoid";
+import { resizeContainerSubtree } from "../composites";
 import { updatePage } from "../model/pages";
 import type { LogicFlowDocument, LogicFlowPoint, Page } from "../model/types";
 import {
@@ -172,6 +173,16 @@ export function createDiagramCommandService(context: DiagramCommandContext) {
           context,
           patchElementProperties(current, selection(), patch),
         );
+    },
+    updateContainerBounds(
+      rootId: string,
+      patch: Parameters<typeof resizeContainerSubtree>[2],
+    ) {
+      const current = page();
+      if (!current) return;
+      const selected = createSelectionState(current, [rootId]);
+      if (!selected.editableIds.includes(rootId)) return;
+      commitPage(context, resizeContainerSubtree(current, rootId, patch));
     },
     reverseEdges() {
       const current = page();

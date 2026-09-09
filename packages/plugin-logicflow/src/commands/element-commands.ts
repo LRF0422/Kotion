@@ -3,6 +3,8 @@ import {
   insertDiagramFragment,
   extractDiagramFragment,
 } from "../model/fragments";
+import { buildContainerIndex, physicalContainerIds } from "../composites";
+import { removeContainerReferences } from "../composites/commands";
 import { normalizeLayers } from "../model/layers";
 import type {
   JsonValue,
@@ -47,21 +49,26 @@ export function patchElementProperties(
 }
 
 export function deleteElements(page: Page, ids: readonly string[]): Page {
-  const editable = new Set(createSelectionState(page, ids).editableIds);
+  const index = buildContainerIndex(page.graph);
+  const editableSelected = ids.filter((id) => !isElementLocked(page, id));
+  const deletedIds = new Set(index.expandRoots(editableSelected, "delete"));
   const deletedNodes = new Set(
     page.graph.nodes
-      .filter((node) => editable.has(node.id))
+      .filter((node) => deletedIds.has(node.id))
       .map((node) => node.id),
   );
-  const graph = {
-    nodes: page.graph.nodes.filter((node) => !editable.has(node.id)),
-    edges: page.graph.edges.filter(
-      (edge) =>
-        !editable.has(edge.id) &&
-        !deletedNodes.has(edge.sourceNodeId) &&
-        !deletedNodes.has(edge.targetNodeId),
-    ),
-  };
+  const graph = removeContainerReferences(
+    {
+      nodes: page.graph.nodes,
+      edges: page.graph.edges.filter(
+        (edge) =>
+          !deletedIds.has(edge.id) &&
+          !deletedNodes.has(edge.sourceNodeId) &&
+          !deletedNodes.has(edge.targetNodeId),
+      ),
+    },
+    deletedIds,
+  );
   return {
     ...page,
     graph,
@@ -80,7 +87,10 @@ export function duplicateElements(
   ids: readonly string[],
   offset: LogicFlowPoint = { x: 24, y: 24 },
 ): Page {
-  const state = createSelectionState(page, ids);
+  const state = createSelectionState(
+    page,
+    physicalContainerIds(page.graph, ids, "duplicate"),
+  );
   if (!state.nodeIds.length) return page;
   const fragment = extractDiagramFragment(page, state.nodeIds);
   return insertDiagramFragment(
@@ -96,12 +106,25 @@ export function setElementsLocked(
   ids: readonly string[],
   locked: boolean,
 ): Page {
-  const existing = ids.filter(
-    (id) =>
-      page.graph.nodes.some((node) => node.id === id) ||
-      page.graph.edges.some((edge) => edge.id === id),
+  const existing = new Set(
+    physicalContainerIds(page.graph, ids, "lock").filter((id) => {
+      const layer = page.layers.find((item) => item.elementIds.includes(id));
+      return !layer?.locked;
+    }),
   );
-  return patchElementProperties(page, existing, { locked });
+  const apply = <T extends LogicFlowNodeData | LogicFlowEdgeData>(
+    element: T,
+  ): T =>
+    existing.has(element.id)
+      ? { ...element, properties: { ...(element.properties ?? {}), locked } }
+      : element;
+  return {
+    ...page,
+    graph: {
+      nodes: page.graph.nodes.map(apply),
+      edges: page.graph.edges.map(apply),
+    },
+  };
 }
 
 export function rotateNodes(
@@ -109,7 +132,7 @@ export function rotateNodes(
   ids: readonly string[],
   angle: number | "reset",
 ): Page {
-  const selected = new Set(ids);
+  const selected = new Set(physicalContainerIds(page.graph, ids, "rotate"));
   return {
     ...page,
     graph: {
@@ -131,7 +154,7 @@ export function flipNodes(
   ids: readonly string[],
   axis: "horizontal" | "vertical",
 ): Page {
-  const selected = new Set(ids);
+  const selected = new Set(physicalContainerIds(page.graph, ids, "flip"));
   const key = axis === "horizontal" ? "flipX" : "flipY";
   return {
     ...page,
@@ -158,13 +181,19 @@ export function nudgeNodes(
   dx: number,
   dy: number,
 ): Page {
-  const selected = new Set(ids);
+  const selected = new Set(
+    physicalContainerIds(
+      page.graph,
+      ids.filter((id) => !isElementLocked(page, id)),
+      "translate",
+    ),
+  );
   return {
     ...page,
     graph: {
       ...page.graph,
       nodes: page.graph.nodes.map((node) =>
-        selected.has(node.id) && !isElementLocked(page, node.id)
+        selected.has(node.id)
           ? { ...node, x: node.x + dx, y: node.y + dy }
           : node,
       ),

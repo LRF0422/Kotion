@@ -1,3 +1,4 @@
+import { buildContainerIndex } from "../composites";
 import type { LogicFlowNodeData, Page } from "../model/types";
 
 export type AlignMode =
@@ -32,12 +33,24 @@ function updateNodes(
   updates: Map<string, { x?: number; y?: number }>,
 ): Page {
   if (!updates.size) return page;
+  const index = buildContainerIndex(page.graph);
+  const expanded = new Map(updates);
+  for (const [rootId, update] of updates) {
+    const root = index.nodeById.get(rootId);
+    if (!root || !index.instanceForRoot(rootId)) continue;
+    const dx = typeof update.x === "number" ? update.x - root.x : 0;
+    const dy = typeof update.y === "number" ? update.y - root.y : 0;
+    for (const child of index.descendants(rootId)) {
+      if (updates.has(child.id)) continue;
+      expanded.set(child.id, { x: child.x + dx, y: child.y + dy });
+    }
+  }
   return {
     ...page,
     graph: {
       ...page.graph,
       nodes: page.graph.nodes.map((node) => {
-        const update = updates.get(node.id);
+        const update = expanded.get(node.id);
         return update ? { ...node, ...update } : node;
       }),
     },

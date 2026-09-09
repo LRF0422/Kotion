@@ -1,3 +1,4 @@
+import { physicalContainerIds } from "../composites";
 import {
   addLayer,
   deleteLayer,
@@ -26,7 +27,7 @@ export function reorderElements(
   ids: readonly string[],
   action: ZOrderAction,
 ): Page {
-  const selected = new Set(ids);
+  const selected = new Set(physicalContainerIds(page.graph, ids, "z-order"));
   return {
     ...page,
     layers: page.layers.map((layer) => {
