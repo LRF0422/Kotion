@@ -2,10 +2,14 @@ import type { ExtensionWrapper } from "@kn/common";
 import { Workflow } from "@kn/icon";
 import React from "react";
 import { LogicFlowDiagram } from "./logicflow";
+import { logicFlowSkill } from "./skills/logicflow-skill";
+import { logicFlowTools } from "./tools/logicflow-tools";
 
 export const LogicFlowExtension: ExtensionWrapper = {
   name: "logicflow",
   extendsion: [LogicFlowDiagram],
+  tools: logicFlowTools,
+  skills: [logicFlowSkill],
   slashConfig: [
     {
       icon: <Workflow className="h-4 w-4" />,

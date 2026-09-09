@@ -12,6 +12,7 @@ import type {
   ScratchpadItem,
 } from "../model/types";
 
+export const LOGICFLOW_DIAGRAMS_MAP = "logicflow-diagrams";
 export const LOCAL_ORIGIN = Symbol("logicflow-local-origin");
 
 const migratedV2Maps = new WeakSet<Y.Map<unknown>>();

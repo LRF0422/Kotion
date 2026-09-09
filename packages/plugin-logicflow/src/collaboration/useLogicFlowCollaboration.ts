@@ -20,14 +20,13 @@ import {
 } from "./awareness";
 import {
   LOCAL_ORIGIN,
+  LOGICFLOW_DIAGRAMS_MAP,
   getOrCreateDiagramMap,
   readLogicFlowDocument,
   replaceLogicFlowDocument,
   seedLogicFlowDocument,
 } from "./yjs-codec";
 import type { SyncStatus } from "../workspace/StatusBar";
-
-const ROOT_MAP = "logicflow-diagrams";
 const CHECKPOINT_DELAY_MS = 500;
 const POINTER_INTERVAL_MS = 40;
 const PRESENCE_HEARTBEAT_MS = 10_000;
@@ -107,7 +106,7 @@ export function useLogicFlowCollaboration(props: NodeViewProps) {
   const ydoc = runtime?.document ?? localDocRef.current!;
   const awareness = runtime?.awareness as AwarenessLike | null | undefined;
   const diagramMap = useMemo(() => {
-    const diagrams = ydoc.getMap<Y.Map<unknown>>(ROOT_MAP);
+    const diagrams = ydoc.getMap<Y.Map<unknown>>(LOGICFLOW_DIAGRAMS_MAP);
     const map = getOrCreateDiagramMap(
       diagrams,
       diagramId,

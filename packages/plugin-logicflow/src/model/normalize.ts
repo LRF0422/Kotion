@@ -31,6 +31,14 @@ const BLOCKED_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 const ID_PATTERN = /^[A-Za-z0-9_.:@+-]{1,200}$/;
 const TYPE_PATTERN = /^[A-Za-z0-9_.:@/-]{1,120}$/;
 
+export function isValidLogicFlowId(value: unknown): value is string {
+  return typeof value === "string" && ID_PATTERN.test(value);
+}
+
+export function isValidLogicFlowType(value: unknown): value is string {
+  return typeof value === "string" && TYPE_PATTERN.test(value);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -87,10 +95,9 @@ function normalizeId(
   index: number,
   used: Set<string>,
 ): string {
-  const requested =
-    typeof value === "string" && ID_PATTERN.test(value)
-      ? value
-      : `${prefix}-${index + 1}`;
+  const requested = isValidLogicFlowId(value)
+    ? value
+    : `${prefix}-${index + 1}`;
   if (!used.has(requested)) {
     used.add(requested);
     return requested;
@@ -103,9 +110,7 @@ function normalizeId(
 }
 
 function normalizeType(value: unknown, fallback: string): string {
-  return typeof value === "string" && TYPE_PATTERN.test(value)
-    ? value
-    : fallback;
+  return isValidLogicFlowType(value) ? value : fallback;
 }
 
 function normalizeText(value: unknown): string | LogicFlowText | undefined {
