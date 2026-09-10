@@ -18,6 +18,7 @@ import {
 } from "../canvas/LogicFlowCanvas";
 import { CollaborationOverlay } from "../collaboration/CollaborationOverlay";
 import { useLogicFlowCollaboration } from "../collaboration/useLogicFlowCollaboration";
+import { registerLogicFlowEditingContext } from "../extension/logicflow-editing-context";
 import "../style/index.css";
 import { LogicFlowWorkspace } from "./LogicFlowWorkspace";
 
@@ -35,6 +36,65 @@ export function LogicFlowEditor(props: NodeViewProps) {
   const isFullscreen = isNativeFullscreen || isFallbackFullscreen;
   const readOnly = !props.editor.isEditable;
   const activePage = collaboration.activePage;
+  const activePageIdRef = useRef(collaboration.activePageId);
+  const selectionRef = useRef<string[]>([]);
+  const modeRef = useRef<"inline" | "workspace">("inline");
+  const getPosRef = useRef(props.getPos);
+  const diagramIdRef = useRef<unknown>(props.node.attrs.id);
+  const editingContextRef = useRef<ReturnType<
+    typeof registerLogicFlowEditingContext
+  > | null>(null);
+  activePageIdRef.current = collaboration.activePageId;
+  modeRef.current = isFullscreen ? "workspace" : "inline";
+  getPosRef.current = props.getPos;
+  diagramIdRef.current = props.node.attrs.id;
+
+  useEffect(() => {
+    const handle = registerLogicFlowEditingContext(props.editor, () => {
+      const currentDiagramId = diagramIdRef.current;
+      const diagramId =
+        typeof currentDiagramId === "string" && currentDiagramId.trim()
+          ? currentDiagramId
+          : null;
+      const position = getPosRef.current();
+      return {
+        diagramId,
+        position: typeof position === "number" ? position : null,
+        pageId: activePageIdRef.current,
+        selectedElementIds: selectionRef.current,
+        mode: modeRef.current,
+      };
+    });
+    editingContextRef.current = handle;
+    return () => {
+      handle.unregister();
+      if (editingContextRef.current === handle)
+        editingContextRef.current = null;
+    };
+  }, [props.editor]);
+
+  const activateEditingContext = useCallback(() => {
+    editingContextRef.current?.activate();
+  }, []);
+
+  const handleActivePageChange = useCallback(
+    (pageId: string) => {
+      activePageIdRef.current = pageId;
+      selectionRef.current = [];
+      activateEditingContext();
+      collaboration.setActivePageId(pageId);
+    },
+    [activateEditingContext, collaboration.setActivePageId],
+  );
+
+  const handleSelectionChange = useCallback(
+    (ids: string[]) => {
+      selectionRef.current = ids;
+      activateEditingContext();
+      collaboration.setSelection(ids);
+    },
+    [activateEditingContext, collaboration.setSelection],
+  );
 
   useEffect(() => {
     const handleFullscreenChange = () =>
@@ -95,6 +155,8 @@ export function LogicFlowEditor(props: NodeViewProps) {
       ref={rootRef}
       className={`logicflow-editor-root ${isFullscreen ? "" : "is-inline"} ${isFallbackFullscreen ? "is-fallback-fullscreen" : ""}`}
       data-theme={resolvedTheme}
+      onPointerDownCapture={activateEditingContext}
+      onFocusCapture={activateEditingContext}
     >
       {isFullscreen ? (
         <LogicFlowWorkspace
@@ -115,13 +177,13 @@ export function LogicFlowEditor(props: NodeViewProps) {
           onPageChange={collaboration.updateActivePage}
           onViewportChange={collaboration.updatePageViewport}
           onReplaceDocument={collaboration.replaceDocument}
-          onActivePageChange={collaboration.setActivePageId}
+          onActivePageChange={handleActivePageChange}
           onUndo={collaboration.undo}
           onRedo={collaboration.redo}
           onRetrySave={() => void collaboration.retryCheckpoint()}
           onFlush={() => void collaboration.flushCheckpoint()}
           onPointerMove={collaboration.setPointer}
-          onSelectionChange={collaboration.setSelection}
+          onSelectionChange={handleSelectionChange}
           onToggleFullscreen={() => void toggleFullscreen()}
           onClose={() => void toggleFullscreen()}
         />
@@ -140,7 +202,7 @@ export function LogicFlowEditor(props: NodeViewProps) {
               </span>
               <Select
                 value={collaboration.activePageId}
-                onValueChange={collaboration.setActivePageId}
+                onValueChange={handleActivePageChange}
               >
                 <SelectTrigger
                   className="logicflow-inline-page-trigger"
@@ -183,7 +245,7 @@ export function LogicFlowEditor(props: NodeViewProps) {
               dark={dark}
               showMiniMap={false}
               className={`h-full w-full ${activePage.settings.grid ? "" : "logicflow-grid-disabled"} ${activePage.settings.background === "solid" ? "logicflow-solid-background" : ""}`}
-              onSelectionChange={collaboration.setSelection}
+              onSelectionChange={handleSelectionChange}
               onPointerMove={collaboration.setPointer}
               onReady={handleInlineReady}
             />

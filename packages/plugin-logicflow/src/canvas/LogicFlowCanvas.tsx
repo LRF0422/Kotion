@@ -277,6 +277,83 @@ function updateElementAttributes(
   const attributes = { ...next };
   if (
     node &&
+    (next.type === "circle" ||
+      next.type === "ellipse" ||
+      next.type === "diamond")
+  ) {
+    const properties =
+      next.properties &&
+      typeof next.properties === "object" &&
+      !Array.isArray(next.properties)
+        ? { ...(next.properties as Record<string, unknown>) }
+        : {};
+    const width =
+      typeof next.width === "number"
+        ? next.width
+        : typeof properties.width === "number"
+          ? properties.width
+          : undefined;
+    const height =
+      typeof next.height === "number"
+        ? next.height
+        : typeof properties.height === "number"
+          ? properties.height
+          : undefined;
+
+    delete attributes.width;
+    delete attributes.height;
+
+    if (next.type === "circle") {
+      const explicitRadius =
+        typeof properties.r === "number"
+          ? properties.r
+          : typeof next.r === "number"
+            ? next.r
+            : undefined;
+      const radius =
+        explicitRadius ??
+        (width !== undefined || height !== undefined
+          ? Math.max(width ?? 0, height ?? 0) / 2
+          : undefined);
+      if (radius !== undefined) {
+        attributes.r = radius;
+        attributes.properties = {
+          ...properties,
+          r: radius,
+          width: radius * 2,
+          height: radius * 2,
+        };
+      }
+    } else {
+      const rx =
+        typeof properties.rx === "number"
+          ? properties.rx
+          : typeof next.rx === "number"
+            ? next.rx
+            : width !== undefined
+              ? width / 2
+              : undefined;
+      const ry =
+        typeof properties.ry === "number"
+          ? properties.ry
+          : typeof next.ry === "number"
+            ? next.ry
+            : height !== undefined
+              ? height / 2
+              : undefined;
+      if (rx !== undefined) attributes.rx = rx;
+      if (ry !== undefined) attributes.ry = ry;
+      if (rx !== undefined || ry !== undefined) {
+        attributes.properties = {
+          ...properties,
+          ...(rx !== undefined ? { rx, width: rx * 2 } : {}),
+          ...(ry !== undefined ? { ry, height: ry * 2 } : {}),
+        };
+      }
+    }
+  }
+  if (
+    node &&
     typeof next.x === "number" &&
     typeof next.y === "number" &&
     (previous.x !== next.x || previous.y !== next.y)

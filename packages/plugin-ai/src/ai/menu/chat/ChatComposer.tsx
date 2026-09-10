@@ -36,7 +36,7 @@ const ModeToggle: React.FC<ModeToggleProps> = ({ mode, onModeChange, disabled })
         { id: 'agent', label: t('ai.chat.modeAgent', { defaultValue: 'Agent' }), icon: <Bot className="h-3 w-3" />, hint: t('ai.chat.modeAgentHint', { defaultValue: 'Agent 模式 — 可编辑文档' }) },
     ]
     return (
-        <div className="inline-flex shrink-0 items-center p-0.5 rounded-md bg-muted/70 text-[10px] font-medium">
+        <div className="inline-flex shrink-0 items-center gap-0.5 text-xs font-medium lg:text-[11px]">
             {modes.map((m) => {
                 const active = mode === m.id
                 return (
@@ -47,10 +47,10 @@ const ModeToggle: React.FC<ModeToggleProps> = ({ mode, onModeChange, disabled })
                         onClick={() => onModeChange(m.id)}
                         title={m.hint}
                         className={
-                            'flex items-center gap-1 px-1.5 h-5 rounded-sm transition-colors disabled:opacity-50 ' +
+                            'flex h-11 items-center gap-1.5 rounded-lg px-2.5 transition-colors disabled:opacity-50 lg:h-7 lg:gap-1 lg:rounded-md lg:px-2 ' +
                             (active
-                                ? 'bg-background text-foreground shadow-sm'
-                                : 'text-muted-foreground hover:text-foreground')
+                                ? 'bg-muted text-foreground'
+                                : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground')
                         }
                     >
                         {m.icon}
@@ -154,7 +154,7 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
     return (
         <form
             onSubmit={handleFormSubmit}
-            className="relative rounded-xl border border-border/60 bg-background focus-within:border-ring/50 focus-within:ring-2 focus-within:ring-ring/20 transition-all"
+            className="relative rounded-xl border border-border/60 bg-background transition-colors focus-within:border-ring/50 focus-within:ring-1 focus-within:ring-ring/15"
         >
             <PageMentionPicker
                 targetPage={targetPage}
@@ -182,14 +182,14 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
                 }
                 disabled={isLoading}
                 rows={1}
-                className="min-h-[44px] max-h-[120px] overflow-y-auto resize-none rounded-xl bg-transparent border-0 px-3 pt-2.5 pb-1 text-[13px] leading-relaxed shadow-none focus-visible:ring-0 placeholder:text-muted-foreground/50"
+                className="min-h-[48px] max-h-[120px] resize-none overflow-y-auto rounded-xl border-0 bg-transparent px-3 pb-1 pt-2.5 text-sm leading-relaxed shadow-none placeholder:text-muted-foreground/45 focus-visible:ring-0 lg:min-h-[38px] lg:pt-2 lg:text-[13px]"
             />
             {/* Toolbar. Secondary controls stay icon-only (agent picker when on
                 the default agent, change-tracking toggle) and sampling params are
                 folded into the model menu, so the row fits one line even in the
                 narrow side dock. `flex-wrap` remains as a safety net; `ml-auto`
                 keeps send right-aligned on whichever line it lands on. */}
-            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 px-2 pb-1.5 pt-0.5">
+            <div className="flex flex-wrap items-center gap-1 px-2 pb-1.5 pt-0.5">
                 <ModeToggle mode={mode} onModeChange={onModeChange} disabled={isLoading} />
                 <ModelSelector
                     model={model}
@@ -197,6 +197,7 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
                     modelParams={modelParams}
                     onModelParamsChange={onModelParamsChange}
                     disabled={isLoading}
+                    triggerClassName="hover:bg-muted/60"
                 />
                 {onToggleTracking && (
                     <button
@@ -212,7 +213,7 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
                             t('ai.chat.trackingHint', { defaultValue: '跟踪文档变动，可在编辑器中审阅并合并' })
                         }
                         className={
-                            'flex shrink-0 items-center h-5 px-1.5 rounded-md transition-colors disabled:opacity-50 ' +
+                            'flex h-11 w-11 shrink-0 items-center justify-center rounded-lg transition-colors disabled:opacity-50 lg:h-7 lg:w-7 lg:rounded-md ' +
                             (tracking
                                 ? 'bg-primary/10 text-primary hover:bg-primary/20'
                                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/70')
@@ -230,11 +231,11 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
                                         type="button"
                                         size="sm"
                                         variant="destructive"
-                                        className="h-7 px-2.5 gap-1 rounded-lg"
+                                        className="h-11 gap-1.5 rounded-xl px-3 lg:h-8 lg:rounded-lg lg:px-2.5"
                                         onClick={onStop}
                                     >
-                                        <Square className="h-3 w-3" />
-                                        <span className="text-[10px] font-medium">
+                                        <Square className="h-3.5 w-3.5" />
+                                        <span className="text-xs font-medium lg:text-[10px]">
                                             {t('ai.stop', { defaultValue: '停止' })}
                                         </span>
                                     </Button>
@@ -250,7 +251,7 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
                             size="sm"
                             aria-label={t('ai.chat.send', { defaultValue: '发送消息' })}
                             disabled={!isValid}
-                            className="h-7 w-7 p-0 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                            className="h-11 w-11 rounded-xl bg-primary p-0 text-primary-foreground transition-all hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40 lg:h-8 lg:w-8 lg:rounded-lg"
                         >
                             <Send className="h-3.5 w-3.5" />
                         </Button>

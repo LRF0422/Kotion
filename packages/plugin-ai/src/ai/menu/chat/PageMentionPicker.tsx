@@ -136,8 +136,8 @@ export const PageMentionPicker: React.FC<PageMentionPickerProps> = ({
                     onClick={status === 'error' ? onRetry : undefined}
                     title={statusText}
                     className={cn(
-                        'inline-flex items-center gap-1 h-5 pl-1.5 pr-0.5 rounded-md max-w-full',
-                        'bg-muted/70 text-[10px] font-medium text-foreground/80',
+                        'inline-flex h-5 max-w-full items-center gap-1 rounded-md pl-1 pr-0.5',
+                        'text-[10px] font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground',
                         status === 'error' ? 'cursor-pointer hover:bg-muted' : 'cursor-default',
                     )}
                 >
@@ -182,8 +182,8 @@ export const PageMentionPicker: React.FC<PageMentionPickerProps> = ({
                             disabled={disabled}
                             title={t('ai.chat.targetPageDefaultHint', { defaultValue: '默认作用于当前页面，点击可指定其他页面' })}
                             className={cn(
-                                'inline-flex items-center gap-1 h-5 px-1.5 rounded-md max-w-full',
-                                'bg-muted/70 text-[10px] font-medium text-foreground/80 hover:bg-muted disabled:opacity-50 transition-colors',
+                                'inline-flex h-5 max-w-full items-center gap-1 rounded-md px-1',
+                                'text-[10px] font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground disabled:opacity-50',
                             )}
                         >
                             <AtSign className="h-3 w-3 shrink-0 text-muted-foreground" />

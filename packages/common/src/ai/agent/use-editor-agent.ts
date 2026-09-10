@@ -43,11 +43,24 @@ export type EditorAgentPhase =
     | 'idle' | 'creating' | 'streaming' | 'waiting-tools'
     | 'waiting-approval' | 'suspended' | 'completed' | 'failed' | 'cancelled'
 
+export interface AgentStepRecord {
+    /** Monotonic event identity; unlike the display step number, never resets. */
+    id: string
+    step: number
+    startedSeq: number
+    reasoning: string
+    text: string
+}
+
 export interface ToolCallRecord {
     callId: string
     tool: string
     args: Record<string, any>
     status: 'running' | 'success' | 'error'
+    step?: number
+    stepId?: string
+    startedSeq?: number
+    completedSeq?: number
     result?: unknown
     error?: string
     durationMs?: number
@@ -66,10 +79,13 @@ export interface EditorAgentState {
     phase: EditorAgentPhase
     runId: string | null
     lastSeq: number
-    /** Accumulated assistant text (rebuilt from assistantText on attach). */
+    /** Accumulated assistant text (rebuilt from durable events on attach). */
     text: string
     reasoning: string
     step: number
+    activeStepId: string | null
+    answerStepId: string | null
+    steps: AgentStepRecord[]
     toolCalls: ToolCallRecord[]
     subRuns: SubRunRecord[]
     plan: { callId: string; text: string } | null
@@ -90,6 +106,9 @@ const initialState: EditorAgentState = {
     text: '',
     reasoning: '',
     step: 0,
+    activeStepId: null,
+    answerStepId: null,
+    steps: [],
     toolCalls: [],
     subRuns: [],
     plan: null,
@@ -192,22 +211,93 @@ function reducer(state: EditorAgentState, action: Action): EditorAgentState {
     }
 }
 
+function appendToCurrentStep(
+    steps: AgentStepRecord[],
+    activeStepId: string | null,
+    step: number,
+    seq: number,
+    field: 'reasoning' | 'text',
+    content: string,
+): { steps: AgentStepRecord[]; stepId: string } {
+    const stepId = activeStepId ?? `step-${seq}`
+    const lastIndex = steps.length - 1
+    const index = lastIndex >= 0 && steps[lastIndex].id === stepId
+        ? lastIndex
+        : steps.findIndex(record => record.id === stepId)
+    if (index === -1) {
+        return {
+            stepId,
+            steps: [
+                ...steps,
+                {
+                    id: stepId,
+                    step: step > 0 ? step : 1,
+                    startedSeq: seq,
+                    reasoning: field === 'reasoning' ? content : '',
+                    text: field === 'text' ? content : '',
+                },
+            ],
+        }
+    }
+    const updated = steps.slice()
+    const record = updated[index]
+    updated[index] = { ...record, [field]: record[field] + content }
+    return { stepId, steps: updated }
+}
+
+function resolveAnswerStepId(state: EditorAgentState): string | null {
+    if (state.answerStepId) return state.answerStepId
+    return [...state.steps].reverse().find(step => step.text.trim())?.id ?? null
+}
+
 function applyEvent(state: EditorAgentState, event: AgentEvent): EditorAgentState {
     const next = { ...state, lastSeq: Math.max(state.lastSeq, event.seq) }
     switch (event.type) {
         case 'run.created':
             return { ...next, runId: event.runId, phase: 'streaming' }
-        case 'step.started':
-            return { ...next, step: event.step, phase: 'streaming', suspendReason: null }
-        case 'text.delta':
-            return { ...next, text: next.text + event.content }
-        case 'reasoning.delta':
-            return { ...next, reasoning: next.reasoning + event.content }
+        case 'step.started': {
+            const stepId = `step-${event.seq}`
+            const exists = next.steps.some(record => record.id === stepId)
+            return {
+                ...next,
+                step: event.step,
+                activeStepId: stepId,
+                steps: exists
+                    ? next.steps
+                    : [...next.steps, { id: stepId, step: event.step, startedSeq: event.seq, reasoning: '', text: '' }],
+                phase: 'streaming',
+                suspendReason: null,
+            }
+        }
+        case 'text.delta': {
+            const appended = appendToCurrentStep(
+                next.steps, next.activeStepId, next.step, event.seq, 'text', event.content
+            )
+            return {
+                ...next,
+                text: next.text + event.content,
+                activeStepId: appended.stepId,
+                answerStepId: appended.stepId,
+                steps: appended.steps,
+            }
+        }
+        case 'reasoning.delta': {
+            const appended = appendToCurrentStep(
+                next.steps, next.activeStepId, next.step, event.seq, 'reasoning', event.content
+            )
+            return {
+                ...next,
+                reasoning: next.reasoning + event.content,
+                activeStepId: appended.stepId,
+                steps: appended.steps,
+            }
+        }
         case 'tool.requested': {
             const existing = next.toolCalls.find(call => call.callId === event.callId)
             if (existing) return next
             return {
                 ...next,
+                answerStepId: next.answerStepId === next.activeStepId ? null : next.answerStepId,
                 toolCalls: [
                     ...next.toolCalls,
                     {
@@ -215,27 +305,49 @@ function applyEvent(state: EditorAgentState, event: AgentEvent): EditorAgentStat
                         tool: event.tool,
                         args: parseToolArgs(event.args),
                         status: 'running',
+                        step: next.step || undefined,
+                        stepId: next.activeStepId ?? undefined,
+                        startedSeq: event.seq,
                     },
                 ],
             }
         }
-        case 'tool.completed':
+        case 'tool.completed': {
+            const existing = next.toolCalls.find(call => call.callId === event.callId)
+            const completed: ToolCallRecord = existing
+                ? {
+                    ...existing,
+                    status: event.ok ? 'success' : 'error',
+                    completedSeq: event.seq,
+                    result: event.result,
+                    error: event.error,
+                    durationMs: event.durationMs,
+                }
+                : {
+                    callId: event.callId,
+                    tool: event.tool,
+                    args: {},
+                    status: event.ok ? 'success' : 'error',
+                    step: next.step || undefined,
+                    stepId: next.activeStepId ?? undefined,
+                    startedSeq: event.seq,
+                    completedSeq: event.seq,
+                    result: event.result,
+                    error: event.error,
+                    durationMs: event.durationMs,
+                }
             return {
                 ...next,
                 error: null,
+                answerStepId: existing
+                    ? next.answerStepId
+                    : (next.answerStepId === next.activeStepId ? null : next.answerStepId),
                 pendingToolIds: next.pendingToolIds.filter(id => id !== event.callId),
-                toolCalls: next.toolCalls.map(call =>
-                    call.callId === event.callId
-                        ? {
-                            ...call,
-                            status: event.ok ? 'success' : 'error',
-                            result: event.result,
-                            error: event.error,
-                            durationMs: event.durationMs,
-                        }
-                        : call
-                ),
+                toolCalls: existing
+                    ? next.toolCalls.map(call => call.callId === event.callId ? completed : call)
+                    : [...next.toolCalls, completed],
             }
+        }
         case 'sub.spawned':
             return {
                 ...next,
@@ -282,13 +394,19 @@ function applyEvent(state: EditorAgentState, event: AgentEvent): EditorAgentStat
             return {
                 ...next,
                 phase: 'completed',
+                answerStepId: resolveAnswerStepId(next),
                 finishReason: event.finishReason ?? 'stop',
                 usage: event.usage ?? next.usage,
             }
         case 'run.failed':
-            return { ...next, phase: 'failed', error: event.error ?? event.code ?? 'unknown error' }
+            return {
+                ...next,
+                phase: 'failed',
+                answerStepId: resolveAnswerStepId(next),
+                error: event.error ?? event.code ?? 'unknown error',
+            }
         case 'run.cancelled':
-            return { ...next, phase: 'cancelled' }
+            return { ...next, phase: 'cancelled', answerStepId: resolveAnswerStepId(next) }
         default:
             return next
     }
@@ -848,32 +966,16 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
                 if (view.status === 'COMPLETED' || view.status === 'FAILED' || view.status === 'CANCELLED') {
                     lock.release(acquiredClaim)
                     acquiredClaim = null
+                    const generation = ++generationRef.current
+                    attachReplayThroughRef.current = view.lastSeq
                     dispatch({
                         type: 'run-created',
                         runId: view.runId,
-                        lastSeq: view.lastSeq,
-                        text: view.assistantText ?? '',
+                        lastSeq: 0,
+                        text: '',
                         phase: 'streaming',
                     })
-                    if (view.status === 'COMPLETED') {
-                        dispatch({
-                            type: 'event',
-                            event: {
-                                seq: view.lastSeq,
-                                type: 'run.completed',
-                                finishReason: view.finishReason,
-                                usage: {
-                                    promptTokens: view.promptTokens,
-                                    completionTokens: view.completionTokens,
-                                    cachedPromptTokens: view.cachedPromptTokens,
-                                },
-                            },
-                        })
-                    } else if (view.status === 'FAILED') {
-                        dispatch({ type: 'event', event: { seq: view.lastSeq, type: 'run.failed', code: view.errorCode, error: view.errorMessage } })
-                    } else {
-                        dispatch({ type: 'event', event: { seq: view.lastSeq, type: 'run.cancelled' } })
-                    }
+                    startStream(view.runId, 0, generation)
                     attachRetryAttemptRef.current = 0
                     return true
                 }
@@ -887,40 +989,11 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
                 dispatch({
                     type: 'run-created',
                     runId: view.runId,
-                    lastSeq: view.lastSeq,
-                    text: view.assistantText ?? '',
+                    lastSeq: 0,
+                    text: '',
                     phase: 'streaming',
                 })
-                if (view.status === 'WAITING_TOOLS' && view.pendingTools.length > 0) {
-                    dispatch({
-                        type: 'restore-pending',
-                        records: view.pendingTools.map(pending => ({
-                            callId: pending.callId,
-                            tool: pending.tool,
-                            args: parseToolArgs(pending.argsJson),
-                            status: 'running',
-                        })),
-                    })
-                } else if (view.status === 'SUSPENDED'
-                    && view.suspendReason === 'plan_approval'
-                    && view.pendingPlanCallId
-                    && view.pendingPlan) {
-                    dispatch({
-                        type: 'event',
-                        event: {
-                            seq: view.lastSeq,
-                            type: 'plan.proposed',
-                            callId: view.pendingPlanCallId,
-                            plan: view.pendingPlan,
-                        },
-                    })
-                } else if (view.status === 'SUSPENDED' && view.suspendReason === 'budget') {
-                    dispatch({
-                        type: 'event',
-                        event: { seq: view.lastSeq, type: 'run.suspended', reason: 'budget' },
-                    })
-                }
-                startStream(view.runId, view.lastSeq, generation)
+                startStream(view.runId, 0, generation)
                 return true
             } catch (error: any) {
                 if (acquiredClaim) lock.release(acquiredClaim)

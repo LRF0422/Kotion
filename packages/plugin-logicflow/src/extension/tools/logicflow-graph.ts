@@ -56,8 +56,8 @@ export type LogicFlowGraphEdit =
       op: "addNode";
       id: string;
       type?: string;
-      x: number;
-      y: number;
+      x?: number;
+      y?: number;
       text?: string;
       properties?: Record<string, unknown>;
     }
@@ -310,6 +310,66 @@ function mergeProperties(
   return sanitizeProperties({ ...(current ?? {}), ...patch });
 }
 
+function positiveNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? value
+    : undefined;
+}
+
+function nodeDimensions(
+  type: string,
+  node: Record<string, unknown> = {},
+): { width: number; height: number } {
+  const definition = getShapeDefinition(type);
+  const properties = isRecord(node.properties) ? node.properties : {};
+  const radius = positiveNumber(properties.r) ?? positiveNumber(node.r);
+  const rx = positiveNumber(properties.rx) ?? positiveNumber(node.rx);
+  const ry = positiveNumber(properties.ry) ?? positiveNumber(node.ry);
+  return {
+    width:
+      positiveNumber(node.width) ??
+      positiveNumber(properties.width) ??
+      (radius !== undefined ? radius * 2 : undefined) ??
+      (rx !== undefined ? rx * 2 : undefined) ??
+      definition?.width ??
+      120,
+    height:
+      positiveNumber(node.height) ??
+      positiveNumber(properties.height) ??
+      (radius !== undefined ? radius * 2 : undefined) ??
+      (ry !== undefined ? ry * 2 : undefined) ??
+      definition?.height ??
+      60,
+  };
+}
+
+function resolveAddedNodePosition(
+  page: Page,
+  type: string,
+  x: number | undefined,
+  y: number | undefined,
+  properties: Record<string, unknown> | undefined,
+): { x: number; y: number } {
+  if (x !== undefined && y !== undefined) return { x, y };
+  const size = nodeDimensions(type, { properties });
+  if (!page.graph.nodes.length) {
+    return { x: x ?? 160, y: y ?? 120 };
+  }
+  const bounds = page.graph.nodes.map((node) => {
+    const dimensions = nodeDimensions(node.type, node);
+    return {
+      left: node.x - dimensions.width / 2,
+      bottom: node.y + dimensions.height / 2,
+    };
+  });
+  const left = Math.min(...bounds.map((item) => item.left));
+  const bottom = Math.max(...bounds.map((item) => item.bottom));
+  return {
+    x: x ?? left + size.width / 2,
+    y: y ?? bottom + size.height / 2 + 80,
+  };
+}
+
 function resolveSemanticEdges(
   nodes: SemanticLogicFlowNode[],
   edges: SemanticLogicFlowEdge[],
@@ -444,8 +504,15 @@ export function applyLogicFlowGraphEdits(
           throw new Error(`节点数量不能超过 ${LOGICFLOW_LIMITS.maxNodes}`);
         const type = edit.type ?? "rect";
         validateDirectLogicFlowShape(type);
-        validateCoordinate(edit.x, "x");
-        validateCoordinate(edit.y, "y");
+        const position = resolveAddedNodePosition(
+          page,
+          type,
+          edit.x,
+          edit.y,
+          edit.properties,
+        );
+        validateCoordinate(position.x, "x");
+        validateCoordinate(position.y, "y");
         validateText(edit.text, "节点");
         const definition = getShapeDefinition(type)!;
         const properties = sanitizeProperties({
@@ -455,8 +522,8 @@ export function applyLogicFlowGraphEdits(
         const node: LogicFlowNodeData = {
           id: edit.id,
           type,
-          x: edit.x,
-          y: edit.y,
+          x: position.x,
+          y: position.y,
           ...(edit.text !== undefined ? { text: edit.text } : {}),
           ...(properties && Object.keys(properties).length
             ? { properties }

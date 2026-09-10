@@ -15,6 +15,7 @@ export { EditorToolExecutor } from './tool-executor'
 export type { EditorToolExecutorOptions, ToolExecutionResult } from './tool-executor'
 export { useEditorAgent } from './use-editor-agent'
 export type {
+    AgentStepRecord,
     EditorAgentApi,
     EditorAgentPhase,
     EditorAgentState,

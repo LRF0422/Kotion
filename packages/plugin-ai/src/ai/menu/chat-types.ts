@@ -1,11 +1,15 @@
-import type { SubRunRecord, RunUsage } from '@kn/common'
+import type { AgentStepRecord, SubRunRecord, RunUsage } from '@kn/common'
 
 // Types
 export interface Message {
     id: string
     content: string
-    /** Reasoning/thinking content from reasoning models (e.g. deepseek-reasoner) */
+    /** Reasoning/thinking content from reasoning models (e.g. deepseek-reasoner). */
     reasoningContent?: string
+    /** Step-scoped activity used to rebuild the reasoning/tool timeline. */
+    activitySteps?: AgentStepRecord[]
+    /** Canonical step selected by AgentCore as the user-facing answer. */
+    answerStepId?: string
     sender: "user" | "ai"
     timestamp: number
     steps?: ExecutionStep[]
@@ -15,6 +19,8 @@ export interface Message {
     usage?: RunUsage
     stopped?: boolean
     error?: boolean
+    errorType?: ChatError['type']
+    errorMessage?: string
 }
 
 export interface ExecutionStep {
@@ -27,6 +33,9 @@ export interface ExecutionStep {
     error?: string
     status: 'running' | 'success' | 'error'
     timestamp: number
+    step?: number
+    stepId?: string
+    sequence?: number
     duration?: number
 }
 
@@ -53,6 +62,28 @@ export const AVATAR_FALLBACKS = {
 
 // Empty state is handled by the greeting UI component instead of a synthetic message
 export const INITIAL_MESSAGES: Message[] = []
+
+const SENSITIVE_TOOL_KEY = /(api[-_]?key|authorization|cookie|password|secret|token)/i
+
+/** Redact credentials before tool records cross into localStorage-backed chat history. */
+export function sanitizeToolPayload(value: unknown, key = ''): unknown {
+    if (SENSITIVE_TOOL_KEY.test(key)) return '••••••'
+    if (typeof value === 'string') {
+        return value
+            .replace(/(bearer\s+)[a-z0-9._~+\/-]+/gi, '$1••••••')
+            .replace(/((?:api[-_]?key|password|secret|token)\s*[:=]\s*)[^\s,;]+/gi, '$1••••••')
+    }
+    if (Array.isArray(value)) return value.map(item => sanitizeToolPayload(item))
+    if (value && typeof value === 'object') {
+        return Object.fromEntries(
+            Object.entries(value as Record<string, unknown>).map(([entryKey, entryValue]) => [
+                entryKey,
+                sanitizeToolPayload(entryValue, entryKey),
+            ]),
+        )
+    }
+    return value
+}
 
 export function classifyError(err: any): ChatError {
     const message = err?.message || ''

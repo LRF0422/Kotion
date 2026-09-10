@@ -12,7 +12,9 @@ import {
   listLogicFlowDiagramRefs,
   readLogicFlowDiagramAtTarget,
   readLogicFlowDiagramRef,
+  resolveCurrentLogicFlowEditingContext,
   resolveLogicFlowDiagramRef,
+  resolveLogicFlowPageContext,
   updateLogicFlowDiagramAtTarget,
   type LogicFlowDiagramTarget,
 } from "./logicflow-document-access";
@@ -49,12 +51,12 @@ const propertiesSchema = z
 const targetFields = {
   diagramId: z
     .string()
-    .describe("listLogicFlowDiagrams 返回的稳定流程图 ID（推荐）")
+    .describe("listLogicFlowDiagrams 返回的稳定流程图 ID；省略时使用当前流程图")
     .optional(),
   position: z
     .number()
     .int()
-    .describe("兼容用 ProseMirror 位置；优先使用 diagramId")
+    .describe("兼容用 ProseMirror 位置；优先使用 diagramId 或当前流程图")
     .optional(),
 };
 
@@ -107,8 +109,8 @@ const editSchema = z.discriminatedUnion("op", [
     op: z.literal("addNode"),
     id: z.string(),
     type: z.string().optional(),
-    x: z.number(),
-    y: z.number(),
+    x: z.number().describe("节点横坐标；省略时自动放置").optional(),
+    y: z.number().describe("节点纵坐标；省略时自动放置").optional(),
     text: z.string().optional(),
     properties: propertiesSchema,
   }),
@@ -142,6 +144,24 @@ const editSchema = z.discriminatedUnion("op", [
   }),
   z.object({ op: z.literal("deleteEdge"), id: z.string() }),
 ]);
+
+const getDiagramInputSchema = z.object({
+  ...targetFields,
+  pageId: z
+    .string()
+    .describe("要读取的页面 ID；省略时使用当前活动页面")
+    .optional(),
+});
+
+const applyEditsInputSchema = z.object({
+  ...targetFields,
+  pageId: z.string().describe("目标页面 ID；省略时使用当前活动页面").optional(),
+  edits: z
+    .array(editSchema)
+    .min(1)
+    .max(200)
+    .describe("按顺序执行的节点和连线编辑；后续编辑可引用本批次新增元素"),
+});
 
 function createDiagramId(editor: Editor): string {
   const used = new Set<string>();
@@ -190,12 +210,14 @@ function resolveInsertError(
 
 function pageSummary(
   document: ReturnType<typeof readLogicFlowDiagramRef>["document"],
+  activePageId?: string,
 ) {
   return document.pages.map((page) => ({
     id: page.id,
     name: page.name,
     nodeCount: page.graph.nodes.length,
     edgeCount: page.graph.edges.length,
+    isActive: page.id === activePageId,
   }));
 }
 
@@ -283,9 +305,14 @@ export const logicFlowTools = [
     inputSchema: z.object({}),
     readOnly: true,
     execute: (editor: Editor) => async () => {
+      const current = resolveCurrentLogicFlowEditingContext(editor);
       const diagrams = listLogicFlowDiagramRefs(editor).map((ref) => {
         const { document } = readLogicFlowDiagramRef(editor, ref);
-        const pages = pageSummary(document);
+        const isCurrent = current?.ref.position === ref.position;
+        const pages = pageSummary(
+          document,
+          isCurrent ? current.snapshot.pageId : undefined,
+        );
         return {
           index: ref.index,
           diagramId: ref.diagramId,
@@ -295,33 +322,54 @@ export const logicFlowTools = [
           pageCount: document.pages.length,
           nodeCount: pages.reduce((total, page) => total + page.nodeCount, 0),
           edgeCount: pages.reduce((total, page) => total + page.edgeCount, 0),
+          isCurrent,
           pages,
         };
       });
-      return { success: true, count: diagrams.length, diagrams };
+      let currentContext = null;
+      if (current) {
+        const diagram = readLogicFlowDiagramRef(editor, current.ref);
+        const pageContext = resolveLogicFlowPageContext(editor, diagram);
+        currentContext = {
+          diagramId: current.ref.diagramId,
+          position: current.ref.position,
+          pageId: pageContext.page.id,
+          selectedElementIds: pageContext.selectedElementIds,
+          mode: pageContext.mode,
+        };
+      }
+      return {
+        success: true,
+        count: diagrams.length,
+        currentContext,
+        diagrams,
+      };
     },
   },
   {
     name: "getLogicFlowDiagram",
     description:
-      "读取指定 LogicFlow 流程图的页面摘要以及一个页面的完整节点、连线、分组、图层和设置。优先用 diagramId 定位。",
-    inputSchema: z.object({
-      ...targetFields,
-      pageId: z.string().describe("要读取的页面 ID；默认第一页").optional(),
-    }),
+      "读取 LogicFlow 流程图的页面摘要以及一个页面的完整节点、连线、分组、图层和设置。省略目标时读取当前正在编辑的流程图和活动页面。",
+    inputSchema: getDiagramInputSchema,
     readOnly: true,
     execute: (editor: Editor) => async (params: GetDiagramParams) => {
-      const { ref, document } = readLogicFlowDiagramAtTarget(editor, params);
-      const pageId = params.pageId ?? document.pages[0]?.id;
-      const page = document.pages.find((candidate) => candidate.id === pageId);
-      if (!page) throw new Error(`未找到 pageId 为 "${pageId}" 的页面`);
+      const input = getDiagramInputSchema.parse(params);
+      const diagram = readLogicFlowDiagramAtTarget(editor, input);
+      const context = resolveLogicFlowPageContext(
+        editor,
+        diagram,
+        input.pageId,
+      );
       return {
         success: true,
-        diagramId: ref.diagramId,
-        position: ref.position,
-        title: document.title,
-        pages: pageSummary(document),
-        page,
+        diagramId: diagram.ref.diagramId,
+        position: diagram.ref.position,
+        title: diagram.document.title,
+        isCurrent: context.isCurrent,
+        activePageId: context.activePageId,
+        selectedElementIds: context.selectedElementIds,
+        pages: pageSummary(diagram.document, context.activePageId),
+        page: context.page,
       };
     },
   },
@@ -377,24 +425,17 @@ export const logicFlowTools = [
   },
   {
     name: "applyLogicFlowEdits",
-    description: `对指定 LogicFlow 页面原子地批量新增、更新或删除节点和连线。先用 listLogicFlowDiagrams 和 getLogicFlowDiagram 获取真实 ID；不要猜测 diagramId、pageId 或元素 ID。`,
-    inputSchema: z.object({
-      ...targetFields,
-      pageId: z.string().describe("目标页面 ID；默认第一页").optional(),
-      edits: z
-        .array(editSchema)
-        .min(1)
-        .max(200)
-        .describe("按顺序执行的节点和连线编辑；后续编辑可引用本批次新增元素"),
-    }),
+    description: `对当前或指定 LogicFlow 页面原子地批量新增、更新或删除节点和连线。先用 listLogicFlowDiagrams 和 getLogicFlowDiagram 获取真实 ID；不要猜测 diagramId、pageId 或元素 ID。`,
+    inputSchema: applyEditsInputSchema,
     execute: (editor: Editor) => async (params: ApplyEditsParams) => {
-      const current = readLogicFlowDiagramAtTarget(editor, params);
-      const pageId = params.pageId ?? current.document.pages[0]?.id;
-      if (!pageId) throw new Error("LogicFlow 文档没有可编辑页面");
+      const input = applyEditsInputSchema.parse(params);
+      const current = readLogicFlowDiagramAtTarget(editor, input);
+      const pageId = resolveLogicFlowPageContext(editor, current, input.pageId)
+        .page.id;
       const result = applyLogicFlowGraphEdits(
         current.document,
         pageId,
-        params.edits,
+        input.edits,
       );
       const updated = updateLogicFlowDiagramAtTarget(
         editor,

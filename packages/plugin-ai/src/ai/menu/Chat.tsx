@@ -1,6 +1,5 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from "react"
 import { Sparkles } from "@kn/icon"
-import { Streamdown, ChatBubble, ChatBubbleMessage } from "@kn/ui"
 import {
     ExpandableChat,
     ExpandableChatHeader,
@@ -29,21 +28,20 @@ import type {
     OffscreenEditorHandle,
     UserChoiceRequest,
     AgentChatMessage,
+    AgentStepRecord,
     ToolCallRecord,
 } from "@kn/common"
 
-import { SubAgentTree } from "@kn/ui"
 import { PlanApprovalCard } from "@kn/ui"
 import {
     ExecutionStep, PendingUserChoice, ChatError,
-    classifyError,
+    classifyError, sanitizeToolPayload,
 } from "./chat-types"
 import type { BlockReference, Message } from "./chat-types"
 import { getHistoryForAI } from "./chat-persistence"
 import type { ChatTargetPage } from "./chat-sessions"
 import { useChatSessions } from "./useChatSessions"
 import { MessageBubble } from "./MessageBubble"
-import { LiveSteps } from "./ExecutionStepsDisplay"
 import { ErrorDisplay } from "./ErrorDisplay"
 import { ChatHeader } from "./chat/ChatHeader"
 import { ChatEmptyState } from "./chat/ChatEmptyState"
@@ -87,13 +85,29 @@ const toolCallsToSteps = (calls: ToolCallRecord[]): ExecutionStep[] =>
         id: tc.callId,
         callId: tc.callId,
         toolName: tc.tool,
-        args: tc.args,
-        result: tc.result,
-        error: tc.error,
+        args: sanitizeToolPayload(tc.args),
+        result: sanitizeToolPayload(tc.result),
+        error: sanitizeToolPayload(tc.error) as string | undefined,
         status: tc.status,
         timestamp: 0,
+        step: tc.step,
+        stepId: tc.stepId,
+        sequence: tc.startedSeq ?? tc.completedSeq,
         duration: tc.durationMs,
     }))
+
+/** Read the canonical user-facing answer chosen by the shared Agent state. */
+const selectFinalAnswer = (
+    activitySteps: AgentStepRecord[],
+    answerStepId: string | null | undefined,
+    fallback: string,
+): string => {
+    if (activitySteps.length === 0) return fallback
+    const answer = answerStepId
+        ? activitySteps.find(step => step.id === answerStepId)
+        : undefined
+    return answer?.text ?? ''
+}
 
 // ─── Chat ──────────────────────────────────────────────────────────
 
@@ -375,6 +389,17 @@ export const ExpandableChatDemo: React.FC<{
         agent.state.phase === 'suspended'
 
     const currentSteps = useMemo(() => toolCallsToSteps(agent.state.toolCalls), [agent.state.toolCalls])
+    const liveMessage = useMemo<Message>(() => ({
+        id: 'active-agent-turn',
+        content: selectFinalAnswer(agent.state.steps, agent.state.answerStepId, agent.state.text),
+        reasoningContent: agent.state.reasoning || undefined,
+        activitySteps: agent.state.steps,
+        answerStepId: agent.state.answerStepId ?? undefined,
+        sender: 'ai',
+        timestamp: Date.now(),
+        steps: currentSteps,
+        subRuns: agent.state.subRuns,
+    }), [agent.state.answerStepId, agent.state.reasoning, agent.state.steps, agent.state.subRuns, agent.state.text, currentSteps])
 
     useEffect(() => {
         event.emit(DOCK_PANEL_RUNNING, { id: 'agent', running: isActive })
@@ -405,22 +430,29 @@ export const ExpandableChatDemo: React.FC<{
                 return
             }
             const steps = toolCallsToSteps(agent.state.toolCalls)
-            const text = agent.state.text
-            const hasContent = text.trim().length > 0 || steps.length > 0 || agent.state.subRuns.length > 0
+            const content = selectFinalAnswer(agent.state.steps, agent.state.answerStepId, agent.state.text)
+            const classifiedError = phase === 'failed'
+                ? classifyError(new Error(agent.state.error ?? ''))
+                : undefined
+            const hasContent = Boolean(
+                content.trim() || steps.length > 0 || agent.state.steps.length > 0
+                || agent.state.subRuns.length > 0 || classifiedError
+            )
             if (hasContent) {
-                const content = phase === 'failed'
-                    ? (text.trim() ? text : '生成失败') + (agent.state.error ? '\n\n⚠️ ' + agent.state.error : '')
-                    : text
                 const snapshot: Message = {
                     id: generateMessageId(),
                     content,
                     reasoningContent: agent.state.reasoning || undefined,
+                    activitySteps: agent.state.steps.map(step => ({ ...step })),
+                    answerStepId: agent.state.answerStepId ?? undefined,
                     sender: 'ai',
                     timestamp: Date.now(),
                     steps,
                     subRuns: agent.state.subRuns.slice(),
                     usage: agent.state.usage ?? undefined,
                     error: phase === 'failed',
+                    errorType: classifiedError?.type,
+                    errorMessage: classifiedError?.message,
                 }
                 setMessages(prev => [...prev, snapshot])
             }
@@ -612,61 +644,12 @@ export const ExpandableChatDemo: React.FC<{
                         />
                     ))}
 
-                    {isActive && currentSteps.length > 0 && (
-                        <LiveSteps steps={currentSteps} />
-                    )}
-
-                    {isActive && agent.state.reasoning && (
-                        <ChatBubble variant="received">
-                            <ChatBubbleMessage className="border border-primary/10 bg-primary/[0.03] p-2.5 rounded-lg rounded-tl-sm">
-                                <details open className="group/reasoning">
-                                    <summary className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground cursor-pointer select-none">
-                                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                                            <Sparkles className="h-3 w-3" />
-                                        </span>
-                                        <span>{t('ai.chat.thinking', 'Thinking')}</span>
-                                        <span className="inline-flex items-end gap-0.5" aria-hidden="true">
-                                            {[0, 1, 2].map(index => (
-                                                <span
-                                                    key={index}
-                                                    className="h-1 w-1 rounded-full bg-primary animate-bounce motion-reduce:animate-none"
-                                                    style={{
-                                                        animationDelay: `${index * 140}ms`,
-                                                        animationDuration: '900ms',
-                                                    }}
-                                                />
-                                            ))}
-                                        </span>
-                                    </summary>
-                                    <div className="mt-2 max-h-32 overflow-y-auto border-l-2 border-primary/15 pl-2 text-[11px] leading-relaxed text-muted-foreground/80 whitespace-pre-wrap break-words">
-                                        {agent.state.reasoning}
-                                    </div>
-                                </details>
-                            </ChatBubbleMessage>
-                        </ChatBubble>
-                    )}
-
-                    {isActive && agent.state.text && (
-                        <ChatBubble variant="received">
-                            <ChatBubbleMessage className="bg-card border border-border/60 dark:bg-muted/40 dark:border-transparent p-2.5 text-[13px] leading-relaxed rounded-lg rounded-tl-sm">
-                                <Streamdown isAnimating>{agent.state.text}</Streamdown>
-                            </ChatBubbleMessage>
-                        </ChatBubble>
-                    )}
-
-                    {isActive && !agent.state.text && currentSteps.length === 0 && (
-                        <ChatBubble variant="received">
-                            <ChatBubbleMessage
-                                isLoading
-                                className="bg-card border border-border/60 dark:bg-muted/40 dark:border-transparent p-2.5 rounded-lg rounded-tl-sm"
-                            />
-                        </ChatBubble>
-                    )}
-
-                    {agent.state.subRuns.length > 0 && (
-                        <div className="mx-2 my-1.5">
-                            <SubAgentTree subRuns={agent.state.subRuns} />
-                        </div>
+                    {isActive && (
+                        <MessageBubble
+                            message={liveMessage}
+                            isStreaming
+                            onRevealReference={handleRevealReference}
+                        />
                     )}
 
                     {agent.state.phase === 'waiting-approval' && agent.state.plan && (
@@ -727,7 +710,7 @@ export const ExpandableChatDemo: React.FC<{
                 </ChatMessageList>
             </ExpandableChatBody>
 
-            <ExpandableChatFooter className="bg-background/80 backdrop-blur-sm p-2.5 border-t">
+            <ExpandableChatFooter className="border-t bg-background p-2">
                 <ChatComposer
                     ref={composerRef}
                     value={input}
@@ -751,6 +734,7 @@ export const ExpandableChatDemo: React.FC<{
                     tracking={tracking}
                     onToggleTracking={handleToggleTracking}
                 />
+                <div className="h-safe-bottom lg:hidden" aria-hidden />
             </ExpandableChatFooter>
 
             {editWindowPageId && (

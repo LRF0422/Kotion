@@ -12,8 +12,10 @@ export const logicFlowSkill = {
   systemPromptFragment: `Use LogicFlow tools when the user asks for a flowchart or an editable process diagram.
 - For a new diagram, prefer createLogicFlowFromGraph and provide semantic nodes and edges; do not invent pixel coordinates.
 - Use rect for ordinary steps, ellipse for start/end, and diamond for decisions. Keep labels concise and label decision branches when useful.
-- Before modifying an existing diagram, call listLogicFlowDiagrams, then getLogicFlowDiagram. Target diagrams, pages, nodes, and edges only by returned IDs; never guess IDs.
-- Combine related changes into one atomic applyLogicFlowEdits call.
+- Before modifying an existing diagram, call listLogicFlowDiagrams, then getLogicFlowDiagram. Prefer currentContext when the user refers to this/current diagram or the selected elements.
+- Target diagrams, pages, nodes, and edges only by returned IDs; never guess IDs or infer them from labels alone.
+- For ordinary addNode edits, omit x and y so the tool places nodes automatically. Supply coordinates only when the user requests a specific position or move.
+- Combine related node and edge additions, property updates, and deletions into one atomic applyLogicFlowEdits call. Deleting a node also deletes its attached edges.
 - Search shapes only when the basic flowchart shapes are insufficient.`,
   tags: ["logicflow", "flowchart", "workflow", "流程图", "plugin"],
 };

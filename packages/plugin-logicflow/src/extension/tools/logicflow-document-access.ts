@@ -4,6 +4,11 @@ import {
   readAuthoritativeLogicFlowDocument,
   replaceAuthoritativeLogicFlowDocument,
 } from "../../collaboration/diagram-store";
+import type { Page } from "../../model/types";
+import {
+  getCurrentLogicFlowEditingContext,
+  type LogicFlowEditingContextSnapshot,
+} from "../logicflow-editing-context";
 import { normalizeLogicFlowData } from "../../model/normalize";
 import { serializeLogicFlowDocument } from "../../model/serialize";
 import { stableStringify } from "../../model/stable-stringify";
@@ -25,6 +30,19 @@ export interface LogicFlowDiagramRef {
 export interface LogicFlowDiagramSnapshot {
   ref: LogicFlowDiagramRef;
   document: LogicFlowDocument;
+}
+
+export interface ResolvedLogicFlowEditingContext {
+  ref: LogicFlowDiagramRef;
+  snapshot: LogicFlowEditingContextSnapshot;
+}
+
+export interface LogicFlowPageContext {
+  page: Page;
+  activePageId: string;
+  selectedElementIds: string[];
+  mode: "inline" | "workspace" | null;
+  isCurrent: boolean;
 }
 
 function nodeDiagramId(node: ProseMirrorNode): string | null {
@@ -50,6 +68,18 @@ export function listLogicFlowDiagramRefs(
   return refs;
 }
 
+export function resolveCurrentLogicFlowEditingContext(
+  editor: Editor,
+): ResolvedLogicFlowEditingContext | null {
+  const snapshot = getCurrentLogicFlowEditingContext(editor);
+  if (!snapshot) return null;
+  const refs = listLogicFlowDiagramRefs(editor);
+  const ref = snapshot.diagramId
+    ? refs.find((candidate) => candidate.diagramId === snapshot.diagramId)
+    : refs.find((candidate) => candidate.position === snapshot.position);
+  return ref ? { ref, snapshot } : null;
+}
+
 export function resolveLogicFlowDiagramRef(
   editor: Editor,
   target: LogicFlowDiagramTarget = {},
@@ -59,9 +89,13 @@ export function resolveLogicFlowDiagramRef(
   const hasPosition = target.position !== undefined;
 
   if (!diagramId && !hasPosition) {
+    const current = resolveCurrentLogicFlowEditingContext(editor);
+    if (current) return current.ref;
     if (refs.length === 1) return refs[0];
     if (!refs.length) throw new Error("当前文档中没有 LogicFlow 流程图");
-    throw new Error("当前文档中有多张 LogicFlow 流程图，请提供 diagramId");
+    throw new Error(
+      "当前文档中有多张 LogicFlow 流程图，请先激活目标流程图或提供 diagramId",
+    );
   }
 
   const byId = diagramId
@@ -107,6 +141,45 @@ export function readLogicFlowDiagramAtTarget(
     editor,
     resolveLogicFlowDiagramRef(editor, target),
   );
+}
+
+export function resolveLogicFlowPageContext(
+  editor: Editor,
+  diagram: LogicFlowDiagramSnapshot,
+  explicitPageId?: string,
+): LogicFlowPageContext {
+  const current = resolveCurrentLogicFlowEditingContext(editor);
+  const matchingCurrent =
+    current?.ref.position === diagram.ref.position ? current : null;
+  const isCurrent = Boolean(matchingCurrent);
+  const activePage =
+    matchingCurrent &&
+    diagram.document.pages.some(
+      (page) => page.id === matchingCurrent.snapshot.pageId,
+    )
+      ? matchingCurrent.snapshot.pageId
+      : undefined;
+  const pageId = explicitPageId ?? activePage ?? diagram.document.pages[0]?.id;
+  const page = diagram.document.pages.find(
+    (candidate) => candidate.id === pageId,
+  );
+  if (!page) throw new Error(`未找到 pageId 为 "${pageId}" 的页面`);
+
+  const selectedElementIds =
+    matchingCurrent?.snapshot.pageId === page.id
+      ? matchingCurrent.snapshot.selectedElementIds.filter(
+          (id) =>
+            page.graph.nodes.some((node) => node.id === id) ||
+            page.graph.edges.some((edge) => edge.id === id),
+        )
+      : [];
+  return {
+    page,
+    activePageId: activePage ?? page.id,
+    selectedElementIds,
+    mode: isCurrent ? (current?.snapshot.mode ?? null) : null,
+    isCurrent,
+  };
 }
 
 export function updateLogicFlowDiagramAtTarget(

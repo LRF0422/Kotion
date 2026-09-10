@@ -127,6 +127,40 @@ assert.deepEqual(
   new Set(["a", "b", "c", "edge-bc"]),
 );
 
+const automaticallyPlaced = applyLogicFlowGraphEdits(document, "page-1", [
+  { op: "addNode", id: "auto-1", text: "自动节点 1" },
+  { op: "addNode", id: "auto-2", type: "diamond", text: "自动节点 2" },
+  { op: "addNode", id: "auto-x", x: 900, text: "指定横坐标" },
+]);
+const autoNodes = automaticallyPlaced.document.pages[0].graph.nodes.filter(
+  (node) => node.id.startsWith("auto-"),
+);
+assert.equal(autoNodes.length, 3);
+assert.ok(Number.isFinite(autoNodes[0].x));
+assert.ok(autoNodes[1].y > autoNodes[0].y);
+assert.equal(autoNodes[2].x, 900);
+assert.ok(autoNodes[2].y > autoNodes[1].y);
+
+const propertyEdited = applyLogicFlowGraphEdits(document, "page-1", [
+  { op: "updateNode", id: "b", properties: { fill: "#2563eb" } },
+  {
+    op: "updateEdge",
+    id: "edge-ab",
+    properties: { stroke: "#16a34a", strokeWidth: 2 },
+  },
+]);
+assert.equal(
+  propertyEdited.document.pages[0].graph.nodes.find((node) => node.id === "b")
+    ?.properties?.fill,
+  "#2563eb",
+);
+assert.equal(
+  propertyEdited.document.pages[0].graph.edges.find(
+    (edge) => edge.id === "edge-ab",
+  )?.properties?.stroke,
+  "#16a34a",
+);
+
 const beforeFailure = stableStringify(document);
 assert.throws(
   () =>
