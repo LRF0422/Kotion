@@ -1,6 +1,6 @@
 # Database migrations
 
-`script/migration` is the authoritative location for ordered Knowledge Cloud database migrations. Existing `V1` through `V13` files are immutable history; new changes must use the next version and must not edit an applied migration.
+`script/migration` is the authoritative location for ordered Knowledge Cloud database migrations. Existing `V1` through `V20` files are immutable history; new changes must use the next version and must not edit an applied migration.
 
 Flyway is available only through the root Maven profile `db-migrate`. It has no lifecycle execution, is not inherited by service modules, does not run when a Spring Boot service starts, disables `clean`, disables out-of-order execution, and never baselines automatically.
 

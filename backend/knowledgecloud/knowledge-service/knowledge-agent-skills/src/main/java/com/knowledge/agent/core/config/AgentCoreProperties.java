@@ -38,6 +38,10 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *     enabled: true
  *     top-k: 5
  *     hot-ttl-days: 7
+ *   saved-skills:
+ *     enabled: true
+ *     top-k: 3
+ *     min-score: 0.30
  *   quota:
  *     enabled: true
  *     create-per-minute: 30
@@ -60,6 +64,7 @@ public class AgentCoreProperties {
     private Checkpoint checkpoint = new Checkpoint();
     private Event event = new Event();
     private Memory memory = new Memory();
+    private SavedSkills savedSkills = new SavedSkills();
     private Quota quota = new Quota();
     private Lease lease = new Lease();
     private Skill skill = new Skill();
@@ -147,6 +152,37 @@ public class AgentCoreProperties {
         private int topK = 5;
         /** Redis hot-tier memory TTL (days). */
         private long hotTtlDays = 7;
+    }
+
+    /** Conversation-derived personal skill settings. */
+    @Data
+    public static class SavedSkills {
+        /** Whether saved-skill creation and automatic retrieval are enabled. */
+        private boolean enabled = true;
+        /** Maximum saved skills injected into one root run. */
+        private int topK = 3;
+        /** Minimum deterministic relevance score (0-1). */
+        private double minScore = 0.30;
+        /** Maximum enabled rows scored for one run. */
+        private int candidateLimit = 100;
+        /** Maximum saved skills owned by one tenant/user pair. */
+        private int maxSkillsPerUser = 100;
+        /** Maximum canonical transcript characters sent to the compiler. */
+        private int maxTranscriptChars = 24000;
+        /** Maximum visible characters retained from one conversation message. */
+        private int maxMessageChars = 4000;
+        /** Maximum characters retained from one tool result. */
+        private int maxToolOutputChars = 1500;
+        /** Maximum characters in one generated skill prompt fragment. */
+        private int maxFragmentChars = 4000;
+        /** Maximum total saved-skill prompt characters injected into a run. */
+        private int maxPromptChars = 6000;
+        /** Maximum required and optional tool names stored in one skill. */
+        private int maxToolNamesPerSkill = 16;
+        /** Maximum compiler response tokens. */
+        private int compileMaxTokens = 1200;
+        /** Optional compiler model override; empty follows the source run model. */
+        private String compileModel = "";
     }
 
     /** Tenant quota settings. */

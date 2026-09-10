@@ -91,7 +91,7 @@ public class ToolGateway {
     /** Execute a backend tool, measuring duration and converting errors. */
     public ToolOutcome executeBackend(String callId, String toolName, String argsJson,
                                       ToolContext context) {
-        BackendTool tool = backendTools.get(toolName);
+        BackendTool tool = backendTool(toolName);
         if (tool == null) {
             return ToolOutcome.failure(callId, toolName, "Backend tool not found: " + toolName, 0);
         }

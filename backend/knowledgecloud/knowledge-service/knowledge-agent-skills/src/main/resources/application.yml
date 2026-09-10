@@ -38,6 +38,20 @@ agent:
     enabled: true
     top-k: 5
     hot-ttl-days: 7
+  saved-skills:
+    enabled: true
+    top-k: 3
+    min-score: 0.30
+    candidate-limit: 100
+    max-skills-per-user: 100
+    max-transcript-chars: 24000
+    max-message-chars: 4000
+    max-tool-output-chars: 1500
+    max-fragment-chars: 4000
+    max-prompt-chars: 6000
+    max-tool-names-per-skill: 16
+    compile-max-tokens: 1200
+    compile-model:
   quota:
     enabled: true
     create-per-minute: 30

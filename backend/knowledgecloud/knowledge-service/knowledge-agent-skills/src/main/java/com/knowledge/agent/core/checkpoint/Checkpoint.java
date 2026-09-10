@@ -2,6 +2,7 @@ package com.knowledge.agent.core.checkpoint;
 
 import com.knowledge.agent.api.dto.ChatMessage;
 import com.knowledge.agent.core.run.PendingToolCall;
+import com.knowledge.agent.core.savedskill.SavedSkillProvenance;
 import lombok.Data;
 
 import java.util.ArrayList;
@@ -60,6 +61,9 @@ public class Checkpoint {
 
     /** Full conversation including system prefix and injected memory. */
     private List<ChatMessage> messages = new ArrayList<>();
+
+    /** Frozen provenance for personal skills retrieved when this run was created. */
+    private List<SavedSkillProvenance> savedSkillProvenance = new ArrayList<>();
 
     /** Frontend tool calls currently awaited (WAITING_TOOLS; subRunId marks children). */
     private List<PendingToolCall> pendingToolCalls = new ArrayList<>();

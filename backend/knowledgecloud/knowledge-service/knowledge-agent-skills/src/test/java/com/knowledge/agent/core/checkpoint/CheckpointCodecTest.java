@@ -3,6 +3,7 @@ package com.knowledge.agent.core.checkpoint;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.knowledge.agent.api.dto.ChatMessage;
 import com.knowledge.agent.core.run.PendingToolCall;
+import com.knowledge.agent.core.savedskill.SavedSkillProvenance;
 import com.knowledge.agent.core.tool.ToolKind;
 import com.knowledge.agent.core.tool.ToolSpec;
 import org.junit.jupiter.api.Test;
@@ -52,6 +53,15 @@ class CheckpointCodecTest {
         checkpoint.getPendingToolCalls().add(PendingToolCall.of("c1", "editor.insert", "{\"a\":1}", 1000L));
         checkpoint.getPendingToolCalls().add(PendingToolCall.ofSub("c2", "editor.read", "{}", 1000L, "sub-1", "dcall-1"));
         checkpoint.getPendingPlanCalls().add(PendingToolCall.of("c3", "present_plan", "{\"plan\":\"x\"}", 2000L));
+        SavedSkillProvenance provenance = new SavedSkillProvenance();
+        provenance.setSkillId("skill-1");
+        provenance.setName("Meeting notes");
+        provenance.setVersion(2);
+        provenance.setSourceFingerprint("fingerprint");
+        provenance.setScore(0.82);
+        provenance.setPromptChars(256);
+        provenance.getCompatibleToolNames().add("editor.read");
+        checkpoint.getSavedSkillProvenance().add(provenance);
 
         String json = codec.toJson(checkpoint);
         Checkpoint restored = codec.fromJson(json);
@@ -76,6 +86,11 @@ class CheckpointCodecTest {
         assertEquals("sub-1", restored.getPendingToolCalls().get(1).getSubRunId());
         assertEquals("dcall-1", restored.getPendingToolCalls().get(1).getDelegateCallId());
         assertEquals(1, restored.getPendingPlanCalls().size());
+        assertEquals(1, restored.getSavedSkillProvenance().size());
+        assertEquals("skill-1", restored.getSavedSkillProvenance().get(0).getSkillId());
+        assertEquals(0.82, restored.getSavedSkillProvenance().get(0).getScore(), 0.0001);
+        assertEquals("editor.read",
+                restored.getSavedSkillProvenance().get(0).getCompatibleToolNames().get(0));
     }
 
     @Test

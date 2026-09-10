@@ -23,6 +23,8 @@ import com.knowledge.agent.core.run.PendingToolCall;
 import com.knowledge.agent.core.run.RunStatus;
 import com.knowledge.agent.core.run.RunStore;
 import com.knowledge.agent.core.run.RunView;
+import com.knowledge.agent.core.savedskill.SavedSkillInjector;
+import com.knowledge.agent.core.savedskill.SavedSkillProvenance;
 import com.knowledge.agent.core.tool.ToolGateway;
 import com.knowledge.agent.core.tool.ToolSpec;
 import lombok.extern.slf4j.Slf4j;
@@ -61,6 +63,7 @@ public class DefaultRunSupervisor {
     private final ToolGateway toolGateway;
     private final ContextManager contextManager;
     private final MemoryInjector memoryInjector;
+    private final SavedSkillInjector savedSkillInjector;
     private final Delegator delegator;
     private final ThreadSummarizer threadSummarizer;
     private final ObjectMapper objectMapper;
@@ -82,6 +85,7 @@ public class DefaultRunSupervisor {
                                 ToolGateway toolGateway,
                                 ContextManager contextManager,
                                 MemoryInjector memoryInjector,
+                                SavedSkillInjector savedSkillInjector,
                                 Delegator delegator,
                                 ThreadSummarizer threadSummarizer,
                                 ObjectMapper objectMapper,
@@ -99,6 +103,7 @@ public class DefaultRunSupervisor {
         this.toolGateway = toolGateway;
         this.contextManager = contextManager;
         this.memoryInjector = memoryInjector;
+        this.savedSkillInjector = savedSkillInjector;
         this.delegator = delegator;
         this.threadSummarizer = threadSummarizer;
         this.objectMapper = objectMapper;
@@ -123,9 +128,10 @@ public class DefaultRunSupervisor {
         }
         quota.checkCreateAllowed(cmd.getTenantId());
         cancelActiveByConversation(cmd.getConversationId(), cmd.getUserId(), cmd.getTenantId());
-        // Inject long-term memory lines (page → space → user scopes) for the
-        // system prompt built by the loop.
+        // Inject long-term memory and relevant owner-scoped skills before the
+        // loop freezes the initial checkpoint. Retrieval failures fail open.
         cmd.setMemoryLines(memoryInjector.buildLines(cmd.getUserId(), cmd.getSpaceId(), cmd.getPageId()));
+        savedSkillInjector.inject(cmd);
 
         AgentRun run = AgentRun.create(UUID.randomUUID().toString(), cmd.getConversationId(),
                 cmd.getUserId(), cmd.getTenantId(), cmd.getModel(), cmd.getMode(), System.currentTimeMillis());
@@ -453,6 +459,11 @@ public class DefaultRunSupervisor {
         @Override
         public List<String> memoryLines() {
             return cmd.getMemoryLines();
+        }
+
+        @Override
+        public List<SavedSkillProvenance> savedSkillProvenance() {
+            return cmd.getSavedSkillProvenance();
         }
 
         @Override

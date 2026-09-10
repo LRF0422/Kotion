@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
+import com.knowledge.agent.core.skill.RemoteSkillRegistry;
+import com.knowledge.agent.core.skill.RemoteSkillTool;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
@@ -13,6 +15,11 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class ToolGatewayTest {
 
@@ -59,6 +66,23 @@ class ToolGatewayTest {
         assertTrue(maximum.isIntegralNumber(), "maximum must remain a JSON number");
         assertFalse(maximum.isTextual());
         assertEquals(MAX_SAFE_INTEGER, maximum.longValue());
+    }
+
+    @Test
+    void executesBackendToolResolvedFromRemoteRegistry() {
+        RemoteSkillRegistry registry = mock(RemoteSkillRegistry.class);
+        RemoteSkillTool remoteTool = mock(RemoteSkillTool.class);
+        ToolContext context = new ToolContext();
+        Map<String, Object> result = Collections.singletonMap("value", "ok");
+        when(registry.find("remote.echo")).thenReturn(remoteTool);
+        when(remoteTool.execute(anyMap(), same(context))).thenReturn(result);
+
+        ToolGateway gateway = new ToolGateway(Collections.emptyList(), new ObjectMapper(), registry);
+        ToolOutcome outcome = gateway.executeBackend("call-1", "remote.echo", "{\"text\":\"hi\"}", context);
+
+        assertTrue(outcome.isOk());
+        assertEquals(result, outcome.getResult());
+        verify(remoteTool).execute(anyMap(), same(context));
     }
 
     private ObjectMapper applicationObjectMapper() {

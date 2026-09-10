@@ -1,6 +1,7 @@
 package com.knowledge.agent.core.supervisor;
 
 import com.knowledge.agent.api.dto.ChatMessage;
+import com.knowledge.agent.core.savedskill.SavedSkillProvenance;
 import com.knowledge.agent.core.tool.ToolSpec;
 import lombok.Data;
 
@@ -39,6 +40,9 @@ public class CreateRunCommand {
 
     /** Long-term memory lines injected at run start (M2). */
     private List<String> memoryLines = new ArrayList<>();
+
+    /** Personal saved skills selected for this fresh run. */
+    private List<SavedSkillProvenance> savedSkillProvenance = new ArrayList<>();
 
     private Double temperature;
 

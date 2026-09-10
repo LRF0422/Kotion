@@ -19,6 +19,7 @@ import com.knowledge.agent.core.run.AgentRun;
 import com.knowledge.agent.core.run.PendingToolCall;
 import com.knowledge.agent.core.run.RunStatus;
 import com.knowledge.agent.core.run.RunStore;
+import com.knowledge.agent.core.savedskill.SavedSkillProvenance;
 import com.knowledge.agent.core.tool.BackendTool;
 import com.knowledge.agent.core.tool.ToolContext;
 import com.knowledge.agent.core.tool.ToolGateway;
@@ -75,6 +76,10 @@ public class AgentLoop implements Runnable {
         List<String> skillFragments();
 
         List<String> memoryLines();
+
+        default List<SavedSkillProvenance> savedSkillProvenance() {
+            return java.util.Collections.emptyList();
+        }
 
         String model();
 
@@ -296,6 +301,12 @@ public class AgentLoop implements Runnable {
                 }
 
                 if (result.getToolCalls().isEmpty()) {
+                    if (result.getText() != null && !result.getText().isEmpty()) {
+                        checkpoint.getMessages().add(ChatMessage.builder()
+                                .role("assistant")
+                                .content(result.getText())
+                                .build());
+                    }
                     complete(result.getFinishReason() != null ? result.getFinishReason() : "stop");
                     return;
                 }
@@ -417,6 +428,9 @@ public class AgentLoop implements Runnable {
         }
         if (runInput != null && runInput.clientTools() != null) {
             cp.setClientTools(new ArrayList<>(runInput.clientTools()));
+        }
+        if (runInput != null && runInput.savedSkillProvenance() != null) {
+            cp.setSavedSkillProvenance(new ArrayList<>(runInput.savedSkillProvenance()));
         }
         cp.setDeferredTools(new ArrayList<>(deferredToolSpecs.values()));
         if (runInput != null) {

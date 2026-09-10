@@ -105,6 +105,18 @@ loop(run):
 - 用户画像 = preference/fact 类长期记忆的聚合注入，不单独建表（削减概念）。
 - 会话结束：后台任务用 LLM 生成 1~2 句摘要 + 标题写入 `agent_thread`。
 
+### 4.1 会话沉淀为个人 Skill
+
+- 保存门禁：只有用户在当前可信 user 消息中明确要求“保存/提炼为 Skill”时，Agent 才能调用
+  `save_conversation_as_skill`；服务端再次校验显式意图、owner 和 root-run，不能由模型主动沉淀。
+- 安全编译：从 checkpoint 投影会话，排除 system/reasoning/JWT，限制并脱敏工具参数与结果；通过
+  provider-neutral `LlmGateway` 生成结构化 Skill，不持久化原始 transcript。
+- 持久化：`agent_saved_skill` 按 `(tenant_id,user_id)` 私有隔离，以规范化会话指纹保证崩溃恢复重放幂等。
+- 自动引用：根 run 创建时用最新 user 消息检索 enabled Skill，校验当前工具兼容性和 prompt 预算后，
+  复用现有 skill fragment + deferred tool 链路注入；命中 provenance 固化在 checkpoint，恢复时不重新检索。
+- 管理 API：`/api/agent/v1/saved-skills` 提供列表、详情、启停和删除，`POST /from-run/{runId}`
+  可对 owned completed root run 确定性提炼；远程服务技能注册仍使用 `/api/v1/skills`，两种 Skill 生命周期互不混用。
+
 ## 5. 子 agent（Delegator）
 
 - 工具：`delegate`，参数 `{ task, tools?(客户端工具子集), mode?, maxSteps?, timeoutSec? }`。

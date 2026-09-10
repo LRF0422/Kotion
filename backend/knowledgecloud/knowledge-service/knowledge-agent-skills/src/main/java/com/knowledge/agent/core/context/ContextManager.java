@@ -51,7 +51,9 @@ public class ContextManager {
             + "4. 长任务先规划：复杂任务先用工作记忆（scratchpad）记录计划与进度，分步执行。\n"
             + "5. 及时汇报：操作完成后用简洁的语言说明改了什么。\n"
             + "6. 记忆：值得长期记住的用户偏好与事实用 remember 工具保存；需要时用 recall_memory 检索。\n"
-            + "7. 委派：独立、可并行的子任务用 delegate 工具委派给子 agent。";
+            + "7. 委派：独立、可并行的子任务用 delegate 工具委派给子 agent。\n"
+            + "8. 个人 Skill：只有当用户在当前消息中明确要求把当前会话保存、提炼或创建为可复用 Skill 时，"
+            + "才调用 save_conversation_as_skill；不得因为你认为流程有用而主动保存。";
 
     /** Plan-mode restrictions appended to the system prompt. */
     public static final String PLAN_MODE_RULES =
