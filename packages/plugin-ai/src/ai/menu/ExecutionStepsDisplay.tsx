@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react'
 import { ChevronDown, Loader2, Sparkles } from '@kn/icon'
-import { Streamdown } from '@kn/ui'
+import { Streamdown, useAutoScroll } from '@kn/ui'
 import type { AgentStepRecord } from '@kn/common'
 import { useTranslation } from '@kn/common'
 import { ExecutionStep, formatToolName, sanitizeToolPayload } from './chat-types'
@@ -160,20 +160,32 @@ function ThinkingItem({
 }) {
     const { t } = useTranslation()
     const [open, setOpen] = useState(expanded)
+    const { scrollRef, scrollToBottom, disableAutoScroll } = useAutoScroll({
+        content: item.reasoning,
+    })
     return (
         <div className="min-w-0 space-y-2.5">
             {item.reasoning.trim() ? (
                 <details
                     className="group/thought"
                     open={open}
-                    onToggle={event => setOpen(event.currentTarget.open)}
+                    onToggle={event => {
+                        const nextOpen = event.currentTarget.open
+                        setOpen(nextOpen)
+                        if (nextOpen) requestAnimationFrame(() => scrollToBottom())
+                    }}
                 >
                     <summary className="flex min-h-8 cursor-pointer list-none items-center gap-2 text-xs text-muted-foreground transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
                         <Sparkles className="h-4 w-4 shrink-0" />
                         <span className="font-medium">{t('ai.chat.thought')}</span>
                         <ChevronDown className="h-3.5 w-3.5 transition-transform group-open/thought:rotate-180" />
                     </summary>
-                    <div className="mt-1 max-h-48 overflow-y-auto whitespace-pre-wrap break-words pr-1 text-xs leading-relaxed text-muted-foreground">
+                    <div
+                        ref={scrollRef}
+                        className="mt-1 max-h-48 overflow-y-auto whitespace-pre-wrap break-words pr-1 text-xs leading-relaxed text-muted-foreground"
+                        onWheel={disableAutoScroll}
+                        onTouchMove={disableAutoScroll}
+                    >
                         {item.reasoning.trim()}
                     </div>
                 </details>

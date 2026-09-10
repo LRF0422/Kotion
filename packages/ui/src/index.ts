@@ -11,6 +11,7 @@ export { useMediaQuery } from "./hooks/use-media-query"
 export { useVirtualKeyboard } from "./hooks/use-virtual-keyboard"
 export type { VirtualKeyboardState } from "./hooks/use-virtual-keyboard"
 export { useCopyToClipboard } from "./hooks/use-copy-to-clipboard"
+export { useAutoScroll } from "./hooks/use-auto-scroll"
 export * from "class-variance-authority"
 export {
     Bar, BarChart, CartesianGrid,
