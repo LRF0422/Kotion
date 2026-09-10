@@ -437,6 +437,8 @@ public class AgentLoop implements Runnable {
         }
         List<Future<ToolOutcome>> futures = new ArrayList<>();
         for (ToolCallRequest call : calls) {
+            emit(RunEvents.TOOL_REQUESTED,
+                    RunEvents.toolRequested(call.getId(), call.getName(), call.getArguments()));
             futures.add(toolExecutor.submit(() -> {
                 ToolContext context = buildToolContext();
                 return toolGateway.executeBackend(call.getId(), call.getName(), call.getArguments(), context);
