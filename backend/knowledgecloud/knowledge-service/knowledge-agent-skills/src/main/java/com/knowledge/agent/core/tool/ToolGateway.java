@@ -2,6 +2,7 @@ package com.knowledge.agent.core.tool;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectWriter;
 import com.knowledge.agent.core.skill.RemoteSkillRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -21,6 +22,9 @@ import java.util.Map;
 @Slf4j
 @Component
 public class ToolGateway {
+
+    /** Tool schemas must preserve JSON numeric types instead of applying API Long-as-string rules. */
+    private static final ObjectWriter TOOL_SCHEMA_WRITER = new ObjectMapper().writer();
 
     private final Map<String, BackendTool> backendTools = new LinkedHashMap<>();
     private final ObjectMapper objectMapper;
@@ -78,7 +82,7 @@ public class ToolGateway {
             return null;
         }
         try {
-            return objectMapper.writeValueAsString(tools);
+            return TOOL_SCHEMA_WRITER.writeValueAsString(tools);
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Failed to serialize tools JSON", e);
         }
