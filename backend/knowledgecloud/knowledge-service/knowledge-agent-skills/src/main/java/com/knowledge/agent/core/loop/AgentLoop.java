@@ -317,7 +317,7 @@ public class AgentLoop implements Runnable {
                     }
                     if ("delegate".equals(call.getName())) {
                         if (planGateBlocks(call.getName())) {
-                            checkpoint.getMessages().add(blockedMessage(call, "PLAN_MODE_BLOCKED"));
+                            rejectToolCall(call, "PLAN_MODE_BLOCKED");
                         } else {
                             delegateCalls.add(call);
                         }
@@ -326,21 +326,21 @@ public class AgentLoop implements Runnable {
                     BackendTool backendTool = toolGateway.backendTool(call.getName());
                     if (backendTool != null) {
                         if (planGateBlocks(call.getName())) {
-                            checkpoint.getMessages().add(blockedMessage(call, "PLAN_MODE_BLOCKED"));
+                            rejectToolCall(call, "PLAN_MODE_BLOCKED");
                         } else {
                             backendCalls.add(call);
                         }
                     } else if (clientToolSpecs.containsKey(call.getName())
                             || deferredToolSpecs.containsKey(call.getName())) {
                         if (planGateBlocksClient(call.getName())) {
-                            checkpoint.getMessages().add(blockedMessage(call, "PLAN_MODE_BLOCKED"));
+                            rejectToolCall(call, "PLAN_MODE_BLOCKED");
                         } else {
                             activateDeferred(call.getName());
                             frontendCalls.add(call);
                         }
                     } else {
-                        checkpoint.getMessages().add(blockedMessage(call,
-                                "TOOL_NOT_FOUND: 工具未注册，请检查工具名或改用可用工具"));
+                        rejectToolCall(call,
+                                "TOOL_NOT_FOUND: 工具未注册，请检查工具名或改用可用工具");
                     }
                 }
 
@@ -430,6 +430,14 @@ public class AgentLoop implements Runnable {
         // Fresh checkpoint is persisted by the first saveCheckpoint() call.
     }
 
+    private void rejectToolCall(ToolCallRequest call, String error) {
+        checkpoint.getMessages().add(blockedMessage(call, error));
+        emit(RunEvents.TOOL_REQUESTED,
+                RunEvents.toolRequested(call.getId(), call.getName(), call.getArguments()));
+        emit(RunEvents.TOOL_COMPLETED,
+                RunEvents.toolCompleted(call.getId(), call.getName(), false, null, error, 0));
+    }
+
     /** Executes backend tool calls in parallel, bounded by the executor. */
     private void executeBackend(List<ToolCallRequest> calls) throws InterruptedException {
         if (calls.isEmpty()) {
@@ -437,12 +445,16 @@ public class AgentLoop implements Runnable {
         }
         List<Future<ToolOutcome>> futures = new ArrayList<>();
         for (ToolCallRequest call : calls) {
-            emit(RunEvents.TOOL_REQUESTED,
-                    RunEvents.toolRequested(call.getId(), call.getName(), call.getArguments()));
             futures.add(toolExecutor.submit(() -> {
                 ToolContext context = buildToolContext();
                 return toolGateway.executeBackend(call.getId(), call.getName(), call.getArguments(), context);
             }));
+        }
+        // Start the whole parallel batch before paying the durable event-write cost.
+        // Completion events are emitted only after this loop, so lifecycle order is preserved.
+        for (ToolCallRequest call : calls) {
+            emit(RunEvents.TOOL_REQUESTED,
+                    RunEvents.toolRequested(call.getId(), call.getName(), call.getArguments()));
         }
         long deadline = System.currentTimeMillis() + properties.getTool().getTimeoutSeconds() * 1000L;
         for (int i = 0; i < calls.size(); i++) {
@@ -621,6 +633,8 @@ public class AgentLoop implements Runnable {
     /** Spawn child runs for delegate tool calls (failures become tool messages). */
     private void spawnDelegations(List<ToolCallRequest> delegateCalls) {
         for (ToolCallRequest call : delegateCalls) {
+            emit(RunEvents.TOOL_REQUESTED,
+                    RunEvents.toolRequested(call.getId(), call.getName(), call.getArguments()));
             try {
                 Delegation delegation = delegator.spawn(buildToolContext(), call);
                 activeDelegations.put(delegation.getCallId(), delegation);
