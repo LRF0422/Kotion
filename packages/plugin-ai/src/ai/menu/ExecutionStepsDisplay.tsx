@@ -194,16 +194,30 @@ function ThinkingItem({
 
 function ToolItem({ step }: { step: ExecutionStep }) {
     const { t } = useTranslation()
+    const [open, setOpen] = useState(false)
     const hasDetails = hasInspectableValue(step.args)
         || hasInspectableValue(step.result)
         || hasInspectableValue(step.error)
+    const toolNameClassName = step.status === 'error'
+        ? 'truncate font-medium text-destructive'
+        : 'truncate font-medium text-foreground/80'
 
     return (
-        <div className="min-w-0 py-1">
-            <div className="flex min-h-7 min-w-0 items-center gap-2 text-xs">
-                <span className={step.status === 'error' ? 'truncate font-medium text-destructive' : 'truncate font-medium text-foreground/80'}>
-                    {formatToolName(step.toolName)}
-                </span>
+        <div className="min-w-0">
+            <div className="flex min-h-6 min-w-0 items-center gap-1.5 text-xs">
+                {hasDetails ? (
+                    <button
+                        type="button"
+                        className="flex min-w-0 items-center gap-1 text-left transition-colors hover:text-foreground"
+                        aria-expanded={open}
+                        onClick={() => setOpen(value => !value)}
+                    >
+                        <span className={toolNameClassName}>{formatToolName(step.toolName)}</span>
+                        <ChevronDown className={`h-3 w-3 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+                    </button>
+                ) : (
+                    <span className={toolNameClassName}>{formatToolName(step.toolName)}</span>
+                )}
                 {step.status === 'running' && (
                     <span className="shrink-0 text-muted-foreground">{t('ai.chat.toolRunning')}</span>
                 )}
@@ -211,37 +225,26 @@ function ToolItem({ step }: { step: ExecutionStep }) {
                     <span className="shrink-0 text-destructive">{t('ai.chat.toolFailed')}</span>
                 )}
             </div>
-            {hasDetails && <ToolDetails step={step} />}
+            {hasDetails && open && <ToolDetails step={step} />}
         </div>
     )
 }
 
 function ToolDetails({ step }: { step: ExecutionStep }) {
     const { t } = useTranslation()
-    const [open, setOpen] = useState(false)
 
     return (
-        <details
-            className="mt-1 text-[11px] text-muted-foreground"
-            onToggle={event => setOpen(event.currentTarget.open)}
-        >
-            <summary className="cursor-pointer select-none hover:text-foreground">
-                {t('ai.chat.toolDetails')}
-            </summary>
-            {open && (
-                <div className="mt-2 space-y-2">
-                    {hasInspectableValue(step.args) && (
-                        <DetailBlock label={t('ai.chat.toolInput')} value={formatDetails(step.args)} />
-                    )}
-                    {hasInspectableValue(step.result) && (
-                        <DetailBlock label={t('ai.chat.toolOutput')} value={formatDetails(step.result)} />
-                    )}
-                    {hasInspectableValue(step.error) && (
-                        <DetailBlock label={t('ai.chat.toolError')} value={formatDetails(step.error)} destructive />
-                    )}
-                </div>
+        <div className="mt-1.5 space-y-2 text-[11px] text-muted-foreground">
+            {hasInspectableValue(step.args) && (
+                <DetailBlock label={t('ai.chat.toolInput')} value={formatDetails(step.args)} />
             )}
-        </details>
+            {hasInspectableValue(step.result) && (
+                <DetailBlock label={t('ai.chat.toolOutput')} value={formatDetails(step.result)} />
+            )}
+            {hasInspectableValue(step.error) && (
+                <DetailBlock label={t('ai.chat.toolError')} value={formatDetails(step.error)} destructive />
+            )}
+        </div>
     )
 }
 

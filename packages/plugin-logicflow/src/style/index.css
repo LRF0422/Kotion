@@ -47,7 +47,7 @@
   border: 1px solid hsl(var(--border));
   border-radius: 0.625rem;
   background: hsl(var(--background) / 0.88);
-  box-shadow: 0 6px 18px hsl(0 0% 0% / 0.24);
+  box-shadow: none;
   backdrop-filter: blur(12px);
 }
 
