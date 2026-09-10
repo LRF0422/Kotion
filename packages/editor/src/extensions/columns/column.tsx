@@ -34,6 +34,21 @@ export const isSafeBackground = (value: string): boolean => {
   return /^(#[0-9a-fA-F]{3,8}|(rgb|rgba|hsl|hsla)\([^"'`]+\)|var\(--[a-zA-Z0-9-_]+\)|[a-zA-Z]+)$/.test(v);
 };
 
+const LEGACY_BACKGROUND_PRESETS: Record<string, string> = {
+  'var(--muted)': 'hsl(var(--muted))',
+  '#eef2ff': 'var(--column-bg-blue)',
+  '#ecfdf5': 'var(--column-bg-green)',
+  '#fdf2f8': 'var(--column-bg-pink)',
+  '#fefce8': 'var(--column-bg-yellow)'
+};
+
+export const resolveColumnBackground = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim();
+  if (!isSafeBackground(normalized)) return undefined;
+  return LEGACY_BACKGROUND_PRESETS[normalized.toLowerCase()] ?? normalized;
+};
+
 export const PADDING_MAP: Record<string, string> = {
   none: '0',
   sm: '6px',
@@ -107,6 +122,14 @@ export const Column = Node.create({
         renderHTML: attributes => {
           if (!attributes.verticalAlign || attributes.verticalAlign === 'top') return {};
           return { "data-valign": attributes.verticalAlign };
+        }
+      },
+      border: {
+        default: true,
+        parseHTML: element => element.getAttribute("data-border") !== 'false',
+        renderHTML: attributes => {
+          if (attributes.border !== false) return {};
+          return { "data-border": "false" };
         }
       }
     };

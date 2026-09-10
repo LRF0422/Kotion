@@ -16,7 +16,7 @@ import lombok.NoArgsConstructor;
 public class StreamChunk {
 
     /**
-     * Chunk type: "content", "tool_call", "done".
+     * Chunk type: "content", "reasoning_content", "tool_call", "done", "usage".
      */
     private String type;
 
@@ -55,7 +55,7 @@ public class StreamChunk {
     private String reasoningContent;
 
     /**
-     * Token usage (for type="done").
+     * Token usage (for type="usage", or legacy type="done").
      */
     private LlmResponse.Usage usage;
 
@@ -90,10 +90,24 @@ public class StreamChunk {
                 .build();
     }
 
+    public static StreamChunk done(String finishReason) {
+        return StreamChunk.builder()
+                .type("done")
+                .finishReason(finishReason)
+                .build();
+    }
+
     public static StreamChunk done(String finishReason, LlmResponse.Usage usage) {
         return StreamChunk.builder()
                 .type("done")
                 .finishReason(finishReason)
+                .usage(usage)
+                .build();
+    }
+
+    public static StreamChunk usage(LlmResponse.Usage usage) {
+        return StreamChunk.builder()
+                .type("usage")
                 .usage(usage)
                 .build();
     }

@@ -28,5 +28,9 @@ public class ModelConfig {
 
     private String systemPrompt;
 
+    /**
+     * Raw provider request extensions. OpenAI-compatible stream options are sent
+     * only for streaming requests.
+     */
     private Map<String, Object> extra;
 }

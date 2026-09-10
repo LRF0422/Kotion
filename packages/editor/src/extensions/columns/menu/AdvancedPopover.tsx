@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
+import { useTranslation } from "@kn/common";
 import { Editor, findParentNode } from "@tiptap/core";
 import { Node as PMNode } from "@tiptap/pm/model";
 import { Settings2 } from "@kn/icon";
@@ -7,6 +8,7 @@ import {
   PopoverContent,
   PopoverTrigger,
   Slider,
+  Switch,
   ToggleGroup,
   ToggleGroupItem,
   Input,
@@ -15,7 +17,7 @@ import {
 } from "@kn/ui";
 
 import { Columns } from "../columns";
-import { Column, isSafeBackground } from "../column";
+import { Column, isSafeBackground, resolveColumnBackground } from "../column";
 
 /**
  * Advanced settings popover for the columns bubble menu.
@@ -48,16 +50,17 @@ const findActiveTargets = (editor: Editor): ActiveTargets | null => {
   };
 };
 
-const BG_PRESETS: Array<{ label: string; value: string | null }> = [
-  { label: '无', value: null },
-  { label: '柔灰', value: 'var(--muted)' },
-  { label: '浅蓝', value: '#eef2ff' },
-  { label: '浅绿', value: '#ecfdf5' },
-  { label: '浅粉', value: '#fdf2f8' },
-  { label: '浅黄', value: '#fefce8' }
+const BG_PRESETS: Array<{ labelKey: string; value: string | null }> = [
+  { labelKey: 'editor.columns.background.none', value: null },
+  { labelKey: 'editor.columns.background.gray', value: 'hsl(var(--muted))' },
+  { labelKey: 'editor.columns.background.blue', value: 'var(--column-bg-blue)' },
+  { labelKey: 'editor.columns.background.green', value: 'var(--column-bg-green)' },
+  { labelKey: 'editor.columns.background.pink', value: 'var(--column-bg-pink)' },
+  { labelKey: 'editor.columns.background.yellow', value: 'var(--column-bg-yellow)' }
 ];
 
 export const ColumnsAdvancedPopover: React.FC<{ editor: Editor }> = React.memo(({ editor }) => {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
 
   // Snapshot the current targets each render while the popover is open.
@@ -71,9 +74,11 @@ export const ColumnsAdvancedPopover: React.FC<{ editor: Editor }> = React.memo((
     : null;
   const padding: PaddingKey = (targets?.columnNode.attrs.padding as PaddingKey) || 'none';
   const verticalAlign: VAlignKey = (targets?.columnNode.attrs.verticalAlign as VAlignKey) || 'top';
+  const border = targets?.columnNode.attrs.border !== false;
   const background: string | null = typeof targets?.columnNode.attrs.background === 'string'
     ? (targets!.columnNode.attrs.background as string)
     : null;
+  const resolvedBackground = resolveColumnBackground(background);
 
   const [bgInput, setBgInput] = useState<string>(background ?? '');
   // Sync when the active column changes.
@@ -111,6 +116,10 @@ export const ColumnsAdvancedPopover: React.FC<{ editor: Editor }> = React.memo((
     updateColumnAttrs({ verticalAlign: value as VAlignKey });
   }, [updateColumnAttrs]);
 
+  const handleBorderChange = useCallback((checked: boolean) => {
+    updateColumnAttrs({ border: checked });
+  }, [updateColumnAttrs]);
+
   const applyBackground = useCallback((raw: string | null) => {
     if (raw === null || raw === '') {
       updateColumnAttrs({ background: null });
@@ -141,7 +150,8 @@ export const ColumnsAdvancedPopover: React.FC<{ editor: Editor }> = React.memo((
       <PopoverTrigger asChild>
         <button
           type="button"
-          title="Advanced"
+          title={t('editor.columns.advanced')}
+          aria-label={t('editor.columns.advanced')}
           className="p-1 hover:bg-muted rounded-md cursor-pointer flex items-center justify-center bg-transparent border-0"
         >
           <Settings2 className="h-4 w-4" />
@@ -151,7 +161,7 @@ export const ColumnsAdvancedPopover: React.FC<{ editor: Editor }> = React.memo((
         <div className="flex flex-col gap-3 text-xs">
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center justify-between">
-              <Label className="text-xs font-medium">列间距</Label>
+              <Label className="text-xs font-medium">{t('editor.columns.gap')}</Label>
               <span className="text-muted-foreground">{gap}px</span>
             </div>
             <Slider
@@ -166,7 +176,7 @@ export const ColumnsAdvancedPopover: React.FC<{ editor: Editor }> = React.memo((
           <Separator />
 
           <div className="flex flex-col gap-1.5">
-            <Label className="text-xs font-medium">当前列 · 内边距</Label>
+            <Label className="text-xs font-medium">{t('editor.columns.padding')}</Label>
             <ToggleGroup
               type="single"
               size="sm"
@@ -174,15 +184,15 @@ export const ColumnsAdvancedPopover: React.FC<{ editor: Editor }> = React.memo((
               onValueChange={handlePaddingChange}
               className="justify-start"
             >
-              <ToggleGroupItem value="none" className="px-2 text-xs">无</ToggleGroupItem>
-              <ToggleGroupItem value="sm" className="px-2 text-xs">紧</ToggleGroupItem>
-              <ToggleGroupItem value="md" className="px-2 text-xs">中</ToggleGroupItem>
-              <ToggleGroupItem value="lg" className="px-2 text-xs">松</ToggleGroupItem>
+              <ToggleGroupItem value="none" className="px-2 text-xs">{t('editor.columns.paddingOptions.none')}</ToggleGroupItem>
+              <ToggleGroupItem value="sm" className="px-2 text-xs">{t('editor.columns.paddingOptions.compact')}</ToggleGroupItem>
+              <ToggleGroupItem value="md" className="px-2 text-xs">{t('editor.columns.paddingOptions.medium')}</ToggleGroupItem>
+              <ToggleGroupItem value="lg" className="px-2 text-xs">{t('editor.columns.paddingOptions.loose')}</ToggleGroupItem>
             </ToggleGroup>
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label className="text-xs font-medium">当前列 · 垂直对齐</Label>
+            <Label className="text-xs font-medium">{t('editor.columns.verticalAlign')}</Label>
             <ToggleGroup
               type="single"
               size="sm"
@@ -190,22 +200,35 @@ export const ColumnsAdvancedPopover: React.FC<{ editor: Editor }> = React.memo((
               onValueChange={handleVAlignChange}
               className="justify-start"
             >
-              <ToggleGroupItem value="top" className="px-2 text-xs">顶部</ToggleGroupItem>
-              <ToggleGroupItem value="center" className="px-2 text-xs">居中</ToggleGroupItem>
-              <ToggleGroupItem value="bottom" className="px-2 text-xs">底部</ToggleGroupItem>
+              <ToggleGroupItem value="top" className="px-2 text-xs">{t('editor.columns.verticalAlignOptions.top')}</ToggleGroupItem>
+              <ToggleGroupItem value="center" className="px-2 text-xs">{t('editor.columns.verticalAlignOptions.center')}</ToggleGroupItem>
+              <ToggleGroupItem value="bottom" className="px-2 text-xs">{t('editor.columns.verticalAlignOptions.bottom')}</ToggleGroupItem>
             </ToggleGroup>
           </div>
 
+          <div className="flex items-center justify-between">
+            <Label htmlFor="column-border" className="text-xs font-medium">
+              {t('editor.columns.border')}
+            </Label>
+            <Switch
+              id="column-border"
+              checked={border}
+              onCheckedChange={handleBorderChange}
+              aria-label={t('editor.columns.border')}
+            />
+          </div>
+
           <div className="flex flex-col gap-1.5">
-            <Label className="text-xs font-medium">当前列 · 背景色</Label>
+            <Label className="text-xs font-medium">{t('editor.columns.backgroundLabel')}</Label>
             <div className="flex flex-wrap items-center gap-1.5">
               {BG_PRESETS.map((preset) => {
-                const isActive = (preset.value ?? '') === (background ?? '');
+                const isActive = (preset.value ?? '') === (resolvedBackground ?? '');
                 return (
                   <button
-                    key={preset.label}
+                    key={preset.labelKey}
                     type="button"
-                    title={preset.label}
+                    title={t(preset.labelKey)}
+                    aria-label={t(preset.labelKey)}
                     onClick={() => {
                       applyBackground(preset.value);
                       setBgInput(preset.value ?? '');
@@ -215,7 +238,7 @@ export const ColumnsAdvancedPopover: React.FC<{ editor: Editor }> = React.memo((
                       (isActive ? 'ring-2 ring-primary/60 border-primary/60 ' : 'border-border ')
                     }
                     style={{
-                      background: preset.value ?? 'repeating-linear-gradient(45deg,#fff,#fff 4px,#eee 4px,#eee 8px)'
+                      background: preset.value ?? 'repeating-linear-gradient(45deg,hsl(var(--background)),hsl(var(--background)) 4px,hsl(var(--muted)) 4px,hsl(var(--muted)) 8px)'
                     }}
                   />
                 );
@@ -231,25 +254,25 @@ export const ColumnsAdvancedPopover: React.FC<{ editor: Editor }> = React.memo((
                   handleBackgroundBlur();
                 }
               }}
-              placeholder="自定义颜色 (#hex / rgb() / var(--x))"
+              placeholder={t('editor.columns.customColorPlaceholder')}
               className="h-7 text-xs"
             />
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label className="text-xs font-medium">当前列 · 宽度 (%)</Label>
+            <Label className="text-xs font-medium">{t('editor.columns.width')}</Label>
             <Input
               type="number"
               min={5}
               max={95}
               step={1}
               value={width ?? ''}
-              placeholder="留空使用预设"
+              placeholder={t('editor.columns.widthPlaceholder')}
               onChange={(e) => handleWidthChange(e.target.value)}
               className="h-7 text-xs"
             />
             <span className="text-muted-foreground text-[10px]">
-              留空可回退到 layout 预设；设置后单列宽度独立生效。
+              {t('editor.columns.widthHint')}
             </span>
           </div>
         </div>

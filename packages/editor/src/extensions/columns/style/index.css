@@ -1,3 +1,17 @@
+:root {
+    --column-bg-blue: #eef2ff;
+    --column-bg-green: #ecfdf5;
+    --column-bg-pink: #fdf2f8;
+    --column-bg-yellow: #fefce8;
+}
+
+.dark {
+    --column-bg-blue: #1e2f46;
+    --column-bg-green: #1d3a2b;
+    --column-bg-pink: #3d2635;
+    --column-bg-yellow: #3d351f;
+}
+
 .columns {
     display: flex;
     width: 100%;

@@ -2,7 +2,7 @@ import { Trash2 } from "@kn/icon";
 import { cn } from "@kn/ui";
 import { NodeViewContent, NodeViewProps, NodeViewWrapper } from "@tiptap/react";
 import React, { useRef, useCallback, useMemo, useState, useEffect } from "react";
-import { PADDING_MAP, VALIGN_MAP, isSafeBackground } from "./column";
+import { PADDING_MAP, VALIGN_MAP, resolveColumnBackground } from "./column";
 
 interface ResizeState {
     isResizing: boolean;
@@ -143,9 +143,9 @@ export const ColumnView: React.FC<NodeViewProps> = React.memo((props) => {
     const wrapperClassName = useMemo(() =>
         cn(
             "prose-p:m-1 w-full relative group/column",
-            editor.isEditable ? "border border-border/40 rounded" : "",
+            editor.isEditable && node.attrs.border !== false && "border border-border/40 rounded",
             resizeState?.isResizing && "select-none"
-        ), [editor.isEditable, resizeState?.isResizing]
+        ), [editor.isEditable, node.attrs.border, resizeState?.isResizing]
     )
 
     // Compose inline style for background / padding / vertical alignment.
@@ -155,9 +155,7 @@ export const ColumnView: React.FC<NodeViewProps> = React.memo((props) => {
     const wrapperStyle = useMemo<React.CSSProperties>(() => {
         const padding = PADDING_MAP[node.attrs.padding as string] ?? PADDING_MAP.md;
         const justifyContent = VALIGN_MAP[node.attrs.verticalAlign as string] ?? VALIGN_MAP.top;
-        const bg = typeof node.attrs.background === 'string' && isSafeBackground(node.attrs.background)
-            ? node.attrs.background
-            : undefined;
+        const bg = resolveColumnBackground(node.attrs.background);
 
         const effectivePadding = node.attrs.padding && node.attrs.padding !== 'none'
             ? padding

@@ -103,11 +103,10 @@ public class LlmGateway {
                     if (chunk.getFinishReason() != null) {
                         result.setFinishReason(chunk.getFinishReason());
                     }
-                    if (chunk.getUsage() != null) {
-                        result.setPromptTokens(chunk.getUsage().getPromptTokens());
-                        result.setCompletionTokens(chunk.getUsage().getCompletionTokens());
-                        result.setCachedPromptTokens(chunk.getUsage().getPromptCacheHitTokens());
-                    }
+                    // Compatibility for clients that still attach usage to done.
+                    applyUsage(result, chunk.getUsage());
+                } else if ("usage".equals(type)) {
+                    applyUsage(result, chunk.getUsage());
                 }
             }
         } catch (RuntimeException e) {
@@ -134,13 +133,18 @@ public class LlmGateway {
             if (response.getContent() != null) {
                 result.setText(response.getContent());
             }
-            if (response.getUsage() != null) {
-                result.setPromptTokens(response.getUsage().getPromptTokens());
-                result.setCompletionTokens(response.getUsage().getCompletionTokens());
-                result.setCachedPromptTokens(response.getUsage().getPromptCacheHitTokens());
-            }
+            applyUsage(result, response.getUsage());
         }
         return result;
+    }
+
+    private void applyUsage(LlmResult result, LlmResponse.Usage usage) {
+        if (usage == null) {
+            return;
+        }
+        result.setPromptTokens(usage.getPromptTokens());
+        result.setCompletionTokens(usage.getCompletionTokens());
+        result.setCachedPromptTokens(usage.getPromptCacheHitTokens());
     }
 
     private LlmRequest toLlmRequest(LlmInferRequest request, boolean stream) {

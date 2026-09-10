@@ -145,7 +145,7 @@ public class OpenAiCompatibleClient implements LlmClient {
 
     // ---- Private helpers ----
 
-    private String buildRequestBody(LlmRequest request, boolean stream) throws Exception {
+    String buildRequestBody(LlmRequest request, boolean stream) throws Exception {
         ObjectNode root = objectMapper.createObjectNode();
         String model = resolveModel(request.getModel());
         root.put("model", model);
@@ -165,6 +165,10 @@ public class OpenAiCompatibleClient implements LlmClient {
         ModelConfig modelConfig = config.getModelConfig(model);
         if (modelConfig != null && modelConfig.getExtra() != null) {
             for (Map.Entry<String, Object> entry : modelConfig.getExtra().entrySet()) {
+                // stream_options is valid only for streaming chat-completion requests.
+                if (!stream && "stream_options".equals(entry.getKey())) {
+                    continue;
+                }
                 root.set(entry.getKey(), objectMapper.valueToTree(entry.getValue()));
             }
         }
@@ -373,26 +377,16 @@ public class OpenAiCompatibleClient implements LlmClient {
             builder.finishReason(finishReason != null ? finishReason.asText() : "stop");
         }
 
-        // Usage — including the provider's context-cache accounting
-        // (prompt_cache_hit_tokens / prompt_cache_miss_tokens), the direct
-        // signal for how many prompt tokens were served from cache.
+        // Usage — including the provider's context-cache accounting.
         JsonNode usage = root.get("usage");
-        if (usage != null) {
-            builder.usage(LlmResponse.Usage.builder()
-                    .promptTokens(usage.has("prompt_tokens") ? usage.get("prompt_tokens").asInt() : 0)
-                    .completionTokens(usage.has("completion_tokens") ? usage.get("completion_tokens").asInt() : 0)
-                    .totalTokens(usage.has("total_tokens") ? usage.get("total_tokens").asInt() : 0)
-                    .promptCacheHitTokens(cacheHitTokens(usage))
-                    .promptCacheMissTokens(cacheMissTokens(usage))
-                    .build());
-        } else {
-            builder.usage(LlmResponse.Usage.builder().build());
-        }
+        builder.usage(usage != null && !usage.isNull()
+                ? parseUsage(usage)
+                : LlmResponse.Usage.builder().build());
 
         return builder.build();
     }
 
-    private Flux<StreamChunk> parseStreamChunk(String line) {
+    Flux<StreamChunk> parseStreamChunk(String line) {
         try {
             // Handle "data: " prefix from SSE
             String json = line.trim();
@@ -404,67 +398,60 @@ public class OpenAiCompatibleClient implements LlmClient {
             }
 
             JsonNode root = objectMapper.readTree(json);
-            JsonNode choices = root.get("choices");
-            if (choices == null || choices.size() == 0) {
-                return Flux.empty();
-            }
-
-            JsonNode choice = choices.get(0);
             List<StreamChunk> chunks = new ArrayList<>();
+            JsonNode choices = root.get("choices");
 
-            // Content delta
-            JsonNode delta = choice.get("delta");
-            if (delta != null) {
-                // Reasoning content delta (DeepSeek thinking mode)
-                JsonNode reasoningContent = delta.get("reasoning_content");
-                if (reasoningContent != null && !reasoningContent.isNull() && !reasoningContent.asText().isEmpty()) {
-                    chunks.add(StreamChunk.reasoningContent(reasoningContent.asText()));
-                }
+            if (choices != null && choices.size() > 0) {
+                JsonNode choice = choices.get(0);
 
-                JsonNode content = delta.get("content");
-                if (content != null && !content.isNull() && !content.asText().isEmpty()) {
-                    chunks.add(StreamChunk.content(content.asText()));
-                }
+                // Content delta
+                JsonNode delta = choice.get("delta");
+                if (delta != null) {
+                    // Reasoning content delta (DeepSeek thinking mode)
+                    JsonNode reasoningContent = delta.get("reasoning_content");
+                    if (reasoningContent != null && !reasoningContent.isNull()
+                            && !reasoningContent.asText().isEmpty()) {
+                        chunks.add(StreamChunk.reasoningContent(reasoningContent.asText()));
+                    }
 
-                // Tool call deltas
-                JsonNode toolCalls = delta.get("tool_calls");
-                if (toolCalls != null && toolCalls.isArray()) {
-                    for (JsonNode tc : toolCalls) {
-                        String id = tc.has("id") ? tc.get("id").asText() : null;
-                        Integer index = tc.has("index") ? tc.get("index").asInt() : null;
-                        JsonNode fn = tc.get("function");
-                        String name = fn != null && fn.has("name") ? fn.get("name").asText() : null;
-                        String argsDelta = fn != null && fn.has("arguments") ? fn.get("arguments").asText() : null;
+                    JsonNode content = delta.get("content");
+                    if (content != null && !content.isNull() && !content.asText().isEmpty()) {
+                        chunks.add(StreamChunk.content(content.asText()));
+                    }
 
-                        if (id != null || name != null || argsDelta != null) {
-                            chunks.add(StreamChunk.toolCall(id, name, argsDelta, index));
+                    // Tool call deltas
+                    JsonNode toolCalls = delta.get("tool_calls");
+                    if (toolCalls != null && toolCalls.isArray()) {
+                        for (JsonNode tc : toolCalls) {
+                            String id = tc.has("id") ? tc.get("id").asText() : null;
+                            Integer index = tc.has("index") ? tc.get("index").asInt() : null;
+                            JsonNode fn = tc.get("function");
+                            String name = fn != null && fn.has("name") ? fn.get("name").asText() : null;
+                            String argsDelta = fn != null && fn.has("arguments")
+                                    ? fn.get("arguments").asText()
+                                    : null;
+
+                            if (id != null || name != null || argsDelta != null) {
+                                chunks.add(StreamChunk.toolCall(id, name, argsDelta, index));
+                            }
                         }
                     }
                 }
+
+                // Finish state is independent from usage. Some providers emit usage
+                // in a later chunk whose choices array is empty.
+                JsonNode finishReason = choice.get("finish_reason");
+                if (finishReason != null && !finishReason.isNull()) {
+                    String reason = finishReason.asText();
+                    if (!reason.isEmpty() && !"null".equals(reason)) {
+                        chunks.add(StreamChunk.done(reason));
+                    }
+                }
             }
 
-            // Finish reason
-            JsonNode finishReason = choice.get("finish_reason");
-            if (finishReason != null && !finishReason.isNull()) {
-                String reason = finishReason.asText();
-                if (!reason.isEmpty() && !"null".equals(reason)) {
-                    // Get usage from the final chunk
-                    LlmResponse.Usage usage = LlmResponse.Usage.builder().build();
-                    JsonNode usageNode = root.get("usage");
-                    if (usageNode != null) {
-                        usage = LlmResponse.Usage.builder()
-                                .promptTokens(
-                                        usageNode.has("prompt_tokens") ? usageNode.get("prompt_tokens").asInt() : 0)
-                                .completionTokens(
-                                        usageNode.has("completion_tokens") ? usageNode.get("completion_tokens").asInt()
-                                                : 0)
-                                .totalTokens(usageNode.has("total_tokens") ? usageNode.get("total_tokens").asInt() : 0)
-                                .promptCacheHitTokens(cacheHitTokens(usageNode))
-                                .promptCacheMissTokens(cacheMissTokens(usageNode))
-                                .build();
-                    }
-                    chunks.add(StreamChunk.done(reason, usage));
-                }
+            JsonNode usageNode = root.get("usage");
+            if (usageNode != null && !usageNode.isNull()) {
+                chunks.add(StreamChunk.usage(parseUsage(usageNode)));
             }
 
             return Flux.fromIterable(chunks);
@@ -472,6 +459,16 @@ public class OpenAiCompatibleClient implements LlmClient {
             log.warn("Failed to parse stream chunk: {}", line, e);
             return Flux.empty();
         }
+    }
+
+    private static LlmResponse.Usage parseUsage(JsonNode usage) {
+        return LlmResponse.Usage.builder()
+                .promptTokens(usage.has("prompt_tokens") ? usage.get("prompt_tokens").asInt() : 0)
+                .completionTokens(usage.has("completion_tokens") ? usage.get("completion_tokens").asInt() : 0)
+                .totalTokens(usage.has("total_tokens") ? usage.get("total_tokens").asInt() : 0)
+                .promptCacheHitTokens(cacheHitTokens(usage))
+                .promptCacheMissTokens(cacheMissTokens(usage))
+                .build();
     }
 
     /**
