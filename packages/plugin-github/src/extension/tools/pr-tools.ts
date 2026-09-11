@@ -65,7 +65,7 @@ export const listGitHubPRsTool = {
         state: z.enum(['open', 'closed', 'all']).optional().describe('筛选状态，默认 open'),
         per_page: z.number().optional().describe('每页数量，默认 20'),
     }),
-    execute: (editor: Editor) => async (params: { owner: string; repo: string; state?: 'open' | 'closed' | 'all'; per_page?: number }) => {
+    execute: (_editor: Editor) => async (params: { owner: string; repo: string; state?: 'open' | 'closed' | 'all'; per_page?: number }) => {
         try {
             const token = await getToken()
             const prs = await listPullRequests(token, params.owner, params.repo, params)
@@ -101,7 +101,7 @@ export const getGitHubPRDetailsTool = {
         repo: z.string().describe('仓库名称'),
         prNumber: z.number().describe('PR 编号'),
     }),
-    execute: (editor: Editor) => async (params: { owner: string; repo: string; prNumber: number }) => {
+    execute: (_editor: Editor) => async (params: { owner: string; repo: string; prNumber: number }) => {
         try {
             const token = await getToken()
             const details = await getPRDetails(token, params.owner, params.repo, params.prNumber)

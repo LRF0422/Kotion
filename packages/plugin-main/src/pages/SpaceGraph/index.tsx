@@ -697,26 +697,62 @@ export const SpaceGraph: React.FC<SpaceGraphProps> = ({
                     </defs>
                     <rect width="100%" height="100%" fill="url(#graph-dot-grid)" />
                     <g transform={`translate(${view.x},${view.y}) scale(${view.k})`}>
-                        {/* Edges */}
+                        {/* Edges — directed page → page, so each one carries an arrowhead. */}
                         {links.map((l, i) => {
                             const s = l.source as SimNode;
                             const tg = l.target as SimNode;
                             if (!s || !tg || s.x == null || tg.x == null) return null;
                             const active =
                                 !!hl && (endId(l.source as any) === hl || endId(l.target as any) === hl);
+                            const stroke = active ? "hsl(var(--foreground))" : "hsl(var(--muted-foreground))";
+                            const opacity = active ? 0.55 : hl ? 0.08 : 0.25;
+                            const strokeWidth = active ? 1.4 : 1;
+
+                            // Trim the segment so the line starts at the source rim
+                            // and the arrowhead tip lands on the target rim instead of
+                            // disappearing under the node circle.
+                            const dx = tg.x - s.x;
+                            const dy = tg.y! - s.y!;
+                            const dist = Math.hypot(dx, dy) || 1;
+                            const ux = dx / dist;
+                            const uy = dy / dist;
+                            const startGap = Math.min(radiusOf(s), dist / 2);
+                            const endGap = Math.min(radiusOf(tg) + 1.5, dist / 2);
+                            const x1 = s.x + ux * startGap;
+                            const y1 = s.y! + uy * startGap;
+                            const tipX = tg.x - ux * endGap;
+                            const tipY = tg.y! - uy * endGap;
+                            const headLen = 7;
+                            const headHalf = 3.2;
+                            const showHead = dist - startGap - endGap > headLen;
+                            const baseX = showHead ? tipX - ux * headLen : tipX;
+                            const baseY = showHead ? tipY - uy * headLen : tipY;
                             return (
-                                <line
-                                    key={i}
-                                    x1={s.x}
-                                    y1={s.y!}
-                                    x2={tg.x}
-                                    y2={tg.y!}
-                                    stroke={active ? "hsl(var(--foreground))" : "hsl(var(--muted-foreground))"}
-                                    strokeOpacity={active ? 0.55 : hl ? 0.08 : 0.25}
-                                    strokeWidth={active ? 1.4 : 1}
-                                    strokeLinecap="round"
-                                    style={{ transition: "stroke-opacity 150ms ease, stroke 150ms ease" }}
-                                />
+                                <g key={i} style={{ transition: "opacity 150ms ease" }}>
+                                    <line
+                                        x1={x1}
+                                        y1={y1}
+                                        x2={baseX}
+                                        y2={baseY}
+                                        stroke={stroke}
+                                        strokeOpacity={opacity}
+                                        strokeWidth={strokeWidth}
+                                        strokeLinecap="round"
+                                        style={{ transition: "stroke-opacity 150ms ease, stroke 150ms ease" }}
+                                    />
+                                    {showHead && (
+                                        <polygon
+                                            points={
+                                                tipX + "," + tipY + " " +
+                                                (baseX - uy * headHalf) + "," + (baseY + ux * headHalf) + " " +
+                                                (baseX + uy * headHalf) + "," + (baseY - ux * headHalf)
+                                            }
+                                            fill={stroke}
+                                            fillOpacity={opacity}
+                                            style={{ transition: "fill-opacity 150ms ease, fill 150ms ease" }}
+                                        />
+                                    )}
+                                </g>
                             );
                         })}
 

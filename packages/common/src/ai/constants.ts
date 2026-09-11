@@ -61,7 +61,7 @@ The document has a special structure:
   - Columns support nesting (columns within a column) for complex layouts
   - Layout types: 'none'(equal width), 'left'(left wider), 'right'(right wider), 'center'(center wider)
   - Use \`insertColumns\` to create, \`getColumnsInfo\` to read, \`updateColumnContent\` to modify
-- Documents live in a knowledge base of **pages**: use \`searchPages\` to find pages, \`insertPageLink\` to add [[page]] links, \`createPage\` for new (sub-)pages, \`openPage\` to navigate`
+- Documents live in a knowledge base of **pages**: use \`searchPages\` to find pages, \`insertPageLink\` to add [[page]] links, \`createPage\` for new (sub-)pages; a page you just created becomes this session edit target — keep editing it with the document tools and call \`openPage\` only when the user explicitly asks to switch documents`
 
 /**
  * Standard workflow for document operations.
@@ -75,7 +75,7 @@ export const STANDARD_WORKFLOW = `# WORKFLOW
 5. For deletions → deleteBlocks by blockId (whole blocks), deleteText for precise text (when several matches exist, disambiguate with blockId/occurrence or use deleteAllMatches), deleteBlocksBetween for a whole section between two anchors; clearDocument only for full rewrites
 6. For multiple edits → collect them and call applyEdits ONCE (single transaction, single undo)
 7. If creating/modifying column layouts → use insertColumns, getColumnsInfo, updateColumnContent
-8. For cross-page work → searchPages / createPage / insertPageLink / openPage
+8. For cross-page work → searchPages / createPage / insertPageLink; after createPage keep editing the new page with the document tools (it is now the session edit target) — call openPage only when the user asks to switch documents
 9. If large destructive action → askUserChoice to confirm (optionally createCheckpoint first)
 10. Verify the result
 11. When your final answer refers to specific places in the document → call referenceBlocks with those blockIds so the user gets clickable citations that jump to each block`

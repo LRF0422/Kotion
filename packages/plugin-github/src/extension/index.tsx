@@ -8,8 +8,12 @@ import { prTools } from './tools/pr-tools'
 import { repoTools } from './tools/repo-tools'
 import { codeTools } from './tools/code-tools'
 import { searchTools } from './tools/search-tools'
+import { historyTools } from './tools/history-tools'
+import { structureTools } from './tools/structure-tools'
 import { githubProjectManagerSkill } from './skills/github-project-manager'
 import { githubCodeReviewerSkill } from './skills/github-code-reviewer'
+import { githubChangelogWriterSkill } from './skills/github-changelog-writer'
+import { githubProjectDocumenterSkill } from './skills/github-project-documenter'
 import { CircleDot, GitPullRequest, FolderGit2, FileCode } from '@kn/icon'
 import React from 'react'
 
@@ -72,9 +76,13 @@ export const GitHubExtension: ExtensionWrapper = {
         ...repoTools,
         ...codeTools,
         ...searchTools,
+        ...historyTools,
+        ...structureTools,
     ],
     skills: [
         githubProjectManagerSkill,
         githubCodeReviewerSkill,
+        githubChangelogWriterSkill,
+        githubProjectDocumenterSkill,
     ],
 }

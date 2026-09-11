@@ -3,12 +3,13 @@ import { NodeViewWrapper, NodeViewProps } from '@kn/editor'
 import { Card, Badge, cn, Tabs, TabsList, TabsTrigger, TabsContent, ScrollArea, CodeEditor } from '@kn/ui'
 import {
     RefreshCw, ExternalLink, Star, GitFork, CircleDot,
-    Folder, FileText, GitCommit, ChevronRight, ArrowLeft, Copy, Check,
+    Folder, FolderTree, FileText, GitCommit, ChevronDown, ChevronRight, ArrowLeft, Copy, Check,
 } from '@kn/icon'
 import { GitHubUrlInput } from './shared/GitHubUrlInput'
+import { GitHubRepoStructure } from './GitHubRepoStructure'
 import { useGitHubData } from '../hooks/use-github-data'
-import { getRepo, getRepoContents, getRepoCommits, getFileContent } from '../services/github-repo-service'
-import type { GitHubTreeItem, GitHubCommit as GitHubCommitType } from '../types/github'
+import { getRepo, getRepoContents, getRepoCommits, getRepoCommit, getFileContent } from '../services/github-repo-service'
+import type { GitHubTreeItem, GitHubCommit as GitHubCommitType, GitHubCommitDetail } from '../types/github'
 
 function formatCount(n: number): string {
     if (n >= 1000) return `${(n / 1000).toFixed(1)}k`
@@ -346,6 +347,10 @@ const CommitsList: React.FC<{
     const [commitsLoading, setCommitsLoading] = useState(false)
     const [commitsError, setCommitsError] = useState<string | null>(null)
     const [loaded, setLoaded] = useState(false)
+    const [expandedSha, setExpandedSha] = useState<string | null>(null)
+    const [details, setDetails] = useState<Record<string, GitHubCommitDetail>>({})
+    const [detailLoading, setDetailLoading] = useState<string | null>(null)
+    const [detailError, setDetailError] = useState<string | null>(null)
 
     const loadCommits = useCallback(async () => {
         if (!token) return
@@ -368,6 +373,26 @@ const CommitsList: React.FC<{
         }
     }, [loaded, token, loadCommits])
 
+    // Expand a commit to reveal its changed files (lazy-loaded and cached).
+    const toggleDetails = useCallback(async (sha: string) => {
+        if (expandedSha === sha) {
+            setExpandedSha(null)
+            return
+        }
+        setExpandedSha(sha)
+        setDetailError(null)
+        if (details[sha] || !token) return
+        setDetailLoading(sha)
+        try {
+            const detail = await getRepoCommit(token, owner, repo, sha)
+            setDetails(prev => ({ ...prev, [sha]: detail }))
+        } catch (err: any) {
+            setDetailError(err.message || 'Failed to load commit details')
+        } finally {
+            setDetailLoading(null)
+        }
+    }, [expandedSha, details, token, owner, repo])
+
     return (
         <div className="mt-2">
             {commitsLoading && (
@@ -383,40 +408,96 @@ const CommitsList: React.FC<{
             {!commitsLoading && !commitsError && (
                 <ScrollArea className="max-h-[280px]">
                     <div className="space-y-0 border rounded-md divide-y">
-                        {commits.map((commit) => (
-                            <div key={commit.sha} className="px-3 py-2 hover:bg-muted">
-                                <div className="flex items-start gap-2">
-                                    {commit.avatar_url ? (
-                                        <img
-                                            src={commit.avatar_url}
-                                            alt={commit.author.name}
-                                            className="w-5 h-5 rounded-full flex-shrink-0 mt-0.5"
-                                        />
-                                    ) : (
-                                        <div className="w-5 h-5 rounded-full bg-muted flex-shrink-0 mt-0.5 flex items-center justify-center text-[10px] text-muted-foreground">
-                                            {commit.author.name.charAt(0).toUpperCase()}
+                        {commits.map((commit) => {
+                            const isExpanded = expandedSha === commit.sha
+                            const detail = details[commit.sha]
+                            return (
+                                <div key={commit.sha}>
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleDetails(commit.sha)}
+                                        className="px-3 py-2 hover:bg-muted w-full text-left"
+                                    >
+                                        <div className="flex items-start gap-2">
+                                            {commit.avatar_url ? (
+                                                <img
+                                                    src={commit.avatar_url}
+                                                    alt={commit.author.name}
+                                                    className="w-5 h-5 rounded-full flex-shrink-0 mt-0.5"
+                                                />
+                                            ) : (
+                                                <div className="w-5 h-5 rounded-full bg-muted flex-shrink-0 mt-0.5 flex items-center justify-center text-[10px] text-muted-foreground">
+                                                    {commit.author.name.charAt(0).toUpperCase()}
+                                                </div>
+                                            )}
+                                            <div className="min-w-0 flex-1">
+                                                <div className="text-xs font-medium leading-snug line-clamp-1">
+                                                    {commit.message.split('\n')[0]}
+                                                </div>
+                                                <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground">
+                                                    <span>{commit.author.name}</span>
+                                                    <span>{formatCommitDate(commit.author.date)}</span>
+                                                    {detail?.stats && (
+                                                        <span className="text-green-600">+{detail.stats.additions}</span>
+                                                    )}
+                                                    {detail?.stats && (
+                                                        <span className="text-red-500">-{detail.stats.deletions}</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-1 flex-shrink-0 mt-0.5">
+                                                <span className="text-[11px] font-mono text-blue-500">
+                                                    {shortenSha(commit.sha)}
+                                                </span>
+                                                {isExpanded
+                                                    ? <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                                                    : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
+                                            </div>
+                                        </div>
+                                    </button>
+
+                                    {isExpanded && (
+                                        <div className="px-3 pb-2">
+                                            {detailLoading === commit.sha && (
+                                                <div className="text-[11px] text-muted-foreground py-1">Loading changed files...</div>
+                                            )}
+                                            {detailError && (
+                                                <div className="text-[11px] text-red-500 py-1">{detailError}</div>
+                                            )}
+                                            {detail && (
+                                                <div className="border rounded-md divide-y">
+                                                    {(detail.files || []).slice(0, 20).map((file) => (
+                                                        <div key={file.filename} className="flex items-center justify-between gap-2 px-2 py-1 text-[11px]">
+                                                            <span className="truncate" title={file.filename}>{file.filename}</span>
+                                                            <span className="flex items-center gap-1.5 flex-shrink-0">
+                                                                <span className="text-green-600">+{file.additions}</span>
+                                                                <span className="text-red-500">-{file.deletions}</span>
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                    {(detail.files || []).length === 0 && (
+                                                        <div className="px-2 py-1 text-[11px] text-muted-foreground">No file changes</div>
+                                                    )}
+                                                    {(detail.files || []).length > 20 && (
+                                                        <div className="px-2 py-1 text-[11px] text-muted-foreground">
+                                                            +{(detail.files || []).length - 20} more files
+                                                        </div>
+                                                    )}
+                                                    <a
+                                                        href={commit.html_url}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="block px-2 py-1 text-[11px] text-blue-500 hover:underline"
+                                                    >
+                                                        View full diff on GitHub
+                                                    </a>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
-                                    <div className="min-w-0 flex-1">
-                                        <div className="text-xs font-medium leading-snug line-clamp-1">
-                                            {commit.message.split('\n')[0]}
-                                        </div>
-                                        <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground">
-                                            <span>{commit.author.name}</span>
-                                            <span>{formatCommitDate(commit.author.date)}</span>
-                                        </div>
-                                    </div>
-                                    <a
-                                        href={commit.html_url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-[11px] font-mono text-blue-500 hover:underline flex-shrink-0 mt-0.5"
-                                    >
-                                        {shortenSha(commit.sha)}
-                                    </a>
                                 </div>
-                            </div>
-                        ))}
+                            )
+                        })}
                         {commits.length === 0 && (
                             <div className="px-3 py-4 text-xs text-muted-foreground text-center">
                                 No commits found
@@ -513,6 +594,9 @@ export const GitHubRepoCard: React.FC<NodeViewProps> = ({ node, updateAttributes
                         <TabsTrigger value="commits" className="text-xs h-6 px-2.5 gap-1">
                             <GitCommit className="h-3 w-3" /> Commits
                         </TabsTrigger>
+                        <TabsTrigger value="structure" className="text-xs h-6 px-2.5 gap-1">
+                            <FolderTree className="h-3 w-3" /> Structure
+                        </TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="overview" className="mt-2">
@@ -565,6 +649,15 @@ export const GitHubRepoCard: React.FC<NodeViewProps> = ({ node, updateAttributes
 
                     <TabsContent value="commits" className="mt-0">
                         <CommitsList
+                            owner={owner}
+                            repo={repo}
+                            defaultBranch={defaultBranch || 'main'}
+                            token={token}
+                        />
+                    </TabsContent>
+
+                    <TabsContent value="structure" className="mt-0">
+                        <GitHubRepoStructure
                             owner={owner}
                             repo={repo}
                             defaultBranch={defaultBranch || 'main'}

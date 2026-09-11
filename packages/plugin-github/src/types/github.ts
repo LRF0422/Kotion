@@ -123,3 +123,68 @@ export interface GitHubSearchResult<T> {
     incomplete_results: boolean
     items: T[]
 }
+
+export type GitHubFileStatus =
+    | 'added'
+    | 'removed'
+    | 'modified'
+    | 'renamed'
+    | 'copied'
+    | 'changed'
+    | 'unchanged'
+
+export interface GitHubCommitFile {
+    filename: string
+    previous_filename?: string
+    status: GitHubFileStatus
+    additions: number
+    deletions: number
+    changes: number
+    patch?: string
+    blob_url: string
+    raw_url: string
+}
+
+export interface GitHubCommitDetail extends GitHubCommit {
+    files?: GitHubCommitFile[]
+    stats?: { additions: number; deletions: number; total: number }
+    parents?: { sha: string }[]
+}
+
+export interface GitHubTag {
+    name: string
+    commit: { sha: string; url: string }
+    zipball_url?: string
+    tarball_url?: string
+}
+
+export interface GitHubRelease {
+    id: number
+    tag_name: string
+    name: string | null
+    body: string | null
+    draft: boolean
+    prerelease: boolean
+    html_url: string
+    published_at: string | null
+    created_at: string
+}
+
+export interface GitHubTreeEntry {
+    path: string
+    mode: string
+    type: 'blob' | 'tree' | 'commit'
+    sha: string
+    size?: number
+    url: string
+}
+
+export interface GitHubCompareResult {
+    status: string
+    ahead_by: number
+    behind_by: number
+    total_commits: number
+    html_url: string
+    commits: GitHubCommit[]
+    files: GitHubCommitFile[]
+}

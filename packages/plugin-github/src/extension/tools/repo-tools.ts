@@ -55,7 +55,7 @@ export const getGitHubRepoInfoTool = {
         owner: z.string().describe('仓库所有者'),
         repo: z.string().describe('仓库名称'),
     }),
-    execute: (editor: Editor) => async (params: { owner: string; repo: string }) => {
+    execute: (_editor: Editor) => async (params: { owner: string; repo: string }) => {
         try {
             const token = await getToken()
             const repoData = await getRepo(token, params.owner, params.repo)

@@ -19,7 +19,7 @@ interface UseGitHubDataResult<T> {
 }
 
 export function useGitHubData<T>(options: UseGitHubDataOptions<T>): UseGitHubDataResult<T> {
-    const { fetcher, lastSyncAt, enabled = true } = options
+    const { fetcher, enabled = true } = options
     const [data, setData] = useState<T | null>(null)
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)

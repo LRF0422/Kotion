@@ -1,7 +1,7 @@
 import type { Editor } from "@kn/editor"
 import { z } from "@kn/ui"
 import type { ToolsRecord } from "@kn/common"
-import { getPageNavigationBridge, resolveService } from "@kn/common"
+import { getPageNavigationBridge, getSessionPageBinding, resolveService } from "@kn/common"
 import { discoverBlocks, findBlockByText } from "@kn/common"
 
 const BRIDGE_MISSING = '页面服务不可用（当前可能不在页面编辑器中）'
@@ -45,7 +45,7 @@ export const createPageTools = (editor: Editor): ToolsRecord => ({
     },
 
     createPage: {
-        description: '在当前空间创建一个新页面。asSubPage 为 true 时创建为当前页面的子页面。创建后可用 insertPageLink 在当前文档中插入指向它的链接',
+        description: '在当前空间创建一个新页面。asSubPage 为 true 时创建为当前页面的子页面。创建后按返回结果继续：若 boundToSession=true，新页面已成为本会话的编辑目标，请直接用文档工具编辑它，不要调用 openPage 跳转；如需在当前文档插入指向它的链接，用 insertPageLink',
         inputSchema: z.object({
             title: z.string().describe("新页面的标题"),
             asSubPage: z.boolean().optional().describe("是否创建为当前页面的子页面，默认 false"),
@@ -86,14 +86,25 @@ export const createPageTools = (editor: Editor): ToolsRecord => ({
                         .run()
                 }
 
-                return {
-                    success: true,
+                // Bind the new page to the active conversation so the agent keeps
+                // editing it off-screen instead of navigating the user away.
+                const binding = getSessionPageBinding()
+                const created = {
                     pageId: String(page.id),
                     title: title.trim(),
                     spaceId: current.spaceId,
+                }
+                if (binding) binding.bindPage(created)
+
+                return {
+                    success: true,
+                    ...created,
                     parentId: asSubPage ? current.pageId : undefined,
                     linkedInDocument: linked,
-                    message: `已创建${asSubPage ? '子' : ''}页面 "${title.trim()}"${linked ? ' 并在文档末尾插入链接' : ''}`
+                    boundToSession: Boolean(binding),
+                    message: binding
+                        ? `已创建${asSubPage ? '子' : ''}页面 "${title.trim()}"，并已将其设为本会话的编辑目标；后续文档工具会直接编辑该页面，继续操作即可，无需 openPage${linked ? '。已同时在文档末尾插入链接' : ''}`
+                        : `已创建${asSubPage ? '子' : ''}页面 "${title.trim()}"${linked ? ' 并在文档末尾插入链接' : ''}`
                 }
             } catch (error) {
                 return { error: `创建页面失败: ${error instanceof Error ? error.message : '未知错误'}` }
@@ -157,7 +168,7 @@ export const createPageTools = (editor: Editor): ToolsRecord => ({
     },
 
     openPage: {
-        description: '跳转到指定页面（会离开当前页面，未保存的编辑会自动保存）。先用 searchPages 找到目标页面',
+        description: '跳转到指定页面（会离开当前页面，未保存的编辑会自动保存）。先用 searchPages 找到目标页面。若目标页面已是本会话的编辑目标，则直接在浮动编辑窗口中打开，不会离开当前页面',
         inputSchema: z.object({
             pageId: z.string().describe("要打开的页面 pageId"),
             spaceId: z.string().optional().describe("页面所属空间 id（searchPages 结果中有），不填则自动解析")
@@ -166,12 +177,26 @@ export const createPageTools = (editor: Editor): ToolsRecord => ({
             const navigation = getPageNavigationBridge()
             if (!navigation) return { error: BRIDGE_MISSING }
 
-            try {
-                await navigation.openPage(String(pageId), spaceId)
+            const target = String(pageId)
+            // A page already being edited by this conversation opens in the
+            // floating window — navigating away would drop the chat's context.
+            const binding = getSessionPageBinding()
+            if (binding && binding.getBoundPage()?.pageId === target) {
+                binding.openPageWindow(target)
                 return {
                     success: true,
-                    pageId: String(pageId),
-                    message: `已跳转到页面 ${pageId}`
+                    pageId: target,
+                    openedInWindow: true,
+                    message: `页面 ${target} 已是本会话的编辑目标，已在浮动编辑窗口中打开`
+                }
+            }
+
+            try {
+                await navigation.openPage(target, spaceId)
+                return {
+                    success: true,
+                    pageId: target,
+                    message: `已跳转到页面 ${target}`
                 }
             } catch (error) {
                 return { error: `打开页面失败: ${error instanceof Error ? error.message : '未知错误'}` }

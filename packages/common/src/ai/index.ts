@@ -23,6 +23,9 @@ export * from "./offscreen-editor-bridge"
 // Page edit window — floating page editor (implementation registered by core)
 export * from "./page-edit-window-bridge"
 
+// Session page binding — agent-created pages bind to the active conversation
+export * from "./session-page-binding"
+
 // Providers
 export * from "./providers"
 

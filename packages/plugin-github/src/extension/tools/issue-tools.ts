@@ -14,16 +14,6 @@ async function getToken(): Promise<string> {
     return token
 }
 
-async function getDefaults(): Promise<{ owner: string; repo: string }> {
-    const store = PluginConfigStore.getInstance()
-    await store.initialize()
-    const config = await store.getConfig<GitHubPluginConfig>(GITHUB_PLUGIN_KEY)
-    return {
-        owner: (config as any)?.defaultOwner || '',
-        repo: (config as any)?.defaultRepo || '',
-    }
-}
-
 export const insertGitHubIssueTool = {
     name: 'insertGitHubIssue',
     description: '在文档中插入一个 GitHub Issue 卡片。需要提供 owner、repo 和 issue 编号。',
@@ -115,7 +105,7 @@ export const updateGitHubIssueStatusTool = {
         labels: z.array(z.string()).optional().describe('替换的标签列表'),
         assignees: z.array(z.string()).optional().describe('替换的指派人列表'),
     }),
-    execute: (editor: Editor) => async (params: { owner: string; repo: string; issueNumber: number; state?: 'open' | 'closed'; labels?: string[]; assignees?: string[] }) => {
+    execute: (_editor: Editor) => async (params: { owner: string; repo: string; issueNumber: number; state?: 'open' | 'closed'; labels?: string[]; assignees?: string[] }) => {
         try {
             const token = await getToken()
             const updated = await updateIssue(token, params.owner, params.repo, params.issueNumber, {
@@ -140,7 +130,7 @@ export const listGitHubIssuesTool = {
         labels: z.string().optional().describe('按标签筛选（逗号分隔）'),
         per_page: z.number().optional().describe('每页数量，默认 20'),
     }),
-    execute: (editor: Editor) => async (params: { owner: string; repo: string; state?: 'open' | 'closed' | 'all'; labels?: string; per_page?: number }) => {
+    execute: (_editor: Editor) => async (params: { owner: string; repo: string; state?: 'open' | 'closed' | 'all'; labels?: string; per_page?: number }) => {
         try {
             const token = await getToken()
             const issues = await listIssues(token, params.owner, params.repo, params)
@@ -172,7 +162,7 @@ export const getGitHubIssueCommentsTool = {
         issueNumber: z.number().describe('Issue 编号'),
         per_page: z.number().optional().describe('获取数量，默认 10'),
     }),
-    execute: (editor: Editor) => async (params: { owner: string; repo: string; issueNumber: number; per_page?: number }) => {
+    execute: (_editor: Editor) => async (params: { owner: string; repo: string; issueNumber: number; per_page?: number }) => {
         try {
             const token = await getToken()
             const comments = await getIssueComments(token, params.owner, params.repo, params.issueNumber, params.per_page)
@@ -201,7 +191,7 @@ export const addGitHubIssueCommentTool = {
         issueNumber: z.number().describe('Issue 编号'),
         body: z.string().describe('评论内容（Markdown）'),
     }),
-    execute: (editor: Editor) => async (params: { owner: string; repo: string; issueNumber: number; body: string }) => {
+    execute: (_editor: Editor) => async (params: { owner: string; repo: string; issueNumber: number; body: string }) => {
         try {
             const token = await getToken()
             const comment = await addIssueComment(token, params.owner, params.repo, params.issueNumber, params.body)

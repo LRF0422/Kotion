@@ -1,4 +1,3 @@
-import { PluginConfig } from "@kn/common"
 import { PluginConfigData } from "@kn/common"
 
 export interface GitHubPluginConfig extends PluginConfigData {

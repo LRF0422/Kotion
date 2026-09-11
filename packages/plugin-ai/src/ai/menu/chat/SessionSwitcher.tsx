@@ -10,9 +10,9 @@ import {
 } from '@kn/ui'
 import type { ChatSessionMeta } from '../chat-sessions'
 
-/** Page shown next to a session: an explicit off-screen target wins, else the page it belongs to. */
+/** Page shown next to a session: the page it belongs to wins, else its off-screen target. */
 const sessionPageTitle = (session?: ChatSessionMeta): string | undefined =>
-    session?.targetPage?.title || session?.boundPage?.title
+    session?.boundPage?.title || session?.targetPage?.title
 
 interface SessionSwitcherProps {
     sessions: ChatSessionMeta[]

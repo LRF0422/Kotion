@@ -15,6 +15,8 @@ import {
     buildAgentRunInputs,
     getOffscreenEditorBridge,
     getPageNavigationBridge,
+    setSessionPageBinding,
+    clearSessionPageBinding,
     revealBlockById,
     PageEditWindow,
     event,
@@ -30,6 +32,7 @@ import type {
     AgentChatMessage,
     AgentStepRecord,
     ToolCallRecord,
+    SessionPageBinding,
 } from "@kn/common"
 
 import { PlanApprovalCard } from "@kn/ui"
@@ -109,9 +112,13 @@ const selectFinalAnswer = (
     return answer?.text ?? ''
 }
 
-/** The page a chat conversation belongs to (an explicit off-screen target wins). */
+/**
+ * The page a chat conversation belongs to. The page it was created/used on
+ * (boundPage) wins over an off-screen edit target (targetPage) so a chat that
+ * edits another page still follows its home page.
+ */
 const sessionPageId = (session?: ChatSessionMeta): string | undefined =>
-    session?.targetPage?.pageId ?? session?.boundPage?.pageId
+    session?.boundPage?.pageId ?? session?.targetPage?.pageId
 
 // ─── Chat ──────────────────────────────────────────────────────────
 
@@ -289,6 +296,32 @@ export const ExpandableChatDemo: React.FC<{
     const handleOpenPageWindow = useCallback(() => {
         if (targetPage) setEditWindowPageId(targetPage.pageId)
     }, [targetPage])
+
+    // ─── Session page binding bridge ─────────────────────────────
+    // Page tools (createPage / openPage) live in core and cannot reach this
+    // session's state. They call through this registry so a freshly created
+    // page becomes the conversation's edit target instead of navigating away.
+    const boundPageRef = useRef<ChatTargetPage | undefined>(targetPage)
+    boundPageRef.current = targetPage
+    useEffect(() => {
+        const binding: SessionPageBinding = {
+            bindPage: (page) => {
+                const record: ChatTargetPage = {
+                    pageId: String(page.pageId),
+                    title: page.title || '',
+                    spaceId: page.spaceId,
+                }
+                // Update synchronously so an openPage in the same tool batch
+                // already sees the new target.
+                boundPageRef.current = record
+                setTargetPage(record)
+            },
+            getBoundPage: () => (boundPageRef.current ? { ...boundPageRef.current } : null),
+            openPageWindow: (pageId) => setEditWindowPageId(String(pageId)),
+        }
+        setSessionPageBinding(binding)
+        return () => clearSessionPageBinding(binding)
+    }, [setTargetPage])
 
     // ─── Block reference navigation ─────────────────────────────
     const [pendingReveal, setPendingReveal] = useState<{ pageId: string; blockId: string } | null>(null)
@@ -614,12 +647,13 @@ export const ExpandableChatDemo: React.FC<{
             return
         }
 
-        // No history for this page yet. An empty, unbound chat (or a legacy
-        // chat that predates page binding) adopts it; a chat already committed
-        // to another page gets a sibling conversation instead.
+        // No history for this page yet. A chat already committed to another
+        // page gets a sibling conversation; an empty or unbound chat adopts
+        // this page instead, so browsing never spawns empty chats.
         const current = sessions.find(s => s.id === activeSessionId)
-        const committedElsewhere = Boolean(current?.targetPage)
-            || (messagesRef.current.length > 0 && Boolean(sessionPageId(current)))
+        const currentPageId = sessionPageId(current)
+        const committedElsewhere = messagesRef.current.length > 0
+            && !!currentPageId && currentPageId !== activePageId
         if (committedElsewhere) {
             createSession(resolvePageBinding(activePageId))
         } else {
@@ -630,12 +664,13 @@ export const ExpandableChatDemo: React.FC<{
         createSession, setBoundPage, resolvePageBinding,
     ])
 
-    // A conversation that has real content adopts the page it is used on, so a
-    // chat created before the page resolved still ends up attached correctly.
+    // A conversation that has real content adopts the page it is used on —
+    // including chats that edit a different page off-screen, whose edit target
+    // must not change the page the conversation itself belongs to.
     useEffect(() => {
-        if (messages.length === 0 || targetPage || boundPage || !activePageId) return
+        if (messages.length === 0 || boundPage || !activePageId) return
         setBoundPage(resolvePageBinding(activePageId))
-    }, [messages.length, targetPage, boundPage, activePageId, setBoundPage, resolvePageBinding])
+    }, [messages.length, boundPage, activePageId, setBoundPage, resolvePageBinding])
 
     // ─── Derived UI flags ─────────────────────────────────────────
     const isEmpty = messages.length === 0 && !isActive

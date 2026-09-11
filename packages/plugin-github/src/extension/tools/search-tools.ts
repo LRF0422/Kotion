@@ -25,7 +25,7 @@ export const searchGitHubIssuesTool = {
         state: z.enum(['open', 'closed']).optional().describe('筛选状态'),
         per_page: z.number().optional().describe('结果数量，默认 20'),
     }),
-    execute: (editor: Editor) => async (params: { query: string; owner?: string; repo?: string; type?: 'issue' | 'pr'; state?: 'open' | 'closed'; per_page?: number }) => {
+    execute: (_editor: Editor) => async (params: { query: string; owner?: string; repo?: string; type?: 'issue' | 'pr'; state?: 'open' | 'closed'; per_page?: number }) => {
         try {
             const token = await getToken()
             const octokit = getOctokit(token)
@@ -73,7 +73,7 @@ export const searchGitHubCodeTool = {
         language: z.string().optional().describe('编程语言筛选'),
         per_page: z.number().optional().describe('结果数量，默认 20'),
     }),
-    execute: (editor: Editor) => async (params: { query: string; owner?: string; repo?: string; language?: string; per_page?: number }) => {
+    execute: (_editor: Editor) => async (params: { query: string; owner?: string; repo?: string; language?: string; per_page?: number }) => {
         try {
             const token = await getToken()
             const octokit = getOctokit(token)

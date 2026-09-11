@@ -16,6 +16,10 @@ export const githubProjectManagerSkill = {
         'searchGitHubIssues',
         'insertGitHubRepo',
         'getGitHubRepoInfo',
+        'getGitHubRepoTree',
+        'listGitHubCommits',
+        'generateGitHubChangelog',
+        'generateGitHubProjectDoc',
     ],
     systemPromptFragment: `You are a GitHub Project Manager assistant. You help users manage their GitHub projects by:
 - Creating and tracking Issues with appropriate labels and assignees

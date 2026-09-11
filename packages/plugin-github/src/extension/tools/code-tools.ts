@@ -66,7 +66,7 @@ export const getGitHubFileContentTool = {
         startLine: z.number().optional().describe('起始行号'),
         endLine: z.number().optional().describe('结束行号'),
     }),
-    execute: (editor: Editor) => async (params: { owner: string; repo: string; path: string; ref?: string; startLine?: number; endLine?: number }) => {
+    execute: (_editor: Editor) => async (params: { owner: string; repo: string; path: string; ref?: string; startLine?: number; endLine?: number }) => {
         try {
             const token = await getToken()
             const file = await getFileContent(token, params.owner, params.repo, params.path, params.ref)

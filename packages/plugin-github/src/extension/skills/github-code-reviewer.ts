@@ -12,6 +12,9 @@ export const githubCodeReviewerSkill = {
         'listGitHubPRs',
         'getGitHubIssueComments',
         'addGitHubIssueComment',
+        'listGitHubCommits',
+        'getGitHubCommitDetails',
+        'getGitHubRepoTree',
     ],
     systemPromptFragment: `You are a GitHub Code Reviewer assistant. You help users with code review by:
 - Embedding relevant code snippets from GitHub into the document

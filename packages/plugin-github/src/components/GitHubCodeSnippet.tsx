@@ -7,7 +7,7 @@ import { useGitHubData } from '../hooks/use-github-data'
 import { getFileContent, decodeContent, extractLines, detectLanguage } from '../services/github-code-service'
 
 export const GitHubCodeSnippet: React.FC<NodeViewProps> = ({ node, updateAttributes, editor, deleteNode }) => {
-    const { owner, repo, path, ref, startLine, endLine, content, language, htmlUrl } = node.attrs
+    const { owner, repo, path, ref, startLine, endLine, content, htmlUrl } = node.attrs
 
     const isConfigured = owner && repo && path
 

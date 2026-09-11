@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react'
+import React from 'react'
 import { NodeViewWrapper, NodeViewProps } from '@kn/editor'
 import { Card, cn } from '@kn/ui'
 import { RefreshCw, ExternalLink, GitPullRequest } from '@kn/icon'

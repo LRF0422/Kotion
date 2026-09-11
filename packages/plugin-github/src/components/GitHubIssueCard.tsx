@@ -1,17 +1,17 @@
 import React, { useCallback } from 'react'
 import { NodeViewWrapper, NodeViewProps } from '@kn/editor'
-import { Card, Badge, cn } from '@kn/ui'
+import { Card, cn } from '@kn/ui'
 import { RefreshCw, ExternalLink, MessageSquare } from '@kn/icon'
 import { GitHubAvatar } from './shared/GitHubAvatar'
 import { GitHubLabel } from './shared/GitHubLabel'
 import { GitHubStatusBadge } from './shared/GitHubStatusBadge'
 import { GitHubTimestamp } from './shared/GitHubTimestamp'
-import { GitHubUrlInput, parseGitHubUrl } from './shared/GitHubUrlInput'
+import { GitHubUrlInput } from './shared/GitHubUrlInput'
 import { useGitHubData } from '../hooks/use-github-data'
 import { getIssue } from '../services/github-issue-service'
 
 export const GitHubIssueCard: React.FC<NodeViewProps> = ({ node, updateAttributes, editor, deleteNode }) => {
-    const { owner, repo, issueNumber, title, state, labels, assignees, commentsCount, authorLogin, authorAvatar, htmlUrl, updatedAt, lastSyncAt } = node.attrs
+    const { owner, repo, issueNumber, title, state, labels, assignees, commentsCount, authorLogin, authorAvatar, htmlUrl, updatedAt } = node.attrs
 
     const isConfigured = owner && repo && issueNumber
 
