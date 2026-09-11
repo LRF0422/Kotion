@@ -12,6 +12,7 @@ import reactor.core.publisher.Flux;
 import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -51,10 +52,26 @@ class LlmGatewayTest {
         assertEquals(25, result.getCachedPromptTokens());
     }
 
+    @Test
+    void surfacesIdleTimeoutAsDomainException() {
+        AgentCoreProperties properties = new AgentCoreProperties();
+        properties.getLlm().setIdleTimeoutSeconds(1);
+        LlmClient client = mock(LlmClient.class);
+        when(client.streamChat(any(LlmRequest.class)))
+                .thenReturn(Flux.concat(Flux.just(StreamChunk.content("partial")), Flux.never()));
+
+        assertThrows(LlmGateway.LlmTimeoutException.class,
+                () -> gateway(client, properties).streamInfer(request(), null, () -> false));
+    }
+
     private LlmGateway gateway(LlmClient client) {
+        return gateway(client, new AgentCoreProperties());
+    }
+
+    private LlmGateway gateway(LlmClient client, AgentCoreProperties properties) {
         LlmClientFactory clientFactory = mock(LlmClientFactory.class);
         when(clientFactory.getClientForModel("test-model")).thenReturn(client);
-        return new LlmGateway(clientFactory, new AgentCoreProperties());
+        return new LlmGateway(clientFactory, properties);
     }
 
     private LlmInferRequest request() {

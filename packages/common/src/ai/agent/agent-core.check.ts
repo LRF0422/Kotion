@@ -115,6 +115,20 @@ async function checkCrlfSseFrames(): Promise<void> {
     ])
 }
 
+async function checkStreamIdleWatchdog(): Promise<void> {
+    // A stream that opens but never delivers a byte must fail fast instead of
+    // parking the reconnect loop (and the UI) forever.
+    const body = new ReadableStream<Uint8Array>({ start() { /* never emits */ } })
+    await assert.rejects(
+        (async () => {
+            for await (const _payload of readSseDataLines(body, 50)) {
+                // drain
+            }
+        })(),
+        /idle/
+    )
+}
+
 async function main(): Promise<void> {
     await checkExecutorSingleFlight()
     checkToolBatchSnapshot()
@@ -123,6 +137,7 @@ async function main(): Promise<void> {
     checkSerializableResults()
     checkStreamSequenceRules()
     await checkCrlfSseFrames()
+    await checkStreamIdleWatchdog()
     console.log('agent-core checks passed')
 }
 

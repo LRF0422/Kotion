@@ -97,16 +97,60 @@ export function acceptAgentEvent(event: AgentEvent, cursor: number): boolean {
 }
 
 /**
+ * A live run stream emits a keepalive comment every ~15s (see the backend
+ * RunStreamer), so a silently dead connection — half-open TCP, proxy blackhole,
+ * suspended process — shows up client-side as a read that never resolves. Bound
+ * each read so the caller's durable reconnect loop can recover instead of
+ * leaving the UI stuck in "streaming" forever. 60s tolerates several missed
+ * keepalives without flagging a legitimately slow model/tool turn.
+ */
+const STREAM_READ_IDLE_TIMEOUT_MS = 60_000
+
+/** Race a body read against an idle bound and reject when no bytes arrive. */
+async function readWithIdleTimeout(
+    reader: ReadableStreamDefaultReader<Uint8Array>,
+    timeoutMs: number
+): Promise<ReadableStreamReadResult<Uint8Array>> {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+        return await Promise.race([
+            reader.read(),
+            new Promise<never>((_, reject) => {
+                timer = setTimeout(
+                    () => reject(new Error('Agent event stream idle for ' + timeoutMs + 'ms')),
+                    timeoutMs
+                )
+            }),
+        ])
+    } finally {
+        if (timer) clearTimeout(timer)
+    }
+}
+
+/**
  * Minimal SSE reader over a fetch Response body — yields complete
  * data payload strings, ignoring keepalive comments and CR/LF variants.
  */
-export async function* readSseDataLines(body: ReadableStream<Uint8Array>): AsyncGenerator<string> {
+export async function* readSseDataLines(
+    body: ReadableStream<Uint8Array>,
+    idleTimeoutMs: number = STREAM_READ_IDLE_TIMEOUT_MS
+): AsyncGenerator<string> {
     const reader = body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
     try {
         while (true) {
-            const { done, value } = await reader.read()
+            let step: ReadableStreamReadResult<Uint8Array>
+            try {
+                step = await readWithIdleTimeout(reader, idleTimeoutMs)
+            } catch (error) {
+                // Cancel the pending read before releasing the lock; the thrown
+                // error is retriable and drives the caller's reconnect (events
+                // are durable and de-duplicated by seq).
+                await reader.cancel().catch(() => undefined)
+                throw error
+            }
+            const { done, value } = step
             if (done) break
             buffer += decoder.decode(value, { stream: true })
             // Split on double-newline (SSE frame boundary), supporting \n\n and \r\n\r\n.

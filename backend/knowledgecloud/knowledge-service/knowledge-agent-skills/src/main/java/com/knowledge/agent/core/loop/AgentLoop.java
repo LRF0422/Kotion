@@ -398,7 +398,12 @@ public class AgentLoop implements Runnable {
         } catch (Exception e) {
             log.error("AgentLoop crashed for run {}", run.getRunId(), e);
             if (!cancelRequested && !run.statusEnum().isTerminal()) {
-                fail("loop_error", e.getMessage());
+                // A stalled provider stream is a distinct, self-describing
+                // terminal state so the UI can show "模型响应超时" instead of
+                // a generic loop error.
+                boolean llmTimeout = e instanceof LlmGateway.LlmTimeoutException;
+                fail(llmTimeout ? "llm_timeout" : "loop_error",
+                        e.getMessage() != null ? e.getMessage() : e.toString());
             }
         } finally {
             try {
