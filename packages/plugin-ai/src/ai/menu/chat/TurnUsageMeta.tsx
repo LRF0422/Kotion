@@ -1,6 +1,6 @@
 import React from 'react'
 import { Zap } from '@kn/icon'
-import { cacheHitRate } from '@kn/common'
+import { cacheHitRate, useTranslation } from '@kn/common'
 import type { RunUsage } from '@kn/common'
 
 /** Compact token count: 1234 → 1.2k. */
@@ -14,15 +14,16 @@ const formatTokens = (value: number): string =>
  * Renders nothing when the provider reported no usable accounting.
  */
 export const TurnUsageMeta: React.FC<{ usage?: RunUsage | null }> = ({ usage }) => {
+    const { t } = useTranslation()
     if (!usage || usage.promptTokens <= 0) return null
     const rate = cacheHitRate(usage)
     const total = usage.promptTokens + usage.completionTokens
     const title = [
-        '输入 ' + usage.promptTokens.toLocaleString() + ' tokens',
+        t('ai.chat.usageInput', { tokens: usage.promptTokens.toLocaleString() }),
         rate === null
-            ? '模型未上报缓存命中'
-            : '其中缓存命中 ' + usage.cachedPromptTokens.toLocaleString() + ' tokens',
-        '输出 ' + usage.completionTokens.toLocaleString() + ' tokens',
+            ? t('ai.chat.usageNoCache')
+            : t('ai.chat.usageCached', { tokens: usage.cachedPromptTokens.toLocaleString() }),
+        t('ai.chat.usageOutput', { tokens: usage.completionTokens.toLocaleString() }),
     ].join(' · ')
 
     return (
@@ -33,7 +34,7 @@ export const TurnUsageMeta: React.FC<{ usage?: RunUsage | null }> = ({ usage }) 
             {rate !== null && (
                 <>
                     <Zap className="h-2.5 w-2.5 shrink-0" />
-                    <span>缓存命中 {Math.round(rate * 100)}%</span>
+                    <span>{t('ai.chat.usageCacheRate', { rate: Math.round(rate * 100) })}</span>
                     <span className="text-muted-foreground/40">·</span>
                 </>
             )}

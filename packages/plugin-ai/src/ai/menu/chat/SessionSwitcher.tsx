@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef } from 'react'
+import { useTranslation } from '@kn/common'
 import { AtSign, ChevronDown, Plus, X, Check } from '@kn/icon'
 import {
     DropdownMenu,
@@ -30,9 +31,10 @@ export const SessionSwitcher: React.FC<SessionSwitcherProps> = ({
     onNewSession,
     onDelete,
 }) => {
+    const { t } = useTranslation()
     const activeItemRef = useRef<HTMLDivElement | null>(null)
     const activeSession = sessions.find((s) => s.id === activeSessionId)
-    const activeTitle = activeSession?.title || 'New chat'
+    const activeTitle = activeSession?.title || t('ai.chat.newChat')
     const activePageTitle = activeSession?.targetPage?.title
 
     // Keep the active item visible when the menu is opened after several
@@ -71,13 +73,13 @@ export const SessionSwitcher: React.FC<SessionSwitcherProps> = ({
                     className="flex items-center gap-2 text-xs font-medium cursor-pointer"
                 >
                     <Plus className="h-3.5 w-3.5" />
-                    <span>New chat</span>
+                    <span>{t('ai.chat.newChat')}</span>
                 </DropdownMenuItem>
                 {sessions.length > 0 && <DropdownMenuSeparator />}
                 <div className="max-h-[280px] overflow-y-auto -mx-1 px-1 py-0.5">
                     {sessions.map((s) => {
                         const isActive = s.id === activeSessionId
-                        const title = s.title || 'New chat'
+                        const title = s.title || t('ai.chat.newChat')
                         const pageTitle = s.targetPage?.title
                         return (
                             <div
@@ -115,7 +117,7 @@ export const SessionSwitcher: React.FC<SessionSwitcherProps> = ({
                                 <button
                                     type="button"
                                     onClick={(e) => handleDelete(e, s.id)}
-                                    aria-label={`Delete ${title}`}
+                                    aria-label={t('ai.chat.deleteChat', { title })}
                                     className={
                                         'flex items-center justify-center h-4 w-4 rounded-sm text-muted-foreground/70 hover:bg-destructive/15 hover:text-destructive transition-colors ' +
                                         (isActive

@@ -1,4 +1,5 @@
 import React from 'react'
+import { useTranslation } from '@kn/common'
 import { Trash2, X, Plus } from '@kn/icon'
 import {
     Button,
@@ -37,6 +38,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
     onClear,
 }) => {
     const chatContext = useChatContext()
+    const { t } = useTranslation()
     return (
         <div className="flex w-full items-center justify-between gap-2 px-3 h-9 border-b bg-background/95 backdrop-blur-sm">
             <SessionSwitcher
@@ -59,7 +61,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                                 <Plus className="h-3.5 w-3.5" />
                             </Button>
                         </TooltipTrigger>
-                        <TooltipContent side="bottom" className="text-xs">New chat</TooltipContent>
+                        <TooltipContent side="bottom" className="text-xs">{t('ai.chat.newChat')}</TooltipContent>
                     </Tooltip>
                     <Tooltip>
                         <TooltipTrigger asChild>
@@ -73,7 +75,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                                 <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                         </TooltipTrigger>
-                        <TooltipContent side="bottom" className="text-xs">Clear current chat</TooltipContent>
+                        <TooltipContent side="bottom" className="text-xs">{t('ai.chat.clearChat')}</TooltipContent>
                     </Tooltip>
                     {/* Floating mode toggles the bubble; in the dock,
                         toggleChat is wired to the host's `close` (collapse). */}
@@ -88,7 +90,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                                 <X className="h-3.5 w-3.5" />
                             </Button>
                         </TooltipTrigger>
-                        <TooltipContent side="bottom" className="text-xs">Close</TooltipContent>
+                        <TooltipContent side="bottom" className="text-xs">{t('ai.chat.close')}</TooltipContent>
                     </Tooltip>
                 </TooltipProvider>
             </div>

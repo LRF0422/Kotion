@@ -15,6 +15,7 @@ import {
     wireNumber,
 } from './events'
 import type {
+    AgentChatMessage,
     AgentEvent,
     CreateRunInput,
     MemoryItem,
@@ -34,6 +35,51 @@ const REQUEST_TIMEOUT_MS = 15_000
 function isPermanentStreamError(error: unknown): boolean {
     const message = error instanceof Error ? error.message : String(error)
     return /\((400|401|403|404)\)/.test(message)
+}
+
+/** Roles accepted by the AgentCore wire contract. */
+const AGENT_ROLES: readonly string[] = ['system', 'user', 'assistant', 'tool']
+
+/** Short single-line content excerpt for diagnostics. */
+function contentPreview(content?: string): string {
+    if (!content) return ''
+    const flat = content.replace(/\s+/g, ' ').trim()
+    return flat.length > 60 ? flat.slice(0, 60) + '…' : flat
+}
+
+/**
+ * The LLM provider rejects `role: null` with 400 BAD_REQUEST (the backend
+ * forwards client messages as-is), and a null entry breaks serialization too.
+ * `role` is required by the wire type, but dynamically assembled history can
+ * still carry a blank one — so normalize here, at the single transport choke
+ * point every producer goes through, and name the culprit in the console.
+ */
+function sanitizeOutgoingMessages(messages?: AgentChatMessage[]): AgentChatMessage[] {
+    if (!Array.isArray(messages)) return []
+    return messages.reduce<AgentChatMessage[]>((out, message, index) => {
+        if (!message) {
+            console.warn(`[AgentClient] dropping null message at messages[${index}]`)
+            return out
+        }
+        const normalized = typeof message.role === 'string' ? message.role.trim() : ''
+        if (!normalized) {
+            console.warn(
+                `[AgentClient] messages[${index}] has a blank role — sending as "user" (content: ${contentPreview(message.content)})`
+            )
+            out.push({ ...message, role: 'user' })
+            return out
+        }
+        if (!AGENT_ROLES.includes(normalized)) {
+            console.warn(`[AgentClient] messages[${index}] has an unknown role "${normalized}"`)
+            out.push(message)
+            return out
+        }
+        // Membership in AGENT_ROLES (which mirrors the wire union) is checked
+        // above; TS cannot narrow an arbitrary string through `includes`.
+        const role = normalized as AgentChatMessage['role']
+        out.push(role === message.role ? message : { ...message, role })
+        return out
+    }, [])
 }
 
 export interface AgentClientOptions {
@@ -76,10 +122,14 @@ export class AgentClient {
     // ==================== runs ====================
 
     async createRun(input: CreateRunInput): Promise<RunView> {
+        const payload: CreateRunInput = {
+            ...input,
+            messages: sanitizeOutgoingMessages(input.messages),
+        }
         return normalizeRunView(
             await this.request<RunView>('/runs', {
                 method: 'POST',
-                body: JSON.stringify(input),
+                body: JSON.stringify(payload),
             })
         )
     }

@@ -1,4 +1,5 @@
 import React from 'react'
+import { useTranslation } from '@kn/common'
 import { HelpCircle, Send, XCircle } from '@kn/icon'
 import { Button, Input } from '@kn/ui'
 import type { PendingUserChoice } from '../chat-types'
@@ -25,6 +26,7 @@ export const UserChoiceCard: React.FC<UserChoiceCardProps> = ({
     onCustomSubmit,
     onCancel,
 }) => {
+    const { t } = useTranslation()
     return (
         <div className="mx-2 my-1.5 p-3 rounded-lg bg-card border border-border/60 shadow-sm animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
             <div className="flex items-start gap-2 mb-2.5">
@@ -36,7 +38,7 @@ export const UserChoiceCard: React.FC<UserChoiceCardProps> = ({
                         {choice.request.question}
                     </p>
                     <p className="text-[10px] text-muted-foreground mt-0.5">
-                        Select an option to continue
+                        {t('ai.chat.selectOptionHint')}
                     </p>
                 </div>
             </div>
@@ -65,13 +67,13 @@ export const UserChoiceCard: React.FC<UserChoiceCardProps> = ({
             {choice.request.allowCustomInput && (
                 <div className="mt-2.5 pt-2.5 border-t border-border/50">
                     <p className="text-[10px] text-muted-foreground mb-1.5">
-                        Or provide a custom response
+                        {t('ai.chat.customResponseHint')}
                     </p>
                     <div className="flex gap-1.5">
                         <Input
                             value={customInput}
                             onChange={(e) => onCustomInputChange(e.target.value)}
-                            placeholder="Type your response…"
+                            placeholder={t('ai.chat.customResponsePlaceholder')}
                             className="flex-1 h-7 text-xs"
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter' && customInput.trim()) {
@@ -100,7 +102,7 @@ export const UserChoiceCard: React.FC<UserChoiceCardProps> = ({
                     className="h-6 px-2 text-[10px] text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                 >
                     <XCircle className="h-3 w-3 mr-1" />
-                    Cancel
+                    {t('ai.chat.cancel')}
                 </Button>
             </div>
         </div>

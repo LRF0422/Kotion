@@ -193,9 +193,15 @@ public class DefaultRunSupervisor {
                 cmd.getSkillFragments(), cmd.getMemoryLines(), cmd.getSkillTools()));
         if (cmd.getMessages() != null) {
             for (ChatMessage message : cmd.getMessages()) {
-                if (message != null && !"system".equalsIgnoreCase(message.getRole())) {
-                    checkpoint.getMessages().add(message);
+                if (message == null || "system".equalsIgnoreCase(message.getRole())) {
+                    continue;
                 }
+                if (isBlank(message.getRole())) {
+                    log.warn("Child run {}: blank message role from caller — treating as 'user'",
+                            run.getRunId());
+                    message.setRole("user");
+                }
+                checkpoint.getMessages().add(message);
             }
         }
         if (cmd.getTools() != null) {

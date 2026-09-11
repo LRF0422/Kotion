@@ -484,7 +484,7 @@ export const ExpandableChatDemo: React.FC<{
         const history = getHistoryForAI(currentMessages).slice(0, -1)
 
         const prompt = targetPage
-            ? '（本会话绑定编辑页面「' + targetPage.title + '」，所有文档工具作用于该页面）\n' + messageText
+            ? t('ai.chat.boundPagePrefix', { title: targetPage.title }) + '\n' + messageText
             : messageText
 
         const agentMessages: AgentChatMessage[] = [
@@ -504,7 +504,7 @@ export const ExpandableChatDemo: React.FC<{
         }
     }, [
         agent, messages, generateMessageId, targetPage, selectedModel, modelParams,
-        setMessages,
+        setMessages, t,
     ])
 
     const handleSend = useCallback(() => {
@@ -663,27 +663,27 @@ export const ExpandableChatDemo: React.FC<{
 
                     {agent.state.phase === 'suspended' && agent.state.suspendReason === 'budget' && (
                         <div className="mx-2 my-1.5 flex items-center gap-2 rounded-lg border border-border/60 bg-card p-2.5 text-[12px] text-muted-foreground">
-                            <span>任务已暂停（迭代预算耗尽）</span>
+                            <span>{t('ai.chat.budgetPaused')}</span>
                             <button
                                 type="button"
                                 className="ml-auto shrink-0 rounded-md bg-primary px-2.5 py-1 text-[12px] font-medium text-primary-foreground hover:opacity-90"
                                 onClick={() => void agent.continueRun()}
                             >
-                                继续执行
+                                {t('ai.chat.continueRun')}
                             </button>
                         </div>
                     )}
 
                     {agent.state.error && agent.state.phase !== 'failed' && (
                         <div className="mx-2 my-1.5 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-[11px] text-amber-700 dark:text-amber-300">
-                            <span className="min-w-0 flex-1">Agent 暂时不可用：{agent.state.error}</span>
+                            <span className="min-w-0 flex-1">{t('ai.chat.unavailable', { error: agent.state.error })}</span>
                             {agent.state.phase === 'suspended' && (
                                 <button
                                     type="button"
                                     className="shrink-0 rounded-md border border-amber-500/30 px-2 py-1 font-medium hover:bg-amber-500/10"
                                     onClick={agent.retryConnection}
                                 >
-                                    重试
+                                    {t('ai.chat.retry')}
                                 </button>
                             )}
                         </div>

@@ -1,4 +1,5 @@
 import React from 'react'
+import { useTranslation } from '@kn/common'
 import { Sparkles, BarChart3, Search, ListFilter, Bot, FileText, PenLine, Lightbulb } from '@kn/icon'
 import type { ChatMode } from '@kn/common'
 
@@ -7,50 +8,19 @@ interface ChatEmptyStateProps {
     onSubmit: (prompt: string) => void
 }
 
+/** Starter prompts as i18n key pairs: the card label and the text sent to the model. */
 const ASK_PROMPTS = [
-    {
-        icon: FileText,
-        label: 'Summarize this document',
-        prompt: 'Summarize the key points of this document.',
-    },
-    {
-        icon: Search,
-        label: 'Find information',
-        prompt: 'Find the most relevant sections about ',
-    },
-    {
-        icon: Lightbulb,
-        label: 'Explain a concept',
-        prompt: 'Explain the following concept in simple terms: ',
-    },
-    {
-        icon: ListFilter,
-        label: 'Compare sections',
-        prompt: 'Compare the arguments in different sections of this document.',
-    },
+    { icon: FileText, labelKey: 'ai.chat.promptSummarize', promptKey: 'ai.chat.promptSummarizeText' },
+    { icon: Search, labelKey: 'ai.chat.promptFind', promptKey: 'ai.chat.promptFindText' },
+    { icon: Lightbulb, labelKey: 'ai.chat.promptExplain', promptKey: 'ai.chat.promptExplainText' },
+    { icon: ListFilter, labelKey: 'ai.chat.promptCompare', promptKey: 'ai.chat.promptCompareText' },
 ] as const
 
 const AGENT_PROMPTS = [
-    {
-        icon: PenLine,
-        label: 'Draft content',
-        prompt: 'Draft a short introduction for this document.',
-    },
-    {
-        icon: BarChart3,
-        label: 'Create a chart',
-        prompt: 'Create a chart or visualization based on the document data.',
-    },
-    {
-        icon: Bot,
-        label: 'Automate a task',
-        prompt: 'Help me create an automated agent for a repetitive task.',
-    },
-    {
-        icon: ListFilter,
-        label: 'Reorganize content',
-        prompt: 'Reorganize this document into a clearer structure.',
-    },
+    { icon: PenLine, labelKey: 'ai.chat.promptDraft', promptKey: 'ai.chat.promptDraftText' },
+    { icon: BarChart3, labelKey: 'ai.chat.promptChart', promptKey: 'ai.chat.promptChartText' },
+    { icon: Bot, labelKey: 'ai.chat.promptAutomate', promptKey: 'ai.chat.promptAutomateText' },
+    { icon: ListFilter, labelKey: 'ai.chat.promptReorganize', promptKey: 'ai.chat.promptReorganizeText' },
 ] as const
 
 /**
@@ -58,12 +28,10 @@ const AGENT_PROMPTS = [
  * with mode-aware copy and a compact 2×2 grid of starter prompts.
  */
 export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({ mode, onSubmit }) => {
+    const { t } = useTranslation()
     const prompts = mode === 'ask' ? ASK_PROMPTS : AGENT_PROMPTS
-    const heading = mode === 'ask' ? 'Ask about your document' : 'What can I help you build?'
-    const sub =
-        mode === 'ask'
-            ? "I'll answer using the content in view. I won't edit anything."
-            : 'I can read, edit and reorganize your document. Try one of these:'
+    const heading = mode === 'ask' ? t('ai.chat.emptyAskTitle') : t('ai.chat.emptyAgentTitle')
+    const sub = mode === 'ask' ? t('ai.chat.emptyAskSub') : t('ai.chat.emptyAgentSub')
 
     return (
         <div className="flex flex-col items-center px-4 pt-6 pb-3">
@@ -78,18 +46,18 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({ mode, onSubmit }
                 {sub}
             </p>
             <div className="grid grid-cols-2 gap-1.5 w-full max-w-[340px]">
-                {prompts.map(({ icon: Icon, label, prompt }) => (
+                {prompts.map(({ icon: Icon, labelKey, promptKey }) => (
                     <button
-                        key={label}
+                        key={labelKey}
                         type="button"
-                        onClick={() => onSubmit(prompt)}
+                        onClick={() => onSubmit(t(promptKey))}
                         className="group flex flex-col items-start gap-1 p-2 rounded-lg border border-border/60 bg-card/50 hover:bg-muted/50 hover:border-border transition-all text-left"
                     >
                         <div className="p-1 rounded bg-muted/60 group-hover:bg-muted transition-colors">
                             <Icon className="h-3 w-3 text-muted-foreground group-hover:text-foreground transition-colors" />
                         </div>
                         <span className="text-[11px] font-medium leading-snug text-foreground/85 line-clamp-2">
-                            {label}
+                            {t(labelKey)}
                         </span>
                     </button>
                 ))}

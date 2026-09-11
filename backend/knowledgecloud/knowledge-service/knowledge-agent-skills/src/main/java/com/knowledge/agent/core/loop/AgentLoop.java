@@ -429,6 +429,7 @@ public class AgentLoop implements Runnable {
                 if (message == null || "system".equalsIgnoreCase(message.getRole())) {
                     continue; // our own system prefix is authoritative
                 }
+                normalizeBlankRole(message);
                 cp.getMessages().add(message);
             }
         }
@@ -925,6 +926,28 @@ public class AgentLoop implements Runnable {
     }
 
     // ==================== helpers ====================
+
+    /**
+     * Client payloads occasionally omit `role` (JSON null / missing field).
+     * Providers reject `role: null` with 400 BAD_REQUEST, so untagged client
+     * content is treated as a user message. Repaired in place and logged with a
+     * content prefix so the offending producer can be traced.
+     */
+    private void normalizeBlankRole(ChatMessage message) {
+        if (message.getRole() == null || message.getRole().trim().isEmpty()) {
+            log.warn("Run {}: blank message role from client — treating as 'user' (content prefix: {})",
+                    run.getRunId(), contentPrefix(message.getContent()));
+            message.setRole("user");
+        }
+    }
+
+    private String contentPrefix(String value) {
+        if (value == null) {
+            return "";
+        }
+        String flat = value.replaceAll("\\s+", " ").trim();
+        return flat.length() > 80 ? flat.substring(0, 80) + "…" : flat;
+    }
 
     private ChatMessage buildAssistantMessage(LlmResult result) {
         ChatMessage message = new ChatMessage();

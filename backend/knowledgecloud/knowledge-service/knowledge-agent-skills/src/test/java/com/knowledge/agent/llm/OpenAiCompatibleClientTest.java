@@ -2,8 +2,10 @@ package com.knowledge.agent.llm;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.knowledge.agent.api.dto.ChatMessage;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -83,6 +85,29 @@ class OpenAiCompatibleClientTest {
 
         assertTrue(body.get("stream").asBoolean());
         assertFalse(body.has("stream_options"));
+    }
+
+    @Test
+    void neverSerializesNullRoleAndSkipsMalformedEntries() throws Exception {
+        OpenAiCompatibleClient client = client(Collections.emptyMap());
+        ChatMessage nullRole = ChatMessage.builder().content("client payload without role").build();
+        ChatMessage blankRole = ChatMessage.builder().role("   ").content("whitespace role").build();
+        ChatMessage valid = ChatMessage.builder().role("user").content("hello").build();
+        LlmRequest request = LlmRequest.builder()
+                .model("test-model")
+                .messages(Arrays.asList(null, nullRole, blankRole, valid))
+                .build();
+
+        JsonNode body = objectMapper.readTree(client.buildRequestBody(request, false));
+
+        JsonNode messages = body.get("messages");
+        assertEquals(1, messages.size());
+        assertEquals("user", messages.get(0).path("role").asText());
+        assertEquals("hello", messages.get(0).path("content").asText());
+        for (JsonNode message : messages) {
+            assertFalse(message.path("role").isNull(), "role must never be JSON null");
+            assertFalse(message.path("role").asText().trim().isEmpty());
+        }
     }
 
     private OpenAiCompatibleClient client(Map<String, Object> extra) {

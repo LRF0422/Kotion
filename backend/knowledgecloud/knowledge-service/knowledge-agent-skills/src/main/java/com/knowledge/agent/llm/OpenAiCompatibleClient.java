@@ -145,6 +145,15 @@ public class OpenAiCompatibleClient implements LlmClient {
 
     // ---- Private helpers ----
 
+    /** Short single-line content excerpt for diagnostics (never logs whole payloads). */
+    private static String contentPrefix(String value) {
+        if (value == null) {
+            return "";
+        }
+        String flat = value.replaceAll("\\s+", " ").trim();
+        return flat.length() > 80 ? flat.substring(0, 80) + "…" : flat;
+    }
+
     String buildRequestBody(LlmRequest request, boolean stream) throws Exception {
         ObjectNode root = objectMapper.createObjectNode();
         String model = resolveModel(request.getModel());
@@ -187,8 +196,25 @@ public class OpenAiCompatibleClient implements LlmClient {
             // Pass 1: Filter orphaned tool messages into a validated list.
             List<com.knowledge.agent.api.dto.ChatMessage> validated = new ArrayList<>();
             boolean inToolCallGroup = false;
-            for (com.knowledge.agent.api.dto.ChatMessage msg : request.getMessages()) {
-                if ("tool".equals(msg.getRole())) {
+            List<com.knowledge.agent.api.dto.ChatMessage> incoming = request.getMessages();
+            for (int index = 0; index < incoming.size(); index++) {
+                com.knowledge.agent.api.dto.ChatMessage msg = incoming.get(index);
+                // Hard boundary: a null entry or a null role would be serialized
+                // as invalid JSON ("role": null) and the provider rejects the
+                // whole request with 400 BAD_REQUEST. Never forward either.
+                if (msg == null) {
+                    log.warn("Skipping messages[{}]: null entry before provider call", index);
+                    continue;
+                }
+                String role = msg.getRole();
+                if (role == null || role.trim().isEmpty()) {
+                    log.warn("Skipping messages[{}]: blank role before provider call "
+                                    + "(name={}, toolCallId={}, contentPrefix={})",
+                            index, msg.getName(), msg.getToolCallId(),
+                            contentPrefix(msg.getContent()));
+                    continue;
+                }
+                if ("tool".equals(role)) {
                     if (!inToolCallGroup) {
                         log.warn(
                                 "Skipping orphaned tool message (no preceding assistant+tool_calls): name={}, toolCallId={}",
@@ -196,7 +222,7 @@ public class OpenAiCompatibleClient implements LlmClient {
                         continue;
                     }
                     // still inside the group — keep this message
-                } else if ("assistant".equals(msg.getRole())
+                } else if ("assistant".equals(role)
                         && msg.getToolCalls() != null && !msg.getToolCalls().isEmpty()) {
                     inToolCallGroup = true;
                 } else {

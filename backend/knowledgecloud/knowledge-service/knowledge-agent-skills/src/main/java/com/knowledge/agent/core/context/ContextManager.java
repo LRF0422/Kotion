@@ -234,6 +234,17 @@ public class ContextManager {
         // Work on a mutable copy so we don't mutate checkpoint state.
         List<ChatMessage> messages = new ArrayList<>(checkpointMessages.size());
         for (ChatMessage msg : checkpointMessages) {
+            if (msg == null) {
+                continue; // a null entry can never be assembled into a request
+            }
+            if (msg.getRole() == null || msg.getRole().trim().isEmpty()) {
+                // Legacy checkpoints (or client payloads) may carry a blank
+                // role; providers reject `role: null` with a 400. Repaired in
+                // place so the next checkpoint persists the fix.
+                log.warn("Context: blank message role repaired to 'user' (content prefix: {})",
+                        contentPrefix(msg.getContent()));
+                msg.setRole("user");
+            }
             messages.add(msg);
         }
 
@@ -321,6 +332,14 @@ public class ContextManager {
         }
 
         return messages;
+    }
+
+    private String contentPrefix(String value) {
+        if (value == null) {
+            return "";
+        }
+        String flat = value.replaceAll("\\s+", " ").trim();
+        return flat.length() > 80 ? flat.substring(0, 80) + "…" : flat;
     }
 
     /**
