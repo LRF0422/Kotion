@@ -38,6 +38,7 @@ import {
   FileText,
   MessageSquare,
   Blocks,
+  Flag,
   Sparkles,
   Gauge,
   ScrollText,
@@ -84,6 +85,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: '平台能力',
     items: [
       { title: '插件审核', url: '/plugins', icon: Blocks, permission: 'platform.plugins.read' },
+      { title: '插件举报', url: '/plugin-reports', icon: Flag, permission: 'platform.plugins.read' },
       { title: 'AI 配置', url: '/ai', icon: Sparkles, permission: 'platform.ai.config.manage' },
       { title: 'AI 用量', url: '/ai-usage', icon: Gauge, permission: 'platform.ai.usage.read' },
     ],

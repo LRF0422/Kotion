@@ -111,6 +111,27 @@ export const resources = {
         publish: "发布插件",
         manage: "管理插件",
         openInstalled: "已安装",
+        report: {
+          trigger: "举报该插件",
+          title: "举报插件",
+          description: "举报「{{name}}」；我们会在核实后处理，请勿滥用举报。",
+          reasonLabel: "举报原因",
+          reasonPlaceholder: "请选择举报原因",
+          detailLabel: "补充说明",
+          detailPlaceholder: "请描述具体问题，例如复现步骤、影响范围…",
+          submit: "提交举报",
+          submitting: "提交中…",
+          cancel: "取消",
+          success: "举报已提交",
+          failed: "举报提交失败，请稍后重试",
+          reasons: {
+            malicious: "恶意代码或行为",
+            privacy: "隐私与数据问题",
+            copyright: "侵权或抄袭",
+            spam: "垃圾或误导信息",
+            other: "其他",
+          },
+        },
         sidebar: {
           title: "已安装插件",
           count: "已安装 {{count}} 个",
@@ -239,6 +260,7 @@ export const resources = {
         sections: {
           basicIdentity: "基础标识",
           versionAndCategory: "版本与分类",
+          permissions: "能力声明",
           displayInfo: "展示信息",
         },
         fields: {
@@ -265,11 +287,29 @@ export const resources = {
           descriptionPlaceholder:
             "请简要描述插件的核心功能和使用场景，这将显示在插件列表中...",
           descriptionHint: "一句话描述插件的核心价值",
+          permissionsHint:
+            "如实勾选插件运行所需的能力；审核通过后会向用户展示，勾选与实际不符可能导致驳回或下架。",
         },
         categories: {
           feature: "功能增强",
           app: "应用",
           connector: "连接器",
+        },
+        permissions: {
+          network: "网络访问",
+          networkHint: "请求外部接口或加载远程资源",
+          storage: "本地存储",
+          storageHint: "读写文档存储或缓存数据",
+          clipboard: "剪贴板",
+          clipboardHint: "读取或写入系统剪贴板",
+          dom: "页面 DOM",
+          domHint: "直接访问或修改宿主页面元素",
+          external_resources: "外部资源",
+          external_resourcesHint: "加载第三方脚本、样式或媒体",
+          editor_extension: "编辑器扩展",
+          editor_extensionHint: "向编辑器注册扩展节点或命令",
+          background_tasks: "后台任务",
+          background_tasksHint: "在后台持续运行定时或异步任务",
         },
         tabs: {
           feature: "功能特性",
@@ -1268,6 +1308,27 @@ export const resources = {
         publish: "Publish plugin",
         manage: "Manage plugins",
         openInstalled: "Installed",
+        report: {
+          trigger: "Report this plugin",
+          title: "Report plugin",
+          description: "Report \"{{name}}\". We review reports before acting; please do not abuse this.",
+          reasonLabel: "Reason",
+          reasonPlaceholder: "Select a reason",
+          detailLabel: "Details",
+          detailPlaceholder: "Describe the issue, e.g. reproduction steps and impact...",
+          submit: "Submit report",
+          submitting: "Submitting...",
+          cancel: "Cancel",
+          success: "Report submitted",
+          failed: "Could not submit the report. Please try again.",
+          reasons: {
+            malicious: "Malicious code or behavior",
+            privacy: "Privacy or data issue",
+            copyright: "Copyright or plagiarism",
+            spam: "Spam or misleading information",
+            other: "Other",
+          },
+        },
         sidebar: {
           title: "Installed plugins",
           count: "{{count}} installed",
@@ -1400,6 +1461,7 @@ export const resources = {
         sections: {
           basicIdentity: "Basic Identity",
           versionAndCategory: "Version & Category",
+          permissions: "Capabilities",
           displayInfo: "Display Info",
         },
         fields: {
@@ -1427,11 +1489,29 @@ export const resources = {
           descriptionPlaceholder:
             "Briefly describe your plugin's core features and use cases. This will be shown in the plugin list...",
           descriptionHint: "One sentence describing your plugin's core value",
+          permissionsHint:
+            "Declare the capabilities your plugin needs. They are shown to users after approval; a mismatch with actual behavior can cause rejection or takedown.",
         },
         categories: {
           feature: "Feature",
           app: "App",
           connector: "Connector",
+        },
+        permissions: {
+          network: "Network access",
+          networkHint: "Call external APIs or load remote resources",
+          storage: "Local storage",
+          storageHint: "Read or write document storage or cached data",
+          clipboard: "Clipboard",
+          clipboardHint: "Read from or write to the system clipboard",
+          dom: "Page DOM",
+          domHint: "Directly access or modify host page elements",
+          external_resources: "External resources",
+          external_resourcesHint: "Load third-party scripts, styles or media",
+          editor_extension: "Editor extension",
+          editor_extensionHint: "Register editor nodes or commands",
+          background_tasks: "Background tasks",
+          background_tasksHint: "Run recurring or async work in the background",
         },
         tabs: {
           feature: "Features",

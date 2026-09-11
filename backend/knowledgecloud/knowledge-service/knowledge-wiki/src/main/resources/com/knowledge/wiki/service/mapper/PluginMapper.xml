@@ -38,6 +38,9 @@
         <if test="query.reviewStatus != null">
             AND COALESCE(candidate.review_status, p.status) = #{query.reviewStatus}
         </if>
+        <if test="query.suspended != null">
+            AND COALESCE(p.suspended, 0) = #{query.suspended}
+        </if>
         ORDER BY
             CASE COALESCE(candidate.review_status, p.status)
                 WHEN 'PENDING' THEN 0

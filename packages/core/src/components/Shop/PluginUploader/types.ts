@@ -15,6 +15,18 @@ export interface PluginDescriptionValue {
   canonical?: boolean;
 }
 
+export const PLUGIN_PERMISSIONS = [
+  "NETWORK",
+  "STORAGE",
+  "CLIPBOARD",
+  "DOM",
+  "EXTERNAL_RESOURCES",
+  "EDITOR_EXTENSION",
+  "BACKGROUND_TASKS",
+] as const;
+
+export type PluginPermission = (typeof PLUGIN_PERMISSIONS)[number];
+
 export interface PluginSubmissionValues {
   name: string;
   pluginKey: string;
@@ -25,6 +37,7 @@ export interface PluginSubmissionValues {
   description: string;
   resourcePath: string;
   integrity: string;
+  permissions: string[];
   versionDescs: PluginDescriptionValue[];
 }
 

@@ -17,10 +17,16 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.knowledge.core.tool.api.R;
 import com.knowledge.core.tool.constant.RoleConstant;
 import com.knowledge.wiki.service.application.PluginApplication;
+import com.knowledge.wiki.service.application.PluginReportApplication;
 import com.knowledge.wiki.service.entity.dto.PluginBatchReviewDTO;
+import com.knowledge.wiki.service.entity.dto.PluginReportHandleDTO;
 import com.knowledge.wiki.service.entity.dto.PluginReviewDTO;
+import com.knowledge.wiki.service.entity.dto.PluginScanReportDTO;
+import com.knowledge.wiki.service.entity.dto.PluginSuspendDTO;
 import com.knowledge.wiki.service.entity.dto.QueryAdminPluginDTO;
+import com.knowledge.wiki.service.entity.dto.QueryPluginReportDTO;
 import com.knowledge.wiki.service.entity.vo.PluginBatchReviewResultVO;
+import com.knowledge.wiki.service.entity.vo.PluginReportVO;
 import com.knowledge.wiki.service.entity.vo.PluginReviewStatsVO;
 import com.knowledge.wiki.service.entity.vo.PluginVO;
 import com.knowledge.wiki.service.entity.vo.PluginVersionVO;
@@ -36,6 +42,8 @@ public class AdminPluginController {
 
     @Autowired
     private PluginApplication pluginApplication;
+    @Autowired
+    private PluginReportApplication pluginReportApplication;
 
     @GetMapping("/list")
     public R<IPage<PluginVO>> list(QueryAdminPluginDTO dto) {
@@ -92,5 +100,45 @@ public class AdminPluginController {
             + ") and principal.clientId == 'kotion-platform-admin'")
     public R<PluginVO> release(@PathVariable("id") Long id) {
         return R.data(pluginApplication.release(id));
+    }
+
+    /** 持久化启发式安全扫描结果。 */
+    @PostMapping("/{id}/scan-report")
+    @PreAuthorize("(hasRole('platform.plugins.review') or " + RoleConstant.HAS_ROLE_ADMIN
+            + ") and principal.clientId == 'kotion-platform-admin'")
+    public R<PluginVersionVO> scanReport(@PathVariable("id") Long id,
+            @Valid @RequestBody PluginScanReportDTO dto) {
+        return R.data(pluginApplication.saveScanReport(id, dto));
+    }
+
+    /** 下架 / 紧急召回已上架插件。 */
+    @PostMapping("/{id}/suspend")
+    @PreAuthorize("(hasRole('platform.plugins.review') or " + RoleConstant.HAS_ROLE_ADMIN
+            + ") and principal.clientId == 'kotion-platform-admin'")
+    public R<PluginVO> suspend(@PathVariable("id") Long id, @Valid @RequestBody PluginSuspendDTO dto) {
+        return R.data(pluginApplication.suspend(id, dto));
+    }
+
+    /** 恢复已下架插件。 */
+    @PostMapping("/{id}/restore")
+    @PreAuthorize("(hasRole('platform.plugins.review') or " + RoleConstant.HAS_ROLE_ADMIN
+            + ") and principal.clientId == 'kotion-platform-admin'")
+    public R<PluginVO> restore(@PathVariable("id") Long id) {
+        return R.data(pluginApplication.restore(id));
+    }
+
+    /** 插件举报列表。 */
+    @GetMapping("/report/list")
+    public R<IPage<PluginReportVO>> reportList(QueryPluginReportDTO dto) {
+        return R.data(pluginReportApplication.adminList(dto));
+    }
+
+    /** 处理插件举报（采纳/驳回）。 */
+    @PostMapping("/report/{reportId}/handle")
+    @PreAuthorize("(hasRole('platform.plugins.review') or " + RoleConstant.HAS_ROLE_ADMIN
+            + ") and principal.clientId == 'kotion-platform-admin'")
+    public R<PluginReportVO> handleReport(@PathVariable("reportId") Long reportId,
+            @Valid @RequestBody PluginReportHandleDTO dto) {
+        return R.data(pluginReportApplication.handle(reportId, dto));
     }
 }

@@ -107,6 +107,33 @@ public final class PluginSubmissionValidator {
         return normalized;
     }
 
+    /** Declared capability permissions must belong to the reviewed catalog. */
+    private static final Set<String> PERMISSION_CATALOG = new LinkedHashSet<>(java.util.Arrays.asList(
+            "NETWORK", "STORAGE", "CLIPBOARD", "DOM", "EXTERNAL_RESOURCES",
+            "EDITOR_EXTENSION", "BACKGROUND_TASKS"));
+
+    public static List<String> normalizePermissions(List<String> permissions) {
+        if (permissions == null || permissions.isEmpty()) {
+            return new ArrayList<>();
+        }
+        Set<String> normalized = new LinkedHashSet<>();
+        for (String permission : permissions) {
+            String value = StrUtil.trim(permission);
+            if (StrUtil.isBlank(value)) {
+                continue;
+            }
+            String upper = value.toUpperCase(Locale.ROOT);
+            if (!PERMISSION_CATALOG.contains(upper)) {
+                throw WikiException.INVALID_PARAMETER.newException("未知的能力声明: " + value);
+            }
+            normalized.add(upper);
+        }
+        if (normalized.size() > 20) {
+            throw WikiException.INVALID_PARAMETER.newException();
+        }
+        return new ArrayList<>(normalized);
+    }
+
     public static void validateVersionDescriptions(List<VersionDesc> descriptions) {
         if (descriptions == null || descriptions.isEmpty()) {
             throw WikiException.INVALID_PARAMETER.newException();

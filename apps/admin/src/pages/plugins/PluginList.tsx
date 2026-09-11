@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Badge,
   Button,
@@ -35,6 +35,7 @@ import {
   useToast,
 } from '@kn/ui'
 import {
+  Ban,
   Blocks,
   Check,
   Download,
@@ -44,7 +45,10 @@ import {
   GitBranch,
   History,
   Loader2,
+  MonitorPlay,
   Play,
+  RotateCcw,
+  ScanSearch,
   Search,
   ShieldAlert,
   ShieldCheck,
@@ -66,15 +70,21 @@ import {
   getAdminPluginReviewStats,
   getAdminPluginVersions,
   releaseAdminPlugin,
+  restoreAdminPlugin,
   reviewPluginSubmission,
+  savePluginScanReport,
+  suspendAdminPlugin,
   type PluginCategory,
   type PluginReviewDecision,
   type PluginReviewReasonValue,
   type PluginReviewStats,
+  type PluginScanFinding,
+  type PluginScanStatus,
   type PluginStatus,
   type PluginVO,
   type PluginVersionVO,
 } from '@/api'
+import { buildSandboxDocument } from '@/lib/plugin-sandbox'
 import { formatDateTime, usePagedData } from '@/lib/use-paged-data'
 
 const PAGE_SIZE = 10
@@ -85,11 +95,60 @@ const CATEGORY_LABEL: Record<string, string> = {
   CONNECTOR: '连接器',
 }
 
-const STATUS_META: Record<string, { label: string; variant: 'warning' | 'info' | 'danger' | 'success' }> = {
+const STATUS_META: Record<string, { label: string; variant: 'warning' | 'info' | 'danger' | 'success' | 'muted' }> = {
   PENDING: { label: '待审核', variant: 'warning' },
   IN_PROGRESS: { label: '审核中', variant: 'info' },
   REJECTED: { label: '已驳回', variant: 'danger' },
   DONE: { label: '已通过', variant: 'success' },
+  SUSPENDED: { label: '已下架', variant: 'muted' },
+}
+
+const PERMISSION_LABEL: Record<string, string> = {
+  NETWORK: '网络访问',
+  STORAGE: '本地存储',
+  CLIPBOARD: '剪贴板',
+  DOM: '页面 DOM',
+  EXTERNAL_RESOURCES: '外部资源',
+  EDITOR_EXTENSION: '编辑器扩展',
+  BACKGROUND_TASKS: '后台任务',
+}
+
+/** Permissions that warrant extra scrutiny during review. */
+const RISKY_PERMISSIONS = new Set(['NETWORK', 'DOM', 'EXTERNAL_RESOURCES'])
+
+interface ScanRule {
+  code: string
+  level: PluginScanFinding['level']
+  message: string
+  pattern: RegExp
+}
+
+const SCAN_RULES: ScanRule[] = [
+  { code: 'EVAL', level: 'danger', message: '使用了 eval()，可执行任意代码', pattern: /\beval\s*\(/ },
+  { code: 'FUNCTION_CTOR', level: 'danger', message: '使用 new Function() 动态构造代码', pattern: /new\s+Function\s*\(/ },
+  { code: 'CHILD_PROCESS', level: 'danger', message: '包含进程/系统调用相关代码', pattern: /(child_process|process\.binding|execSync)/ },
+  { code: 'REMOTE_SCRIPT', level: 'danger', message: '动态创建 script 标签，可能加载远程脚本', pattern: /createElement\s*\(\s*['"]script['"]\s*\)/ },
+  { code: 'DOCUMENT_WRITE', level: 'warn', message: '使用 document.write', pattern: /document\.write\s*\(/ },
+  { code: 'INNER_HTML', level: 'warn', message: '直接写入 innerHTML', pattern: /\.innerHTML\s*=/ },
+  { code: 'DATA_URI', level: 'warn', message: '包含 data:text/html（可能内嵌可执行内容）', pattern: /data:text\/html/i },
+  { code: 'OBFUSCATION', level: 'warn', message: '包含超长无空白字符串，疑似混淆', pattern: /[A-Za-z0-9+/=]{800,}/ },
+  { code: 'COOKIE', level: 'info', message: '访问 document.cookie', pattern: /document\.cookie/ },
+  { code: 'NETWORK_CALL', level: 'info', message: '发起网络请求', pattern: /\b(fetch\s*\(|XMLHttpRequest|WebSocket\s*\()/ },
+]
+
+const scanArtifact = (source: string): { status: PluginScanStatus; findings: PluginScanFinding[] } => {
+  const findings: PluginScanFinding[] = []
+  for (const rule of SCAN_RULES) {
+    if (rule.pattern.test(source)) {
+      findings.push({ level: rule.level, code: rule.code, message: rule.message })
+    }
+  }
+  const status: PluginScanStatus = findings.some((item) => item.level === 'danger')
+    ? 'FAIL'
+    : findings.some((item) => item.level === 'warn')
+      ? 'WARN'
+      : 'PASS'
+  return { status, findings }
 }
 
 const VERSION_STATUS_LABEL: Record<string, string> = {
@@ -159,8 +218,10 @@ const getReasonLabel = (value: unknown) => {
   return getEnumDescription(value) || REVIEW_REASON_META[code || ''] || code || '-'
 }
 
-const getReviewStatus = (plugin?: PluginVO | null) =>
-  getEnumValue(plugin?.candidateVersion?.reviewStatus ?? plugin?.status)
+const getReviewStatus = (plugin?: PluginVO | null) => {
+  if (plugin?.suspended) return 'SUSPENDED'
+  return getEnumValue(plugin?.candidateVersion?.reviewStatus ?? plugin?.status)
+}
 
 const getSubmittedVersion = (plugin: PluginVO) => plugin.candidateVersion ?? plugin.currentVersion
 
@@ -240,6 +301,16 @@ export const PluginList = () => {
   const [batchRunning, setBatchRunning] = useState(false)
   const [claiming, setClaiming] = useState(false)
   const [stats, setStats] = useState<PluginReviewStats | null>(null)
+  const [scanning, setScanning] = useState(false)
+  const [scanStatus, setScanStatus] = useState<PluginScanStatus | null>(null)
+  const [scanFindings, setScanFindings] = useState<PluginScanFinding[]>([])
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [previewHtml, setPreviewHtml] = useState('')
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [previewLogs, setPreviewLogs] = useState<string[]>([])
+  const [suspendOpen, setSuspendOpen] = useState(false)
+  const [suspendReason, setSuspendReason] = useState('')
+  const [suspending, setSuspending] = useState(false)
   const detailRequestId = useRef(0)
   const versionsRequestId = useRef(0)
 
@@ -250,7 +321,9 @@ export const PluginList = () => {
         pageSize: PAGE_SIZE,
         searchValue: search || undefined,
         category: categoryFilter === 'all' ? undefined : (categoryFilter as PluginCategory),
-        reviewStatus: statusTab === 'all' ? undefined : (statusTab as PluginStatus),
+        reviewStatus:
+          statusTab === 'all' || statusTab === 'SUSPENDED' ? undefined : (statusTab as PluginStatus),
+        suspended: statusTab === 'SUSPENDED' ? true : statusTab === 'all' ? undefined : false,
       }),
     [search, categoryFilter, statusTab],
   )
@@ -280,6 +353,16 @@ export const PluginList = () => {
   useEffect(() => {
     setSelectedIds([])
   }, [search, categoryFilter, statusTab])
+
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as { __pluginPreview?: boolean; level?: string; message?: string }
+      if (!data || !data.__pluginPreview) return
+      setPreviewLogs((prev) => [...prev.slice(-49), `[${data.level || 'log'}] ${data.message || ''}`])
+    }
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
+  }, [])
 
   const loadDetail = useCallback(async (pluginId: string) => {
     const requestId = ++detailRequestId.current
@@ -318,6 +401,13 @@ export const PluginList = () => {
     setRejectReasonCode('')
     setRejectBatch(false)
     setVerifyResult(null)
+    setScanStatus(null)
+    setScanFindings([])
+    setPreviewOpen(false)
+    setPreviewHtml('')
+    setPreviewLogs([])
+    setSuspendOpen(false)
+    setSuspendReason('')
     setVersions([])
     loadDetail(plugin.id)
     loadVersions(plugin.id)
@@ -336,6 +426,13 @@ export const PluginList = () => {
       setRejectReasonCode('')
       setRejectBatch(false)
       setVerifyResult(null)
+      setScanStatus(null)
+      setScanFindings([])
+      setPreviewOpen(false)
+      setPreviewHtml('')
+      setPreviewLogs([])
+      setSuspendOpen(false)
+      setSuspendReason('')
     }
   }
 
@@ -456,6 +553,82 @@ export const PluginList = () => {
     }
   }
 
+  const runScan = async () => {
+    if (!artifactUrl || scanning) return
+    setScanning(true)
+    try {
+      const response = await fetch(artifactUrl)
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const { status, findings } = scanArtifact(await response.text())
+      setScanStatus(status)
+      setScanFindings(findings)
+      if (detail) {
+        const updated = await savePluginScanReport(detail.id, { status, report: JSON.stringify(findings) })
+        setDetail((prev) => (prev ? { ...prev, candidateVersion: updated } : prev))
+      }
+      toast({
+        title: status === 'PASS' ? '安全扫描通过' : status === 'WARN' ? '扫描发现告警项' : '扫描发现高风险项',
+        variant: status === 'FAIL' ? 'destructive' : undefined,
+      })
+    } catch (err) {
+      toast({ title: '安全扫描失败', description: err instanceof Error ? err.message : undefined, variant: 'destructive' })
+    } finally {
+      setScanning(false)
+    }
+  }
+
+  const openSandboxPreview = async () => {
+    if (!artifactUrl) return
+    setPreviewOpen(true)
+    setPreviewLogs([])
+    setPreviewHtml('')
+    setPreviewLoading(true)
+    try {
+      const response = await fetch(artifactUrl)
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      setPreviewHtml(buildSandboxDocument(await response.text()))
+    } catch (err) {
+      setPreviewHtml(
+        `<p style="font:13px sans-serif;padding:12px;color:#b91c1c">无法加载产物：${err instanceof Error ? err.message : '未知错误'}</p>`,
+      )
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
+
+  const handleSuspend = async () => {
+    if (!detail || !suspendReason.trim() || suspending) return
+    setSuspending(true)
+    try {
+      const updated = await suspendAdminPlugin(detail.id, suspendReason.trim())
+      setDetail(updated)
+      setSuspendOpen(false)
+      setSuspendReason('')
+      toast({ title: '插件已下架', description: detail.name })
+      reload()
+    } catch (err) {
+      toast({ title: '下架失败', description: err instanceof Error ? err.message : undefined, variant: 'destructive' })
+    } finally {
+      setSuspending(false)
+    }
+  }
+
+  const handleRestore = async () => {
+    if (!detail || suspending) return
+    if (!window.confirm(`确认恢复上架「${detail.name}」？`)) return
+    setSuspending(true)
+    try {
+      const updated = await restoreAdminPlugin(detail.id)
+      setDetail(updated)
+      toast({ title: '插件已恢复上架', description: detail.name })
+      reload()
+    } catch (err) {
+      toast({ title: '恢复失败', description: err instanceof Error ? err.message : undefined, variant: 'destructive' })
+    } finally {
+      setSuspending(false)
+    }
+  }
+
   const openRejectDialog = (batch = false) => {
     setRejectReason('')
     setRejectReasonCode('')
@@ -501,6 +674,17 @@ export const PluginList = () => {
       setVerifying(false)
     }
   }
+
+  const storedFindings = useMemo<PluginScanFinding[]>(() => {
+    if (!artifact?.scanReport) return []
+    try {
+      return JSON.parse(artifact.scanReport) as PluginScanFinding[]
+    } catch {
+      return []
+    }
+  }, [artifact?.scanReport])
+  const displayFindings = scanFindings.length > 0 ? scanFindings : storedFindings
+  const displayScanStatus = scanStatus ?? (artifact?.scanStatus as PluginScanStatus | undefined) ?? null
 
   const selectableIds = records
     .filter((plugin) => {
@@ -598,6 +782,7 @@ export const PluginList = () => {
             <TabsTrigger value="IN_PROGRESS">审核中</TabsTrigger>
             <TabsTrigger value="REJECTED">已驳回</TabsTrigger>
             <TabsTrigger value="DONE">已通过</TabsTrigger>
+            <TabsTrigger value="SUSPENDED">已下架</TabsTrigger>
             <TabsTrigger value="all">全部</TabsTrigger>
           </TabsList>
         </Tabs>
@@ -819,6 +1004,21 @@ export const PluginList = () => {
                 )}
               </section>
 
+              {detail.suspended && (
+                <div className="flex gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 text-sm">
+                  <Ban className="mt-0.5 size-4 shrink-0 text-amber-600" />
+                  <div className="space-y-1">
+                    <div className="font-medium text-amber-700 dark:text-amber-400">插件已下架</div>
+                    <p className="whitespace-pre-wrap text-amber-700/90 dark:text-amber-400/90">
+                      {detail.suspendReason || '未填写下架原因'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      操作人：{detail.suspendByName || '-'} · {formatDateTime(detail.suspendTime)}
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {reviewStatus === 'REJECTED' && reviewAudit?.comment && (
                 <div className="flex gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm">
                   <ShieldAlert className="mt-0.5 size-4 shrink-0 text-destructive" />
@@ -888,6 +1088,32 @@ export const PluginList = () => {
                       {detail.gitPath}
                     </a>
                   </div>
+                )}
+              </section>
+
+              <section className="space-y-3">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <ShieldAlert className="size-4" />
+                  能力声明
+                </div>
+                {artifact?.permissions && artifact.permissions.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {artifact.permissions.map((permission) => (
+                      <Badge
+                        key={permission}
+                        variant="outline"
+                        className={
+                          RISKY_PERMISSIONS.has(permission)
+                            ? 'border-amber-500/50 text-amber-600 dark:text-amber-400'
+                            : ''
+                        }
+                      >
+                        {PERMISSION_LABEL[permission] || permission}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border p-4 text-sm text-muted-foreground">未声明能力</div>
                 )}
               </section>
 
@@ -1004,7 +1230,72 @@ export const PluginList = () => {
                         </a>
                       </Button>
                     )}
+                    {artifactUrl && (
+                      <Button size="sm" variant="outline" onClick={() => void openSandboxPreview()}>
+                        <MonitorPlay className="mr-1.5 size-4" />
+                        沙箱预览
+                      </Button>
+                    )}
                   </div>
+                </div>
+              </section>
+
+              <section className="space-y-3">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <ScanSearch className="size-4" />
+                  安全扫描
+                  {artifact?.scanStatus && (
+                    <StatusBadge
+                      variant={
+                        artifact.scanStatus === 'PASS'
+                          ? 'success'
+                          : artifact.scanStatus === 'FAIL'
+                            ? 'danger'
+                            : 'warning'
+                      }
+                    >
+                      {artifact.scanStatus === 'PASS' ? '通过' : artifact.scanStatus === 'FAIL' ? '高风险' : '告警'}
+                    </StatusBadge>
+                  )}
+                </div>
+                <div className="space-y-3 rounded-lg border p-4 text-sm">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!artifactUrl || scanning || !candidate}
+                    onClick={() => void runScan()}
+                  >
+                    {scanning
+                      ? <Loader2 className="mr-1.5 size-4 animate-spin" />
+                      : <ScanSearch className="mr-1.5 size-4" />}
+                    运行启发式扫描
+                  </Button>
+                  {displayFindings.length > 0 ? (
+                    <ul className="space-y-1.5">
+                      {displayFindings.map((finding) => (
+                        <li key={finding.code} className="flex items-start gap-2 text-xs">
+                          <span
+                            className={
+                              finding.level === 'danger'
+                                ? 'text-destructive'
+                                : finding.level === 'warn'
+                                  ? 'text-amber-600'
+                                  : 'text-muted-foreground'
+                            }
+                          >
+                            ●
+                          </span>
+                          <span>
+                            <span className="font-mono">{finding.code}</span> · {finding.message}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      {displayScanStatus ? '未命中风险规则' : '尚未运行扫描；结果会记录到候选版本'}
+                    </p>
+                  )}
                 </div>
               </section>
 
@@ -1133,7 +1424,31 @@ export const PluginList = () => {
                       </Button>
                     </>
                   )}
-                  {(reviewStatus === 'REJECTED' || reviewStatus === 'DONE') && (
+                  {reviewStatus === 'DONE' && !detail.suspended && (
+                    <Button
+                      variant="outline"
+                      className="text-destructive"
+                      disabled={suspending}
+                      onClick={() => {
+                        setSuspendReason('')
+                        setSuspendOpen(true)
+                      }}
+                    >
+                      {suspending
+                        ? <Loader2 className="mr-2 size-4 animate-spin" />
+                        : <Ban className="mr-2 size-4" />}
+                      下架
+                    </Button>
+                  )}
+                  {detail.suspended && (
+                    <Button variant="outline" disabled={suspending} onClick={() => void handleRestore()}>
+                      {suspending
+                        ? <Loader2 className="mr-2 size-4 animate-spin" />
+                        : <RotateCcw className="mr-2 size-4" />}
+                      恢复上架
+                    </Button>
+                  )}
+                  {(reviewStatus === 'REJECTED' || reviewStatus === 'DONE') && !detail.suspended && (
                     <div className="flex items-center text-sm text-muted-foreground">
                       当前状态无需进一步审核操作
                     </div>
@@ -1218,6 +1533,74 @@ export const PluginList = () => {
               {rejectBatch ? '确认批量驳回' : '确认驳回'}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={suspendOpen} onOpenChange={setSuspendOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>下架 / 紧急召回</DialogTitle>
+            <DialogDescription>
+              下架「{detail?.name}」后，插件将从市场隐藏且不可安装；原因会通知开发者。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <label htmlFor="plugin-suspend-reason" className="text-sm font-medium">
+              下架原因 <span className="text-destructive">*</span>
+            </label>
+            <Textarea
+              id="plugin-suspend-reason"
+              value={suspendReason}
+              maxLength={500}
+              rows={4}
+              placeholder="例如：发现恶意行为、严重安全漏洞、侵犯版权…"
+              onChange={(event) => setSuspendReason(event.target.value)}
+            />
+            <div className="text-right text-xs text-muted-foreground">{suspendReason.length}/500</div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" disabled={suspending} onClick={() => setSuspendOpen(false)}>
+              取消
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={!suspendReason.trim() || suspending}
+              onClick={() => void handleSuspend()}
+            >
+              {suspending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Ban className="mr-2 size-4" />}
+              确认下架
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>沙箱预览</DialogTitle>
+            <DialogDescription>
+              在隔离的无同源 iframe 中执行候选产物，仅捕获控制台输出，不授予宿主权限与网络访问。
+            </DialogDescription>
+          </DialogHeader>
+          {previewLoading ? (
+            <div className="flex h-64 items-center justify-center text-muted-foreground">
+              <Loader2 className="size-5 animate-spin" />
+            </div>
+          ) : (
+            <iframe
+              title="plugin-sandbox"
+              sandbox="allow-scripts"
+              srcDoc={previewHtml}
+              className="h-64 w-full rounded border bg-white"
+            />
+          )}
+          <div className="max-h-40 overflow-auto rounded border bg-muted p-3 font-mono text-xs">
+            {previewLogs.length === 0 ? (
+              <span className="text-muted-foreground">暂无控制台输出</span>
+            ) : (
+              previewLogs.map((line, index) => <div key={index}>{line}</div>)
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

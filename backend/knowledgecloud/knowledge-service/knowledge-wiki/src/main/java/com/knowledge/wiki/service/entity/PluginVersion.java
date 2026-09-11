@@ -5,6 +5,7 @@ import java.util.List;
 
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
 import com.knowledge.core.version.BaseVersion;
 import com.knowledge.wiki.service.entity.enums.PluginReviewReason;
 import com.knowledge.wiki.service.entity.enums.PluginStatus;
@@ -36,6 +37,11 @@ public class PluginVersion extends BaseVersion {
     private Long claimedBy;
     private String claimedByName;
     private LocalDateTime claimedTime;
+    /** Declared capability permissions for security review. */
+    @TableField(typeHandler = JacksonTypeHandler.class)
+    private List<String> permissions;
+    private String scanStatus;
+    private String scanReport;
     @TableField(typeHandler = VersionDescListTypeHandler.class)
     private List<VersionDesc> versionDescription;
 

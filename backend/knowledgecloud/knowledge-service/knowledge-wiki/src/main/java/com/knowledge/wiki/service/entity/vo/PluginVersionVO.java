@@ -50,6 +50,9 @@ public class PluginVersionVO implements Serializable {
     private Long claimedBy;
     private String claimedByName;
     private LocalDateTime claimedTime;
+    private List<String> permissions;
+    private String scanStatus;
+    private String scanReport;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 

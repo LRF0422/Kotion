@@ -1,5 +1,6 @@
 package com.knowledge.wiki.service.entity;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import com.baomidou.mybatisplus.annotation.TableField;
@@ -29,6 +30,12 @@ public class Plugin extends BaseSubject {
     private String pluginKey;
     private String gitPath;
     private PluginStatus status;
+    /** Taken down / emergency recall: hidden from the marketplace and not installable. */
+    private Boolean suspended;
+    private String suspendReason;
+    private LocalDateTime suspendTime;
+    private Long suspendBy;
+    private String suspendByName;
     private Long installCtn;
     private Long favoriteCtn;
     private PluginCategory category;

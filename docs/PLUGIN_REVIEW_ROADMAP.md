@@ -8,7 +8,7 @@
 > - 前端：`apps/admin/src/pages/plugins/PluginList.tsx`、`apps/admin/src/api/index.ts`
 > - 开发者侧：`packages/core/src/components/Shop/PluginManager/*`、`packages/core/src/components/Shop/PluginUploader/*`
 > - 后端：`knowledge-wiki` 的 `AdminPluginController` / `PluginController` / `PluginApplication` / `wiki_plugin*` 表
-> - 迁移：`script/migration/V13__plugin_submission_lifecycle.sql`、`V22__plugin_review_audit.sql`
+> - 迁移：`V13__plugin_submission_lifecycle.sql`、`V22__plugin_review_audit.sql`、`V23__plugin_review_reason_and_claim.sql`、`V24__plugin_safety_and_reports.sql`
 > - 数据库：wiki 域表（`wiki_plugin*`）位于 `knowledge_wiki` 库；迁移用 `DATABASE()` 取当前库，随连接指向该库执行
 
 ---
@@ -84,24 +84,27 @@
 
 ### 2.2 第二期（P1，安全审查与治理）
 
-**a. 能力声明与权限审查**
-- 提交 schema 增加 `permissions`（如网络、存储、编辑器扩展点、剪贴板）声明；审核页以只读清单展示，逐项确认。
-- 表：`wiki_plugin_version.permissions_json`（或独立 `wiki_plugin_permission`）。
+> 状态：**本轮已落地**（评分刷量检测留待有评分入口后再做）。对应迁移 `V24__plugin_safety_and_reports.sql`。
 
-**b. 产物安全扫描**
-- 接入静态扫描（敏感 API、`eval`、远程加载、混淆程度）与可选恶意代码扫描；审核页展示扫描报告与结论。
-- 服务端在 `submit/createVersion` 时触发异步扫描任务，`scan_status/scan_report` 落版本表。
+**a. 能力声明与权限审查 ✅**
+- 提交 schema 增加 `permissions`，后端白名单校验（`NETWORK/STORAGE/CLIPBOARD/DOM/EXTERNAL_RESOURCES/EDITOR_EXTENSION/BACKGROUND_TASKS`），落 `wiki_plugin_version.permissions_json`。
+- 提交向导新增「能力声明」勾选区；审核页以只读清单展示，高风险能力（网络/DOM/外部资源）高亮。
+- 版本更新与重新提交均会刷新声明。
 
-**c. 沙箱预览**
-- 详情内以 iframe（`sandbox` 属性 + 独立 origin）加载候选产物，审核人可实际体验；只读、断网、限能力。
+**b. 产物安全扫描 ✅（启发式，外部扫描引擎待接）**
+- 审核页「运行启发式扫描」在浏览器端拉取产物，按规则集检测 `eval`/`new Function`/进程调用/远程脚本/dangerous innerHTML/混淆等，结论与明细经 `POST /admin/plugin/{id}/scan-report` 落 `scan_status/scan_report` 供审计与回显。
+- 备注：服务端异步扫描与恶意样本库检测为后续增强。
 
-**d. 下架 / 紧急召回**
-- 已发布插件支持下架（`DONE → SUSPENDED` 或新增状态），下架原因与操作人落审计；通知开发者。
-- 接口：`POST /admin/plugin/{id}/takedown`、`/restore`；高危操作二次确认。
+**c. 沙箱预览 ✅**
+- 详情「沙箱预览」在 `sandbox="allow-scripts"` 的无同源 iframe 中内联执行候选产物，`postMessage` 回传 console/error 日志；iframe 不授予宿主权限与网络访问。
 
-**e. 举报与评分治理**
-- 客户端插件举报入口；后台举报处理页（复用内容举报的通用表与流程）。
-- 评分/评论刷量检测与隐藏。
+**d. 下架 / 紧急召回 ✅**
+- `wiki_plugin` 增加 `suspended/suspend_reason/suspend_time/suspend_by(_name)`；`POST /admin/plugin/{id}/suspend`、`/restore`。
+- 下架后从市场列表与详情隐藏、禁止安装；后台新增「已下架」筛选页签；下架/恢复均通知开发者。
+
+**e. 举报与评分治理 ✅（评分治理待评分入口）**
+- 新表 `wiki_plugin_report` + 客户端 `POST /plugin/report`（插件详情「举报该插件」入口）+ 后台「插件举报」页（`GET /admin/plugin/report/list`、`POST /admin/plugin/report/{id}/handle`）。
+- 备注：评分/评论刷量检测依赖尚不存在的评分入口，暂缓。
 
 ### 2.3 第三期（P2，精细化与生态）
 

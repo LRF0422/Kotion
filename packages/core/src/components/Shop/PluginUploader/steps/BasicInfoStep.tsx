@@ -1,5 +1,6 @@
 import {
   Button,
+  Checkbox,
   FormControl,
   FormDescription,
   FormField,
@@ -19,7 +20,7 @@ import {
 import { ImageIcon, Loader2Icon, TrashIcon, UploadIcon } from "@kn/icon";
 import React, { type ReactNode } from "react";
 
-import type { PluginSubmissionValues } from "../types";
+import { PLUGIN_PERMISSIONS, type PluginSubmissionValues } from "../types";
 
 interface BasicInfoStepProps {
   form: UseFormReturn<PluginSubmissionValues>;
@@ -192,6 +193,54 @@ export const BasicInfoStep = ({
             )}
           />
         </div>
+      </Section>
+
+      <Section title={t("pluginUploader.sections.permissions")}>
+        <FormField
+          control={form.control}
+          name="permissions"
+          render={({ field }) => {
+            const selected: string[] = field.value ?? [];
+            return (
+              <FormItem>
+                <FormDescription>
+                  {t("pluginUploader.fields.permissionsHint")}
+                </FormDescription>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  {PLUGIN_PERMISSIONS.map((permission) => {
+                    const checked = selected.includes(permission);
+                    return (
+                      <label
+                        key={permission}
+                        className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition hover:border-primary/60"
+                      >
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={() => {
+                            field.onChange(
+                              checked
+                                ? selected.filter((value) => value !== permission)
+                                : [...selected, permission],
+                            );
+                          }}
+                        />
+                        <span className="space-y-0.5">
+                          <span className="block text-sm font-medium">
+                            {t(`pluginUploader.permissions.${permission.toLowerCase()}`)}
+                          </span>
+                          <span className="block text-xs text-muted-foreground">
+                            {t(`pluginUploader.permissions.${permission.toLowerCase()}Hint`)}
+                          </span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <FormMessage />
+              </FormItem>
+            );
+          }}
+        />
       </Section>
 
       <Section title={t("pluginUploader.sections.displayInfo")}>

@@ -230,6 +230,9 @@ export interface PluginVersionVO {
   claimedBy?: string
   claimedByName?: string
   claimedTime?: string
+  permissions?: string[]
+  scanStatus?: string
+  scanReport?: string
   createTime?: string
   updateTime?: string
 }
@@ -244,6 +247,11 @@ export interface PluginVO {
   pluginKey?: string
   gitPath?: string
   status?: PluginStatus
+  suspended?: boolean
+  suspendReason?: string
+  suspendTime?: string
+  suspendBy?: string
+  suspendByName?: string
   installCtn?: number
   favoriteCtn?: number
   maintainer?: string
@@ -271,6 +279,7 @@ export const getAdminPluginList = (params: {
   searchValue?: string
   category?: PluginCategory
   reviewStatus?: PluginStatus
+  suspended?: boolean
 }) => get<PageResult<PluginVO>>('/knowledge-wiki/admin/plugin/list', params)
 
 export const getAdminPluginDetail = (id: string) =>
@@ -307,6 +316,62 @@ export const releaseAdminPlugin = (id: string) =>
 /** 审核运营指标。 */
 export const getAdminPluginReviewStats = () =>
   get<PluginReviewStats>('/knowledge-wiki/admin/plugin/stats/review')
+
+// ---------- 下架/召回、安全扫描、举报 ----------
+
+export type PluginScanStatus = 'PASS' | 'WARN' | 'FAIL'
+
+export interface PluginScanFinding {
+  level: 'info' | 'warn' | 'danger'
+  code: string
+  message: string
+}
+
+/** 下架 / 紧急召回已上架插件。 */
+export const suspendAdminPlugin = (id: string, reason: string) =>
+  post<PluginVO>(`/knowledge-wiki/admin/plugin/${id}/suspend`, { reason })
+
+/** 恢复已下架插件。 */
+export const restoreAdminPlugin = (id: string) =>
+  post<PluginVO>(`/knowledge-wiki/admin/plugin/${id}/restore`)
+
+/** 持久化启发式安全扫描结果。 */
+export const savePluginScanReport = (
+  id: string,
+  payload: { status: PluginScanStatus; report: string },
+) => post<PluginVersionVO>(`/knowledge-wiki/admin/plugin/${id}/scan-report`, payload)
+
+export type PluginReportStatus = 'PENDING' | 'RESOLVED' | 'REJECTED'
+export type PluginReportReasonValue = 'MALICIOUS' | 'PRIVACY' | 'COPYRIGHT' | 'SPAM' | 'OTHER'
+
+export interface PluginReportVO {
+  id: string
+  pluginId: string
+  pluginName?: string
+  pluginKey?: string
+  versionId?: string
+  version?: string
+  reasonType?: PluginReportReasonValue | { value?: string; desc?: string }
+  reasonText?: string
+  reporterId?: string
+  reporterName?: string
+  status?: PluginReportStatus | { value?: string; desc?: string }
+  handlerId?: string
+  handleNote?: string
+  handleTime?: string
+  createTime?: string
+}
+
+export const getAdminPluginReportList = (params: {
+  current: number
+  pageSize: number
+  status?: PluginReportStatus
+  pluginId?: string
+}) => get<PageResult<PluginReportVO>>('/knowledge-wiki/admin/plugin/report/list', params)
+
+/** 处理插件举报（采纳/驳回）。 */
+export const handleAdminPluginReport = (id: string, payload: { approved: boolean; note?: string }) =>
+  post<PluginReportVO>(`/knowledge-wiki/admin/plugin/report/${id}/handle`, payload)
 
 // ---------- 日志（knowledge-log，current + size） ----------
 

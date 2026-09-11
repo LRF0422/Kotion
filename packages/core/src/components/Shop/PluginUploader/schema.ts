@@ -40,6 +40,7 @@ export const createPluginSubmissionSchema = (t: (key: string) => string) =>
       .max(500, t("pluginUploader.validation.descriptionMax")),
     resourcePath: z.string(),
     integrity: z.string(),
+    permissions: z.array(z.string()).max(20).optional(),
     versionDescs: z.array(
       z.object({
         id: z.string(),
@@ -60,6 +61,7 @@ export const createDefaultPluginSubmission = (): PluginSubmissionValues => ({
   description: "",
   resourcePath: "",
   integrity: "",
+  permissions: [],
   versionDescs: [
     { id: "feature", label: "Feature", content: {}, canonical: true },
     { id: "detail", label: "Detail", content: {}, canonical: true },
@@ -77,6 +79,7 @@ export const normalizeSubmissionPayload = (values: PluginSubmissionValues) => ({
   description: values.description.trim(),
   resourcePath: values.resourcePath,
   integrity: values.integrity,
+  permissions: values.permissions ?? [],
   versionDescs: values.versionDescs
     .filter(
       (item) =>

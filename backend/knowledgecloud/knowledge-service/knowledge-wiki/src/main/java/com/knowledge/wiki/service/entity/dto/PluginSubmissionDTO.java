@@ -56,6 +56,9 @@ public class PluginSubmissionDTO implements Serializable {
     @Pattern(regexp = "^sha384-[A-Za-z0-9+/]{64}$", message = "资源完整性哈希必须是sha384 SRI格式")
     private String integrity;
 
+    @Size(max = 20, message = "能力声明不能超过20项")
+    private List<String> permissions;
+
     @Valid
     @NotEmpty(message = "版本说明不能为空")
     @Size(max = 20, message = "版本说明不能超过20项")

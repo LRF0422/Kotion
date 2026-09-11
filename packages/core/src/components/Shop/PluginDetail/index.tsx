@@ -16,6 +16,7 @@ import React, { useContext, useMemo, useState } from "react";
 import { PluginDetailHero } from "./PluginDetailHero";
 import { PluginDocumentationCard } from "./PluginDocumentationCard";
 import { PluginFactsPanel } from "./PluginFactsPanel";
+import { PluginReportDialog } from "./PluginReportDialog";
 import { usePluginDetail } from "./use-plugin-detail";
 import {
   toRemotePluginDescriptor,
@@ -246,7 +247,14 @@ export const PluginDetail: React.FC = () => {
             versionId={versionId}
             sections={documentationSections}
           />
-          <PluginFactsPanel plugin={plugin} />
+          <div className="space-y-4">
+            <PluginFactsPanel plugin={plugin} />
+            <PluginReportDialog
+              pluginId={plugin.id}
+              pluginName={plugin.name}
+              versionId={versionId}
+            />
+          </div>
         </div>
       </div>
     </div>

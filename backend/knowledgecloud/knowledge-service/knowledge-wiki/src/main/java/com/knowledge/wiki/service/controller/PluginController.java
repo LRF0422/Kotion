@@ -18,11 +18,14 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.knowledge.core.tool.api.R;
 import com.knowledge.core.tool.constant.RoleConstant;
 import com.knowledge.wiki.service.application.PluginApplication;
+import com.knowledge.wiki.service.application.PluginReportApplication;
 import com.knowledge.wiki.service.entity.dto.PluginDTO;
+import com.knowledge.wiki.service.entity.dto.PluginReportDTO;
 import com.knowledge.wiki.service.entity.dto.PluginReviewDTO;
 import com.knowledge.wiki.service.entity.dto.PluginSubmissionDTO;
 import com.knowledge.wiki.service.entity.dto.PluginVersionPublishDTO;
 import com.knowledge.wiki.service.entity.dto.QueryPluginDTO;
+import com.knowledge.wiki.service.entity.vo.PluginReportVO;
 import com.knowledge.wiki.service.entity.vo.PluginVO;
 
 @RestController
@@ -31,6 +34,8 @@ public class PluginController {
 
     @Autowired
     private PluginApplication pluginApplication;
+    @Autowired
+    private PluginReportApplication pluginReportApplication;
 
     @PostMapping
     public R<?> create(@Valid @RequestBody PluginDTO dto) {
@@ -86,6 +91,12 @@ public class PluginController {
     @GetMapping("/{id}")
     public R<PluginVO> detail(@PathVariable("id") Long id) {
         return R.data(pluginApplication.detail(id));
+    }
+
+    /** 用户举报已上架插件（恶意代码、隐私、侵权等）。 */
+    @PostMapping("/report")
+    public R<PluginReportVO> report(@Valid @RequestBody PluginReportDTO dto) {
+        return R.data(pluginReportApplication.submit(dto));
     }
 
     @PostMapping("/install")

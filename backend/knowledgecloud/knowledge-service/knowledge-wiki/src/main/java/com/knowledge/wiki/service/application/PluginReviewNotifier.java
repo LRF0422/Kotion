@@ -69,4 +69,33 @@ public class PluginReviewNotifier {
             }
         }
     }
+
+    public void notifyTakedown(Long operatorId, Plugin plugin, boolean suspended, String reason) {
+        if (messageClient == null || plugin == null) {
+            return;
+        }
+        Long developerId = plugin.getDeveloperId();
+        if (developerId == null || developerId <= 0 || developerId.equals(operatorId)) {
+            return;
+        }
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("type", suspended ? "PLUGIN_SUSPENDED" : "PLUGIN_RESTORED");
+        data.put("pluginId", plugin.getId());
+        data.put("pluginKey", plugin.getPluginKey());
+        data.put("pluginName", plugin.getName());
+        data.put("reason", StrUtil.trim(reason));
+
+        String content = "插件「" + plugin.getName() + "」已" + (suspended ? "下架" : "恢复上架")
+                + (StrUtil.isNotBlank(reason) ? "：" + StrUtil.trim(reason) : "");
+        try {
+            messageClient.sendInstantMessage(operatorId, developerId, content, MESSAGE_TYPE, data);
+        } catch (Exception ex) {
+            log.warn("Failed to persist plugin takedown notification for plugin {}", plugin.getId(), ex);
+            try {
+                messageClient.sendWebSocketNotification(developerId, "NOTIFICATION", data);
+            } catch (Exception fallback) {
+                log.warn("Fallback websocket notification failed for plugin {}", plugin.getId(), fallback);
+            }
+        }
+    }
 }

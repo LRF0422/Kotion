@@ -20,4 +20,9 @@ public class QueryAdminPluginDTO extends PageDTO {
      * 候选版本优先的有效审核状态。
      */
     private PluginStatus reviewStatus;
+
+    /**
+     * true 只返回已下架插件，false 只返回未下架插件，null 不过滤。
+     */
+    private Boolean suspended;
 }

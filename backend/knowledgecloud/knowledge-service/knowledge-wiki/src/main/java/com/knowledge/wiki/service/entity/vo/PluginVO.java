@@ -24,6 +24,11 @@ public class PluginVO implements Serializable {
     private String pluginKey;
     private String gitPath;
     private PluginStatus status;
+    private Boolean suspended;
+    private String suspendReason;
+    private java.time.LocalDateTime suspendTime;
+    private Long suspendBy;
+    private String suspendByName;
     private Long installCtn;
     private Long favoriteCtn;
     private String maintainer;

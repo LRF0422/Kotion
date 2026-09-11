@@ -36,7 +36,9 @@ import com.knowledge.wiki.service.entity.VersionDesc;
 import com.knowledge.wiki.service.entity.dto.PluginBatchReviewDTO;
 import com.knowledge.wiki.service.entity.dto.PluginDTO;
 import com.knowledge.wiki.service.entity.dto.PluginReviewDTO;
+import com.knowledge.wiki.service.entity.dto.PluginScanReportDTO;
 import com.knowledge.wiki.service.entity.dto.PluginSubmissionDTO;
+import com.knowledge.wiki.service.entity.dto.PluginSuspendDTO;
 import com.knowledge.wiki.service.entity.dto.PluginVersionPublishDTO;
 import com.knowledge.wiki.service.entity.dto.QueryAdminPluginDTO;
 import com.knowledge.wiki.service.entity.dto.QueryPluginDTO;
@@ -237,6 +239,66 @@ public class PluginApplication {
         return toSubmissionVO(requirePlugin(pluginId));
     }
 
+    /** Take a published plugin down (emergency recall); it disappears from the marketplace. */
+    @Transactional(rollbackFor = Exception.class)
+    public PluginVO suspend(Long pluginId, PluginSuspendDTO dto) {
+        requirePermission("platform.plugins.review");
+        Plugin plugin = requirePlugin(pluginId);
+        if (plugin.getStatus() != PluginStatus.DONE) {
+            throw WikiException.PLUGIN_INVALID_STATE.newException("仅已上架插件可下架");
+        }
+        String reason = StrUtil.trim(dto.getReason());
+        pluginService.lambdaUpdate()
+                .eq(Plugin::getId, pluginId)
+                .set(Plugin::getSuspended, true)
+                .set(Plugin::getSuspendReason, reason)
+                .set(Plugin::getSuspendTime, LocalDateTime.now())
+                .set(Plugin::getSuspendBy, SecurityContextUtil.getUserId())
+                .set(Plugin::getSuspendByName, StrUtil.trim(SecurityContextUtil.getUserName()))
+                .update();
+        Plugin refreshed = requirePlugin(pluginId);
+        notifyTakedown(refreshed, true, reason);
+        return toSubmissionVO(refreshed);
+    }
+
+    /** Restore a taken-down plugin to the marketplace. */
+    @Transactional(rollbackFor = Exception.class)
+    public PluginVO restore(Long pluginId) {
+        requirePermission("platform.plugins.review");
+        Plugin plugin = requirePlugin(pluginId);
+        if (!Boolean.TRUE.equals(plugin.getSuspended())) {
+            throw WikiException.PLUGIN_INVALID_STATE.newException("插件未处于下架状态");
+        }
+        pluginService.lambdaUpdate()
+                .eq(Plugin::getId, pluginId)
+                .set(Plugin::getSuspended, false)
+                .set(Plugin::getSuspendReason, null)
+                .set(Plugin::getSuspendTime, null)
+                .set(Plugin::getSuspendBy, null)
+                .set(Plugin::getSuspendByName, null)
+                .update();
+        Plugin refreshed = requirePlugin(pluginId);
+        notifyTakedown(refreshed, false, null);
+        return toSubmissionVO(refreshed);
+    }
+
+    /** Persist a heuristic safety-scan result for the current candidate. */
+    @Transactional(rollbackFor = Exception.class)
+    public PluginVersionVO saveScanReport(Long pluginId, PluginScanReportDTO dto) {
+        requirePermission("platform.plugins.review");
+        requirePlugin(pluginId);
+        PluginVersion candidate = requirePendingCandidate(pluginId);
+        String status = StrUtil.trim(dto.getStatus());
+        pluginVersionService.lambdaUpdate()
+                .eq(PluginVersion::getId, candidate.getId())
+                .set(PluginVersion::getScanStatus, status)
+                .set(PluginVersion::getScanReport, dto.getReport())
+                .update();
+        candidate.setScanStatus(status);
+        candidate.setScanReport(dto.getReport());
+        return PluginVersionConverter.INSTANCE.convertVO(candidate);
+    }
+
     /**
      * Apply one decision to several plugins. Each item runs in its own transaction
      * so a single invalid row is reported without rolling back the rest.
@@ -365,7 +427,7 @@ public class PluginApplication {
 
     public PluginVO detail(Long id) {
         Plugin plugin = requirePlugin(id);
-        if (plugin.getStatus() != PluginStatus.DONE) {
+        if (plugin.getStatus() != PluginStatus.DONE || Boolean.TRUE.equals(plugin.getSuspended())) {
             throw WikiException.PLUGIN_NOT_FOUND.newException();
         }
         PluginVersion activeVersion = pluginService.getActiveVersion(id);
@@ -398,6 +460,9 @@ public class PluginApplication {
         if (plugin.getStatus() != PluginStatus.DONE) {
             throw WikiException.PLUGIN_INVALID_STATE.newException();
         }
+        if (Boolean.TRUE.equals(plugin.getSuspended())) {
+            throw WikiException.PLUGIN_INVALID_STATE.newException("插件已下架");
+        }
         this.pluginService.installPlugin(pluginVersionId);
     }
 
@@ -415,6 +480,7 @@ public class PluginApplication {
                 .selectAs(PluginVersion::getIntegrity, PluginVO::getIntegrity)
                 .eq(dto.getCategory() != null, Plugin::getCategory, dto.getCategory())
                 .eq(Plugin::getStatus, PluginStatus.DONE)
+                .eq(Plugin::getSuspended, false)
                 .eq(PluginVersion::getStatus, VersionStatus.ACTIVE);
         IPage<PluginVO> page = this.pluginService.selectJoinListPage(dto.page(), PluginVO.class, wrapper);
         page.getRecords().forEach(it -> {
@@ -468,7 +534,7 @@ public class PluginApplication {
         }
 
         PluginVersion candidate = candidate(plugin.getId(), dto.getVersion(), dto.getResourcePath(),
-                dto.getIntegrity(), dto.getVersionDescs());
+                dto.getIntegrity(), dto.getPermissions(), dto.getVersionDescs());
         saveCandidate(candidate);
         pluginTagService.replaceTags(plugin.getId(), dto.getTags());
         log.info("Plugin {} submitted by user {}", plugin.getPluginKey(), ownerId);
@@ -520,6 +586,7 @@ public class PluginApplication {
         candidate.setVersion(dto.getVersion());
         candidate.setResourcePath(dto.getResourcePath());
         candidate.setIntegrity(dto.getIntegrity());
+        candidate.setPermissions(dto.getPermissions());
         candidate.setVersionDescription(dto.getVersionDescs());
         candidate.setStatus(VersionStatus.PENDING);
         candidate.setReviewStatus(PluginStatus.PENDING);
@@ -539,6 +606,7 @@ public class PluginApplication {
         dto.setResourcePath(PluginSubmissionValidator.requireJavaScriptPath(dto.getResourcePath()));
         dto.setIntegrity(requireIntegrity ? PluginSubmissionValidator.requireIntegrity(dto.getIntegrity())
                 : StrUtil.trim(dto.getIntegrity()));
+        dto.setPermissions(PluginSubmissionValidator.normalizePermissions(dto.getPermissions()));
         PluginSubmissionValidator.validateVersionDescriptions(dto.getVersionDescs());
         PluginVersion candidate = pluginVersionService.getRejectedCandidate(plugin.getId());
         assertVersionAvailable(plugin.getId(), dto.getVersion(), candidate == null ? null : candidate.getId());
@@ -546,12 +614,13 @@ public class PluginApplication {
 
         if (candidate == null) {
             candidate = candidate(plugin.getId(), dto.getVersion(), dto.getResourcePath(),
-                    dto.getIntegrity(), dto.getVersionDescs());
+                    dto.getIntegrity(), dto.getPermissions(), dto.getVersionDescs());
             saveCandidate(candidate);
         } else {
             candidate.setVersion(dto.getVersion());
             candidate.setResourcePath(dto.getResourcePath());
             candidate.setIntegrity(dto.getIntegrity());
+            candidate.setPermissions(dto.getPermissions());
             candidate.setVersionDescription(dto.getVersionDescs());
             candidate.setStatus(VersionStatus.PENDING);
             candidate.setReviewStatus(PluginStatus.PENDING);
@@ -705,6 +774,7 @@ public class PluginApplication {
         if (dto.getCategory() == null) {
             throw WikiException.INVALID_PARAMETER.newException();
         }
+        dto.setPermissions(PluginSubmissionValidator.normalizePermissions(dto.getPermissions()));
         PluginSubmissionValidator.validateVersionDescriptions(dto.getVersionDescs());
     }
 
@@ -720,12 +790,13 @@ public class PluginApplication {
     }
 
     private PluginVersion candidate(Long pluginId, String version, String resourcePath, String integrity,
-            List<com.knowledge.wiki.service.entity.VersionDesc> descriptions) {
+            List<String> permissions, List<com.knowledge.wiki.service.entity.VersionDesc> descriptions) {
         PluginVersion candidate = new PluginVersion();
         candidate.setSubjectId(pluginId);
         candidate.setVersion(version);
         candidate.setResourcePath(resourcePath);
         candidate.setIntegrity(integrity);
+        candidate.setPermissions(permissions);
         candidate.setVersionDescription(descriptions);
         candidate.setStatus(VersionStatus.PENDING);
         candidate.setReviewStatus(PluginStatus.PENDING);
@@ -832,6 +903,13 @@ public class PluginApplication {
         }
         reviewNotifier.notifyDecision(SecurityContextUtil.getUserId(), plugin,
                 pluginVersionService.getLatestVersion(plugin.getId()), decision, reason, reasonCode);
+    }
+
+    private void notifyTakedown(Plugin plugin, boolean suspended, String reason) {
+        if (reviewNotifier == null) {
+            return;
+        }
+        reviewNotifier.notifyTakedown(SecurityContextUtil.getUserId(), plugin, suspended, reason);
     }
 
     /** Snapshot of the acting reviewer, applied to the SQL update and the in-memory entity. */
