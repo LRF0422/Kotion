@@ -16,6 +16,7 @@ import React, { useContext, useMemo, useState } from "react";
 import { PluginDetailHero } from "./PluginDetailHero";
 import { PluginDocumentationCard } from "./PluginDocumentationCard";
 import { PluginFactsPanel } from "./PluginFactsPanel";
+import { PluginRatingCard } from "./PluginRatingCard";
 import { PluginReportDialog } from "./PluginReportDialog";
 import { usePluginDetail } from "./use-plugin-detail";
 import {
@@ -131,7 +132,7 @@ export const PluginDetail: React.FC = () => {
   const { usePath } = useUploadFile();
   const { pluginManager } = useContext(AppContext);
   const { loadedPluginNames, incompatiblePlugins } = usePluginState();
-  const { status, plugin, retry } = usePluginDetail(pluginId);
+  const { status, plugin, retry, refresh } = usePluginDetail(pluginId);
   const [installing, setInstalling] = useState(false);
 
   const installState = useMemo(
@@ -248,6 +249,7 @@ export const PluginDetail: React.FC = () => {
             sections={documentationSections}
           />
           <div className="space-y-4">
+            <PluginRatingCard plugin={plugin} onRated={() => void refresh()} />
             <PluginFactsPanel plugin={plugin} />
             <PluginReportDialog
               pluginId={plugin.id}

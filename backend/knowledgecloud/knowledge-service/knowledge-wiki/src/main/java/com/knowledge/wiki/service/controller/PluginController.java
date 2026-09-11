@@ -18,13 +18,16 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.knowledge.core.tool.api.R;
 import com.knowledge.core.tool.constant.RoleConstant;
 import com.knowledge.wiki.service.application.PluginApplication;
+import com.knowledge.wiki.service.application.PluginRatingApplication;
 import com.knowledge.wiki.service.application.PluginReportApplication;
 import com.knowledge.wiki.service.entity.dto.PluginDTO;
+import com.knowledge.wiki.service.entity.dto.PluginRatingDTO;
 import com.knowledge.wiki.service.entity.dto.PluginReportDTO;
 import com.knowledge.wiki.service.entity.dto.PluginReviewDTO;
 import com.knowledge.wiki.service.entity.dto.PluginSubmissionDTO;
 import com.knowledge.wiki.service.entity.dto.PluginVersionPublishDTO;
 import com.knowledge.wiki.service.entity.dto.QueryPluginDTO;
+import com.knowledge.wiki.service.entity.vo.PluginRatingSummaryVO;
 import com.knowledge.wiki.service.entity.vo.PluginReportVO;
 import com.knowledge.wiki.service.entity.vo.PluginVO;
 
@@ -36,6 +39,8 @@ public class PluginController {
     private PluginApplication pluginApplication;
     @Autowired
     private PluginReportApplication pluginReportApplication;
+    @Autowired
+    private PluginRatingApplication pluginRatingApplication;
 
     @PostMapping
     public R<?> create(@Valid @RequestBody PluginDTO dto) {
@@ -97,6 +102,13 @@ public class PluginController {
     @PostMapping("/report")
     public R<PluginReportVO> report(@Valid @RequestBody PluginReportDTO dto) {
         return R.data(pluginReportApplication.submit(dto));
+    }
+
+    /** 给已上架插件评分（1-5，每个用户对每个插件仅保留一次评分）。 */
+    @PostMapping("/{id}/rating")
+    public R<PluginRatingSummaryVO> rate(@PathVariable("id") Long id,
+            @Valid @RequestBody PluginRatingDTO dto) {
+        return R.data(pluginRatingApplication.rate(id, dto));
     }
 
     @PostMapping("/install")

@@ -43,6 +43,7 @@ import com.knowledge.wiki.service.entity.enums.PluginReviewReason;
 import com.knowledge.wiki.service.entity.enums.PluginStatus;
 import com.knowledge.wiki.service.entity.vo.PluginVO;
 import com.knowledge.wiki.service.service.IInstalledPluginService;
+import com.knowledge.wiki.service.service.IPluginRatingService;
 import com.knowledge.wiki.service.service.IPluginService;
 import com.knowledge.wiki.service.service.IPluginTagService;
 import com.knowledge.wiki.service.service.IPluginVersionService;
@@ -58,6 +59,8 @@ class PluginApplicationTest {
     private IPluginTagService pluginTagService;
     @Mock
     private IInstalledPluginService installedPluginService;
+    @Mock
+    private IPluginRatingService pluginRatingService;
     @InjectMocks
     private PluginApplication application;
 

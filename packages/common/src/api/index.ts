@@ -130,6 +130,10 @@ export const APIS = {
         url: '/knowledge-wiki/plugin/report',
         method: 'POST'
     } as API,
+    SUBMIT_PLUGIN_RATING: {
+        url: '/knowledge-wiki/plugin/:id/rating',
+        method: 'POST'
+    } as API,
     REVIEW_PLUGIN_SUBMISSION: {
         url: '/knowledge-wiki/plugin/submissions/:id/review',
         method: 'POST'

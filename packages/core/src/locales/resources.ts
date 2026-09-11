@@ -111,6 +111,15 @@ export const resources = {
         publish: "发布插件",
         manage: "管理插件",
         openInstalled: "已安装",
+        rating: {
+          title: "评分",
+          prompt: "点击星星为这个插件评分",
+          yourRating: "你的评分：{{score}} 星",
+          reviews: "{{count}} 条评分",
+          scoreLabel: "{{score}} 星",
+          success: "评分成功",
+          failed: "评分失败，请稍后重试",
+        },
         report: {
           trigger: "举报该插件",
           title: "举报插件",
@@ -1308,6 +1317,15 @@ export const resources = {
         publish: "Publish plugin",
         manage: "Manage plugins",
         openInstalled: "Installed",
+        rating: {
+          title: "Rating",
+          prompt: "Tap a star to rate this plugin",
+          yourRating: "Your rating: {{score}} / 5",
+          reviews: "{{count}} ratings",
+          scoreLabel: "{{score}} stars",
+          success: "Rating submitted",
+          failed: "Could not submit your rating. Please try again.",
+        },
         report: {
           trigger: "Report this plugin",
           title: "Report plugin",

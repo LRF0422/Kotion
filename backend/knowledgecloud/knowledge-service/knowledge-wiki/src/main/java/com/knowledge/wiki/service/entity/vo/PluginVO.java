@@ -42,6 +42,8 @@ public class PluginVO implements Serializable {
     private Double rating;
     private Long reviews;
     private Long downloads;
+    /** Current user's rating, null when not rated or anonymous. */
+    private Integer myRating;
     private String screenShot;
     private String resourcePath;
     private String integrity;

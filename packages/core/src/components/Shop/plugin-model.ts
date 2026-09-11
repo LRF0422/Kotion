@@ -54,6 +54,7 @@ export interface PluginRecord {
   tags?: string[];
   rating?: number | string;
   reviews?: number | string;
+  myRating?: number | string | null;
   downloads?: number | string;
   createTime?: string;
   updateTime?: string;

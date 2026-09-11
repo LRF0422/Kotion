@@ -952,8 +952,8 @@ export const PluginList = () => {
       </Card>
 
       <Sheet open={detailOpen} onOpenChange={handleDetailOpenChange}>
-        <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
-          <SheetHeader>
+        <SheetContent className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+          <SheetHeader className="shrink-0 border-b px-6 py-4 pr-12">
             <SheetTitle>{detail?.name || '插件审核详情'}</SheetTitle>
             <SheetDescription>
               {detail?.pluginKey ? `插件 Key：${detail.pluginKey}` : '查看候选版本并完成审核'}
@@ -961,11 +961,12 @@ export const PluginList = () => {
           </SheetHeader>
 
           {!detail && detailLoading ? (
-            <div className="flex h-40 items-center justify-center text-muted-foreground">
+            <div className="flex flex-1 items-center justify-center text-muted-foreground">
               <Loader2 className="size-5 animate-spin" />
             </div>
           ) : detail ? (
-            <div className="mt-6 space-y-6 pb-24">
+            <>
+              <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-6">
               {detailLoading && (
                 <div className="flex items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
                   <Loader2 className="size-4 animate-spin" />
@@ -1372,7 +1373,9 @@ export const PluginList = () => {
                 </div>
               )}
 
-              <div className="fixed inset-x-0 bottom-0 border-t bg-background/95 p-4 backdrop-blur sm:absolute">
+              </div>
+
+              <div className="shrink-0 border-t bg-background/95 px-6 py-4 backdrop-blur">
                 <div className="flex flex-wrap justify-end gap-2">
                   {(reviewStatus === 'PENDING' || reviewStatus === 'IN_PROGRESS') && (
                     candidate?.claimedByName ? (
@@ -1455,16 +1458,16 @@ export const PluginList = () => {
                       恢复上架
                     </Button>
                   )}
-                  {(reviewStatus === 'REJECTED' || reviewStatus === 'DONE') && !detail.suspended && (
+                  {reviewStatus === 'REJECTED' && (
                     <div className="flex items-center text-sm text-muted-foreground">
-                      当前状态无需进一步审核操作
+                      已驳回，等待开发者修改后重新提交
                     </div>
                   )}
                 </div>
               </div>
-            </div>
+            </>
           ) : detailError ? (
-            <div className="mt-6 rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+            <div className="m-6 rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
               {detailError}
             </div>
           ) : null}

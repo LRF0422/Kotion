@@ -31,6 +31,7 @@ import com.knowledge.wiki.service.converter.PluginVersionConverter;
 import com.knowledge.wiki.service.entity.InstalledPlugin;
 import com.knowledge.wiki.service.entity.Plugin;
 import com.knowledge.wiki.service.entity.PluginLogo;
+import com.knowledge.wiki.service.entity.PluginRating;
 import com.knowledge.wiki.service.entity.PluginVersion;
 import com.knowledge.wiki.service.entity.VersionDesc;
 import com.knowledge.wiki.service.entity.dto.PluginBatchReviewDTO;
@@ -55,6 +56,7 @@ import com.knowledge.wiki.service.entity.vo.PluginVO;
 import com.knowledge.wiki.service.entity.vo.PluginVersionVO;
 import com.knowledge.wiki.service.exception.WikiException;
 import com.knowledge.wiki.service.service.IInstalledPluginService;
+import com.knowledge.wiki.service.service.IPluginRatingService;
 import com.knowledge.wiki.service.service.IPluginService;
 import com.knowledge.wiki.service.service.IPluginTagService;
 import com.knowledge.wiki.service.service.IPluginVersionService;
@@ -76,6 +78,8 @@ public class PluginApplication {
     private IPluginTagService pluginTagService;
     @Autowired
     private IInstalledPluginService installedPluginService;
+    @Autowired
+    private IPluginRatingService pluginRatingService;
     @Autowired
     private PlatformTransactionManager transactionManager;
     @Autowired(required = false)
@@ -443,6 +447,14 @@ public class PluginApplication {
         InstalledPlugin record = installedPluginService.getInstallRecord(id);
         vo.setInstallStatus(record == null ? null : record.getStatus());
         vo.setTags(pluginTagService.listTagContents(id));
+        Long currentUserId = SecurityContextUtil.getUserId();
+        if (currentUserId != null && currentUserId > 0) {
+            PluginRating mine = pluginRatingService.lambdaQuery()
+                    .eq(PluginRating::getPluginId, id)
+                    .eq(PluginRating::getUserId, currentUserId)
+                    .one();
+            vo.setMyRating(mine == null ? null : mine.getScore());
+        }
         return vo;
     }
 

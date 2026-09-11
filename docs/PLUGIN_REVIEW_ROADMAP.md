@@ -8,7 +8,7 @@
 > - 前端：`apps/admin/src/pages/plugins/PluginList.tsx`、`apps/admin/src/api/index.ts`
 > - 开发者侧：`packages/core/src/components/Shop/PluginManager/*`、`packages/core/src/components/Shop/PluginUploader/*`
 > - 后端：`knowledge-wiki` 的 `AdminPluginController` / `PluginController` / `PluginApplication` / `wiki_plugin*` 表
-> - 迁移：`V13__plugin_submission_lifecycle.sql`、`V22__plugin_review_audit.sql`、`V23__plugin_review_reason_and_claim.sql`、`V24__plugin_safety_and_reports.sql`
+> - 迁移：`V13__plugin_submission_lifecycle.sql`、`V22__plugin_review_audit.sql`、`V23__plugin_review_reason_and_claim.sql`、`V24__plugin_safety_and_reports.sql`、`V25__plugin_rating.sql`
 > - 数据库：wiki 域表（`wiki_plugin*`）位于 `knowledge_wiki` 库；迁移用 `DATABASE()` 取当前库，随连接指向该库执行
 
 ---
@@ -102,9 +102,10 @@
 - `wiki_plugin` 增加 `suspended/suspend_reason/suspend_time/suspend_by(_name)`；`POST /admin/plugin/{id}/suspend`、`/restore`。
 - 下架后从市场列表与详情隐藏、禁止安装；后台新增「已下架」筛选页签；下架/恢复均通知开发者。
 
-**e. 举报与评分治理 ✅（评分治理待评分入口）**
-- 新表 `wiki_plugin_report` + 客户端 `POST /plugin/report`（插件详情「举报该插件」入口）+ 后台「插件举报」页（`GET /admin/plugin/report/list`、`POST /admin/plugin/report/{id}/handle`）。
-- 备注：评分/评论刷量检测依赖尚不存在的评分入口，暂缓。
+**e. 举报与评分治理 ✅**
+- 举报：新表 `wiki_plugin_report` + 客户端 `POST /plugin/report`（插件详情「举报该插件」入口）+ 后台「插件举报」页（`GET /admin/plugin/report/list`、`POST /admin/plugin/report/{id}/handle`）。
+- 评分：新表 `wiki_plugin_rating`（每用户每插件一条），客户端插件详情新增星级评分卡，`POST /plugin/{id}/rating`（1-5，upsert），服务端事务内重算 `wiki_plugin.rating/reviews` 聚合，详情接口回显 `myRating`；禁止开发者给自己的插件评分。
+- 备注：评分/评论刷量检测（异常模式识别、隐藏）仍为后续增强。
 
 ### 2.3 第三期（P2，精细化与生态）
 
