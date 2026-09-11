@@ -14,15 +14,16 @@ function getContrastColor(hexColor: string): string {
 }
 
 export const GitHubLabel: React.FC<GitHubLabelProps> = ({ name, color }) => {
-    const bgColor = `#${color}`
+    const bgColor = '#' + color
     const textColor = getContrastColor(color)
 
     return (
         <span
-            className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[11px] font-medium leading-tight"
+            className="inline-flex max-w-[12rem] items-center rounded-full border border-black/10 px-2 py-0.5 text-[11px] font-medium leading-tight shadow-sm dark:border-white/10"
             style={{ backgroundColor: bgColor, color: textColor }}
+            title={name}
         >
-            {name}
+            <span className="truncate">{name}</span>
         </span>
     )
 }

@@ -1,11 +1,28 @@
 import React from 'react'
 import { NodeViewWrapper, NodeViewProps } from '@kn/editor'
 import { Card, cn } from '@kn/ui'
-import { RefreshCw, ExternalLink, GitPullRequest } from '@kn/icon'
+import { ArrowRight, ExternalLink, GitPullRequest, RefreshCw } from '@kn/icon'
 import { GitHubAvatar } from './shared/GitHubAvatar'
 import { GitHubStatusBadge } from './shared/GitHubStatusBadge'
 import { GitHubTimestamp } from './shared/GitHubTimestamp'
 import { GitHubUrlInput } from './shared/GitHubUrlInput'
+import {
+    GhIconButton,
+    GhIconLink,
+    ghBody,
+    ghCard,
+    ghCardDashed,
+    ghCardInteractive,
+    ghChip,
+    ghErrorBox,
+    ghHeader,
+    ghHeaderStart,
+    ghIconTile,
+    ghRef,
+    ghStatAdd,
+    ghStatDel,
+    ghTitle,
+} from './shared/styles'
 import { useGitHubData } from '../hooks/use-github-data'
 import { getPullRequest } from '../services/github-pr-service'
 import type { PRMergeState } from '../types/github'
@@ -49,7 +66,7 @@ export const GitHubPRCard: React.FC<NodeViewProps> = ({ node, updateAttributes, 
     if (!isConfigured) {
         return (
             <NodeViewWrapper>
-                <Card className="my-4 border-2 border-dashed">
+                <Card className={ghCardDashed}>
                     <GitHubUrlInput
                         type="pr"
                         onSubmit={(parsed) => {
@@ -67,71 +84,64 @@ export const GitHubPRCard: React.FC<NodeViewProps> = ({ node, updateAttributes, 
     }
 
     const mergeState = getPRState(state, merged, draft)
+    const reviewerList = reviewers || []
 
     return (
         <NodeViewWrapper>
-            <Card className={cn(
-                'my-4 p-3 transition-all duration-200 border',
-                editor.isEditable && 'hover:border-primary/50'
-            )}>
-                {/* Row 1: header */}
-                <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0">
-                        <GitPullRequest className="h-3.5 w-3.5 text-purple-500" />
-                        <span className="truncate font-mono">{owner}/{repo}#{prNumber}</span>
+            <Card className={cn(ghCard, editor.isEditable && ghCardInteractive)}>
+                <div className={ghHeader}>
+                    <div className={ghHeaderStart}>
+                        <span className={cn(ghIconTile, 'bg-violet-500/10 text-violet-600 ring-violet-500/20 dark:text-violet-400')}>
+                            <GitPullRequest className="h-3.5 w-3.5" />
+                        </span>
+                        <span className={ghRef}>
+                            {owner}/{repo}#{prNumber}
+                        </span>
                     </div>
-                    <div className="flex items-center gap-1 flex-shrink-0">
+                    <div className="flex shrink-0 items-center gap-0.5">
                         <GitHubStatusBadge state={mergeState} type="pr" />
-                        {loading && <RefreshCw className="h-3 w-3 animate-spin text-muted-foreground" />}
+                        {loading && <RefreshCw className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-label="Loading" />}
                         {!loading && editor.isEditable && (
-                            <button onClick={refresh} className="p-0.5 hover:bg-muted rounded" title="Refresh">
-                                <RefreshCw className="h-3 w-3 text-muted-foreground" />
-                            </button>
+                            <GhIconButton label="Refresh" onClick={refresh}>
+                                <RefreshCw className="h-3.5 w-3.5" />
+                            </GhIconButton>
                         )}
                         {htmlUrl && (
-                            <a href={htmlUrl} target="_blank" rel="noopener noreferrer" className="p-0.5 hover:bg-muted rounded">
-                                <ExternalLink className="h-3 w-3 text-muted-foreground" />
-                            </a>
+                            <GhIconLink label="Open on GitHub" href={htmlUrl}>
+                                <ExternalLink className="h-3.5 w-3.5" />
+                            </GhIconLink>
                         )}
                     </div>
                 </div>
 
-                {/* Row 2: title */}
-                <div className="mt-1 font-medium text-sm leading-snug">
-                    {title || 'Loading...'}
+                <div className={ghBody}>
+                    <div className={ghTitle}>{title || 'Loading…'}</div>
+
+                    <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[11px] text-muted-foreground">
+                        <span className="inline-flex items-center gap-1 font-mono">
+                            <span className="rounded bg-muted/60 px-1.5 py-0.5 text-foreground/80">{baseRef}</span>
+                            <ArrowRight className="h-3 w-3" />
+                            <span className="rounded bg-muted/60 px-1.5 py-0.5 text-foreground/80">{headRef}</span>
+                        </span>
+                        {additions > 0 && <span className={ghStatAdd}>+{additions}</span>}
+                        {deletions > 0 && <span className={ghStatDel}>-{deletions}</span>}
+                        {changedFiles > 0 && <span className={ghChip}>{changedFiles} files</span>}
+                    </div>
+
+                    <div className="mt-2.5 flex items-center justify-between gap-2">
+                        <div className="flex min-w-0 items-center gap-1.5">
+                            {authorLogin && <GitHubAvatar login={authorLogin} avatarUrl={authorAvatar} size="md" />}
+                            {reviewerList.length > 0 && <span className="text-xs text-muted-foreground">reviewers</span>}
+                            {reviewerList.slice(0, 4).map((r: any, i: number) => (
+                                <GitHubAvatar key={i} login={r.login} avatarUrl={r.avatar_url} />
+                            ))}
+                            {reviewerList.length > 4 && <span className="text-xs text-muted-foreground">+{reviewerList.length - 4}</span>}
+                        </div>
+                        <GitHubTimestamp date={updatedAt} />
+                    </div>
                 </div>
 
-                {/* Row 3: base ← head + diff stats */}
-                <div className="mt-1.5 flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                    <div className="flex items-center gap-1 font-mono">
-                        <span>{baseRef}</span>
-                        <span>←</span>
-                        <span>{headRef}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        {additions > 0 && <span className="text-green-600 dark:text-green-400">+{additions}</span>}
-                        {deletions > 0 && <span className="text-red-600 dark:text-red-400">-{deletions}</span>}
-                        {changedFiles > 0 && <span>{changedFiles} files</span>}
-                    </div>
-                </div>
-
-                {/* Row 4: author + reviewers + timestamp */}
-                <div className="mt-1.5 flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                    <div className="flex items-center gap-1.5">
-                        {authorLogin && <GitHubAvatar login={authorLogin} avatarUrl={authorAvatar} />}
-                        {(reviewers || []).length > 0 && (
-                            <>
-                                <span>Reviewers:</span>
-                                {reviewers.map((r: any, i: number) => (
-                                    <GitHubAvatar key={i} login={r.login} avatarUrl={r.avatar_url} />
-                                ))}
-                            </>
-                        )}
-                    </div>
-                    <GitHubTimestamp date={updatedAt} />
-                </div>
-
-                {error && <div className="mt-2 text-xs text-red-500">{error}</div>}
+                {error && <div className={ghErrorBox}>{error}</div>}
             </Card>
         </NodeViewWrapper>
     )

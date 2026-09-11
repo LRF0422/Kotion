@@ -8,19 +8,36 @@ import {
 import { GitHubUrlInput } from './shared/GitHubUrlInput'
 import { GitHubRepoStructure } from './GitHubRepoStructure'
 import { GitHubMark } from './GitHubLogo'
+import {
+    GhIconButton,
+    GhIconLink,
+    ghCard,
+    ghCardDashed,
+    ghCardInteractive,
+    ghChip,
+    ghEmptyState,
+    ghErrorBox,
+    ghHeader,
+    ghHeaderStart,
+    ghIconTile,
+    ghRef,
+    ghRowHover,
+    ghStatAdd,
+    ghStatDel,
+} from './shared/styles'
 import { useGitHubData } from '../hooks/use-github-data'
 import { getRepo, getRepoContents, getRepoCommits, getRepoCommit, getFileContent } from '../services/github-repo-service'
 import type { GitHubTreeItem, GitHubCommit as GitHubCommitType, GitHubCommitDetail } from '../types/github'
 
 function formatCount(n: number): string {
-    if (n >= 1000) return `${(n / 1000).toFixed(1)}k`
+    if (n >= 1000) return (n / 1000).toFixed(1) + 'k'
     return String(n)
 }
 
 function formatSize(bytes: number): string {
-    if (bytes < 1024) return `${bytes} B`
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+    if (bytes < 1024) return bytes + ' B'
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
 }
 
 function formatCommitDate(dateStr: string): string {
@@ -31,9 +48,9 @@ function formatCommitDate(dateStr: string): string {
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
     if (diffDays === 0) return 'today'
     if (diffDays === 1) return 'yesterday'
-    if (diffDays < 30) return `${diffDays} days ago`
-    if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`
-    return `${Math.floor(diffDays / 365)} years ago`
+    if (diffDays < 30) return diffDays + ' days ago'
+    if (diffDays < 365) return Math.floor(diffDays / 30) + ' months ago'
+    return Math.floor(diffDays / 365) + ' years ago'
 }
 
 function shortenSha(sha: string): string {
@@ -42,23 +59,23 @@ function shortenSha(sha: string): string {
 
 const MAX_VIEWABLE_SIZE = 256 * 1024 // 256KB
 
+const TEXT_EXTENSIONS = [
+    'txt', 'md', 'markdown', 'rst', 'adoc',
+    'js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs',
+    'py', 'rb', 'go', 'rs', 'java', 'kt', 'scala', 'cs', 'c', 'cpp', 'h', 'hpp',
+    'swift', 'dart', 'lua', 'r', 'pl', 'php', 'sh', 'bash', 'zsh', 'fish', 'ps1',
+    'html', 'htm', 'css', 'scss', 'sass', 'less', 'vue', 'svelte',
+    'json', 'yaml', 'yml', 'toml', 'xml', 'csv', 'tsv', 'ini', 'cfg', 'conf',
+    'sql', 'graphql', 'gql', 'proto',
+    'dockerfile', 'makefile', 'cmake',
+    'gitignore', 'gitattributes', 'editorconfig', 'env', 'env.example',
+    'lock', 'log', 'license', 'readme', 'changelog',
+]
+
 function isTextFile(name: string): boolean {
-    const textExts = [
-        'txt', 'md', 'markdown', 'rst', 'adoc',
-        'js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs',
-        'py', 'rb', 'go', 'rs', 'java', 'kt', 'scala', 'cs', 'c', 'cpp', 'h', 'hpp',
-        'swift', 'dart', 'lua', 'r', 'pl', 'php', 'sh', 'bash', 'zsh', 'fish', 'ps1',
-        'html', 'htm', 'css', 'scss', 'sass', 'less', 'vue', 'svelte',
-        'json', 'yaml', 'yml', 'toml', 'xml', 'csv', 'tsv', 'ini', 'cfg', 'conf',
-        'sql', 'graphql', 'gql', 'proto',
-        'dockerfile', 'makefile', 'cmake',
-        'gitignore', 'gitattributes', 'editorconfig', 'env', 'env.example',
-        'lock', 'log',
-        'license', 'readme', 'changelog',
-    ]
     const lower = name.toLowerCase()
     const ext = lower.includes('.') ? lower.split('.').pop()! : lower
-    return textExts.includes(ext)
+    return TEXT_EXTENSIONS.includes(ext)
 }
 
 // --- File Viewer Sub-component ---
@@ -100,53 +117,43 @@ const FileViewer: React.FC<{
         if (!content) return
         navigator.clipboard.writeText(content)
         setCopied(true)
-        setTimeout(() => setCopied(false), 2000)
+        setTimeout(() => setCopied(false), 1600)
     }
 
     const lineCount = content ? content.split('\n').length : 0
 
     return (
         <div className="mt-2">
-            {/* Header */}
-            <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-1.5 text-xs min-w-0">
-                    <button
-                        onClick={onBack}
-                        className="flex items-center gap-0.5 text-muted-foreground hover:text-foreground"
-                    >
-                        <ArrowLeft className="h-3 w-3" />
-                    </button>
-                    <FileText className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                    <span className="font-medium truncate">{fileName}</span>
-                    <span className="text-muted-foreground flex-shrink-0">{formatSize(fileSize)}</span>
-                    {lineCount > 0 && (
-                        <span className="text-muted-foreground flex-shrink-0">{lineCount} lines</span>
-                    )}
+            <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-1.5 text-xs">
+                    <GhIconButton label="Back" onClick={onBack} className="h-6 w-6">
+                        <ArrowLeft className="h-3.5 w-3.5" />
+                    </GhIconButton>
+                    <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <span className="truncate font-medium">{fileName}</span>
+                    <span className="shrink-0 text-muted-foreground">{formatSize(fileSize)}</span>
+                    {lineCount > 0 && <span className="hidden shrink-0 text-muted-foreground sm:inline">{lineCount} lines</span>}
                 </div>
-                <div className="flex items-center gap-1 flex-shrink-0">
+                <div className="flex shrink-0 items-center gap-0.5">
                     {content && (
-                        <button onClick={handleCopy} className="p-0.5 hover:bg-muted rounded" title="Copy content">
-                            {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3 text-muted-foreground" />}
-                        </button>
+                        <GhIconButton label={copied ? 'Copied' : 'Copy content'} onClick={handleCopy}>
+                            {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                        </GhIconButton>
                     )}
-                    <a href={htmlUrl} target="_blank" rel="noopener noreferrer" className="p-0.5 hover:bg-muted rounded" title="Open on GitHub">
-                        <ExternalLink className="h-3 w-3 text-muted-foreground" />
-                    </a>
+                    <GhIconLink label="Open on GitHub" href={htmlUrl}>
+                        <ExternalLink className="h-3.5 w-3.5" />
+                    </GhIconLink>
                 </div>
             </div>
 
             {fileLoading && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground py-4 justify-center">
-                    <RefreshCw className="h-3 w-3 animate-spin" /> Loading file...
+                <div className="flex items-center justify-center gap-2 py-6 text-xs text-muted-foreground">
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Loading file…
                 </div>
             )}
-
-            {fileError && (
-                <div className="text-xs text-red-500 py-2">{fileError}</div>
-            )}
-
+            {fileError && <div className="py-2 text-xs text-destructive">{fileError}</div>}
             {!fileLoading && !fileError && content !== null && (
-                <div className="border rounded-md overflow-hidden">
+                <div className="overflow-hidden rounded-lg border">
                     <CodeEditor
                         value={content}
                         readOnly
@@ -192,14 +199,12 @@ const FileBrowser: React.FC<{
         }
     }, [token, owner, repo, defaultBranch])
 
-    // Load root on first render
     React.useEffect(() => {
         if (!loaded && token) {
             loadFiles('')
         }
     }, [loaded, token, loadFiles])
 
-    // If viewing a file, show the file viewer
     if (viewingFile && token) {
         return (
             <FileViewer
@@ -220,14 +225,10 @@ const FileBrowser: React.FC<{
 
     return (
         <div className="mt-2">
-            {/* Breadcrumb */}
-            <div className="flex items-center gap-0.5 text-xs text-muted-foreground mb-2 flex-wrap">
+            <div className="mb-2 flex flex-wrap items-center gap-0.5 text-xs text-muted-foreground">
                 <button
                     onClick={() => loadFiles('')}
-                    className={cn(
-                        'hover:text-foreground hover:underline',
-                        currentPath === '' && 'text-foreground font-medium'
-                    )}
+                    className={cn('rounded px-1 py-0.5 transition-colors hover:bg-muted hover:text-foreground', currentPath === '' && 'font-medium text-foreground')}
                 >
                     {repo}
                 </button>
@@ -236,13 +237,10 @@ const FileBrowser: React.FC<{
                     const isLast = i === pathParts.length - 1
                     return (
                         <React.Fragment key={fullPath}>
-                            <ChevronRight className="h-3 w-3" />
+                            <ChevronRight className="h-3 w-3 shrink-0 opacity-60" />
                             <button
                                 onClick={() => !isLast && loadFiles(fullPath)}
-                                className={cn(
-                                    'hover:text-foreground hover:underline',
-                                    isLast && 'text-foreground font-medium'
-                                )}
+                                className={cn('rounded px-1 py-0.5 transition-colors hover:bg-muted hover:text-foreground', isLast && 'font-medium text-foreground')}
                             >
                                 {part}
                             </button>
@@ -252,36 +250,27 @@ const FileBrowser: React.FC<{
             </div>
 
             {filesLoading && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground py-4 justify-center">
-                    <RefreshCw className="h-3 w-3 animate-spin" /> Loading files...
+                <div className="flex items-center justify-center gap-2 py-6 text-xs text-muted-foreground">
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Loading files…
                 </div>
             )}
-
-            {filesError && (
-                <div className="text-xs text-red-500 py-2">{filesError}</div>
-            )}
+            {filesError && <div className="py-2 text-xs text-destructive">{filesError}</div>}
 
             {!filesLoading && !filesError && (
                 <ScrollArea className="max-h-[280px]">
-                    <div className="border rounded-md divide-y">
+                    <div className="divide-y overflow-hidden rounded-lg border">
                         {currentPath && (
                             <button
-                                onClick={() => {
-                                    const parent = currentPath.split('/').slice(0, -1).join('/')
-                                    loadFiles(parent)
-                                }}
-                                className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted w-full text-left"
+                                onClick={() => loadFiles(currentPath.split('/').slice(0, -1).join('/'))}
+                                className={cn('flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs', ghRowHover)}
                             >
                                 <span className="text-muted-foreground">..</span>
                             </button>
                         )}
                         {files.map((item) => (
-                            <div
-                                key={item.sha}
-                                className="flex items-center justify-between px-3 py-1.5 text-xs hover:bg-muted"
-                            >
+                            <div key={item.sha} className={cn('group flex items-center justify-between gap-2 px-3 py-1.5 text-xs', ghRowHover)}>
                                 <button
-                                    className="flex items-center gap-2 min-w-0 text-left"
+                                    className="flex min-w-0 flex-1 items-center gap-2 text-left"
                                     onClick={() => {
                                         if (item.type === 'dir') {
                                             loadFiles(item.path)
@@ -293,43 +282,34 @@ const FileBrowser: React.FC<{
                                     }}
                                 >
                                     {item.type === 'dir' ? (
-                                        <Folder className="h-3.5 w-3.5 text-blue-500 flex-shrink-0" />
+                                        <Folder className="h-3.5 w-3.5 shrink-0 text-blue-500" />
                                     ) : (
-                                        <FileText className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                                        <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                                     )}
-                                    <span className={cn(
-                                        'truncate',
-                                        item.type === 'dir' ? 'text-foreground font-medium' : 'text-foreground'
-                                    )}>
+                                    <span className={cn('truncate', item.type === 'dir' ? 'font-medium text-foreground' : 'text-foreground/90')}>
                                         {item.name}
                                     </span>
                                 </button>
-                                <div className="flex items-center gap-1.5 ml-2 flex-shrink-0">
+                                <div className="flex shrink-0 items-center gap-1.5">
                                     {item.type !== 'dir' && item.size > 0 && (
-                                        <span className="text-muted-foreground">
-                                            {formatSize(item.size)}
-                                        </span>
+                                        <span className="text-muted-foreground">{formatSize(item.size)}</span>
                                     )}
                                     {item.type !== 'dir' && (
                                         <a
                                             href={item.html_url}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            className="p-0.5 hover:bg-accent rounded opacity-0 group-hover:opacity-100"
+                                            className="rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100"
                                             title="Open on GitHub"
                                             onClick={(e) => e.stopPropagation()}
                                         >
-                                            <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                                            <ExternalLink className="h-3 w-3" />
                                         </a>
                                     )}
                                 </div>
                             </div>
                         ))}
-                        {files.length === 0 && (
-                            <div className="px-3 py-4 text-xs text-muted-foreground text-center">
-                                Empty directory
-                            </div>
-                        )}
+                        {files.length === 0 && <div className={ghEmptyState}>Empty directory</div>}
                     </div>
                 </ScrollArea>
             )}
@@ -374,7 +354,6 @@ const CommitsList: React.FC<{
         }
     }, [loaded, token, loadCommits])
 
-    // Expand a commit to reveal its changed files (lazy-loaded and cached).
     const toggleDetails = useCallback(async (sha: string) => {
         if (expandedSha === sha) {
             setExpandedSha(null)
@@ -397,18 +376,15 @@ const CommitsList: React.FC<{
     return (
         <div className="mt-2">
             {commitsLoading && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground py-4 justify-center">
-                    <RefreshCw className="h-3 w-3 animate-spin" /> Loading commits...
+                <div className="flex items-center justify-center gap-2 py-6 text-xs text-muted-foreground">
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Loading commits…
                 </div>
             )}
-
-            {commitsError && (
-                <div className="text-xs text-red-500 py-2">{commitsError}</div>
-            )}
+            {commitsError && <div className="py-2 text-xs text-destructive">{commitsError}</div>}
 
             {!commitsLoading && !commitsError && (
-                <ScrollArea className="max-h-[280px]">
-                    <div className="space-y-0 border rounded-md divide-y">
+                <ScrollArea className="max-h-[300px]">
+                    <div className="divide-y overflow-hidden rounded-lg border">
                         {commits.map((commit) => {
                             const isExpanded = expandedSha === commit.sha
                             const detail = details[commit.sha]
@@ -417,39 +393,27 @@ const CommitsList: React.FC<{
                                     <button
                                         type="button"
                                         onClick={() => toggleDetails(commit.sha)}
-                                        className="px-3 py-2 hover:bg-muted w-full text-left"
+                                        className={cn('w-full px-3 py-2 text-left', ghRowHover)}
                                     >
                                         <div className="flex items-start gap-2">
                                             {commit.avatar_url ? (
-                                                <img
-                                                    src={commit.avatar_url}
-                                                    alt={commit.author.name}
-                                                    className="w-5 h-5 rounded-full flex-shrink-0 mt-0.5"
-                                                />
+                                                <img src={commit.avatar_url} alt={commit.author.name} loading="lazy" className="mt-0.5 h-5 w-5 shrink-0 rounded-full bg-muted object-cover ring-1 ring-inset ring-border" />
                                             ) : (
-                                                <div className="w-5 h-5 rounded-full bg-muted flex-shrink-0 mt-0.5 flex items-center justify-center text-[10px] text-muted-foreground">
+                                                <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground ring-1 ring-inset ring-border">
                                                     {commit.author.name.charAt(0).toUpperCase()}
                                                 </div>
                                             )}
                                             <div className="min-w-0 flex-1">
-                                                <div className="text-xs font-medium leading-snug line-clamp-1">
-                                                    {commit.message.split('\n')[0]}
-                                                </div>
-                                                <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground">
+                                                <div className="line-clamp-1 text-xs font-medium leading-snug">{commit.message.split('\n')[0]}</div>
+                                                <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
                                                     <span>{commit.author.name}</span>
                                                     <span>{formatCommitDate(commit.author.date)}</span>
-                                                    {detail?.stats && (
-                                                        <span className="text-green-600">+{detail.stats.additions}</span>
-                                                    )}
-                                                    {detail?.stats && (
-                                                        <span className="text-red-500">-{detail.stats.deletions}</span>
-                                                    )}
+                                                    {detail?.stats && <span className={ghStatAdd}>+{detail.stats.additions}</span>}
+                                                    {detail?.stats && <span className={ghStatDel}>-{detail.stats.deletions}</span>}
                                                 </div>
                                             </div>
-                                            <div className="flex items-center gap-1 flex-shrink-0 mt-0.5">
-                                                <span className="text-[11px] font-mono text-blue-500">
-                                                    {shortenSha(commit.sha)}
-                                                </span>
+                                            <div className="mt-0.5 flex shrink-0 items-center gap-1">
+                                                <span className="font-mono text-[11px] text-primary">{shortenSha(commit.sha)}</span>
                                                 {isExpanded
                                                     ? <ChevronDown className="h-3 w-3 text-muted-foreground" />
                                                     : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
@@ -460,19 +424,17 @@ const CommitsList: React.FC<{
                                     {isExpanded && (
                                         <div className="px-3 pb-2">
                                             {detailLoading === commit.sha && (
-                                                <div className="text-[11px] text-muted-foreground py-1">Loading changed files...</div>
+                                                <div className="py-1 text-[11px] text-muted-foreground">Loading changed files…</div>
                                             )}
-                                            {detailError && (
-                                                <div className="text-[11px] text-red-500 py-1">{detailError}</div>
-                                            )}
+                                            {detailError && <div className="py-1 text-[11px] text-destructive">{detailError}</div>}
                                             {detail && (
-                                                <div className="border rounded-md divide-y">
+                                                <div className="divide-y overflow-hidden rounded-lg border bg-muted/20">
                                                     {(detail.files || []).slice(0, 20).map((file) => (
                                                         <div key={file.filename} className="flex items-center justify-between gap-2 px-2 py-1 text-[11px]">
                                                             <span className="truncate" title={file.filename}>{file.filename}</span>
-                                                            <span className="flex items-center gap-1.5 flex-shrink-0">
-                                                                <span className="text-green-600">+{file.additions}</span>
-                                                                <span className="text-red-500">-{file.deletions}</span>
+                                                            <span className="flex shrink-0 items-center gap-1.5">
+                                                                <span className={ghStatAdd}>+{file.additions}</span>
+                                                                <span className={ghStatDel}>-{file.deletions}</span>
                                                             </span>
                                                         </div>
                                                     ))}
@@ -488,7 +450,7 @@ const CommitsList: React.FC<{
                                                         href={commit.html_url}
                                                         target="_blank"
                                                         rel="noopener noreferrer"
-                                                        className="block px-2 py-1 text-[11px] text-blue-500 hover:underline"
+                                                        className="block px-2 py-1 text-[11px] text-primary underline-offset-2 hover:underline"
                                                     >
                                                         View full diff on GitHub
                                                     </a>
@@ -499,11 +461,7 @@ const CommitsList: React.FC<{
                                 </div>
                             )
                         })}
-                        {commits.length === 0 && (
-                            <div className="px-3 py-4 text-xs text-muted-foreground text-center">
-                                No commits found
-                            </div>
-                        )}
+                        {commits.length === 0 && <div className={ghEmptyState}>No commits found</div>}
                     </div>
                 </ScrollArea>
             )}
@@ -542,7 +500,7 @@ export const GitHubRepoCard: React.FC<NodeViewProps> = ({ node, updateAttributes
     if (!isConfigured) {
         return (
             <NodeViewWrapper>
-                <Card className="my-4 border-2 border-dashed">
+                <Card className={ghCardDashed}>
                     <GitHubUrlInput
                         type="repo"
                         onSubmit={(parsed) => {
@@ -555,119 +513,106 @@ export const GitHubRepoCard: React.FC<NodeViewProps> = ({ node, updateAttributes
         )
     }
 
+    const tabTriggerClass = 'h-7 gap-1.5 rounded-md px-2.5 text-xs'
+
     return (
         <NodeViewWrapper>
-            <Card className={cn(
-                'my-4 p-3 transition-all duration-200 border',
-                editor.isEditable && 'hover:border-primary/50'
-            )}>
-                {/* Header: name + visibility + actions */}
-                <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <GitHubMark className="h-3.5 w-3.5 shrink-0 text-foreground" />
-                        <span className="font-mono font-medium text-foreground">{owner}/{repo}</span>
-                    </div>
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 capitalize">
+            <Card className={cn(ghCard, editor.isEditable && ghCardInteractive)}>
+                <div className={ghHeader}>
+                    <div className={ghHeaderStart}>
+                        <span className={ghIconTile}>
+                            <GitHubMark className="h-3.5 w-3.5 text-foreground" />
+                        </span>
+                        <span className={ghRef}>{owner}/{repo}</span>
+                        <Badge variant="outline" className="h-5 shrink-0 rounded-full px-2 text-[10px] capitalize">
                             {visibility || 'public'}
                         </Badge>
-                        {loading && <RefreshCw className="h-3 w-3 animate-spin text-muted-foreground" />}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-0.5">
+                        {loading && <RefreshCw className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-label="Loading" />}
                         {!loading && editor.isEditable && (
-                            <button onClick={refresh} className="p-0.5 hover:bg-muted rounded">
-                                <RefreshCw className="h-3 w-3 text-muted-foreground" />
-                            </button>
+                            <GhIconButton label="Refresh" onClick={refresh}>
+                                <RefreshCw className="h-3.5 w-3.5" />
+                            </GhIconButton>
                         )}
                         {htmlUrl && (
-                            <a href={htmlUrl} target="_blank" rel="noopener noreferrer" className="p-0.5 hover:bg-muted rounded">
-                                <ExternalLink className="h-3 w-3 text-muted-foreground" />
-                            </a>
+                            <GhIconLink label="Open on GitHub" href={htmlUrl}>
+                                <ExternalLink className="h-3.5 w-3.5" />
+                            </GhIconLink>
                         )}
                     </div>
                 </div>
 
-                {/* Tabs */}
-                <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-2">
-                    <TabsList className="h-7 p-0.5">
-                        <TabsTrigger value="overview" className="text-xs h-6 px-2.5">Overview</TabsTrigger>
-                        <TabsTrigger value="files" className="text-xs h-6 px-2.5 gap-1">
-                            <Folder className="h-3 w-3" /> Files
-                        </TabsTrigger>
-                        <TabsTrigger value="commits" className="text-xs h-6 px-2.5 gap-1">
-                            <GitCommit className="h-3 w-3" /> Commits
-                        </TabsTrigger>
-                        <TabsTrigger value="structure" className="text-xs h-6 px-2.5 gap-1">
-                            <FolderTree className="h-3 w-3" /> Structure
-                        </TabsTrigger>
-                    </TabsList>
+                <Tabs value={activeTab} onValueChange={setActiveTab}>
+                    <div className="border-b px-3 py-2">
+                        <TabsList className="h-8 w-full justify-start gap-1 bg-transparent p-0">
+                            <TabsTrigger value="overview" className={tabTriggerClass}>
+                                <CircleDot className="h-3.5 w-3.5" /> Overview
+                            </TabsTrigger>
+                            <TabsTrigger value="files" className={tabTriggerClass}>
+                                <Folder className="h-3.5 w-3.5" /> Files
+                            </TabsTrigger>
+                            <TabsTrigger value="commits" className={tabTriggerClass}>
+                                <GitCommit className="h-3.5 w-3.5" /> Commits
+                            </TabsTrigger>
+                            <TabsTrigger value="structure" className={tabTriggerClass}>
+                                <FolderTree className="h-3.5 w-3.5" /> Structure
+                            </TabsTrigger>
+                        </TabsList>
+                    </div>
 
-                    <TabsContent value="overview" className="mt-2">
-                        {/* Description */}
-                        {description && (
-                            <div className="text-sm text-muted-foreground line-clamp-2">{description}</div>
-                        )}
+                    <TabsContent value="overview" className="mt-0 p-3">
+                        {description && <p className="line-clamp-2 text-sm text-muted-foreground">{description}</p>}
 
-                        {/* Stats: language + stars + forks + issues */}
-                        <div className="mt-1.5 flex items-center gap-3 text-xs text-muted-foreground">
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
                             {language && (
-                                <span className="flex items-center gap-1">
-                                    <span className="inline-block w-2.5 h-2.5 rounded-full bg-primary" />
+                                <span className={ghChip}>
+                                    <span className="inline-block h-2 w-2 rounded-full bg-primary" />
                                     {language}
                                 </span>
                             )}
-                            <span className="flex items-center gap-0.5">
+                            <span className={ghChip}>
                                 <Star className="h-3 w-3" /> {formatCount(stars || 0)}
                             </span>
-                            <span className="flex items-center gap-0.5">
+                            <span className={ghChip}>
                                 <GitFork className="h-3 w-3" /> {formatCount(forks || 0)}
                             </span>
                             {openIssues > 0 && (
-                                <span className="flex items-center gap-0.5">
+                                <span className={ghChip}>
                                     <CircleDot className="h-3 w-3" /> {openIssues} issues
                                 </span>
                             )}
                         </div>
 
-                        {/* Topics */}
                         {(topics || []).length > 0 && (
-                            <div className="mt-1.5 flex items-center gap-1 flex-wrap">
+                            <div className="mt-2 flex flex-wrap items-center gap-1">
                                 {topics.map((topic: string, i: number) => (
-                                    <Badge key={i} variant="secondary" className="text-[10px] px-1.5 py-0">
+                                    <Badge key={i} variant="secondary" className="rounded-full px-2 py-0 text-[10px] font-normal">
                                         {topic}
                                     </Badge>
                                 ))}
                             </div>
                         )}
+
+                        {!description && (topics || []).length === 0 && (
+                            <div className="mt-2 text-xs text-muted-foreground">No description provided.</div>
+                        )}
                     </TabsContent>
 
-                    <TabsContent value="files" className="mt-0">
-                        <FileBrowser
-                            owner={owner}
-                            repo={repo}
-                            defaultBranch={defaultBranch || 'main'}
-                            token={token}
-                        />
+                    <TabsContent value="files" className="mt-0 p-3">
+                        <FileBrowser owner={owner} repo={repo} defaultBranch={defaultBranch || 'main'} token={token} />
                     </TabsContent>
 
-                    <TabsContent value="commits" className="mt-0">
-                        <CommitsList
-                            owner={owner}
-                            repo={repo}
-                            defaultBranch={defaultBranch || 'main'}
-                            token={token}
-                        />
+                    <TabsContent value="commits" className="mt-0 p-3">
+                        <CommitsList owner={owner} repo={repo} defaultBranch={defaultBranch || 'main'} token={token} />
                     </TabsContent>
 
-                    <TabsContent value="structure" className="mt-0">
-                        <GitHubRepoStructure
-                            owner={owner}
-                            repo={repo}
-                            defaultBranch={defaultBranch || 'main'}
-                            token={token}
-                        />
+                    <TabsContent value="structure" className="mt-0 p-3">
+                        <GitHubRepoStructure owner={owner} repo={repo} defaultBranch={defaultBranch || 'main'} token={token} />
                     </TabsContent>
                 </Tabs>
 
-                {error && <div className="mt-2 text-xs text-red-500">{error}</div>}
+                {error && <div className={ghErrorBox}>{error}</div>}
             </Card>
         </NodeViewWrapper>
     )

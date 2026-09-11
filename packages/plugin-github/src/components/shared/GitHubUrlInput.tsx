@@ -1,5 +1,6 @@
-import React, { useState } from 'react'
-import { Input, Button } from '@kn/ui'
+import React, { useEffect, useRef, useState } from 'react'
+import { Input, Button, cn } from '@kn/ui'
+import { Link2 } from '@kn/icon'
 
 interface ParsedGitHubUrl {
     owner: string
@@ -74,9 +75,21 @@ interface GitHubUrlInputProps {
     onCancel?: () => void
 }
 
+const TYPE_LABELS: Record<string, string> = {
+    issue: 'Issue',
+    pr: 'Pull Request',
+    repo: 'Repository',
+    code: 'Code',
+}
+
 export const GitHubUrlInput: React.FC<GitHubUrlInputProps> = ({ type, placeholder, onSubmit, onCancel }) => {
     const [url, setUrl] = useState('')
     const [error, setError] = useState('')
+    const inputRef = useRef<HTMLInputElement>(null)
+
+    useEffect(() => {
+        inputRef.current?.focus()
+    }, [])
 
     const defaultPlaceholders: Record<string, string> = {
         issue: 'owner/repo#123 or https://github.com/owner/repo/issues/123',
@@ -101,18 +114,27 @@ export const GitHubUrlInput: React.FC<GitHubUrlInputProps> = ({ type, placeholde
     }
 
     return (
-        <div className="p-4 flex flex-col items-center gap-3">
-            <div className="text-sm text-muted-foreground">
-                Paste a GitHub {type === 'pr' ? 'Pull Request' : type === 'issue' ? 'Issue' : type === 'repo' ? 'Repository' : 'Code'} URL
+        <div className="flex flex-col items-center gap-4 p-5">
+            <div className="flex w-full max-w-md items-center gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-inset ring-primary/20">
+                    <Link2 className="h-4 w-4" />
+                </span>
+                <div className="min-w-0 text-left">
+                    <p className="text-sm font-medium">Embed GitHub {TYPE_LABELS[type]}</p>
+                    <p className="text-xs text-muted-foreground">Paste a URL or use the owner/repo shorthand</p>
+                </div>
             </div>
             <div className="w-full max-w-md space-y-2">
                 <Input
+                    ref={inputRef}
                     value={url}
                     onChange={(e) => { setUrl(e.target.value); setError('') }}
                     placeholder={placeholder || defaultPlaceholders[type]}
                     onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit() }}
+                    aria-invalid={!!error}
+                    className={cn(error && 'border-destructive focus-visible:ring-destructive')}
                 />
-                {error && <p className="text-xs text-red-500">{error}</p>}
+                {error && <p className="text-xs text-destructive">{error}</p>}
                 <div className="flex gap-2">
                     <Button size="sm" onClick={handleSubmit} disabled={!url.trim()}>Embed</Button>
                     {onCancel && <Button size="sm" variant="outline" onClick={onCancel}>Cancel</Button>}

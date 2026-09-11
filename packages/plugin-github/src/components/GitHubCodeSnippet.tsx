@@ -1,13 +1,28 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { NodeViewWrapper, NodeViewProps } from '@kn/editor'
 import { Card, cn } from '@kn/ui'
-import { RefreshCw, ExternalLink, Copy, FileCode } from '@kn/icon'
+import { Check, Copy, ExternalLink, FileCode, RefreshCw } from '@kn/icon'
 import { GitHubUrlInput } from './shared/GitHubUrlInput'
+import {
+    GhIconButton,
+    GhIconLink,
+    ghCard,
+    ghCardDashed,
+    ghCardInteractive,
+    ghChip,
+    ghErrorBox,
+    ghHeader,
+    ghHeaderStart,
+    ghIconTile,
+    ghRef,
+    ghRowHover,
+} from './shared/styles'
 import { useGitHubData } from '../hooks/use-github-data'
 import { getFileContent, decodeContent, extractLines, detectLanguage } from '../services/github-code-service'
 
 export const GitHubCodeSnippet: React.FC<NodeViewProps> = ({ node, updateAttributes, editor, deleteNode }) => {
-    const { owner, repo, path, ref, startLine, endLine, content, htmlUrl } = node.attrs
+    const { owner, repo, path, ref, startLine, endLine, content, language, htmlUrl } = node.attrs
+    const [copied, setCopied] = useState(false)
 
     const isConfigured = owner && repo && path
 
@@ -29,15 +44,16 @@ export const GitHubCodeSnippet: React.FC<NodeViewProps> = ({ node, updateAttribu
     })
 
     const handleCopy = () => {
-        if (content) {
-            navigator.clipboard.writeText(content)
-        }
+        if (!content) return
+        navigator.clipboard.writeText(content)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 1600)
     }
 
     if (!isConfigured) {
         return (
             <NodeViewWrapper>
-                <Card className="my-4 border-2 border-dashed">
+                <Card className={ghCardDashed}>
                     <GitHubUrlInput
                         type="code"
                         onSubmit={(parsed) => {
@@ -57,62 +73,74 @@ export const GitHubCodeSnippet: React.FC<NodeViewProps> = ({ node, updateAttribu
         )
     }
 
-    const lineLabel = startLine && endLine ? `L${startLine}-${endLine}` : startLine ? `L${startLine}+` : ''
+    const lineLabel = startLine && endLine ? 'L' + startLine + '–' + endLine : startLine ? 'L' + startLine + '+' : ''
+    const lineCount = content ? content.split('\n').length : 0
 
     return (
         <NodeViewWrapper>
-            <Card className={cn(
-                'my-4 overflow-hidden transition-all duration-200 border',
-                editor.isEditable && 'hover:border-primary/50'
-            )}>
-                {/* Header */}
-                <div className="flex items-center justify-between px-3 py-1.5 bg-muted/50 border-b text-xs text-muted-foreground">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                        <FileCode className="h-3.5 w-3.5 flex-shrink-0" />
-                        <span className="truncate font-mono">{owner}/{repo}/{path}</span>
-                        {lineLabel && <span className="text-muted-foreground/70">({lineLabel})</span>}
+            <Card className={cn(ghCard, editor.isEditable && ghCardInteractive)}>
+                <div className={ghHeader}>
+                    <div className={ghHeaderStart}>
+                        <span className={ghIconTile}>
+                            <FileCode className="h-3.5 w-3.5" />
+                        </span>
+                        <div className="flex min-w-0 items-baseline gap-1.5">
+                            <span className={ghRef}>
+                                {owner}/{repo}/{path}
+                            </span>
+                            {lineLabel && (
+                                <span className="shrink-0 font-mono text-[11px] text-muted-foreground">{lineLabel}</span>
+                            )}
+                        </div>
                     </div>
-                    <div className="flex items-center gap-1 flex-shrink-0">
+                    <div className="flex shrink-0 items-center gap-0.5">
+                        {language && <span className={cn(ghChip, 'hidden capitalize sm:inline-flex')}>{language}</span>}
+                        {lineCount > 0 && <span className={cn(ghChip, 'hidden lg:inline-flex')}>{lineCount} lines</span>}
+                        {loading && <RefreshCw className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-label="Loading" />}
                         {content && (
-                            <button onClick={handleCopy} className="p-0.5 hover:bg-muted rounded" title="Copy code">
-                                <Copy className="h-3 w-3" />
-                            </button>
+                            <GhIconButton label={copied ? 'Copied' : 'Copy code'} onClick={handleCopy}>
+                                {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                            </GhIconButton>
                         )}
-                        {loading && <RefreshCw className="h-3 w-3 animate-spin" />}
                         {!loading && editor.isEditable && (
-                            <button onClick={refresh} className="p-0.5 hover:bg-muted rounded" title="Refresh">
-                                <RefreshCw className="h-3 w-3" />
-                            </button>
+                            <GhIconButton label="Refresh" onClick={refresh}>
+                                <RefreshCw className="h-3.5 w-3.5" />
+                            </GhIconButton>
                         )}
                         {htmlUrl && (
-                            <a href={htmlUrl} target="_blank" rel="noopener noreferrer" className="p-0.5 hover:bg-muted rounded">
-                                <ExternalLink className="h-3 w-3" />
-                            </a>
+                            <GhIconLink label="Open on GitHub" href={htmlUrl}>
+                                <ExternalLink className="h-3.5 w-3.5" />
+                            </GhIconLink>
                         )}
                     </div>
                 </div>
 
-                {/* Code body */}
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto bg-muted/20">
                     {content ? (
-                        <pre className="p-3 text-xs font-mono leading-relaxed m-0">
-                            <code>
+                        <pre className="m-0 p-3 text-xs leading-relaxed">
+                            <code className="font-mono">
                                 {content.split('\n').map((line: string, i: number) => (
-                                    <div key={i} className="flex">
-                                        <span className="select-none text-muted-foreground/50 pr-4 text-right min-w-[2.5rem]">
+                                    <div key={i} className={cn('flex rounded-sm px-1', ghRowHover)}>
+                                        <span className="mr-3 min-w-[2.5rem] select-none text-right text-muted-foreground/50">
                                             {(startLine || 1) + i}
                                         </span>
-                                        <span>{line}</span>
+                                        <span className="whitespace-pre">{line || ' '}</span>
                                     </div>
                                 ))}
                             </code>
                         </pre>
                     ) : loading ? (
-                        <div className="p-4 text-xs text-muted-foreground text-center">Loading code...</div>
-                    ) : null}
+                        <div className="space-y-2 p-3">
+                            {[0, 1, 2, 3].map((i) => (
+                                <div key={i} className="h-3 rounded bg-muted" style={{ width: 55 + i * 12 + '%' }} />
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="px-3 py-6 text-center text-xs text-muted-foreground">No code loaded</div>
+                    )}
                 </div>
 
-                {error && <div className="px-3 pb-2 text-xs text-red-500">{error}</div>}
+                {error && <div className={ghErrorBox}>{error}</div>}
             </Card>
         </NodeViewWrapper>
     )

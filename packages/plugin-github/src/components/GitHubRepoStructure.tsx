@@ -6,6 +6,7 @@ import {
 } from '@kn/icon'
 import { getFileContent, getRepoTree } from '../services/github-repo-service'
 import type { GitHubTreeItem } from '../types/github'
+import { GhIconButton, GhIconLink, ghChip, ghEmptyState, ghRowHover } from './shared/styles'
 
 const MAX_VIEWABLE_SIZE = 256 * 1024
 
@@ -32,6 +33,21 @@ function formatSize(bytes: number): string {
     if (bytes < 1024) return bytes + ' B'
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+}
+
+const CODE_EXT = ['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'py', 'rb', 'go', 'rs', 'java', 'kt', 'cs', 'c', 'cpp', 'h', 'hpp', 'php', 'swift', 'dart', 'lua', 'sh', 'bash', 'sql', 'graphql', 'vue', 'svelte', 'html', 'css', 'scss', 'less']
+const DOC_EXT = ['md', 'markdown', 'txt', 'rst', 'adoc', 'pdf']
+const CONFIG_EXT = ['json', 'yaml', 'yml', 'toml', 'ini', 'cfg', 'conf', 'xml', 'env', 'lock']
+const DATA_EXT = ['csv', 'tsv', 'xlsx', 'parquet']
+
+function fileIconClass(name: string): string {
+    const lower = name.toLowerCase()
+    const ext = lower.includes('.') ? lower.split('.').pop()! : lower
+    if (CODE_EXT.includes(ext)) return 'text-blue-500'
+    if (DOC_EXT.includes(ext)) return 'text-amber-500'
+    if (CONFIG_EXT.includes(ext) || lower === 'dockerfile') return 'text-slate-400'
+    if (DATA_EXT.includes(ext)) return 'text-violet-500'
+    return 'text-muted-foreground'
 }
 
 interface TreeDir {
@@ -114,43 +130,43 @@ const StructureFileViewer: React.FC<{
         if (!content) return
         navigator.clipboard.writeText(content)
         setCopied(true)
-        setTimeout(() => setCopied(false), 2000)
+        setTimeout(() => setCopied(false), 1600)
     }
 
     const lineCount = content ? content.split('\n').length : 0
 
     return (
         <div className="mt-1">
-            <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-1.5 text-xs min-w-0">
-                    <button onClick={onBack} className="flex items-center gap-0.5 text-muted-foreground hover:text-foreground">
-                        <ArrowLeft className="h-3 w-3" />
-                    </button>
-                    <FileText className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                    <span className="font-medium truncate">{file.name}</span>
-                    <span className="text-muted-foreground flex-shrink-0">{formatSize(file.size)}</span>
-                    {lineCount > 0 && <span className="text-muted-foreground flex-shrink-0">{lineCount} lines</span>}
+            <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-1.5 text-xs">
+                    <GhIconButton label="Back" onClick={onBack} className="h-6 w-6">
+                        <ArrowLeft className="h-3.5 w-3.5" />
+                    </GhIconButton>
+                    <FileText className={cn('h-3.5 w-3.5 shrink-0', fileIconClass(file.name))} />
+                    <span className="truncate font-medium">{file.name}</span>
+                    <span className="shrink-0 text-muted-foreground">{formatSize(file.size)}</span>
+                    {lineCount > 0 && <span className="hidden shrink-0 text-muted-foreground sm:inline">{lineCount} lines</span>}
                 </div>
-                <div className="flex items-center gap-1 flex-shrink-0">
+                <div className="flex shrink-0 items-center gap-0.5">
                     {content && (
-                        <button onClick={handleCopy} className="p-0.5 hover:bg-muted rounded" title="Copy content">
-                            {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3 text-muted-foreground" />}
-                        </button>
+                        <GhIconButton label={copied ? 'Copied' : 'Copy content'} onClick={handleCopy}>
+                            {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                        </GhIconButton>
                     )}
-                    <a href={file.html_url} target="_blank" rel="noopener noreferrer" className="p-0.5 hover:bg-muted rounded" title="Open on GitHub">
-                        <ExternalLink className="h-3 w-3 text-muted-foreground" />
-                    </a>
+                    <GhIconLink label="Open on GitHub" href={file.html_url}>
+                        <ExternalLink className="h-3.5 w-3.5" />
+                    </GhIconLink>
                 </div>
             </div>
 
             {loading && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground py-4 justify-center">
-                    <RefreshCw className="h-3 w-3 animate-spin" /> Loading file...
+                <div className="flex items-center justify-center gap-2 py-6 text-xs text-muted-foreground">
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Loading file…
                 </div>
             )}
-            {error && <div className="text-xs text-red-500 py-2">{error}</div>}
+            {error && <div className="py-2 text-xs text-destructive">{error}</div>}
             {!loading && !error && content !== null && (
-                <div className="border rounded-md overflow-hidden">
+                <div className="overflow-hidden rounded-lg border">
                     <CodeEditor
                         value={content}
                         readOnly
@@ -243,11 +259,15 @@ export const GitHubRepoStructure: React.FC<{
                 <React.Fragment key={node.path}>
                     <button
                         onClick={() => toggle(node.path)}
-                        className="flex items-center gap-1.5 px-2 py-1 text-xs hover:bg-muted w-full text-left"
-                        style={{ paddingLeft: 8 + level * 14 }}
+                        className={cn('flex w-full items-center gap-1.5 py-1 text-xs', ghRowHover)}
+                        style={{ paddingLeft: 8 + level * 14, paddingRight: 8 }}
                     >
-                        {isOpen ? <ChevronDown className="h-3 w-3 flex-shrink-0 text-muted-foreground" /> : <ChevronRight className="h-3 w-3 flex-shrink-0 text-muted-foreground" />}
-                        {isOpen ? <FolderOpen className="h-3.5 w-3.5 text-blue-500 flex-shrink-0" /> : <Folder className="h-3.5 w-3.5 text-blue-500 flex-shrink-0" />}
+                        {isOpen
+                            ? <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
+                            : <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />}
+                        {isOpen
+                            ? <FolderOpen className="h-3.5 w-3.5 shrink-0 text-blue-500" />
+                            : <Folder className="h-3.5 w-3.5 shrink-0 text-blue-500" />}
                         <span className="truncate font-medium">{node.name}</span>
                     </button>
                     {isOpen && renderNodes(node.children, level + 1)}
@@ -258,25 +278,25 @@ export const GitHubRepoStructure: React.FC<{
             <button
                 key={node.path}
                 onClick={() => handleFileClick({ name: node.name, path: node.path, type: 'file', size: node.size, sha: '', html_url: node.html_url })}
-                className="flex items-center gap-1.5 px-2 py-1 text-xs hover:bg-muted w-full text-left"
-                style={{ paddingLeft: 8 + level * 14 + 16 }}
+                className={cn('flex w-full items-center gap-1.5 py-1 text-xs', ghRowHover)}
+                style={{ paddingLeft: 8 + level * 14 + 16, paddingRight: 8 }}
                 title={node.path}
             >
-                <FileText className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                <FileText className={cn('h-3.5 w-3.5 shrink-0', fileIconClass(node.name))} />
                 <span className="truncate">{node.name}</span>
-                {node.size > 0 && <span className="ml-auto text-[10px] text-muted-foreground flex-shrink-0">{formatSize(node.size)}</span>}
+                {node.size > 0 && <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">{formatSize(node.size)}</span>}
             </button>
         )
     })
 
     return (
         <div className="mt-2">
-            <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <span className="font-mono">{ref}</span>
-                    <span>· {items.length} entries</span>
+            <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-1.5">
+                    <span className={cn(ghChip, 'font-mono')}>{ref}</span>
+                    <span className="text-xs text-muted-foreground">{items.length} entries</span>
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex shrink-0 items-center gap-1">
                     <select
                         value={depth}
                         onChange={(event) => {
@@ -284,7 +304,7 @@ export const GitHubRepoStructure: React.FC<{
                             setDepth(next)
                             load(ref, next)
                         }}
-                        className="h-6 rounded border border-input bg-transparent px-1 text-[11px]"
+                        className="h-7 rounded-md border border-input bg-background px-1.5 text-[11px] text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         title="Directory depth"
                     >
                         <option value={2}>2 levels</option>
@@ -292,30 +312,25 @@ export const GitHubRepoStructure: React.FC<{
                         <option value={4}>4 levels</option>
                         <option value={6}>6 levels</option>
                     </select>
-                    <button
-                        onClick={() => load(ref, depth)}
-                        className="p-0.5 hover:bg-muted rounded"
-                        disabled={loading}
-                        title="Reload structure"
-                    >
-                        <RefreshCw className={cn('h-3 w-3 text-muted-foreground', loading && 'animate-spin')} />
-                    </button>
+                    <GhIconButton label="Reload structure" onClick={() => load(ref, depth)} disabled={loading}>
+                        <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
+                    </GhIconButton>
                 </div>
             </div>
 
             {loading && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground py-4 justify-center">
-                    <RefreshCw className="h-3 w-3 animate-spin" /> Loading structure...
+                <div className="flex items-center justify-center gap-2 py-6 text-xs text-muted-foreground">
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Loading structure…
                 </div>
             )}
-            {error && <div className="text-xs text-red-500 py-2">{error}</div>}
+            {error && <div className="py-2 text-xs text-destructive">{error}</div>}
 
             {!loading && !error && (
-                <ScrollArea className="max-h-[320px]">
-                    <div className="border rounded-md divide-y py-1">
-                        {tree.length === 0 ? (
-                            <div className="px-3 py-4 text-xs text-muted-foreground text-center">Empty repository</div>
-                        ) : renderNodes(tree, 0)}
+                <ScrollArea className="max-h-[340px]">
+                    <div className="divide-y overflow-hidden rounded-lg border py-1">
+                        {tree.length === 0
+                            ? <div className={ghEmptyState}>Empty repository</div>
+                            : renderNodes(tree, 0)}
                     </div>
                 </ScrollArea>
             )}
