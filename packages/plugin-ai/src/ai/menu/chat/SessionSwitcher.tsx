@@ -10,6 +10,10 @@ import {
 } from '@kn/ui'
 import type { ChatSessionMeta } from '../chat-sessions'
 
+/** Page shown next to a session: an explicit off-screen target wins, else the page it belongs to. */
+const sessionPageTitle = (session?: ChatSessionMeta): string | undefined =>
+    session?.targetPage?.title || session?.boundPage?.title
+
 interface SessionSwitcherProps {
     sessions: ChatSessionMeta[]
     activeSessionId: string
@@ -35,7 +39,7 @@ export const SessionSwitcher: React.FC<SessionSwitcherProps> = ({
     const activeItemRef = useRef<HTMLDivElement | null>(null)
     const activeSession = sessions.find((s) => s.id === activeSessionId)
     const activeTitle = activeSession?.title || t('ai.chat.newChat')
-    const activePageTitle = activeSession?.targetPage?.title
+    const activePageTitle = sessionPageTitle(activeSession)
 
     // Keep the active item visible when the menu is opened after several
     // sessions have accumulated.
@@ -80,7 +84,7 @@ export const SessionSwitcher: React.FC<SessionSwitcherProps> = ({
                     {sessions.map((s) => {
                         const isActive = s.id === activeSessionId
                         const title = s.title || t('ai.chat.newChat')
-                        const pageTitle = s.targetPage?.title
+                        const pageTitle = sessionPageTitle(s)
                         return (
                             <div
                                 key={s.id}

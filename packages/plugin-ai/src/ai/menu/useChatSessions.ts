@@ -28,7 +28,7 @@ export interface UseChatSessionsResult {
     messages: Message[]
     setMessages: Dispatch<SetStateAction<Message[]>>
     /** Create a brand-new empty chat session and switch to it. */
-    createSession: () => string
+    createSession: (boundPage?: ChatTargetPage) => string
     /** Switch the active chat to the given session id. */
     switchSession: (id: string) => void
     /** Delete a session. If it was active, switches to the next or creates a new one. */
@@ -41,6 +41,10 @@ export interface UseChatSessionsResult {
     targetPage: ChatTargetPage | undefined
     /** Bind / unbind the active session's target page. */
     setTargetPage: (page: ChatTargetPage | null) => void
+    /** Page the active session belongs to (auto-bound), if any. */
+    boundPage: ChatTargetPage | undefined
+    /** Bind / unbind the active session's owning page. */
+    setBoundPage: (page: ChatTargetPage | null) => void
 }
 
 /**
@@ -131,7 +135,7 @@ export function useChatSessions(): UseChatSessionsResult {
         [],
     )
 
-    const createSession = useCallback((): string => {
+    const createSession = useCallback((boundPage?: ChatTargetPage): string => {
         const id = generateSessionId()
         const now = Date.now()
         const meta: ChatSessionMeta = {
@@ -139,6 +143,7 @@ export function useChatSessions(): UseChatSessionsResult {
             title: 'New chat',
             createdAt: now,
             updatedAt: now,
+            boundPage,
         }
         setSessions(prev => {
             const next = [meta, ...prev]
@@ -223,6 +228,8 @@ export function useChatSessions(): UseChatSessionsResult {
 
     const targetPage = activeSession?.targetPage
 
+    const boundPage = activeSession?.boundPage
+
     const setTargetPage = useCallback(
         (page: ChatTargetPage | null) => {
             updateMeta(activeSessionId, s => ({
@@ -230,6 +237,15 @@ export function useChatSessions(): UseChatSessionsResult {
                 targetPage: page ?? undefined,
                 updatedAt: Date.now(),
             }))
+        },
+        [activeSessionId, updateMeta],
+    )
+
+    const setBoundPage = useCallback(
+        (page: ChatTargetPage | null) => {
+            // Binding is not user activity — leave updatedAt alone so merely
+            // browsing pages cannot promote a stale chat to "most recent".
+            updateMeta(activeSessionId, s => ({ ...s, boundPage: page ?? undefined }))
         },
         [activeSessionId, updateMeta],
     )
@@ -247,5 +263,7 @@ export function useChatSessions(): UseChatSessionsResult {
         clearActiveMessages,
         targetPage,
         setTargetPage,
+        boundPage,
+        setBoundPage,
     }
 }

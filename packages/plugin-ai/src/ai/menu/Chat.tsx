@@ -39,7 +39,7 @@ import {
 } from "./chat-types"
 import type { BlockReference, Message } from "./chat-types"
 import { getHistoryForAI } from "./chat-persistence"
-import type { ChatTargetPage } from "./chat-sessions"
+import type { ChatSessionMeta, ChatTargetPage } from "./chat-sessions"
 import { useChatSessions } from "./useChatSessions"
 import { MessageBubble } from "./MessageBubble"
 import { ErrorDisplay } from "./ErrorDisplay"
@@ -108,6 +108,10 @@ const selectFinalAnswer = (
         : undefined
     return answer?.text ?? ''
 }
+
+/** The page a chat conversation belongs to (an explicit off-screen target wins). */
+const sessionPageId = (session?: ChatSessionMeta): string | undefined =>
+    session?.targetPage?.pageId ?? session?.boundPage?.pageId
 
 // ─── Chat ──────────────────────────────────────────────────────────
 
@@ -208,6 +212,8 @@ export const ExpandableChatDemo: React.FC<{
         clearActiveMessages,
         targetPage,
         setTargetPage,
+        boundPage,
+        setBoundPage,
     } = useChatSessions()
 
     // ─── Off-screen target editor (@-page binding) ──────────────
@@ -562,15 +568,30 @@ export const ExpandableChatDemo: React.FC<{
         deleteSession(id)
     }, [activeSessionId, abandonAgent, deleteSession])
 
-    // ─── Page → session follow ─────────────────────────────────
-    // A page-bound session is the conversation about that page, so switching
-    // to a page that already has one should surface it here instead of making
-    // the user re-find it in the dropdown. Only an actual page change may
-    // trigger the switch — never mid-run (it would cancel the stream) and
-    // never when the incoming page has no bound session (keep the current
-    // chat, e.g. a general-purpose one).
-    const { pageId: activePageId } = useActiveEditor()
+    // ─── Page ↔ session binding ────────────────────────────────
+    // Each conversation belongs to the page it is used on. Switching pages
+    // surfaces that page's most recent conversation; a page with no history
+    // adopts the current (still empty, unbound) chat or starts a fresh one, so
+    // browsing never spawns empty chats and chatting never lands in another
+    // page's thread.
+    const { pageId: activePageId, spaceId: activeSpaceId } = useActiveEditor()
     const followedPageRef = useRef<string | null>(null)
+    const messagesRef = useRef(messages)
+    messagesRef.current = messages
+    const currentPageRef = useRef<ChatTargetPage | undefined>(currentPage)
+    currentPageRef.current = currentPage
+
+    /** The open page as a binding record, refreshing from the navigation bridge. */
+    const resolvePageBinding = useCallback((pageId: string): ChatTargetPage => {
+        const info = getPageNavigationBridge()?.getCurrentPage()
+        if (info?.pageId !== undefined && String(info.pageId) === pageId) {
+            return { pageId, title: info.title || '', spaceId: info.spaceId ?? activeSpaceId }
+        }
+        const known = currentPageRef.current
+        if (known?.pageId === pageId) return known
+        return { pageId, title: '', spaceId: known?.spaceId ?? activeSpaceId }
+    }, [activeSpaceId])
+
     useEffect(() => {
         // No page in view — forget the last followed page so reopening it
         // later still counts as a switch.
@@ -578,14 +599,43 @@ export const ExpandableChatDemo: React.FC<{
             followedPageRef.current = null
             return
         }
+        // Never switch mid-run (it would cancel the stream); when the run
+        // settles this effect re-runs and performs the pending switch.
+        if (isActive) return
         if (followedPageRef.current === activePageId) return
         followedPageRef.current = activePageId
-        if (isActive) return
-        // sessions are sorted by updatedAt desc, so this is the most recent
-        // conversation bound to the incoming page.
-        const match = sessions.find(s => s.targetPage?.pageId === activePageId)
-        if (match && match.id !== activeSessionId) void handleSwitchSession(match.id)
-    }, [activePageId, sessions, activeSessionId, isActive, handleSwitchSession])
+
+        // Latest conversation bound to the incoming page.
+        const match = sessions
+            .filter(s => sessionPageId(s) === activePageId)
+            .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0]
+        if (match) {
+            if (match.id !== activeSessionId) void handleSwitchSession(match.id)
+            return
+        }
+
+        // No history for this page yet. An empty, unbound chat (or a legacy
+        // chat that predates page binding) adopts it; a chat already committed
+        // to another page gets a sibling conversation instead.
+        const current = sessions.find(s => s.id === activeSessionId)
+        const committedElsewhere = Boolean(current?.targetPage)
+            || (messagesRef.current.length > 0 && Boolean(sessionPageId(current)))
+        if (committedElsewhere) {
+            createSession(resolvePageBinding(activePageId))
+        } else {
+            setBoundPage(resolvePageBinding(activePageId))
+        }
+    }, [
+        activePageId, sessions, activeSessionId, isActive, handleSwitchSession,
+        createSession, setBoundPage, resolvePageBinding,
+    ])
+
+    // A conversation that has real content adopts the page it is used on, so a
+    // chat created before the page resolved still ends up attached correctly.
+    useEffect(() => {
+        if (messages.length === 0 || targetPage || boundPage || !activePageId) return
+        setBoundPage(resolvePageBinding(activePageId))
+    }, [messages.length, targetPage, boundPage, activePageId, setBoundPage, resolvePageBinding])
 
     // ─── Derived UI flags ─────────────────────────────────────────
     const isEmpty = messages.length === 0 && !isActive

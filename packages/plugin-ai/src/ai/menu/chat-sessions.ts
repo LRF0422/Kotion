@@ -32,6 +32,13 @@ export interface ChatSessionMeta {
     updatedAt: number
     /** Page this session's agent edits (off-screen) instead of the open document. */
     targetPage?: ChatTargetPage
+    /**
+     * Page this conversation belongs to. Bound automatically the first time the
+     * conversation is used on a page; drives auto-switching when the user moves
+     * between pages. While a chat is still empty its binding is provisional and
+     * follows whatever page the user is browsing.
+     */
+    boundPage?: ChatTargetPage
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────
