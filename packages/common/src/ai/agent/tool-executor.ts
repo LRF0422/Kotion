@@ -18,8 +18,12 @@ export function ensureSerializableToolResult(outcome: ToolExecutionResult): Tool
         return outcome
     }
     try {
-        JSON.stringify(outcome.result)
-        return outcome
+        // Keep the wire representation, not the live object: the backend only
+        // ever receives JSON, and holding the original reference in React state
+        // let cyclic graphs (parent pointers, or a `toJSON` that hides a
+        // back-reference from `JSON.stringify`) leak into the tool tape and
+        // overflow the display-time sanitizer.
+        return { ...outcome, result: JSON.parse(JSON.stringify(outcome.result)) }
     } catch (error: any) {
         return {
             ok: false,

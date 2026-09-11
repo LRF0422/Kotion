@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react'
-import { ChevronDown, Loader2, Sparkles } from '@kn/icon'
+import { Check, ChevronDown, Loader2, Sparkles } from '@kn/icon'
 import { Streamdown, useAutoScroll } from '@kn/ui'
 import type { AgentStepRecord } from '@kn/common'
 import { useTranslation } from '@kn/common'
 import { ExecutionStep, formatToolName, sanitizeToolPayload } from './chat-types'
+import { ShimmerText } from './chat/ShimmerText'
 
 interface AgentActivityTimelineProps {
     steps?: ExecutionStep[]
@@ -28,6 +29,32 @@ type TimelineItem =
         sequence: number
         step: ExecutionStep
     }
+
+/** Tool id of the user-choice frontend tool (see core `misc-tools`). */
+const USER_CHOICE_TOOL = 'askUserChoice'
+
+/**
+ * The user-choice tool returns `{ selectedLabel, isCustomInput, ... }`. Surface
+ * the question and the picked answer inline so the decision stays visible in
+ * the timeline after the interactive card is gone.
+ */
+function readUserChoice(
+    step: ExecutionStep,
+): { question?: string; answer?: string; waiting: boolean } | null {
+    if (step.toolName !== USER_CHOICE_TOOL) return null
+    const args = step.args as { question?: unknown } | null | undefined
+    const result = step.result as
+        | { selectedLabel?: unknown; error?: unknown }
+        | null
+        | undefined
+    const question = typeof args?.question === 'string' && args.question.trim()
+        ? args.question.trim()
+        : undefined
+    const label = typeof result?.selectedLabel === 'string' ? result.selectedLabel.trim() : ''
+    if (label) return { question, answer: label, waiting: false }
+    if (step.status === 'running') return { question, waiting: true }
+    return { question, waiting: false }
+}
 
 function formatDetails(value: unknown): string {
     if (value === undefined) return ''
@@ -143,7 +170,7 @@ export const AgentActivityTimeline = React.memo(function AgentActivityTimeline({
                     <div className="relative flex min-h-8 items-center gap-2 text-xs text-muted-foreground" role="status" aria-live="polite">
                         <span className="absolute -left-[24px] top-3 h-2 w-2 rounded-full bg-primary ring-4 ring-background" />
                         <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
-                        <span>{t('ai.chat.thinking')}</span>
+                        <ShimmerText>{t('ai.chat.thinking')}</ShimmerText>
                     </div>
                 )}
             </div>
@@ -177,7 +204,9 @@ function ThinkingItem({
                 >
                     <summary className="flex min-h-8 cursor-pointer list-none items-center gap-2 text-xs text-muted-foreground transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
                         <Sparkles className="h-4 w-4 shrink-0" />
-                        <span className="font-medium">{t('ai.chat.thought')}</span>
+                        {expanded
+                            ? <ShimmerText className="font-medium">{t('ai.chat.thought')}</ShimmerText>
+                            : <span className="font-medium">{t('ai.chat.thought')}</span>}
                         <ChevronDown className="h-3.5 w-3.5 transition-transform group-open/thought:rotate-180" />
                     </summary>
                     <div
@@ -192,7 +221,9 @@ function ThinkingItem({
             ) : (
                 <div className="flex min-h-8 items-center gap-2 text-xs text-muted-foreground">
                     <Sparkles className="h-4 w-4 shrink-0" />
-                    <span className="font-medium">{t('ai.chat.thought')}</span>
+                    {expanded
+                        ? <ShimmerText className="font-medium">{t('ai.chat.thought')}</ShimmerText>
+                        : <span className="font-medium">{t('ai.chat.thought')}</span>}
                 </div>
             )}
             {item.text.trim() && (
@@ -207,12 +238,18 @@ function ThinkingItem({
 function ToolItem({ step }: { step: ExecutionStep }) {
     const { t } = useTranslation()
     const [open, setOpen] = useState(false)
+    const userChoice = readUserChoice(step)
     const hasDetails = hasInspectableValue(step.args)
         || hasInspectableValue(step.result)
         || hasInspectableValue(step.error)
     const toolNameClassName = step.status === 'error'
         ? 'truncate font-medium text-destructive'
         : 'truncate font-medium text-foreground/80'
+    // Running tools shimmer (DeepSeek-style in-progress cue). The colour
+    // comes from the gradient, so the muted/foreground text class is dropped.
+    const toolName = step.status === 'running'
+        ? <ShimmerText className="truncate font-medium">{formatToolName(step.toolName)}</ShimmerText>
+        : <span className={toolNameClassName}>{formatToolName(step.toolName)}</span>
 
     return (
         <div className="min-w-0">
@@ -224,11 +261,11 @@ function ToolItem({ step }: { step: ExecutionStep }) {
                         aria-expanded={open}
                         onClick={() => setOpen(value => !value)}
                     >
-                        <span className={toolNameClassName}>{formatToolName(step.toolName)}</span>
+                        {toolName}
                         <ChevronDown className={`h-3 w-3 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
                     </button>
                 ) : (
-                    <span className={toolNameClassName}>{formatToolName(step.toolName)}</span>
+                    toolName
                 )}
                 {step.status === 'running' && (
                     <span className="shrink-0 text-muted-foreground">{t('ai.chat.toolRunning')}</span>
@@ -237,6 +274,23 @@ function ToolItem({ step }: { step: ExecutionStep }) {
                     <span className="shrink-0 text-destructive">{t('ai.chat.toolFailed')}</span>
                 )}
             </div>
+            {userChoice && (
+                <div className="mt-1 space-y-0.5 pl-[22px] text-[11px]">
+                    {userChoice.question && (
+                        <div className="line-clamp-2 text-muted-foreground">{userChoice.question}</div>
+                    )}
+                    {userChoice.answer ? (
+                        <div className="flex items-start gap-1">
+                            <Check className="mt-0.5 h-3 w-3 shrink-0 text-primary" />
+                            <span className="min-w-0 break-words font-medium text-foreground">
+                                {t('ai.chat.userChoiceLabel')}{userChoice.answer}
+                            </span>
+                        </div>
+                    ) : userChoice.waiting ? (
+                        <div className="text-muted-foreground">{t('ai.chat.userChoiceWaiting')}</div>
+                    ) : null}
+                </div>
+            )}
             {hasDetails && open && <ToolDetails step={step} />}
         </div>
     )

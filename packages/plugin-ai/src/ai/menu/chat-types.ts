@@ -65,24 +65,58 @@ export const INITIAL_MESSAGES: Message[] = []
 
 const SENSITIVE_TOOL_KEY = /(api[-_]?key|authorization|cookie|password|secret|token)/i
 
-/** Redact credentials before tool records cross into localStorage-backed chat history. */
-export function sanitizeToolPayload(value: unknown, key = ''): unknown {
+/** Depth cap for tool payloads — deeper branches are elided instead of walked. */
+const MAX_SANITIZE_DEPTH = 8
+
+/** Emitted where a branch points back at one of its own ancestors. */
+const CIRCULAR_MARKER = '[circular]'
+
+/** Emitted for branches nested deeper than {@link MAX_SANITIZE_DEPTH}. */
+const TRUNCATED_MARKER = '[truncated]'
+
+/**
+ * Redact credentials before tool records cross into localStorage-backed chat
+ * history.
+ *
+ * Frontend tool results are arbitrary live objects (editor/page tools return
+ * ProseMirror-ish structures with parent pointers, or objects whose `toJSON`
+ * hides a back-reference). Walking them naively recursed until the JS stack
+ * overflowed, so traversal is now cycle-safe (ancestors tracked on the current
+ * path only) and depth-bounded.
+ */
+export function sanitizeToolPayload(
+    value: unknown,
+    key = '',
+    ancestors?: WeakSet<object>,
+    depth = 0,
+): unknown {
     if (SENSITIVE_TOOL_KEY.test(key)) return '••••••'
     if (typeof value === 'string') {
         return value
             .replace(/(bearer\s+)[a-z0-9._~+\/-]+/gi, '$1••••••')
             .replace(/((?:api[-_]?key|password|secret|token)\s*[:=]\s*)[^\s,;]+/gi, '$1••••••')
     }
-    if (Array.isArray(value)) return value.map(item => sanitizeToolPayload(item))
-    if (value && typeof value === 'object') {
+    if (value === null || typeof value !== 'object') return value
+    if (depth >= MAX_SANITIZE_DEPTH) return TRUNCATED_MARKER
+
+    const seen = ancestors ?? new WeakSet<object>()
+    if (seen.has(value)) return CIRCULAR_MARKER
+    seen.add(value)
+    try {
+        if (Array.isArray(value)) {
+            return value.map(item => sanitizeToolPayload(item, key, seen, depth + 1))
+        }
         return Object.fromEntries(
             Object.entries(value as Record<string, unknown>).map(([entryKey, entryValue]) => [
                 entryKey,
-                sanitizeToolPayload(entryValue, entryKey),
+                sanitizeToolPayload(entryValue, entryKey, seen, depth + 1),
             ]),
         )
+    } finally {
+        // Only the current path counts as visited: the same object may
+        // legitimately appear in sibling branches and must still render there.
+        seen.delete(value)
     }
-    return value
 }
 
 export function classifyError(err: any): ChatError {

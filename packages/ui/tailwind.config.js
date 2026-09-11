@@ -240,6 +240,14 @@ module.exports = {
           from: { transform: "translateY(0)" },
           to: { transform: "translateY(100%)" },
         },
+        // In-progress label shimmer (thinking / running tools / answer
+        // streaming): a soft highlight travels across the text via
+        // background-position. Pair with a 200%-wide gradient +
+        // bg-clip-text — see <ShimmerText>.
+        "text-shimmer": {
+          "0%": { backgroundPosition: "200% 50%" },
+          "100%": { backgroundPosition: "-200% 50%" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -256,6 +264,7 @@ module.exports = {
         "sheet-out-top": "sheet-out-top 0.3s ease-in",
         "sheet-in-bottom": "sheet-in-bottom 0.5s cubic-bezier(0.32, 0.72, 0, 1)",
         "sheet-out-bottom": "sheet-out-bottom 0.3s ease-in",
+        "text-shimmer": "text-shimmer 1.6s linear infinite",
       },
       typography: {
         // Notion-like reading experience for `prose` content

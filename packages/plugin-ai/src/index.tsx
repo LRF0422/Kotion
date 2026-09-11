@@ -135,7 +135,9 @@ export const ai = new AiPlugin({
                         "budgetPaused": "Task paused (step budget exhausted)",
                         "continueRun": "Continue",
                         "unavailable": "Agent temporarily unavailable: {{error}}",
-                        "retry": "Retry"
+                        "retry": "Retry",
+                        "userChoiceLabel": "Your choice: ",
+                        "userChoiceWaiting": "Waiting for your selection…"
                     }
                 }
             }
@@ -220,7 +222,9 @@ export const ai = new AiPlugin({
                         "budgetPaused": "任务已暂停（迭代预算耗尽）",
                         "continueRun": "继续执行",
                         "unavailable": "Agent 暂时不可用：{{error}}",
-                        "retry": "重试"
+                        "retry": "重试",
+                        "userChoiceLabel": "你的选择：",
+                        "userChoiceWaiting": "等待你的选择…"
                     }
                 }
             }

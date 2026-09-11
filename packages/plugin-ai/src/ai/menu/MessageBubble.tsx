@@ -12,6 +12,7 @@ import { useTranslation } from '@kn/common'
 import { Message, extractBlockReferences } from './chat-types'
 import type { BlockReference } from './chat-types'
 import { AgentActivityTimeline } from './ExecutionStepsDisplay'
+import { ShimmerText } from './chat/ShimmerText'
 import { BlockReferences } from './BlockReferences'
 import { TurnUsageMeta } from './chat/TurnUsageMeta'
 
@@ -127,7 +128,7 @@ export const MessageBubble = React.memo(function MessageBubble({
             ) : isStreaming ? (
                 <div className="flex items-center gap-2 py-1 text-xs text-muted-foreground" role="status" aria-live="polite">
                     <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
-                    <span>{t('ai.chat.preparingAnswer')}</span>
+                    <ShimmerText>{t('ai.chat.preparingAnswer')}</ShimmerText>
                 </div>
             ) : null}
 
