@@ -6,6 +6,7 @@ import { DEFAULT_GITHUB_CONFIG } from '../types/config'
 import { testConnection } from '../services/github-client'
 import { GITHUB_PLUGIN_KEY } from '../hooks/use-github-config'
 import { RefreshCw, CheckCircle2, XCircle, Eye, EyeOff } from '@kn/icon'
+import { GitHubLogo } from './GitHubLogo'
 
 export const GitHubSettings: React.FC<{ pluginKey?: string }> = () => {
     const { config, updateConfig, saving, saveError, isDirty } = usePluginConfig<GitHubPluginConfig>({
@@ -28,6 +29,14 @@ export const GitHubSettings: React.FC<{ pluginKey?: string }> = () => {
 
     return (
         <div className="space-y-4">
+            {/* Brand header */}
+            <div className="flex items-center gap-3">
+                <GitHubLogo size={44} className="shrink-0" />
+                <p className="text-xs text-muted-foreground">
+                    Embed issues, PRs, repositories and code snippets, and generate changelogs and project docs from repository history.
+                </p>
+            </div>
+
             {/* Authentication */}
             <Card>
                 <CardHeader className="pb-3">

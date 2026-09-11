@@ -7,6 +7,7 @@ import {
 } from '@kn/icon'
 import { GitHubUrlInput } from './shared/GitHubUrlInput'
 import { GitHubRepoStructure } from './GitHubRepoStructure'
+import { GitHubMark } from './GitHubLogo'
 import { useGitHubData } from '../hooks/use-github-data'
 import { getRepo, getRepoContents, getRepoCommits, getRepoCommit, getFileContent } from '../services/github-repo-service'
 import type { GitHubTreeItem, GitHubCommit as GitHubCommitType, GitHubCommitDetail } from '../types/github'
@@ -563,7 +564,7 @@ export const GitHubRepoCard: React.FC<NodeViewProps> = ({ node, updateAttributes
                 {/* Header: name + visibility + actions */}
                 <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <span className="font-bold">▪</span>
+                        <GitHubMark className="h-3.5 w-3.5 shrink-0 text-foreground" />
                         <span className="font-mono font-medium text-foreground">{owner}/{repo}</span>
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0">

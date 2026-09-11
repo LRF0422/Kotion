@@ -1,7 +1,7 @@
 import { KPlugin, PluginConfig } from '@kn/common'
 import { GitHubExtension } from './extension'
 import { GitHubSettings } from './components/GitHubSettings'
-import { Github } from '@kn/icon'
+import { GitHubMark } from './components/GitHubLogo'
 import React from 'react'
 
 interface GitHubPluginConfig extends PluginConfig {}
@@ -16,7 +16,7 @@ export const github = new GitHubPlugin({
         key: 'github-settings',
         label: 'GitHub',
         description: 'Configure GitHub integration (PAT, default repo, cache)',
-        icon: React.createElement(Github, { className: 'h-4 w-4' }),
+        icon: React.createElement(GitHubMark, { className: 'h-4 w-4' }),
         component: GitHubSettings,
     },
     locales: {
@@ -48,3 +48,5 @@ export const github = new GitHubPlugin({
 })
 
 export { GitHubExtension } from './extension'
+export { GitHubLogo, GitHubMark } from './components/GitHubLogo'
+export type { GitHubLogoProps, GitHubMarkProps } from './components/GitHubLogo'

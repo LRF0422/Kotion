@@ -15,6 +15,7 @@
     "build:ai": "pnpm --filter @kn/plugin-ai build",
     "build:excalidraw": "pnpm --filter @kn/plugin-excalidraw build",
     "build:bitable": "pnpm --filter @kn/plugin-bitable build",
+    "build:github": "pnpm --filter @kn/plugin-github build",
     "build:mermaid": "pnpm --filter @kn/mermaid-plugin build",
     "build:block": "pnpm --filter @kn/plugin-block-reference build",
     "build:file-manager": "pnpm --filter @kn/file-manager build",
