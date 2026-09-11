@@ -87,6 +87,23 @@ public class DefaultSavedSkillStore implements SavedSkillStore {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean updateOwned(SavedSkill skill) {
+        requireSavable(skill);
+        requireOwner(skill.getTenantId(), skill.getUserId());
+        if (isBlank(skill.getSkillId()) || skill.getVersion() <= 0) {
+            throw new IllegalArgumentException("saved skill identity and version are required");
+        }
+        long now = System.currentTimeMillis();
+        // Same owner lock as creation: serializes version bumps per owner so
+        // two concurrent saves cannot both claim version N+1.
+        mapper.ensureOwnerLock(skill.getTenantId(), skill.getUserId(), now);
+        mapper.lockOwner(skill.getTenantId(), skill.getUserId());
+        skill.setUpdateTime(now);
+        return mapper.updateOwned(toEntity(skill)) > 0;
+    }
+
+    @Override
     public boolean setEnabled(Long tenantId, Long userId, String skillId, boolean enabled) {
         requireOwner(tenantId, userId);
         return mapper.updateOwnedEnabled(

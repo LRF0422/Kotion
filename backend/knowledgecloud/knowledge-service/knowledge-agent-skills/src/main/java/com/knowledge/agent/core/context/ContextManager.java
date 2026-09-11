@@ -89,6 +89,17 @@ public class ContextManager {
      */
     public ChatMessage buildSystemMessage(AgentRun run, List<String> skillFragments,
                                           List<String> memoryLines, List<ToolSpec> deferredTools) {
+        return buildSystemMessage(run, skillFragments, memoryLines, deferredTools, null);
+    }
+
+    /**
+     * Same as {@link #buildSystemMessage(AgentRun, List, List, List)} plus the
+     * rolling session-memory summary (thread summary) — injected into fresh
+     * runs so conversation continuity survives truncated client history.
+     */
+    public ChatMessage buildSystemMessage(AgentRun run, List<String> skillFragments,
+                                          List<String> memoryLines, List<ToolSpec> deferredTools,
+                                          String sessionSummary) {
         StringBuilder content = new StringBuilder(BASE_SYSTEM_PROMPT);
 
         if (skillFragments != null) {
@@ -106,6 +117,10 @@ public class ContextManager {
                     content.append("\n- ").append(line.trim());
                 }
             }
+        }
+        if (sessionSummary != null && !sessionSummary.trim().isEmpty()) {
+            content.append("\n\n【本次会话的近期进展（会话记忆）】\n")
+                    .append(sessionSummary.trim());
         }
         if ("plan".equalsIgnoreCase(run.getMode()) && !run.isPlanGateOpen()) {
             content.append(PLAN_MODE_RULES);

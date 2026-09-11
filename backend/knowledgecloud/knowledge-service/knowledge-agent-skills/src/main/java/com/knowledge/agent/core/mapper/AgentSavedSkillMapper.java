@@ -74,6 +74,22 @@ public interface AgentSavedSkillMapper {
     @Options(useGeneratedKeys = true, keyProperty = "id")
     int insert(AgentSavedSkillEntity entity);
 
+    /**
+     * Versioned definition replacement (continuous update). Deliberately does
+     * NOT touch enabled/use_count/last_used_time/create_time: usage state
+     * survives the update and enablement stays under user control.
+     */
+    @Update("UPDATE agent_saved_skill SET name = #{name}, description = #{description}, "
+            + "trigger_text = #{triggerText}, example_intents_json = #{exampleIntentsJson}, "
+            + "tags_json = #{tagsJson}, system_prompt_fragment = #{systemPromptFragment}, "
+            + "required_tool_names_json = #{requiredToolNamesJson}, "
+            + "optional_tool_names_json = #{optionalToolNamesJson}, "
+            + "source_conversation_id = #{sourceConversationId}, source_run_id = #{sourceRunId}, "
+            + "source_schema_version = #{sourceSchemaVersion}, source_fingerprint = #{sourceFingerprint}, "
+            + "version = #{version}, update_time = #{updateTime} "
+            + "WHERE tenant_id = #{tenantId} AND user_id = #{userId} AND skill_id = #{skillId}")
+    int updateOwned(AgentSavedSkillEntity entity);
+
     @Update("UPDATE agent_saved_skill SET enabled = #{enabled}, update_time = #{updateTime} "
             + "WHERE tenant_id = #{tenantId} AND user_id = #{userId} AND skill_id = #{skillId}")
     int updateOwnedEnabled(@Param("tenantId") Long tenantId,

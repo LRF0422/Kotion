@@ -42,6 +42,7 @@ public class SaveConversationAsSkillTool implements BackendTool {
         result.put("name", saved.getSkill().getName());
         result.put("version", saved.getSkill().getVersion());
         result.put("created", saved.isCreated());
+        result.put("updated", saved.isUpdated());
         return result;
     }
 }

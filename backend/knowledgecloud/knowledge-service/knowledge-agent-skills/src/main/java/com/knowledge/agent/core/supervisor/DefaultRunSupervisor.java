@@ -18,6 +18,7 @@ import com.knowledge.agent.core.mapper.AgentRunMapper;
 import com.knowledge.agent.core.memory.MemoryInjector;
 import com.knowledge.agent.core.memory.ThreadSummarizer;
 import com.knowledge.agent.core.entity.AgentRunEntity;
+import com.knowledge.agent.core.entity.AgentThreadEntity;
 import com.knowledge.agent.core.run.AgentRun;
 import com.knowledge.agent.core.run.PendingToolCall;
 import com.knowledge.agent.core.run.RunStatus;
@@ -146,8 +147,15 @@ public class DefaultRunSupervisor {
                 RunEvents.runCreated(run.getRunId(), run.getConversationId(), run.getModel(), run.getMode()))
                 .getSeq());
         threadStore.upsertActive(run.getConversationId(), run.getUserId(), run.getTenantId(), run.getRunId());
+        // Session memory: carry the rolling thread summary into this fresh run
+        // (the upsert no longer erases it) and keep the first-message title
+        // stable — only set it when the conversation has none yet.
+        AgentThreadEntity thread = threadStore.get(run.getConversationId());
+        if (thread != null && thread.getSummary() != null && !thread.getSummary().trim().isEmpty()) {
+            cmd.setThreadSummary(thread.getSummary().trim());
+        }
         String title = ThreadSummarizer.titleFrom(cmd.getMessages());
-        if (title != null) {
+        if (title != null && (thread == null || isBlank(thread.getTitle()))) {
             threadStore.updateMeta(run.getConversationId(), title, null);
         }
 
@@ -397,6 +405,10 @@ public class DefaultRunSupervisor {
 
     // ==================== internals ====================
 
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
+    }
+
     private LoopHandle startLoop(AgentRun run, Checkpoint checkpoint, AgentLoop.RunInput input) {
         if (!lease.acquire(run.getRunId(), properties.getLease().getTtlSeconds())) {
             log.warn("Lease unavailable for {} — another instance drives it", run.getRunId());
@@ -459,6 +471,11 @@ public class DefaultRunSupervisor {
         @Override
         public List<String> memoryLines() {
             return cmd.getMemoryLines();
+        }
+
+        @Override
+        public String threadSummary() {
+            return cmd.getThreadSummary();
         }
 
         @Override

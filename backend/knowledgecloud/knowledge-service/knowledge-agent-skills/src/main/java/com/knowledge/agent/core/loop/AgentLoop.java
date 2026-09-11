@@ -77,6 +77,11 @@ public class AgentLoop implements Runnable {
 
         List<String> memoryLines();
 
+        /** Rolling session-memory summary of the conversation (may be null). */
+        default String threadSummary() {
+            return null;
+        }
+
         default List<SavedSkillProvenance> savedSkillProvenance() {
             return java.util.Collections.emptyList();
         }
@@ -417,7 +422,8 @@ public class AgentLoop implements Runnable {
         cp.getMessages().add(contextManager.buildSystemMessage(run,
                 runInput != null ? runInput.skillFragments() : null,
                 runInput != null ? runInput.memoryLines() : null,
-                new ArrayList<>(deferredToolSpecs.values())));
+                new ArrayList<>(deferredToolSpecs.values()),
+                runInput != null ? runInput.threadSummary() : null));
         if (runInput != null && runInput.messages() != null) {
             for (ChatMessage message : runInput.messages()) {
                 if (message == null || "system".equalsIgnoreCase(message.getRole())) {

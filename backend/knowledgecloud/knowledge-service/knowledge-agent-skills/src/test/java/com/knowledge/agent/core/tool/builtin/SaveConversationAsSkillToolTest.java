@@ -62,6 +62,7 @@ class SaveConversationAsSkillToolTest {
         assertEquals("Reusable workflow", result.get("name"));
         assertEquals(1, result.get("version"));
         assertTrue((Boolean) result.get("created"));
+        assertFalse((Boolean) result.get("updated"));
         assertFalse(result.containsKey("transcript"));
         verify(service).saveFromTool(same(context));
     }

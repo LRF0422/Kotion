@@ -125,6 +125,7 @@ public class SavedSkillController {
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("skill", SavedSkillView.of(saved.getSkill()));
             result.put("created", saved.isCreated());
+            result.put("updated", saved.isUpdated());
             return R.data(result);
         } catch (IllegalArgumentException | IllegalStateException e) {
             return R.fail(e.getMessage());

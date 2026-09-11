@@ -42,6 +42,9 @@ agent:
     enabled: true
     top-k: 3
     min-score: 0.30
+    # 0.55: a trusted save request whose best-matching enabled skill scores at
+    # least this value merges into that skill (version + 1). 1.0 disables merging.
+    merge-score: 0.55
     candidate-limit: 100
     max-skills-per-user: 100
     max-transcript-chars: 24000

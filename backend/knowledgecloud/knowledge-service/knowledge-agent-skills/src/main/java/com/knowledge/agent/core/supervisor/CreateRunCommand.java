@@ -41,6 +41,13 @@ public class CreateRunCommand {
     /** Long-term memory lines injected at run start (M2). */
     private List<String> memoryLines = new ArrayList<>();
 
+    /**
+     * Rolling session-memory summary of this conversation (thread summary,
+     * continuously updated on each completed run) — injected into the system
+     * prompt of fresh runs so continuity survives client-side history loss.
+     */
+    private String threadSummary;
+
     /** Personal saved skills selected for this fresh run. */
     private List<SavedSkillProvenance> savedSkillProvenance = new ArrayList<>();
 

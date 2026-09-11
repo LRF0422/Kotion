@@ -103,7 +103,8 @@ loop(run):
 - 召回打分：`importance × 0.7 + recency 衰减 × 0.3 + 关键词/tag 命中加成`；top-k（默认 5）注入。
 - `MemoryRetriever` 接口预留：未来 `EmbeddingMemoryRetriever` 只需替换实现，接口签名不变。
 - 用户画像 = preference/fact 类长期记忆的聚合注入，不单独建表（削减概念）。
-- 会话结束：后台任务用 LLM 生成 1~2 句摘要 + 标题写入 `agent_thread`。
+- 会话结束：后台任务用 LLM 滚动更新摘要（首轮生成 1~2 句；后续轮次把本 run 尾部并入已有摘要，
+  持续维护）+ 标题写入 `agent_thread`；下一次 run 创建时摘要注入系统提示（upsert 不再清空 title/summary）。
 
 ### 4.1 会话沉淀为个人 Skill
 
@@ -112,6 +113,9 @@ loop(run):
 - 安全编译：从 checkpoint 投影会话，排除 system/reasoning/JWT，限制并脱敏工具参数与结果；通过
   provider-neutral `LlmGateway` 生成结构化 Skill，不持久化原始 transcript。
 - 持久化：`agent_saved_skill` 按 `(tenant_id,user_id)` 私有隔离，以规范化会话指纹保证崩溃恢复重放幂等。
+- 持续更新：保存时若最新业务消息与某个 enabled Skill 的检索得分 ≥ `saved-skills.merge-score`（默认 0.55），
+  编译器把新会话合并进该 Skill（merge 模式）并以 `version + 1` 落库（保留 useCount/启用状态），而不是新建重复技能；
+  得分不足或设为 1.0 时退回新建。
 - 自动引用：根 run 创建时用最新 user 消息检索 enabled Skill，校验当前工具兼容性和 prompt 预算后，
   复用现有 skill fragment + deferred tool 链路注入；命中 provenance 固化在 checkpoint，恢复时不重新检索。
 - 管理 API：`/api/agent/v1/saved-skills` 提供列表、详情、启停和删除，`POST /from-run/{runId}`

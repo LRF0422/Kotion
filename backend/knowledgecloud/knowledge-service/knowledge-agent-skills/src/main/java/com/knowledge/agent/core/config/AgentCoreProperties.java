@@ -42,6 +42,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *     enabled: true
  *     top-k: 3
  *     min-score: 0.30
+ *     merge-score: 0.55
  *   quota:
  *     enabled: true
  *     create-per-minute: 30
@@ -163,6 +164,12 @@ public class AgentCoreProperties {
         private int topK = 3;
         /** Minimum deterministic relevance score (0-1). */
         private double minScore = 0.30;
+        /**
+         * Continuous update: a trusted save request whose best-matching
+         * enabled skill scores at least this value merges into that skill
+         * (version + 1) instead of creating a duplicate. 1.0 disables merging.
+         */
+        private double mergeScore = 0.55;
         /** Maximum enabled rows scored for one run. */
         private int candidateLimit = 100;
         /** Maximum saved skills owned by one tenant/user pair. */

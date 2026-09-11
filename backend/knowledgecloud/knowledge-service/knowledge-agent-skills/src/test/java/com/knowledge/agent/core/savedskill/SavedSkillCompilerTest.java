@@ -1,5 +1,6 @@
 package com.knowledge.agent.core.savedskill;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.knowledge.agent.core.config.AgentCoreProperties;
 import com.knowledge.agent.core.llm.LlmGateway;
@@ -8,10 +9,12 @@ import com.knowledge.agent.core.llm.LlmResult;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -63,6 +66,51 @@ class SavedSkillCompilerTest {
                 Collections.singleton("editor.read")));
         assertThrows(IllegalArgumentException.class, () -> compiler.parseAndValidate(
                 validJson() + "\nextra prose", Collections.singleton("editor.read")));
+    }
+
+    @Test
+    void updateCompileFeedsExistingSkillAsDataAndValidatesReplacement() throws Exception {
+        LlmResult result = new LlmResult();
+        result.setText(validJson().replace("会议纪要整理", "会议纪要整理 v2"));
+        when(gateway.infer(any(LlmInferRequest.class))).thenReturn(result);
+
+        SavedSkill existing = new SavedSkill();
+        existing.setSkillId("skill-existing");
+        existing.setVersion(3);
+        existing.setName("会议纪要整理");
+        existing.setDescription("整理会议讨论并提取行动项");
+        existing.setTriggerText("整理会议纪要和行动项");
+        existing.setExampleIntents(Collections.singletonList("把讨论整理成会议纪要"));
+        existing.setTags(Arrays.asList("会议", "纪要"));
+        existing.setSystemPromptFragment("按步骤读取并整理会议内容");
+        existing.setRequiredToolNames(Collections.singletonList("editor.read"));
+        existing.setOptionalToolNames(Collections.emptyList());
+
+        SavedSkillDraft draft = compiler.compileUpdate(existing, "deepseek-chat",
+                "[user]\\n更新：改用新流程", new LinkedHashSet<>(Collections.singletonList("editor.read")));
+
+        assertEquals("会议纪要整理 v2", draft.getName());
+        ArgumentCaptor<LlmInferRequest> request = ArgumentCaptor.forClass(LlmInferRequest.class);
+        verify(gateway).infer(request.capture());
+        assertEquals("deepseek-chat", request.getValue().getModel());
+        assertEquals(0.0, request.getValue().getTemperature());
+        String system = request.getValue().getMessages().get(0).getContent();
+        assertTrue(system.contains("合并"), "update compile must instruct merging");
+        JsonNode userData = new ObjectMapper().readTree(request.getValue().getMessages().get(1).getContent());
+        assertEquals("[user]\\n更新：改用新流程", userData.path("conversationTranscript").asText());
+        assertEquals("skill-existing", userData.path("existingSkill").path("skillId").asText());
+        assertEquals(3, userData.path("existingSkill").path("version").asInt());
+        assertEquals("会议纪要整理", userData.path("existingSkill").path("name").asText());
+        // The merge target's own fragment must not leak into the system prompt.
+        assertFalse(system.contains("按步骤读取并整理会议内容"));
+    }
+
+    @Test
+    void updateCompileRequiresAnExistingTarget() {
+        assertThrows(IllegalArgumentException.class, () -> compiler.compileUpdate(
+                null, "deepseek-chat", "transcript", Collections.emptySet()));
+        assertThrows(IllegalArgumentException.class, () -> compiler.compileUpdate(
+                new SavedSkill(), "deepseek-chat", "transcript", Collections.emptySet()));
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.knowledge.agent.core.savedskill;
 
+import com.knowledge.agent.api.dto.ChatMessage;
 import com.knowledge.agent.core.checkpoint.Checkpoint;
 import com.knowledge.agent.core.checkpoint.CheckpointStore;
 import com.knowledge.agent.core.config.AgentCoreProperties;
@@ -11,11 +12,20 @@ import com.knowledge.agent.core.tool.ToolGateway;
 import com.knowledge.agent.core.tool.ToolSpec;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-/** Coordinates consent, transcript projection, compilation, and persistence. */
+/**
+ * Coordinates consent, transcript projection, compilation, and persistence.
+ *
+ * <p>Beyond one-shot creation this owns the continuous-update path: when a
+ * trusted save request matches an existing enabled skill (deterministic
+ * retrieval score ≥ {@code saved-skills.merge-score}), the compiler merges the
+ * new conversation into that skill and the result is persisted as
+ * {@code version + 1} instead of creating a duplicate.
+ */
 @Service
 public class SavedSkillService {
 
@@ -27,6 +37,7 @@ public class SavedSkillService {
     private final ExplicitSkillSaveIntentPolicy intentPolicy;
     private final ConversationTranscriptProjector projector;
     private final SavedSkillCompiler compiler;
+    private final SavedSkillRetriever retriever;
     private final ToolGateway toolGateway;
     private final AgentCoreProperties properties;
 
@@ -35,6 +46,7 @@ public class SavedSkillService {
                              ExplicitSkillSaveIntentPolicy intentPolicy,
                              ConversationTranscriptProjector projector,
                              SavedSkillCompiler compiler,
+                             SavedSkillRetriever retriever,
                              ToolGateway toolGateway,
                              AgentCoreProperties properties) {
         this.store = store;
@@ -43,6 +55,7 @@ public class SavedSkillService {
         this.intentPolicy = intentPolicy;
         this.projector = projector;
         this.compiler = compiler;
+        this.retriever = retriever;
         this.toolGateway = toolGateway;
         this.properties = properties;
     }
@@ -108,10 +121,30 @@ public class SavedSkillService {
         }
 
         Set<String> allowedTools = allowedToolNames(checkpoint);
+        SavedSkill mergeTarget = findMergeTarget(run, checkpoint, allowedTools);
+        if (mergeTarget != null) {
+            SavedSkillDraft draft = compiler.compileUpdate(mergeTarget, run.getModel(),
+                    projection.getTranscript(), allowedTools);
+            SavedSkill updated = applyDefinition(mergeTarget, draft, run, projection);
+            updated.setVersion(mergeTarget.getVersion() + 1);
+            if (!store.updateOwned(updated)) {
+                throw new IllegalStateException("SAVED_SKILL_UPDATE_MISSING: " + mergeTarget.getSkillId());
+            }
+            return new SavedSkillStore.SaveResult(updated, false, true);
+        }
+
         SavedSkillDraft draft = compiler.compile(run.getModel(), projection.getTranscript(), allowedTools);
-        SavedSkill skill = new SavedSkill();
-        skill.setTenantId(run.getTenantId());
-        skill.setUserId(run.getUserId());
+        SavedSkill skill = applyDefinition(new SavedSkill(), draft, run, projection);
+        skill.setSourceSchemaVersion("v1");
+        skill.setEnabled(true);
+        skill.setVersion(1);
+        return store.saveIfAbsent(skill, clamp(
+                properties.getSavedSkills().getMaxSkillsPerUser(), 1, 1000));
+    }
+
+    /** Copy a validated draft onto a (possibly new) skill, tracing the source run. */
+    private SavedSkill applyDefinition(SavedSkill skill, SavedSkillDraft draft, AgentRun run,
+                                       ConversationTranscriptProjector.Projection projection) {
         skill.setName(draft.getName());
         skill.setDescription(draft.getDescription());
         skill.setTriggerText(draft.getTriggerText());
@@ -122,12 +155,68 @@ public class SavedSkillService {
         skill.setOptionalToolNames(draft.getOptionalToolNames());
         skill.setSourceConversationId(run.getConversationId());
         skill.setSourceRunId(run.getRunId());
-        skill.setSourceSchemaVersion("v1");
         skill.setSourceFingerprint(projection.getFingerprint());
-        skill.setEnabled(true);
-        skill.setVersion(1);
-        return store.saveIfAbsent(skill, clamp(
-                properties.getSavedSkills().getMaxSkillsPerUser(), 1, 1000));
+        if (skill.getTenantId() == null) {
+            skill.setTenantId(run.getTenantId());
+            skill.setUserId(run.getUserId());
+        }
+        return skill;
+    }
+
+    /**
+     * Continuous-update target: the enabled owned skill whose trigger surface
+     * best matches this conversation. Disabled when {@code merge-score} ≥ 1.0.
+     */
+    private SavedSkill findMergeTarget(AgentRun run, Checkpoint checkpoint, Set<String> allowedTools) {
+        AgentCoreProperties.SavedSkills config = properties.getSavedSkills();
+        double mergeScore = clamp(config.getMergeScore(), 0.0, 1.0);
+        if (mergeScore >= 1.0) {
+            return null;
+        }
+        String query = mergeQuery(checkpoint);
+        if (query == null) {
+            return null;
+        }
+        List<SavedSkill> candidates = store.listEnabledCandidates(
+                run.getTenantId(), run.getUserId(), clamp(config.getCandidateLimit(), 1, 500));
+        if (candidates.isEmpty()) {
+            return null;
+        }
+        List<SavedSkillMatch> matches = retriever.retrieve(candidates, query, allowedTools, mergeScore, 1);
+        return matches.isEmpty() ? null : matches.get(0).getSkill();
+    }
+
+    /**
+     * Retrieval query for merge matching: the latest user message that is not
+     * itself a save/update request (the save request describes saving, not the
+     * topic). Falls back to the first recent user message.
+     */
+    private String mergeQuery(Checkpoint checkpoint) {
+        List<ChatMessage> messages = checkpoint.getMessages();
+        if (messages == null) {
+            return null;
+        }
+        List<String> recent = new ArrayList<>();
+        for (int i = messages.size() - 1; i >= 0 && recent.size() < 3; i--) {
+            ChatMessage message = messages.get(i);
+            if (message != null && "user".equalsIgnoreCase(message.getRole())
+                    && message.getContent() != null && !message.getContent().trim().isEmpty()) {
+                recent.add(message.getContent().trim());
+            }
+        }
+        if (recent.isEmpty()) {
+            return null;
+        }
+        for (String content : recent) {
+            if (!intentPolicy.isExplicitMessage(content)) {
+                return bounded(content, 2000);
+            }
+        }
+        return bounded(recent.get(0), 2000);
+    }
+
+    private String bounded(String value, int limit) {
+        return value.length() <= limit ? value : value.substring(0, limit);
     }
 
     private Set<String> allowedToolNames(Checkpoint checkpoint) {
@@ -192,6 +281,10 @@ public class SavedSkillService {
     }
 
     private int clamp(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    private double clamp(double value, double min, double max) {
         return Math.max(min, Math.min(max, value));
     }
 }
