@@ -610,9 +610,72 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
     {
         name: 'createPage',
         category: 'page',
-        description: '在当前空间创建新页面，可作为子页面并可同时插入链接',
+        description: '创建新页面：可指定空间与位置（relativeTo+position=child/sibling/root 或 parentId），可设为本会话离屏编辑目标并可插入链接',
         priority: 8,
-        tags: ['page', 'create', 'subpage'],
+        tags: ['page', 'create', 'subpage', 'sibling', 'page-tree'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'listSpaces',
+        category: 'page',
+        description: '列出可访问的空间（知识库），返回 spaceId、名称和当前空间',
+        priority: 8,
+        tags: ['page', 'space', 'list', 'page-tree'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'getSpacePageTree',
+        category: 'page',
+        description: '获取空间的完整页面树（层级/父子关系/标题/pageId），是操作页面树的基础',
+        priority: 9,
+        tags: ['page', 'tree', 'space', 'structure', 'page-tree'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'editPage',
+        category: 'page',
+        description: '把本会话的离屏编辑目标切换到指定页面，之后文档工具即可读取/编辑该页面而不离开当前页面',
+        priority: 9,
+        tags: ['page', 'offscreen', 'edit', 'target'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'renamePage',
+        category: 'page',
+        description: '重命名任意页面（修改标题）',
+        priority: 7,
+        tags: ['page', 'rename', 'title', 'page-tree'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'movePage',
+        category: 'page',
+        description: '移动页面到新的父页面/空间根层级，调整页面树结构',
+        priority: 7,
+        tags: ['page', 'move', 'page-tree'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'deletePage',
+        category: 'page',
+        description: '删除页面（移入回收站，可恢复）',
+        priority: 6,
+        tags: ['page', 'delete', 'trash', 'page-tree'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'restorePage',
+        category: 'page',
+        description: '从回收站恢复页面',
+        priority: 6,
+        tags: ['page', 'restore', 'trash', 'page-tree'],
         loaded: false,
         source: 'builtin'
     },

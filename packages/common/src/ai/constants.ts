@@ -61,7 +61,8 @@ The document has a special structure:
   - Columns support nesting (columns within a column) for complex layouts
   - Layout types: 'none'(equal width), 'left'(left wider), 'right'(right wider), 'center'(center wider)
   - Use \`insertColumns\` to create, \`getColumnsInfo\` to read, \`updateColumnContent\` to modify
-- Documents live in a knowledge base of **pages**: use \`searchPages\` to find pages, \`insertPageLink\` to add [[page]] links, \`createPage\` for new (sub-)pages; a page you just created becomes this session edit target — keep editing it with the document tools and call \`openPage\` only when the user explicitly asks to switch documents`
+- Documents live in a knowledge base of **pages** organized as a tree per space: use \`listSpaces\` / \`getSpacePageTree\` to inspect the tree, \`createPage\` (with relativeTo+position or parentId) for children/siblings, \`renamePage\` / \`movePage\` / \`deletePage\` / \`restorePage\` to manage it, and \`insertPageLink\` to add [[page]] links
+- The conversation edits pages **off-screen**: call \`editPage(pageId)\` to point the document tools at any page (children included) without navigating the user away. After \`editPage\`, every document tool acts on that page until the next \`editPage\`. \`createPage\` also binds the new page as the edit target by default. Call \`openPage\` only when the user explicitly asks to jump to a page in the UI`
 
 /**
  * Standard workflow for document operations.
@@ -75,7 +76,7 @@ export const STANDARD_WORKFLOW = `# WORKFLOW
 5. For deletions → deleteBlocks by blockId (whole blocks), deleteText for precise text (when several matches exist, disambiguate with blockId/occurrence or use deleteAllMatches), deleteBlocksBetween for a whole section between two anchors; clearDocument only for full rewrites
 6. For multiple edits → collect them and call applyEdits ONCE (single transaction, single undo)
 7. If creating/modifying column layouts → use insertColumns, getColumnsInfo, updateColumnContent
-8. For cross-page work → searchPages / createPage / insertPageLink; after createPage keep editing the new page with the document tools (it is now the session edit target) — call openPage only when the user asks to switch documents
+8. For cross-page work → getSpacePageTree / searchPages to locate pages; editPage(pageId) to point the document tools at any page off-screen (or createPage with relativeTo+position/parentId to add a child/sibling, which also becomes the edit target); renamePage / movePage / deletePage / restorePage to manage the tree; insertPageLink for [[page]] links — call openPage only when the user asks to switch documents in the UI
 9. If large destructive action → askUserChoice to confirm (optionally createCheckpoint first)
 10. Verify the result
 11. When your final answer refers to specific places in the document → call referenceBlocks with those blockIds so the user gets clickable citations that jump to each block`
@@ -156,7 +157,8 @@ You can:
 - Search and find information
 - Organize and structure content
 - Create and manage multi-column layouts (分栏)
-- Work across pages: search pages, create (sub-)pages, insert [[page]] links, navigate
+- Work across the space page tree: inspect it (listSpaces / getSpacePageTree), create child or sibling pages under any page, rename/move/delete/restore pages, insert [[page]] links
+- Edit any page off-screen without navigating the user away: call editPage(pageId), then use the document tools — they act on that page
 - Answer questions about the content
 - Help with writing and editing
 
