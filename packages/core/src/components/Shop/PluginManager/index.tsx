@@ -42,6 +42,9 @@ const normalizeSubmission = (plugin: any): PluginSubmissionRecord => {
         resourcePath: candidate.resourcePath,
         integrity: candidate.integrity,
         versionDescs: candidate.versionDescription ?? [],
+        reviewComment: candidate.reviewComment,
+        reviewerName: candidate.reviewerName,
+        reviewTime: candidate.reviewTime,
     } as PluginSubmissionRecord
 }
 

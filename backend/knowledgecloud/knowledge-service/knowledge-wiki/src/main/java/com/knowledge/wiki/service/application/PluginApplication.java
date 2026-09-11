@@ -1,5 +1,6 @@
 package com.knowledge.wiki.service.application;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -89,8 +90,8 @@ public class PluginApplication {
                 pluginService.updateById(plugin);
             }
             if (trustedInner && dto.isPublish()) {
-                startReview(plugin);
-                approve(plugin);
+                startReview(plugin, null);
+                approve(plugin, null);
             }
             return;
         }
@@ -108,8 +109,8 @@ public class PluginApplication {
             publish.setVersionDescs(legacyVersionDescriptions(dto, current));
             createVersionInternal(plugin, publish, trustedInner);
             if (trustedInner) {
-                startReview(plugin);
-                approve(plugin);
+                startReview(plugin, null);
+                approve(plugin, null);
             }
         } else {
             PluginSubmissionDTO submission = mergeLegacyResubmission(plugin, dto);
@@ -142,12 +143,16 @@ public class PluginApplication {
         requirePermission("platform.plugins.review");
         Plugin plugin = requirePlugin(id);
         PluginReviewDecision decision = dto.getDecision();
+        String reason = StrUtil.trim(dto.getReason());
         if (decision == PluginReviewDecision.START) {
-            startReview(plugin);
+            startReview(plugin, reason);
         } else if (decision == PluginReviewDecision.APPROVE) {
-            approve(plugin);
+            approve(plugin, reason);
         } else if (decision == PluginReviewDecision.REJECT) {
-            reject(plugin);
+            if (StrUtil.isBlank(reason)) {
+                throw WikiException.PLUGIN_REVIEW_REASON_REQUIRED.newException();
+            }
+            reject(plugin, reason);
         } else {
             throw WikiException.INVALID_PARAMETER.newException();
         }
@@ -175,6 +180,13 @@ public class PluginApplication {
     public PluginVO adminReviewDetail(Long id) {
         requirePermission("platform.plugins.read");
         return toSubmissionVO(requirePlugin(id));
+    }
+
+    /** Full version history (newest first) for the admin review timeline. */
+    public List<PluginVersionVO> adminReviewVersions(Long id) {
+        requirePermission("platform.plugins.read");
+        requirePlugin(id);
+        return PluginVersionConverter.INSTANCE.convertVO(pluginVersionService.listVersions(id));
     }
 
     public PluginVO detail(Long id) {
@@ -337,6 +349,7 @@ public class PluginApplication {
         candidate.setVersionDescription(dto.getVersionDescs());
         candidate.setStatus(VersionStatus.PENDING);
         candidate.setReviewStatus(PluginStatus.PENDING);
+        clearReviewAudit(candidate.getId());
         pluginVersionService.updateById(candidate);
         pluginTagService.replaceTags(plugin.getId(), dto.getTags());
         return plugin;
@@ -368,11 +381,12 @@ public class PluginApplication {
             candidate.setVersionDescription(dto.getVersionDescs());
             candidate.setStatus(VersionStatus.PENDING);
             candidate.setReviewStatus(PluginStatus.PENDING);
+            clearReviewAudit(candidate.getId());
             pluginVersionService.updateById(candidate);
         }
     }
 
-    private void startReview(Plugin plugin) {
+    private void startReview(Plugin plugin, String reason) {
         PluginVersion candidate = requirePendingCandidate(plugin.getId());
         if (candidate.getReviewStatus() != PluginStatus.PENDING) {
             throw WikiException.PLUGIN_INVALID_STATE.newException();
@@ -384,15 +398,21 @@ public class PluginApplication {
         if (active != null && plugin.getStatus() != PluginStatus.DONE) {
             throw WikiException.PLUGIN_INVALID_STATE.newException();
         }
+        ReviewAudit audit = audit(reason);
         boolean candidateClaimed = pluginVersionService.lambdaUpdate()
                 .eq(PluginVersion::getId, candidate.getId())
                 .eq(PluginVersion::getStatus, VersionStatus.PENDING)
                 .eq(PluginVersion::getReviewStatus, PluginStatus.PENDING)
                 .set(PluginVersion::getReviewStatus, PluginStatus.IN_PROGRESS)
+                .set(PluginVersion::getReviewComment, audit.comment)
+                .set(PluginVersion::getReviewerId, audit.reviewerId)
+                .set(PluginVersion::getReviewerName, audit.reviewerName)
+                .set(PluginVersion::getReviewTime, audit.reviewTime)
                 .update();
         if (!candidateClaimed) {
             throw WikiException.PLUGIN_INVALID_STATE.newException();
         }
+        audit.apply(candidate);
         candidate.setReviewStatus(PluginStatus.IN_PROGRESS);
         if (active == null) {
             boolean pluginClaimed = pluginService.lambdaUpdate()
@@ -407,22 +427,28 @@ public class PluginApplication {
         }
     }
 
-    private void reject(Plugin plugin) {
+    private void reject(Plugin plugin, String reason) {
         PluginVersion candidate = requirePendingCandidate(plugin.getId());
         if (candidate.getReviewStatus() != PluginStatus.IN_PROGRESS) {
             throw WikiException.PLUGIN_INVALID_STATE.newException();
         }
         PluginVersion active = pluginVersionService.getCurrentActiveVersion(plugin.getId());
+        ReviewAudit audit = audit(reason);
         boolean candidateClaimed = pluginVersionService.lambdaUpdate()
                 .eq(PluginVersion::getId, candidate.getId())
                 .eq(PluginVersion::getStatus, VersionStatus.PENDING)
                 .eq(PluginVersion::getReviewStatus, PluginStatus.IN_PROGRESS)
                 .set(PluginVersion::getStatus, VersionStatus.DRAFT)
                 .set(PluginVersion::getReviewStatus, PluginStatus.REJECTED)
+                .set(PluginVersion::getReviewComment, audit.comment)
+                .set(PluginVersion::getReviewerId, audit.reviewerId)
+                .set(PluginVersion::getReviewerName, audit.reviewerName)
+                .set(PluginVersion::getReviewTime, audit.reviewTime)
                 .update();
         if (!candidateClaimed) {
             throw WikiException.PLUGIN_INVALID_STATE.newException();
         }
+        audit.apply(candidate);
         candidate.setStatus(VersionStatus.DRAFT);
         candidate.setReviewStatus(PluginStatus.REJECTED);
         if (active == null) {
@@ -438,7 +464,7 @@ public class PluginApplication {
         }
     }
 
-    private void approve(Plugin plugin) {
+    private void approve(Plugin plugin, String reason) {
         PluginVersion candidate = requirePendingCandidate(plugin.getId());
         if (candidate.getReviewStatus() != PluginStatus.IN_PROGRESS) {
             throw WikiException.PLUGIN_INVALID_STATE.newException();
@@ -446,15 +472,23 @@ public class PluginApplication {
         candidate.setIntegrity(PluginSubmissionValidator.requireIntegrity(candidate.getIntegrity()));
         candidate.setResourcePath(PluginSubmissionValidator.requireJavaScriptPath(candidate.getResourcePath()));
         PluginVersion active = pluginVersionService.getCurrentActiveVersion(plugin.getId());
+        // Keep the START note when no approval comment is supplied.
+        String comment = StrUtil.isNotBlank(reason) ? StrUtil.trim(reason) : candidate.getReviewComment();
+        ReviewAudit audit = audit(comment);
         boolean candidateClaimed = pluginVersionService.lambdaUpdate()
                 .eq(PluginVersion::getId, candidate.getId())
                 .eq(PluginVersion::getStatus, VersionStatus.PENDING)
                 .eq(PluginVersion::getReviewStatus, PluginStatus.IN_PROGRESS)
                 .set(PluginVersion::getReviewStatus, PluginStatus.DONE)
+                .set(PluginVersion::getReviewComment, audit.comment)
+                .set(PluginVersion::getReviewerId, audit.reviewerId)
+                .set(PluginVersion::getReviewerName, audit.reviewerName)
+                .set(PluginVersion::getReviewTime, audit.reviewTime)
                 .update();
         if (!candidateClaimed) {
             throw WikiException.PLUGIN_INVALID_STATE.newException();
         }
+        audit.apply(candidate);
         if (active == null) {
             boolean pluginClaimed = pluginService.lambdaUpdate()
                     .eq(Plugin::getId, plugin.getId())
@@ -591,6 +625,44 @@ public class PluginApplication {
             throw WikiException.PLUGIN_FORBIDDEN.newException();
         }
         return userId;
+    }
+
+    private ReviewAudit audit(String comment) {
+        return new ReviewAudit(StrUtil.trim(comment), currentUserId(),
+                StrUtil.trim(SecurityContextUtil.getUserName()), LocalDateTime.now());
+    }
+
+    /** Drop stale decision metadata when a rejected candidate is resubmitted or reused. */
+    private void clearReviewAudit(Long versionId) {
+        pluginVersionService.lambdaUpdate()
+                .eq(PluginVersion::getId, versionId)
+                .set(PluginVersion::getReviewComment, null)
+                .set(PluginVersion::getReviewerId, null)
+                .set(PluginVersion::getReviewerName, null)
+                .set(PluginVersion::getReviewTime, null)
+                .update();
+    }
+
+    /** Snapshot of the acting reviewer, applied to the SQL update and the in-memory entity. */
+    private static final class ReviewAudit {
+        private final String comment;
+        private final Long reviewerId;
+        private final String reviewerName;
+        private final LocalDateTime reviewTime;
+
+        private ReviewAudit(String comment, Long reviewerId, String reviewerName, LocalDateTime reviewTime) {
+            this.comment = comment;
+            this.reviewerId = reviewerId;
+            this.reviewerName = reviewerName;
+            this.reviewTime = reviewTime;
+        }
+
+        private void apply(PluginVersion candidate) {
+            candidate.setReviewComment(comment);
+            candidate.setReviewerId(reviewerId);
+            candidate.setReviewerName(reviewerName);
+            candidate.setReviewTime(reviewTime);
+        }
     }
 
     private Long legacyOwner(PluginDTO dto) {

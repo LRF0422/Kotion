@@ -189,6 +189,10 @@ export interface PluginVersionVO {
   resourcePath?: string
   integrity?: string
   versionDescription?: PluginVersionDescription[]
+  reviewComment?: string
+  reviewerId?: string
+  reviewerName?: string
+  reviewTime?: string
   createTime?: string
   updateTime?: string
 }
@@ -201,6 +205,7 @@ export interface PluginVO {
   developerId?: string
   icon?: string
   pluginKey?: string
+  gitPath?: string
   status?: PluginStatus
   installCtn?: number
   favoriteCtn?: number
@@ -234,8 +239,16 @@ export const getAdminPluginList = (params: {
 export const getAdminPluginDetail = (id: string) =>
   get<PluginVO>(`/knowledge-wiki/admin/plugin/${id}/detail`)
 
-export const reviewPluginSubmission = (id: string, decision: PluginReviewDecision) =>
-  post<PluginVO>(`/knowledge-wiki/plugin/submissions/${id}/review`, { decision })
+/** 插件全量版本历史（新→旧），用于审核时间线。 */
+export const getAdminPluginVersions = (id: string) =>
+  get<PluginVersionVO[]>(`/knowledge-wiki/admin/plugin/${id}/versions`)
+
+/** 提交审核决定。REJECT 时 reason 为必填的驳回原因。 */
+export const reviewPluginSubmission = (
+  id: string,
+  decision: PluginReviewDecision,
+  reason?: string,
+) => post<PluginVO>(`/knowledge-wiki/admin/plugin/${id}/review`, { decision, reason })
 
 // ---------- 日志（knowledge-log，current + size） ----------
 

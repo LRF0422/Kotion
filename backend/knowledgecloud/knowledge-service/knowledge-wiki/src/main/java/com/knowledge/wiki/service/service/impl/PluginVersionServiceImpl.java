@@ -1,5 +1,7 @@
 package com.knowledge.wiki.service.service.impl;
 
+import java.util.List;
+
 import org.springframework.stereotype.Service;
 
 import com.knowledge.core.version.VersionStatus;
@@ -80,6 +82,13 @@ public class PluginVersionServiceImpl extends AbstractVersionService<Plugin, Plu
                 .orderByDesc(PluginVersion::getId)
                 .last("LIMIT 1")
                 .one();
+    }
+
+    @Override
+    public List<PluginVersion> listVersions(Long pluginId) {
+        return this.lambdaQuery().eq(PluginVersion::getSubjectId, pluginId)
+                .orderByDesc(PluginVersion::getId)
+                .list();
     }
 
     @Override

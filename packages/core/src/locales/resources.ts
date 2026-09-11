@@ -403,6 +403,7 @@ export const resources = {
           editResubmit: "修改并重新提交",
           readOnly: "等待状态更新",
           loadMore: "加载更多",
+          rejectionReason: "驳回原因",
           status: {
             pending: "待审核",
             in_progress: "审核中",
@@ -1565,6 +1566,7 @@ export const resources = {
           editResubmit: "Edit and resubmit",
           readOnly: "Waiting for status update",
           loadMore: "Load more",
+          rejectionReason: "Rejection reason",
           status: {
             pending: "Pending",
             in_progress: "In review",

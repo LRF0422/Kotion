@@ -40,6 +40,11 @@ public class PluginVersionVO implements Serializable {
     private String version;
     private VersionStatus status;
     private PluginStatus reviewStatus;
+    /** Reviewer comment, or the mandatory reason when the candidate is rejected. */
+    private String reviewComment;
+    private Long reviewerId;
+    private String reviewerName;
+    private LocalDateTime reviewTime;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 

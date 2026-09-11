@@ -1,5 +1,6 @@
 package com.knowledge.wiki.service.entity;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import com.baomidou.mybatisplus.annotation.TableField;
@@ -23,6 +24,11 @@ public class PluginVersion extends BaseVersion {
      */
     private String integrity;
     private PluginStatus reviewStatus;
+    /** Reviewer comment, or the mandatory reason when the candidate is rejected. */
+    private String reviewComment;
+    private Long reviewerId;
+    private String reviewerName;
+    private LocalDateTime reviewTime;
     @TableField(typeHandler = VersionDescListTypeHandler.class)
     private List<VersionDesc> versionDescription;
 

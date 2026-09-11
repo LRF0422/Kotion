@@ -22,7 +22,7 @@
 | 空间管理 | `pages/spaces` | 分页列表、按类型筛选、搜索（**只读，无任何操作**） |
 | 页面管理 | `pages/pages` | 分页列表、按状态筛选、单条回收站恢复 |
 | 评论审核 | `pages/comments` | 列表、解决/重开、删除 |
-| 插件管理 | `pages/plugins` | 列表、按分类筛选（生命周期操作待补） |
+| 插件审核 | `pages/plugins` | 审核队列（分类/状态/搜索）、详情（版本历史/审核审计/完整性校验）、开始/通过/驳回（驳回原因必填）；细节见 [PLUGIN_REVIEW_ROADMAP.md](./PLUGIN_REVIEW_ROADMAP.md) |
 | 日志中心 | `pages/logs` | API / 业务 / 异常 三类日志分页查看 |
 | AI 配置 | `pages/ai` | 模型参数配置（基于系统参数 `/param`） |
 | 系统设置 | `pages/settings` | 系统参数管理 |
@@ -169,6 +169,15 @@ CREATE TABLE IF NOT EXISTS knowledge_log_login (
 **实现要点**
 - 登录日志同时是二期留存分析、三期防暴力破解的数据基础，一期必须落地。
 - 前端 `LogList.tsx` 已是多 Tab 结构（api/usual/error），扩展 `login` 一类即可。
+
+### 2.5 插件审核与生态治理
+
+**功能**
+- 审核提效：结构化驳回原因、批量审核、审核通知、待办 SLA/认领。
+- 安全审查：能力/权限声明、产物安全扫描、沙箱预览。
+- 生态治理：下架/紧急召回、举报与评分治理。
+
+> 审查结论、本轮已补全项与接口/DDL 草案见 **[PLUGIN_REVIEW_ROADMAP.md](./PLUGIN_REVIEW_ROADMAP.md)**。
 
 ---
 

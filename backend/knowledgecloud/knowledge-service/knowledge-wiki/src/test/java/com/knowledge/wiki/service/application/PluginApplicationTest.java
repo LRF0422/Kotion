@@ -274,6 +274,32 @@ class PluginApplicationTest {
         assertEquals(VersionStatus.ACTIVE, active.getStatus());
         assertEquals(VersionStatus.DRAFT, candidate.getStatus());
         assertEquals(PluginStatus.REJECTED, result.getCandidateVersion().getReviewStatus());
+        assertEquals("审核说明", result.getCandidateVersion().getReviewComment());
+        assertEquals(1L, result.getCandidateVersion().getReviewerId());
+        assertEquals("test-user", result.getCandidateVersion().getReviewerName());
+        assertNotNull(result.getCandidateVersion().getReviewTime());
+    }
+
+    @Test
+    void rejectWithoutReasonIsDenied() {
+        authenticate(1L, "admin");
+        Plugin plugin = plugin(7L, PluginStatus.DONE);
+
+        when(pluginService.getById(7L)).thenReturn(plugin);
+
+        PluginReviewDTO review = new PluginReviewDTO();
+        review.setDecision(PluginReviewDecision.REJECT);
+
+        assertThrows(BusinessException.class, () -> application.review(7L, review));
+        verify(pluginVersionService, never()).lambdaUpdate();
+    }
+
+    @Test
+    void reviewOnlyUserCannotReadVersionHistory() {
+        authenticate(42L, "PLATFORM_OPERATOR,platform.plugins.review");
+
+        assertThrows(BusinessException.class, () -> application.adminReviewVersions(7L));
+        verify(pluginVersionService, never()).listVersions(any());
     }
 
     @Test
@@ -338,6 +364,7 @@ class PluginApplicationTest {
     private PluginReviewDTO review(PluginReviewDecision decision) {
         PluginReviewDTO review = new PluginReviewDTO();
         review.setDecision(decision);
+        review.setReason("审核说明");
         return review;
     }
 

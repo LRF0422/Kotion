@@ -116,6 +116,22 @@ export const SubmissionList = ({
                 </div>
               </div>
 
+              {status === "REJECTED" && submission.reviewComment && (
+                <div className="mt-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm">
+                  <div className="font-medium text-destructive">
+                    {t("pluginManager.submissions.rejectionReason")}
+                  </div>
+                  <p className="mt-1 whitespace-pre-wrap text-destructive/90">
+                    {submission.reviewComment}
+                  </p>
+                  {submission.reviewerName && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {submission.reviewerName}
+                    </p>
+                  )}
+                </div>
+              )}
+
               <div className="mt-4 flex items-center justify-between border-t pt-3 text-xs text-muted-foreground">
                 <span>v{submission.version || "1.0.0"}</span>
                 {status === "REJECTED" ? (

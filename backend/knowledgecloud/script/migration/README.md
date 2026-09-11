@@ -2,6 +2,8 @@
 
 `script/migration` is the authoritative location for ordered Knowledge Cloud database migrations. Existing `V1` through `V20` files are immutable history; new changes must use the next version and must not edit an applied migration.
 
+The wiki-domain tables (including `wiki_plugin`, `wiki_plugin_version`, `wiki_plugin_tag`) live in the `knowledge_wiki` schema, which is the database these migrations are applied to; connect with the default schema set to `knowledge_wiki` so the unqualified statements and the `DATABASE()` guards resolve to it.
+
 Flyway is available only through the root Maven profile `db-migrate`. It has no lifecycle execution, is not inherited by service modules, does not run when a Spring Boot service starts, disables `clean`, disables out-of-order execution, and never baselines automatically.
 
 ## Required connection configuration
@@ -9,7 +11,7 @@ Flyway is available only through the root Maven profile `db-migrate`. It has no 
 Run commands from `backend/knowledgecloud` and provide all three variables:
 
 ```bash
-export FLYWAY_URL='jdbc:mysql://db.example:3306/knowledge?useSSL=true&useUnicode=true&characterEncoding=utf8&serverTimezone=UTC'
+export FLYWAY_URL='jdbc:mysql://db.example:3306/knowledge_wiki?useSSL=true&useUnicode=true&characterEncoding=utf8&serverTimezone=UTC'
 export FLYWAY_USER='knowledge_migrator'
 export FLYWAY_PASSWORD='replace-me'
 ```
@@ -18,7 +20,7 @@ Equivalent one-command Maven properties are supported and override the environme
 
 ```bash
 mvn -N -Pdb-migrate flyway:info \
-  -Dflyway.url='jdbc:mysql://db.example:3306/knowledge?useSSL=true&serverTimezone=UTC' \
+  -Dflyway.url='jdbc:mysql://db.example:3306/knowledge_wiki?useSSL=true&serverTimezone=UTC' \
   -Dflyway.user='knowledge_migrator' \
   -Dflyway.password='replace-me'
 ```
@@ -75,7 +77,7 @@ Run the read-only report after V14 and before any such backfill. Use a read-only
 ```bash
 export MYSQL_HOST='db.example'
 export MYSQL_PORT='3306'
-export MYSQL_DATABASE='knowledge'
+export MYSQL_DATABASE='knowledge_wiki'
 mysql --host="$MYSQL_HOST" --port="$MYSQL_PORT" \
   --user="$FLYWAY_USER" --password --database="$MYSQL_DATABASE" \
   --show-warnings --table \

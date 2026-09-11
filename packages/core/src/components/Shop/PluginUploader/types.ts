@@ -31,6 +31,10 @@ export interface PluginSubmissionValues {
 export interface PluginSubmissionRecord extends Partial<PluginSubmissionValues> {
   id: string | number;
   status?: "PENDING" | "IN_PROGRESS" | "REJECTED" | "DONE";
+  /** Reviewer comment; when status is REJECTED this is the mandatory rejection reason. */
+  reviewComment?: string;
+  reviewerName?: string;
+  reviewTime?: string;
 }
 
 export interface PluginUploaderProps {

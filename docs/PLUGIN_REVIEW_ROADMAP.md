@@ -1,0 +1,194 @@
+# 插件审核与生态治理规划（Plugin Review & Governance Roadmap）
+
+> 本文是 [Admin 模块持续运营功能规划](./ADMIN_OPERATIONS_ROADMAP.md) 中「插件审核」能力的专项补充。
+> 先给出对现有 admin 插件审批链路的审查结论（含本轮已补全项），再规划后续该有的能力。
+> 接口与 DDL 为规划草案，实施时以评审为准。
+>
+> 涉及代码：
+> - 前端：`apps/admin/src/pages/plugins/PluginList.tsx`、`apps/admin/src/api/index.ts`
+> - 开发者侧：`packages/core/src/components/Shop/PluginManager/*`、`packages/core/src/components/Shop/PluginUploader/*`
+> - 后端：`knowledge-wiki` 的 `AdminPluginController` / `PluginController` / `PluginApplication` / `wiki_plugin*` 表
+> - 迁移：`script/migration/V13__plugin_submission_lifecycle.sql`、`V22__plugin_review_audit.sql`
+> - 数据库：wiki 域表（`wiki_plugin*`）位于 `knowledge_wiki` 库；迁移用 `DATABASE()` 取当前库，随连接指向该库执行
+
+---
+
+## 1. 审查结论
+
+### 1.1 已有能力（链路是通的）
+
+| 环节 | 现状 |
+| --- | --- |
+| 提交 | 开发者通过 `/knowledge-wiki/plugin/submissions` 提交，状态 `PENDING`；候选版本落 `wiki_plugin_version` |
+| 队列 | 后台 `GET /admin/plugin/list` 按「候选版本优先」聚合审核状态，支持分类/状态/关键字筛选与分页 |
+| 审核 | `START → IN_PROGRESS`，`APPROVE → DONE`（候选版本转 ACTIVE、旧版本转 IN_ACTIVE），`REJECT`（候选转 DRAFT + REJECTED） |
+| 权限 | 读权限 `platform.plugins.read` 与审核权限 `platform.plugins.review` 分离，并有 `clientId == kotion-platform-admin` 限制 |
+| 并发安全 | 状态流转使用条件更新（claim）避免并发重复审核；候选版本唯一约束由 V13 保证 |
+
+### 1.2 本轮补全的缺口
+
+| # | 缺口（补全前） | 补全内容 |
+| --- | --- | --- |
+| 1 | **驳回无原因**：`PluginReviewDTO` 只有 `decision`，前端用 `window.confirm`，开发者无从得知为何被驳回 | 新增 `reason` 字段并强校验（`REJECT` 必填，≤500 字）；前端改为驳回原因对话框 |
+| 2 | **无审核审计**：谁在何时以何理由审核不可追溯 | `wiki_plugin_version` 新增 `review_comment/reviewer_id/reviewer_name/review_time`，`START/APPROVE/REJECT` 均落审计并回显 |
+| 3 | **无审核时间线**：详情只能看到当前候选版本 | 新增 `GET /admin/plugin/{id}/versions` 与详情「版本历史」区块 |
+| 4 | **候选复用时审计残留**：驳回候选被重新提交后旧的审核信息仍在 | `resubmit/createVersion` 显式清空审计列 |
+| 5 | **SRI 只展示不校验**：审核人无从确认产物与声明的完整性哈希一致 | 详情新增「校验完整性」按钮，浏览器内计算 SHA-384 比对 |
+| 6 | **信息不足**：详情缺少安装/收藏/下载/评分、仓库地址 | 新增「运行数据」区块与仓库链接；新增「最近一次审核」区块 |
+| 7 | **开发者无感知**：我的提交里看不到驳回原因 | `PluginSubmissionRecord` 透传 `reviewComment/reviewerName/reviewTime`，列表卡片展示驳回原因 |
+| 8 | **审核入口分散**：审核动作在客户端 `/plugin/submissions/{id}/review` | 新增语义一致的 `POST /admin/plugin/{id}/review`（方法级鉴权覆盖类级，保持 review 权限可独立授权） |
+
+### 1.3 仍然存在的缺口（后续规划输入）
+
+- **效率**：无批量审核、无待办分配、无审核超时/SLA。
+- **流程粒度**：只有「通过/驳回」，缺少「要求修改（保留候选、通知开发者）」这一中间态；缺少开发者撤回提交。
+- **安全**：除 SRI 外无恶意代码扫描、无能力/权限声明审查、无沙箱预览。
+- **治理**：已上架插件无法下架/紧急召回；无举报与评分治理。
+- **触达**：审核结果不通知开发者（无站内信/邮件）。
+- **数据**：无审核时效、通过率、驳回原因分布等运营指标；驳回原因为自由文本，无法结构化统计。
+- **元数据**：无最低宿主版本/兼容性、无权限清单、无多端支持声明。
+
+---
+
+## 2. 后续功能规划
+
+### 2.1 第一期（P0，审核提效与闭环）
+
+> 目标：审核员「批得动、追得到」，开发者「收得到、改得明」。
+
+**a. 批量审核**
+- 列表支持多选（仅同状态且均有候选版本的条目），批量通过/批量驳回（驳回原因对所选条目共用）。
+- 接口：`POST /knowledge-wiki/admin/plugin/batch-review`，body `{ ids: number[], decision, reason? }`；服务端逐条走既有状态机，返回成功/失败明细。
+- 点：逐条独立事务，避免一条脏数据回滚整批；返回 `{ succeeded: [], failed: [{id, code, message}] }`。
+
+**b. 审核通知**
+- 审核决定后向开发者发送站内信（复用 `knowledge-message` 批量推送与站内信落库）。
+- 内容：插件名、版本、结论、驳回原因、详情入口。
+- 后续可加邮件/Webhook。
+
+**c. 结构化驳回原因**
+- `review_comment` 之外新增 `review_reason_code`（枚举：`ARTIFACT_INVALID`、`INTEGRITY_MISMATCH`、`DESCRIPTION_MISMATCH`、`SECURITY_RISK`、`POLICY_VIOLATION`、`OTHER`），驳回时必选。
+- 收益：原因分布统计、开发者自助定位、审核口径统一。
+
+**d. 运营指标**
+- 审核时效：`review_time - create_time`（候选提交→决定）均值/P90。
+- 通过率、驳回原因 TOP、各审核员工作量。
+- 接口：`GET /knowledge-wiki/admin/plugin/stats/review`。
+
+**e. 待办与 SLA**
+- 队列按 `IN_PROGRESS` 中滞留时长排序；超过阈值（系统参数可配）在列表与导航上高亮告警。
+- 预留「认领」字段（`claimed_by`），避免多人重复审核同一候选。
+
+### 2.2 第二期（P1，安全审查与治理）
+
+**a. 能力声明与权限审查**
+- 提交 schema 增加 `permissions`（如网络、存储、编辑器扩展点、剪贴板）声明；审核页以只读清单展示，逐项确认。
+- 表：`wiki_plugin_version.permissions_json`（或独立 `wiki_plugin_permission`）。
+
+**b. 产物安全扫描**
+- 接入静态扫描（敏感 API、`eval`、远程加载、混淆程度）与可选恶意代码扫描；审核页展示扫描报告与结论。
+- 服务端在 `submit/createVersion` 时触发异步扫描任务，`scan_status/scan_report` 落版本表。
+
+**c. 沙箱预览**
+- 详情内以 iframe（`sandbox` 属性 + 独立 origin）加载候选产物，审核人可实际体验；只读、断网、限能力。
+
+**d. 下架 / 紧急召回**
+- 已发布插件支持下架（`DONE → SUSPENDED` 或新增状态），下架原因与操作人落审计；通知开发者。
+- 接口：`POST /admin/plugin/{id}/takedown`、`/restore`；高危操作二次确认。
+
+**e. 举报与评分治理**
+- 客户端插件举报入口；后台举报处理页（复用内容举报的通用表与流程）。
+- 评分/评论刷量检测与隐藏。
+
+### 2.3 第三期（P2，精细化与生态）
+
+- **兼容性矩阵**：最低宿主版本、依赖插件、平台（web/desktop）声明与校验。
+- **开发者体系**：开发者资料、认证/信任等级，认证开发者可走快速通道。
+- **可信内建**：延续 `createInnerPlugin` 的可信直发，增加白名单与「跳过人审但保留扫描」策略。
+- **审核规则引擎**：把审核清单/评分模板配置化，支持不同分类走不同检查项。
+- **灰度发布**：候选版本按租户/用户比例灰度，再全量。
+- **通用审计接入**：审核/下架等写操作接入三期「操作审计」表（见总规划 §4.3）。
+- **导出**：审核台账导出 CSV，供合规留档。
+
+### 2.4 权限点建议
+
+| 权限 | 说明 |
+| --- | --- |
+| `platform.plugins.read` | 查看审核队列与详情（现有） |
+| `platform.plugins.review` | 开始/通过/驳回（现有） |
+| `platform.plugins.publish` | 下架/恢复已发布插件（建议新增，与日常审核分离） |
+| `platform.plugins.scan.read` | 查看安全扫描报告（建议新增） |
+
+---
+
+## 3. 表结构草案（增量）
+
+```sql
+-- 结构化驳回/审核扩展（在 V22 已加 review_comment/reviewer_* 基础上）
+ALTER TABLE wiki_plugin_version
+    ADD COLUMN review_reason_code VARCHAR(32) NULL COMMENT 'ARTIFACT_INVALID|INTEGRITY_MISMATCH|DESCRIPTION_MISMATCH|SECURITY_RISK|POLICY_VIOLATION|OTHER',
+    ADD COLUMN claimed_by         BIGINT      NULL COMMENT '审核认领人',
+    ADD COLUMN claimed_time       DATETIME    NULL,
+    ADD COLUMN scan_status        VARCHAR(16) NULL COMMENT 'PENDING|PASS|WARN|FAIL',
+    ADD COLUMN scan_report        JSON        NULL,
+    ADD COLUMN permissions_json   JSON        NULL COMMENT '能力/权限声明';
+
+-- 插件举报（或复用通用 wiki_content_report，target_type='PLUGIN'）
+CREATE TABLE IF NOT EXISTS wiki_plugin_report (
+    id          BIGINT PRIMARY KEY AUTO_INCREMENT,
+    plugin_id   BIGINT NOT NULL,
+    version_id  BIGINT NULL,
+    reason_type VARCHAR(32) NOT NULL,
+    reason_text VARCHAR(500),
+    reporter_id BIGINT NOT NULL,
+    status      VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    handler_id  BIGINT,
+    handle_note VARCHAR(500),
+    handle_time DATETIME,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    is_deleted  INT DEFAULT 0,
+    KEY idx_status_time (status, create_time),
+    KEY idx_plugin (plugin_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='插件举报表';
+```
+
+---
+
+## 4. 优先级与依赖
+
+```
+P0 审核提效与闭环
+├── 批量审核 ─────────────┐
+├── 结构化驳回原因 ───────┼──> 运营指标（时效/通过率/原因分布）
+├── 审核通知（站内信）────┘
+└── 待办 SLA / 认领
+
+P1 安全审查与治理
+├── 能力声明 + 权限审查 ──> 审核页只读清单
+├── 产物安全扫描 ─────────> 扫描报告
+├── 沙箱预览
+├── 下架/召回（新权限点 + 审计）
+└── 举报与评分治理
+
+P2 精细化与生态
+├── 兼容性矩阵 / 依赖声明
+├── 开发者体系与信任通道
+├── 审核规则引擎（清单/评分配置化）
+├── 灰度发布
+└── 审计接入 / 台账导出
+```
+
+**横切约束**
+- 管理端接口统一 `/admin/plugin/**`，网关 + 服务双层 admin 鉴权；高危操作（下架、批量）纳入审计。
+- 状态机以服务端条件更新为准，前端展示状态不参与裁决，避免并发越权。
+- 驳回原因/扫描结论等对开发者可见的信息与内部备注分离，内部备注不通过客户端接口下发。
+- 分页口径：wiki 模块用 `current + pageSize`。
+
+---
+
+## 5. 建议的落地顺序
+
+1. 先做 P0 的「结构化驳回原因 + 审核通知」——投入小、闭环价值最高（驳回原因已具备自由文本基础）。
+2. 再做「批量审核 + 运营指标」——直接降低审核人力成本。
+3. P1 的安全扫描与沙箱取决于是否引入外部扫描能力，需先做技术选型。
+4. 下架/召回与举报建议与总规划二期的内容治理一并实施，复用举报与审计基础设施。

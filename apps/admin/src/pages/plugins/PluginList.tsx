@@ -4,6 +4,12 @@ import {
   Button,
   Card,
   CardContent,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
   Input,
   Select,
   SelectContent,
@@ -24,17 +30,25 @@ import {
   Tabs,
   TabsList,
   TabsTrigger,
+  Textarea,
   useToast,
 } from '@kn/ui'
 import {
   Blocks,
   Check,
+  Download,
   ExternalLink,
   Eye,
   FileCode2,
+  GitBranch,
+  History,
   Loader2,
   Play,
   Search,
+  ShieldAlert,
+  ShieldCheck,
+  Star,
+  UserCheck,
   X,
 } from '@kn/icon'
 import { PageHeader } from '@/components/PageHeader'
@@ -43,6 +57,7 @@ import { TablePagination } from '@/components/TablePagination'
 import {
   getAdminPluginDetail,
   getAdminPluginList,
+  getAdminPluginVersions,
   reviewPluginSubmission,
   type PluginCategory,
   type PluginReviewDecision,
@@ -106,6 +121,17 @@ const getReviewStatus = (plugin?: PluginVO | null) =>
 
 const getSubmittedVersion = (plugin: PluginVO) => plugin.candidateVersion ?? plugin.currentVersion
 
+const formatMetric = (value?: number) =>
+  value === undefined || value === null ? '—' : value.toLocaleString('zh-CN')
+
+const getReviewAudit = (version?: PluginVersionVO | null) => {
+  if (!version) return null
+  const comment = version.reviewComment?.trim()
+  const reviewer = version.reviewerName || (version.reviewerId ? `ID: ${version.reviewerId}` : undefined)
+  if (!comment && !reviewer && !version.reviewTime) return null
+  return { comment, reviewer, time: version.reviewTime }
+}
+
 const formatVersionContent = (content?: string) => {
   if (!content) return '-'
   try {
@@ -158,7 +184,14 @@ export const PluginList = () => {
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState<string | null>(null)
   const [reviewingDecision, setReviewingDecision] = useState<PluginReviewDecision | null>(null)
+  const [versions, setVersions] = useState<PluginVersionVO[]>([])
+  const [versionsLoading, setVersionsLoading] = useState(false)
+  const [rejectOpen, setRejectOpen] = useState(false)
+  const [rejectReason, setRejectReason] = useState('')
+  const [verifying, setVerifying] = useState(false)
+  const [verifyResult, setVerifyResult] = useState<'match' | 'mismatch' | 'error' | null>(null)
   const detailRequestId = useRef(0)
+  const versionsRequestId = useRef(0)
 
   const fetcher = useCallback(
     (current: number) =>
@@ -198,22 +231,45 @@ export const PluginList = () => {
     }
   }, [])
 
+  const loadVersions = useCallback(async (pluginId: string) => {
+    const requestId = ++versionsRequestId.current
+    setVersionsLoading(true)
+    try {
+      const data = await getAdminPluginVersions(pluginId)
+      if (versionsRequestId.current === requestId) setVersions(data ?? [])
+    } catch {
+      if (versionsRequestId.current === requestId) setVersions([])
+    } finally {
+      if (versionsRequestId.current === requestId) setVersionsLoading(false)
+    }
+  }, [])
+
   const openDetail = (plugin: PluginVO) => {
     setDetail(plugin)
     setDetailOpen(true)
+    setRejectOpen(false)
+    setRejectReason('')
+    setVerifyResult(null)
+    setVersions([])
     loadDetail(plugin.id)
+    loadVersions(plugin.id)
   }
 
   const handleDetailOpenChange = (open: boolean) => {
     setDetailOpen(open)
     if (!open) {
       detailRequestId.current += 1
+      versionsRequestId.current += 1
       setDetailLoading(false)
       setDetailError(null)
+      setVersions([])
+      setRejectOpen(false)
+      setRejectReason('')
+      setVerifyResult(null)
     }
   }
 
-  const handleReview = async (decision: PluginReviewDecision) => {
+  const handleReview = async (decision: PluginReviewDecision, reason?: string) => {
     if (!detail || reviewingDecision) return
     const candidate = detail.candidateVersion
     if (!candidate) {
@@ -222,22 +278,36 @@ export const PluginList = () => {
     }
 
     const decisionLabel = decision === 'START' ? '开始审核' : decision === 'APPROVE' ? '批准上架' : '驳回'
-    if (decision !== 'START') {
+    const trimmedReason = reason?.trim()
+    if (decision === 'APPROVE') {
       const confirmed = window.confirm(
         `确认${decisionLabel}插件「${detail.name}」的 v${candidate.version || '-'} 版本？`,
       )
       if (!confirmed) return
     }
+    if (decision === 'REJECT' && !trimmedReason) {
+      toast({
+        title: '请填写驳回原因',
+        description: '驳回原因会展示给开发者，便于其修正后重新提交。',
+        variant: 'destructive',
+      })
+      return
+    }
 
     setReviewingDecision(decision)
     try {
-      const updated = await reviewPluginSubmission(detail.id, decision)
+      const updated = await reviewPluginSubmission(detail.id, decision, trimmedReason || undefined)
       setDetail(updated)
+      if (decision === 'REJECT') {
+        setRejectOpen(false)
+        setRejectReason('')
+      }
       toast({
         title: decision === 'START' ? '已开始审核' : decision === 'APPROVE' ? '插件已批准上架' : '插件已驳回',
         description: `${detail.name} v${candidate.version || '-'}`,
       })
       reload()
+      void loadVersions(detail.id)
     } catch (err) {
       toast({ title: `${decisionLabel}失败`, description: err instanceof Error ? err.message : undefined, variant: 'destructive' })
       await loadDetail(detail.id)
@@ -245,6 +315,11 @@ export const PluginList = () => {
     } finally {
       setReviewingDecision(null)
     }
+  }
+
+  const openRejectDialog = () => {
+    setRejectReason('')
+    setRejectOpen(true)
   }
 
   const emptyText = statusTab === 'PENDING'
@@ -256,9 +331,27 @@ export const PluginList = () => {
   const reviewStatus = getReviewStatus(detail)
   const candidate = detail?.candidateVersion
   const artifact = candidate ?? (reviewStatus === 'DONE' ? detail?.currentVersion : undefined)
+  const reviewAudit = getReviewAudit(artifact)
   const artifactUrl = artifact?.resourcePath
     ? `/api/knowledge-resource/oss/endpoint/public/plugin?fileName=${encodeURIComponent(artifact.resourcePath)}`
     : undefined
+
+  const verifyIntegrity = async () => {
+    if (!artifactUrl || !artifact?.integrity) return
+    setVerifying(true)
+    setVerifyResult(null)
+    try {
+      const response = await fetch(artifactUrl)
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const digest = await crypto.subtle.digest('SHA-384', await response.arrayBuffer())
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(digest)))
+      setVerifyResult(`sha384-${base64}` === artifact.integrity ? 'match' : 'mismatch')
+    } catch {
+      setVerifyResult('error')
+    } finally {
+      setVerifying(false)
+    }
+  }
 
   return (
     <div>
@@ -461,13 +554,90 @@ export const PluginList = () => {
                 )}
               </section>
 
+              {reviewStatus === 'REJECTED' && reviewAudit?.comment && (
+                <div className="flex gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm">
+                  <ShieldAlert className="mt-0.5 size-4 shrink-0 text-destructive" />
+                  <div className="space-y-1">
+                    <div className="font-medium text-destructive">驳回原因</div>
+                    <p className="whitespace-pre-wrap text-destructive/90">{reviewAudit.comment}</p>
+                    <p className="text-xs text-muted-foreground">
+                      审核人：{reviewAudit.reviewer || '-'} · {formatDateTime(reviewAudit.time)}
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <section className="grid gap-3 sm:grid-cols-2">
                 <VersionSummary version={detail.currentVersion} title="当前激活版本" />
                 <VersionSummary version={detail.candidateVersion} title="本次候选版本" />
               </section>
 
               <section className="space-y-3">
-                <div className="text-sm font-medium">提交信息</div>
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <Star className="size-4" />
+                  运行数据
+                </div>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  {[
+                    { label: '安装量', value: detail.installCtn },
+                    { label: '收藏量', value: detail.favoriteCtn },
+                    { label: '下载量', value: detail.downloads },
+                    { label: '评分', value: detail.rating },
+                  ].map((item) => (
+                    <div key={item.label} className="rounded-lg border p-3">
+                      <div className="text-xs text-muted-foreground">{item.label}</div>
+                      <div className="mt-1 text-lg font-semibold">
+                        {typeof item.value === 'number' ? formatMetric(item.value) : '—'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {detail.gitPath && (
+                  <div className="flex items-center gap-2 rounded-lg border p-3 text-sm">
+                    <GitBranch className="size-4 text-muted-foreground" />
+                    <span className="text-muted-foreground">仓库</span>
+                    <a
+                      href={detail.gitPath}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="truncate text-primary hover:underline"
+                    >
+                      {detail.gitPath}
+                    </a>
+                  </div>
+                )}
+              </section>
+
+              {reviewAudit && (
+                <section className="space-y-3">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <ShieldCheck className="size-4" />
+                    最近一次审核
+                  </div>
+                  <div className="space-y-2 rounded-lg border p-4 text-sm">
+                    <div className="flex justify-between gap-4">
+                      <span className="text-muted-foreground">审核人</span>
+                      <span>{reviewAudit.reviewer || '-'}</span>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <span className="text-muted-foreground">审核时间</span>
+                      <span>{formatDateTime(reviewAudit.time)}</span>
+                    </div>
+                    {reviewAudit.comment && (
+                      <div>
+                        <div className="mb-1 text-muted-foreground">审核意见</div>
+                        <p className="whitespace-pre-wrap rounded bg-muted px-3 py-2 text-sm">{reviewAudit.comment}</p>
+                      </div>
+                    )}
+                  </div>
+                </section>
+              )}
+
+              <section className="space-y-3">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <UserCheck className="size-4" />
+                  提交信息
+                </div>
                 <div className="space-y-2 rounded-lg border p-4 text-sm">
                   <div className="flex justify-between gap-4">
                     <span className="text-muted-foreground">开发者</span>
@@ -509,16 +679,85 @@ export const PluginList = () => {
                     <code className="block break-all rounded bg-muted px-2 py-1.5 text-xs">
                       {artifact?.integrity || '-'}
                     </code>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={!artifact?.integrity || verifying}
+                        onClick={() => void verifyIntegrity()}
+                      >
+                        {verifying
+                          ? <Loader2 className="mr-1.5 size-4 animate-spin" />
+                          : <ShieldCheck className="mr-1.5 size-4" />}
+                        校验完整性
+                      </Button>
+                      {verifyResult === 'match' && <StatusBadge variant="success">完整性校验通过</StatusBadge>}
+                      {verifyResult === 'mismatch' && (
+                        <StatusBadge variant="danger">完整性校验失败，产物与声明不一致</StatusBadge>
+                      )}
+                      {verifyResult === 'error' && <StatusBadge variant="muted">校验失败，请重试</StatusBadge>}
+                    </div>
                   </div>
-                  {artifactUrl && (
-                    <Button asChild size="sm" variant="outline">
-                      <a href={artifactUrl} target="_blank" rel="noreferrer noopener">
-                        <ExternalLink className="mr-1.5 size-4" />
-                        查看原始 JS 产物
-                      </a>
-                    </Button>
-                  )}
+                  <div className="flex flex-wrap gap-2">
+                    {artifactUrl && (
+                      <Button asChild size="sm" variant="outline">
+                        <a href={artifactUrl} target="_blank" rel="noreferrer noopener">
+                          <ExternalLink className="mr-1.5 size-4" />
+                          查看原始 JS 产物
+                        </a>
+                      </Button>
+                    )}
+                    {artifactUrl && (
+                      <Button asChild size="sm" variant="outline">
+                        <a href={artifactUrl} download>
+                          <Download className="mr-1.5 size-4" />
+                          下载产物
+                        </a>
+                      </Button>
+                    )}
+                  </div>
                 </div>
+              </section>
+
+              <section className="space-y-3">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <History className="size-4" />
+                  版本历史
+                  {versionsLoading && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
+                </div>
+                {versions.length === 0 ? (
+                  <div className="rounded-lg border p-4 text-sm text-muted-foreground">
+                    {versionsLoading ? '加载中…' : '暂无版本记录'}
+                  </div>
+                ) : (
+                  <ol className="space-y-2">
+                    {versions.map((version) => {
+                      const status = getEnumValue(version.reviewStatus) || getEnumValue(version.status)
+                      const meta = status ? STATUS_META[status] : undefined
+                      return (
+                        <li key={version.id || version.version} className="rounded-lg border p-3 text-sm">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-mono">v{version.version || '-'}</span>
+                            {meta ? <StatusBadge variant={meta.variant}>{meta.label}</StatusBadge> : null}
+                            <Badge variant="outline">{getVersionStatusLabel(version.status)}</Badge>
+                            <span className="ml-auto text-xs text-muted-foreground">
+                              {formatDateTime(version.reviewTime || version.updateTime || version.createTime)}
+                            </span>
+                          </div>
+                          {version.reviewComment && (
+                            <p className="mt-2 whitespace-pre-wrap text-xs text-muted-foreground">
+                              {version.reviewComment}
+                            </p>
+                          )}
+                          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                            {version.reviewerName && <span>审核人：{version.reviewerName}</span>}
+                            {version.integrity && <span className="truncate font-mono">{version.integrity}</span>}
+                          </div>
+                        </li>
+                      )
+                    })}
+                  </ol>
+                )}
               </section>
 
               <section className="space-y-3">
@@ -561,7 +800,7 @@ export const PluginList = () => {
                         variant="outline"
                         className="text-destructive"
                         disabled={!candidate || Boolean(reviewingDecision)}
-                        onClick={() => handleReview('REJECT')}
+                        onClick={openRejectDialog}
                       >
                         {reviewingDecision === 'REJECT'
                           ? <Loader2 className="mr-2 size-4 animate-spin" />
@@ -594,6 +833,46 @@ export const PluginList = () => {
           ) : null}
         </SheetContent>
       </Sheet>
+
+      <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>驳回插件提交</DialogTitle>
+            <DialogDescription>
+              驳回「{detail?.name}」v{candidate?.version || '-'}。驳回原因会展示给开发者，并用于后续重新提交。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <label htmlFor="plugin-reject-reason" className="text-sm font-medium">
+              驳回原因 <span className="text-destructive">*</span>
+            </label>
+            <Textarea
+              id="plugin-reject-reason"
+              value={rejectReason}
+              maxLength={500}
+              rows={4}
+              placeholder="请说明需要修正的问题，例如：产物未通过完整性校验、功能说明与实现不符、缺少必要的权限声明…"
+              onChange={(event) => setRejectReason(event.target.value)}
+            />
+            <div className="text-right text-xs text-muted-foreground">{rejectReason.length}/500</div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setRejectOpen(false)} disabled={Boolean(reviewingDecision)}>
+              取消
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={!rejectReason.trim() || Boolean(reviewingDecision)}
+              onClick={() => void handleReview('REJECT', rejectReason)}
+            >
+              {reviewingDecision === 'REJECT'
+                ? <Loader2 className="mr-2 size-4 animate-spin" />
+                : <X className="mr-2 size-4" />}
+              确认驳回
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
