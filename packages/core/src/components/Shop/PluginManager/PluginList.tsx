@@ -9,16 +9,15 @@ import {
     DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator
 } from "@kn/ui";
 import {
-    PlusIcon, SearchIcon, UploadIcon, XIcon, Loader2Icon, AlertCircleIcon, CheckCircleIcon, EditIcon,
+    PlusIcon, SearchIcon, UploadIcon, XIcon, Loader2Icon, CheckCircleIcon, EditIcon,
     PowerIcon, BoxIcon, Trash2Icon, MoreVerticalIcon, ArrowUpDownIcon, EyeIcon, CopyIcon, RefreshCwIcon,
-    SettingsIcon, HistoryIcon, InfoIcon, ChevronRightIcon
+    SettingsIcon, HistoryIcon, ChevronRightIcon
 } from "@kn/icon";
 import { PluginUploader } from "../PluginUploader";
 
 import { CollaborationEditor } from "@kn/editor";
-import { isObject } from "lodash";
 import { useTranslation } from "@kn/common";
-import { toRemotePluginDescriptor } from "../plugin-model";
+import { hasDocumentationContent, toRemotePluginDescriptor } from "../plugin-model";
 
 interface PluginStatus {
     code: string;
@@ -67,14 +66,36 @@ const nextPatchVersion = (version?: string) => {
     return match ? `${match[1]}.${match[2]}.${(BigInt(match[3]) + 1n).toString()}` : '1.0.0';
 };
 
-const hasVersionDescriptionContent = (content: any): boolean => {
-    if (!content) return false;
-    const value = typeof content === 'string' ? (() => {
-        try { return JSON.parse(content); } catch { return null; }
-    })() : content;
-    if (!value) return false;
-    if (typeof value.text === 'string' && value.text.trim()) return true;
-    return Array.isArray(value.content) && value.content.some((child: any) => hasVersionDescriptionContent(child));
+/**
+ * Serialize a description payload exactly once. Content loaded from the API is
+ * already a JSON string, so stringify only plain objects/arrays — otherwise the
+ * stored value ends up double-encoded and unreadable on the detail page.
+ */
+const toVersionContentString = (content: any): string => {
+    if (typeof content === 'string') {
+        const trimmed = content.trim();
+        if (!trimmed) return '{}';
+        try {
+            return JSON.stringify(JSON.parse(trimmed));
+        } catch {
+            return '{}';
+        }
+    }
+    return JSON.stringify(content ?? {});
+};
+
+/** Coerce persisted content into an editor-friendly object without throwing. */
+const resolveEditorContent = (content: any): any => {
+    if (content && typeof content === 'object') return content;
+    if (typeof content === 'string') {
+        try {
+            const parsed = JSON.parse(content);
+            return parsed && typeof parsed === 'object' ? parsed : {};
+        } catch {
+            return {};
+        }
+    }
+    return {};
 };
 
 const pickPluginFile = () => new Promise<File | null>((resolve) => {
@@ -111,6 +132,9 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
     const [file, setFile] = useState<PluginArtifactFile>();
     const [version, setVersion] = useState("1.0.0");
     const uploadSessionRef = useRef(0);
+    // Live editor instances per description tab, read at publish time so unsaved
+    // edits are never dropped (and content is never stringified twice).
+    const editorRefs = useRef<Record<number, any>>({});
     const [descriptions, setDescriptions] = useState<PluginVersion[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
     const [loading, setLoading] = useState(false);
@@ -188,6 +212,7 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                     const desc: PluginVersion[] = res.data.currentVersion?.versionDescription || [];
                     setCurrentPlugin(res.data);
                     setVersion(nextPatchVersion(res.data.currentVersion?.version));
+                    editorRefs.current = {};
                     setDescriptions(desc.length > 0 ? res.data.currentVersion.versionDescription : [
                         { label: "Feature", content: {} },
                         { label: "Detail", content: {} },
@@ -413,14 +438,29 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
             toast.error(t('pluginUploader.validation.versionFormat'));
             return;
         }
-        const normalizedLabels = descriptions.map(item => item.label.trim().toLowerCase());
-        if (!descriptions.length || descriptions.length > 20
+        // Pull the latest editor state before validating/sending: blur alone is
+        // not reliable when the user clicks Publish straight from the editor.
+        const synchronized = descriptions.map((item, index) => {
+            const editor = editorRefs.current[index];
+            return editor && typeof editor.getJSON === 'function'
+                ? { ...item, content: editor.getJSON() }
+                : item;
+        });
+        const normalizedLabels = synchronized.map(item => item.label.trim().toLowerCase());
+        if (!synchronized.length || synchronized.length > 20
             || normalizedLabels.some(label => !label)
             || new Set(normalizedLabels).size !== normalizedLabels.length
-            || !descriptions.some(item => hasVersionDescriptionContent(item.content))) {
+            || !synchronized.some(item => hasDocumentationContent(item.content))) {
             toast.error(t('pluginUploader.validation.descriptionContent'));
             return;
         }
+
+        const versionDescs = synchronized
+            .filter(item => item.label.trim() && hasDocumentationContent(item.content))
+            .map(item => ({
+                label: item.label.trim(),
+                content: toVersionContentString(item.content),
+            }));
 
         setPublishing(true);
         try {
@@ -428,10 +468,7 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                 version,
                 resourcePath: file.name,
                 integrity: file.integrity,
-                versionDescs: descriptions.map(item => ({
-                    label: item.label,
-                    content: JSON.stringify(item.content),
-                }))
+                versionDescs,
             });
             toast.success(t('pluginManager.publishSuccess'));
             setOpen(false);
@@ -1033,8 +1070,11 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                                                 )}
                                             </div>
                                             <CollaborationEditor
+                                                ref={(editor: any) => {
+                                                    editorRefs.current[index] = editor;
+                                                }}
                                                 id=""
-                                                content={isObject(item.content) ? item.content : JSON.parse(item.content || '{}')}
+                                                content={resolveEditorContent(item.content)}
                                                 isEditable
                                                 width="w-full"
                                                 withTitle={false}

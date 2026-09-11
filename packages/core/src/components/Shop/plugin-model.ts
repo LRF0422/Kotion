@@ -234,16 +234,72 @@ const sectionId = (label: string, index: number) => {
 const normalizeJsonContent = (
   content?: JSONContent | string | null,
 ): JSONContent | undefined => {
-  try {
-    const value = typeof content === "string" ? JSON.parse(content) : content;
-    if (!value || typeof value !== "object" || Array.isArray(value))
+  let value: unknown = content;
+  // Defensive: several publish paths historically JSON.stringify'd a payload
+  // that was already a JSON string, storing a double-encoded value. Unwrap
+  // nested strings before validating so those versions still render.
+  for (let depth = 0; depth < 4 && typeof value === "string"; depth += 1) {
+    try {
+      value = JSON.parse(value);
+    } catch {
       return undefined;
-    if (typeof value.type !== "string" && !Array.isArray(value.content))
-      return undefined;
-    return value;
-  } catch {
-    return undefined;
+    }
   }
+
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    return undefined;
+  const record = value as JSONContent;
+  if (typeof record.type !== "string" && !Array.isArray(record.content))
+    return undefined;
+  return record;
+};
+
+// Container/inline node types that carry no content on their own. Any other
+// node type (image, table, codeBlock, …) counts as meaningful content.
+const NON_CONTENT_NODE_TYPES = new Set([
+  "doc",
+  "paragraph",
+  "text",
+  "title",
+  "hardBreak",
+  "heading",
+  "bulletList",
+  "orderedList",
+  "listItem",
+  "blockquote",
+]);
+
+const hasContentNode = (value: unknown): boolean => {
+  if (!value || typeof value !== "object") return false;
+  const node = value as JSONContent;
+  if (typeof node.text === "string" && node.text.trim()) return true;
+  if (Array.isArray(node.content) && node.content.some(hasContentNode))
+    return true;
+  if (typeof node.type === "string" && !NON_CONTENT_NODE_TYPES.has(node.type))
+    return true;
+  return false;
+};
+
+/** Whether a documentation payload contains anything renderable. */
+export const hasDocumentationContent = (
+  content?: JSONContent | string | null,
+): boolean => {
+  const value = normalizeJsonContent(content);
+  return Boolean(value && hasContentNode(value));
+};
+
+const isEmptyDocumentationContent = (
+  content?: JSONContent | string | null,
+): boolean => {
+  if (content === null || content === undefined) return true;
+  if (typeof content === "string") {
+    const trimmed = content.trim();
+    return !trimmed || trimmed === "{}" || trimmed === "null";
+  }
+  if (typeof content === "object" && !Array.isArray(content)) {
+    return Object.keys(content).length === 0;
+  }
+  return false;
 };
 
 export const normalizeDocumentationSections = (
@@ -255,12 +311,26 @@ export const normalizeDocumentationSections = (
       if (!label) return [];
 
       const content = normalizeJsonContent(description.content);
+      // Empty sections are dropped entirely; only non-empty payloads that fail
+      // to parse are surfaced as malformed so the page warns instead of lying.
+      if (!content) {
+        if (isEmptyDocumentationContent(description.content)) return [];
+        return [
+          {
+            id: sectionId(label, index),
+            label,
+            content: undefined,
+            malformed: true,
+          },
+        ];
+      }
+      if (!hasContentNode(content)) return [];
       return [
         {
           id: sectionId(label, index),
           label,
           content,
-          malformed: !content,
+          malformed: false,
         },
       ];
     },
