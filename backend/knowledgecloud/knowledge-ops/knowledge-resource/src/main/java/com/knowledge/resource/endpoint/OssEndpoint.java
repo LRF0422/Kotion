@@ -359,6 +359,38 @@ public class OssEndpoint {
 		inputStream.close();
 	}
 
+	/**
+	 * 公开图片下载（免鉴权，网关放行 /oss/endpoint/public/**）。
+	 * 用于插件图标等非敏感图片资源：<img> 无法携带 Authorization 头。
+	 * 仅允许常见图片扩展名并拒绝路径穿越。
+	 *
+	 * @param fileName 存储桶对象名称
+	 */
+	@GetMapping("/public/image")
+	@SneakyThrows
+	public void downloadPublicImage(@RequestParam("fileName") String fileName, HttpServletResponse response) {
+		if (StringUtil.isBlank(fileName) || fileName.contains("..")
+				|| !fileName.matches("(?i).*\\.(png|jpe?g|gif|webp|svg|bmp|ico)$")) {
+			response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+			return;
+		}
+		String lower = fileName.toLowerCase();
+		String contentType = lower.endsWith(".png") ? "image/png"
+				: (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) ? "image/jpeg"
+				: lower.endsWith(".gif") ? "image/gif"
+				: lower.endsWith(".webp") ? "image/webp"
+				: lower.endsWith(".svg") ? "image/svg+xml"
+				: lower.endsWith(".bmp") ? "image/bmp"
+				: "image/x-icon";
+		response.setHeader("Content-Type", contentType);
+		// 发布即换文件名，可长期缓存
+		response.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+		response.setHeader("Access-Control-Allow-Origin", "*");
+		InputStream inputStream = ossClient.downloadFile(fileName);
+		IoUtil.copy(inputStream, response.getOutputStream());
+		inputStream.close();
+	}
+
 	@GetMapping("/fileInfo")
 	public R<List<KnowledgeFile>> fileInfo(@RequestParam("bucket") String bucket) {
 		return R.data(ossClient.getFiles(bucket));

@@ -3,6 +3,7 @@ import { useOptionalFileService } from "../services/file-service";
 import { fileOpen } from "browser-fs-access";
 import { useApi } from "../api/use-api";
 import { APIS } from "../api";
+import { getAccessToken } from "../utils/auth";
 
 export interface KnowledgeFile {
     name: string
@@ -31,6 +32,10 @@ export const useUploadFile = () => {
     const [files, setFiles] = useState<KnowledgeFile[]>([])
 
     const downloadPath = "https://kotion.top:888/api/knowledge-resource/oss/endpoint/download?fileName="
+    // <img> cannot send the Authorization header, so images load from the
+    // anonymous public endpoint (gateway whitelists /oss/endpoint/public/**).
+    const publicImagePath = "https://kotion.top:888/api/knowledge-resource/oss/endpoint/public/image?fileName="
+    const IMAGE_FILE = /\.(png|jpe?g|gif|webp|svg|bmp|ico)$/i
 
     const remove = (path: string) => {
         setFiles(files.filter(file => file.name !== path))
@@ -40,13 +45,17 @@ export const useUploadFile = () => {
         if (!fileName) {
             return '';
         }
-        if (fileService) {
-            return fileService.getDownloadUrl(fileName);
-        }
         if (fileName.startsWith('http://') || fileName.startsWith('https://')) {
             return fileName;
         }
-        return downloadPath + fileName
+        if (IMAGE_FILE.test(fileName)) {
+            return publicImagePath + fileName;
+        }
+        if (fileService) {
+            return fileService.getDownloadUrl(fileName);
+        }
+        const token = getAccessToken();
+        return downloadPath + fileName + (token ? '&Authorization=' + token : '')
     }
 
     const upload = async (type: string[] = ["**/*"]) => {

@@ -218,6 +218,13 @@ const getReasonLabel = (value: unknown) => {
   return getEnumDescription(value) || REVIEW_REASON_META[code || ''] || code || '-'
 }
 
+/** Plugin icons are images rendered by <img>, so load them from the anonymous public endpoint. */
+const resolveIconUrl = (path?: string) => {
+  if (!path) return undefined
+  if (/^https?:\/\//i.test(path)) return path
+  return `/api/knowledge-resource/oss/endpoint/public/image?fileName=${encodeURIComponent(path)}`
+}
+
 const getReviewStatus = (plugin?: PluginVO | null) => {
   if (plugin?.suspended) return 'SUSPENDED'
   return getEnumValue(plugin?.candidateVersion?.reviewStatus ?? plugin?.status)
@@ -883,7 +890,7 @@ export const PluginList = () => {
                     <TableCell>
                       <div className="flex items-center gap-3">
                         {plugin.icon ? (
-                          <img src={plugin.icon} alt="" className="size-9 rounded-lg object-cover" />
+                          <img src={resolveIconUrl(plugin.icon)} alt="" className="size-9 rounded-lg object-cover" />
                         ) : (
                           <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
                             <Blocks className="size-5" />
@@ -977,7 +984,7 @@ export const PluginList = () => {
               <section className="space-y-3">
                 <div className="flex items-start gap-3">
                   {detail.icon ? (
-                    <img src={detail.icon} alt="" className="size-12 rounded-xl object-cover" />
+                    <img src={resolveIconUrl(detail.icon)} alt="" className="size-12 rounded-xl object-cover" />
                   ) : (
                     <div className="flex size-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
                       <Blocks className="size-6" />
