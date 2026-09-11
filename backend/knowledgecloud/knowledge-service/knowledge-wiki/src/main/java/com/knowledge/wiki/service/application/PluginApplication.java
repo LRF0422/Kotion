@@ -1,9 +1,12 @@
 package com.knowledge.wiki.service.application;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -12,10 +15,13 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.baomidou.mybatisplus.extension.conditions.update.LambdaUpdateChainWrapper;
 import com.github.yulichang.toolkit.MPJWrappers;
 import com.github.yulichang.wrapper.MPJLambdaWrapper;
 import com.knowledge.core.secure.utils.SecurityContextUtil;
@@ -27,6 +33,7 @@ import com.knowledge.wiki.service.entity.Plugin;
 import com.knowledge.wiki.service.entity.PluginLogo;
 import com.knowledge.wiki.service.entity.PluginVersion;
 import com.knowledge.wiki.service.entity.VersionDesc;
+import com.knowledge.wiki.service.entity.dto.PluginBatchReviewDTO;
 import com.knowledge.wiki.service.entity.dto.PluginDTO;
 import com.knowledge.wiki.service.entity.dto.PluginReviewDTO;
 import com.knowledge.wiki.service.entity.dto.PluginSubmissionDTO;
@@ -36,7 +43,12 @@ import com.knowledge.wiki.service.entity.dto.QueryPluginDTO;
 import com.knowledge.wiki.service.entity.dto.TagDTO;
 import com.knowledge.wiki.service.entity.enums.PluginCategory;
 import com.knowledge.wiki.service.entity.enums.PluginReviewDecision;
+import com.knowledge.wiki.service.entity.enums.PluginReviewReason;
 import com.knowledge.wiki.service.entity.enums.PluginStatus;
+import com.knowledge.wiki.service.entity.vo.PluginBatchReviewFailureVO;
+import com.knowledge.wiki.service.entity.vo.PluginBatchReviewResultVO;
+import com.knowledge.wiki.service.entity.vo.PluginReviewReasonCountVO;
+import com.knowledge.wiki.service.entity.vo.PluginReviewStatsVO;
 import com.knowledge.wiki.service.entity.vo.PluginVO;
 import com.knowledge.wiki.service.entity.vo.PluginVersionVO;
 import com.knowledge.wiki.service.exception.WikiException;
@@ -62,6 +74,10 @@ public class PluginApplication {
     private IPluginTagService pluginTagService;
     @Autowired
     private IInstalledPluginService installedPluginService;
+    @Autowired
+    private PlatformTransactionManager transactionManager;
+    @Autowired(required = false)
+    private PluginReviewNotifier reviewNotifier;
 
     /**
      * Backward-compatible adapter for the historical POST /plugin payload. New
@@ -149,14 +165,172 @@ public class PluginApplication {
         } else if (decision == PluginReviewDecision.APPROVE) {
             approve(plugin, reason);
         } else if (decision == PluginReviewDecision.REJECT) {
-            if (StrUtil.isBlank(reason)) {
-                throw WikiException.PLUGIN_REVIEW_REASON_REQUIRED.newException();
-            }
-            reject(plugin, reason);
+            requireRejectionReason(reason, dto.getReasonCode());
+            reject(plugin, reason, dto.getReasonCode());
         } else {
             throw WikiException.INVALID_PARAMETER.newException();
         }
-        return toSubmissionVO(requirePlugin(id));
+        Plugin refreshed = requirePlugin(id);
+        if (decision != PluginReviewDecision.START) {
+            notifyReviewDecision(refreshed, decision, reason, dto.getReasonCode());
+        }
+        return toSubmissionVO(refreshed);
+    }
+
+    private void requireRejectionReason(String reason, PluginReviewReason reasonCode) {
+        if (StrUtil.isBlank(reason)) {
+            throw WikiException.PLUGIN_REVIEW_REASON_REQUIRED.newException();
+        }
+        if (reasonCode == null) {
+            throw WikiException.PLUGIN_REVIEW_REASON_CODE_REQUIRED.newException();
+        }
+    }
+
+    /**
+     * Reviewer claims the current candidate. Claiming is optimistic: the update
+     * only succeeds while the row is still unclaimed or already owned by the caller.
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public PluginVO claim(Long pluginId) {
+        requirePermission("platform.plugins.review");
+        requirePlugin(pluginId);
+        PluginVersion candidate = requirePendingCandidate(pluginId);
+        Long me = currentUserId();
+        if (candidate.getClaimedBy() != null && !Objects.equals(candidate.getClaimedBy(), me)) {
+            throw WikiException.PLUGIN_ALREADY_CLAIMED.newException();
+        }
+        LambdaUpdateChainWrapper<PluginVersion> claimUpdate = pluginVersionService.lambdaUpdate()
+                .eq(PluginVersion::getId, candidate.getId());
+        if (candidate.getClaimedBy() == null) {
+            // Only the first reviewer to flip a null claim wins the race.
+            claimUpdate.isNull(PluginVersion::getClaimedBy);
+        } else {
+            claimUpdate.eq(PluginVersion::getClaimedBy, me);
+        }
+        boolean claimed = claimUpdate
+                .set(PluginVersion::getClaimedBy, me)
+                .set(PluginVersion::getClaimedByName, StrUtil.trim(SecurityContextUtil.getUserName()))
+                .set(PluginVersion::getClaimedTime, LocalDateTime.now())
+                .update();
+        if (!claimed) {
+            throw WikiException.PLUGIN_ALREADY_CLAIMED.newException();
+        }
+        return toSubmissionVO(requirePlugin(pluginId));
+    }
+
+    /** Release a candidate the caller currently owns so others can pick it up. */
+    @Transactional(rollbackFor = Exception.class)
+    public PluginVO release(Long pluginId) {
+        requirePermission("platform.plugins.review");
+        requirePlugin(pluginId);
+        PluginVersion candidate = requirePendingCandidate(pluginId);
+        Long me = currentUserId();
+        if (candidate.getClaimedBy() != null && !Objects.equals(candidate.getClaimedBy(), me)) {
+            throw WikiException.PLUGIN_NOT_CLAIMED_BY_YOU.newException();
+        }
+        pluginVersionService.lambdaUpdate()
+                .eq(PluginVersion::getId, candidate.getId())
+                .set(PluginVersion::getClaimedBy, null)
+                .set(PluginVersion::getClaimedByName, null)
+                .set(PluginVersion::getClaimedTime, null)
+                .update();
+        return toSubmissionVO(requirePlugin(pluginId));
+    }
+
+    /**
+     * Apply one decision to several plugins. Each item runs in its own transaction
+     * so a single invalid row is reported without rolling back the rest.
+     */
+    public PluginBatchReviewResultVO batchReview(PluginBatchReviewDTO dto) {
+        requirePermission("platform.plugins.review");
+        PluginReviewDecision decision = dto.getDecision();
+        if (decision == null) {
+            throw WikiException.INVALID_PARAMETER.newException();
+        }
+        String reason = StrUtil.trim(dto.getReason());
+        if (decision == PluginReviewDecision.REJECT) {
+            requireRejectionReason(reason, dto.getReasonCode());
+        }
+        List<Long> ids = dto.getIds() == null ? new ArrayList<>()
+                : dto.getIds().stream().filter(Objects::nonNull).distinct().collect(Collectors.toList());
+        PluginBatchReviewResultVO result = new PluginBatchReviewResultVO();
+        result.setRequested(ids.size());
+        if (ids.isEmpty()) {
+            return result;
+        }
+        PluginReviewDTO single = new PluginReviewDTO();
+        single.setDecision(decision);
+        single.setReason(reason);
+        single.setReasonCode(dto.getReasonCode());
+        for (Long id : ids) {
+            try {
+                if (transactionManager == null) {
+                    review(id, single);
+                } else {
+                    new TransactionTemplate(transactionManager)
+                            .execute(status -> {
+                                review(id, single);
+                                return null;
+                            });
+                }
+                result.setSucceeded(result.getSucceeded() + 1);
+            } catch (Exception ex) {
+                result.getFailures().add(new PluginBatchReviewFailureVO(id,
+                        StrUtil.isBlank(ex.getMessage()) ? "审核失败" : ex.getMessage()));
+            }
+        }
+        return result;
+    }
+
+    /** Aggregate review health for the admin console. */
+    public PluginReviewStatsVO reviewStats() {
+        requirePermission("platform.plugins.read");
+        PluginReviewStatsVO stats = new PluginReviewStatsVO();
+        // Plugin-level terminal states give the approval rate.
+        for (Plugin plugin : pluginService.lambdaQuery().list()) {
+            PluginStatus status = plugin.getStatus();
+            if (status == null) {
+                continue;
+            }
+            if (status == PluginStatus.DONE) {
+                stats.setApproved(stats.getApproved() + 1);
+            } else if (status == PluginStatus.REJECTED) {
+                stats.setRejected(stats.getRejected() + 1);
+            }
+        }
+        long decisions = stats.getApproved() + stats.getRejected();
+        stats.setApprovalRate(decisions == 0 ? 0D : (double) stats.getApproved() / decisions);
+
+        long totalMinutes = 0;
+        long decided = 0;
+        Map<PluginReviewReason, Long> reasonCounts = new EnumMap<>(PluginReviewReason.class);
+        for (PluginVersion version : pluginVersionService.lambdaQuery().list()) {
+            // Queue size tracks candidate versions so pending updates are counted too.
+            if (version.getReviewStatus() == PluginStatus.PENDING) {
+                stats.setPending(stats.getPending() + 1);
+            } else if (version.getReviewStatus() == PluginStatus.IN_PROGRESS) {
+                stats.setInProgress(stats.getInProgress() + 1);
+            }
+            if (version.getReviewStatus() == PluginStatus.REJECTED && version.getReviewReasonCode() != null) {
+                reasonCounts.merge(version.getReviewReasonCode(), 1L, Long::sum);
+            }
+            boolean isDecision = version.getReviewStatus() == PluginStatus.DONE
+                    || version.getReviewStatus() == PluginStatus.REJECTED;
+            if (isDecision && version.getReviewTime() != null && version.getCreateTime() != null) {
+                totalMinutes += Math.max(0,
+                        Duration.between(version.getCreateTime(), version.getReviewTime()).toMinutes());
+                decided++;
+            }
+        }
+        if (decided > 0) {
+            stats.setAverageReviewHours((double) totalMinutes / decided / 60D);
+        }
+        List<PluginReviewReasonCountVO> reasons = new ArrayList<>();
+        for (PluginReviewReason reason : PluginReviewReason.values()) {
+            reasons.add(new PluginReviewReasonCountVO(reason, reasonCounts.getOrDefault(reason, 0L)));
+        }
+        stats.setReasons(reasons);
+        return stats;
     }
 
     public IPage<PluginVO> mySubmissions(QueryPluginDTO dto) {
@@ -405,6 +579,7 @@ public class PluginApplication {
                 .eq(PluginVersion::getReviewStatus, PluginStatus.PENDING)
                 .set(PluginVersion::getReviewStatus, PluginStatus.IN_PROGRESS)
                 .set(PluginVersion::getReviewComment, audit.comment)
+                .set(PluginVersion::getReviewReasonCode, null)
                 .set(PluginVersion::getReviewerId, audit.reviewerId)
                 .set(PluginVersion::getReviewerName, audit.reviewerName)
                 .set(PluginVersion::getReviewTime, audit.reviewTime)
@@ -427,7 +602,7 @@ public class PluginApplication {
         }
     }
 
-    private void reject(Plugin plugin, String reason) {
+    private void reject(Plugin plugin, String reason, PluginReviewReason reasonCode) {
         PluginVersion candidate = requirePendingCandidate(plugin.getId());
         if (candidate.getReviewStatus() != PluginStatus.IN_PROGRESS) {
             throw WikiException.PLUGIN_INVALID_STATE.newException();
@@ -441,6 +616,7 @@ public class PluginApplication {
                 .set(PluginVersion::getStatus, VersionStatus.DRAFT)
                 .set(PluginVersion::getReviewStatus, PluginStatus.REJECTED)
                 .set(PluginVersion::getReviewComment, audit.comment)
+                .set(PluginVersion::getReviewReasonCode, reasonCode)
                 .set(PluginVersion::getReviewerId, audit.reviewerId)
                 .set(PluginVersion::getReviewerName, audit.reviewerName)
                 .set(PluginVersion::getReviewTime, audit.reviewTime)
@@ -451,6 +627,7 @@ public class PluginApplication {
         audit.apply(candidate);
         candidate.setStatus(VersionStatus.DRAFT);
         candidate.setReviewStatus(PluginStatus.REJECTED);
+        candidate.setReviewReasonCode(reasonCode);
         if (active == null) {
             boolean pluginClaimed = pluginService.lambdaUpdate()
                     .eq(Plugin::getId, plugin.getId())
@@ -481,6 +658,7 @@ public class PluginApplication {
                 .eq(PluginVersion::getReviewStatus, PluginStatus.IN_PROGRESS)
                 .set(PluginVersion::getReviewStatus, PluginStatus.DONE)
                 .set(PluginVersion::getReviewComment, audit.comment)
+                .set(PluginVersion::getReviewReasonCode, null)
                 .set(PluginVersion::getReviewerId, audit.reviewerId)
                 .set(PluginVersion::getReviewerName, audit.reviewerName)
                 .set(PluginVersion::getReviewTime, audit.reviewTime)
@@ -632,15 +810,28 @@ public class PluginApplication {
                 StrUtil.trim(SecurityContextUtil.getUserName()), LocalDateTime.now());
     }
 
-    /** Drop stale decision metadata when a rejected candidate is resubmitted or reused. */
+    /** Drop stale decision/claim metadata when a rejected candidate is resubmitted or reused. */
     private void clearReviewAudit(Long versionId) {
         pluginVersionService.lambdaUpdate()
                 .eq(PluginVersion::getId, versionId)
                 .set(PluginVersion::getReviewComment, null)
+                .set(PluginVersion::getReviewReasonCode, null)
                 .set(PluginVersion::getReviewerId, null)
                 .set(PluginVersion::getReviewerName, null)
                 .set(PluginVersion::getReviewTime, null)
+                .set(PluginVersion::getClaimedBy, null)
+                .set(PluginVersion::getClaimedByName, null)
+                .set(PluginVersion::getClaimedTime, null)
                 .update();
+    }
+
+    private void notifyReviewDecision(Plugin plugin, PluginReviewDecision decision, String reason,
+            PluginReviewReason reasonCode) {
+        if (reviewNotifier == null) {
+            return;
+        }
+        reviewNotifier.notifyDecision(SecurityContextUtil.getUserId(), plugin,
+                pluginVersionService.getLatestVersion(plugin.getId()), decision, reason, reasonCode);
     }
 
     /** Snapshot of the acting reviewer, applied to the SQL update and the in-memory entity. */

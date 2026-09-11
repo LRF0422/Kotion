@@ -7,6 +7,7 @@ import java.util.List;
 import com.knowledge.wiki.service.entity.VersionDesc;
 import com.knowledge.wiki.service.entity.enums.PluginCategory;
 import com.knowledge.core.version.VersionStatus;
+import com.knowledge.wiki.service.entity.enums.PluginReviewReason;
 import com.knowledge.wiki.service.entity.enums.PluginStatus;
 
 import lombok.Data;
@@ -42,9 +43,13 @@ public class PluginVersionVO implements Serializable {
     private PluginStatus reviewStatus;
     /** Reviewer comment, or the mandatory reason when the candidate is rejected. */
     private String reviewComment;
+    private PluginReviewReason reviewReasonCode;
     private Long reviewerId;
     private String reviewerName;
     private LocalDateTime reviewTime;
+    private Long claimedBy;
+    private String claimedByName;
+    private LocalDateTime claimedTime;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 

@@ -18,6 +18,9 @@ public enum WikiException implements BusinessExceptionAssert {
     PLUGIN_INVALID_STATE(1005, "插件当前状态不允许此操作"),
     PLUGIN_INVALID_VERSION(1006, "无效的插件语义化版本"),
     PLUGIN_REVIEW_REASON_REQUIRED(1007, "驳回插件必须填写驳回原因"),
+    PLUGIN_REVIEW_REASON_CODE_REQUIRED(1008, "驳回插件必须选择驳回原因分类"),
+    PLUGIN_ALREADY_CLAIMED(1009, "该候选版本已被其他审核员认领"),
+    PLUGIN_NOT_CLAIMED_BY_YOU(1010, "该候选版本未被您认领"),
 
     // Space related (2000-2999)
     SPACE_NOT_FOUND(2001, "空间不存在"),

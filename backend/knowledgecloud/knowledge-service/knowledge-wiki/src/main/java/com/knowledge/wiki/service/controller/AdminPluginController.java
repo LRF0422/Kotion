@@ -17,8 +17,11 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.knowledge.core.tool.api.R;
 import com.knowledge.core.tool.constant.RoleConstant;
 import com.knowledge.wiki.service.application.PluginApplication;
+import com.knowledge.wiki.service.entity.dto.PluginBatchReviewDTO;
 import com.knowledge.wiki.service.entity.dto.PluginReviewDTO;
 import com.knowledge.wiki.service.entity.dto.QueryAdminPluginDTO;
+import com.knowledge.wiki.service.entity.vo.PluginBatchReviewResultVO;
+import com.knowledge.wiki.service.entity.vo.PluginReviewStatsVO;
 import com.knowledge.wiki.service.entity.vo.PluginVO;
 import com.knowledge.wiki.service.entity.vo.PluginVersionVO;
 
@@ -44,10 +47,16 @@ public class AdminPluginController {
         return R.data(pluginApplication.adminReviewDetail(id));
     }
 
-    /** 审核时间线：该插件的全部版本（含审核状态、审核人、审核意见）。 */
+    /** 审核时间线：该插件的全部版本（含审核状态、审核人、审核意见、驳回分类）。 */
     @GetMapping("/{id}/versions")
     public R<List<PluginVersionVO>> versions(@PathVariable("id") Long id) {
         return R.data(pluginApplication.adminReviewVersions(id));
+    }
+
+    /** 审核运营指标：队列规模、通过率、平均时效、驳回原因分布。 */
+    @GetMapping("/stats/review")
+    public R<PluginReviewStatsVO> reviewStats() {
+        return R.data(pluginApplication.reviewStats());
     }
 
     /**
@@ -59,5 +68,29 @@ public class AdminPluginController {
             + ") and principal.clientId == 'kotion-platform-admin'")
     public R<PluginVO> review(@PathVariable("id") Long id, @Valid @RequestBody PluginReviewDTO dto) {
         return R.data(pluginApplication.review(id, dto));
+    }
+
+    /** 批量审核，逐条独立事务，返回成功数与失败明细。 */
+    @PostMapping("/batch-review")
+    @PreAuthorize("(hasRole('platform.plugins.review') or " + RoleConstant.HAS_ROLE_ADMIN
+            + ") and principal.clientId == 'kotion-platform-admin'")
+    public R<PluginBatchReviewResultVO> batchReview(@Valid @RequestBody PluginBatchReviewDTO dto) {
+        return R.data(pluginApplication.batchReview(dto));
+    }
+
+    /** 认领当前候选版本，避免多个审核员重复审核。 */
+    @PostMapping("/{id}/claim")
+    @PreAuthorize("(hasRole('platform.plugins.review') or " + RoleConstant.HAS_ROLE_ADMIN
+            + ") and principal.clientId == 'kotion-platform-admin'")
+    public R<PluginVO> claim(@PathVariable("id") Long id) {
+        return R.data(pluginApplication.claim(id));
+    }
+
+    /** 释放当前候选版本的认领。 */
+    @PostMapping("/{id}/release")
+    @PreAuthorize("(hasRole('platform.plugins.review') or " + RoleConstant.HAS_ROLE_ADMIN
+            + ") and principal.clientId == 'kotion-platform-admin'")
+    public R<PluginVO> release(@PathVariable("id") Long id) {
+        return R.data(pluginApplication.release(id));
     }
 }

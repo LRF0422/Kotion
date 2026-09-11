@@ -32,12 +32,14 @@ import com.knowledge.wiki.service.entity.InstalledPlugin;
 import com.knowledge.wiki.service.entity.Plugin;
 import com.knowledge.wiki.service.entity.PluginVersion;
 import com.knowledge.wiki.service.entity.VersionDesc;
+import com.knowledge.wiki.service.entity.dto.PluginBatchReviewDTO;
 import com.knowledge.wiki.service.entity.dto.PluginDTO;
 import com.knowledge.wiki.service.entity.dto.PluginReviewDTO;
 import com.knowledge.wiki.service.entity.dto.PluginVersionPublishDTO;
 import com.knowledge.wiki.service.entity.dto.QueryAdminPluginDTO;
 import com.knowledge.wiki.service.entity.enums.InstalledPluginStatus;
 import com.knowledge.wiki.service.entity.enums.PluginReviewDecision;
+import com.knowledge.wiki.service.entity.enums.PluginReviewReason;
 import com.knowledge.wiki.service.entity.enums.PluginStatus;
 import com.knowledge.wiki.service.entity.vo.PluginVO;
 import com.knowledge.wiki.service.service.IInstalledPluginService;
@@ -281,6 +283,31 @@ class PluginApplicationTest {
     }
 
     @Test
+    void rejectWithoutReasonCodeIsDenied() {
+        authenticate(1L, "admin");
+        Plugin plugin = plugin(7L, PluginStatus.DONE);
+        when(pluginService.getById(7L)).thenReturn(plugin);
+
+        PluginReviewDTO review = new PluginReviewDTO();
+        review.setDecision(PluginReviewDecision.REJECT);
+        review.setReason("缺少分类");
+
+        assertThrows(BusinessException.class, () -> application.review(7L, review));
+        verify(pluginVersionService, never()).lambdaUpdate();
+    }
+
+    @Test
+    void batchReviewRequiresReviewPermission() {
+        authenticate(42L, "PLATFORM_OPERATOR,platform.plugins.read");
+        PluginBatchReviewDTO dto = new PluginBatchReviewDTO();
+        dto.setDecision(PluginReviewDecision.START);
+        dto.setIds(Collections.singletonList(7L));
+
+        assertThrows(BusinessException.class, () -> application.batchReview(dto));
+        verify(pluginService, never()).getById(any());
+    }
+
+    @Test
     void rejectWithoutReasonIsDenied() {
         authenticate(1L, "admin");
         Plugin plugin = plugin(7L, PluginStatus.DONE);
@@ -365,6 +392,9 @@ class PluginApplicationTest {
         PluginReviewDTO review = new PluginReviewDTO();
         review.setDecision(decision);
         review.setReason("审核说明");
+        if (decision == PluginReviewDecision.REJECT) {
+            review.setReasonCode(PluginReviewReason.OTHER);
+        }
         return review;
     }
 

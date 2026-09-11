@@ -6,6 +6,7 @@ import java.util.List;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.knowledge.core.version.BaseVersion;
+import com.knowledge.wiki.service.entity.enums.PluginReviewReason;
 import com.knowledge.wiki.service.entity.enums.PluginStatus;
 import com.knowledge.wiki.service.typeHandler.VersionDescListTypeHandler;
 
@@ -26,9 +27,15 @@ public class PluginVersion extends BaseVersion {
     private PluginStatus reviewStatus;
     /** Reviewer comment, or the mandatory reason when the candidate is rejected. */
     private String reviewComment;
+    /** Structured rejection category, required when this candidate is rejected. */
+    private PluginReviewReason reviewReasonCode;
     private Long reviewerId;
     private String reviewerName;
     private LocalDateTime reviewTime;
+    /** Reviewer who currently owns this candidate; null when unclaimed. */
+    private Long claimedBy;
+    private String claimedByName;
+    private LocalDateTime claimedTime;
     @TableField(typeHandler = VersionDescListTypeHandler.class)
     private List<VersionDesc> versionDescription;
 

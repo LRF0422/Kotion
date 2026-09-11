@@ -404,6 +404,14 @@ export const resources = {
           readOnly: "等待状态更新",
           loadMore: "加载更多",
           rejectionReason: "驳回原因",
+          reason: {
+            artifact_invalid: "产物无效或无法加载",
+            integrity_mismatch: "完整性校验不通过",
+            description_mismatch: "描述与实现不符",
+            security_risk: "存在安全风险",
+            policy_violation: "违反平台规范",
+            other: "其他",
+          },
           status: {
             pending: "待审核",
             in_progress: "审核中",
@@ -1567,6 +1575,14 @@ export const resources = {
           readOnly: "Waiting for status update",
           loadMore: "Load more",
           rejectionReason: "Rejection reason",
+          reason: {
+            artifact_invalid: "Artifact invalid or unloadable",
+            integrity_mismatch: "Integrity check failed",
+            description_mismatch: "Description does not match behavior",
+            security_risk: "Security risk",
+            policy_violation: "Policy violation",
+            other: "Other",
+          },
           status: {
             pending: "Pending",
             in_progress: "In review",

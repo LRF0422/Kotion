@@ -4,6 +4,7 @@ import {
   Button,
   Card,
   CardContent,
+  Checkbox,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -48,19 +49,28 @@ import {
   ShieldAlert,
   ShieldCheck,
   Star,
+  TriangleAlert,
   UserCheck,
+  UserMinus,
+  UserPlus,
   X,
 } from '@kn/icon'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
 import { TablePagination } from '@/components/TablePagination'
 import {
+  batchReviewPluginSubmissions,
+  claimAdminPlugin,
   getAdminPluginDetail,
   getAdminPluginList,
+  getAdminPluginReviewStats,
   getAdminPluginVersions,
+  releaseAdminPlugin,
   reviewPluginSubmission,
   type PluginCategory,
   type PluginReviewDecision,
+  type PluginReviewReasonValue,
+  type PluginReviewStats,
   type PluginStatus,
   type PluginVO,
   type PluginVersionVO,
@@ -87,6 +97,34 @@ const VERSION_STATUS_LABEL: Record<string, string> = {
   PENDING: '待发布',
   ACTIVE: '已激活',
   IN_ACTIVE: '已停用',
+}
+
+const REVIEW_REASON_META: Record<string, string> = {
+  ARTIFACT_INVALID: '产物无效或无法加载',
+  INTEGRITY_MISMATCH: '完整性校验不通过',
+  DESCRIPTION_MISMATCH: '描述与实现不符',
+  SECURITY_RISK: '存在安全风险',
+  POLICY_VIOLATION: '违反平台规范',
+  OTHER: '其他',
+}
+
+const REVIEW_REASON_OPTIONS: PluginReviewReasonValue[] = [
+  'ARTIFACT_INVALID',
+  'INTEGRITY_MISMATCH',
+  'DESCRIPTION_MISMATCH',
+  'SECURITY_RISK',
+  'POLICY_VIOLATION',
+  'OTHER',
+]
+
+/** Candidate waiting longer than this is flagged as overdue in the queue. */
+const REVIEW_SLA_HOURS = 48
+
+const hoursWaiting = (iso?: string) => {
+  if (!iso) return undefined
+  const started = new Date(iso).getTime()
+  if (Number.isNaN(started)) return undefined
+  return (Date.now() - started) / 36e5
 }
 
 const getEnumValue = (value: unknown) => {
@@ -116,6 +154,11 @@ const getVersionStatusLabel = (status: unknown) => {
   return getEnumDescription(status) || VERSION_STATUS_LABEL[value || ''] || value || '-'
 }
 
+const getReasonLabel = (value: unknown) => {
+  const code = getEnumValue(value)
+  return getEnumDescription(value) || REVIEW_REASON_META[code || ''] || code || '-'
+}
+
 const getReviewStatus = (plugin?: PluginVO | null) =>
   getEnumValue(plugin?.candidateVersion?.reviewStatus ?? plugin?.status)
 
@@ -128,8 +171,9 @@ const getReviewAudit = (version?: PluginVersionVO | null) => {
   if (!version) return null
   const comment = version.reviewComment?.trim()
   const reviewer = version.reviewerName || (version.reviewerId ? `ID: ${version.reviewerId}` : undefined)
-  if (!comment && !reviewer && !version.reviewTime) return null
-  return { comment, reviewer, time: version.reviewTime }
+  const reasonCode = version.reviewReasonCode
+  if (!comment && !reviewer && !version.reviewTime && !reasonCode) return null
+  return { comment, reviewer, time: version.reviewTime, reasonCode }
 }
 
 const formatVersionContent = (content?: string) => {
@@ -190,6 +234,12 @@ export const PluginList = () => {
   const [rejectReason, setRejectReason] = useState('')
   const [verifying, setVerifying] = useState(false)
   const [verifyResult, setVerifyResult] = useState<'match' | 'mismatch' | 'error' | null>(null)
+  const [rejectReasonCode, setRejectReasonCode] = useState<PluginReviewReasonValue | ''>('')
+  const [rejectBatch, setRejectBatch] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [batchRunning, setBatchRunning] = useState(false)
+  const [claiming, setClaiming] = useState(false)
+  const [stats, setStats] = useState<PluginReviewStats | null>(null)
   const detailRequestId = useRef(0)
   const versionsRequestId = useRef(0)
 
@@ -214,6 +264,22 @@ export const PluginList = () => {
       setCurrent(Math.max(pages, 1))
     }
   }, [current, loading, pages, setCurrent])
+
+  const loadStats = useCallback(async () => {
+    try {
+      setStats(await getAdminPluginReviewStats())
+    } catch {
+      // Stats are advisory; a failure must not break the review queue.
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadStats()
+  }, [loadStats])
+
+  useEffect(() => {
+    setSelectedIds([])
+  }, [search, categoryFilter, statusTab])
 
   const loadDetail = useCallback(async (pluginId: string) => {
     const requestId = ++detailRequestId.current
@@ -249,6 +315,8 @@ export const PluginList = () => {
     setDetailOpen(true)
     setRejectOpen(false)
     setRejectReason('')
+    setRejectReasonCode('')
+    setRejectBatch(false)
     setVerifyResult(null)
     setVersions([])
     loadDetail(plugin.id)
@@ -265,11 +333,17 @@ export const PluginList = () => {
       setVersions([])
       setRejectOpen(false)
       setRejectReason('')
+      setRejectReasonCode('')
+      setRejectBatch(false)
       setVerifyResult(null)
     }
   }
 
-  const handleReview = async (decision: PluginReviewDecision, reason?: string) => {
+  const handleReview = async (
+    decision: PluginReviewDecision,
+    reason?: string,
+    reasonCode?: PluginReviewReasonValue,
+  ) => {
     if (!detail || reviewingDecision) return
     const candidate = detail.candidateVersion
     if (!candidate) {
@@ -285,9 +359,9 @@ export const PluginList = () => {
       )
       if (!confirmed) return
     }
-    if (decision === 'REJECT' && !trimmedReason) {
+    if (decision === 'REJECT' && (!trimmedReason || !reasonCode)) {
       toast({
-        title: '请填写驳回原因',
+        title: '请填写驳回原因并选择原因分类',
         description: '驳回原因会展示给开发者，便于其修正后重新提交。',
         variant: 'destructive',
       })
@@ -296,11 +370,12 @@ export const PluginList = () => {
 
     setReviewingDecision(decision)
     try {
-      const updated = await reviewPluginSubmission(detail.id, decision, trimmedReason || undefined)
+      const updated = await reviewPluginSubmission(detail.id, decision, trimmedReason || undefined, reasonCode)
       setDetail(updated)
       if (decision === 'REJECT') {
         setRejectOpen(false)
         setRejectReason('')
+        setRejectReasonCode('')
       }
       toast({
         title: decision === 'START' ? '已开始审核' : decision === 'APPROVE' ? '插件已批准上架' : '插件已驳回',
@@ -308,6 +383,7 @@ export const PluginList = () => {
       })
       reload()
       void loadVersions(detail.id)
+      void loadStats()
     } catch (err) {
       toast({ title: `${decisionLabel}失败`, description: err instanceof Error ? err.message : undefined, variant: 'destructive' })
       await loadDetail(detail.id)
@@ -317,9 +393,82 @@ export const PluginList = () => {
     }
   }
 
-  const openRejectDialog = () => {
+  const handleBatchReview = async (
+    decision: PluginReviewDecision,
+    reason?: string,
+    reasonCode?: PluginReviewReasonValue,
+  ) => {
+    if (selectedIds.length === 0 || batchRunning) return
+    const trimmedReason = reason?.trim()
+    if (decision === 'APPROVE' && !window.confirm(`确认批量批准所选 ${selectedIds.length} 个插件上架？`)) return
+    if (decision === 'REJECT' && (!trimmedReason || !reasonCode)) {
+      toast({ title: '请填写驳回原因并选择原因分类', variant: 'destructive' })
+      return
+    }
+    setBatchRunning(true)
+    try {
+      const result = await batchReviewPluginSubmissions({
+        ids: selectedIds,
+        decision,
+        reason: trimmedReason || undefined,
+        reasonCode,
+      })
+      const failures = result.failures ?? []
+      if (failures.length > 0) {
+        toast({
+          title: `批量审核完成 ${result.succeeded}/${result.requested}`,
+          description: failures.slice(0, 3).map((item) => `${item.id}：${item.message || '失败'}`).join('；'),
+          variant: 'destructive',
+        })
+      } else {
+        toast({ title: '批量审核完成', description: `成功 ${result.succeeded} 个` })
+      }
+      setSelectedIds([])
+      setRejectOpen(false)
+      setRejectBatch(false)
+      setRejectReason('')
+      setRejectReasonCode('')
+      reload()
+      void loadStats()
+    } catch (err) {
+      toast({ title: '批量审核失败', description: err instanceof Error ? err.message : undefined, variant: 'destructive' })
+    } finally {
+      setBatchRunning(false)
+    }
+  }
+
+  const handleClaim = async (action: 'claim' | 'release') => {
+    if (!detail || claiming) return
+    setClaiming(true)
+    try {
+      const updated = action === 'claim' ? await claimAdminPlugin(detail.id) : await releaseAdminPlugin(detail.id)
+      setDetail(updated)
+      toast({ title: action === 'claim' ? '已认领该候选版本' : '已释放该候选版本' })
+      reload()
+    } catch (err) {
+      toast({
+        title: action === 'claim' ? '认领失败' : '释放失败',
+        description: err instanceof Error ? err.message : undefined,
+        variant: 'destructive',
+      })
+    } finally {
+      setClaiming(false)
+    }
+  }
+
+  const openRejectDialog = (batch = false) => {
     setRejectReason('')
+    setRejectReasonCode('')
+    setRejectBatch(batch)
     setRejectOpen(true)
+  }
+
+  const confirmReject = () => {
+    if (rejectBatch) {
+      void handleBatchReview('REJECT', rejectReason, rejectReasonCode || undefined)
+    } else {
+      void handleReview('REJECT', rejectReason, rejectReasonCode || undefined)
+    }
   }
 
   const emptyText = statusTab === 'PENDING'
@@ -353,9 +502,94 @@ export const PluginList = () => {
     }
   }
 
+  const selectableIds = records
+    .filter((plugin) => {
+      const status = getReviewStatus(plugin)
+      return status === 'PENDING' || status === 'IN_PROGRESS'
+    })
+    .map((plugin) => plugin.id)
+  const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.includes(id))
+  const toggleSelect = (id: string) =>
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((value) => value !== id) : [...prev, id]))
+  const toggleSelectAll = () => setSelectedIds(allSelected ? [] : selectableIds)
+
   return (
     <div>
       <PageHeader title="插件审核" description="审核插件首次提交与版本更新，管理上架状态" />
+
+      {stats && (
+        <div className="mb-4 space-y-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            {[
+              { label: '待审核', value: stats.pending },
+              { label: '审核中', value: stats.inProgress },
+              { label: '已通过', value: stats.approved },
+              { label: '已驳回', value: stats.rejected },
+            ].map((item) => (
+              <div key={item.label} className="rounded-lg border bg-card p-3">
+                <div className="text-xs text-muted-foreground">{item.label}</div>
+                <div className="mt-1 text-xl font-semibold">{formatMetric(item.value)}</div>
+              </div>
+            ))}
+            <div className="rounded-lg border bg-card p-3">
+              <div className="text-xs text-muted-foreground">通过率</div>
+              <div className="mt-1 text-xl font-semibold">
+                {stats.approved + stats.rejected === 0 ? '—' : `${Math.round(stats.approvalRate * 100)}%`}
+              </div>
+            </div>
+            <div className="rounded-lg border bg-card p-3">
+              <div className="text-xs text-muted-foreground">平均时效</div>
+              <div className="mt-1 text-xl font-semibold">
+                {stats.averageReviewHours == null ? '—' : `${stats.averageReviewHours.toFixed(1)}h`}
+              </div>
+            </div>
+          </div>
+          {stats.reasons && stats.reasons.some((item) => item.count > 0) && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted-foreground">驳回原因分布：</span>
+              {stats.reasons
+                .filter((item) => item.count > 0)
+                .map((item) => (
+                  <span
+                    key={getEnumValue(item.reason) || 'UNKNOWN'}
+                    className="rounded border px-2 py-0.5 text-xs text-muted-foreground"
+                  >
+                    {getReasonLabel(item.reason)} · {item.count}
+                  </span>
+                ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {selectedIds.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2">
+          <span className="text-sm">已选 {selectedIds.length} 项</span>
+          <Button size="sm" variant="outline" disabled={batchRunning} onClick={() => setSelectedIds([])}>
+            清空
+          </Button>
+          <div className="ml-auto flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" disabled={batchRunning} onClick={() => void handleBatchReview('START')}>
+              {batchRunning ? <Loader2 className="mr-1.5 size-4 animate-spin" /> : <Play className="mr-1.5 size-4" />}
+              批量开始审核
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-destructive"
+              disabled={batchRunning}
+              onClick={() => openRejectDialog(true)}
+            >
+              <X className="mr-1.5 size-4" />
+              批量驳回
+            </Button>
+            <Button size="sm" disabled={batchRunning} onClick={() => void handleBatchReview('APPROVE')}>
+              <Check className="mr-1.5 size-4" />
+              批量通过
+            </Button>
+          </div>
+        </div>
+      )}
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <Tabs value={statusTab} onValueChange={setStatusTab}>
@@ -396,6 +630,14 @@ export const PluginList = () => {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    checked={allSelected}
+                    disabled={selectableIds.length === 0}
+                    onCheckedChange={toggleSelectAll}
+                    aria-label="全选可审核插件"
+                  />
+                </TableHead>
                 <TableHead>插件</TableHead>
                 <TableHead>提交版本</TableHead>
                 <TableHead>提交类型</TableHead>
@@ -409,14 +651,14 @@ export const PluginList = () => {
             <TableBody>
               {loading && (
                 <TableRow>
-                  <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
+                  <TableCell colSpan={9} className="h-32 text-center text-muted-foreground">
                     <Loader2 className="mx-auto size-5 animate-spin" />
                   </TableCell>
                 </TableRow>
               )}
               {!loading && error && (
                 <TableRow>
-                  <TableCell colSpan={8} className="h-32 text-center">
+                  <TableCell colSpan={9} className="h-32 text-center">
                     <div className="space-y-3">
                       <div className="text-destructive">{error}</div>
                       <Button size="sm" variant="outline" onClick={reload}>重新加载</Button>
@@ -426,12 +668,17 @@ export const PluginList = () => {
               )}
               {!loading && !error && records.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">{emptyText}</TableCell>
+                  <TableCell colSpan={9} className="h-32 text-center text-muted-foreground">{emptyText}</TableCell>
                 </TableRow>
               )}
               {!loading && !error && records.map((plugin) => {
                 const submittedVersion = getSubmittedVersion(plugin)
                 const isUpdate = Boolean(plugin.currentVersion && plugin.candidateVersion)
+                const reviewState = getReviewStatus(plugin)
+                const selectable = reviewState === 'PENDING' || reviewState === 'IN_PROGRESS'
+                const waiting = hoursWaiting(submittedVersion?.updateTime || submittedVersion?.createTime)
+                const overdue =
+                  selectable && waiting !== undefined && waiting > REVIEW_SLA_HOURS
                 return (
                   <TableRow
                     key={plugin.id}
@@ -440,6 +687,14 @@ export const PluginList = () => {
                     onClick={() => openDetail(plugin)}
                     onKeyDown={(event) => event.key === 'Enter' && openDetail(plugin)}
                   >
+                    <TableCell onClick={(event) => event.stopPropagation()}>
+                      <Checkbox
+                        checked={selectedIds.includes(plugin.id)}
+                        disabled={!selectable}
+                        onCheckedChange={() => toggleSelect(plugin.id)}
+                        aria-label={`选择 ${plugin.name}`}
+                      />
+                    </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-3">
                         {plugin.icon ? (
@@ -468,7 +723,17 @@ export const PluginList = () => {
                       )}
                     </TableCell>
                     <TableCell>{getCategoryLabel(plugin.category)}</TableCell>
-                    <TableCell><ReviewStatus plugin={plugin} /></TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <ReviewStatus plugin={plugin} />
+                        {overdue && (
+                          <span className="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
+                            <TriangleAlert className="size-3.5" />
+                            超 {REVIEW_SLA_HOURS}h
+                          </span>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell className="text-right text-muted-foreground">
                       {formatDateTime(submittedVersion?.updateTime || submittedVersion?.createTime || plugin.updateTime)}
                     </TableCell>
@@ -558,12 +823,30 @@ export const PluginList = () => {
                 <div className="flex gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm">
                   <ShieldAlert className="mt-0.5 size-4 shrink-0 text-destructive" />
                   <div className="space-y-1">
-                    <div className="font-medium text-destructive">驳回原因</div>
+                    <div className="font-medium text-destructive">
+                      驳回原因
+                      <span className="ml-2 rounded bg-destructive/10 px-1.5 py-0.5 text-xs">
+                        {getReasonLabel(reviewAudit.reasonCode)}
+                      </span>
+                    </div>
                     <p className="whitespace-pre-wrap text-destructive/90">{reviewAudit.comment}</p>
                     <p className="text-xs text-muted-foreground">
                       审核人：{reviewAudit.reviewer || '-'} · {formatDateTime(reviewAudit.time)}
                     </p>
                   </div>
+                </div>
+              )}
+
+              {(reviewStatus === 'PENDING' || reviewStatus === 'IN_PROGRESS') && (
+                <div className="flex items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-sm">
+                  <UserCheck className="size-4 text-muted-foreground" />
+                  {candidate?.claimedByName ? (
+                    <span>
+                      已由 <span className="font-medium">{candidate.claimedByName}</span> 认领 · {formatDateTime(candidate.claimedTime)}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">尚未认领</span>
+                  )}
                 </div>
               )}
 
@@ -623,6 +906,12 @@ export const PluginList = () => {
                       <span className="text-muted-foreground">审核时间</span>
                       <span>{formatDateTime(reviewAudit.time)}</span>
                     </div>
+                    {reviewAudit.reasonCode && (
+                      <div className="flex justify-between gap-4">
+                        <span className="text-muted-foreground">驳回分类</span>
+                        <span>{getReasonLabel(reviewAudit.reasonCode)}</span>
+                      </div>
+                    )}
                     {reviewAudit.comment && (
                       <div>
                         <div className="mb-1 text-muted-foreground">审核意见</div>
@@ -746,6 +1035,7 @@ export const PluginList = () => {
                           </div>
                           {version.reviewComment && (
                             <p className="mt-2 whitespace-pre-wrap text-xs text-muted-foreground">
+                              {version.reviewReasonCode ? `[${getReasonLabel(version.reviewReasonCode)}] ` : ''}
                               {version.reviewComment}
                             </p>
                           )}
@@ -785,7 +1075,32 @@ export const PluginList = () => {
               )}
 
               <div className="fixed inset-x-0 bottom-0 border-t bg-background/95 p-4 backdrop-blur sm:absolute">
-                <div className="flex justify-end gap-2">
+                <div className="flex flex-wrap justify-end gap-2">
+                  {(reviewStatus === 'PENDING' || reviewStatus === 'IN_PROGRESS') && (
+                    candidate?.claimedByName ? (
+                      <Button
+                        variant="outline"
+                        disabled={!candidate || claiming}
+                        onClick={() => void handleClaim('release')}
+                      >
+                        {claiming
+                          ? <Loader2 className="mr-2 size-4 animate-spin" />
+                          : <UserMinus className="mr-2 size-4" />}
+                        释放认领
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        disabled={!candidate || claiming}
+                        onClick={() => void handleClaim('claim')}
+                      >
+                        {claiming
+                          ? <Loader2 className="mr-2 size-4 animate-spin" />
+                          : <UserPlus className="mr-2 size-4" />}
+                        认领
+                      </Button>
+                    )
+                  )}
                   {reviewStatus === 'PENDING' && (
                     <Button disabled={!candidate || Boolean(reviewingDecision)} onClick={() => handleReview('START')}>
                       {reviewingDecision === 'START'
@@ -800,7 +1115,7 @@ export const PluginList = () => {
                         variant="outline"
                         className="text-destructive"
                         disabled={!candidate || Boolean(reviewingDecision)}
-                        onClick={openRejectDialog}
+                        onClick={() => openRejectDialog(false)}
                       >
                         {reviewingDecision === 'REJECT'
                           ? <Loader2 className="mr-2 size-4 animate-spin" />
@@ -837,38 +1152,70 @@ export const PluginList = () => {
       <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>驳回插件提交</DialogTitle>
+            <DialogTitle>{rejectBatch ? '批量驳回插件提交' : '驳回插件提交'}</DialogTitle>
             <DialogDescription>
-              驳回「{detail?.name}」v{candidate?.version || '-'}。驳回原因会展示给开发者，并用于后续重新提交。
+              {rejectBatch
+                ? `将对所选 ${selectedIds.length} 个插件提交驳回，驳回原因与分类对全部条目生效。`
+                : `驳回「${detail?.name}」v${candidate?.version || '-'}。驳回原因会展示给开发者，并用于后续重新提交。`}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2">
-            <label htmlFor="plugin-reject-reason" className="text-sm font-medium">
-              驳回原因 <span className="text-destructive">*</span>
-            </label>
-            <Textarea
-              id="plugin-reject-reason"
-              value={rejectReason}
-              maxLength={500}
-              rows={4}
-              placeholder="请说明需要修正的问题，例如：产物未通过完整性校验、功能说明与实现不符、缺少必要的权限声明…"
-              onChange={(event) => setRejectReason(event.target.value)}
-            />
-            <div className="text-right text-xs text-muted-foreground">{rejectReason.length}/500</div>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                驳回分类 <span className="text-destructive">*</span>
+              </label>
+              <Select
+                value={rejectReasonCode}
+                onValueChange={(value) => setRejectReasonCode(value as PluginReviewReasonValue)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="请选择驳回分类" />
+                </SelectTrigger>
+                <SelectContent>
+                  {REVIEW_REASON_OPTIONS.map((code) => (
+                    <SelectItem key={code} value={code}>
+                      {REVIEW_REASON_META[code]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="plugin-reject-reason" className="text-sm font-medium">
+                驳回原因 <span className="text-destructive">*</span>
+              </label>
+              <Textarea
+                id="plugin-reject-reason"
+                value={rejectReason}
+                maxLength={500}
+                rows={4}
+                placeholder="请说明需要修正的问题，例如：产物未通过完整性校验、功能说明与实现不符、缺少必要的权限声明…"
+                onChange={(event) => setRejectReason(event.target.value)}
+              />
+              <div className="text-right text-xs text-muted-foreground">{rejectReason.length}/500</div>
+            </div>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setRejectOpen(false)} disabled={Boolean(reviewingDecision)}>
+            <Button
+              variant="outline"
+              onClick={() => setRejectOpen(false)}
+              disabled={rejectBatch ? batchRunning : Boolean(reviewingDecision)}
+            >
               取消
             </Button>
             <Button
               variant="destructive"
-              disabled={!rejectReason.trim() || Boolean(reviewingDecision)}
-              onClick={() => void handleReview('REJECT', rejectReason)}
+              disabled={
+                !rejectReason.trim()
+                || !rejectReasonCode
+                || (rejectBatch ? batchRunning : Boolean(reviewingDecision))
+              }
+              onClick={confirmReject}
             >
-              {reviewingDecision === 'REJECT'
+              {(rejectBatch ? batchRunning : reviewingDecision === 'REJECT')
                 ? <Loader2 className="mr-2 size-4 animate-spin" />
                 : <X className="mr-2 size-4" />}
-              确认驳回
+              {rejectBatch ? '确认批量驳回' : '确认驳回'}
             </Button>
           </DialogFooter>
         </DialogContent>

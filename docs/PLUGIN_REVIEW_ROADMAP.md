@@ -55,29 +55,32 @@
 ### 2.1 第一期（P0，审核提效与闭环）
 
 > 目标：审核员「批得动、追得到」，开发者「收得到、改得明」。
+>
+> 状态：**本轮已落地**（除文末备注的增强项）。对应迁移 `V22__plugin_review_audit.sql`、`V23__plugin_review_reason_and_claim.sql`。
 
-**a. 批量审核**
-- 列表支持多选（仅同状态且均有候选版本的条目），批量通过/批量驳回（驳回原因对所选条目共用）。
-- 接口：`POST /knowledge-wiki/admin/plugin/batch-review`，body `{ ids: number[], decision, reason? }`；服务端逐条走既有状态机，返回成功/失败明细。
-- 点：逐条独立事务，避免一条脏数据回滚整批；返回 `{ succeeded: [], failed: [{id, code, message}] }`。
+**a. 批量审核 ✅**
+- 列表多选（仅 `PENDING/IN_PROGRESS` 可勾选），支持批量开始审核/批量通过/批量驳回（驳回原因与分类对所选条目共用）。
+- 接口：`POST /knowledge-wiki/admin/plugin/batch-review`，body `{ ids: number[], decision, reason?, reasonCode? }`。
+- 实现：`PluginApplication.batchReview` 用 `TransactionTemplate` 逐条独立事务，返回 `{ requested, succeeded, failures: [{ id, message }] }`；前端展示成功数与前三条失败明细。
 
-**b. 审核通知**
-- 审核决定后向开发者发送站内信（复用 `knowledge-message` 批量推送与站内信落库）。
-- 内容：插件名、版本、结论、驳回原因、详情入口。
-- 后续可加邮件/Webhook。
+**b. 审核通知 ✅（站内信，邮件/Webhook 待补）**
+- `PluginReviewNotifier` 在 APPROVE/REJECT 后调用 `IMessageClient.sendInstantMessage` 推送并落库；失败回退 WebSocket 通知，全程 best-effort 不影响审核。
+- 内容：插件名、版本、结论、驳回分类与原因。
+- 备注：各审核员工作量统计、"详情入口深链"、邮件/Webhook 仍为增强项。
 
-**c. 结构化驳回原因**
-- `review_comment` 之外新增 `review_reason_code`（枚举：`ARTIFACT_INVALID`、`INTEGRITY_MISMATCH`、`DESCRIPTION_MISMATCH`、`SECURITY_RISK`、`POLICY_VIOLATION`、`OTHER`），驳回时必选。
-- 收益：原因分布统计、开发者自助定位、审核口径统一。
+**c. 结构化驳回原因 ✅**
+- `wiki_plugin_version.review_reason_code` + 枚举 `PluginReviewReason`（`ARTIFACT_INVALID`、`INTEGRITY_MISMATCH`、`DESCRIPTION_MISMATCH`、`SECURITY_RISK`、`POLICY_VIOLATION`、`OTHER`），驳回时后端强校验。
+- 管理端驳回对话框必选分类，详情/版本历史/开发者「我的提交」均回显分类标签。
 
-**d. 运营指标**
-- 审核时效：`review_time - create_time`（候选提交→决定）均值/P90。
-- 通过率、驳回原因 TOP、各审核员工作量。
-- 接口：`GET /knowledge-wiki/admin/plugin/stats/review`。
+**d. 运营指标 ✅（P90/按审核员待补）**
+- 接口：`GET /knowledge-wiki/admin/plugin/stats/review`，返回队列规模、通过率、平均审核时效与驳回原因分布（全枚举覆盖，便于画图）。
+- 管理端顶部指标卡展示待审核/审核中/已通过/已驳回/通过率/平均时效。
+- 备注：P90 与按审核员维度需按 `reviewer_id` 聚合，后续补充。
 
-**e. 待办与 SLA**
-- 队列按 `IN_PROGRESS` 中滞留时长排序；超过阈值（系统参数可配）在列表与导航上高亮告警。
-- 预留「认领」字段（`claimed_by`），避免多人重复审核同一候选。
+**e. 待办与 SLA ✅（SLA 阈值暂为常量）**
+- `claimed_by/claimed_by_name/claimed_time` + `POST /admin/plugin/{id}/claim`、`/release`（乐观更新：只有首个把 `claimed_by` 从 null 置为本人者成功）。
+- 列表对 `PENDING/IN_PROGRESS` 且等待超过 48h 的候选高亮「超时」；详情展示认领人并提供认领/释放。
+- 备注：SLA 阈值后续改为系统参数 `plugin.review.slaHours`，并支持队列按滞留时长排序。
 
 ### 2.2 第二期（P1，安全审查与治理）
 

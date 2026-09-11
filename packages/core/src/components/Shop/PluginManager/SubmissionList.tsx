@@ -121,6 +121,13 @@ export const SubmissionList = ({
                   <div className="font-medium text-destructive">
                     {t("pluginManager.submissions.rejectionReason")}
                   </div>
+                  {submission.reviewReasonCode && (
+                    <p className="mt-1 text-xs text-destructive/80">
+                      {t(
+                        `pluginManager.submissions.reason.${submission.reviewReasonCode.toLowerCase()}`,
+                      )}
+                    </p>
+                  )}
                   <p className="mt-1 whitespace-pre-wrap text-destructive/90">
                     {submission.reviewComment}
                   </p>

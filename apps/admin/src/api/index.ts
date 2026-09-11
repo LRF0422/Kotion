@@ -174,6 +174,39 @@ export type PluginCategory = 'FEATURE' | 'APP' | 'CONNECTOR'
 export type PluginStatus = 'PENDING' | 'IN_PROGRESS' | 'REJECTED' | 'DONE'
 export type PluginVersionStatus = 'DRAFT' | 'PENDING' | 'ACTIVE' | 'IN_ACTIVE'
 export type PluginReviewDecision = 'START' | 'APPROVE' | 'REJECT'
+export type PluginReviewReasonValue =
+  | 'ARTIFACT_INVALID'
+  | 'INTEGRITY_MISMATCH'
+  | 'DESCRIPTION_MISMATCH'
+  | 'SECURITY_RISK'
+  | 'POLICY_VIOLATION'
+  | 'OTHER'
+
+export interface PluginBatchReviewFailure {
+  id: string
+  message?: string
+}
+
+export interface PluginBatchReviewResult {
+  requested: number
+  succeeded: number
+  failures: PluginBatchReviewFailure[]
+}
+
+export interface PluginReviewReasonCount {
+  reason?: { value?: string; desc?: string } | string
+  count: number
+}
+
+export interface PluginReviewStats {
+  pending: number
+  inProgress: number
+  approved: number
+  rejected: number
+  approvalRate: number
+  averageReviewHours?: number | null
+  reasons?: PluginReviewReasonCount[]
+}
 
 export interface PluginVersionDescription {
   label?: string
@@ -190,9 +223,13 @@ export interface PluginVersionVO {
   integrity?: string
   versionDescription?: PluginVersionDescription[]
   reviewComment?: string
+  reviewReasonCode?: PluginReviewReasonValue | { value?: string; desc?: string }
   reviewerId?: string
   reviewerName?: string
   reviewTime?: string
+  claimedBy?: string
+  claimedByName?: string
+  claimedTime?: string
   createTime?: string
   updateTime?: string
 }
@@ -243,12 +280,33 @@ export const getAdminPluginDetail = (id: string) =>
 export const getAdminPluginVersions = (id: string) =>
   get<PluginVersionVO[]>(`/knowledge-wiki/admin/plugin/${id}/versions`)
 
-/** 提交审核决定。REJECT 时 reason 为必填的驳回原因。 */
+/** 提交审核决定。REJECT 时 reason 与 reasonCode 均必填。 */
 export const reviewPluginSubmission = (
   id: string,
   decision: PluginReviewDecision,
   reason?: string,
-) => post<PluginVO>(`/knowledge-wiki/admin/plugin/${id}/review`, { decision, reason })
+  reasonCode?: PluginReviewReasonValue,
+) => post<PluginVO>(`/knowledge-wiki/admin/plugin/${id}/review`, { decision, reason, reasonCode })
+
+/** 批量审核，逐条独立事务，返回成功数与失败明细。 */
+export const batchReviewPluginSubmissions = (payload: {
+  ids: string[]
+  decision: PluginReviewDecision
+  reason?: string
+  reasonCode?: PluginReviewReasonValue
+}) => post<PluginBatchReviewResult>('/knowledge-wiki/admin/plugin/batch-review', payload)
+
+/** 认领当前候选版本。 */
+export const claimAdminPlugin = (id: string) =>
+  post<PluginVO>(`/knowledge-wiki/admin/plugin/${id}/claim`)
+
+/** 释放当前候选版本的认领。 */
+export const releaseAdminPlugin = (id: string) =>
+  post<PluginVO>(`/knowledge-wiki/admin/plugin/${id}/release`)
+
+/** 审核运营指标。 */
+export const getAdminPluginReviewStats = () =>
+  get<PluginReviewStats>('/knowledge-wiki/admin/plugin/stats/review')
 
 // ---------- 日志（knowledge-log，current + size） ----------
 

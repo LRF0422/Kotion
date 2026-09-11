@@ -33,6 +33,8 @@ export interface PluginSubmissionRecord extends Partial<PluginSubmissionValues> 
   status?: "PENDING" | "IN_PROGRESS" | "REJECTED" | "DONE";
   /** Reviewer comment; when status is REJECTED this is the mandatory rejection reason. */
   reviewComment?: string;
+  /** Structured rejection category, e.g. INTEGRITY_MISMATCH. */
+  reviewReasonCode?: string;
   reviewerName?: string;
   reviewTime?: string;
 }
