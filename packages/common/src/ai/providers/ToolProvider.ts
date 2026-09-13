@@ -166,21 +166,17 @@ export class ToolProvider {
     }
 
     /**
-     * Swap the editor reference (e.g. on editor recreation) and rebuild
-     * built-in tools. Plugin tools are preserved as-is.
+     * Swap the editor reference and rebuild the built-in tools against it.
+     *
+     * Plugin tools are deliberately NOT carried over: their executors come from
+     * `pluginManager.resolveTools(editor)` and close over that editor, so
+     * preserving them would silently target the previous editor. The caller
+     * (`useCapabilityProviders.rebindEditor`) re-resolves and re-registers them
+     * for the new editor right after this returns.
      */
     updateEditor(editor: any): void {
         this.editor = editor
-        // Rebuild built-in tools against the new editor instance.
-        const pluginEntries = Array.from(this.tools.entries()).filter(([name]) => {
-            const meta = this.toolMetadata.get(name)
-            return meta?.source === 'plugin'
-        })
         this.instantiateBuiltinTools()
-        // Restore plugin tools captured before rebuild.
-        for (const [name, tool] of pluginEntries) {
-            this.tools.set(name, tool)
-        }
         this.incrementVersion()
     }
 

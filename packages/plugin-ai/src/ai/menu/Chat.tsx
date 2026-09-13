@@ -34,8 +34,6 @@ import type {
     ToolCallRecord,
     SessionPageBinding,
     SessionPageBindingPage,
-    ToolsRecord,
-    ToolProvider,
 } from "@kn/common"
 
 import { PlanApprovalCard } from "@kn/ui"
@@ -60,6 +58,9 @@ import { useModelPreference } from "../model-preference"
 
 const MODE_STORAGE_KEY = 'kn_chat_mode'
 const MODEL_PARAMS_STORAGE_KEY = 'kn_chat_model_params'
+
+/** Max off-screen edit targets held at once (matches the off-screen engine's session cap). */
+const MAX_OFFSCREEN_TARGETS = 3
 
 /** Parse persisted model-param JSON, ignoring malformed or out-of-range values. */
 const readModelParams = (): ChatModelParams => {
@@ -233,14 +234,6 @@ export const ExpandableChatDemo: React.FC<{
     offscreenHandleRef.current = offscreenHandle
     const [acquireAttempt, setAcquireAttempt] = useState(0)
 
-    // The live tool catalog, read at execution time so a tool that switches the
-    // edit target (editPage) takes effect for every later call in the same
-    // backend tool batch — the executor is not rebuilt mid-batch.
-    const toolProviderRef = useRef<ToolProvider | null>(null)
-    const toolsRef = useRef<ToolsRecord>({})
-
-    /** Max off-screen edit targets held at once (matches the engine's session cap). */
-    const MAX_OFFSCREEN_TARGETS = 3
     const offscreenTargetsRef = useRef<Map<string, OffscreenEditorHandle>>(new Map())
 
     const releaseTarget = useCallback((pageId: string) => {
@@ -260,7 +253,12 @@ export const ExpandableChatDemo: React.FC<{
     const activateOffscreenTarget = useCallback(async (page: ChatTargetPage): Promise<OffscreenEditorHandle> => {
         const pageId = String(page.pageId)
         const cached = offscreenTargetsRef.current.get(pageId)
-        if (cached) return cached
+        if (cached) {
+            // Refresh recency so eviction drops the least-recently *used* target.
+            offscreenTargetsRef.current.delete(pageId)
+            offscreenTargetsRef.current.set(pageId, cached)
+            return cached
+        }
         const bridge = getOffscreenEditorBridge()
         if (!bridge) throw new Error('离屏编辑器不可用')
         // Never exceed the engine's session cap: drop the oldest other target
@@ -380,35 +378,6 @@ export const ExpandableChatDemo: React.FC<{
         return { record, handle }
     }, [activateOffscreenTarget])
 
-    useEffect(() => {
-        const binding: SessionPageBinding = {
-            bindPage: (page) => { bindTargetPage(page) },
-            getBoundPage: () => (boundPageRef.current ? { ...boundPageRef.current } : null),
-            openPageWindow: (pageId) => setEditWindowPageId(String(pageId)),
-            editPage: async (page) => {
-                const { record, handle } = await switchEditTarget(page)
-                const targetEditor = (handle?.editor as Editor) ?? editor
-                // Rebind the live tool set to the target editor synchronously so
-                // document tools later in the same backend batch act on it.
-                toolProviderRef.current?.updateEditor(targetEditor)
-                toolsRef.current = toolProviderRef.current?.getAllTools() ?? toolsRef.current
-                offscreenHandleRef.current = handle
-                if (handle) {
-                    setOffscreenHandle(handle)
-                    setTargetStatus('ready')
-                } else {
-                    setOffscreenHandle(null)
-                    setTargetStatus('current')
-                }
-                bindTargetPage(record)
-                return { ...record, editor: targetEditor }
-            },
-            getEditor: () => (offscreenHandleRef.current?.editor as Editor) ?? editor,
-        }
-        setSessionPageBinding(binding)
-        return () => clearSessionPageBinding(binding)
-    }, [bindTargetPage, switchEditTarget, editor])
-
     // ─── Block reference navigation ─────────────────────────────
     const [pendingReveal, setPendingReveal] = useState<{ pageId: string; blockId: string } | null>(null)
 
@@ -467,21 +436,48 @@ export const ExpandableChatDemo: React.FC<{
 
     // ─── AgentCore driver ─────────────────────────────────────────
     const isAskMode = chatMode === 'ask'
-    const { allTools, getCatalog, toolProvider } = useCapabilityProviders(agentEditor, {
+    const { getCatalog, rebindEditor, resolveTools } = useCapabilityProviders(agentEditor, {
         onUserChoiceRequest: handleUserChoiceRequest,
     })
-    // Keep the refs the editPage bridge reads in sync with the latest provider
-    // and catalog. toolsRef is what tools resolve at execution time.
-    toolProviderRef.current = toolProvider
-    toolsRef.current = allTools
     const catalog = useMemo(() => getCatalog(), [getCatalog])
     // tools[] carries the always-on schemas; skill-owned tools ride inside
     // skills[] and stay deferred until the model calls one.
     const { tools: toolSpecs, skills } = useMemo(() => buildAgentRunInputs(catalog), [catalog])
-    // Stable resolver: it must not change identity when the target editor
-    // changes, otherwise the executor would be recreated mid-batch and the
-    // editPage switch would not apply to later calls in the same batch.
-    const resolveTools = useCallback(() => toolsRef.current, [])
+
+    // ─── Session page binding bridge ─────────────────────────────
+    // Registered after the capability hook so editPage can rebind the live tool
+    // set synchronously. Page tools (createPage / openPage / editPage) live in
+    // core and cannot reach this session's state; they call through this registry
+    // so a page the agent targets becomes the conversation's off-screen edit
+    // target instead of navigating away.
+    useEffect(() => {
+        const binding: SessionPageBinding = {
+            bindPage: (page) => { bindTargetPage(page) },
+            getBoundPage: () => (boundPageRef.current ? { ...boundPageRef.current } : null),
+            openPageWindow: (pageId) => setEditWindowPageId(String(pageId)),
+            editPage: async (page) => {
+                const { record, handle } = await switchEditTarget(page)
+                const targetEditor = (handle?.editor as Editor) ?? editor
+                // Rebind built-in AND plugin tools to the target editor in one
+                // synchronous step so document tools later in the same backend
+                // batch already act on it — no stale-editor window.
+                rebindEditor(targetEditor)
+                offscreenHandleRef.current = handle
+                if (handle) {
+                    setOffscreenHandle(handle)
+                    setTargetStatus('ready')
+                } else {
+                    setOffscreenHandle(null)
+                    setTargetStatus('current')
+                }
+                bindTargetPage(record)
+                return { ...record, editor: targetEditor }
+            },
+            getEditor: () => (offscreenHandleRef.current?.editor as Editor) ?? editor,
+        }
+        setSessionPageBinding(binding)
+        return () => clearSessionPageBinding(binding)
+    }, [bindTargetPage, switchEditTarget, rebindEditor, editor])
     const liveCurrentPageId = getPageNavigationBridge()?.getCurrentPage()?.pageId
     const targetToolsReady = !targetPageId
         ? !!currentPage?.pageId

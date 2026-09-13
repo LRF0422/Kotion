@@ -75,6 +75,7 @@ const placementCases: Array<[Parameters<typeof resolveCreatePlacement>[0], strin
     [{ asSubPage: true, currentPageId: 'cur' }, 'cur', 'legacy asSubPage'],
     [{}, null, 'default is root'],
     [{ position: 'root', relativeTo: 'r' }, null, 'explicit root ignores relativeTo'],
+    [{ position: 'root', asSubPage: true, currentPageId: 'cur' }, null, 'explicit root beats legacy asSubPage'],
     [{ parentId: undefined, asSubPage: true, currentPageId: null }, null, 'no current page falls back to root'],
 ]
 for (const [input, expected, label] of placementCases) {

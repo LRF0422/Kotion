@@ -135,6 +135,11 @@ export function resolveCreatePlacement(input: CreatePlacementInput): CreatePlace
         }
     }
 
+    // An explicit root request must win over the legacy asSubPage shorthand.
+    if (input.position === 'root') {
+        return { parentId: null, description: '创建在空间根层级' }
+    }
+
     if (relativeTo && input.position === 'sibling') {
         const parentId = toPageId(input.relativeParentId)
         return {

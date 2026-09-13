@@ -6,7 +6,7 @@ import {
     getSessionPageBinding,
     resolveService,
 } from "@kn/common"
-import { discoverBlocks, findBlockByText } from "@kn/common"
+import { discoverBlocks, findBlockByText, runWithAITransactionMeta } from "@kn/common"
 import {
     flattenPageTree,
     formatPageTree,
@@ -26,16 +26,8 @@ interface ActivePageContext {
 }
 
 const resolveActivePage = (): ActivePageContext => {
-    const bound = getSessionPageBinding()?.getBoundPage()
-    if (bound?.pageId) {
-        return {
-            pageId: toPageId(bound.pageId) ?? undefined,
-            spaceId: bound.spaceId,
-            title: bound.title,
-        }
-    }
     const current = getPageNavigationBridge()?.getCurrentPage()
-    return {
+    const openPage: ActivePageContext = {
         pageId: current?.pageId === undefined ? undefined : String(current.pageId),
         spaceId: current?.spaceId === undefined ? undefined : String(current.spaceId),
         title: current?.title,
@@ -43,18 +35,31 @@ const resolveActivePage = (): ActivePageContext => {
             ? undefined
             : String(current.parentId),
     }
+    const bound = getSessionPageBinding()?.getBoundPage()
+    if (bound?.pageId) {
+        return {
+            pageId: toPageId(bound.pageId) ?? openPage.pageId,
+            // The edit target may be built from a partial record (e.g. a
+            // just-created page without a space): fall back to the open page's
+            // space so tree operations still resolve the right space.
+            spaceId: bound.spaceId ?? openPage.spaceId,
+            title: bound.title ?? openPage.title,
+            parentId: openPage.parentId,
+        }
+    }
+    return openPage
 }
 
 const readMetadata = async (pageId: string) =>
     resolveService('spacePageService').pages.getPageMetadata(pageId)
 
 /** Insert a [[page]] link into a specific editor instance. */
-const insertPageLinkInto = (
+const insertPageLinkInto = async (
     editorInstance: Editor | null | undefined,
     pageId: string,
     title: string,
     nearText?: string,
-): { success: boolean; insertPos?: number; anchor?: string; error?: string } => {
+): Promise<{ success: boolean; insertPos?: number; anchor?: string; error?: string }> => {
     if (!editorInstance) return { success: false, error: '没有可用的编辑器' }
     if (!editorInstance.schema.nodes.pageLinkNode) {
         return { success: false, error: '当前编辑器不支持页面链接（pageLinkNode 扩展未加载）' }
@@ -69,12 +74,16 @@ const insertPageLinkInto = (
         anchor = `"${found.text}" 所在块的末尾`
     }
     // setPageLink is declared by the block-reference plugin, which core does not
-    // depend on — invoke it dynamically.
-    const ok = (editorInstance.chain().setTextSelection(insertPos) as any)
-        .setPageLink({ pageId: String(pageId), title })
-        .scrollIntoView()
-        .run()
-    return ok ? { success: true, insertPos, anchor } : { success: false, error: '插入页面链接失败' }
+    // depend on — invoke it dynamically. Tag the transaction as AI-origin on the
+    // *target* editor: the tool-level wrapper patches only the editor that was
+    // active when the tool was built, which is wrong for cross-page inserts.
+    return runWithAITransactionMeta(editorInstance, () => {
+        const ok = (editorInstance.chain().setTextSelection(insertPos) as any)
+            .setPageLink({ pageId: String(pageId), title })
+            .scrollIntoView()
+            .run()
+        return ok ? { success: true, insertPos, anchor } : { success: false, error: '插入页面链接失败' }
+    })
 }
 
 /**
@@ -265,7 +274,7 @@ export const createPageTools = (editor: Editor): ToolsRecord => ({
                 if (linkInDocument && anchorPageId) {
                     const anchorEditor = await resolveEditorForPage(editor, anchorPageId, active.pageId)
                     if (anchorEditor.editor) {
-                        const result = insertPageLinkInto(anchorEditor.editor, created.pageId, created.title)
+                        const result = await insertPageLinkInto(anchorEditor.editor, created.pageId, created.title)
                         linked = result.success
                         linkAnchor = result.anchor
                         linkError = result.error
@@ -475,7 +484,7 @@ export const createPageTools = (editor: Editor): ToolsRecord => ({
             if (!resolved.editor) {
                 return { error: resolved.error ?? '没有可用的编辑器' }
             }
-            const result = insertPageLinkInto(resolved.editor, target, title, nearText)
+            const result = await insertPageLinkInto(resolved.editor, target, title, nearText)
             if (!result.success) return { error: result.error }
             return {
                 success: true,

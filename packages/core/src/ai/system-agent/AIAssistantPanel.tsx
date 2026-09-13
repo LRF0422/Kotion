@@ -113,11 +113,10 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
     const messagesEndRef = useRef<HTMLDivElement>(null)
 
     // 编辑器工具目录 + 技能片段（保留的供应商层）
-    const { allTools, getCatalog } = useCapabilityProviders(editor ?? null)
+    const { getCatalog, resolveTools } = useCapabilityProviders(editor ?? null)
     const catalog = useMemo(() => getCatalog(), [getCatalog])
     // tools[] 常驻；技能自带的工具随 skills[] 下发，首次调用前不展开参数结构。
     const { tools: toolSpecs, skills } = useMemo(() => buildAgentRunInputs(catalog), [catalog])
-    const resolveTools = useCallback(() => allTools, [allTools])
     const currentPage = getPageNavigationBridge()?.getCurrentPage()
 
     const agent = useEditorAgent({
