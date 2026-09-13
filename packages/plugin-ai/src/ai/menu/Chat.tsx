@@ -20,7 +20,6 @@ import {
     revealBlockById,
     PageEditWindow,
     event,
-    useActiveEditor,
     useTranslation,
     DOCK_PANEL_RUNNING,
     EDITOR_AGENT_PROMPT,
@@ -44,7 +43,7 @@ import {
 } from "./chat-types"
 import type { BlockReference, Message } from "./chat-types"
 import { getHistoryForAI } from "./chat-persistence"
-import type { ChatSessionMeta, ChatTargetPage } from "./chat-sessions"
+import type { ChatTargetPage } from "./chat-sessions"
 import { useChatSessions } from "./useChatSessions"
 import { MessageBubble } from "./MessageBubble"
 import { ErrorDisplay } from "./ErrorDisplay"
@@ -117,14 +116,6 @@ const selectFinalAnswer = (
     return answer?.text ?? ''
 }
 
-/**
- * The page a chat conversation belongs to. The page it was created/used on
- * (boundPage) wins over an off-screen edit target (targetPage) so a chat that
- * edits another page still follows its home page.
- */
-const sessionPageId = (session?: ChatSessionMeta): string | undefined =>
-    session?.boundPage?.pageId ?? session?.targetPage?.pageId
-
 // ─── Chat ──────────────────────────────────────────────────────────
 
 /**
@@ -138,7 +129,11 @@ const sessionPageId = (session?: ChatSessionMeta): string | undefined =>
  * own the frame; `onClose` is what that host's close affordance should do.
  */
 export const ExpandableChatDemo: React.FC<{
-    editor: Editor
+    /**
+     * Active editor to bind document tools to. Optional: the chat stays mounted
+     * (and any in-flight run keeps going) while no page editor is published.
+     */
+    editor?: Editor
     embedded?: boolean
     onClose?: () => void
 }> = ({ editor, embedded, onClose }) => {
@@ -224,8 +219,6 @@ export const ExpandableChatDemo: React.FC<{
         clearActiveMessages,
         targetPage,
         setTargetPage,
-        boundPage,
-        setBoundPage,
     } = useChatSessions()
 
     // ─── Off-screen target editor (@-page binding) ──────────────
@@ -276,6 +269,20 @@ export const ExpandableChatDemo: React.FC<{
     const targetPageRef = useRef<ChatTargetPage | undefined>(targetPage)
     targetPageRef.current = targetPage
     const targetPageId = targetPage?.pageId
+
+    // Run-scoped edit target: a turn freezes the page it edits. While the run
+    // is active, browsing other pages must not redirect its document tools. The
+    // pin is expressed through targetPage (so the existing off-screen machinery
+    // keeps an editor on it) and released at the terminal phase, unless the
+    // target changed meanwhile (user pick / agent editPage).
+    const autoPinnedPageIdRef = useRef<string | null>(null)
+    const releaseRunTargetPin = useCallback(() => {
+        const pinned = autoPinnedPageIdRef.current
+        if (!pinned) return
+        autoPinnedPageIdRef.current = null
+        if (targetPageRef.current?.pageId === pinned) setTargetPage(null)
+    }, [setTargetPage])
+
     useEffect(() => {
         const requested = targetPageRef.current
         if (!targetPageId || !requested) {
@@ -361,6 +368,7 @@ export const ExpandableChatDemo: React.FC<{
         }
         // Update synchronously so a tool later in the same batch already sees it.
         boundPageRef.current = record
+        targetPageRef.current = record
         setTargetPage(record)
         return record
     }, [setTargetPage])
@@ -384,7 +392,7 @@ export const ExpandableChatDemo: React.FC<{
 
     const handleRevealReference = useCallback((ref: BlockReference) => {
         if (ref.found === false) return
-        if (revealBlockById(editor, ref.blockId)) return
+        if (editor && revealBlockById(editor, ref.blockId)) return
         if (targetPage) {
             const currentPageId = getPageNavigationBridge()?.getCurrentPage()?.pageId
             if (currentPageId !== undefined && String(currentPageId) === targetPage.pageId) return
@@ -399,7 +407,7 @@ export const ExpandableChatDemo: React.FC<{
         const timer = setInterval(() => {
             const currentPageId = getPageNavigationBridge()?.getCurrentPage()?.pageId
             const arrived = currentPageId !== undefined && String(currentPageId) === pendingReveal.pageId
-            if (arrived && revealBlockById(editor, pendingReveal.blockId)) {
+            if (arrived && editor && revealBlockById(editor, pendingReveal.blockId)) {
                 clearInterval(timer)
                 setPendingReveal(null)
                 return
@@ -413,7 +421,7 @@ export const ExpandableChatDemo: React.FC<{
     }, [pendingReveal, editor])
 
     const agentEditor = (offscreenHandle?.editor as Editor) ?? editor
-    const agentEditorRef = useRef<Editor>(editor)
+    const agentEditorRef = useRef<Editor | undefined>(editor)
     agentEditorRef.current = agentEditor
 
     // ─── Change tracking ──────────────────────────────────────────
@@ -492,7 +500,9 @@ export const ExpandableChatDemo: React.FC<{
         // Editor rules the backend cannot import; appended to its base prompt.
         systemPrompt: isAskMode ? undefined : EDITOR_AGENT_PROMPT,
         resolveTools,
-        autoExecuteTools: targetToolsReady,
+        // A page switch transiently unbinds the editor; defer a pending tool
+        // batch until the new editor is published instead of failing it.
+        autoExecuteTools: targetToolsReady && !!agentEditor,
         spaceId: targetPage?.spaceId ?? currentPage?.spaceId,
         pageId: targetPage?.pageId ?? currentPage?.pageId,
     })
@@ -556,6 +566,7 @@ export const ExpandableChatDemo: React.FC<{
         if (lastPhaseRef.current === phase) return
         lastPhaseRef.current = phase
         if (phase === 'completed' || phase === 'failed' || phase === 'cancelled') {
+            releaseRunTargetPin()
             if (abandoningRef.current) {
                 agent.reset()
                 return
@@ -594,10 +605,13 @@ export const ExpandableChatDemo: React.FC<{
 
     const abandonAgent = useCallback(async () => {
         abandoningRef.current = true
+        // Release before switching sessions so the pin is cleared on the
+        // session that owns it, not the one we are about to activate.
+        releaseRunTargetPin()
         const cancelled = await agent.cancel().catch(() => false)
         if (cancelled) agent.reset()
         abandoningRef.current = false
-    }, [agent])
+    }, [agent, releaseRunTargetPin])
 
     // ─── Submit ───────────────────────────────────────────────────
     const submitMessage = useCallback(async (messageText: string) => {
@@ -614,8 +628,19 @@ export const ExpandableChatDemo: React.FC<{
         const currentMessages = [...messages, userMessage]
         const history = getHistoryForAI(currentMessages).slice(0, -1)
 
-        const prompt = targetPage
-            ? t('ai.chat.boundPagePrefix', { title: targetPage.title }) + '\n' + messageText
+        // Freeze the page this turn edits. Navigation during the run then only
+        // moves the viewport; the agent keeps editing the same page (through an
+        // off-screen editor once it is no longer the visible one).
+        const runTarget = targetPage ?? (currentPage?.pageId
+            ? { pageId: currentPage.pageId, title: currentPage.title, spaceId: currentPage.spaceId }
+            : undefined)
+        if (!targetPage && runTarget) {
+            autoPinnedPageIdRef.current = runTarget.pageId
+            setTargetPage(runTarget)
+        }
+
+        const prompt = runTarget
+            ? t('ai.chat.boundPagePrefix', { title: runTarget.title }) + '\n' + messageText
             : messageText
 
         const agentMessages: AgentChatMessage[] = [
@@ -634,8 +659,8 @@ export const ExpandableChatDemo: React.FC<{
             setError(classifyError(err))
         }
     }, [
-        agent, messages, generateMessageId, targetPage, selectedModel, modelParams,
-        setMessages, t,
+        agent, messages, generateMessageId, targetPage, currentPage, setTargetPage,
+        selectedModel, modelParams, setMessages, t,
     ])
 
     const handleSend = useCallback(() => {
@@ -693,76 +718,12 @@ export const ExpandableChatDemo: React.FC<{
         deleteSession(id)
     }, [activeSessionId, abandonAgent, deleteSession])
 
-    // ─── Page ↔ session binding ────────────────────────────────
-    // Each conversation belongs to the page it is used on. Switching pages
-    // surfaces that page's most recent conversation; a page with no history
-    // adopts the current (still empty, unbound) chat or starts a fresh one, so
-    // browsing never spawns empty chats and chatting never lands in another
-    // page's thread.
-    const { pageId: activePageId, spaceId: activeSpaceId } = useActiveEditor()
-    const followedPageRef = useRef<string | null>(null)
-    const messagesRef = useRef(messages)
-    messagesRef.current = messages
-    const currentPageRef = useRef<ChatTargetPage | undefined>(currentPage)
-    currentPageRef.current = currentPage
-
-    /** The open page as a binding record, refreshing from the navigation bridge. */
-    const resolvePageBinding = useCallback((pageId: string): ChatTargetPage => {
-        const info = getPageNavigationBridge()?.getCurrentPage()
-        if (info?.pageId !== undefined && String(info.pageId) === pageId) {
-            return { pageId, title: info.title || '', spaceId: info.spaceId ?? activeSpaceId }
-        }
-        const known = currentPageRef.current
-        if (known?.pageId === pageId) return known
-        return { pageId, title: '', spaceId: known?.spaceId ?? activeSpaceId }
-    }, [activeSpaceId])
-
-    useEffect(() => {
-        // No page in view — forget the last followed page so reopening it
-        // later still counts as a switch.
-        if (!activePageId) {
-            followedPageRef.current = null
-            return
-        }
-        // Never switch mid-run (it would cancel the stream); when the run
-        // settles this effect re-runs and performs the pending switch.
-        if (isActive) return
-        if (followedPageRef.current === activePageId) return
-        followedPageRef.current = activePageId
-
-        // Latest conversation bound to the incoming page.
-        const match = sessions
-            .filter(s => sessionPageId(s) === activePageId)
-            .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0]
-        if (match) {
-            if (match.id !== activeSessionId) void handleSwitchSession(match.id)
-            return
-        }
-
-        // No history for this page yet. A chat already committed to another
-        // page gets a sibling conversation; an empty or unbound chat adopts
-        // this page instead, so browsing never spawns empty chats.
-        const current = sessions.find(s => s.id === activeSessionId)
-        const currentPageId = sessionPageId(current)
-        const committedElsewhere = messagesRef.current.length > 0
-            && !!currentPageId && currentPageId !== activePageId
-        if (committedElsewhere) {
-            createSession(resolvePageBinding(activePageId))
-        } else {
-            setBoundPage(resolvePageBinding(activePageId))
-        }
-    }, [
-        activePageId, sessions, activeSessionId, isActive, handleSwitchSession,
-        createSession, setBoundPage, resolvePageBinding,
-    ])
-
-    // A conversation that has real content adopts the page it is used on —
-    // including chats that edit a different page off-screen, whose edit target
-    // must not change the page the conversation itself belongs to.
-    useEffect(() => {
-        if (messages.length === 0 || boundPage || !activePageId) return
-        setBoundPage(resolvePageBinding(activePageId))
-    }, [messages.length, boundPage, activePageId, setBoundPage, resolvePageBinding])
+    // ─── Page-independent conversation ─────────────────────────
+    // The agent is not bound to the open page. Switching pages keeps the
+    // active conversation (and any run it owns) untouched instead of swapping
+    // to a page-owned thread, so navigation can never cancel or strand
+    // in-flight work. The @-mention target (targetPage) remains the only
+    // explicit page binding the user can set.
 
     // ─── Derived UI flags ─────────────────────────────────────────
     const isEmpty = messages.length === 0 && !isActive

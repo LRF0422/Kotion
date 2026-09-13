@@ -1,5 +1,5 @@
 import React from "react"
-import { DockPanelConfig, DockPanelProps, useTranslation } from "@kn/common"
+import { DockPanelConfig, DockPanelProps } from "@kn/common"
 import { Editor } from "@kn/editor"
 import { ExpandableChatDemo } from "../ai/menu/Chat"
 
@@ -20,22 +20,14 @@ const AgentSparkleIcon: React.FC<{ className?: string }> = ({ className }) => (
 /**
  * Chat hosted in the side dock.
  *
- * Every agent tool binds to the editor handed to `ExpandableChatDemo`, so the
- * chat only mounts once a document is open; without one there is nothing for
- * the agent to edit and the hook has no editor to bind.
+ * The chat (and any in-flight agent run) stays mounted even when the workspace
+ * has no active editor: the agent is no longer bound to a page, so navigating
+ * between pages must not tear a running turn down. While no editor is
+ * published, document tools fail closed; the moment a new editor appears the
+ * live tool map is rebound to it and the same run keeps going.
  */
 const ChatDockPanel: React.FC<DockPanelProps> = ({ editor, close }) => {
-    const { t } = useTranslation()
-
-    if (!editor) {
-        return (
-            <div className="flex h-full items-center justify-center px-6 text-center text-xs text-muted-foreground">
-                {t("dock.agentNoEditor", "Open a page to chat with the agent")}
-            </div>
-        )
-    }
-
-    return <ExpandableChatDemo editor={editor as Editor} embedded onClose={close} />
+    return <ExpandableChatDemo editor={editor as Editor | undefined} embedded onClose={close} />
 }
 
 /**

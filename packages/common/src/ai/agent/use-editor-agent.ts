@@ -962,13 +962,10 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
                 }
                 const view = await client.getRun(saved.runId)
                 if (!mountedRef.current || requestGeneration !== generationRef.current || !view) return false
-                if ((view.pageId ?? null) !== (pageId ?? null)
-                    || (view.spaceId ?? null) !== (spaceId ?? null)) {
-                    throw new AgentControlError(
-                        'RUN_CONTEXT_MISMATCH',
-                        '保存的 Agent 任务绑定了不同的页面，已阻止自动执行工具'
-                    )
-                }
+                // The run is bound to its conversation, not to the page it was
+                // started from: re-attaching on a different page is expected
+                // (the agent survives navigation), so the old page-context
+                // guard would wrongly strand a resumable run.
                 if (view.status === 'COMPLETED' || view.status === 'FAILED' || view.status === 'CANCELLED') {
                     lock.release(acquiredClaim)
                     acquiredClaim = null
@@ -1009,7 +1006,7 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
                 return false
             }
         },
-        [client, conversationId, lock, pageId, scheduleAttachRetry, spaceId, store, startStream]
+        [client, conversationId, lock, scheduleAttachRetry, store, startStream]
     )
     attachRef.current = attach
 
