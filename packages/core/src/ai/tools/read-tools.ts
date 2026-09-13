@@ -16,7 +16,7 @@ import {
  */
 export const createReadTools = (editor: Editor): ToolsRecord => ({
     getDocumentStructure: {
-        description: '获取文档结构概览,包括大小、标题、块等信息。处理大文档时应该首先调用此工具',
+        description: '获取文档结构概览,包括大小、标题、每个块的 blockId 与文本预览 textPreview。通常据此即可定位与判断内容,无需逐块读取',
         inputSchema: z.object({}),
         execute: async () => {
             const structure = extractDocumentStructure(editor)
@@ -30,7 +30,7 @@ export const createReadTools = (editor: Editor): ToolsRecord => ({
     },
 
     readChunk: {
-        description: `分块读取文档内容。每次最多读取 ${MAX_CHUNK_SIZE} 字符或 ${MAX_NODES_PER_READ} 个节点`,
+        description: `按字符范围读取文档内容。建议一次读取 1000-${MAX_CHUNK_SIZE} 字符（${MAX_NODES_PER_READ} 个节点以内）；不要按单块的小尺寸反复小块读取，那会产生大量重复往返并拖慢任务`,
         inputSchema: z.object({
             from: z.number().describe("起始位置"),
             chunkSize: z.number().optional().describe(`读取的字符数,最大 ${MAX_CHUNK_SIZE}`),

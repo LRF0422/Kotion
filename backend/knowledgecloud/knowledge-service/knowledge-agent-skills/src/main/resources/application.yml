@@ -22,9 +22,12 @@ agent:
   context:
     max-context-tokens: 60000
     compaction-threshold: 0.75
-    keep-recent-messages: 8
-    tool-result-max-chars: 8000
-    evict-tool-results-after-steps: 3
+    # Keep more of the window verbatim: the editor agent reads documents in
+    # several chunks, and evicting read results after only 3 steps made the
+    # model lose what it had just read and re-read it in a loop.
+    keep-recent-messages: 16
+    tool-result-max-chars: 12000
+    evict-tool-results-after-steps: 10
     # Optional cheaper model for L2 summarization; empty = follow the run model.
     compaction-model:
     summary-max-tokens: 1024

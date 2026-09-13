@@ -147,6 +147,10 @@ export function usePageSession(options: UsePageSessionOptions): UsePageSessionRe
   // one: the identical answer arrives before the very first claim has landed,
   // and acting on that would eject every client as it opens the page.
   const wasCollaboratorRef = useRef(false)
+  // Whether the live host was the same user (another tab, or the floating /
+  // off-screen editor for the same page). Such a host going away is a release,
+  // not an end: this client must re-claim instead of latching "session ended".
+  const lastHostSelfRef = useRef(false)
   // Guards against two claims racing after a remount or a fast reclaim.
   const claimingRef = useRef(false)
   const liveRef = useRef(true)
@@ -162,6 +166,9 @@ export function usePageSession(options: UsePageSessionOptions): UsePageSessionRe
     if (!liveRef.current) return
     wasHostRef.current = next.role === 'HOST'
     if (next.role === 'COLLABORATOR') wasCollaboratorRef.current = true
+    // NONE carries no host, so keep the last live value across the ended/reclaim
+    // transition — that value is exactly what decides between the two.
+    if (next.role !== 'NONE') lastHostSelfRef.current = next.hostSelf === true
     if (next.hostName) lastHostNameRef.current = next.hostName
     setState(next)
   }, [])
@@ -195,13 +202,15 @@ export function usePageSession(options: UsePageSessionOptions): UsePageSessionRe
       const decision = decideHeartbeat(next.role, {
         wasHost: wasHostRef.current,
         wasCollaborator: wasCollaboratorRef.current,
+        lastHostSelf: lastHostSelfRef.current,
       })
 
       if (decision === 'reclaim') {
-        // Our own lease expired while we still had the page open — a
+        // Either our own lease expired while the page was still open — a
         // suspended laptop, a long offline stretch, a tab throttled to
-        // death. Re-claim rather than silently stopping: this client is
-        // still the one the user is typing into.
+        // death — or a same-user editor/tab that held it just released.
+        // Re-claim rather than silently stopping: this client is still the
+        // one the user is looking at.
         //
         // Whether it is then *safe* to write is a separate question, and
         // deliberately not answered here: someone else may have held and
@@ -297,6 +306,7 @@ export function usePageSession(options: UsePageSessionOptions): UsePageSessionRe
     if (!enabled) {
       wasHostRef.current = false
       wasCollaboratorRef.current = false
+      lastHostSelfRef.current = false
       sessionEndedRef.current = false
       lastHostNameRef.current = null
       setState({ role: 'NONE', alive: false })

@@ -24,6 +24,17 @@ export interface HeartbeatContext {
   wasHost: boolean
   /** Has this client been a collaborator at any point in this session? */
   wasCollaborator: boolean
+  /**
+   * Whether the last live host belonged to the same *user* as this client
+   * (another tab, or another editor of the same page inside this tab).
+   *
+   * A same-user host going away is not someone else ending our session: the
+   * lease is still ours to take, and the server's claim path deliberately lets
+   * the same user take over. Latching "ended" here is what makes opening the
+   * floating page-edit window (or the hidden off-screen editor) eject the user
+   * from a page they are still looking at.
+   */
+  lastHostSelf?: boolean
 }
 
 /**
@@ -38,6 +49,11 @@ export function decideHeartbeat(role: SessionRole, ctx: HeartbeatContext): Heart
   // one — and of the two readings, re-claiming a lease we are entitled to is
   // recoverable while ending the session is not.
   if (ctx.wasHost) return 'reclaim'
+
+  // The host that just went away was the same user (another tab, or the hidden
+  // off-screen / floating editor for this page). Re-claim instead of ending:
+  // otherwise every sibling editor that closes ejects the user from the page.
+  if (ctx.wasCollaborator && ctx.lastHostSelf) return 'reclaim'
 
   if (ctx.wasCollaborator) return 'ended'
 

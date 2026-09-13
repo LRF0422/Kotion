@@ -25,9 +25,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *   context:
  *     max-context-tokens: 60000
  *     compaction-threshold: 0.75
- *     keep-recent-messages: 8
- *     tool-result-max-chars: 8000
- *     evict-tool-results-after-steps: 3
+ *     keep-recent-messages: 16
+ *     tool-result-max-chars: 12000
+ *     evict-tool-results-after-steps: 10
  *   checkpoint:
  *     enabled: true
  *   event:
@@ -113,11 +113,15 @@ public class AgentCoreProperties {
         /** Compaction triggers when estimated tokens exceed max * threshold. */
         private double compactionThreshold = 0.75;
         /** Number of most recent messages always kept verbatim. */
-        private int keepRecentMessages = 8;
+        private int keepRecentMessages = 16;
         /** Tool results longer than this (chars) are truncated. */
-        private int toolResultMaxChars = 8000;
-        /** Tool results older than this many steps are evicted first (L1). */
-        private int evictToolResultsAfterSteps = 3;
+        private int toolResultMaxChars = 12000;
+        /**
+         * Tool results older than this many steps are evicted first (L1).
+         * Must stay comfortably above the number of read steps a single task
+         * needs, or the model loses earlier reads and re-reads in a loop.
+         */
+        private int evictToolResultsAfterSteps = 10;
         /** Model used for L2 summarization; empty = follow the run model. */
         private String compactionModel = "";
         /** Max output tokens for one L2 summarization call. */

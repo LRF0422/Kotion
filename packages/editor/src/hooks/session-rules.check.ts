@@ -41,7 +41,21 @@ check(
 
 check(
   'a collaborator with no session left is ended',
-  decideHeartbeat('NONE', { wasHost: false, wasCollaborator: true }) === 'ended',
+  decideHeartbeat('NONE', { wasHost: false, wasCollaborator: true, lastHostSelf: false }) === 'ended',
+)
+
+check(
+  'a same-user host releasing is re-claimed, not ended',
+  // Another tab / the floating page-edit window / the hidden off-screen editor
+  // of the SAME user held the lease and let go. The user is still looking at the
+  // page, so take the (deliberately same-user-transferable) lease back instead
+  // of ejecting them with "Session Ended".
+  decideHeartbeat('NONE', { wasHost: false, wasCollaborator: true, lastHostSelf: true }) === 'reclaim',
+)
+
+check(
+  'a different-user host leaving still ends the session',
+  decideHeartbeat('NONE', { wasHost: false, wasCollaborator: true, lastHostSelf: false }) === 'ended',
 )
 
 check(
