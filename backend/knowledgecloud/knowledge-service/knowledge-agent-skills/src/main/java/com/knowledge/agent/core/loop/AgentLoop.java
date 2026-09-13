@@ -104,6 +104,22 @@ public class AgentLoop implements Runnable {
         void onExit(String runId);
     }
 
+    /**
+     * Provider finish reasons meaning "output hit the token ceiling", not
+     * "task finished". A truncated turn must never complete the run — the model
+     * simply ran out of room mid-answer.
+     */
+    private static final java.util.Set<String> TRUNCATED_FINISH_REASONS = new java.util.HashSet<>(
+            java.util.Arrays.asList("length", "max_tokens", "max_output_tokens"));
+
+    /** Bounded auto-continue after a truncated turn, so a bad model cannot spin. */
+    private static final int MAX_TRUNCATION_CONTINUES = 3;
+
+    /** Injected after a truncated turn to get the model to resume, not re-plan. */
+    private static final String TRUNCATION_CONTINUE_NUDGE =
+            "[系统] 你的上一条回复因输出长度上限被截断，当前任务尚未完成。请从中断处继续，"
+            + "直接调用必要的工具把任务做完；不要重复已完成的步骤，也不要只描述计划。";
+
     private final AgentRun run;
 
     /** Replaced by initFreshCheckpoint on fresh runs; restored on recovery. */
@@ -253,6 +269,8 @@ public class AgentLoop implements Runnable {
                 }
             }
 
+            // Bounded auto-continue counter for turns truncated by the token limit.
+            int truncationContinues = 0;
             while (!cancelRequested && !run.statusEnum().isTerminal()) {
                 run.setStatus(RunStatus.RUNNING.name());
                 run.touch();
@@ -306,13 +324,39 @@ public class AgentLoop implements Runnable {
                 }
 
                 if (result.getToolCalls().isEmpty()) {
+                    String finishReason = result.getFinishReason() != null
+                            ? result.getFinishReason() : "stop";
+                    // A turn cut off by the output-token limit is not a finished
+                    // task: keep the partial answer and ask the model to resume,
+                    // bounded so a pathological repeat cannot spin forever.
+                    if (isTruncatedFinish(finishReason)
+                            && !checkpoint.isNoTools()
+                            && truncationContinues < MAX_TRUNCATION_CONTINUES) {
+                        truncationContinues++;
+                        if (result.getText() != null && !result.getText().isEmpty()) {
+                            checkpoint.getMessages().add(ChatMessage.builder()
+                                    .role("assistant")
+                                    .content(result.getText())
+                                    .build());
+                        }
+                        // user role (not system) so providers that only accept a
+                        // leading system message do not reject the follow-up.
+                        checkpoint.getMessages().add(ChatMessage.builder()
+                                .role("user")
+                                .content(TRUNCATION_CONTINUE_NUDGE)
+                                .build());
+                        log.warn("Run {}: response truncated (finishReason={}) — auto-continuing {}/{}",
+                                run.getRunId(), finishReason,
+                                truncationContinues, MAX_TRUNCATION_CONTINUES);
+                        continue;
+                    }
                     if (result.getText() != null && !result.getText().isEmpty()) {
                         checkpoint.getMessages().add(ChatMessage.builder()
                                 .role("assistant")
                                 .content(result.getText())
                                 .build());
                     }
-                    complete(result.getFinishReason() != null ? result.getFinishReason() : "stop");
+                    complete(finishReason);
                     return;
                 }
 
@@ -898,6 +942,11 @@ public class AgentLoop implements Runnable {
         saveCheckpoint();
         persist();
         saveHot(true);
+    }
+
+    /** True when the provider stopped because the output hit its token ceiling. */
+    private static boolean isTruncatedFinish(String finishReason) {
+        return finishReason != null && TRUNCATED_FINISH_REASONS.contains(finishReason.toLowerCase());
     }
 
     private void complete(String finishReason) {

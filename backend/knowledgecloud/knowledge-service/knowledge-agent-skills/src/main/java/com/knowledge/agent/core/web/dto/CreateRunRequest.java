@@ -34,6 +34,13 @@ public class CreateRunRequest {
 
     private Integer maxTokens;
 
+    /**
+     * Extra system-prompt text supplied by the client (editor rules, page-tree
+     * guidance) — appended after the backend's base prompt, since the backend
+     * cannot import the frontend constants that own them.
+     */
+    private String systemPrompt;
+
     /** Pure-text mode: no tools offered to the model at all. */
     private boolean noTools;
 

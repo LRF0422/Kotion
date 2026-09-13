@@ -23,6 +23,7 @@ import {
     useActiveEditor,
     useTranslation,
     DOCK_PANEL_RUNNING,
+    EDITOR_AGENT_PROMPT,
 } from "@kn/common"
 import type {
     ChatMode,
@@ -488,6 +489,8 @@ export const ExpandableChatDemo: React.FC<{
         conversationId: activeSessionId,
         tools: isAskMode ? [] : toolSpecs,
         skills: isAskMode ? [] : skills,
+        // Editor rules the backend cannot import; appended to its base prompt.
+        systemPrompt: isAskMode ? undefined : EDITOR_AGENT_PROMPT,
         resolveTools,
         autoExecuteTools: targetToolsReady,
         spaceId: targetPage?.spaceId ?? currentPage?.spaceId,

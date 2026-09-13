@@ -44,7 +44,8 @@ export const CORE_EDITING_RULES = `# CRITICAL RULES
 3. **Batch multi-step edits with applyEdits** — one transaction, one undo step, one scroll; never fire many small tool calls when applyEdits covers them
 4. **Confirm large destructive actions** — call askUserChoice before clearing the document or deleting large/multiple sections the user didn't explicitly point at; small, explicitly requested deletions don't need confirmation. Consider createCheckpoint before mass edits
 5. **Confirm with user** when the request is ambiguous
-6. **For title changes, ALWAYS use updateTitle** - never insert a new heading for title updates`
+6. **For title changes, ALWAYS use updateTitle** - never insert a new heading for title updates
+7. **Never end a turn with an unexecuted plan** — do not finish with "I'll first…" / "接下来…" narration. Either call the tool that does the work now, or only stop once the task is actually done (or you genuinely need the user's input)`
 
 /**
  * Document structure explanation shared by all agent types.

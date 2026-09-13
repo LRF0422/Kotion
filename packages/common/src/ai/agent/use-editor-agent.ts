@@ -431,6 +431,11 @@ export interface UseEditorAgentOptions {
     /** Live editor-bound tool executables keyed by name. */
     resolveTools: () => ToolsRecord | Promise<ToolsRecord>
     skills?: AgentSkillInput[]
+    /**
+     * Extra system-prompt text appended by the backend after its base prompt.
+     * Hosts pass their editor rules here (the backend cannot import them).
+     */
+    systemPrompt?: string
     spaceId?: string
     pageId?: string
     client?: AgentClient
@@ -463,7 +468,7 @@ export interface EditorAgentApi {
 
 export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
     const {
-        conversationId, tools, resolveTools, skills, spaceId, pageId, onToolExecution,
+        conversationId, tools, resolveTools, skills, systemPrompt, spaceId, pageId, onToolExecution,
         autoExecuteTools = true, persist = true, store: providedStore,
     } = options
 
@@ -595,6 +600,7 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
                     messages,
                     tools,
                     skills,
+                    systemPrompt,
                     spaceId,
                     pageId,
                     model: opts.model,

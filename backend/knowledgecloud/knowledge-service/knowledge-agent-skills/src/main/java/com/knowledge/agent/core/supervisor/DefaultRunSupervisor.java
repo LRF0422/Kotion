@@ -189,8 +189,15 @@ public class DefaultRunSupervisor {
         checkpoint.setNextStep(1);
         checkpoint.setPlanGateOpen(run.isPlanGateOpen());
         checkpoint.setDelegateDepth(delegateDepth);
+        // Client editor rules ride in the same fragment list as skill prompts so
+        // they land in the (cache-stable) system message.
+        List<String> systemFragments = new ArrayList<>(cmd.getSkillFragments() != null
+                ? cmd.getSkillFragments() : java.util.Collections.emptyList());
+        if (cmd.getSystemPrompt() != null && !cmd.getSystemPrompt().trim().isEmpty()) {
+            systemFragments.add(cmd.getSystemPrompt().trim());
+        }
         checkpoint.getMessages().add(contextManager.buildSystemMessage(run,
-                cmd.getSkillFragments(), cmd.getMemoryLines(), cmd.getSkillTools()));
+                systemFragments, cmd.getMemoryLines(), cmd.getSkillTools()));
         if (cmd.getMessages() != null) {
             for (ChatMessage message : cmd.getMessages()) {
                 if (message == null || "system".equalsIgnoreCase(message.getRole())) {

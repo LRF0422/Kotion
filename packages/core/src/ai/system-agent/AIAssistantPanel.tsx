@@ -39,6 +39,7 @@ import {
     useCapabilityProviders,
     buildAgentRunInputs,
     getPageNavigationBridge,
+    EDITOR_AGENT_PROMPT,
     type AgentChatMessage,
 } from '@kn/common'
 import { SubAgentTree } from './SubAgentTree'
@@ -123,6 +124,8 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
         conversationId,
         tools: toolSpecs,
         skills,
+        // Editor rules the backend cannot import; appended to its base prompt.
+        systemPrompt: EDITOR_AGENT_PROMPT,
         resolveTools,
         spaceId: currentPage?.spaceId,
         pageId: currentPage?.pageId !== undefined ? String(currentPage.pageId) : undefined,

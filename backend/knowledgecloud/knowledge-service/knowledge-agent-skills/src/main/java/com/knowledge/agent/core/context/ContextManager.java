@@ -53,7 +53,9 @@ public class ContextManager {
             + "6. 记忆：值得长期记住的用户偏好与事实用 remember 工具保存；需要时用 recall_memory 检索。\n"
             + "7. 委派：独立、可并行的子任务用 delegate 工具委派给子 agent。\n"
             + "8. 个人 Skill：只有当用户在当前消息中明确要求把当前会话保存、提炼或创建为可复用 Skill 时，"
-            + "才调用 save_conversation_as_skill；不得因为你认为流程有用而主动保存。";
+            + "才调用 save_conversation_as_skill；不得因为你认为流程有用而主动保存。\n"
+            + "9. 持续执行：不要用“我先…/接下来…”这类只描述计划的句子结束回复。要么立即调用相应工具把当前任务做完，"
+            + "要么在真正完成后才汇报结果；只有任务确实完成、或必须等待用户确认/输入时才结束回合。";
 
     /** Plan-mode restrictions appended to the system prompt. */
     public static final String PLAN_MODE_RULES =

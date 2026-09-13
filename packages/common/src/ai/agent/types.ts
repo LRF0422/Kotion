@@ -92,6 +92,11 @@ export interface CreateRunInput {
     messages: AgentChatMessage[]
     tools?: AgentToolSpec[]
     skills?: AgentSkillInput[]
+    /**
+     * Extra system-prompt text appended after the backend's base prompt —
+     * the client's editor rules and page/document guidance.
+     */
+    systemPrompt?: string
     temperature?: number
     maxTokens?: number
     /** Pure-text mode: no tools offered to the model at all. */

@@ -55,6 +55,9 @@ public class CreateRunCommand {
 
     private Integer maxTokens;
 
+    /** Extra system-prompt text appended after the base prompt (client editor rules). */
+    private String systemPrompt;
+
     /** Step budget (sub-runs may pass their own; null = config default). */
     private Integer maxSteps;
 
