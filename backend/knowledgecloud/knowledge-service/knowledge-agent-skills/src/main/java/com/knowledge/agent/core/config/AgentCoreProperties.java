@@ -12,7 +12,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * <pre>
  * agent:
  *   run:
- *     max-steps: 24
+ *     max-steps: 100
  *     max-delegate-depth: 2
  *     delegate-timeout-seconds: 600
  *     waiting-tools-timeout-seconds: 600
@@ -74,7 +74,7 @@ public class AgentCoreProperties {
     @Data
     public static class Run {
         /** Maximum steps (LLM turns) per run before budget suspension. */
-        private int maxSteps = 24;
+        private int maxSteps = 100;
         /** Maximum sub-agent delegation depth. */
         private int maxDelegateDepth = 2;
         /** Timeout for a delegated sub-agent run (seconds). */

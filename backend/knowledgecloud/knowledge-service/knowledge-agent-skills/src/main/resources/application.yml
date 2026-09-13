@@ -8,7 +8,8 @@ agent:
   default-model: deepseek-chat
   # ---- AgentCore runtime (from-0 redesign; replaced the V2 engine config) ----
   run:
-    max-steps: 24
+    # LLM turns allowed before the run suspends with reason "budget".
+    max-steps: 100
     max-delegate-depth: 2
     delegate-timeout-seconds: 600
     waiting-tools-timeout-seconds: 600
