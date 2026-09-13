@@ -79,6 +79,17 @@ public class RunStreamer {
         emitter.onTimeout(cleanup);
         emitter.onError(e -> cleanup.run());
 
+        // Commit the SSE response before the async replay starts. Spring does
+        // not write response headers until the first frame, so a resume whose
+        // first real event is slow (or a replay with nothing new yet) otherwise
+        // makes the client abandon the request as "no response headers". Sent
+        // after subscribe() so a subscription failure can still return 500.
+        try {
+            emitter.send(SseEmitter.event().comment("open"));
+        } catch (Exception ignored) {
+            // best-effort; the async path reports real send failures
+        }
+
         streamExecutor.submit(() -> {
             long lastSentSeq = afterSeq;
             long observedDropped = 0;

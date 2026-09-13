@@ -27,7 +27,7 @@ import { parseToolArgs, TERMINAL_EVENT_TYPES } from './types'
 const MAX_OUTER_RECONNECTS = 5
 const MAX_TOOL_RESUME_RETRIES = 5
 const MAX_ATTACH_RETRIES = 5
-const RESUME_FIRST_EVENT_TIMEOUT_MS = 10_000
+const RESUME_FIRST_EVENT_TIMEOUT_MS = 30_000
 
 function isPermanentTransportError(error: unknown): boolean {
     if (error instanceof AgentControlError) {

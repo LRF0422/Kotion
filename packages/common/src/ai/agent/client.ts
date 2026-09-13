@@ -29,7 +29,7 @@ const DEFAULT_API_BASE = '/api/knowledge-agent/api/agent/v1'
 
 const MAX_RECONNECTS = 5
 const RECONNECT_BASE_DELAY_MS = 500
-const RESUME_RESPONSE_TIMEOUT_MS = 10_000
+const RESUME_RESPONSE_TIMEOUT_MS = 30_000
 const REQUEST_TIMEOUT_MS = 15_000
 
 function isPermanentStreamError(error: unknown): boolean {
