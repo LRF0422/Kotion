@@ -42,7 +42,6 @@ import {
     classifyError, sanitizeToolPayload,
 } from "./chat-types"
 import type { BlockReference, Message } from "./chat-types"
-import { getHistoryForAI } from "./chat-persistence"
 import type { ChatTargetPage } from "./chat-sessions"
 import { useChatSessions } from "./useChatSessions"
 import { MessageBubble } from "./MessageBubble"
@@ -625,9 +624,6 @@ export const ExpandableChatDemo: React.FC<{
         lastUserMessageRef.current = messageText
         setError(null)
 
-        const currentMessages = [...messages, userMessage]
-        const history = getHistoryForAI(currentMessages).slice(0, -1)
-
         // Freeze the page this turn edits. Navigation during the run then only
         // moves the viewport; the agent keeps editing the same page (through an
         // off-screen editor once it is no longer the visible one).
@@ -643,10 +639,9 @@ export const ExpandableChatDemo: React.FC<{
             ? t('ai.chat.boundPagePrefix', { title: runTarget.title }) + '\n' + messageText
             : messageText
 
-        const agentMessages: AgentChatMessage[] = [
-            ...history,
-            { role: 'user', content: prompt },
-        ]
+        // Conversation history is engine-owned (session model log); the client
+        // only sends the new turn.
+        const agentMessages: AgentChatMessage[] = [{ role: 'user', content: prompt }]
 
         try {
             await agent.start(agentMessages, {
@@ -659,7 +654,7 @@ export const ExpandableChatDemo: React.FC<{
             setError(classifyError(err))
         }
     }, [
-        agent, messages, generateMessageId, targetPage, currentPage, setTargetPage,
+        agent, generateMessageId, targetPage, currentPage, setTargetPage,
         selectedModel, modelParams, setMessages, t,
     ])
 

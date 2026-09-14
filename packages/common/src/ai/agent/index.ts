@@ -27,11 +27,13 @@ export type {
 export { TERMINAL_EVENT_TYPES, parseToolArgs, cacheHitRate } from './types'
 export type {
     AgentChatMessage,
+    AgentChatSession,
     AgentEvent,
     AgentSkillInput,
     AgentToolCallInfo,
     AgentToolSpec,
     CreateRunInput,
+    ImportAgentChatSessionInput,
     MemoryItem,
     PendingToolCall,
     ResumePayload,
@@ -39,5 +41,6 @@ export type {
     RunStatus,
     RunUsage,
     RunView,
+    SaveAgentChatSessionInput,
     ThreadView,
 } from './types'

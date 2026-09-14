@@ -27,6 +27,8 @@ export interface SavedToolResult {
     ok: boolean
     result?: unknown
     error?: string
+    /** True when the body was too large to persist and was dropped. */
+    resultOmitted?: boolean
 }
 
 interface SavedToolResults {
@@ -94,15 +96,58 @@ export class RunStore {
     }
 
     saveToolResult(runId: string, callId: string, result: SavedToolResult): boolean {
-        try {
-            if (!this.storage) return false
-            const saved = this.loadToolResults(runId)
-            saved.results[callId] = { ...result, status: result.status ?? 'completed' }
+        const entry: SavedToolResult = { ...result, status: result.status ?? 'completed' }
+        if (this.writeToolResults(runId, saved => {
+            saved.results[callId] = entry
             saved.updatedAt = Date.now()
-            this.storage.setItem(TOOL_RESULTS_PREFIX + runId, JSON.stringify(saved))
+        })) {
             return true
+        }
+        // The payload did not fit (usually the per-origin storage quota). Keep a
+        // compact completion marker so a crash-recovery attach still refuses to
+        // re-execute the call, even though the result body is lost.
+        const compact: SavedToolResult = { ...entry, result: undefined, resultOmitted: true }
+        return this.writeToolResults(runId, saved => {
+            saved.results[callId] = compact
+            saved.updatedAt = Date.now()
+        })
+    }
+
+    /**
+     * Read-modify-write one run's tool-result map. On quota failure, drop other
+     * runs' recovery payloads and retry once — they are recoverable after
+     * re-running, whereas the current call already had its side effect.
+     */
+    private writeToolResults(runId: string, mutate: (saved: SavedToolResults) => void): boolean {
+        const attempt = (): boolean => {
+            try {
+                if (!this.storage) return false
+                const saved = this.loadToolResults(runId)
+                mutate(saved)
+                this.storage.setItem(TOOL_RESULTS_PREFIX + runId, JSON.stringify(saved))
+                return true
+            } catch {
+                return false
+            }
+        }
+        if (attempt()) return true
+        this.pruneOtherToolResults(runId)
+        return attempt()
+    }
+
+    private pruneOtherToolResults(keepRunId: string): void {
+        try {
+            const keep = TOOL_RESULTS_PREFIX + keepRunId
+            const keys: string[] = []
+            for (let i = 0; i < this.storage.length; i += 1) {
+                const key = this.storage.key(i)
+                if (key && key.startsWith(TOOL_RESULTS_PREFIX) && key !== keep) keys.push(key)
+            }
+            keys.forEach(key => {
+                try { this.storage.removeItem(key) } catch { /* ignore */ }
+            })
         } catch {
-            return false
+            // ignore
         }
     }
 

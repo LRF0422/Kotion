@@ -1,5 +1,13 @@
 import type { Message } from './chat-types'
 
+/**
+ * LOCAL CACHE for the AI side-panel chat sessions.
+ *
+ * The durable source of truth is now the backend (`/api/agent/v1/sessions`,
+ * see chat-session-api.ts); this module keeps a synchronous localStorage copy
+ * so the panel can render instantly on boot and keep working offline. The
+ * hook writes through to both and reconciles them on load.
+ */
 // ─── Storage keys ───────────────────────────────────────────────────
 const INDEX_KEY = 'kn-ai-chat-sessions-index'
 const ACTIVE_KEY = 'kn-ai-chat-active-session'
@@ -12,8 +20,8 @@ const LEGACY_SESSION_TS_KEY = 'agent-session-timestamp'
 const LEGACY_CONVERSATION_KEY = 'agent-conversation-id'
 
 // ─── Limits ────────────────────────────────────────────────────────
-const MAX_MESSAGES_PER_SESSION = 100
-const MAX_SESSIONS = 50
+export const MAX_MESSAGES_PER_SESSION = 100
+export const MAX_SESSIONS = 50
 
 // ─── Types ─────────────────────────────────────────────────────────
 /** A page bound to a chat session via the @-mention picker. */

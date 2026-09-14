@@ -16,11 +16,14 @@ import {
 } from './events'
 import type {
     AgentChatMessage,
+    AgentChatSession,
     AgentEvent,
     CreateRunInput,
+    ImportAgentChatSessionInput,
     MemoryItem,
     ResumePayload,
     RunView,
+    SaveAgentChatSessionInput,
     ThreadView,
 } from './types'
 import { TERMINAL_EVENT_TYPES } from './types'
@@ -254,6 +257,59 @@ export class AgentClient {
             if (strict) throw error
             return null
         }
+    }
+
+    // ==================== chat sessions (durable UI records) ====================
+
+    /** List the caller's persisted chat sessions (metadata only, newest first). */
+    async listChatSessions(limit = 100): Promise<AgentChatSession[]> {
+        const data = await this.request<{ items?: AgentChatSession[] }>(
+            '/sessions?limit=' + encodeURIComponent(String(limit)),
+        )
+        return Array.isArray(data?.items) ? data!.items! : []
+    }
+
+    /** Load one chat session including its message blob; null when absent. */
+    async getChatSession(sessionId: string, strict = false): Promise<AgentChatSession | null> {
+        try {
+            return await this.request<AgentChatSession>('/sessions/' + encodeURIComponent(sessionId))
+        } catch (error) {
+            if (strict) throw error
+            return null
+        }
+    }
+
+    /**
+     * Create or update a session. Omit `messages` for a metadata-only write:
+     * the stored message blob is left untouched.
+     */
+    async saveChatSession(sessionId: string, input: SaveAgentChatSessionInput): Promise<void> {
+        await this.request('/sessions/' + encodeURIComponent(sessionId), {
+            method: 'PUT',
+            body: JSON.stringify(input),
+        })
+    }
+
+    async deleteChatSession(sessionId: string): Promise<void> {
+        await this.request('/sessions/' + encodeURIComponent(sessionId), { method: 'DELETE' })
+    }
+
+    /**
+     * One-time migration: upload a pre-existing local transcript. The backend
+     * rejects the upload once it owns an engine-projected transcript.
+     */
+    async importChatSession(sessionId: string, input: ImportAgentChatSessionInput): Promise<void> {
+        await this.request('/sessions/' + encodeURIComponent(sessionId) + '/import', {
+            method: 'POST',
+            body: JSON.stringify(input),
+        })
+    }
+
+    /** Explicit user command to reset the engine-owned transcript. */
+    async clearChatSessionTranscript(sessionId: string): Promise<void> {
+        await this.request('/sessions/' + encodeURIComponent(sessionId) + '/transcript', {
+            method: 'DELETE',
+        })
     }
 
     async listMemory(params: {

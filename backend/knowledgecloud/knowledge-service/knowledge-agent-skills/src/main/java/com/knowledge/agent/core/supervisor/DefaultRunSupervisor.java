@@ -17,6 +17,7 @@ import com.knowledge.agent.core.loop.ResumePayload;
 import com.knowledge.agent.core.mapper.AgentRunMapper;
 import com.knowledge.agent.core.memory.MemoryInjector;
 import com.knowledge.agent.core.memory.ThreadSummarizer;
+import com.knowledge.agent.core.session.SessionTranscriptProjector;
 import com.knowledge.agent.core.entity.AgentRunEntity;
 import com.knowledge.agent.core.entity.AgentThreadEntity;
 import com.knowledge.agent.core.run.AgentRun;
@@ -67,6 +68,7 @@ public class DefaultRunSupervisor {
     private final SavedSkillInjector savedSkillInjector;
     private final Delegator delegator;
     private final ThreadSummarizer threadSummarizer;
+    private final SessionTranscriptProjector transcriptProjector;
     private final ObjectMapper objectMapper;
     private final AgentCoreProperties properties;
     private final ExecutorService loopExecutor;
@@ -89,6 +91,7 @@ public class DefaultRunSupervisor {
                                 SavedSkillInjector savedSkillInjector,
                                 Delegator delegator,
                                 ThreadSummarizer threadSummarizer,
+                                SessionTranscriptProjector transcriptProjector,
                                 ObjectMapper objectMapper,
                                 AgentCoreProperties properties,
                                 @Qualifier("agentLoopExecutor") ExecutorService loopExecutor,
@@ -107,6 +110,7 @@ public class DefaultRunSupervisor {
         this.savedSkillInjector = savedSkillInjector;
         this.delegator = delegator;
         this.threadSummarizer = threadSummarizer;
+        this.transcriptProjector = transcriptProjector;
         this.objectMapper = objectMapper;
         this.properties = properties;
         this.loopExecutor = loopExecutor;
@@ -159,7 +163,10 @@ public class DefaultRunSupervisor {
             threadStore.updateMeta(run.getConversationId(), title, null);
         }
 
-        LoopHandle handle = startLoop(run, null, new CommandRunInput(cmd));
+        // Root runs rebuild their conversation from the engine-owned session log;
+        // the caller only supplies the new turn (prepareHistory appends it).
+        List<ChatMessage> history = transcriptProjector.prepareHistory(run, cmd.getMessages());
+        LoopHandle handle = startLoop(run, null, new CommandRunInput(cmd, history));
         if (handle == null) {
             markFailed(run, "lease_unavailable", "无法获取执行租约");
         }
@@ -221,8 +228,12 @@ public class DefaultRunSupervisor {
         checkpoint.setMaxTokens(cmd.getMaxTokens());
         checkpoint.setMaxSteps(cmd.getMaxSteps() != null
                 ? cmd.getMaxSteps() : properties.getRun().getMaxSteps());
+        // Record the boundary between caller-supplied history and messages the
+        // run itself produces, so the projection appends only the new turns.
+        checkpoint.setInputMessageCount(checkpoint.getMessages().size());
         checkpointStore.save(checkpoint);
 
+        // Child runs are stateless and never projected into a session.
         LoopHandle handle = startLoop(run, checkpoint, new CommandRunInput(cmd));
         if (handle == null) {
             markFailed(run, "lease_unavailable", "无法获取执行租约");
@@ -368,6 +379,10 @@ public class DefaultRunSupervisor {
             if (RunStatus.COMPLETED.name().equals(run.getStatus()) && run.getParentRunId() == null) {
                 threadSummarizer.summarizeAsync(runId, run.getConversationId(), run.getModel());
             }
+            // Engine-owned transcript projection for every terminal state (root
+            // runs only). Synchronous: a reload right after the run settles must
+            // not race the projection.
+            transcriptProjector.onRunTerminal(run);
         }
         // Deregister the live-tail fan-out; existing SSE subscribers drain.
         eventLog.release(runId);
@@ -456,14 +471,20 @@ public class DefaultRunSupervisor {
     /** {@link AgentLoop.RunInput} adapter over a create command. */
     private static final class CommandRunInput implements AgentLoop.RunInput {
         private final CreateRunCommand cmd;
+        private final List<ChatMessage> history;
 
         CommandRunInput(CreateRunCommand cmd) {
+            this(cmd, cmd.getMessages());
+        }
+
+        CommandRunInput(CreateRunCommand cmd, List<ChatMessage> history) {
             this.cmd = cmd;
+            this.history = history;
         }
 
         @Override
         public List<ChatMessage> messages() {
-            return cmd.getMessages();
+            return history;
         }
 
         @Override

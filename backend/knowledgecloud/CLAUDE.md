@@ -96,6 +96,12 @@ make clean
   `/api/v1/skills/*` 契约不变（RemoteSkillController）。
 - **DB 迁移 V7**（`script/migration/V7__agentcore.sql`）：agent_run / agent_run_event /
   agent_run_checkpoint / agent_long_memory / agent_thread。旧表保留数据不删。
+- **会话日志 + 投影（V26–V28）**：`agent_chat_session.model_messages_json` 是引擎维护的
+  **规范会话日志**（`SessionTranscriptProjector` 跨 run 累积），**是模型上下文的唯一来源** —— 客户端只发本轮
+  用户消息，不再回传历史；`messages_json` 是由规范日志纯推导的 UI 投影缓存。事实来源仍是 run 日志
+  （`agent_run_checkpoint` + `agent_run_event`）。`ChatSessionController` 对客户端只读 transcript，
+  PUT 仅 UI 元数据，`/import` 迁移、`DELETE /transcript` 清空。与 `agent_thread`（运行时摘要）职责分离。
+  详见 `docs/AGENT_CHAT_SESSION_PERSISTENCE.md`。
 
 ### Key Patterns
 

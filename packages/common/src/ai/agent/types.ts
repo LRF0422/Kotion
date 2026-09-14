@@ -127,6 +127,47 @@ export interface ThreadView {
     updateTime?: number
 }
 
+/**
+ * One persisted chat session returned by /api/agent/v1/sessions. The payload
+ * is intentionally loose (messages/pages are passed through as raw JSON) so
+ * the wire type does not depend on the UI's Message/ChatTargetPage shape.
+ */
+export interface AgentChatSession {
+    sessionId: string
+    title?: string
+    targetPage?: unknown
+    boundPage?: unknown
+    /** Present only on the detail endpoint, never on the index list. */
+    messages?: unknown
+    messageCount?: number
+    createdAt?: number
+    updatedAt?: number
+}
+
+/**
+ * Client-writable session metadata only — the transcript is engine-owned and
+ * must not travel through this payload.
+ */
+export interface SaveAgentChatSessionInput {
+    title?: string
+    targetPage?: unknown
+    boundPage?: unknown
+    createdAt?: number
+    updatedAt?: number
+}
+
+/**
+ * One-time migration upload of a pre-existing local transcript. The backend
+ * accepts it only when it has no engine-owned transcript for the session.
+ */
+export interface ImportAgentChatSessionInput {
+    title?: string
+    targetPage?: unknown
+    boundPage?: unknown
+    messages: unknown[]
+    createdAt?: number
+}
+
 export interface MemoryItem {
     memoryId: string
     scope: string

@@ -496,6 +496,8 @@ public class AgentLoop implements Runnable {
         cp.setMaxSteps(runInput != null && runInput.maxSteps() != null
                 ? runInput.maxSteps() : properties.getRun().getMaxSteps());
         cp.setNoTools(runInput != null && runInput.noTools());
+        // Boundary between supplied history and messages this run produces.
+        cp.setInputMessageCount(cp.getMessages().size());
         this.checkpoint = cp;
         // Fresh checkpoint is persisted by the first saveCheckpoint() call.
     }

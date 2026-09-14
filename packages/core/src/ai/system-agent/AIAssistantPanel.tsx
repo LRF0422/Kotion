@@ -40,7 +40,6 @@ import {
     buildAgentRunInputs,
     getPageNavigationBridge,
     EDITOR_AGENT_PROMPT,
-    type AgentChatMessage,
 } from '@kn/common'
 import { SubAgentTree } from './SubAgentTree'
 import { PlanApprovalCard } from './PlanApprovalCard'
@@ -182,13 +181,10 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
         }
         setMessages(prev => [...prev, userMessage])
         setInput('')
-        const history: AgentChatMessage[] = messages.map(m => ({
-            role: m.role,
-            content: m.content,
-        }))
-        await agent.start([...history, { role: 'user', content: trimmed }], { mode })
+        // History is engine-owned (session model log); send only the new turn.
+        await agent.start([{ role: 'user', content: trimmed }], { mode })
             .catch(() => undefined)
-    }, [input, agent, messages, mode, currentPage?.pageId])
+    }, [input, agent, mode, currentPage?.pageId])
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
         if (e.key === 'Enter' && !e.shiftKey) {

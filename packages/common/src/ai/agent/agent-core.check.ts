@@ -73,6 +73,39 @@ function checkPersistedToolResults(): void {
     assert.equal(store.loadToolResult('run-1', 'call-1'), null)
 }
 
+function checkToolResultPersistenceFallback(): void {
+    // Simulate a full quota: any value above the threshold throws, forcing the
+    // RunStore to degrade an oversized tool result to a compact tombstone
+    // (completion is still recorded, so a re-attach will not re-execute it).
+    const backing = new Map<string, string>()
+    const storage = {
+        get length() { return backing.size },
+        clear: () => { backing.clear() },
+        getItem: (key: string) => backing.get(key) ?? null,
+        key: (index: number) => [...backing.keys()][index] ?? null,
+        removeItem: (key: string) => { backing.delete(key) },
+        setItem: (key: string, value: string) => {
+            if (value.length > 200) {
+                const error = new Error('QuotaExceededError')
+                error.name = 'QuotaExceededError'
+                throw error
+            }
+            backing.set(key, value)
+        },
+    } as unknown as Storage
+    const store = new RunStore({ storage })
+    const big = { ok: true, result: { blob: 'x'.repeat(2000) } }
+    assert.equal(
+        store.saveToolResult('run-big', 'call-big', big),
+        true,
+        'oversized tool result must fall back to a compact tombstone'
+    )
+    const saved = store.loadToolResult('run-big', 'call-big')
+    assert.equal(saved?.status, 'completed')
+    assert.equal(saved?.resultOmitted, true)
+    assert.equal(saved?.result, undefined)
+}
+
 function checkSerializableResults(): void {
     const cyclic: Record<string, unknown> = {}
     cyclic.self = cyclic
@@ -134,6 +167,7 @@ async function main(): Promise<void> {
     checkToolBatchSnapshot()
     await checkConversationLockOwnership()
     checkPersistedToolResults()
+    checkToolResultPersistenceFallback()
     checkSerializableResults()
     checkStreamSequenceRules()
     await checkCrlfSseFrames()

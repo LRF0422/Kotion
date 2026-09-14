@@ -809,10 +809,11 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
                     }
                     outcome = await executor.execute(callId, record.tool, record.args)
                     if (!store.saveToolResult(current.runId, callId, outcome)) {
-                        throw new AgentControlError(
-                            'TOOL_RESULT_PERSIST_FAILED',
-                            '工具已执行但结果无法持久化，为避免重复修改已停止自动恢复'
-                        )
+                        // Persistence only backs crash recovery. The intent marker
+                        // written before the side effect still makes a re-attach
+                        // fail closed, so a full storage quota must not strand an
+                        // otherwise-healthy turn.
+                        console.warn('[agent] tool result not persisted; continuing without recovery for', callId)
                     }
                     if (!mountedRef.current || generation !== generationRef.current) return
                 }

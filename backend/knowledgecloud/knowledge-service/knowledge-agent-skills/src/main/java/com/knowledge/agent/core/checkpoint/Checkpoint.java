@@ -33,6 +33,13 @@ public class Checkpoint {
     /** Step number about to run next. */
     private int nextStep;
 
+    /**
+     * Number of messages present when the run was created (system prefix +
+     * caller-supplied history). Messages at and after this index were produced
+     * by this run and are what the session projection appends.
+     */
+    private int inputMessageCount;
+
     /** Step budget per grant cycle (defaults from config; sub-runs may differ). */
     private Integer maxSteps;
 
