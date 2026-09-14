@@ -348,9 +348,7 @@ public class OpenAiCompatibleClient implements LlmClient {
             }
         }
 
-        String body = objectMapper.writeValueAsString(root);
-        log.debug("LLM request body for {}: {}", providerName, body);
-        return body;
+        return objectMapper.writeValueAsString(root);
     }
 
     private String resolveModel(String requestedModel) {
