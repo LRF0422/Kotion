@@ -76,6 +76,10 @@
     <!-- 业务日志 -->
     <Logger name="com.knowledge" level="DEBUG" />
     <Logger name="com.knowledge.core.version" level="INFO"/>
+    <!-- AgentCore mapper 在 DEBUG 下会被 MyBatis 打印全部 SQL 参数，其中包含
+         checkpoint.state_json / agent_run_event.payload（完整工具结果，可达数百 KB
+         甚至更大），既刷屏又拖慢每一步执行。mapper 单独收敛到 INFO。 -->
+    <Logger name="com.knowledge.agent.core.mapper" level="INFO" />
 
     <!-- 减少nacos日志 -->
     <logger name="com.alibaba.nacos" level="ERROR"/>
