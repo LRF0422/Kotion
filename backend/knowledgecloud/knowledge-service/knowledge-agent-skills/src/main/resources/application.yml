@@ -59,6 +59,13 @@ agent:
     max-tool-names-per-skill: 16
     compile-max-tokens: 1200
     compile-model:
+  remote-skill:
+    enabled: true
+    # A registering microservice is considered dead after this long without a
+    # heartbeat and its tools are dropped from the model's tool list.
+    stale-ms: 90000
+    # Timeout for one remote skill invocation (seconds).
+    call-timeout-seconds: 30
   quota:
     enabled: true
     create-per-minute: 30
@@ -92,3 +99,11 @@ agent:
         api-key: ${KAGGLE_KEY:}
       datagov:
         api-url: https://catalog.data.gov/api/3/action/package_search
+
+# Service-to-service Agent SDK registration/heartbeat/unregister carries no user
+# JWT, so these endpoints must bypass user authentication. The skill *invoke*
+# callback is the opposite: it forwards the original user JWT and stays secured.
+knowledge:
+  secure:
+    skip-url:
+      - /api/v1/skills/**

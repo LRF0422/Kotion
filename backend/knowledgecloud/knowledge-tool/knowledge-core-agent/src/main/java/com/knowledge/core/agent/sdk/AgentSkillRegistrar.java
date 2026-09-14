@@ -12,7 +12,6 @@ import org.springframework.core.env.Environment;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -64,10 +63,11 @@ public class AgentSkillRegistrar implements ApplicationContextAware, SmartInitia
     private final ScheduledExecutorService scheduler;
 
     private volatile ScheduledFuture<?> heartbeatFuture;
+    private volatile ScheduledFuture<?> reregisterFuture;
     private volatile boolean registered = false;
 
-    /** Agent Skills Service Application Name */
-    private static final String AGENT_SKILLS_SERVICE_NAME = "knowledge-agent";
+    /** Definitions captured at startup; replayed by periodic re-registration. */
+    private volatile List<SkillDefinition> registeredDefinitions = new ArrayList<>();
 
     public AgentSkillRegistrar(AgentSdkProperties properties,
             ISkillRegistrationClient skillRegistrationClient,
@@ -128,101 +128,11 @@ public class AgentSkillRegistrar implements ApplicationContextAware, SmartInitia
             }
         }
 
+        registeredDefinitions = toRegister;
         if (!toRegister.isEmpty()) {
-            // Check if we're running inside the agent-skills service itself
-            String appName = environment.getProperty("spring.application.name", "");
-            if (AGENT_SKILLS_SERVICE_NAME.equals(appName)) {
-                // Try to register locally
-                if (registerLocally(toRegister)) {
-                    registered = true;
-                    log.info("[AgentSDK] Registered {} skill tool(s) locally (same-service mode)",
-                            toRegister.size());
-                    return;
-                }
-            }
-
-            // Remote registration with retry
+            // Remote registration with retry. This also covers same-service
+            // mode: the Feign client targets this service's own Nacos name.
             registerWithRetry(toRegister);
-        }
-    }
-
-    /**
-     * Attempts to register skills directly with the local SkillRegistry if
-     * available.
-     * This is used when the SDK is running inside the agent-skills service itself.
-     *
-     * @param definitions skill definitions to register
-     * @return true if local registration succeeded, false if SkillRegistry is not
-     *         available
-     */
-    private boolean registerLocally(List<SkillDefinition> definitions) {
-        try {
-            // Try to get SkillRegistry bean - it should exist in agent-skills service
-            Object skillRegistry = applicationContext.getBean("skillRegistry");
-            if (skillRegistry == null) {
-                return false;
-            }
-
-            // Use reflection to avoid compile-time dependency on agent-skills module
-            Class<?> registryClass = skillRegistry.getClass();
-            Method registerMethod = null;
-            for (Method m : registryClass.getMethods()) {
-                if ("register".equals(m.getName()) && m.getParameterCount() == 1) {
-                    registerMethod = m;
-                    break;
-                }
-            }
-
-            if (registerMethod == null) {
-                log.warn("[AgentSDK] SkillRegistry.register method not found, falling back to HTTP");
-                return false;
-            }
-
-            // We need to create SkillExecutor instances - use SkillService.registerRemote
-            // instead
-            // This is cleaner as it handles the conversion for us
-            Object skillService = applicationContext.getBean("skillService");
-            if (skillService != null) {
-                Method registerRemoteMethod = null;
-                for (Method m : skillService.getClass().getMethods()) {
-                    if ("registerRemote".equals(m.getName()) && m.getParameterCount() == 1) {
-                        registerRemoteMethod = m;
-                        break;
-                    }
-                }
-                if (registerRemoteMethod != null) {
-                    // Convert SkillDefinition to RemoteSkillRegistrationRequest format
-                    List<Map<String, Object>> requests = new ArrayList<>();
-                    for (SkillDefinition def : definitions) {
-                        Map<String, Object> req = new HashMap<>();
-                        req.put("id", def.getId());
-                        req.put("name", def.getName());
-                        req.put("description", def.getDescription());
-                        req.put("version", def.getVersion());
-                        req.put("author", def.getAuthor());
-                        req.put("tier", def.getTier());
-                        req.put("categories", def.getCategories());
-                        req.put("enabled", def.isEnabled());
-                        req.put("toolName", def.getToolName());
-                        req.put("toolDescription", def.getToolDescription());
-                        req.put("parameters", def.getParameters());
-                        req.put("jsonSchema", def.getJsonSchema());
-                        req.put("callbackUrl", def.getCallbackUrl());
-                        req.put("serviceId", def.getServiceId());
-                        requests.add(req);
-                    }
-                    // We can't directly call this because the parameter type is
-                    // List<RemoteSkillRegistrationRequest>
-                    // Fall back to Feign registration which works for both local and remote
-                    log.debug(
-                            "[AgentSDK] Local registration via SkillService would require type conversion, using Feign instead");
-                    return false;
-                }
-            }
-            return false;
-        } catch (Exception e) {
-            log.debug("[AgentSDK] Local registration not possible: {}", e.getMessage());
-            return false;
         }
     }
 
@@ -244,6 +154,7 @@ public class AgentSkillRegistrar implements ApplicationContextAware, SmartInitia
                     log.info("[AgentSDK] Successfully registered {} skill tool(s) (attempt {})",
                             definitions.size(), currentAttempt);
                     startHeartbeat();
+                    startReregistration();
                 } catch (Exception e) {
                     if (currentAttempt >= maxRetries) {
                         log.error("[AgentSDK] Failed to register skills after {} attempts: {}. " +
@@ -300,6 +211,43 @@ public class AgentSkillRegistrar implements ApplicationContextAware, SmartInitia
         log.info("[AgentSDK] Started heartbeat scheduler, interval={}s", interval);
     }
 
+    /**
+     * Periodically replays the startup registration. The heartbeat keeps an
+     * already-registered service alive but cannot recover one whose startup
+     * registration failed; this does. Registration is idempotent on the agent
+     * side (it overwrites existing records).
+     */
+    private void startReregistration() {
+        if (reregisterFuture != null) {
+            return; // Already started
+        }
+        int interval = properties.getReregisterInterval();
+        if (interval <= 0) {
+            return;
+        }
+        reregisterFuture = scheduler.scheduleAtFixedRate(
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        List<SkillDefinition> definitions = registeredDefinitions;
+                        if (definitions.isEmpty()) {
+                            return;
+                        }
+                        try {
+                            doRegister(definitions);
+                            log.debug("[AgentSDK] Periodic re-registration succeeded for {} skill tool(s)",
+                                    definitions.size());
+                        } catch (Exception e) {
+                            log.warn("[AgentSDK] Periodic re-registration failed: {}", e.getMessage());
+                        }
+                    }
+                },
+                interval,
+                interval,
+                TimeUnit.SECONDS);
+        log.info("[AgentSDK] Started periodic re-registration, interval={}s", interval);
+    }
+
     private void sendHeartbeat() {
         if (registeredSkillIds.isEmpty()) {
             return;
@@ -322,10 +270,14 @@ public class AgentSkillRegistrar implements ApplicationContextAware, SmartInitia
     public void destroy() {
         log.info("[AgentSDK] Shutting down...");
 
-        // Stop heartbeat
+        // Stop heartbeat and periodic re-registration
         if (heartbeatFuture != null) {
             heartbeatFuture.cancel(false);
             heartbeatFuture = null;
+        }
+        if (reregisterFuture != null) {
+            reregisterFuture.cancel(false);
+            reregisterFuture = null;
         }
 
         // Unregister from agent service

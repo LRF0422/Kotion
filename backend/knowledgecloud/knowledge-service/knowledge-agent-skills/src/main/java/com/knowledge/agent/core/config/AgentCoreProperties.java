@@ -43,6 +43,10 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *     top-k: 3
  *     min-score: 0.30
  *     merge-score: 0.55
+ *   remote-skill:
+ *     enabled: true
+ *     stale-ms: 90000
+ *     call-timeout-seconds: 30
  *   quota:
  *     enabled: true
  *     create-per-minute: 30
@@ -66,6 +70,7 @@ public class AgentCoreProperties {
     private Event event = new Event();
     private Memory memory = new Memory();
     private SavedSkills savedSkills = new SavedSkills();
+    private RemoteSkill remoteSkill = new RemoteSkill();
     private Quota quota = new Quota();
     private Lease lease = new Lease();
     private Skill skill = new Skill();
@@ -194,6 +199,22 @@ public class AgentCoreProperties {
         private int compileMaxTokens = 1200;
         /** Optional compiler model override; empty follows the source run model. */
         private String compileModel = "";
+    }
+
+    /** Remote (microservice-registered) skill settings. */
+    @Data
+    public static class RemoteSkill {
+        /** Whether remote skills are registered/exposed to the model at all. */
+        private boolean enabled = true;
+        /**
+         * A registering microservice is considered dead after this many
+         * milliseconds without a heartbeat and its tools are pruned.
+         */
+        private long staleMs = 90_000;
+        /** Timeout for one remote skill HTTP invocation (seconds). */
+        private int callTimeoutSeconds = 30;
+        /** Periodic “registered N remote skill(s)” debug log interval (minutes). */
+        private int statsLogMinutes = 10;
     }
 
     /** Tenant quota settings. */

@@ -6,6 +6,7 @@ import com.knowledge.core.agent.sdk.UnregisterRequest;
 import com.knowledge.core.tool.api.R;
 import io.swagger.annotations.Api;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * AgentCore remote-skill registration endpoints — the consumption side of the
@@ -75,5 +77,15 @@ public class RemoteSkillController {
             registry.unregister(request.getServiceId());
         }
         return R.data(null);
+    }
+
+    /**
+     * Diagnostics: every registered remote skill tool, including stale entries.
+     * {@code live=false} means the owning service has missed the heartbeat
+     * window and the tool is not offered to the model.
+     */
+    @GetMapping("/remote")
+    public R<List<Map<String, Object>>> listRemoteSkills() {
+        return R.data(registry.statusSnapshot());
     }
 }

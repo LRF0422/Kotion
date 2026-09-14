@@ -106,7 +106,9 @@ make clean
 ### Key Patterns
 
 - **远程技能注册**: 其它微服务用 knowledge-core-agent SDK 的 `@AgentSkill` 注解注册；
-  agent 侧 `RemoteSkillRegistry` Redis 持久化 + 启动恢复 + 心跳保鲜。
+  agent 侧 `RemoteSkillRegistry` Redis 持久化 + 启动恢复 + 心跳保鲜。心跳按 **skillId**
+  匹配（一个 skill 多个 tool），SDK 每 300s 周期重注册兜底；运维见
+  `knowledge-service/knowledge-agent-skills/REMOTE_SKILLS.md`。
 - **LLM Abstraction**: `LlmClient`/`LlmClientFactory`（OpenAI 兼容 provider，`agent.providers.*` 配置）；
   AgentCore 的 `LlmGateway` 是唯一调用入口（同步驱动 + 流式工具调用累积）。
 - **Multi-agent**: `delegate` 工具创建子 run，父 loop 阻塞等待子终态并聚合结果。

@@ -15,6 +15,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *     enabled: true
  *     service-id: ${spring.application.name}
  *     callback-base-url: http://my-service:8100   # optional
+ *     heartbeat-interval: 30
+ *     reregister-interval: 300
  * </pre>
  *
  * <p>
@@ -56,4 +58,13 @@ public class AgentSdkProperties {
      * Default: 5 attempts.
      */
     private int registrationRetryMax = 5;
+
+    /**
+     * Interval for periodic re-registration (seconds). The heartbeat keeps an
+     * already-registered service alive, but it cannot recover a service whose
+     * startup registration failed (for example, when the agent service started
+     * after this one). Re-registering on a slow cadence closes that gap.
+     * Default: 300 seconds. {@code <= 0} disables periodic re-registration.
+     */
+    private int reregisterInterval = 300;
 }
