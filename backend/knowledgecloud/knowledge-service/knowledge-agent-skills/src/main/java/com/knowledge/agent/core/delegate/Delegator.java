@@ -159,19 +159,39 @@ public class Delegator {
         if (toolsArg == null) {
             return new ArrayList<>(clientTools);
         }
+        // Tool names are matched case-insensitively: a model that writes
+        // "getGithubRepoTree" for the registered "getGitHubRepoTree" must not
+        // silently strip the child's tools.
         Set<String> wanted = new HashSet<>();
         if (toolsArg instanceof List) {
             for (Object item : (List<?>) toolsArg) {
-                wanted.add(String.valueOf(item));
+                String name = String.valueOf(item).trim();
+                if (!name.isEmpty()) {
+                    wanted.add(name.toLowerCase());
+                }
             }
         } else {
-            wanted.add(String.valueOf(toolsArg));
+            String name = String.valueOf(toolsArg).trim();
+            if (!name.isEmpty()) {
+                wanted.add(name.toLowerCase());
+            }
+        }
+        if (wanted.isEmpty()) {
+            return new ArrayList<>(clientTools);
         }
         List<ToolSpec> selected = new ArrayList<>();
         for (ToolSpec spec : clientTools) {
-            if (wanted.contains(spec.getName())) {
+            if (spec.getName() != null && wanted.contains(spec.getName().toLowerCase())) {
                 selected.add(spec);
             }
+        }
+        if (selected.isEmpty()) {
+            // Nothing matched: honoring that literally would leave the child with
+            // no client tools at all, so every call it makes fails as
+            // TOOL_NOT_FOUND until the delegation times out. Keep the child
+            // capable and make the mismatch visible instead.
+            log.warn("delegate tools 选择未命中任何前端工具 {}，回退为全部前端工具", wanted);
+            return new ArrayList<>(clientTools);
         }
         return selected;
     }

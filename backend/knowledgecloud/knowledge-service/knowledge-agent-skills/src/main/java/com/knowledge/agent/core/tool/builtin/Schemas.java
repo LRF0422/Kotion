@@ -37,4 +37,15 @@ final class Schemas {
         prop.put("description", description);
         return prop;
     }
+
+    /** Array-of-string property (e.g. a tool-name subset). */
+    static Map<String, Object> strArray(String description) {
+        Map<String, Object> items = new LinkedHashMap<>();
+        items.put("type", "string");
+        Map<String, Object> prop = new LinkedHashMap<>();
+        prop.put("type", "array");
+        prop.put("items", items);
+        prop.put("description", description);
+        return prop;
+    }
 }

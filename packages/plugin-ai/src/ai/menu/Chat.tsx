@@ -100,6 +100,7 @@ const toolCallsToSteps = (calls: ToolCallRecord[]): ExecutionStep[] =>
         stepId: tc.stepId,
         sequence: tc.startedSeq ?? tc.completedSeq,
         duration: tc.durationMs,
+        subRunId: tc.subRunId,
     }))
 
 /** Read the canonical user-facing answer chosen by the shared Agent state. */

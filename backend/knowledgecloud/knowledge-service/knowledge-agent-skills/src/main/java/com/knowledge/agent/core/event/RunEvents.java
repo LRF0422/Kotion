@@ -57,8 +57,24 @@ public final class RunEvents {
 
     public static Map<String, Object> toolCompleted(String callId, String tool, boolean ok,
                                                     Object result, String error, long durationMs) {
-        return payload("callId", callId, "tool", tool, "ok", ok,
+        return toolCompleted(callId, tool, ok, result, error, durationMs, null);
+    }
+
+    /**
+     * Tool completion carrying the owning sub-agent run id. The client needs it
+     * to attribute a delegated child's frontend tool call to that child's own
+     * progress node instead of the parent's step tape. {@code subRunId} is
+     * omitted for parent-owned calls, so the parent payload shape is unchanged.
+     */
+    public static Map<String, Object> toolCompleted(String callId, String tool, boolean ok,
+                                                    Object result, String error, long durationMs,
+                                                    String subRunId) {
+        Map<String, Object> payload = payload("callId", callId, "tool", tool, "ok", ok,
                 "result", result, "error", error, "durationMs", durationMs);
+        if (subRunId != null && !subRunId.isEmpty()) {
+            payload.put("subRunId", subRunId);
+        }
+        return payload;
     }
 
     public static Map<String, Object> subSpawned(String callId, String subRunId, String task) {

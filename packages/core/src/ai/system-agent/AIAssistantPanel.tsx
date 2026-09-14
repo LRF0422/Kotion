@@ -130,6 +130,12 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
         pageId: currentPage?.pageId !== undefined ? String(currentPage.pageId) : undefined,
     })
 
+    // 主 agent 自己的工具调用记录；带 subRunId 的调用属于子 agent，归入委派树。
+    const parentToolCalls = useMemo(
+        () => agent.state.toolCalls.filter(call => !call.subRunId),
+        [agent.state.toolCalls]
+    )
+
     // 断点恢复：面板打开且空闲时自动续接未过期的 run（防重入）。
     useEffect(() => {
         if (open && currentPage?.pageId && agent.state.phase === 'idle' && !agent.state.runId) {
@@ -268,7 +274,11 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
                             </div>
                         )}
 
-                        {messages.map(message => (
+                        {messages.map(message => {
+                            // 子 agent 的调用归委派树，这里只数主 agent 自己的调用。
+                            const parentCallCount = (message.toolCalls ?? [])
+                                .filter(call => !call.subRunId).length
+                            return (
                             <div key={message.id} className={cn('flex gap-2', message.role === 'user' ? 'justify-end' : 'justify-start')}>
                                 <div
                                     className={cn(
@@ -282,13 +292,13 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
                                     {message.role === 'user' && message.content}
                                     {message.role === 'assistant' && (
                                         <div className="flex items-center gap-1.5 mt-1.5">
-                                            {message.toolCalls && message.toolCalls.length > 0 && (
+                                            {parentCallCount > 0 && (
                                                 <Badge variant="outline" className="text-[10px]">
-                                                    {message.toolCalls.length} 次工具调用
+                                                    {parentCallCount} 次工具调用
                                                 </Badge>
                                             )}
                                             {message.subRuns && message.subRuns.length > 0 && (
-                                                <SubAgentTree subRuns={message.subRuns} />
+                                                <SubAgentTree subRuns={message.subRuns} toolCalls={message.toolCalls} />
                                             )}
                                             <Button
                                                 variant="ghost"
@@ -302,7 +312,8 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
                                     )}
                                 </div>
                             </div>
-                        ))}
+                            )
+                        })}
 
                         {/* 当前进行中的 assistant 气泡 */}
                         {(isGenerating || isWaiting || agent.state.phase === 'suspended' || agent.state.phase === 'waiting-approval') && (
@@ -315,10 +326,10 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
                                         </div>
                                     )}
 
-                                    {/* 工具执行记录 */}
-                                    {agent.state.toolCalls.length > 0 && (
+                                    {/* 工具执行记录（子 agent 自己的调用在下方委派树里） */}
+                                    {parentToolCalls.length > 0 && (
                                         <div className="mt-2 space-y-1.5">
-                                            {agent.state.toolCalls.map(call => (
+                                            {parentToolCalls.map(call => (
                                                 <div key={call.callId} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                                                     {call.status === 'success' && <CheckCircle2 className="h-3 w-3 text-emerald-500" />}
                                                     {call.status === 'error' && <XCircle className="h-3 w-3 text-destructive" />}
@@ -332,7 +343,7 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
 
                                     {/* 子 agent 树 */}
                                     {agent.state.subRuns.length > 0 && (
-                                        <SubAgentTree subRuns={agent.state.subRuns} />
+                                        <SubAgentTree subRuns={agent.state.subRuns} toolCalls={agent.state.toolCalls} />
                                     )}
 
                                     {/* 计划审批卡片 */}

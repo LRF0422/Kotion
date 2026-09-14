@@ -56,6 +56,12 @@ export interface PendingToolCall {
     tool: string
     argsJson: string
     requestedAt: number
+    /**
+     * Set when this call belongs to a delegated sub-agent run. The parent run
+     * owns the pause, but the result is routed back to the child, and the UI
+     * attributes the call to that child's node.
+     */
+    subRunId?: string
 }
 
 export interface RunView {
@@ -206,8 +212,8 @@ export type AgentEvent =
     | { seq: number; type: 'step.started'; step: number }
     | { seq: number; type: 'text.delta'; content: string }
     | { seq: number; type: 'reasoning.delta'; content: string }
-    | { seq: number; type: 'tool.requested'; callId: string; tool: string; args: string }
-    | { seq: number; type: 'tool.completed'; callId: string; tool: string; ok: boolean; result?: unknown; error?: string; durationMs?: number }
+    | { seq: number; type: 'tool.requested'; callId: string; tool: string; args: string; subRunId?: string }
+    | { seq: number; type: 'tool.completed'; callId: string; tool: string; ok: boolean; result?: unknown; error?: string; durationMs?: number; subRunId?: string }
     | { seq: number; type: 'sub.spawned'; callId: string; subRunId: string; task?: string }
     | { seq: number; type: 'sub.completed'; callId: string; subRunId: string; ok: boolean; result?: unknown }
     | { seq: number; type: 'sub.failed'; callId: string; subRunId: string; ok: false; error?: string }

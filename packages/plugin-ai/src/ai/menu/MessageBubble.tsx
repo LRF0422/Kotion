@@ -9,7 +9,7 @@ import {
     useCopyToClipboard,
 } from '@kn/ui'
 import { useTranslation } from '@kn/common'
-import { Message, extractBlockReferences } from './chat-types'
+import { Message, extractBlockReferences, subToolCallsFromSteps } from './chat-types'
 import type { BlockReference } from './chat-types'
 import { AgentActivityTimeline } from './ExecutionStepsDisplay'
 import { ShimmerText } from './chat/ShimmerText'
@@ -45,8 +45,14 @@ export const MessageBubble = React.memo(function MessageBubble({
     const isAI = message.sender === 'ai'
     const relativeTime = formatDistanceToNow(message.timestamp, { addSuffix: true })
     const blockReferences = useMemo(() => extractBlockReferences(message.steps), [message.steps])
+    // A delegated child's steps belong to the sub-agent tree, not this timeline.
+    const parentSteps = useMemo(
+        () => message.steps?.filter(step => !step.subRunId),
+        [message.steps]
+    )
+    const subToolCalls = useMemo(() => subToolCallsFromSteps(message.steps), [message.steps])
     const hasActivity = Boolean(
-        message.steps?.length
+        parentSteps?.length
         || message.reasoningContent?.trim()
         || message.activitySteps?.some(step => step.reasoning.trim())
         || (message.activitySteps?.length ?? 0) > 1
@@ -91,7 +97,7 @@ export const MessageBubble = React.memo(function MessageBubble({
         >
             {(hasActivity || (isStreaming && !message.content)) && (
                 <AgentActivityTimeline
-                    steps={message.steps}
+                    steps={parentSteps}
                     activitySteps={message.activitySteps}
                     answerStepId={message.answerStepId}
                     reasoningFallback={message.reasoningContent}
@@ -101,7 +107,7 @@ export const MessageBubble = React.memo(function MessageBubble({
 
             {message.subRuns && message.subRuns.length > 0 && (
                 <div className="mb-3">
-                    <SubAgentTree subRuns={message.subRuns} />
+                    <SubAgentTree subRuns={message.subRuns} toolCalls={subToolCalls} />
                 </div>
             )}
 

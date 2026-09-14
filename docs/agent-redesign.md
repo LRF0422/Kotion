@@ -172,6 +172,7 @@ DELETE /api/agent/v1/memory/{memoryId}          删除记忆（UI）
 {"seq":4,"type":"reasoning.delta","content":"…"}
 {"seq":5,"type":"tool.requested","callId":"c1","tool":"editor.insert","args":{}}          // 前端工具
 {"seq":6,"type":"tool.completed","callId":"c2","tool":"web_search","ok":true,"result":{}} // 后端工具
+{"seq":6,"type":"tool.requested","callId":"c5","tool":"editor.insert","args":{},"subRunId":"…"} // 子 agent 的前端工具
 {"seq":7,"type":"sub.spawned","callId":"c3","subRunId":"…","task":"…"}
 {"seq":8,"type":"sub.completed","callId":"c3","subRunId":"…","ok":true,"result":"…"}
 {"seq":9,"type":"plan.proposed","callId":"c4","plan":{…}}
@@ -180,6 +181,12 @@ DELETE /api/agent/v1/memory/{memoryId}          删除记忆（UI）
 {"seq":12,"type":"run.failed","code":"tool_timeout","error":"…"}
 {"seq":13,"type":"run.cancelled"}
 ```
+
+`tool.requested` / `tool.completed` 可带可选 `subRunId`：调用由子 agent 发起，父 run 负责转发
+（暂停等前端执行）并把结果回路由给子 run，但归属是那个子 agent。前端必须按 `subRunId` 把它挂到
+对应子 agent 节点，不能混进主 agent 的步骤带；`pendingTools`（RunView）同样带 `subRunId`。子 run 终态
+（`sub.completed` / `sub.failed` / 委派超时）之后，父 run 会丢弃该子 agent 未完成的 pending 调用，
+不会再为此暂停。
 
 ## 9. 数据库迁移（V7__agentcore.sql，旧表保留数据不删）
 

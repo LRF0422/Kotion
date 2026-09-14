@@ -1,4 +1,5 @@
 import type { AgentStepRecord, SubRunRecord, RunUsage } from '@kn/common'
+import type { SubToolCallView } from '@kn/ui'
 
 // Types
 export interface Message {
@@ -37,6 +38,11 @@ export interface ExecutionStep {
     stepId?: string
     sequence?: number
     duration?: number
+    /**
+     * Owning sub-agent run for a delegated child's frontend tool call. Such a
+     * step belongs to the sub-agent tree, not to the parent's activity timeline.
+     */
+    subRunId?: string
 }
 
 // Pending user choice state
@@ -176,10 +182,11 @@ export interface BlockReference {
  * `result.references`; entries are deduped by blockId, first occurrence wins.
  */
 export function extractBlockReferences(steps?: ExecutionStep[]): BlockReference[] {
-    if (!steps) return []
     const seen = new Set<string>()
     const refs: BlockReference[] = []
-    for (const step of steps) {
+    for (const step of steps ?? []) {
+        // A delegated child's citations belong to that child, not this message.
+        if (step.subRunId) continue
         if (step.toolName !== REFERENCE_TOOL_NAME || step.status !== 'success') continue
         const list = (step.result as any)?.references
         if (!Array.isArray(list)) continue
@@ -198,5 +205,27 @@ export function formatToolName(toolName: string) {
         .replace(/([A-Z])/g, ' $1')
         .replace(/^./, str => str.toUpperCase())
         .trim()
+}
+
+/**
+ * Delegated children's tool calls, shaped for the sub-agent tree. The parent's
+ * own calls are dropped: `SubAgentTree` groups what is left by `subRunId`.
+ */
+export function subToolCallsFromSteps(steps?: ExecutionStep[]): SubToolCallView[] {
+    const calls: SubToolCallView[] = []
+    for (const step of steps ?? []) {
+        if (!step.subRunId || !step.callId) continue
+        calls.push({
+            callId: step.callId,
+            tool: step.toolName,
+            status: step.status,
+            args: step.args,
+            result: step.result,
+            error: step.error,
+            durationMs: step.duration,
+            subRunId: step.subRunId,
+        })
+    }
+    return calls
 }
 

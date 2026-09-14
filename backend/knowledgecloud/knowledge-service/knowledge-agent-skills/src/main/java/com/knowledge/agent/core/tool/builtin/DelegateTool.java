@@ -21,7 +21,8 @@ public class DelegateTool implements BackendTool {
     public ToolSpec spec() {
         Map<String, Object> props = new LinkedHashMap<>();
         props.put("task", Schemas.str("委派给子 agent 的完整任务描述（独立、自包含，可含具体要求与验收标准）。"));
-        props.put("tools", Schemas.str("子 agent 可用的编辑器工具名列表（JSON 数组，可选；缺省继承全部客户端工具）。"));
+        props.put("tools", Schemas.strArray("子 agent 可用的客户端工具名列表（可选；名字必须与工具目录完全一致，"
+                + "大小写不敏感。缺省或全部不匹配时继承全部客户端工具）。"));
         props.put("maxSteps", Schemas.integer("子 agent 的最大步数（可选，默认继承配置）。"));
         props.put("timeoutSec", Schemas.integer("子 agent 超时秒数（可选，默认 600）。"));
         return ToolSpec.of("delegate",

@@ -666,7 +666,7 @@ public class AgentLoop implements Runnable {
             }
             emit(RunEvents.TOOL_COMPLETED,
                     RunEvents.toolCompleted(item.getCallId(), match.getTool(), item.isOk(),
-                            boundResult(item.getResult()), item.getError(), 0));
+                            boundResult(item.getResult()), item.getError(), 0, match.getSubRunId()));
         }
         for (java.util.Map.Entry<String, List<ResumePayload.ToolResultItem>> entry : bySub.entrySet()) {
             delegator.resumeChild(entry.getKey(), entry.getValue());
@@ -798,6 +798,10 @@ public class AgentLoop implements Runnable {
                     finished.add(delegation.getCallId());
                 } else if (delegation.isExpired(now)) {
                     delegator.cancelChild(delegation.getSubRunId());
+                    // The child is gone: settle and drop its outstanding frontend
+                    // tool calls so the parent never pauses waiting for results
+                    // that can no longer be routed anywhere.
+                    dropChildPendingTools(delegation.getSubRunId(), "委派超时");
                     checkpoint.getMessages().add(delegateMessage(delegation, false,
                             "委派超时（" + (delegation.getTimeoutMs() / 1000) + "s）"));
                     emit(RunEvents.SUB_FAILED,
@@ -860,7 +864,32 @@ public class AgentLoop implements Runnable {
             emit(RunEvents.TOOL_COMPLETED,
                     RunEvents.toolCompleted(delegation.getCallId(), "delegate", false, null, error, 0));
         }
+        // A child can reach a terminal state while one of its frontend tool
+        // calls is still outstanding (cancel / failure mid-wait). The parent must
+        // not keep waiting on a call that can no longer be routed to anyone.
+        dropChildPendingTools(delegation.getSubRunId(), "子 agent 已结束，工具调用未返回结果");
         delegation.getSubscription().close();
+    }
+
+    /**
+     * Settle and drop a finished/cancelled child's outstanding frontend tool
+     * calls. Each one is closed out on the parent event log (failed, tagged with
+     * the child) so the client never keeps a call marked "running" for a child
+     * that can no longer receive its result.
+     */
+    private void dropChildPendingTools(String subRunId, String reason) {
+        List<PendingToolCall> orphaned = new ArrayList<>();
+        for (PendingToolCall pending : checkpoint.getPendingToolCalls()) {
+            if (subRunId.equals(pending.getSubRunId())) {
+                orphaned.add(pending);
+            }
+        }
+        for (PendingToolCall pending : orphaned) {
+            emit(RunEvents.TOOL_COMPLETED,
+                    RunEvents.toolCompleted(pending.getCallId(), pending.getTool(),
+                            false, null, reason, 0, subRunId));
+        }
+        checkpoint.getPendingToolCalls().removeAll(orphaned);
     }
 
     private ChatMessage delegateMessage(Delegation delegation, boolean ok, String content) {

@@ -57,6 +57,12 @@ export interface ToolCallRecord {
     tool: string
     args: Record<string, any>
     status: 'running' | 'success' | 'error'
+    /**
+     * Owning sub-agent run id for tools a delegated child invoked. The parent
+     * run executes and routes them, but the UI must show them on the child's
+     * node — never on the parent's step tape.
+     */
+    subRunId?: string
     step?: number
     stepId?: string
     startedSeq?: number
@@ -305,6 +311,7 @@ function applyEvent(state: EditorAgentState, event: AgentEvent): EditorAgentStat
                         tool: event.tool,
                         args: parseToolArgs(event.args),
                         status: 'running',
+                        subRunId: event.subRunId,
                         step: next.step || undefined,
                         stepId: next.activeStepId ?? undefined,
                         startedSeq: event.seq,
@@ -322,12 +329,14 @@ function applyEvent(state: EditorAgentState, event: AgentEvent): EditorAgentStat
                     result: event.result,
                     error: event.error,
                     durationMs: event.durationMs,
+                    subRunId: existing.subRunId ?? event.subRunId,
                 }
                 : {
                     callId: event.callId,
                     tool: event.tool,
                     args: {},
                     status: event.ok ? 'success' : 'error',
+                    subRunId: event.subRunId,
                     step: next.step || undefined,
                     stepId: next.activeStepId ?? undefined,
                     startedSeq: event.seq,
@@ -348,7 +357,9 @@ function applyEvent(state: EditorAgentState, event: AgentEvent): EditorAgentStat
                     : [...next.toolCalls, completed],
             }
         }
-        case 'sub.spawned':
+        case 'sub.spawned': {
+            // Replayed/reconnected streams can re-deliver the same spawn.
+            if (next.subRuns.some(sub => sub.subRunId === event.subRunId)) return next
             return {
                 ...next,
                 subRuns: [
@@ -356,6 +367,7 @@ function applyEvent(state: EditorAgentState, event: AgentEvent): EditorAgentStat
                     { callId: event.callId, subRunId: event.subRunId, task: event.task, status: 'running' },
                 ],
             }
+        }
         case 'sub.completed':
             return {
                 ...next,
@@ -774,6 +786,7 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
                     tool: pending.tool,
                     args: parseToolArgs(pending.argsJson),
                     status: 'running' as const,
+                    subRunId: pending.subRunId,
                 }))
                 if (records.length === 0 || missing.some(id => !records.some(record => record.callId === id))) {
                     throw new Error('无法恢复待执行的前端工具调用: ' + missing.join(', '))
