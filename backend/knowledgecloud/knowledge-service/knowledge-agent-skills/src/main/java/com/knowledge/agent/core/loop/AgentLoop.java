@@ -24,6 +24,7 @@ import com.knowledge.agent.core.tool.BackendTool;
 import com.knowledge.agent.core.tool.ToolContext;
 import com.knowledge.agent.core.tool.ToolGateway;
 import com.knowledge.agent.core.tool.ToolOutcome;
+import com.knowledge.agent.core.tool.ToolResultLimiter;
 import com.knowledge.agent.core.tool.ToolSpec;
 import lombok.extern.slf4j.Slf4j;
 
@@ -549,7 +550,8 @@ public class AgentLoop implements Runnable {
             }
             emit(RunEvents.TOOL_COMPLETED,
                     RunEvents.toolCompleted(outcome.getCallId(), outcome.getTool(),
-                            outcome.isOk(), outcome.getResult(), outcome.getError(), outcome.getDurationMs()));
+                            outcome.isOk(), boundResult(outcome.getResult()),
+                            outcome.getError(), outcome.getDurationMs()));
             checkpoint.getMessages().add(toolMessage(call, outcome));
             checkpoint.setScratchpad(scratchpad.read());
         }
@@ -664,7 +666,7 @@ public class AgentLoop implements Runnable {
             }
             emit(RunEvents.TOOL_COMPLETED,
                     RunEvents.toolCompleted(item.getCallId(), match.getTool(), item.isOk(),
-                            item.getResult(), item.getError(), 0));
+                            boundResult(item.getResult()), item.getError(), 0));
         }
         for (java.util.Map.Entry<String, List<ResumePayload.ToolResultItem>> entry : bySub.entrySet()) {
             delegator.resumeChild(entry.getKey(), entry.getValue());
@@ -841,11 +843,12 @@ public class AgentLoop implements Runnable {
         Map<String, Object> result = RunEvents.payload("subRunId", delegation.getSubRunId(),
                 "text", child != null ? child.getAssistantText() : null);
         if (ok) {
+            Object boundedResult = boundResult(result);
             emit(RunEvents.SUB_COMPLETED,
-                    RunEvents.subCompleted(delegation.getCallId(), delegation.getSubRunId(), true, result));
-            checkpoint.getMessages().add(delegateMessage(delegation, true, renderResult(result)));
+                    RunEvents.subCompleted(delegation.getCallId(), delegation.getSubRunId(), true, boundedResult));
+            checkpoint.getMessages().add(delegateMessage(delegation, true, renderResult(boundedResult)));
             emit(RunEvents.TOOL_COMPLETED,
-                    RunEvents.toolCompleted(delegation.getCallId(), "delegate", true, result, null, 0));
+                    RunEvents.toolCompleted(delegation.getCallId(), "delegate", true, boundedResult, null, 0));
         } else {
             String error = str(terminal.getPayload().get("error"));
             if (error.isEmpty()) {
@@ -1138,14 +1141,27 @@ public class AgentLoop implements Runnable {
     }
 
     private String renderResult(Object result) {
-        if (result == null) {
+        Object bounded = boundResult(result);
+        if (bounded == null) {
             return "null";
         }
-        try {
-            return objectMapper.writeValueAsString(result);
-        } catch (Exception e) {
-            return String.valueOf(result);
+        if (bounded instanceof String) {
+            return (String) bounded;
         }
+        try {
+            return objectMapper.writeValueAsString(bounded);
+        } catch (Exception e) {
+            return "[tool result could not be serialized]";
+        }
+    }
+
+    /**
+     * Hard-cap a tool result before it reaches the checkpoint, the event log,
+     * Redis/MySQL or a log line (see {@link ToolResultLimiter}).
+     */
+    private Object boundResult(Object result) {
+        return ToolResultLimiter.bound(result, objectMapper,
+                properties.getContext().getToolResultMaxChars());
     }
 
     /** Truncate long tool results so the context stays bounded (L1-friendly). */
