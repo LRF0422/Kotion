@@ -25,7 +25,12 @@
 ```
 
 调用时 `RemoteSkillTool` → `RemoteSkillInvoker` POST 到该服务的
-`/api/v1/agent-sdk/invoke`，并透传原始用户 JWT（`knowledge-auth` 头）。
+`/api/v1/agent-sdk/invoke`，并透传用户 JWT（`knowledge-auth` 头）。
+
+> ⚠️ `SecurityContextUtil.getToken()` 返回的是**去掉 `Bearer ` 前缀的裸 JWT**，而目标
+> 服务的 `JwtAuthenticationFilter` 只认 `Bearer ` 前缀（裸 token 会被当作未认证而 403）。
+> `RemoteSkillInvoker` 统一补齐 `Bearer ` 前缀后再转发——这是后端主动调用远程技能时
+> 最常见的 403 原因。
 
 ---
 
@@ -97,7 +102,7 @@ agent:
    Nacos 发现）；有记录但 `live=false` → 心跳没刷新（查注册方 `[AgentSDK]
    Heartbeat` 与 skillId）。
 2. 注册返回 401/403 → 放行 `/api/v1/skills/**`（见上）。
-3. 工具可见但调用失败 → 看 `RemoteSkillInvoker` 日志里的 callback 失败信息：
-   会先试 SDK 上报的 callbackUrl，失败后退化为按 `serviceId` 走 Nacos 发现解析
-   实例再试。
+3. 工具可见但调用失败（尤其 **403**）→ 后端主动调用时 JWT 必须带 `Bearer ` 前缀
+   （见上）；再查 `RemoteSkillInvoker` 日志里的 callback 失败信息：会先试 SDK 上报的
+   callbackUrl，失败后退化为按 `serviceId` 走 Nacos 发现解析实例再试。
 4. 改完配置/代码后需重启对应微服务与 agent 服务。

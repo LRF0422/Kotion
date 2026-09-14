@@ -44,6 +44,13 @@ public class RemoteSkillInvoker {
     private static final String INVOKE_PATH = "/api/v1/agent-sdk/invoke";
     private static final int DEFAULT_TIMEOUT_SECONDS = 30;
 
+    /**
+     * The platform's JwtAuthenticationFilter strips this prefix off the
+     * incoming header, so {@code SecurityContextUtil.getToken()} returns the
+     * bare JWT and it must be re-prefixed before forwarding.
+     */
+    private static final String BEARER_PREFIX = "Bearer ";
+
     private final ObjectMapper objectMapper;
     private final AgentCoreProperties properties;
     private final DiscoveryClient discoveryClient;
@@ -107,7 +114,7 @@ public class RemoteSkillInvoker {
                 .uri(URI.create(url))
                 .contentType(MediaType.APPLICATION_JSON)
                 .header(TokenConstant.HEADER,
-                        context == null || context.getToken() == null ? "" : context.getToken())
+                        bearerToken(context == null ? null : context.getToken()))
                 .bodyValue(body)
                 .retrieve()
                 .bodyToMono(String.class)
@@ -122,6 +129,22 @@ public class RemoteSkillInvoker {
             // Plain-text (non-JSON) tool results are legal — pass them through.
             return json;
         }
+    }
+
+    /**
+     * Normalises a token to the {@code Bearer <jwt>} form the platform's JWT
+     * filter expects. Idempotent: an already-prefixed token is returned as-is.
+     * Package-private for testing.
+     */
+    static String bearerToken(String token) {
+        if (token == null || token.trim().isEmpty()) {
+            return "";
+        }
+        String trimmed = token.trim();
+        if (trimmed.regionMatches(true, 0, BEARER_PREFIX, 0, BEARER_PREFIX.length())) {
+            return trimmed;
+        }
+        return BEARER_PREFIX + trimmed;
     }
 
     private String resolveServiceUrl(String serviceId) {
