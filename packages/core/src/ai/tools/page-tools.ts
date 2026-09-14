@@ -1,6 +1,6 @@
 import type { Editor } from "@kn/editor"
 import { z } from "@kn/ui"
-import type { ToolsRecord } from "@kn/common"
+import type { ToolsRecord, ToolExecutionContext } from "@kn/common"
 import {
     getPageNavigationBridge,
     getSessionPageBinding,
@@ -25,7 +25,12 @@ interface ActivePageContext {
     parentId?: string
 }
 
-const resolveActivePage = (): ActivePageContext => {
+/**
+ * The page the agent is working on: the edit target wins over the open page.
+ * When the caller passes its editor, the target is resolved for *that* agent —
+ * a delegated child bound to its own page must not see the parent's target.
+ */
+const resolveActivePage = (targetEditor?: Editor | null): ActivePageContext => {
     const current = getPageNavigationBridge()?.getCurrentPage()
     const openPage: ActivePageContext = {
         pageId: current?.pageId === undefined ? undefined : String(current.pageId),
@@ -35,7 +40,9 @@ const resolveActivePage = (): ActivePageContext => {
             ? undefined
             : String(current.parentId),
     }
-    const bound = getSessionPageBinding()?.getBoundPage()
+    const binding = getSessionPageBinding()
+    const bound = (targetEditor ? binding?.getPageForEditor?.(targetEditor) : null)
+        ?? binding?.getBoundPage()
     if (bound?.pageId) {
         return {
             pageId: toPageId(bound.pageId) ?? openPage.pageId,
@@ -107,7 +114,7 @@ export const createPageTools = (editor: Editor): ToolsRecord => ({
                 const result = await resolveService('spacePageService').spaces.querySpaces(
                     keyword ? { keyword } : undefined
                 )
-                const active = resolveActivePage()
+                const active = resolveActivePage(editor)
                 return {
                     success: true,
                     currentSpaceId: active.spaceId,
@@ -132,7 +139,7 @@ export const createPageTools = (editor: Editor): ToolsRecord => ({
             maxNodes: z.number().optional().describe("最多返回多少个节点，默认 200")
         }),
         execute: async ({ spaceId, searchValue, maxNodes }: { spaceId?: string; searchValue?: string; maxNodes?: number }) => {
-            const active = resolveActivePage()
+            const active = resolveActivePage(editor)
             const resolvedSpaceId = toPageId(spaceId) ?? active.spaceId
             if (!resolvedSpaceId) {
                 return { error: '无法确定空间，请传入 spaceId（可先用 listSpaces 查询）' }
@@ -171,7 +178,7 @@ export const createPageTools = (editor: Editor): ToolsRecord => ({
                     searchValue: query,
                     pageSize: 30,
                 })
-                const current = resolveActivePage()
+                const current = resolveActivePage(editor)
                 return {
                     success: true,
                     pages: result.records.map((page) => ({
@@ -216,7 +223,7 @@ export const createPageTools = (editor: Editor): ToolsRecord => ({
             if (!title || title.trim().length === 0) {
                 return { error: '页面标题不能为空' }
             }
-            const active = resolveActivePage()
+            const active = resolveActivePage(editor)
             const resolvedSpaceId = toPageId(spaceId) ?? active.spaceId
             if (!resolvedSpaceId) {
                 return { error: '无法确定当前空间，无法创建页面；请传入 spaceId' }
@@ -416,7 +423,11 @@ export const createPageTools = (editor: Editor): ToolsRecord => ({
         inputSchema: z.object({
             pageId: z.string().describe("要离屏编辑的页面 id（可用 getSpacePageTree/searchPages 获取）")
         }),
-        execute: async ({ pageId }: { pageId: string }) => {
+        execute: async (
+            { pageId }: { pageId: string },
+            _callId?: string,
+            context?: ToolExecutionContext,
+        ) => {
             const id = toPageId(pageId)
             if (!id) return { error: 'pageId 不能为空' }
 
@@ -431,6 +442,25 @@ export const createPageTools = (editor: Editor): ToolsRecord => ({
             }
 
             const binding = getSessionPageBinding()
+            const owner = context?.owner ?? null
+
+            // A delegated child retargets only itself: the parent keeps editing
+            // its own document, so parallel agents stop fighting over one target.
+            if (owner && binding?.editPageFor) {
+                try {
+                    const target = await binding.editPageFor(owner, { pageId: id, title, spaceId })
+                    return {
+                        success: true,
+                        pageId: id,
+                        title: target.title ?? title,
+                        spaceId: target.spaceId ?? spaceId,
+                        message: `已为本子 agent 切换到页面 "${target.title ?? title ?? id}"，此后本子 agent 的文档工具作用于它`,
+                    }
+                } catch (error) {
+                    return { error: `切换子 agent 编辑目标失败: ${error instanceof Error ? error.message : '未知错误'}` }
+                }
+            }
+
             if (binding?.editPage) {
                 try {
                     const target = await binding.editPage({ pageId: id, title, spaceId })
@@ -478,7 +508,7 @@ export const createPageTools = (editor: Editor): ToolsRecord => ({
         }) => {
             const target = toPageId(pageId)
             if (!target) return { error: 'pageId 不能为空' }
-            const active = resolveActivePage()
+            const active = resolveActivePage(editor)
             const hostPageId = toPageId(inPageId) ?? active.pageId
             const resolved = await resolveEditorForPage(editor, hostPageId, active.pageId)
             if (!resolved.editor) {

@@ -13,10 +13,21 @@ import type { OffscreenEditorHandle } from "@kn/common"
 
 /** Destroy a session this long after its last holder released it. */
 const IDLE_TIMEOUT_MS = 60_000
-/** Max simultaneously mounted sessions; idle ones beyond this are LRU-evicted. */
-const MAX_SESSIONS = 3
+/**
+ * Max simultaneously mounted sessions; idle ones beyond this are LRU-evicted.
+ * Sessions that still have holders (a conversation target, or a delegated agent
+ * editing its own page) are never evicted, so the cap only limits *idle* ones.
+ * Raised from 3 because parallel delegation can legitimately hold several.
+ */
+let maxSessions = 6
 /** Acquire wait cap — readiness must arrive within this window or the caller errors. */
 const ACQUIRE_TIMEOUT_MS = 15_000
+
+/** Adjust the idle-session cap (host configuration / tests). */
+export function setMaxOffscreenSessions(limit: number): void {
+    if (!Number.isFinite(limit) || limit < 1) return
+    maxSessions = Math.floor(limit)
+}
 
 interface Waiter {
     resolve: (handle: OffscreenEditorHandle) => void
@@ -85,14 +96,32 @@ const scheduleIdleDestroy = (record: SessionRecord): void => {
 
 /** Evict the least-recently-used idle session when over the cap. */
 const evictIfNeeded = (): void => {
-    if (sessions.size < MAX_SESSIONS) return
+    if (sessions.size < maxSessions) return
     const idle = [...sessions.values()]
         .filter(s => s.refCount <= 0)
         .sort((a, b) => a.lastUsedAt - b.lastUsedAt)
-    // Evict enough idle sessions to make room for one more.
+    // Evict enough *idle* sessions to make room for one more. Held sessions
+    // (conversation target, delegated agent) are never dropped: over-cap while
+    // everything is in use is expected, and correctness beats the cap.
     for (const record of idle) {
-        if (sessions.size < MAX_SESSIONS) break
+        if (sessions.size < maxSessions) break
         void destroySession(record.pageId)
+    }
+}
+
+/** Idle sessions currently held for eviction accounting (diagnostics). */
+export function offscreenSessionStats(): {
+    total: number
+    held: number
+    cap: number
+    pageIds: string[]
+} {
+    const all = [...sessions.values()]
+    return {
+        total: all.length,
+        held: all.filter(s => s.refCount > 0).length,
+        cap: maxSessions,
+        pageIds: all.map(s => s.pageId),
     }
 }
 

@@ -83,12 +83,44 @@ export class ToolProvider {
      * distinguish agent edits from user edits.
      */
     private tagAsAIEdit(tool: ToolDefinition): ToolDefinition {
+        return this.tagAsAIEditFor(this.editor, tool)
+    }
+
+    /**
+     * Same tagging, against an explicit editor. Tools built for a delegated
+     * child (see {@link buildToolsFor}) must tag against *that* editor, not the
+     * active one, or the AI-origin meta would land on the wrong document.
+     */
+    private tagAsAIEditFor(editor: any, tool: ToolDefinition): ToolDefinition {
         const originalExecute = tool.execute
         return {
             ...tool,
-            execute: (args: any) =>
-                runWithAITransactionMeta(this.editor, () => originalExecute(args)),
+            execute: (args: any, callId?: string, context?: any) =>
+                runWithAITransactionMeta(editor, () => originalExecute(args, callId, context)),
         }
+    }
+
+    /**
+     * Build a tool record bound to `editor` **without** touching the active
+     * catalog, its metadata or its version. Used for per-agent execution: a
+     * delegated child resolves its own editor and gets its own tool instances,
+     * so its calls can never land on the parent's document.
+     */
+    buildToolsFor(editor: any): ToolsRecord {
+        const allTools: ToolsRecord = {}
+        for (const factory of getToolFactories()) {
+            Object.assign(allTools, factory(editor, this.onUserChoiceRequest))
+        }
+        const tagged: ToolsRecord = {}
+        for (const [name, tool] of Object.entries(allTools)) {
+            tagged[name] = this.tagAsAIEditFor(editor, tool as ToolDefinition)
+        }
+        return tagged
+    }
+
+    /** The editor the active catalog is currently bound to. */
+    getEditor(): any {
+        return this.editor
     }
 
     /**

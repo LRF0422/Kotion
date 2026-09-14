@@ -10,7 +10,7 @@ import { setOffscreenEditorBridge } from "@kn/common"
 import { offscreenSessionManager } from "./session-manager"
 
 export { OffscreenEditorHost } from "./OffscreenEditorHost"
-export { offscreenSessionManager } from "./session-manager"
+export { offscreenSessionManager, offscreenSessionStats, setMaxOffscreenSessions } from "./session-manager"
 
 /**
  * Register the engine into the global bridge. Must be called once at

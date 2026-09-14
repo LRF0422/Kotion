@@ -230,6 +230,17 @@ export const ExpandableChatDemo: React.FC<{
 
     const offscreenTargetsRef = useRef<Map<string, OffscreenEditorHandle>>(new Map())
 
+    /**
+     * Per-agent (delegated sub-run) edit targets. The main agent keeps using the
+     * conversation target; a child that calls `editPage` gets its own page — and
+     * its own editor lease — so parallel agents stop fighting over one target
+     * and one document.
+     */
+    const ownerTargetsRef = useRef<Map<string, ChatTargetPage>>(new Map())
+    const ownerHandlesRef = useRef<Map<string, OffscreenEditorHandle>>(new Map())
+    /** In-flight per-agent acquisitions, so concurrent calls share one lease. */
+    const ownerAcquireRef = useRef<Map<string, Promise<{ pageId: string; editor: any }>>>(new Map())
+
     const releaseTarget = useCallback((pageId: string) => {
         const handle = offscreenTargetsRef.current.get(pageId)
         if (!handle) return
@@ -241,6 +252,91 @@ export const ExpandableChatDemo: React.FC<{
         const handles = [...offscreenTargetsRef.current.values()]
         offscreenTargetsRef.current.clear()
         handles.forEach(handle => { try { handle.release() } catch { /* ignore */ } })
+    }, [])
+
+    /** Drop one delegated agent's target + its own editor lease. */
+    const releaseOwner = useCallback((owner: string) => {
+        const handle = ownerHandlesRef.current.get(owner)
+        ownerHandlesRef.current.delete(owner)
+        ownerTargetsRef.current.delete(owner)
+        ownerAcquireRef.current.delete(owner)
+        if (handle) {
+            try { handle.release() } catch { /* already released */ }
+        }
+    }, [])
+
+    const releaseAllOwners = useCallback(() => {
+        const owners = [...ownerTargetsRef.current.keys()]
+        owners.forEach(releaseOwner)
+    }, [releaseOwner])
+
+    /** True while any delegated agent still edits this page. */
+    const pageHeldByOwner = useCallback((pageId: string): boolean => {
+        const wanted = String(pageId)
+        for (const target of ownerTargetsRef.current.values()) {
+            if (String(target.pageId) === wanted) return true
+        }
+        return false
+    }, [])
+
+    /**
+     * Point ONE agent at a page: acquire (or reuse) the editor its document
+     * tools must act on, without touching the conversation target. Concurrent
+     * requests for the same agent share one acquisition (the pool is
+     * ref-counted; two acquires would leak a reference).
+     */
+    const acquireOwnerTarget = useCallback(async (
+        owner: string,
+        page: SessionPageBindingPage,
+    ): Promise<{ pageId: string; title?: string; spaceId?: string; editor: any }> => {
+        const pageId = String(page.pageId)
+        const pending = ownerAcquireRef.current.get(owner)
+        if (pending) {
+            const acquired = await pending
+            if (String(acquired.pageId) === pageId) return acquired
+        }
+
+        const run = (async () => {
+            const target: ChatTargetPage = {
+                pageId,
+                title: page.title || '',
+                spaceId: page.spaceId,
+            }
+            const existing = ownerHandlesRef.current.get(owner)
+            if (existing && existing.pageId === pageId) {
+                ownerTargetsRef.current.set(owner, target)
+                return { ...target, editor: existing.editor }
+            }
+            if (existing) releaseOwner(owner)
+            ownerTargetsRef.current.set(owner, target)
+
+            const currentPageId = getPageNavigationBridge()?.getCurrentPage()?.pageId
+            if (currentPageId !== undefined && String(currentPageId) === pageId) {
+                // The page the user has open is its own editor.
+                return { ...target, editor }
+            }
+            const bridge = getOffscreenEditorBridge()
+            if (!bridge) throw new Error('离屏编辑器不可用')
+            const handle = await bridge.acquire(pageId)
+            ownerHandlesRef.current.set(owner, handle)
+            return { ...target, editor: handle.editor }
+        })()
+
+        ownerAcquireRef.current.set(owner, run)
+        try {
+            return await run
+        } finally {
+            if (ownerAcquireRef.current.get(owner) === run) ownerAcquireRef.current.delete(owner)
+        }
+    }, [editor, releaseOwner])
+
+    /** The page a given agent edits (owner null → the conversation target). */
+    const getPageFor = useCallback((owner?: string | null): SessionPageBindingPage | null => {
+        if (owner) {
+            const target = ownerTargetsRef.current.get(owner)
+            if (target) return { ...target }
+        }
+        return boundPageRef.current ? { ...boundPageRef.current } : null
     }, [])
 
     /** Acquire (or reuse) the live off-screen editor for a page. */
@@ -256,15 +352,17 @@ export const ExpandableChatDemo: React.FC<{
         const bridge = getOffscreenEditorBridge()
         if (!bridge) throw new Error('离屏编辑器不可用')
         // Never exceed the engine's session cap: drop the oldest other target
-        // before acquiring so the engine's own LRU can reclaim it.
+        // before acquiring so the engine's own LRU can reclaim it. A page a
+        // delegated agent is still editing is never dropped.
         if (offscreenTargetsRef.current.size >= MAX_OFFSCREEN_TARGETS) {
-            const oldest = [...offscreenTargetsRef.current.keys()].find(id => id !== pageId)
+            const oldest = [...offscreenTargetsRef.current.keys()]
+                .find(id => id !== pageId && !pageHeldByOwner(id))
             if (oldest) releaseTarget(oldest)
         }
         const handle = await bridge.acquire(pageId)
         offscreenTargetsRef.current.set(pageId, handle)
         return handle
-    }, [releaseTarget])
+    }, [releaseTarget, pageHeldByOwner])
 
     const targetPageRef = useRef<ChatTargetPage | undefined>(targetPage)
     targetPageRef.current = targetPage
@@ -322,8 +420,13 @@ export const ExpandableChatDemo: React.FC<{
     }, [activeSessionId, targetPageId, acquireAttempt, editor, activateOffscreenTarget])
 
     // Off-screen sessions are shared per page and survive target switches; only
-    // release them when the conversation changes or the panel unmounts.
-    useEffect(() => () => { releaseAllTargets() }, [activeSessionId, releaseAllTargets])
+    // release them when the conversation changes or the panel unmounts. The same
+    // goes for delegated agents' targets: their owner ids are run-scoped and a
+    // new conversation can never reuse them.
+    useEffect(() => () => {
+        releaseAllOwners()
+        releaseAllTargets()
+    }, [activeSessionId, releaseAllOwners, releaseAllTargets])
 
     const handleRetryPage = useCallback(() => setAcquireAttempt(n => n + 1), [])
 
@@ -445,7 +548,7 @@ export const ExpandableChatDemo: React.FC<{
 
     // ─── AgentCore driver ─────────────────────────────────────────
     const isAskMode = chatMode === 'ask'
-    const { getCatalog, rebindEditor, resolveTools } = useCapabilityProviders(agentEditor, {
+    const { getCatalog, rebindEditor, resolveTools, isReadOnlyTool } = useCapabilityProviders(agentEditor, {
         onUserChoiceRequest: handleUserChoiceRequest,
     })
     const catalog = useMemo(() => getCatalog(), [getCatalog])
@@ -483,15 +586,76 @@ export const ExpandableChatDemo: React.FC<{
                 return { ...record, editor: targetEditor }
             },
             getEditor: () => (offscreenHandleRef.current?.editor as Editor) ?? editor,
+            // ─── Per-agent (delegated child) targeting ───────────────
+            getPageFor,
+            getEditorFor: (owner: string) => {
+                const handle = ownerHandlesRef.current.get(owner)
+                if (handle?.editor) return handle.editor
+                const target = ownerTargetsRef.current.get(owner)
+                if (target) {
+                    const currentPageId = getPageNavigationBridge()?.getCurrentPage()?.pageId
+                    if (currentPageId !== undefined && String(currentPageId) === String(target.pageId)) {
+                        return editor
+                    }
+                }
+                // No dedicated target yet → inherit the conversation's tools.
+                return null
+            },
+            // The synchronous lookup above cannot acquire; when a child has a
+            // target but no editor yet (it pointed at the page the user had open
+            // and the user navigated away), wait for its own session instead of
+            // silently letting its tools hit the conversation document.
+            getEditorForAsync: async (owner: string) => {
+                const target = ownerTargetsRef.current.get(owner)
+                if (!target) return null
+                const acquired = await acquireOwnerTarget(owner, target)
+                return acquired.editor
+            },
+            editPageFor: (owner: string, page: SessionPageBindingPage) => acquireOwnerTarget(owner, page),
+            releaseOwner,
+            getPageForEditor: (targetEditor: any) => {
+                if (!targetEditor) return null
+                for (const [owner, handle] of ownerHandlesRef.current) {
+                    if (handle?.editor === targetEditor) {
+                        const target = ownerTargetsRef.current.get(owner)
+                        if (target) return { ...target }
+                    }
+                }
+                // A child bound to the page the user has open uses the visible
+                // editor, which the parent may share: resolving by *page* keeps
+                // both agents on the same (correct) document.
+                if (targetEditor === editor) {
+                    const currentPageId = getPageNavigationBridge()?.getCurrentPage()?.pageId
+                    if (currentPageId !== undefined) {
+                        for (const target of ownerTargetsRef.current.values()) {
+                            if (String(target.pageId) === String(currentPageId)) return { ...target }
+                        }
+                    }
+                }
+                return null
+            },
         }
         setSessionPageBinding(binding)
         return () => clearSessionPageBinding(binding)
-    }, [bindTargetPage, switchEditTarget, rebindEditor, editor])
+    }, [bindTargetPage, switchEditTarget, rebindEditor, editor, getPageFor, acquireOwnerTarget, releaseOwner])
     const liveCurrentPageId = getPageNavigationBridge()?.getCurrentPage()?.pageId
     const targetToolsReady = !targetPageId
         ? !!currentPage?.pageId
         : ((targetStatus === 'current' && String(liveCurrentPageId) === targetPageId)
             || (targetStatus === 'ready' && offscreenHandle?.pageId === targetPageId))
+
+    // A child bound to the page the user had open must keep its own editor if
+    // the user navigates away: promote it to an off-screen session eagerly, so
+    // its next tool call does not have to wait for the acquisition.
+    useEffect(() => {
+        for (const [owner, target] of ownerTargetsRef.current) {
+            if (ownerHandlesRef.current.has(owner) || ownerAcquireRef.current.has(owner)) continue
+            if (liveCurrentPageId !== undefined && String(liveCurrentPageId) === String(target.pageId)) continue
+            void acquireOwnerTarget(owner, target).catch(error => {
+                console.error('Failed to promote delegated agent target off-screen:', error)
+            })
+        }
+    }, [liveCurrentPageId, acquireOwnerTarget])
 
     const agent = useEditorAgent({
         conversationId: activeSessionId,
@@ -500,6 +664,9 @@ export const ExpandableChatDemo: React.FC<{
         // Editor rules the backend cannot import; appended to its base prompt.
         systemPrompt: isAskMode ? undefined : EDITOR_AGENT_PROMPT,
         resolveTools,
+        // Mutating calls are serialized per document (write lease), and a
+        // delegated child resolves its tools against its own editor.
+        isReadOnlyTool,
         // A page switch transiently unbinds the editor; defer a pending tool
         // batch until the new editor is published instead of failing it.
         autoExecuteTools: targetToolsReady && !!agentEditor,

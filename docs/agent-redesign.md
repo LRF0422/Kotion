@@ -358,3 +358,49 @@ bean-definition-overriding 兜底，无副作用。守卫断言已加入 `AgentC
 @ComponentScan、兜底 Bean 存在且带 @ConditionalOnMissingBean）+ `EditorAgentControllerMappingTest`
 （URL 契约 + 包位置）。
 
+
+## 15. 多 agent 与编辑器（每 agent 目标 + 写租约）
+
+并行委派下主 agent 与子 agent 会同时调用前端（编辑器）工具。此前所有 agent 共用**一个会话级编辑
+目标**：任何一方 `editPage` 都会改掉别人的目标，同页写入也会交错（读到旧内容再写 = 丢失更新）。
+现在的规则：
+
+1. **归属（owner）**：一次工具调用的 owner 是 `subRunId ?? null`（子 agent / 主 agent）。
+   `tool.requested`、`pendingTools`、`ToolCallRecord` 都带 `subRunId`，前端据此路由。
+2. **每 agent 的编辑目标**：`session-page-binding` 增加 owner 维度
+   （`getPageFor` / `getEditorFor` / `editPageFor` / `releaseOwner` / `getPageForEditor`）。
+   子 agent 调 `editPage` 只切它自己（`editPageFor`），主 agent 的会话目标不受影响；
+   未重定向的子 agent 继承父的工具与目标。子 agent 的编辑器来自离屏编辑器池
+   （`offscreenSessionManager`，按 pageId 复用、引用计数、空闲回收），run 终态即释放；
+   若子 agent 指向的正是用户当时打开的页面、随后用户切走，则在后台把它提升为离屏会话，
+   必要时 `getEditorForAsync` 会等它就绪（宁可等，也不静默写到别的文档）。
+3. **工具绑定到具体 editor**：`useCapabilityProviders.resolveTools(owner)` 用
+   `ToolProvider.buildToolsFor(editor)`（core 工厂 + 插件工具，按 editor 实例缓存）为子 agent
+   构建独立工具集 —— 文档工具因此天然作用于该 agent 自己的文档。
+4. **写租约**：`document-write-lock.ts` 按文档（pageId）做 FIFO 互斥，只读工具不排队；
+   执行器在调用 mutating 工具前取租约（`isReadOnlyTool` 判定：显式 `readOnly === true`
+   或 category 属于 `document-read`/`discovery`/`interaction`）。等待上限 120s，超时以明确错误回填。
+5. **池容量**：`setMaxOffscreenSessions(n)`（App 启动设为 8）；只淘汰**空闲**会话，
+   被持有的会话（会话目标 / 子 agent）永不淘汰；Chat 的离屏目标缓存也不会释放仍被
+   owner 持有的页面。
+
+### 15.1 平台请求包装器会改坏 agent 的 JSON 体（必须跳过 XSS 过滤）
+
+平台全局 `KnowledgeRequestFilter`（`knowledge-core-tool`，注册在 `/*`）默认把**整个请求体**当作 HTML
+跑一遍 XSS 清洗（`XssHtmlServletRequestWrapper`）。agent 的 body 是结构化 JSON，值里是任意数据
+（用户提示词、Markdown、工具结果里的源码/HTML、`<|--`、`=>`、`&`），清洗会改写这些字符并让 JSON 失配，
+表现为 `/runs/{id}/resume` 400：`Unexpected character ... was expecting comma to separate Object entries`
+（引用链停在 `toolResults[i].result`）。
+
+已在 `knowledge-agent-skills/application.yml` 配置 `knowledge.xss.skip-url: /api/agent/**`，与
+`knowledge-wiki` 对结构化文档端点的既有做法一致；回归测试见
+`AgentRequestBodyXssExclusionTest`（对照 `PageDocXssExclusionTest`）。
+
+注意：跳过 XSS 后 body 仍会过 `KnowledgeHttpServletRequestWrapper`，它会去掉**裸换行**并按平台默认
+编码重编码（`new String(bytes, UTF-8).getBytes()`）——客户端只发紧凑 JSON（换行已转义），所以安全；
+但若 JVM 默认编码不是 UTF-8（Java 8 + 非 UTF-8 locale），中文工具结果会变成 `?`，需加
+`-Dfile.encoding=UTF-8`。
+
+范围说明：写租约是**单 JS 上下文**内的（同标签页）。两个标签页编辑同一页面依旧只靠 CRDT 合并；
+跨标签串行化需要 Web Locks，未实现。子 agent 的编辑器隔离是「不同页面」级别的，两个子 agent
+写**同一页**仍然共享同一个 Y.Doc，只保证调用不交错、不丢失更新。

@@ -43,6 +43,39 @@ export interface SessionPageBinding {
     editPage?: (page: SessionPageBindingPage) => Promise<SessionPageEditorTarget>
     /** The editor backing the conversation's current edit target, if ready. */
     getEditor?: () => any | null
+    /**
+     * The page a given agent edits. `owner` is a delegated sub-run id, or
+     * null/undefined for the conversation's default (main agent) target.
+     * Used by the client executor to scope the write lease per document.
+     */
+    getPageFor?: (owner?: string | null) => SessionPageBindingPage | null
+    /**
+     * The editor a given agent's document tools must act on. Returns null when
+     * the owner has no dedicated editor — callers then fall back to the
+     * conversation target. A child that never retargeted inherits the parent's.
+     */
+    getEditorFor?: (owner: string) => any | null
+    /**
+     * Async variant used when the owner has a target but no editor yet (it was
+     * pointed at the page the user had open and the user navigated away):
+     * resolves once that agent's own editor is ready. Returning the wrong
+     * document silently is worse than waiting.
+     */
+    getEditorForAsync?: (owner: string) => Promise<any | null>
+    /**
+     * Point ONE agent at a page without touching the conversation target: the
+     * child gets its own off-screen editor lease and the parent's tools keep
+     * acting on the parent's document.
+     */
+    editPageFor?: (owner: string, page: SessionPageBindingPage) => Promise<SessionPageEditorTarget>
+    /** Drop a delegated agent's target + editor lease (run terminal/reset). */
+    releaseOwner?: (owner: string) => void
+    /**
+     * The page a given editor instance is the agent's target of. Editor-bound
+     * tools only carry their editor, so this is how they resolve the same
+     * per-agent target the executor routed them with.
+     */
+    getPageForEditor?: (editor: any) => SessionPageBindingPage | null
 }
 
 let current: SessionPageBinding | null = null

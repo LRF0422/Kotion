@@ -107,3 +107,14 @@ knowledge:
   secure:
     skip-url:
       - /api/v1/skills/**
+  # Agent bodies are structured JSON whose *values* are arbitrary data: user
+  # prompts, markdown, and tool results that may contain fetched source code,
+  # HTML, `-->>`, `=>`, `<|--`, or `&`. The global XSS wrapper runs the whole
+  # raw body through an HTML filter, which rewrites those characters and leaves
+  # the body unparseable ("Unexpected character ... was expecting comma",
+  # surfacing as a 400 on /runs/{id}/resume once a tool result is large enough).
+  # Same precedent as knowledge-wiki's structured document endpoints: escaping
+  # belongs at the render boundary, not on the wire.
+  xss:
+    skip-url:
+      - /api/agent/**

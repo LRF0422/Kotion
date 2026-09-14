@@ -19,7 +19,7 @@ import { resources } from "./locales/resources"
 import { merge } from "lodash";
 import { clearContextSensitiveClientState, normalizeTokenResponse, notifyContextChanged, setRequestToast, setSessionExpiredHandler, resetSessionExpiredGuard, subscribeToContextChanges, useAsyncEffect, useSafeState, useTranslation, useApi, useUploadFile, APIS, saveTokens } from "@kn/common"
 import { registerCoreToolFactories } from "./ai/tools/register"
-import { registerOffscreenEditorBridge } from "./ai/offscreen"
+import { registerOffscreenEditorBridge, setMaxOffscreenSessions } from "./ai/offscreen"
 import { AIAssistantPage } from "./pages/AIAssistantPage"
 import { registerPageEditWindow } from "./components/PageEditWindowImpl"
 import { toast, AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel, Button, Input, Label } from "@kn/ui"
@@ -255,6 +255,9 @@ const ensureCoreRuntimeRegistered = () => {
     if (coreRuntimeRegistered) return
     registerCoreToolFactories()
     registerOffscreenEditorBridge()
+    // Parallel delegation can legitimately hold several off-screen editors at
+    // once (one per agent's page); the cap only bounds *idle* sessions.
+    setMaxOffscreenSessions(8)
     registerPageEditWindow()
     coreRuntimeRegistered = true
 }

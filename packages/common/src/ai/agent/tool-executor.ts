@@ -1,11 +1,16 @@
 /**
  * EditorToolExecutor — executes frontend-dispatched editor tools with:
+ *  - per-owner tool resolution (a delegated child gets tools bound to *its*
+ *    editor, never the parent's document)
+ *  - a per-document write lease so mutating calls from different agents on the
+ *    same document cannot interleave (see document-write-lock.ts)
  *  - callId idempotency (event replay never re-executes an editor operation)
  *  - completion tracking without unsafe non-cancelling timeouts
  *  - execution callbacks for the UI (start/success/error)
  */
 
 import type { OnToolExecution, ToolDefinition, ToolsRecord } from '../types'
+import { withDocumentWrite } from './document-write-lock'
 
 export interface ToolExecutionResult {
     ok: boolean
@@ -33,14 +38,27 @@ export function ensureSerializableToolResult(outcome: ToolExecutionResult): Tool
 }
 
 export interface EditorToolExecutorOptions {
-    /** Resolve the live editor-bound tool definitions (factory output). */
-    resolveTools: () => ToolsRecord | Promise<ToolsRecord>
+    /**
+     * Resolve the live editor-bound tool definitions (factory output). The
+     * optional owner is the delegated sub-run id: hosts that can bind a child to
+     * its own editor must return tools for that editor.
+     */
+    resolveTools: (owner?: string | null) => ToolsRecord | Promise<ToolsRecord>
+    /**
+     * Read-only classification for the write lease. Omitted → every tool is
+     * treated as mutating (conservative: extra serialization, never skipped).
+     */
+    isReadOnlyTool?: (toolName: string) => boolean
+    /** Document a call acts on, or null when nothing has to be serialized. */
+    resolveDocumentId?: (owner: string | null) => string | null
     /** Execution notifications for the UI. */
     onExecution?: OnToolExecution
 }
 
 export class EditorToolExecutor {
     private readonly resolveTools: EditorToolExecutorOptions['resolveTools']
+    private readonly isReadOnlyTool?: EditorToolExecutorOptions['isReadOnlyTool']
+    private readonly resolveDocumentId?: EditorToolExecutorOptions['resolveDocumentId']
     private readonly onExecution?: OnToolExecution
     /** Idempotency cache: callId → result (replays/reconnects reuse it). */
     private readonly cache = new Map<string, ToolExecutionResult>()
@@ -49,11 +67,18 @@ export class EditorToolExecutor {
 
     constructor(options: EditorToolExecutorOptions) {
         this.resolveTools = options.resolveTools
+        this.isReadOnlyTool = options.isReadOnlyTool
+        this.resolveDocumentId = options.resolveDocumentId
         this.onExecution = options.onExecution
     }
 
     /** Execute a frontend tool call; cached/in-flight results are shared by callId. */
-    async execute(callId: string, toolName: string, args: Record<string, any>): Promise<ToolExecutionResult> {
+    async execute(
+        callId: string,
+        toolName: string,
+        args: Record<string, any>,
+        owner?: string | null
+    ): Promise<ToolExecutionResult> {
         const cached = this.cache.get(callId)
         if (cached) {
             return cached
@@ -62,7 +87,7 @@ export class EditorToolExecutor {
         if (running) {
             return running
         }
-        const execution = this.executeOnce(callId, toolName, args)
+        const execution = this.executeOnce(callId, toolName, args, owner ?? null)
             .finally(() => this.inFlight.delete(callId))
         this.inFlight.set(callId, execution)
         return execution
@@ -71,7 +96,8 @@ export class EditorToolExecutor {
     private async executeOnce(
         callId: string,
         toolName: string,
-        args: Record<string, any>
+        args: Record<string, any>,
+        owner: string | null
     ): Promise<ToolExecutionResult> {
         const started = Date.now()
         this.onExecution?.({
@@ -84,7 +110,7 @@ export class EditorToolExecutor {
 
         let outcome: ToolExecutionResult
         try {
-            const tools = await this.resolveTools()
+            const tools = await this.resolveTools(owner)
             const definition: ToolDefinition | undefined = tools[toolName]
             if (!definition || typeof definition.execute !== 'function') {
                 outcome = { ok: false, error: 'Tool not available on frontend: ' + toolName }
@@ -92,7 +118,15 @@ export class EditorToolExecutor {
                 // Do not race mutating editor operations against a timeout: the
                 // underlying promise cannot be cancelled and may commit later,
                 // after the backend has already retried under a new callId.
-                const result = await definition.execute(args, callId)
+                //
+                // Mutating calls take the document's write lease so two agents
+                // bound to the same document cannot interleave (lost updates).
+                const run = () => definition.execute(args, callId, { owner })
+                const mutating = this.isReadOnlyTool ? !this.isReadOnlyTool(toolName) : true
+                const documentId = mutating ? (this.resolveDocumentId?.(owner) ?? null) : null
+                const result = documentId
+                    ? await withDocumentWrite(documentId, run, { label: toolName })
+                    : await run()
                 outcome = { ok: true, result }
             }
         } catch (error: any) {

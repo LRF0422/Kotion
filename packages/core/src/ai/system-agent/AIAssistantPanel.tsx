@@ -113,7 +113,7 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
     const messagesEndRef = useRef<HTMLDivElement>(null)
 
     // 编辑器工具目录 + 技能片段（保留的供应商层）
-    const { getCatalog, resolveTools } = useCapabilityProviders(editor ?? null)
+    const { getCatalog, resolveTools, isReadOnlyTool } = useCapabilityProviders(editor ?? null)
     const catalog = useMemo(() => getCatalog(), [getCatalog])
     // tools[] 常驻；技能自带的工具随 skills[] 下发，首次调用前不展开参数结构。
     const { tools: toolSpecs, skills } = useMemo(() => buildAgentRunInputs(catalog), [catalog])
@@ -126,6 +126,9 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
         // Editor rules the backend cannot import; appended to its base prompt.
         systemPrompt: EDITOR_AGENT_PROMPT,
         resolveTools,
+        // Mutating calls take the document's write lease (no per-agent editor
+        // target in this panel, so all agents share the conversation document).
+        isReadOnlyTool,
         spaceId: currentPage?.spaceId,
         pageId: currentPage?.pageId !== undefined ? String(currentPage.pageId) : undefined,
     })

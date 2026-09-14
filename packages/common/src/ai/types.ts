@@ -103,11 +103,22 @@ export interface ToolDefinition {
      * Execute the tool. The optional second argument is the stable tool-call
      * id assigned by the backend — executors that surface {@link OnToolExecution}
      * events should include it so start/end events correlate even when the
-     * same tool runs concurrently.
+     * same tool runs concurrently. The third argument carries the owning agent
+     * (see {@link ToolExecutionContext}).
      */
-    execute: (args: any, callId?: string) => Promise<any>
+    execute: (args: any, callId?: string, context?: ToolExecutionContext) => Promise<any>
     // Allow additional properties that might be required by AI library
     [key: string]: any
+}
+
+/**
+ * Who a tool call belongs to. `owner` is the delegated sub-run id when a child
+ * agent issued the call, and null/undefined for the main agent of the run.
+ * Tools that act on a per-agent target (e.g. `editPage`) must use it instead of
+ * assuming the conversation-wide target.
+ */
+export interface ToolExecutionContext {
+    owner?: string | null
 }
 
 export type ToolsRecord = Record<string, ToolDefinition>

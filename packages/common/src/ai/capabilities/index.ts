@@ -6,7 +6,7 @@
  * approach.
  */
 
-export { collectCapabilityCatalog } from './CapabilityCatalog'
+export { collectCapabilityCatalog, isReadOnlyTool } from './CapabilityCatalog'
 export type { CapabilityCatalog } from './CapabilityCatalog'
 export { buildAgentRunInputs } from './catalog-to-run-input'
 export type { AgentRunInputs } from './catalog-to-run-input'

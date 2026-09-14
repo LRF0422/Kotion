@@ -42,7 +42,7 @@ export const wrapToolWithCallback = (
 
     return {
         ...tool,
-        execute: async (args: any, callId?: string) => {
+        execute: async (args: any, callId?: string, context?: any) => {
             const startTime = Date.now()
 
             onToolExecution({
@@ -54,7 +54,7 @@ export const wrapToolWithCallback = (
             })
 
             try {
-                const result = await tool.execute(args, callId)
+                const result = await tool.execute(args, callId, context)
 
                 onToolExecution({
                     toolName,

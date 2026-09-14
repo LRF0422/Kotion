@@ -8,6 +8,7 @@ import {
 import { RunLock, RunStore } from './run-store'
 import { createPendingToolBatch, matchesPendingToolBatch } from './tool-batch'
 import { EditorToolExecutor, ensureSerializableToolResult } from './tool-executor'
+import { resetDocumentWriteLocks, withDocumentWrite } from './document-write-lock'
 
 async function checkExecutorSingleFlight(): Promise<void> {
     let executions = 0
@@ -162,6 +163,96 @@ async function checkStreamIdleWatchdog(): Promise<void> {
     )
 }
 
+async function checkDocumentWriteSerialization(): Promise<void> {
+    resetDocumentWriteLocks()
+    const events: string[] = []
+    let inFlight = 0
+    let overlapped = false
+    const task = (name: string, delay: number) => async () => {
+        inFlight += 1
+        if (inFlight > 1) overlapped = true
+        events.push(`${name}:start`)
+        await new Promise(resolve => setTimeout(resolve, delay))
+        events.push(`${name}:end`)
+        inFlight -= 1
+        return name
+    }
+
+    // Two agents writing the SAME document: strictly serialized, FIFO.
+    const results = await Promise.all([
+        withDocumentWrite('page-1', task('a', 20)),
+        withDocumentWrite('page-1', task('b', 0)),
+    ])
+    assert.deepEqual(results, ['a', 'b'])
+    assert.equal(overlapped, false, 'mutating calls on one document must not interleave')
+    assert.deepEqual(events, ['a:start', 'a:end', 'b:start', 'b:end'])
+
+    // Different documents are independent: b2 must not wait for a2.
+    const parallel: string[] = []
+    await Promise.all([
+        withDocumentWrite('page-2', async () => {
+            await new Promise(resolve => setTimeout(resolve, 20))
+            parallel.push('a2')
+        }),
+        withDocumentWrite('page-3', async () => { parallel.push('b2') }),
+    ])
+    assert.deepEqual(parallel, ['b2', 'a2'], 'documents must not serialize against each other')
+
+    // A wedged holder must not park a later call forever.
+    void withDocumentWrite('page-4', () => new Promise<never>(() => { /* never settles */ }))
+    await new Promise(resolve => setTimeout(resolve, 5))
+    await assert.rejects(
+        withDocumentWrite('page-4', async () => 'x', { timeoutMs: 30 }),
+        /等待文档写锁超时/
+    )
+    resetDocumentWriteLocks()
+}
+
+async function checkExecutorOwnerAndWriteLease(): Promise<void> {
+    resetDocumentWriteLocks()
+    const ownersSeen: Array<string | null | undefined> = []
+    let releaseWrite: (() => void) | undefined
+    const writeGate = new Promise<void>(resolve => { releaseWrite = resolve })
+    let writeStarted = 0
+
+    const executor = new EditorToolExecutor({
+        resolveTools: owner => {
+            ownersSeen.push(owner)
+            return {
+                writeDocument: {
+                    description: 'mutating',
+                    inputSchema: {},
+                    execute: async () => { writeStarted += 1; await writeGate; return 'written' },
+                },
+                readDocument: {
+                    description: 'read only',
+                    inputSchema: {},
+                    execute: async () => 'read',
+                },
+            }
+        },
+        isReadOnlyTool: name => name === 'readDocument',
+        resolveDocumentId: () => 'page-9',
+    })
+
+    // A delegated child's mutating call holds the document's write lease…
+    const write = executor.execute('w-1', 'writeDocument', {}, 'sub-42')
+    await new Promise(resolve => setTimeout(resolve, 5))
+    assert.equal(writeStarted, 1)
+
+    // …while a read-only call must NOT queue behind it.
+    const readOutcome = await Promise.race([
+        executor.execute('r-1', 'readDocument', {}, 'sub-42'),
+        new Promise<'timeout'>(resolve => setTimeout(() => resolve('timeout'), 50)),
+    ])
+    assert.notEqual(readOutcome, 'timeout', 'read-only calls must not wait for the write lease')
+    assert.deepEqual(ownersSeen, ['sub-42', 'sub-42'], 'the owner must reach resolveTools')
+
+    releaseWrite?.()
+    assert.deepEqual(await write, { ok: true, result: 'written' })
+    resetDocumentWriteLocks()
+}
+
 async function main(): Promise<void> {
     await checkExecutorSingleFlight()
     checkToolBatchSnapshot()
@@ -172,6 +263,8 @@ async function main(): Promise<void> {
     checkStreamSequenceRules()
     await checkCrlfSseFrames()
     await checkStreamIdleWatchdog()
+    await checkDocumentWriteSerialization()
+    await checkExecutorOwnerAndWriteLease()
     console.log('agent-core checks passed')
 }
 

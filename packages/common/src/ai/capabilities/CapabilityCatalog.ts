@@ -37,7 +37,12 @@ const ALWAYS_ON_TOOLS = new Set([
     'referenceBlocks',
 ])
 
-function isReadOnlyTool(meta: { category: string } | undefined, executable: any): boolean {
+/**
+ * Read-only classification shared by the run catalog (plan-mode gating) and the
+ * client executor (write-lease decision). A tool is read-only when it says so
+ * explicitly, or when its category is inherently non-mutating.
+ */
+export function isReadOnlyTool(meta: { category: string } | undefined, executable: any): boolean {
     if (executable?.readOnly === true) return true
     return !!meta && READ_ONLY_CATEGORIES.has(meta.category)
 }

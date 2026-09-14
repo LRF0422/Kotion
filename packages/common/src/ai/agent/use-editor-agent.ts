@@ -23,6 +23,7 @@ import type {
     RunUsage,
 } from './types'
 import { parseToolArgs, TERMINAL_EVENT_TYPES } from './types'
+import { getSessionPageBinding } from '../session-page-binding'
 
 const MAX_OUTER_RECONNECTS = 5
 const MAX_TOOL_RESUME_RETRIES = 5
@@ -440,8 +441,17 @@ export interface UseEditorAgentOptions {
     conversationId: string
     /** Client-declared editor tool specs (host builds them from its registry). */
     tools: AgentToolSpec[]
-    /** Live editor-bound tool executables keyed by name. */
-    resolveTools: () => ToolsRecord | Promise<ToolsRecord>
+    /**
+     * Live editor-bound tool executables keyed by name. The optional owner is a
+     * delegated sub-run id; hosts that bind children to their own editor return
+     * that agent's tools instead of the conversation's.
+     */
+    resolveTools: (owner?: string | null) => ToolsRecord | Promise<ToolsRecord>
+    /**
+     * Read-only classification (write-lease decision). Mutating calls from two
+     * agents on the same document are serialized instead of interleaving.
+     */
+    isReadOnlyTool?: (name: string) => boolean
     skills?: AgentSkillInput[]
     /**
      * Extra system-prompt text appended by the backend after its base prompt.
@@ -483,6 +493,7 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
         conversationId, tools, resolveTools, skills, systemPrompt, spaceId, pageId, onToolExecution,
         autoExecuteTools = true, persist = true, store: providedStore,
     } = options
+    const isReadOnlyTool = options.isReadOnlyTool
 
     const client = useMemo(() => options.client ?? new AgentClient(), [options.client])
     const store = useMemo(() => providedStore ?? new RunStore(), [providedStore])
@@ -510,10 +521,59 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
     const attachRef = useRef<(runId?: string) => Promise<boolean>>(async () => false)
     stateRef.current = state
 
+    /**
+     * Serialize mutating calls per document. The document is the page the owner
+     * currently edits: the delegated child's own target when it has one, else
+     * the conversation's target. No binding / no known page → no serialization
+     * (single-editor hosts keep their existing behaviour).
+     */
+    const resolveDocumentId = useCallback((owner: string | null): string | null => {
+        const binding = getSessionPageBinding()
+        if (!binding) return null
+        const page = (owner ? binding.getPageFor?.(owner) : binding.getPageFor?.(null))
+            ?? binding.getBoundPage?.()
+        const pageId = page?.pageId
+        return pageId === undefined || pageId === null || pageId === '' ? null : String(pageId)
+    }, [])
+
     const executor = useMemo(
-        () => new EditorToolExecutor({ resolveTools, onExecution: onToolExecution }),
-        [resolveTools, onToolExecution]
+        () => new EditorToolExecutor({ resolveTools, isReadOnlyTool, resolveDocumentId, onExecution: onToolExecution }),
+        [resolveTools, isReadOnlyTool, resolveDocumentId, onToolExecution]
     )
+
+    /** Delegated agents seen in this turn, so their editor targets can be freed. */
+    const ownedAgentIdsRef = useRef<Set<string>>(new Set())
+    const releaseOwnerTarget = useCallback((owner: string) => {
+        ownedAgentIdsRef.current.delete(owner)
+        getSessionPageBinding()?.releaseOwner?.(owner)
+    }, [])
+    const releaseAllOwnerTargets = useCallback(() => {
+        const ids = [...ownedAgentIdsRef.current]
+        ownedAgentIdsRef.current.clear()
+        const binding = getSessionPageBinding()
+        if (!binding?.releaseOwner) return
+        for (const owner of ids) binding.releaseOwner(owner)
+    }, [])
+
+    // A delegated child's editor target dies with it: releasing on terminal
+    // avoids pinning an off-screen session (and its editor) for an agent that
+    // can no longer edit anything. A call that is still executing keeps the
+    // target alive until its result is applied — destroying the editor under a
+    // running tool is worse than holding the session a moment longer.
+    useEffect(() => {
+        for (const sub of state.subRuns) {
+            if (sub.status === 'running') {
+                ownedAgentIdsRef.current.add(sub.subRunId)
+                continue
+            }
+            if (!ownedAgentIdsRef.current.has(sub.subRunId)) continue
+            const stillRunning = state.toolCalls.some(
+                call => call.subRunId === sub.subRunId && call.status === 'running'
+            )
+            if (stillRunning) continue
+            releaseOwnerTarget(sub.subRunId)
+        }
+    }, [state.subRuns, state.toolCalls, releaseOwnerTarget])
 
     const startStream = useCallback(
         (runId: string, afterSeq: number, generation = generationRef.current) => {
@@ -820,7 +880,7 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
                             '无法持久化工具执行状态，已在修改文档前停止'
                         )
                     }
-                    outcome = await executor.execute(callId, record.tool, record.args)
+                    outcome = await executor.execute(callId, record.tool, record.args, record.subRunId ?? null)
                     if (!store.saveToolResult(current.runId, callId, outcome)) {
                         // Persistence only backs crash recovery. The intent marker
                         // written before the side effect still makes a re-attach
@@ -1077,6 +1137,7 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
         abortRef.current?.abort()
         toolBatchRef.current = null
         executor.clearCache()
+        releaseAllOwnerTargets()
         if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current)
         if (attachRetryTimerRef.current) clearTimeout(attachRetryTimerRef.current)
         if (toolRetryTimerRef.current) clearTimeout(toolRetryTimerRef.current)
@@ -1110,6 +1171,7 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
         abortRef.current?.abort()
         toolBatchRef.current = null
         executor.clearCache()
+        releaseAllOwnerTargets()
         if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current)
         if (attachRetryTimerRef.current) clearTimeout(attachRetryTimerRef.current)
         if (toolRetryTimerRef.current) clearTimeout(toolRetryTimerRef.current)
@@ -1122,7 +1184,7 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
         lock.release()
         if (ownsConversation || terminal) store.clear(conversationId)
         dispatch({ type: 'reset' })
-    }, [conversationId, lock, store, executor])
+    }, [conversationId, lock, store, executor, releaseAllOwnerTargets])
 
     // A single mounted chat component can switch conversations. Release only the
     // local stream/lock; keep the previous conversation's saved handle intact.
@@ -1142,9 +1204,10 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
         toolRetryAttemptRef.current = 0
         toolRetryKeyRef.current = ''
         lock.release()
+        releaseAllOwnerTargets()
         conversationRef.current = conversationId
         dispatch({ type: 'reset' })
-    }, [conversationId, executor, lock])
+    }, [conversationId, executor, lock, releaseAllOwnerTargets])
 
     // Cleanup on unmount: release the stream (keep the stored handle for re-attach).
     useEffect(() => {

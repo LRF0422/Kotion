@@ -32,9 +32,10 @@ import { event, PLUGIN_CHANGED } from "../event"
 import type { OnToolExecution, OnUserChoiceRequest, ToolsRecord, ToolDefinition } from "./types"
 import { ToolProvider } from "./providers/ToolProvider"
 import { SkillProvider } from "./providers/SkillProvider"
-import { collectCapabilityCatalog, type CapabilityCatalog } from "./capabilities"
+import { collectCapabilityCatalog, isReadOnlyTool, type CapabilityCatalog } from "./capabilities"
 import { builtinSkills, getSkillRegistry } from "./skills"
 import { wrapToolsWithCallback } from "./utils/tool-wrapper"
+import { getSessionPageBinding } from "./session-page-binding"
 
 export interface CapabilityProviders {
     toolProvider: ToolProvider
@@ -61,11 +62,23 @@ export interface CapabilityProviders {
      */
     rebindEditor: (nextEditor: Editor | null) => ToolsRecord
     /**
-     * Stable executor resolver: always returns the tools bound to the current
-     * editor. Unlike `allTools`, its identity never changes, so a tool that
-     * switches the target mid-batch is honoured by the next tool call.
+     * Stable executor resolver. Without an owner it returns the tools bound to
+     * the conversation's current editor (identity never changes, so a tool that
+     * switches the target mid-batch is honoured by the next call). With an owner
+     * (a delegated sub-run id) it returns tools bound to **that agent's** editor
+     * when the host exposes one, so a child can never edit the parent's document.
      */
-    resolveTools: () => ToolsRecord
+    resolveTools: (owner?: string | null) => ToolsRecord | Promise<ToolsRecord>
+    /**
+     * Build (or return the cached) tool record bound to an arbitrary editor,
+     * without touching the active catalog. Exposed for hosts that manage
+     * per-agent editors themselves.
+     */
+    buildToolsForEditor: (targetEditor: any) => ToolsRecord
+    /** Read-only classification of a tool (write-lease decision). */
+    isReadOnlyTool: (name: string) => boolean
+    /** The editor the active catalog is bound to. */
+    getEditor: () => any
 }
 
 export function useCapabilityProviders(
@@ -127,6 +140,13 @@ export function useCapabilityProviders(
     const editorRef = useRef<Editor | null>(editor)
     editorRef.current = editor
 
+    /**
+     * Tool records built for delegated agents' editors, keyed by editor instance.
+     * Building one runs every tool factory plus plugin resolution, and an agent's
+     * editor is stable for the life of its target, so cache per instance.
+     */
+    const perEditorToolsRef = useRef<WeakMap<object, ToolsRecord>>(new WeakMap())
+
     /** Plugin skills are editor-independent; register them whenever they change. */
     const registerPluginSkills = useCallback(() => {
         if (!pluginManager) return
@@ -138,6 +158,32 @@ export function useCapabilityProviders(
     }, [pluginManager, skillProvider])
 
     /**
+     * Plugin tools grouped by the extension that owns them. Keeps the per-plugin
+     * `pluginName` metadata of the active catalog intact, and — resolving against
+     * an explicit editor — is also what per-agent tool builds reuse.
+     */
+    const collectPluginToolsByPlugin = useCallback((targetEditor: Editor | null): Array<{ pluginName: string; tools: ToolsRecord }> => {
+        if (!pluginManager || !targetEditor) return []
+        const allPluginTools = pluginManager.resolveTools?.(targetEditor) || {}
+        const extensions = pluginManager.resolveEditorExtensions?.() || []
+        const groups: Array<{ pluginName: string; tools: ToolsRecord }> = []
+        for (const ext of extensions) {
+            const toolNames = ext.tools
+                ? (Array.isArray(ext.tools) ? ext.tools : [ext.tools]).map((t: any) => t.name)
+                : []
+            if (toolNames.length === 0) continue
+            const filtered: ToolsRecord = {}
+            for (const name of toolNames) {
+                if (allPluginTools[name]) filtered[name] = allPluginTools[name]
+            }
+            if (Object.keys(filtered).length > 0) {
+                groups.push({ pluginName: ext.name, tools: filtered })
+            }
+        }
+        return groups
+    }, [pluginManager])
+
+    /**
      * Rebind built-in + plugin tools to `nextEditor`, synchronously, and return
      * the resulting tool map. Plugin tools are resolved against the *new*
      * editor here rather than restored from the previous provider, so a stale
@@ -146,28 +192,46 @@ export function useCapabilityProviders(
     const rebindEditor = useCallback((nextEditor: Editor | null): ToolsRecord => {
         toolProvider.updateEditor(nextEditor)
         registerPluginSkills()
+        // A rebind may pick up different plugin tools; per-editor builds cached
+        // for delegated agents must not keep serving the previous instances.
+        perEditorToolsRef.current = new WeakMap()
 
-        if (pluginManager && nextEditor) {
-            const allPluginTools = pluginManager.resolveTools?.(nextEditor) || {}
-            const extensions = pluginManager.resolveEditorExtensions?.() || []
-            for (const ext of extensions) {
-                const toolNames = ext.tools
-                    ? (Array.isArray(ext.tools) ? ext.tools : [ext.tools]).map((t: any) => t.name)
-                    : []
-                if (toolNames.length === 0) continue
-
-                const filtered: ToolsRecord = {}
-                for (const name of toolNames) {
-                    if (allPluginTools[name]) filtered[name] = allPluginTools[name]
-                }
-                if (Object.keys(filtered).length > 0) {
-                    console.log(`[Agent] Registering ${Object.keys(filtered).length} tools from plugin "${ext.name}"`)
-                    toolProvider.registerPluginTools(filtered, ext.name)
-                }
-            }
+        for (const group of collectPluginToolsByPlugin(nextEditor)) {
+            console.log(`[Agent] Registering ${Object.keys(group.tools).length} tools from plugin "${group.pluginName}"`)
+            toolProvider.registerPluginTools(group.tools, group.pluginName)
         }
         return toolProvider.getAllTools()
-    }, [toolProvider, pluginManager, registerPluginSkills])
+    }, [toolProvider, pluginManager, registerPluginSkills, collectPluginToolsByPlugin])
+
+    /**
+     * Build (or reuse) the tool record bound to an arbitrary editor: the same
+     * sources as the active catalog (core factories + plugin extension tools),
+     * but nothing is registered and no metadata/version is touched. This is what
+     * gives a delegated agent its own editor binding.
+     */
+    const buildToolsForEditor = useCallback((targetEditor: any): ToolsRecord => {
+        if (!targetEditor) return toolProvider.getAllTools()
+        const cached = perEditorToolsRef.current.get(targetEditor)
+        if (cached) return cached
+
+        const record = toolProvider.buildToolsFor(targetEditor)
+        for (const group of collectPluginToolsByPlugin(targetEditor)) {
+            Object.assign(record, group.tools)
+        }
+        perEditorToolsRef.current.set(targetEditor, record)
+        return record
+    }, [toolProvider, collectPluginToolsByPlugin])
+
+    /**
+     * Read-only classification for the write lease: the tool's own flag wins,
+     * otherwise its catalog category decides (same rule the run catalog uses).
+     */
+    const isReadOnlyToolName = useCallback((name: string): boolean => {
+        return isReadOnlyTool(toolProvider.getToolMetadata(name), toolProvider.getToolExecutor(name))
+    }, [toolProvider])
+
+    /** The editor the active catalog is bound to. */
+    const getEditor = useCallback(() => toolProvider.getEditor(), [toolProvider])
 
     // Rebind on every active-editor change. useLayoutEffect (not useEffect) so
     // the tools are already pointing at the new editor before the auto-execute
@@ -176,7 +240,6 @@ export function useCapabilityProviders(
     useLayoutEffect(() => {
         rebindEditor(editor)
     }, [rebindEditor, editor])
-
     // Register plugin skills + tools when plugins are loaded/changed, against
     // the editor that is active at that moment.
     useEffect(() => {
@@ -255,8 +318,28 @@ export function useCapabilityProviders(
     )
 
     // Stable: reads the live provider map at call time, so a target switch made
-    // earlier in the same backend tool batch is visible to the next call.
-    const resolveTools = useCallback(() => toolProvider.getAllTools(), [toolProvider])
+    // earlier in the same backend tool batch is visible to the next call. An
+    // owner (delegated sub-run) resolves to that agent's own editor when the
+    // host exposes one; a child that never retargeted inherits the parent's.
+    // The async branch only runs when the owner has a target whose editor is
+    // not ready yet — never silently fall back to another document for it.
+    const resolveTools = useCallback((owner?: string | null): ToolsRecord | Promise<ToolsRecord> => {
+        if (!owner) return toolProvider.getAllTools()
+        const binding = getSessionPageBinding()
+        const activeEditor = toolProvider.getEditor()
+        const ownerEditor = binding?.getEditorFor?.(owner)
+        if (ownerEditor) {
+            return ownerEditor === activeEditor
+                ? toolProvider.getAllTools()
+                : buildToolsForEditor(ownerEditor)
+        }
+        if (!binding?.getEditorForAsync) return toolProvider.getAllTools()
+        return binding.getEditorForAsync(owner).then(editor => (
+            editor && editor !== activeEditor
+                ? buildToolsForEditor(editor)
+                : toolProvider.getAllTools()
+        ))
+    }, [toolProvider, buildToolsForEditor])
 
     return {
         toolProvider,
@@ -268,5 +351,8 @@ export function useCapabilityProviders(
         allTools,
         rebindEditor,
         resolveTools,
+        buildToolsForEditor,
+        isReadOnlyTool: isReadOnlyToolName,
+        getEditor,
     }
 }
