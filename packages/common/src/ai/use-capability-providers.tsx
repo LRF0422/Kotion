@@ -68,7 +68,10 @@ export interface CapabilityProviders {
      * (a delegated sub-run id) it returns tools bound to **that agent's** editor
      * when the host exposes one, so a child can never edit the parent's document.
      */
-    resolveTools: (owner?: string | null) => ToolsRecord | Promise<ToolsRecord>
+    resolveTools: (
+        owner?: string | null,
+        options?: { mutating?: boolean }
+    ) => ToolsRecord | Promise<ToolsRecord>
     /**
      * Build (or return the cached) tool record bound to an arbitrary editor,
      * without touching the active catalog. Exposed for hosts that manage
@@ -323,7 +326,10 @@ export function useCapabilityProviders(
     // host exposes one; a child that never retargeted inherits the parent's.
     // The async branch only runs when the owner has a target whose editor is
     // not ready yet — never silently fall back to another document for it.
-    const resolveTools = useCallback((owner?: string | null): ToolsRecord | Promise<ToolsRecord> => {
+    const resolveTools = useCallback((
+        owner?: string | null,
+        options?: { mutating?: boolean }
+    ): ToolsRecord | Promise<ToolsRecord> => {
         if (!owner) return toolProvider.getAllTools()
         const binding = getSessionPageBinding()
         const activeEditor = toolProvider.getEditor()
@@ -334,7 +340,7 @@ export function useCapabilityProviders(
                 : buildToolsForEditor(ownerEditor)
         }
         if (!binding?.getEditorForAsync) return toolProvider.getAllTools()
-        return binding.getEditorForAsync(owner).then(editor => (
+        return binding.getEditorForAsync(owner, options).then(editor => (
             editor && editor !== activeEditor
                 ? buildToolsForEditor(editor)
                 : toolProvider.getAllTools()

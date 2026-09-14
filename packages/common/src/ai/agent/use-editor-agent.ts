@@ -13,6 +13,7 @@ import { AgentClient } from './client'
 import { AgentControlError } from './events'
 import { createPendingToolBatch, matchesPendingToolBatch, type PendingToolBatch } from './tool-batch'
 import { EditorToolExecutor, type ToolExecutionResult } from './tool-executor'
+import { SubRunWorker } from './sub-run-worker'
 import { RunLock, RunStore } from './run-store'
 import type {
     AgentChatMessage,
@@ -80,6 +81,19 @@ export interface SubRunRecord {
     status: 'running' | 'completed' | 'failed'
     result?: unknown
     error?: string
+    /**
+     * The child's own live output, streamed from the child's run (the client
+     * drives children directly). Trimmed to a preview for the tree.
+     */
+    text?: string
+    reasoning?: string
+    /** Private-document merge outcome, once the child settled. */
+    merge?: {
+        applied: number
+        conflicts: number
+        reorderDetected: boolean
+        summary: string
+    }
 }
 
 export interface EditorAgentState {
@@ -133,6 +147,8 @@ type Action =
     | { type: 'run-created'; runId: string; lastSeq: number; text: string; phase: EditorAgentPhase }
     | { type: 'restore-pending'; records: ToolCallRecord[] }
     | { type: 'event'; event: AgentEvent }
+    | { type: 'sub-event'; subRunId: string; event: AgentEvent }
+    | { type: 'sub-merged'; subRunId: string; report: SubRunRecord['merge'] }
     | { type: 'tool-result'; callId: string; ok: boolean; result?: unknown; error?: string }
     | { type: 'transport-error'; error: string }
     | { type: 'connection-stopped'; error: string }
@@ -213,8 +229,104 @@ function reducer(state: EditorAgentState, action: Action): EditorAgentState {
             return { ...state, phase: 'failed', error: action.error }
         case 'event':
             return applyEvent(state, action.event)
+        case 'sub-event':
+            return applySubRunEvent(state, action.subRunId, action.event)
+        case 'sub-merged':
+            return {
+                ...state,
+                subRuns: state.subRuns.map(sub =>
+                    sub.subRunId === action.subRunId ? { ...sub, merge: action.report } : sub
+                ),
+            }
         default:
             return state
+    }
+}
+
+/** Preview cap for a child's own streamed output in the tree. */
+const SUB_RUN_PREVIEW_CHARS = 400
+
+/**
+ * Fold a delegated child's own event into the parent state: its text/reasoning
+ * preview live on the {@link SubRunRecord}, and its frontend tool calls join the
+ * shared tool tape tagged with `subRunId` (so the tree attributes them and the
+ * parent's own timeline filters them out).
+ *
+ * Only the events the UI needs are handled — parent-only bookkeeping (steps,
+ * answer selection, pending ids) must never be touched by a child's stream.
+ */
+function applySubRunEvent(state: EditorAgentState, subRunId: string, event: AgentEvent): EditorAgentState {
+    const next = { ...state }
+    const preview = (current: string | undefined, delta: string): string => {
+        const merged = (current ?? '') + delta
+        return merged.length > SUB_RUN_PREVIEW_CHARS ? merged.slice(-SUB_RUN_PREVIEW_CHARS) : merged
+    }
+
+    switch (event.type) {
+        case 'text.delta':
+            return {
+                ...next,
+                subRuns: next.subRuns.map(sub =>
+                    sub.subRunId === subRunId ? { ...sub, text: preview(sub.text, event.content) } : sub
+                ),
+            }
+        case 'reasoning.delta':
+            return {
+                ...next,
+                subRuns: next.subRuns.map(sub =>
+                    sub.subRunId === subRunId ? { ...sub, reasoning: preview(sub.reasoning, event.content) } : sub
+                ),
+            }
+        case 'tool.requested': {
+            if (next.toolCalls.some(call => call.callId === event.callId)) return next
+            return {
+                ...next,
+                toolCalls: [
+                    ...next.toolCalls,
+                    {
+                        callId: event.callId,
+                        tool: event.tool,
+                        args: parseToolArgs(event.args),
+                        status: 'running',
+                        subRunId,
+                        startedSeq: event.seq,
+                    },
+                ],
+            }
+        }
+        case 'tool.completed': {
+            const existing = next.toolCalls.find(call => call.callId === event.callId)
+            const completed: ToolCallRecord = existing
+                ? {
+                    ...existing,
+                    status: event.ok ? 'success' : 'error',
+                    completedSeq: event.seq,
+                    result: event.result,
+                    error: event.error,
+                    durationMs: event.durationMs,
+                    subRunId,
+                }
+                : {
+                    callId: event.callId,
+                    tool: event.tool,
+                    args: {},
+                    status: event.ok ? 'success' : 'error',
+                    subRunId,
+                    startedSeq: event.seq,
+                    completedSeq: event.seq,
+                    result: event.result,
+                    error: event.error,
+                    durationMs: event.durationMs,
+                }
+            return {
+                ...next,
+                toolCalls: existing
+                    ? next.toolCalls.map(call => call.callId === event.callId ? completed : call)
+                    : [...next.toolCalls, completed],
+            }
+        }
+        default:
+            return next
     }
 }
 
@@ -530,6 +642,10 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
     const resolveDocumentId = useCallback((owner: string | null): string | null => {
         const binding = getSessionPageBinding()
         if (!binding) return null
+        // A forked (private) document is edited exclusively by its own agent, so
+        // the shared-document write lease must not serialize it — that lease
+        // exists for agents writing one document, which no longer happens.
+        if (owner && binding.isOwnerIsolated?.(owner)) return null
         const page = (owner ? binding.getPageFor?.(owner) : binding.getPageFor?.(null))
             ?? binding.getBoundPage?.()
         const pageId = page?.pageId
@@ -543,27 +659,68 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
 
     /** Delegated agents seen in this turn, so their editor targets can be freed. */
     const ownedAgentIdsRef = useRef<Set<string>>(new Set())
-    const releaseOwnerTarget = useCallback((owner: string) => {
+    const releaseOwnerTarget = useCallback((owner: string, options?: { commit?: boolean }) => {
         ownedAgentIdsRef.current.delete(owner)
-        getSessionPageBinding()?.releaseOwner?.(owner)
+        const binding = getSessionPageBinding()
+        // `releaseOwner` merges the agent's private document back into the live
+        // page and hands back the report; the tree shows it on the child.
+        void Promise.resolve(binding?.releaseOwner?.(owner, options))
+            .then(report => {
+                if (report && mountedRef.current) {
+                    dispatch({ type: 'sub-merged', subRunId: owner, report })
+                }
+            })
+            .catch(() => { /* the tree already shows the child's own error */ })
     }, [])
     const releaseAllOwnerTargets = useCallback(() => {
         const ids = [...ownedAgentIdsRef.current]
         ownedAgentIdsRef.current.clear()
         const binding = getSessionPageBinding()
         if (!binding?.releaseOwner) return
-        for (const owner of ids) binding.releaseOwner(owner)
+        // A cancelled/reset turn discards private documents: merging half-done
+        // work into the page would be worse than losing it.
+        for (const owner of ids) void binding.releaseOwner?.(owner, { commit: false })
     }, [])
+
+    /**
+     * Delegated children are driven from here, not through the parent run: each
+     * child gets its own stream + resume round-trips, so several children can
+     * work (and touch their own documents) at the same time.
+     */
+    const subRunWorker = useMemo(() => new SubRunWorker({
+        client,
+        store,
+        executeTool: (callId, tool, args, owner) => executor.execute(callId, tool, args, owner),
+        onEvent: (runId, event) => dispatch({ type: 'sub-event', subRunId: runId, event }),
+        onSettled: (runId, settlement) => {
+            // The child can no longer edit anything: hand its editor back, drop
+            // its tool-result journal, and merge its private document — but only
+            // when it finished normally (a cancelled/timed-out child's partial
+            // edits are discarded rather than written into the page).
+            ownedAgentIdsRef.current.delete(runId)
+            void Promise.resolve(
+                getSessionPageBinding()?.releaseOwner?.(runId, { commit: settlement === 'completed' })
+            ).then(report => {
+                if (report && mountedRef.current) {
+                    dispatch({ type: 'sub-merged', subRunId: runId, report })
+                }
+            }).catch(() => { /* the tree already shows the child's own error */ })
+            store.clearToolResults(runId)
+        },
+    }), [client, store, executor])
 
     // A delegated child's editor target dies with it: releasing on terminal
     // avoids pinning an off-screen session (and its editor) for an agent that
     // can no longer edit anything. A call that is still executing keeps the
     // target alive until its result is applied — destroying the editor under a
-    // running tool is worse than holding the session a moment longer.
+    // running tool is worse than holding the session a moment longer. Live
+    // children are attached to the sub-run worker here, which is also how a
+    // re-attached parent resumes driving children it did not spawn in this tab.
     useEffect(() => {
         for (const sub of state.subRuns) {
             if (sub.status === 'running') {
                 ownedAgentIdsRef.current.add(sub.subRunId)
+                subRunWorker.attach(sub.subRunId)
                 continue
             }
             if (!ownedAgentIdsRef.current.has(sub.subRunId)) continue
@@ -571,9 +728,10 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
                 call => call.subRunId === sub.subRunId && call.status === 'running'
             )
             if (stillRunning) continue
-            releaseOwnerTarget(sub.subRunId)
+            subRunWorker.detach(sub.subRunId)
+            releaseOwnerTarget(sub.subRunId, { commit: sub.status === 'completed' })
         }
-    }, [state.subRuns, state.toolCalls, releaseOwnerTarget])
+    }, [state.subRuns, state.toolCalls, releaseOwnerTarget, subRunWorker])
 
     const startStream = useCallback(
         (runId: string, afterSeq: number, generation = generationRef.current) => {
@@ -1137,6 +1295,7 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
         abortRef.current?.abort()
         toolBatchRef.current = null
         executor.clearCache()
+        subRunWorker.stopAll()
         releaseAllOwnerTargets()
         if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current)
         if (attachRetryTimerRef.current) clearTimeout(attachRetryTimerRef.current)
@@ -1171,6 +1330,7 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
         abortRef.current?.abort()
         toolBatchRef.current = null
         executor.clearCache()
+        subRunWorker.stopAll()
         releaseAllOwnerTargets()
         if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current)
         if (attachRetryTimerRef.current) clearTimeout(attachRetryTimerRef.current)
@@ -1184,7 +1344,7 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
         lock.release()
         if (ownsConversation || terminal) store.clear(conversationId)
         dispatch({ type: 'reset' })
-    }, [conversationId, lock, store, executor, releaseAllOwnerTargets])
+    }, [conversationId, lock, store, executor, releaseAllOwnerTargets, subRunWorker])
 
     // A single mounted chat component can switch conversations. Release only the
     // local stream/lock; keep the previous conversation's saved handle intact.
@@ -1204,10 +1364,11 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
         toolRetryAttemptRef.current = 0
         toolRetryKeyRef.current = ''
         lock.release()
+        subRunWorker.stopAll()
         releaseAllOwnerTargets()
         conversationRef.current = conversationId
         dispatch({ type: 'reset' })
-    }, [conversationId, executor, lock, releaseAllOwnerTargets])
+    }, [conversationId, executor, lock, releaseAllOwnerTargets, subRunWorker])
 
     // Cleanup on unmount: release the stream (keep the stored handle for re-attach).
     useEffect(() => {
@@ -1219,12 +1380,15 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
             abortRef.current?.abort()
             toolBatchRef.current = null
             attachReplayThroughRef.current = 0
+            // Children keep running server-side; this tab simply stops driving
+            // them (another tab / a later re-attach picks them up).
+            subRunWorker.dispose()
             if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current)
             if (attachRetryTimerRef.current) clearTimeout(attachRetryTimerRef.current)
             if (toolRetryTimerRef.current) clearTimeout(toolRetryTimerRef.current)
             lock.release()
         }
-    }, [lock])
+    }, [lock, subRunWorker])
 
     return { state, start, attach, approvePlan, continueRun, retryConnection, cancel, reset }
 }

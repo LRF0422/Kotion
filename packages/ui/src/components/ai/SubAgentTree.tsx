@@ -43,6 +43,16 @@ export interface SubRunView {
     error?: string
     /** Per-child tool calls, when the host already grouped them. */
     toolCalls?: SubToolCallView[]
+    /** The child's own live output (tail-preview), streamed by the client. */
+    text?: string
+    reasoning?: string
+    /** Private-document merge outcome (true-parallel fork/merge). */
+    merge?: {
+        applied: number
+        conflicts: number
+        reorderDetected?: boolean
+        summary: string
+    }
 }
 
 export interface SubAgentTreeProps {
@@ -80,6 +90,13 @@ function firstLine(task?: string): string {
     if (!task) return '（未提供任务描述）'
     const line = task.split('\n').map(part => part.trim()).find(Boolean)
     return line ?? '（未提供任务描述）'
+}
+
+/** Last non-empty line of a child's live output — one line, never a dump. */
+function lastLine(text?: string): string {
+    if (!text) return ''
+    const lines = text.split('\n').map(part => part.trim()).filter(Boolean)
+    return lines.length > 0 ? lines[lines.length - 1] : ''
 }
 
 /**
@@ -273,8 +290,15 @@ const SubAgentRow: React.FC<SubAgentRowProps> = ({ index, sub, toolCalls, expand
                     : <ChevronRight className="h-2.5 w-2.5 shrink-0 text-muted-foreground" />}
                 <span className="shrink-0 font-mono text-[10px] text-muted-foreground/60">#{index}</span>
                 <StatusIcon status={sub.status} />
-                <span className="min-w-0 flex-1 truncate text-[11px]" title={sub.task}>
-                    {firstLine(sub.task)}
+                <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate text-[11px]" title={sub.task}>
+                        {firstLine(sub.task)}
+                    </span>
+                    {sub.status === 'running' && lastLine(sub.text) && (
+                        <span className="truncate text-[10px] italic text-muted-foreground/70" title={sub.text}>
+                            {lastLine(sub.text)}
+                        </span>
+                    )}
                 </span>
                 {toolCalls.length > 0 && (
                     <span className="flex shrink-0 items-center gap-0.5 text-[10px] text-muted-foreground">
@@ -300,6 +324,27 @@ const SubAgentRow: React.FC<SubAgentRowProps> = ({ index, sub, toolCalls, expand
                         <div>
                             <p className="text-[10px] text-muted-foreground/70">工具调用</p>
                             <ToolSteps calls={toolCalls} />
+                        </div>
+                    )}
+
+                    {sub.status === 'running' && sub.text && (
+                        <div>
+                            <p className="text-[10px] text-muted-foreground/70">实时输出</p>
+                            <p className="max-h-32 overflow-auto whitespace-pre-wrap break-words text-[11px] text-muted-foreground">
+                                {sub.text}
+                            </p>
+                        </div>
+                    )}
+
+                    {sub.merge && (
+                        <div>
+                            <p className="text-[10px] text-muted-foreground/70">合并回页面</p>
+                            <p className={cn(
+                                'text-[11px]',
+                                sub.merge.conflicts > 0 ? 'text-amber-600' : 'text-muted-foreground'
+                            )}>
+                                {sub.merge.summary}
+                            </p>
                         </div>
                     )}
 

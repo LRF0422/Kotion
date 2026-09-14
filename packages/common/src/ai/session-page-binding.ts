@@ -11,6 +11,8 @@
  * Same registration pattern as page-navigation-bridge / offscreen-editor-bridge.
  */
 
+import type { AgentDocumentMergeReport } from './agent-document-bridge'
+
 export interface SessionPageBindingPage {
     pageId: string
     title?: string
@@ -59,17 +61,32 @@ export interface SessionPageBinding {
      * Async variant used when the owner has a target but no editor yet (it was
      * pointed at the page the user had open and the user navigated away):
      * resolves once that agent's own editor is ready. Returning the wrong
-     * document silently is worse than waiting.
+     * document silently is worse than waiting. `mutating` tells the host a
+     * write is coming, which is the signal to fork a private document when the
+     * agent does not have one yet (read-only calls can use the live page).
      */
-    getEditorForAsync?: (owner: string) => Promise<any | null>
+    getEditorForAsync?: (owner: string, options?: { mutating?: boolean }) => Promise<any | null>
     /**
      * Point ONE agent at a page without touching the conversation target: the
      * child gets its own off-screen editor lease and the parent's tools keep
      * acting on the parent's document.
      */
     editPageFor?: (owner: string, page: SessionPageBindingPage) => Promise<SessionPageEditorTarget>
-    /** Drop a delegated agent's target + editor lease (run terminal/reset). */
-    releaseOwner?: (owner: string) => void
+    /**
+     * Drop a delegated agent's target + editor lease (run terminal/reset).
+     * `commit: false` discards the private document instead of merging it —
+     * used when the child did not finish normally (timeout/cancel), so half-done
+     * edits never land in the page. Returns the merge report when one was made.
+     */
+    releaseOwner?: (
+        owner: string,
+        options?: { commit?: boolean }
+    ) => Promise<AgentDocumentMergeReport | null> | void
+    /**
+     * True while the owner edits a private forked document: it never touches the
+     * shared page, so the shared write lease must not serialize it.
+     */
+    isOwnerIsolated?: (owner: string) => boolean
     /**
      * The page a given editor instance is the agent's target of. Editor-bound
      * tools only carry their editor, so this is how they resolve the same

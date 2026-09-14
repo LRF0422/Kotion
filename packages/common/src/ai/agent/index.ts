@@ -13,6 +13,16 @@ export { RunStore, RunLock } from './run-store'
 export type { SavedRun } from './run-store'
 export { EditorToolExecutor } from './tool-executor'
 export type { EditorToolExecutorOptions, ToolExecutionResult } from './tool-executor'
+export { SubRunWorker, DEFAULT_MAX_PARALLEL_CALLS } from './sub-run-worker'
+export type { SubRunClient, SubRunSettlement, SubRunWorkerOptions } from './sub-run-worker'
+export { mergeAgentDocument, blockKey } from './document-merge'
+export type {
+    DocJson,
+    MergeConflict,
+    MergeConflictReason,
+    MergeOp,
+    MergeResult,
+} from './document-merge'
 export { useEditorAgent } from './use-editor-agent'
 export type {
     AgentStepRecord,

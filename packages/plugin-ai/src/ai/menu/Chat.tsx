@@ -13,6 +13,7 @@ import {
     useEditorAgent,
     useCapabilityProviders,
     buildAgentRunInputs,
+    getAgentDocumentBridge,
     getOffscreenEditorBridge,
     getPageNavigationBridge,
     setSessionPageBinding,
@@ -25,6 +26,7 @@ import {
     EDITOR_AGENT_PROMPT,
 } from "@kn/common"
 import type {
+    AgentDocumentMergeReport,
     ChatMode,
     ChatModelParams,
     OffscreenEditorHandle,
@@ -254,22 +256,6 @@ export const ExpandableChatDemo: React.FC<{
         handles.forEach(handle => { try { handle.release() } catch { /* ignore */ } })
     }, [])
 
-    /** Drop one delegated agent's target + its own editor lease. */
-    const releaseOwner = useCallback((owner: string) => {
-        const handle = ownerHandlesRef.current.get(owner)
-        ownerHandlesRef.current.delete(owner)
-        ownerTargetsRef.current.delete(owner)
-        ownerAcquireRef.current.delete(owner)
-        if (handle) {
-            try { handle.release() } catch { /* already released */ }
-        }
-    }, [])
-
-    const releaseAllOwners = useCallback(() => {
-        const owners = [...ownerTargetsRef.current.keys()]
-        owners.forEach(releaseOwner)
-    }, [releaseOwner])
-
     /** True while any delegated agent still edits this page. */
     const pageHeldByOwner = useCallback((pageId: string): boolean => {
         const wanted = String(pageId)
@@ -307,7 +293,12 @@ export const ExpandableChatDemo: React.FC<{
                 ownerTargetsRef.current.set(owner, target)
                 return { ...target, editor: existing.editor }
             }
-            if (existing) releaseOwner(owner)
+            if (existing) {
+                // Retargeting an owner that held a shared lease: drop that lease
+                // inline (releaseOwner is declared later in this component).
+                ownerHandlesRef.current.delete(owner)
+                try { existing.release() } catch { /* already released */ }
+            }
             ownerTargetsRef.current.set(owner, target)
 
             const currentPageId = getPageNavigationBridge()?.getCurrentPage()?.pageId
@@ -328,7 +319,7 @@ export const ExpandableChatDemo: React.FC<{
         } finally {
             if (ownerAcquireRef.current.get(owner) === run) ownerAcquireRef.current.delete(owner)
         }
-    }, [editor, releaseOwner])
+    }, [editor])
 
     /** The page a given agent edits (owner null → the conversation target). */
     const getPageFor = useCallback((owner?: string | null): SessionPageBindingPage | null => {
@@ -363,6 +354,69 @@ export const ExpandableChatDemo: React.FC<{
         offscreenTargetsRef.current.set(pageId, handle)
         return handle
     }, [releaseTarget, pageHeldByOwner])
+
+    /**
+     * The shared (live) editor for a page: the visible editor when the page is
+     * open, otherwise its off-screen session. Used both to fork a private
+     * document and as the merge target when an agent finishes.
+     */
+    const resolveSharedEditorForPage = useCallback(async (page: ChatTargetPage): Promise<any | null> => {
+        const currentPageId = getPageNavigationBridge()?.getCurrentPage()?.pageId
+        if (currentPageId !== undefined && String(currentPageId) === String(page.pageId)) return editor
+        try {
+            const handle = await activateOffscreenTarget(page)
+            return handle?.editor ?? null
+        } catch (error) {
+            console.error('Failed to acquire the shared editor for the page:', error)
+            return null
+        }
+    }, [editor, activateOffscreenTarget])
+
+    /**
+     * Drop one delegated agent: merge its private document back into the live
+     * page (report returned), then release every editor it held.
+     */
+    const releaseOwner = useCallback(async (
+        owner: string,
+        options?: { commit?: boolean },
+    ): Promise<AgentDocumentMergeReport | null> => {
+        const docBridge = getAgentDocumentBridge()
+        const page = ownerTargetsRef.current.get(owner) ?? null
+        let report: AgentDocumentMergeReport | null = null
+        const shouldCommit = options?.commit !== false
+
+        if (shouldCommit && docBridge?.get(owner) && page) {
+            const liveEditor = await resolveSharedEditorForPage(page)
+            if (liveEditor) {
+                try {
+                    report = await docBridge.commit(owner, liveEditor)
+                } catch (error) {
+                    console.error('Failed to merge the agent document:', error)
+                }
+            }
+        }
+        if (docBridge?.get(owner)) docBridge.release(owner)
+
+        // Fallback path (no private document): release the shared lease.
+        const handle = ownerHandlesRef.current.get(owner)
+        ownerHandlesRef.current.delete(owner)
+        ownerTargetsRef.current.delete(owner)
+        ownerAcquireRef.current.delete(owner)
+        if (handle) {
+            try { handle.release() } catch { /* already released */ }
+        }
+        return report
+    }, [resolveSharedEditorForPage])
+
+    // Teardown (panel close / conversation switch): discard rather than merge.
+    // A private document lives in this tab only, and writing a half-finished
+    // child document into the page is worse than losing it — the child run
+    // itself keeps running server-side.
+    const releaseAllOwners = useCallback(() => {
+        const owners = [...ownerTargetsRef.current.keys()]
+        owners.forEach(owner => { void releaseOwner(owner, { commit: false }) })
+    }, [releaseOwner])
+
 
     const targetPageRef = useRef<ChatTargetPage | undefined>(targetPage)
     targetPageRef.current = targetPage
@@ -589,6 +643,10 @@ export const ExpandableChatDemo: React.FC<{
             // ─── Per-agent (delegated child) targeting ───────────────
             getPageFor,
             getEditorFor: (owner: string) => {
+                // A forked private document wins: its tools must act on the
+                // agent's own copy, never the shared page.
+                const privateDoc = getAgentDocumentBridge()?.get(owner)?.editor
+                if (privateDoc) return privateDoc
                 const handle = ownerHandlesRef.current.get(owner)
                 if (handle?.editor) return handle.editor
                 const target = ownerTargetsRef.current.get(owner)
@@ -598,23 +656,75 @@ export const ExpandableChatDemo: React.FC<{
                         return editor
                     }
                 }
-                // No dedicated target yet → inherit the conversation's tools.
+                // Nothing yet: the async path decides (fork on writes, live page
+                // for reads).
                 return null
             },
             // The synchronous lookup above cannot acquire; when a child has a
             // target but no editor yet (it pointed at the page the user had open
             // and the user navigated away), wait for its own session instead of
             // silently letting its tools hit the conversation document.
-            getEditorForAsync: async (owner: string) => {
-                const target = ownerTargetsRef.current.get(owner)
+            getEditorForAsync: async (owner: string, options?: { mutating?: boolean }) => {
+                const docBridge = getAgentDocumentBridge()
+                const existing = docBridge?.get(owner)?.editor
+                if (existing) return existing
+
+                const target = ownerTargetsRef.current.get(owner) ?? boundPageRef.current
                 if (!target) return null
-                const acquired = await acquireOwnerTarget(owner, target)
-                return acquired.editor
+                // Read-only work reads the live page: no fork, no snapshot cost,
+                // and no staleness for research-style children.
+                if (!options?.mutating || !docBridge) return null
+
+                const source = await resolveSharedEditorForPage(target)
+                if (!source) return null
+                try {
+                    const handle = await docBridge.fork(
+                        owner,
+                        String(target.pageId),
+                        source,
+                        target.title,
+                    )
+                    ownerTargetsRef.current.set(owner, target)
+                    return handle.editor
+                } catch (error) {
+                    // Over the fork cap (or a bad source): degrade to the shared
+                    // document, which the write lease still serializes.
+                    console.warn('[agent] private document unavailable, using the shared document:', error)
+                    return null
+                }
             },
-            editPageFor: (owner: string, page: SessionPageBindingPage) => acquireOwnerTarget(owner, page),
+            editPageFor: async (owner: string, page: SessionPageBindingPage) => {
+                const target: ChatTargetPage = {
+                    pageId: String(page.pageId),
+                    title: page.title || '',
+                    spaceId: page.spaceId,
+                }
+                ownerTargetsRef.current.set(owner, target)
+                const docBridge = getAgentDocumentBridge()
+                const source = await resolveSharedEditorForPage(target)
+                if (docBridge && source) {
+                    try {
+                        const handle = await docBridge.fork(owner, target.pageId, source, target.title)
+                        return { ...target, editor: handle.editor }
+                    } catch (error) {
+                        console.warn('[agent] private document unavailable, using the shared document:', error)
+                    }
+                }
+                if (!source) throw new Error('离屏编辑器不可用')
+                // Degraded path: the shared editor for that page (+ write lease).
+                return { ...target, editor: source }
+            },
             releaseOwner,
+            isOwnerIsolated: (owner: string) => Boolean(getAgentDocumentBridge()?.get(owner)),
             getPageForEditor: (targetEditor: any) => {
                 if (!targetEditor) return null
+                // A forked private document belongs to one agent's page.
+                const docBridge = getAgentDocumentBridge()
+                if (docBridge) {
+                    for (const [owner, target] of ownerTargetsRef.current) {
+                        if (docBridge.get(owner)?.editor === targetEditor) return { ...target }
+                    }
+                }
                 for (const [owner, handle] of ownerHandlesRef.current) {
                     if (handle?.editor === targetEditor) {
                         const target = ownerTargetsRef.current.get(owner)

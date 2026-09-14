@@ -378,6 +378,7 @@ bean-definition-overriding 兜底，无副作用。守卫断言已加入 `AgentC
    `ToolProvider.buildToolsFor(editor)`（core 工厂 + 插件工具，按 editor 实例缓存）为子 agent
    构建独立工具集 —— 文档工具因此天然作用于该 agent 自己的文档。
 4. **写租约**：`document-write-lock.ts` 按文档（pageId）做 FIFO 互斥，只读工具不排队；
+   （§16 起，只有**未隔离**的 owner 才走写租约：持有私有文档的子 agent 不碰共享文档。）
    执行器在调用 mutating 工具前取租约（`isReadOnlyTool` 判定：显式 `readOnly === true`
    或 category 属于 `document-read`/`discovery`/`interaction`）。等待上限 120s，超时以明确错误回填。
 5. **池容量**：`setMaxOffscreenSessions(n)`（App 启动设为 8）；只淘汰**空闲**会话，
@@ -404,3 +405,46 @@ bean-definition-overriding 兜底，无副作用。守卫断言已加入 `AgentC
 范围说明：写租约是**单 JS 上下文**内的（同标签页）。两个标签页编辑同一页面依旧只靠 CRDT 合并；
 跨标签串行化需要 Web Locks，未实现。子 agent 的编辑器隔离是「不同页面」级别的，两个子 agent
 写**同一页**仍然共享同一个 Y.Doc，只保证调用不交错、不丢失更新。
+
+## 16. 真并行（子 agent 自驱 + 私有文档 + 合并）
+
+§15 的做法是「共享文档 + 写租约」：能防丢更新，但本质仍是**串行**。真并行砍掉了两处耦合：
+
+### 16.1 子 run 自驱（不再经父 run 中转）
+
+- **父 loop 不再转发子 agent 的工具调用**，也不再为此暂停（`delegationWait` 只轮询子日志的终态、
+  超时与取消）。子 run 在自己的 `dispatchFrontendAndWait` 上暂停，等**客户端直接恢复它**。
+- **客户端直接驱动子 run**（`packages/common/src/ai/agent/sub-run-worker.ts`，`SubRunWorker`）：
+  每个活着的子 run 一条流（`GET /runs/{childRunId}/events`）+ 自己执行自己的前端工具
+  （`owner = childRunId`，走同一套 `EditorToolExecutor`）+ `POST /runs/{childRunId}/resume`。
+  同一子 run 内调用顺序执行，**不同子 run 并发执行**（`DEFAULT_MAX_PARALLEL_CALLS = 4`）。
+- 事件协议不变，但语义变了：父日志里**不再有**子 agent 的 `tool.requested`；子 agent 的工具/文本事件
+  只出现在它自己的日志里，客户端把它折叠进子 agent 节点（`sub-event`）。父日志仍有
+  `sub.spawned` / `sub.completed` / `sub.failed`，父只做聚合。
+- 断点恢复：父 checkpoint 新增 `delegations`（`DelegationRecord`）记录活着的子 run；重建时按它
+  `attach`，子 run 自己 pending 的前端调用由客户端从 `GET /runs/{childRunId}` 的 `pendingTools` 恢复。
+  客户端崩溃/刷新后重挂父 run 时，replay 出的 `sub.spawned` 会重新拉起 worker。
+
+### 16.2 每个子 agent 一份私有文档（fork → edit → merge）
+
+- **fork**：子 agent 的**读**走共享的实时页面（不付快照成本、不陈旧）；第一次**写**（执行器把
+  `mutating` 传给 `resolveTools(owner, { mutating })`）时，宿主把它 fork 成一份私有文档：
+  `packages/core/src/ai/agentdoc/` 用 `useEditorExtension()` 在隐藏容器里挂一个**无 collaboration
+  provider** 的编辑器，用目标页面的 `getJSON()` 做种子。此后该子 agent 的读写都在这份私有副本上，
+  与父 agent、其他子 agent、以及用户正在编辑的页面**完全没有共享写入**。
+- **merge**：子 agent 正常结束（`settled === 'completed'`）时，`releaseOwner(owner, {commit:true})`
+  调 `mergeAgentDocument(baseline, agentDoc, liveDoc)`（`packages/common/src/ai/agent/document-merge.ts`，
+  纯函数、可单测）得到块级操作，再由 `agentdoc/merge-apply.ts` 按 blockId 应用到实时页面。
+  规则：只改「自 fork 以来没被别人动过」的块；两边都改 = 冲突，**跳过并上报**；别人改的照旧保留；
+  重排只上报不应用。结果以一行摘要进子 agent 节点（「N 块已合并，M 块冲突（未覆盖）」）。
+- **半成品不落地**：超时/取消/整体 cancel/面板关闭时 `commit:false`，直接丢弃私有副本。
+- **降级路径**：私有文档数上限 `MAX_AGENT_DOCUMENTS = 8`，超出或 fork 失败时回退到共享文档 +
+  §15 的写租约（正确但退化为串行），并在控制台告警。`isOwnerIsolated(owner)` 让写租约知道
+  该 owner 不再碰共享文档。
+
+### 16.3 已知限制
+
+- 私有文档是**标签页内存态**：委派进行中关闭标签页会丢该子 agent 尚未合并的编辑（子 run 本身与
+  其结果仍在服务端继续）；重挂只会重新驱动 run，不会恢复那份副本。
+- 合并粒度是**顶层块**（blockId）：块内部的细粒度并发编辑仍以「块」为单位取舍，重排不自动应用。
+- 子 agent 的预算是自驱的：遇到 `run.suspended(budget)` 时 worker 自动 `resume(continue)`。

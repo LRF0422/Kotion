@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.knowledge.agent.api.dto.ChatMessage;
 import com.knowledge.agent.core.checkpoint.Checkpoint;
 import com.knowledge.agent.core.checkpoint.CheckpointStore;
+import com.knowledge.agent.core.checkpoint.DelegationRecord;
 import com.knowledge.agent.core.config.AgentCoreProperties;
 import com.knowledge.agent.core.context.ContextManager;
 import com.knowledge.agent.core.delegate.Delegation;
@@ -246,20 +247,25 @@ public class AgentLoop implements Runnable {
             }
 
             RunStatus status = run.statusEnum();
+            // Children keep running while the parent does its own work, so a
+            // rebuilt parent re-attaches to whatever it still has in flight —
+            // independent of whether the parent itself was waiting for tools.
+            if (!checkpoint.getDelegations().isEmpty()) {
+                rebuildDelegations();
+            }
             if (status == RunStatus.WAITING_TOOLS && !checkpoint.getPendingToolCalls().isEmpty()) {
-                // Crashed while waiting for frontend tool results — resume the wait.
+                // Crashed while waiting for its OWN frontend tool results.
                 run.setPendingToolCalls(new ArrayList<>(checkpoint.getPendingToolCalls()));
-                if (hasSubPending()) {
-                    // Mixed/sub-agent pending: rebuild delegations so child
-                    // results route correctly and terminal events drain.
-                    rebuildDelegations();
-                }
                 if (!dispatchWaitForPending()) {
                     return;
                 }
                 if (!activeDelegations.isEmpty() && !delegationWait()) {
                     return;
                 }
+            } else if (status == RunStatus.WAITING_TOOLS) {
+                // Every awaited result was already applied before the crash: the
+                // step can continue instead of parking on an empty wait.
+                run.setPendingToolCalls(new ArrayList<>());
             } else if (status == RunStatus.SUSPENDED && "budget".equals(run.getSuspendReason())) {
                 if (!waitForBudgetGrant()) {
                     return;
@@ -695,43 +701,63 @@ public class AgentLoop implements Runnable {
 
     // ==================== sub-agent delegation ====================
 
-    private boolean hasSubPending() {
-        for (PendingToolCall pendingCall : checkpoint.getPendingToolCalls()) {
-            if (pendingCall.getSubRunId() != null) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     /** Spawn child runs for delegate tool calls (failures become tool messages). */
     private void spawnDelegations(List<ToolCallRequest> delegateCalls) {
+        boolean spawnedAny = false;
         for (ToolCallRequest call : delegateCalls) {
             emit(RunEvents.TOOL_REQUESTED,
                     RunEvents.toolRequested(call.getId(), call.getName(), call.getArguments()));
             try {
                 Delegation delegation = delegator.spawn(buildToolContext(), call);
                 activeDelegations.put(delegation.getCallId(), delegation);
+                checkpoint.getDelegations().add(new DelegationRecord(
+                        delegation.getCallId(), delegation.getSubRunId(), delegation.getTask(),
+                        delegation.getSpawnedAt()));
+                spawnedAny = true;
             } catch (Exception e) {
                 checkpoint.getMessages().add(blockedMessage(call, "DELEGATE_FAILED: " + e.getMessage()));
                 emit(RunEvents.TOOL_COMPLETED,
                         RunEvents.toolCompleted(call.getId(), "delegate", false, null, e.getMessage(), 0));
             }
         }
+        if (spawnedAny) {
+            // Persist the child handles before waiting: children are driven by the
+            // client now, so this record (not a pending tool entry) is what a
+            // rebuilt parent re-attaches to.
+            saveCheckpoint();
+            persist();
+        }
+    }
+
+    /** Drop a finished delegation's recovery record. */
+    private void forgetDelegation(String subRunId) {
+        if (subRunId == null) {
+            return;
+        }
+        checkpoint.getDelegations().removeIf(record -> subRunId.equals(record.getSubRunId()));
     }
 
     /** Rebuild delegations from the checkpoint after a crash. */
     private void rebuildDelegations() {
-        java.util.Map<String, PendingToolCall> bySub = new java.util.LinkedHashMap<>();
-        for (PendingToolCall pendingCall : checkpoint.getPendingToolCalls()) {
-            if (pendingCall.getSubRunId() != null && pendingCall.getDelegateCallId() != null) {
-                bySub.putIfAbsent(pendingCall.getSubRunId(), pendingCall);
+        java.util.Map<String, String[]> bySub = new java.util.LinkedHashMap<>();
+        for (DelegationRecord record : checkpoint.getDelegations()) {
+            if (record.getSubRunId() != null && record.getCallId() != null) {
+                bySub.putIfAbsent(record.getSubRunId(),
+                        new String[]{record.getCallId(), record.getTask()});
             }
         }
-        for (java.util.Map.Entry<String, PendingToolCall> entry : bySub.entrySet()) {
+        // Legacy checkpoints (written before children drove their own tools)
+        // recorded the delegation only through the child's pending tool calls.
+        for (PendingToolCall pendingCall : checkpoint.getPendingToolCalls()) {
+            if (pendingCall.getSubRunId() != null && pendingCall.getDelegateCallId() != null) {
+                bySub.putIfAbsent(pendingCall.getSubRunId(),
+                        new String[]{pendingCall.getDelegateCallId(), null});
+            }
+        }
+        for (java.util.Map.Entry<String, String[]> entry : bySub.entrySet()) {
             String subRunId = entry.getKey();
-            PendingToolCall pending = entry.getValue();
-            Delegation delegation = delegator.attach(run.getRunId(), pending.getDelegateCallId(), subRunId);
+            Delegation delegation = delegator.attach(run.getRunId(), entry.getValue()[0], subRunId);
+            delegation.setTask(entry.getValue()[1]);
             // A child that already reached terminal before the crash: drop its
             // moot pending entries and synthesize the terminal event.
             AgentRun child = runStore.load(subRunId);
@@ -766,30 +792,27 @@ public class AgentLoop implements Runnable {
     }
 
     /**
-     * Drive all live delegations to completion: drain child events, relay
-     * their frontend tool calls to the client (pause the parent), route tool
-     * results back, and collect child terminal states as delegate tool results.
+     * Drive all live delegations to completion: watch each child's log for its
+     * terminal event and collect the result as the delegate tool result.
+     *
+     * <p>Children are otherwise autonomous: they pause on their own gate for
+     * their frontend tools, the client drives them directly (stream + resume by
+     * child run id), and the parent never parks on a child's tool call. That is
+     * what lets several children work at the same time.
      */
     private boolean delegationWait() throws InterruptedException {
         while (!cancelRequested && !activeDelegations.isEmpty()) {
             long now = System.currentTimeMillis();
-            boolean newPending = false;
             List<String> finished = new ArrayList<>();
             for (Delegation delegation : activeDelegations.values()) {
                 RunEvent event;
                 while ((event = delegation.getSubscription().poll(0)) != null) {
-                    if (RunEvents.TOOL_REQUESTED.equals(event.getType())) {
-                        Map<String, Object> payload = event.getPayload();
-                        String callId = str(payload.get("callId"));
-                        String tool = str(payload.get("tool"));
-                        String args = str(payload.get("args"));
-                        checkpoint.getPendingToolCalls().add(PendingToolCall.ofSub(
-                                callId, tool, args, now, delegation.getSubRunId(), delegation.getCallId()));
-                        emit(RunEvents.TOOL_REQUESTED,
-                                RunEvents.payload("callId", callId, "tool", tool, "args", args,
-                                        "subRunId", delegation.getSubRunId()));
-                        newPending = true;
-                    } else if (event.isTerminal()) {
+                    // Child tool calls are NOT relayed into the parent's pending
+                    // list any more: the child pauses on its own gate, the client
+                    // streams the child's log directly and resumes the child. The
+                    // parent therefore never blocks on a child's frontend tool and
+                    // children progress in parallel.
+                    if (event.isTerminal()) {
                         delegation.setTerminal(event);
                     }
                 }
@@ -798,9 +821,9 @@ public class AgentLoop implements Runnable {
                     finished.add(delegation.getCallId());
                 } else if (delegation.isExpired(now)) {
                     delegator.cancelChild(delegation.getSubRunId());
-                    // The child is gone: settle and drop its outstanding frontend
-                    // tool calls so the parent never pauses waiting for results
-                    // that can no longer be routed anywhere.
+                    // Legacy checkpoints can still hold this child's pending
+                    // calls (from before children drove their own tools) — settle
+                    // them so a rebuilt run never waits for a dead child.
                     dropChildPendingTools(delegation.getSubRunId(), "委派超时");
                     checkpoint.getMessages().add(delegateMessage(delegation, false,
                             "委派超时（" + (delegation.getTimeoutMs() / 1000) + "s）"));
@@ -818,22 +841,11 @@ public class AgentLoop implements Runnable {
             if (activeDelegations.isEmpty()) {
                 break;
             }
-            if (newPending || hasSubPending()) {
-                List<String> pendingIds = new ArrayList<>();
-                for (PendingToolCall pendingCall : checkpoint.getPendingToolCalls()) {
-                    pendingIds.add(pendingCall.getCallId());
-                }
-                pauseForPendingTools(pendingIds);
-                if (!dispatchWaitForPending()) {
-                    return false;
-                }
-            } else {
-                // All children working with no pending tools — wait for new
-                // child events, cancel delivery or the delegation timeout.
-                ResumePayload payload = gate.await(500);
-                if (payload != null && "cancel".equals(payload.getAction())) {
-                    return false;
-                }
+            // Every child is working on its own: wait for its next event, a
+            // cancel, or the delegation timeout.
+            ResumePayload payload = gate.await(500);
+            if (payload != null && "cancel".equals(payload.getAction())) {
+                return false;
             }
         }
         return true;
@@ -865,9 +877,12 @@ public class AgentLoop implements Runnable {
                     RunEvents.toolCompleted(delegation.getCallId(), "delegate", false, null, error, 0));
         }
         // A child can reach a terminal state while one of its frontend tool
-        // calls is still outstanding (cancel / failure mid-wait). The parent must
-        // not keep waiting on a call that can no longer be routed to anyone.
+        // calls is still outstanding (cancel / failure mid-wait) — but those
+        // calls never live on the parent any more, so this only cleans up
+        // legacy checkpoints written before children drove their own tools.
         dropChildPendingTools(delegation.getSubRunId(), "子 agent 已结束，工具调用未返回结果");
+        forgetDelegation(delegation.getSubRunId());
+        saveCheckpoint();
         delegation.getSubscription().close();
     }
 

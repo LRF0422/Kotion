@@ -9,6 +9,9 @@ import { RunLock, RunStore } from './run-store'
 import { createPendingToolBatch, matchesPendingToolBatch } from './tool-batch'
 import { EditorToolExecutor, ensureSerializableToolResult } from './tool-executor'
 import { resetDocumentWriteLocks, withDocumentWrite } from './document-write-lock'
+import { SubRunWorker } from './sub-run-worker'
+import { mergeAgentDocument } from './document-merge'
+import type { AgentEvent } from './types'
 
 async function checkExecutorSingleFlight(): Promise<void> {
     let executions = 0
@@ -253,6 +256,165 @@ async function checkExecutorOwnerAndWriteLease(): Promise<void> {
     resetDocumentWriteLocks()
 }
 
+function checkMergeRefusesToClobber(): void {
+    const block = (id: string, text: string) => ({
+        type: 'paragraph',
+        attrs: { blockId: id },
+        content: [{ type: 'text', text }],
+    })
+    const doc = (...blocks: any[]) => ({ type: 'doc', content: blocks })
+
+    const baseline = doc(block('a', 'A'), block('b', 'B'), block('c', 'C'))
+
+    // 1) Additions land in order, anchored to the agent's preceding block.
+    const added = mergeAgentDocument(
+        baseline,
+        doc(block('a', 'A'), block('b', 'B'), block('new1', 'N1'), block('new2', 'N2'), block('c', 'C')),
+        baseline
+    )
+    assert.deepEqual(
+        added.ops.map(op => (op.kind === 'insert' ? [op.kind, op.anchorKey] : [op.kind])),
+        [['insert', 'b'], ['insert', 'new1']],
+        'insertions keep the agent order and follow their anchor'
+    )
+    assert.equal(added.conflicts.length, 0)
+
+    // 2) A block nobody else touched is replaced.
+    const replaced = mergeAgentDocument(
+        baseline,
+        doc(block('a', 'A'), block('b', 'B-edited'), block('c', 'C')),
+        baseline
+    )
+    assert.deepEqual(replaced.ops, [{ kind: 'replace', key: 'b', node: block('b', 'B-edited') }])
+
+    // 3) Both sides changed the same block → conflict, never a silent overwrite.
+    const conflicted = mergeAgentDocument(
+        baseline,
+        doc(block('a', 'A'), block('b', 'agent-version'), block('c', 'C')),
+        doc(block('a', 'A'), block('b', 'human-version'), block('c', 'C'))
+    )
+    assert.equal(conflicted.ops.length, 0, 'a conflicting block must not be applied')
+    assert.equal(conflicted.conflicts.length, 1)
+    assert.equal(conflicted.conflicts[0].key, 'b')
+    assert.equal(conflicted.conflicts[0].reason, 'both-changed')
+
+    // 4) Deletions apply only while the live block is untouched…
+    const deleted = mergeAgentDocument(
+        baseline,
+        doc(block('a', 'A'), block('c', 'C')),
+        baseline
+    )
+    assert.deepEqual(deleted.ops, [{ kind: 'delete', key: 'b' }])
+
+    // …and become conflicts once someone else edited it.
+    const deleteConflict = mergeAgentDocument(
+        baseline,
+        doc(block('a', 'A'), block('c', 'C')),
+        doc(block('a', 'A'), block('b', 'touched'), block('c', 'C'))
+    )
+    assert.equal(deleteConflict.ops.length, 0)
+    assert.equal(deleteConflict.conflicts[0].reason, 'changed-and-deleted')
+
+    // 5) Other people's edits survive the merge.
+    const concurrent = mergeAgentDocument(
+        baseline,
+        doc(block('a', 'A-agent'), block('b', 'B'), block('c', 'C')),
+        doc(block('a', 'A'), block('b', 'B'), block('c', 'C'), block('d', 'D-human'))
+    )
+    assert.deepEqual(concurrent.ops.map(op => op.kind), ['replace'])
+    assert.equal((concurrent.ops[0] as any).key, 'a')
+
+    // 6) Reorders are reported but not applied.
+    const reordered = mergeAgentDocument(
+        baseline,
+        doc(block('c', 'C'), block('a', 'A'), block('b', 'B')),
+        baseline
+    )
+    assert.equal(reordered.reorderDetected, true)
+    assert.deepEqual(reordered.ops, [])
+}
+
+async function checkSubRunWorkersRunInParallel(): Promise<void> {
+    // Two delegated children, each pausing for one of its own frontend tools.
+    // They must execute concurrently, and each resume must address the child
+    // that owned the call — the whole point of driving children directly.
+    const resumes: Array<{ runId: string; payload: any }> = []
+    const settled: string[] = []
+    const eventsSeen: string[] = []
+
+    const childScript = (runId: string, callId: string) => ({
+        runId,
+        callId,
+    })
+    const children = [childScript('child-a', 'call-a'), childScript('child-b', 'call-b')]
+
+    const fakeClient = {
+        streamEvents(runId: string): AsyncGenerator<AgentEvent> {
+            const child = children.find(c => c.runId === runId)!
+            return (async function* () {
+                yield { seq: 1, type: 'tool.requested', callId: child.callId, tool: 'writeDocument', args: '{"markdown":"x"}' } as AgentEvent
+                yield { seq: 2, type: 'run.suspended', reason: 'waiting_tools', pendingCallIds: [child.callId] } as AgentEvent
+            })()
+        },
+        async resume(runId: string, payload: any): Promise<AsyncGenerator<AgentEvent>> {
+            resumes.push({ runId, payload })
+            return (async function* () {
+                yield { seq: 3, type: 'tool.completed', callId: 'ignored', tool: 'writeDocument', ok: true } as AgentEvent
+                yield { seq: 4, type: 'run.completed', finishReason: 'stop' } as AgentEvent
+            })()
+        },
+        async getRun() {
+            throw new Error('getRun must not be needed when calls arrived on the stream')
+        },
+    }
+
+    let inFlight = 0
+    let maxInFlight = 0
+    const worker = new SubRunWorker({
+        client: fakeClient as any,
+        executeTool: async (callId, _tool, _args, owner) => {
+            inFlight += 1
+            maxInFlight = Math.max(maxInFlight, inFlight)
+            await new Promise(resolve => setTimeout(resolve, 20))
+            inFlight -= 1
+            return { ok: true, result: { callId, owner } }
+        },
+        onEvent: (runId, event) => { eventsSeen.push(`${runId}:${event.type}`) },
+        onSettled: (runId, settlement) => { settled.push(`${runId}:${settlement}`) },
+    })
+
+    worker.attach('child-a')
+    worker.attach('child-b')
+
+    await waitFor(() => settled.length === 2, 3000)
+
+    assert.equal(maxInFlight, 2, 'two children must have a tool call in flight at the same time')
+    assert.deepEqual(
+        resumes.map(entry => entry.runId).sort(),
+        ['child-a', 'child-b'],
+        'each child must be resumed directly, by its own run id'
+    )
+    const resumedCalls = resumes.flatMap(entry => entry.payload.toolResults.map((r: any) => r.callId)).sort()
+    assert.deepEqual(resumedCalls, ['call-a', 'call-b'])
+    assert.ok(
+        resumes.every(entry => entry.payload.action === 'tool_results'),
+        'children are resumed with their own tool results'
+    )
+    assert.deepEqual(settled.sort(), ['child-a:completed', 'child-b:completed'])
+    assert.ok(eventsSeen.includes('child-a:text.delta') === false, 'unrelated event types are ignored by the check script')
+    assert.deepEqual(worker.activeRunIds, [], 'settled children must be detached')
+    worker.dispose()
+}
+
+async function waitFor(predicate: () => boolean, timeoutMs: number): Promise<void> {
+    const deadline = Date.now() + timeoutMs
+    while (Date.now() < deadline) {
+        if (predicate()) return
+        await new Promise(resolve => setTimeout(resolve, 5))
+    }
+    throw new Error('timed out waiting for condition')
+}
+
 async function main(): Promise<void> {
     await checkExecutorSingleFlight()
     checkToolBatchSnapshot()
@@ -265,6 +427,8 @@ async function main(): Promise<void> {
     await checkStreamIdleWatchdog()
     await checkDocumentWriteSerialization()
     await checkExecutorOwnerAndWriteLease()
+    await checkSubRunWorkersRunInParallel()
+    checkMergeRefusesToClobber()
     console.log('agent-core checks passed')
 }
 

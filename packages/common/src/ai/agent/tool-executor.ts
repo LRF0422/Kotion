@@ -43,7 +43,10 @@ export interface EditorToolExecutorOptions {
      * optional owner is the delegated sub-run id: hosts that can bind a child to
      * its own editor must return tools for that editor.
      */
-    resolveTools: (owner?: string | null) => ToolsRecord | Promise<ToolsRecord>
+    resolveTools: (
+        owner?: string | null,
+        options?: { mutating?: boolean }
+    ) => ToolsRecord | Promise<ToolsRecord>
     /**
      * Read-only classification for the write lease. Omitted → every tool is
      * treated as mutating (conservative: extra serialization, never skipped).
@@ -110,7 +113,11 @@ export class EditorToolExecutor {
 
         let outcome: ToolExecutionResult
         try {
-            const tools = await this.resolveTools(owner)
+            // Read-only classification is decided before resolving tools: the host
+            // needs it to know whether the owner is about to *write* (and must
+            // therefore fork a private document) or only read the live page.
+            const mutating = this.isReadOnlyTool ? !this.isReadOnlyTool(toolName) : true
+            const tools = await this.resolveTools(owner, { mutating })
             const definition: ToolDefinition | undefined = tools[toolName]
             if (!definition || typeof definition.execute !== 'function') {
                 outcome = { ok: false, error: 'Tool not available on frontend: ' + toolName }
@@ -122,7 +129,6 @@ export class EditorToolExecutor {
                 // Mutating calls take the document's write lease so two agents
                 // bound to the same document cannot interleave (lost updates).
                 const run = () => definition.execute(args, callId, { owner })
-                const mutating = this.isReadOnlyTool ? !this.isReadOnlyTool(toolName) : true
                 const documentId = mutating ? (this.resolveDocumentId?.(owner) ?? null) : null
                 const result = documentId
                     ? await withDocumentWrite(documentId, run, { label: toolName })

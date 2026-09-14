@@ -72,8 +72,15 @@ public class Checkpoint {
     /** Frozen provenance for personal skills retrieved when this run was created. */
     private List<SavedSkillProvenance> savedSkillProvenance = new ArrayList<>();
 
-    /** Frontend tool calls currently awaited (WAITING_TOOLS; subRunId marks children). */
+    /**
+     * Frontend tool calls currently awaited (WAITING_TOOLS). Child calls are
+     * never parked here: a delegated run pauses on its own gate and is resumed
+     * directly by the client, so the parent stays free to keep working.
+     */
     private List<PendingToolCall> pendingToolCalls = new ArrayList<>();
+
+    /** Live child runs this run has delegated to (re-attach after a crash). */
+    private List<DelegationRecord> delegations = new ArrayList<>();
 
     /** plan_approval | budget (why the run is SUSPENDED). */
     private String suspendReason;

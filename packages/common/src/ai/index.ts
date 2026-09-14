@@ -25,6 +25,7 @@ export * from "./page-edit-window-bridge"
 
 // Session page binding — agent-created pages bind to the active conversation
 export * from "./session-page-binding"
+export * from "./agent-document-bridge"
 
 // Providers
 export * from "./providers"
