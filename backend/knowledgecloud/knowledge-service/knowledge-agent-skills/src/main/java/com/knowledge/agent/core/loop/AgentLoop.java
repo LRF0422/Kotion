@@ -554,11 +554,23 @@ public class AgentLoop implements Runnable {
         cp.setSkillFragments(fragments);
         cp.setMemoryLines(memoryLines);
         cp.setSystemPrompt(runInput != null ? runInput.systemPrompt() : null);
-        cp.getMessages().add(contextManager.buildSystemMessage(run,
-                fragments,
-                memoryLines,
-                new ArrayList<>(deferredToolSpecs.values()),
-                runInput != null ? runInput.threadSummary() : null));
+        // Pure-text mode (inline translate / polish / summarize, the AI block,
+        // ...): do NOT inject the editor-agent persona, which advertises
+        // editor.*/web-search tools this run cannot call. With no tool schemas
+        // offered, the model otherwise answered with a raw tool-call markup
+        // (DeepSeek DSML tokens) as content — the exact inline-translation bug.
+        // The caller's own instruction (hoisted into systemPrompt by
+        // streamKnowledgeChat) becomes the whole system message instead.
+        if (runInput != null && runInput.noTools()) {
+            cp.getMessages().add(ContextManager.buildPlainTextSystemMessage(
+                    runInput.systemPrompt()));
+        } else {
+            cp.getMessages().add(contextManager.buildSystemMessage(run,
+                    fragments,
+                    memoryLines,
+                    new ArrayList<>(deferredToolSpecs.values()),
+                    runInput != null ? runInput.threadSummary() : null));
+        }
         if (runInput != null && runInput.messages() != null) {
             for (ChatMessage message : runInput.messages()) {
                 if (message == null || "system".equalsIgnoreCase(message.getRole())) {

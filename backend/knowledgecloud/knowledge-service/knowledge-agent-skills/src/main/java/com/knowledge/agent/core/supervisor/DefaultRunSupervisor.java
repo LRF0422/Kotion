@@ -214,8 +214,12 @@ public class DefaultRunSupervisor {
         if (cmd.getSystemPrompt() != null && !cmd.getSystemPrompt().trim().isEmpty()) {
             systemFragments.add(cmd.getSystemPrompt().trim());
         }
-        checkpoint.getMessages().add(contextManager.buildSystemMessage(run,
-                systemFragments, cmd.getMemoryLines(), cmd.getSkillTools()));
+        // A pure-text child (noTools) must not inherit the tool-advertising
+        // editor persona either — see AgentLoop#initFreshCheckpoint.
+        checkpoint.getMessages().add(cmd.isNoTools()
+                ? ContextManager.buildPlainTextSystemMessage(cmd.getSystemPrompt())
+                : contextManager.buildSystemMessage(run,
+                        systemFragments, cmd.getMemoryLines(), cmd.getSkillTools()));
         if (cmd.getMessages() != null) {
             for (ChatMessage message : cmd.getMessages()) {
                 if (message == null || "system".equalsIgnoreCase(message.getRole())) {

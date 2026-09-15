@@ -86,10 +86,10 @@ export const SessionSwitcher: React.FC<SessionSwitcherProps> = ({
                         const title = s.title || t('ai.chat.newChat')
                         const pageTitle = sessionPageTitle(s)
                         return (
-                            <div
+                            <DropdownMenuItem
                                 key={s.id}
                                 ref={isActive ? activeItemRef : undefined}
-                                onClick={() => !isActive && onSwitch(s.id)}
+                                onSelect={() => { if (!isActive) onSwitch(s.id) }}
                                 className={
                                     'group flex items-center gap-1.5 px-2 py-1.5 rounded-sm cursor-pointer select-none ' +
                                     (isActive
@@ -131,7 +131,7 @@ export const SessionSwitcher: React.FC<SessionSwitcherProps> = ({
                                 >
                                     <X className="h-3 w-3" />
                                 </button>
-                            </div>
+                            </DropdownMenuItem>
                         )
                     })}
                 </div>

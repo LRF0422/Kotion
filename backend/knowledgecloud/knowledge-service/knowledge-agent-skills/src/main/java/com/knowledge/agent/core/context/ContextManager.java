@@ -82,6 +82,27 @@ public class ContextManager {
             "\n\n当前处于 PLAN（计划）模式：只允许只读工具与 present_plan。"
             + "先调研、再给出计划；不要修改任何文档，等用户批准后再执行。";
 
+    /**
+     * System prompt for a pure-text (noTools) run — inline translate / polish /
+     * summarize and other one-shot text helpers. It deliberately does NOT
+     * mention tools, because the run offers none; advertising them made the
+     * model answer with a raw tool-call markup (DeepSeek DSML tokens) as content.
+     */
+    public static final String PLAIN_TEXT_SYSTEM_PROMPT =
+            "你是文本处理助手。严格按照用户给出的指令处理文本，直接输出处理后的结果，"
+            + "不要输出解释、前言、后缀或代码围栏，也不要调用任何工具。";
+
+    /**
+     * Build the system message for a pure-text run: the caller-supplied
+     * instruction when present, otherwise a neutral no-tools default.
+     */
+    public static ChatMessage buildPlainTextSystemMessage(String instruction) {
+        String content = instruction != null && !instruction.trim().isEmpty()
+                ? instruction.trim()
+                : PLAIN_TEXT_SYSTEM_PROMPT;
+        return ChatMessage.builder().role("system").content(content).build();
+    }
+
     /** Header of the deferred (skill-owned) tool directory. */
     private static final String DEFERRED_TOOLS_HEADER =
             "\n\n【按需工具】以下工具可直接调用，但为节省上下文只给出参数签名（`?` 表示可选），"

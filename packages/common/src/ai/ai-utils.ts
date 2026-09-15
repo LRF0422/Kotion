@@ -34,6 +34,19 @@ export function streamKnowledgeChat(
 ): { textStream: AsyncGenerator<string> } {
     const client = getDefaultClient()
 
+    // The AgentCore backend owns the model log: it builds its own system message
+    // and silently drops any system-role entry found in messages. Inline callers
+    // (translate/polish/... and the AI block) therefore MUST hoist their
+    // instruction into the top-level systemPrompt option; leaving it in the
+    // message list ran the whole editor-agent base prompt with the instruction
+    // lost, which made the model answer with a raw tool-call instead of text.
+    const systemInstruction = messages
+        .filter((message) => message?.role === 'system' && !!message.content)
+        .map((message) => message.content!.trim())
+        .filter(Boolean)
+        .join('\n\n')
+    const conversation = messages.filter((message) => message?.role !== 'system')
+
     async function* textStream(): AsyncGenerator<string> {
         if (options.signal?.aborted) return
 
@@ -55,7 +68,8 @@ export function streamKnowledgeChat(
                 conversationId,
                 model: options.model,
                 mode: 'execute',
-                messages,
+                messages: conversation,
+                systemPrompt: systemInstruction || undefined,
                 tools: [],
                 skills: [],
                 noTools: true,

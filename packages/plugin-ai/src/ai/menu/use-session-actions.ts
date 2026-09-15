@@ -47,9 +47,12 @@ export function useSessionActions(options: UseSessionActionsOptions): UseSession
 
     const handleSwitchSession = useCallback(async (id: string) => {
         if (id === activeSessionId) return
-        await abandonAgent()
         setError(null)
+        // Swap the transcript first: the visible conversation must change even
+        // if cancelling the outgoing run is slow or fails. `abandonAgent` was
+        // captured with the outgoing conversation, so it still stops that run.
         switchSession(id)
+        await abandonAgent().catch(() => undefined)
     }, [activeSessionId, abandonAgent, switchSession, setError])
 
     const handleDeleteSession = useCallback(async (id: string) => {

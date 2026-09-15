@@ -36,6 +36,8 @@ export interface UseChatSessionsResult {
     /** Messages of the active session. */
     messages: Message[]
     setMessages: Dispatch<SetStateAction<Message[]>>
+    /** True while the active session's engine transcript is being fetched. */
+    loadingTranscript: boolean
     /** Create a brand-new empty chat session and switch to it. */
     createSession: (boundPage?: ChatTargetPage) => string
     /** Switch the active chat to the given session id. */
@@ -134,6 +136,28 @@ export function useChatSessions(): UseChatSessionsResult {
     const lastSyncedRef = useRef(messages)
     const userTouchedRef = useRef(false)
 
+    // The engine transcript is fetched asynchronously on boot and on every
+    // switch; surface that as a loading state so the panel never flashes the
+    // empty state while a conversation is still in flight. Only the load the
+    // user is currently waiting on may clear the flag (an older load that
+    // resolves after a newer switch must not hide the spinner).
+    const [loadingTranscript, setLoadingTranscript] = useState(false)
+    const loadingSessionRef = useRef<string | null>(null)
+    const beginTranscriptLoad = useCallback((id: string) => {
+        loadingSessionRef.current = id
+        setLoadingTranscript(true)
+    }, [])
+    const endTranscriptLoad = useCallback((id: string) => {
+        if (loadingSessionRef.current === id) {
+            loadingSessionRef.current = null
+            setLoadingTranscript(false)
+        }
+    }, [])
+    const cancelTranscriptLoad = useCallback(() => {
+        loadingSessionRef.current = null
+        setLoadingTranscript(false)
+    }, [])
+
     // ── Engine transcript loading (with one-time import of local history) ──
     const applyTranscript = useCallback((id: string, transcript: Message[]) => {
         messagesSessionRef.current = id
@@ -143,7 +167,10 @@ export function useChatSessions(): UseChatSessionsResult {
     }, [])
 
     const loadTranscript = useCallback(async (id: string, local: Message[]): Promise<Message[]> => {
-        if (!isSessionApiAvailable()) return local
+        // Reads are never gated by the availability flag: one transient failure
+        // (or a failed metadata write) must not permanently hide every
+        // transcript. A successful read resets the flag, so an explicit open
+        // recovers automatically at the cost of one extra attempt.
         let remote: Message[] | null = null
         try {
             remote = await getRemoteMessages(id)
@@ -168,13 +195,14 @@ export function useChatSessions(): UseChatSessionsResult {
 
     useEffect(() => {
         const hydrate = async () => {
-            if (!isSessionApiAvailable()) return
-            let remote: ChatSessionMeta[]
+            let remote: ChatSessionMeta[] = []
             try {
                 remote = await listRemoteSessions(SESSION_LIST_LIMIT)
             } catch {
+                // Keep the local index and still load the active transcript
+                // below: the detail read is a different endpoint and may
+                // succeed even when the list call failed.
                 markSessionApiUnavailable()
-                return
             }
             const merged = mergeSessions(remote, loadIndex())
             let nextActive = getActiveId() || ''
@@ -206,11 +234,16 @@ export function useChatSessions(): UseChatSessionsResult {
             }
             const local = loadSessionMessages(nextActive)
             applyTranscript(nextActive, local)
-            const transcript = await loadTranscript(nextActive, local)
-            if (messagesSessionRef.current !== nextActive) return
-            if (messagesRef.current !== local) return
-            if (transcript !== local) {
-                applyTranscript(nextActive, transcript)
+            beginTranscriptLoad(nextActive)
+            try {
+                const transcript = await loadTranscript(nextActive, local)
+                if (messagesSessionRef.current !== nextActive) return
+                if (messagesRef.current !== local) return
+                if (transcript !== local) {
+                    applyTranscript(nextActive, transcript)
+                }
+            } finally {
+                endTranscriptLoad(nextActive)
             }
         }
         void hydrate()
@@ -276,12 +309,13 @@ export function useChatSessions(): UseChatSessionsResult {
         messagesRef.current = empty
         setActiveId(id)
         setActiveSessionIdState(id)
+        cancelTranscriptLoad()
         setMessages(empty)
         if (isSessionApiAvailable()) {
             void upsertRemoteSession(meta).catch(() => markSessionApiUnavailable())
         }
         return id
-    }, [])
+    }, [cancelTranscriptLoad])
 
     const switchSession = useCallback(
         (id: string) => {
@@ -290,18 +324,22 @@ export function useChatSessions(): UseChatSessionsResult {
             setActiveId(id)
             setActiveSessionIdState(id)
             applyTranscript(id, local)
+            beginTranscriptLoad(id)
 
-            if (!isSessionApiAvailable()) return
             void (async () => {
-                const transcript = await loadTranscript(id, local)
-                if (messagesSessionRef.current !== id) return
-                if (messagesRef.current !== local) return // user typed meanwhile
-                if (transcript !== local) {
-                    applyTranscript(id, transcript)
+                try {
+                    const transcript = await loadTranscript(id, local)
+                    if (messagesSessionRef.current !== id) return
+                    if (messagesRef.current !== local) return // user typed meanwhile
+                    if (transcript !== local) {
+                        applyTranscript(id, transcript)
+                    }
+                } finally {
+                    endTranscriptLoad(id)
                 }
             })()
         },
-        [applyTranscript, loadTranscript],
+        [applyTranscript, loadTranscript, beginTranscriptLoad, endTranscriptLoad],
     )
 
     const deleteSession = useCallback(
@@ -319,20 +357,24 @@ export function useChatSessions(): UseChatSessionsResult {
                     applyTranscript(nextId, loadSessionMessages(nextId))
                     setActiveId(nextId)
                     setActiveSessionIdState(nextId)
-                    if (isSessionApiAvailable()) {
-                        void (async () => {
+                    beginTranscriptLoad(nextId)
+                    void (async () => {
+                        try {
                             const transcript = await loadTranscript(nextId, messagesRef.current)
                             if (messagesSessionRef.current === nextId) {
                                 applyTranscript(nextId, transcript)
                             }
-                        })()
-                    }
+                        } finally {
+                            endTranscriptLoad(nextId)
+                        }
+                    })()
                 } else {
                     const fresh = createMeta(generateSessionId())
                     remaining.push(fresh)
                     applyTranscript(fresh.id, [])
                     setActiveId(fresh.id)
                     setActiveSessionIdState(fresh.id)
+                    cancelTranscriptLoad()
                     if (isSessionApiAvailable()) {
                         void upsertRemoteSession(fresh).catch(() => markSessionApiUnavailable())
                     }
@@ -342,7 +384,7 @@ export function useChatSessions(): UseChatSessionsResult {
             saveIndex(remaining)
             setSessions(remaining)
         },
-        [applyTranscript, loadTranscript],
+        [applyTranscript, loadTranscript, beginTranscriptLoad, endTranscriptLoad, cancelTranscriptLoad],
     )
 
     const renameSession = useCallback(
@@ -393,6 +435,7 @@ export function useChatSessions(): UseChatSessionsResult {
         activeSessionId,
         messages,
         setMessages,
+        loadingTranscript,
         createSession,
         switchSession,
         deleteSession,

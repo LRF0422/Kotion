@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from "react"
-import { Sparkles } from "@kn/icon"
+import { Loader2, Sparkles } from "@kn/icon"
 import {
     ExpandableChat,
     ExpandableChatHeader,
@@ -135,6 +135,7 @@ export const ExpandableChatDemo: React.FC<{
         activeSessionId,
         messages,
         setMessages,
+        loadingTranscript,
         createSession,
         switchSession,
         deleteSession,
@@ -736,7 +737,7 @@ export const ExpandableChatDemo: React.FC<{
     // explicit page binding the user can set.
 
     // ─── Derived UI flags ─────────────────────────────────────────
-    const isEmpty = messages.length === 0 && !isActive
+    const isEmpty = messages.length === 0 && !isActive && !loadingTranscript
 
     // ─── Render ───────────────────────────────────────────────────
     return (
@@ -780,6 +781,17 @@ export const ExpandableChatDemo: React.FC<{
 
             <ExpandableChatBody className="bg-muted/20 dark:bg-background overflow-x-hidden">
                 <ChatMessageList>
+                    {loadingTranscript && messages.length === 0 && (
+                        <div
+                            role="status"
+                            aria-live="polite"
+                            className="flex flex-col items-center justify-center gap-2 py-16 text-muted-foreground"
+                        >
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                            <span className="text-xs">{t('ai.chat.loadingSession')}</span>
+                        </div>
+                    )}
+
                     {isEmpty && (
                         <ChatEmptyState mode={chatMode} onSubmit={handleQuickSubmit} />
                     )}
