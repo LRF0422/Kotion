@@ -1,5 +1,5 @@
 import {
-    FolderIcon, FolderOpenIcon, FolderPlusIcon, UploadIcon, Trash2,
+    FolderIcon, FolderOpenIcon, FolderPlusIcon, FolderUpIcon, UploadIcon, Trash2,
     ListIcon, LayoutGridIcon, ArrowLeft, ArrowRight, Menu as MenuIcon,
     Search, ClockIcon, StarIcon,
 } from "@kn/icon";
@@ -9,7 +9,8 @@ import {
     Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
     AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogFooter,
     AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel,
-    useResponsive,
+    DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+    toast, useResponsive,
 } from "@kn/ui";
 import React, { useCallback, useEffect, useState, useMemo, useRef } from "react";
 import { logger, useSafeState, useApi } from "@kn/common";
@@ -26,6 +27,7 @@ import {
 import { useFileManager } from "../../hooks/useFileManager";
 import { useFileSelection } from "../../hooks/useFileSelection";
 import { isPreviewable, normalizeFileName } from "../../utils/fileUtils";
+import { collectDroppedSelection } from "../../utils/folder-upload";
 import {
     isItemSelectable as matchesSelectionPolicy,
     normalizeConfirmedSelection,
@@ -93,7 +95,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
     const {
         currentFolderId, setCurrentFolderId, currentItem, setCurrentItem,
         currentFolderItems, loading, error,
-        createFolder, uploadFile, deleteFiles, refreshFolder,
+        createFolder, uploadFile, uploadFolder, deleteFiles, refreshFolder,
         breadcrumbPath, canGoBack, canGoForward, goBack: goBackRaw, goForward: goForwardRaw,
         navigateToFolder: navigateRaw,
         renameFile, moveFiles, copyFiles, duplicateFiles,
@@ -232,6 +234,11 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
         }
     }, [canUpload, createFolder, uploadFile, repoKey]);
 
+    const handleUploadFolder = useCallback(() => {
+        if (!canUpload) return;
+        void uploadFolder(repoKey);
+    }, [canUpload, uploadFolder, repoKey]);
+
     const handleDelete = useCallback((ids: string[]) => deleteFiles(ids), [deleteFiles]);
     const handleRename = useCallback((file: FileItem, newName: string) => renameFile(file, newName), [renameFile]);
     const handleMove = useCallback((files: FileItem[], target: string) => moveFiles(files, target), [moveFiles]);
@@ -256,14 +263,21 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
         dragDepth.current -= 1;
         if (dragDepth.current <= 0) { dragDepth.current = 0; setIsDragging(false); }
     }, [canUpload]);
-    const handleDrop = useCallback((e: React.DragEvent) => {
+    const handleDrop = useCallback(async (e: React.DragEvent) => {
         if (!Array.from(e.dataTransfer.types || []).includes('Files')) return;
         e.preventDefault();
         if (!canUpload) return;
         dragDepth.current = 0; setIsDragging(false);
-        const files = Array.from(e.dataTransfer.files || []);
-        if (files.length) uploadFile(repoKey, files);
-    }, [canUpload, uploadFile, repoKey]);
+        try {
+            const selection = await collectDroppedSelection(e.dataTransfer);
+            if (selection.entries.length || selection.directories.length) {
+                await uploadFolder(repoKey, selection);
+            }
+        } catch (err) {
+            const message = err instanceof Error ? err.message : 'Failed to upload';
+            toast.error(message);
+        }
+    }, [canUpload, uploadFolder, repoKey]);
 
     // ---- sidebar search (debounced) ----
     const searchTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -357,7 +371,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
         selectedFiles, setSelectFiles,
         currentFolderId, setCurrentFolderId, currentItem, setCurrentItem,
         repoKey,
-        handleUpload: handleCreateFile, handleDelete,
+        handleUpload: handleCreateFile, handleUploadFolder, handleDelete,
         loading, error,
         breadcrumbPath, canGoBack, canGoForward, goBack, goForward, navigateToFolder,
         handleRename, handleMove, handleCopy, handleDuplicate,
@@ -368,7 +382,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
     }), [
         selectable, multiple, target, accept, confirmSelection, itemIsSelectable, t, isTouch,
         currentFolderItems, sortedItems, selectedFiles, setSelectFiles,
-        currentFolderId, setCurrentFolderId, currentItem, setCurrentItem, repoKey, handleCreateFile, handleDelete,
+        currentFolderId, setCurrentFolderId, currentItem, setCurrentItem, repoKey, handleCreateFile, handleUploadFolder, handleDelete,
         loading, error, breadcrumbPath, canGoBack, canGoForward, goBack, goForward, navigateToFolder,
         handleRename, handleMove, handleCopy, handleDuplicate, selectItem, isSelected, selectAll, clearSelection,
         openItem, requestRename, requestMove, requestDetails, requestPreview, requestDelete, requestPurge,
@@ -560,22 +574,35 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                                 </Tooltip>
                             ) : (
                                 <>
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <Button
-                                                size="sm"
-                                                variant="ghost"
-                                                className="h-11 w-11 gap-1.5 rounded-lg px-0 text-muted-foreground transition-colors duration-150 hover:text-foreground active:bg-muted/70 motion-reduce:transition-none lg:h-8 lg:w-auto lg:px-3"
-                                                onClick={() => handleCreateFile('FILE')}
-                                                disabled={loading || !canUpload}
-                                                aria-label={t('toolbar.upload')}
-                                            >
-                                                <UploadIcon className="h-4 w-4" />
-                                                <span className="hidden lg:inline">{t('toolbar.upload')}</span>
-                                            </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent>{t('toolbar.upload')}</TooltipContent>
-                                    </Tooltip>
+                                    <DropdownMenu modal={false}>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        className="h-11 w-11 gap-1.5 rounded-lg px-0 text-muted-foreground transition-colors duration-150 hover:text-foreground active:bg-muted/70 motion-reduce:transition-none lg:h-8 lg:w-auto lg:px-3"
+                                                        disabled={loading || !canUpload}
+                                                        aria-label={t('toolbar.upload')}
+                                                    >
+                                                        <UploadIcon className="h-4 w-4" />
+                                                        <span className="hidden lg:inline">{t('toolbar.upload')}</span>
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                            </TooltipTrigger>
+                                            <TooltipContent>{t('toolbar.upload')}</TooltipContent>
+                                        </Tooltip>
+                                        <DropdownMenuContent align="end" className="w-[200px]">
+                                            <DropdownMenuItem className="h-11 lg:h-8" onClick={() => handleCreateFile('FILE')}>
+                                                <UploadIcon className="mr-2 h-4 w-4" />
+                                                {t('toolbar.uploadFiles')}
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem className="h-11 lg:h-8" onClick={handleUploadFolder}>
+                                                <FolderUpIcon className="mr-2 h-4 w-4" />
+                                                {t('toolbar.uploadFolder')}
+                                            </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
                                     <Tooltip>
                                         <TooltipTrigger asChild>
                                             <Button
@@ -689,6 +716,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                                     description={isTrash ? undefined : t('emptyState.noFilesDescription')}
                                     className="h-full rounded-none border-0"
                                     action={canUpload ? { label: t('emptyState.uploadFiles'), onClick: () => handleCreateFile('FILE') } : undefined}
+                                    secondaryAction={canUpload ? { label: t('emptyState.uploadFolder'), onClick: handleUploadFolder } : undefined}
                                 />
                             )}
                         </div>

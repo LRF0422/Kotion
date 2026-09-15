@@ -24,10 +24,12 @@ export const translations = {
             gridView: 'Grid view',
             listView: 'List view',
             upload: 'Upload',
+            uploadFiles: 'Upload Files',
+            uploadFolder: 'Upload Folder',
             newFolder: 'New Folder',
             emptyTrash: 'Empty Trash',
             cancel: 'Cancel',
-            dropFiles: 'Drop files to upload',
+            dropFiles: 'Drop files or folders to upload',
             fileNavigation: 'File navigation',
         },
         views: {
@@ -50,6 +52,7 @@ export const translations = {
             clear: 'Clear ({{count}})',
             newFolder: 'New Folder',
             uploadFile: 'Upload File',
+            uploadFolder: 'Upload Folder',
         },
         actions: {
             moreActions: 'More actions',
@@ -161,6 +164,7 @@ export const translations = {
             noFiles: 'No files yet',
             noFilesDescription: 'Upload files or create a folder to get started.',
             uploadFiles: 'Upload Files',
+            uploadFolder: 'Upload Folder',
         },
         attachment: {
             empty: 'Empty attachment',
@@ -228,10 +232,12 @@ export const translations = {
             gridView: '网格视图',
             listView: '列表视图',
             upload: '上传',
+            uploadFiles: '上传文件',
+            uploadFolder: '上传文件夹',
             newFolder: '新建文件夹',
             emptyTrash: '清空回收站',
             cancel: '取消',
-            dropFiles: '拖放文件以上传',
+            dropFiles: '拖放文件或文件夹以上传',
             fileNavigation: '文件导航',
         },
         views: {
@@ -254,6 +260,7 @@ export const translations = {
             clear: '清除 ({{count}})',
             newFolder: '新建文件夹',
             uploadFile: '上传文件',
+            uploadFolder: '上传文件夹',
         },
         actions: {
             moreActions: '更多操作',
@@ -365,6 +372,7 @@ export const translations = {
             noFiles: '暂无文件',
             noFilesDescription: '上传文件或创建文件夹以开始。',
             uploadFiles: '上传文件',
+            uploadFolder: '上传文件夹',
         },
         attachment: {
             empty: '空附件',

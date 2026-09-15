@@ -4,6 +4,7 @@ import {
     useFileService,
     useSafeState,
     useOptionalUploadTaskService,
+    type UploadDestination,
     type UploadFileHandle,
     type UploadSource,
 } from '@kn/common';
@@ -11,6 +12,13 @@ import { toast } from '@kn/ui';
 import { APIS } from '../api';
 import { FileItem, BreadcrumbItem } from '../editor-extensions/component/FileContext';
 import { normalizeFileName } from '../utils/fileUtils';
+import {
+    groupFilesByDirectory,
+    pickFolderSelection,
+    planFolderUpload,
+    type FolderUploadResult,
+    type FolderUploadSelection,
+} from '../utils/folder-upload';
 
 interface UseFileManagerProps {
     initialFolderId?: string;
@@ -164,15 +172,28 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
         [resolveFileItem, view, searchKeyword]
     );
 
+    /** Create a single folder record and return its id (no toast / refresh). */
+    const createFolderNode = useCallback(
+        async (name: string, parentId: string, repoKey: string): Promise<string> => {
+            const res = await useApi(APIS.CREATE_FILE, null, {
+                name,
+                parentId: parentId || '0',
+                type: 'FOLDER',
+                repositoryKey: repoKey,
+            });
+            const createdId = res?.data?.id ?? res?.data?.fileId ?? res?.data?.folderId;
+            if (createdId === undefined || createdId === null || createdId === '') {
+                throw new Error('Failed to create folder');
+            }
+            return String(createdId);
+        },
+        []
+    );
+
     const createFolder = useCallback(
         async (name: string, repoKey: string) => {
             try {
-                await useApi(APIS.CREATE_FILE, null, {
-                    name,
-                    parentId: currentFolderId || '0',
-                    type: 'FOLDER',
-                    repositoryKey: repoKey,
-                });
+                await createFolderNode(name, currentFolderId || '0', repoKey);
                 refresh({ silent: true });
                 toast.success('Folder created successfully');
             } catch (err) {
@@ -181,68 +202,180 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
                 throw err;
             }
         },
-        [currentFolderId, refresh]
+        [createFolderNode, currentFolderId, refresh]
     );
+
+    /** Resolve upload sources from an explicit file list or the OS file picker. */
+    const pickUploadSources = useCallback(async (files?: File[]): Promise<UploadSource[]> => {
+        try {
+            if (files?.length) return files.map((file) => ({ file }));
+            const pickerWindow = window as FilePickerWindow;
+            if (pickerWindow.showOpenFilePicker) {
+                // Call on `window`: detached File System Access methods throw Illegal invocation.
+                const handles = await pickerWindow.showOpenFilePicker({ multiple: true });
+                return await Promise.all(handles.map(async (handle) => ({
+                    file: await handle.getFile(),
+                    handle,
+                })));
+            }
+            if (fileService.pickFiles) {
+                const picked = await fileService.pickFiles({ mimeTypes: ['*/*'], multiple: true });
+                return picked.map((file) => ({ file }));
+            }
+            return [];
+        } catch (pickerError) {
+            if (pickerError instanceof DOMException && pickerError.name === 'AbortError') return [];
+            throw pickerError;
+        }
+    }, [fileService]);
+
+    /** Queue/upload sources into one destination, falling back to the legacy endpoint for small files. */
+    const enqueueUploadSources = useCallback(async (
+        sources: UploadSource[],
+        destination: UploadDestination,
+    ): Promise<{ queued: number; uploaded: number; failed: number }> => {
+        if (!sources.length) return { queued: 0, uploaded: 0, failed: 0 };
+
+        if (uploadTaskService) {
+            const taskIds = await uploadTaskService.enqueue(sources, destination);
+            const enqueuedTasks = uploadTaskService.getSnapshot().tasks
+                .filter((task) => taskIds.includes(task.id));
+            const queued = enqueuedTasks.filter((task) => task.status !== 'FAILED').length;
+            if (queued > 0) return { queued, uploaded: 0, failed: sources.length - queued };
+
+            const resumableUnavailable = enqueuedTasks.every((task) =>
+                task.errorCode === 'RESUMABLE_UPLOAD_UNAVAILABLE');
+            if (!resumableUnavailable || sources.some(({ file }) => file.size > 64 * 1024 * 1024)) {
+                return { queued: 0, uploaded: 0, failed: sources.length };
+            }
+            await Promise.all(taskIds.map((taskId) => uploadTaskService.cancel(taskId)));
+            taskIds.forEach((taskId) => uploadTaskService.clear(taskId));
+            if (!fileService.uploadToFileCenter) throw new Error('uploadToFileCenter not available');
+            const legacy = await Promise.allSettled(sources.map(({ file }) =>
+                fileService.uploadToFileCenter?.(file, destination.parentId, destination.repositoryKey, { forceLegacy: true })));
+            const uploaded = legacy.filter((result) => result.status === 'fulfilled').length;
+            return { queued: 0, uploaded, failed: sources.length - uploaded };
+        }
+
+        if (!fileService.uploadToFileCenter) throw new Error('uploadToFileCenter not available');
+        const results = await Promise.allSettled(sources.map(({ file }) =>
+            fileService.uploadToFileCenter?.(file, destination.parentId, destination.repositoryKey)));
+        const uploaded = results.filter((result) => result.status === 'fulfilled').length;
+        return { queued: 0, uploaded, failed: sources.length - uploaded };
+    }, [fileService, uploadTaskService]);
 
     /** Queue files for direct, resumable multipart upload. */
     const uploadFile = useCallback(
         async (repoKey: string, files?: File[]) => {
-            let sources: UploadSource[] = [];
-            try {
-                if (files?.length) {
-                    sources = files.map((file) => ({ file }));
-                } else {
-                    const picker = (window as FilePickerWindow).showOpenFilePicker;
-                    if (picker) {
-                        const handles = await picker({ multiple: true });
-                        sources = await Promise.all(handles.map(async (handle) => ({
-                            file: await handle.getFile(),
-                            handle,
-                        })));
-                    } else if (fileService.pickFiles) {
-                        const picked = await fileService.pickFiles({ mimeTypes: ['*/*'], multiple: true });
-                        sources = picked.map((file) => ({ file }));
-                    }
-                }
-            } catch (pickerError) {
-                if (pickerError instanceof DOMException && pickerError.name === 'AbortError') return;
-                throw pickerError;
-            }
-
+            const sources = await pickUploadSources(files);
             if (!sources.length) return;
-            if (uploadTaskService) {
-                const taskIds = await uploadTaskService.enqueue(sources, {
-                    parentId: currentFolderId || '0',
-                    repositoryKey: repoKey,
-                });
-                const enqueuedTasks = uploadTaskService.getSnapshot().tasks
-                    .filter((task) => taskIds.includes(task.id));
-                const queuedCount = enqueuedTasks.filter((task) => task.status !== 'FAILED').length;
-                if (queuedCount > 0) {
-                    toast.success(`${queuedCount} file${queuedCount > 1 ? 's' : ''} queued for upload`);
-                    return;
+            const outcome = await enqueueUploadSources(sources, {
+                parentId: currentFolderId || '0',
+                repositoryKey: repoKey,
+            });
+            if (outcome.queued > 0) {
+                toast.success(`${outcome.queued} file${outcome.queued > 1 ? 's' : ''} queued for upload`);
+            }
+            if (outcome.uploaded > 0) refresh({ silent: true });
+            if (outcome.failed > 0 && outcome.queued === 0) {
+                toast.error(`${outcome.failed} file upload(s) failed`);
+            }
+        },
+        [currentFolderId, enqueueUploadSources, pickUploadSources, refresh]
+    );
+
+    /**
+     * Upload a local folder, recreating its directory tree under the current folder.
+     * Pass `selection` to upload an already-collected tree (e.g. a dropped folder),
+     * or omit it to open the OS folder picker.
+     */
+    const uploadFolder = useCallback(
+        async (repoKey: string, selection?: FolderUploadSelection): Promise<FolderUploadResult | null> => {
+            let resolved: FolderUploadSelection | null | undefined = selection;
+            if (!resolved) {
+                try {
+                    resolved = await pickFolderSelection();
+                } catch (pickerError) {
+                    const message = pickerError instanceof Error ? pickerError.message : 'Failed to pick folder';
+                    toast.error(message);
+                    return null;
                 }
-                const resumableUnavailable = enqueuedTasks.every((task) =>
-                    task.errorCode === 'RESUMABLE_UPLOAD_UNAVAILABLE');
-                if (!resumableUnavailable || sources.some(({ file }) => file.size > 64 * 1024 * 1024)) return;
-                await Promise.all(taskIds.map((taskId) => uploadTaskService.cancel(taskId)));
-                taskIds.forEach((taskId) => uploadTaskService.clear(taskId));
-                if (!fileService.uploadToFileCenter) throw new Error('uploadToFileCenter not available');
-                const legacy = await Promise.allSettled(sources.map(({ file }) =>
-                    fileService.uploadToFileCenter?.(file, currentFolderId, repoKey, { forceLegacy: true })));
-                if (legacy.some((result) => result.status === 'fulfilled')) refresh({ silent: true });
-                if (legacy.some((result) => result.status === 'rejected')) toast.error('One or more uploads failed');
-                return;
+            }
+            if (!resolved) return null; // user cancelled the folder picker
+
+            const plan = planFolderUpload(resolved);
+            if (!plan.directories.length && !plan.files.length) {
+                toast.info('No files found in the selected folder');
+                return null;
             }
 
-            if (!fileService.uploadToFileCenter) throw new Error('uploadToFileCenter not available');
-            const results = await Promise.allSettled(sources.map(({ file }) =>
-                fileService.uploadToFileCenter?.(file, currentFolderId, repoKey)));
-            const uploaded = results.filter((result) => result.status === 'fulfilled').length;
-            if (uploaded > 0) refresh({ silent: true });
-            if (uploaded < sources.length) toast.error(`${sources.length - uploaded} file upload(s) failed`);
+            try {
+                const childrenByParent = new Map<string, FileItem[]>();
+                childrenByParent.set(currentFolderId || '0', currentFolderItems);
+                const folderIdByPath = new Map<string, string>();
+
+                const listChildren = async (parentId: string): Promise<FileItem[]> => {
+                    const cached = childrenByParent.get(parentId);
+                    if (cached) return cached;
+                    const res = await useApi(APIS.GET_CHILDREN, { folderId: parentId || '0' });
+                    const items = (res?.data || []).map((item: any) => resolveFileItem(item));
+                    childrenByParent.set(parentId, items);
+                    return items;
+                };
+
+                let foldersCreated = 0;
+                for (const directory of plan.directories) {
+                    const parentId = directory.parentPath
+                        ? folderIdByPath.get(directory.parentPath)
+                        : (currentFolderId || '0');
+                    if (!parentId) continue;
+                    const siblings = await listChildren(parentId);
+                    const existing = siblings.find((item) =>
+                        item.isFolder && normalizeFileName(item.name, item.id) === directory.name);
+                    let folderId: string;
+                    if (existing) {
+                        folderId = existing.id;
+                    } else {
+                        folderId = await createFolderNode(directory.name, parentId, repoKey);
+                        siblings.push({ id: folderId, name: directory.name, isFolder: true, type: { value: 'FOLDER' } });
+                        foldersCreated += 1;
+                    }
+                    folderIdByPath.set(directory.path, folderId);
+                }
+
+                let filesQueued = 0;
+                let filesUploaded = 0;
+                let filesFailed = 0;
+                for (const group of groupFilesByDirectory(plan.files)) {
+                    const parentId = group.directoryPath
+                        ? folderIdByPath.get(group.directoryPath)
+                        : (currentFolderId || '0');
+                    if (!parentId) {
+                        filesFailed += group.files.length;
+                        continue;
+                    }
+                    const outcome = await enqueueUploadSources(
+                        group.files.map((file) => ({ file })),
+                        { parentId, repositoryKey: repoKey },
+                    );
+                    filesQueued += outcome.queued;
+                    filesUploaded += outcome.uploaded;
+                    filesFailed += outcome.failed;
+                }
+
+                refresh({ silent: true });
+                if (filesQueued > 0) {
+                    toast.success(`${filesQueued} file${filesQueued > 1 ? 's' : ''} queued for upload`);
+                }
+                if (filesFailed > 0) toast.error(`${filesFailed} file upload(s) failed`);
+                return { foldersCreated, filesQueued, filesUploaded, filesFailed };
+            } catch (error) {
+                const message = error instanceof Error ? error.message : 'Failed to upload folder';
+                toast.error(message);
+                return null;
+            }
         },
-        [currentFolderId, fileService, refresh, uploadTaskService]
+        [createFolderNode, currentFolderId, currentFolderItems, enqueueUploadSources, refresh, resolveFileItem]
     );
 
     /** 删除 → 移入回收站(批量) */
@@ -465,6 +598,7 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
         searchKeyword,
         createFolder,
         uploadFile,
+        uploadFolder,
         deleteFiles,
         refreshFolder: refresh,
         // Navigation

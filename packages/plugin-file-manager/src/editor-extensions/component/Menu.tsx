@@ -1,4 +1,4 @@
-import { FolderPlusIcon, UploadIcon, CheckSquare, Square } from "@kn/icon";
+import { FolderPlusIcon, FolderUpIcon, UploadIcon, CheckSquare, Square } from "@kn/icon";
 import {
     ContextMenu, ContextMenuContent, ContextMenuItem,
     ContextMenuSeparator, ContextMenuShortcut, ContextMenuTrigger, cn,
@@ -9,7 +9,7 @@ import { getFileActions } from "./fileActions";
 
 export const Menu: React.FC<PropsWithChildren> = React.memo((props) => {
     const ctx = useFileManagerState();
-    const { handleUpload, selectedFiles, loading, selectAll, clearSelection, view, selectable, multiple } = ctx;
+    const { handleUpload, handleUploadFolder, selectedFiles, loading, selectAll, clearSelection, view, selectable, multiple } = ctx;
 
     const fileActions = selectedFiles.length > 0 ? getFileActions(selectedFiles, ctx) : [];
 
@@ -39,6 +39,9 @@ export const Menu: React.FC<PropsWithChildren> = React.memo((props) => {
                         </ContextMenuItem>
                         <ContextMenuItem className="h-11 lg:h-8" onClick={() => handleUpload('FILE')} disabled={loading}>
                             <UploadIcon className="mr-2 h-4 w-4" /> {ctx.t('contextMenu.uploadFile')}
+                        </ContextMenuItem>
+                        <ContextMenuItem className="h-11 lg:h-8" onClick={() => handleUploadFolder()} disabled={loading}>
+                            <FolderUpIcon className="mr-2 h-4 w-4" /> {ctx.t('contextMenu.uploadFolder')}
                         </ContextMenuItem>
                     </>
                 )}

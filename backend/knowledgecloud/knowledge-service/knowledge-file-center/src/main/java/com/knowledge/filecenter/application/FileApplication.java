@@ -8,8 +8,11 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import javax.servlet.http.HttpServletResponse;
@@ -34,6 +37,7 @@ import com.knowledge.filecenter.converter.KnowledgeFileRepositoryConverter;
 import com.knowledge.filecenter.entity.KnowledgeFile;
 import com.knowledge.filecenter.entity.KnowledgeFileRepository;
 import com.knowledge.filecenter.entity.vo.FileAccessUrlsVO;
+import com.knowledge.filecenter.entity.vo.FileContentVO;
 import com.knowledge.filecenter.entity.vo.KnowledgeFileVO;
 import com.knowledge.filecenter.service.IFileRepositoryService;
 import com.knowledge.filecenter.service.IFileService;
@@ -54,6 +58,26 @@ import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignReques
 public class FileApplication {
 
     private static final Duration FILE_ACCESS_URL_EXPIRY = Duration.ofHours(1);
+
+    /** Default number of characters returned when reading a text file. */
+    private static final int DEFAULT_READ_MAX_CHARS = 4000;
+    /** Hard upper bound for the requested read length. */
+    private static final int MAX_READ_MAX_CHARS = 50000;
+    /** Number of leading bytes inspected when sniffing whether content is text. */
+    private static final int TEXT_SNIFF_BYTES = 8192;
+
+    private static final Set<String> TEXT_FILE_SUFFIXES = new HashSet<>(Arrays.asList(
+            "txt", "text", "md", "markdown", "json", "json5", "xml", "svg", "yaml", "yml", "toml", "ini", "conf",
+            "cfg", "properties", "env", "csv", "tsv", "log", "html", "htm", "css", "scss", "less", "js", "jsx",
+            "mjs", "cjs", "ts", "tsx", "vue", "svelte", "java", "kt", "kts", "groovy", "scala", "py", "rb", "php",
+            "go", "rs", "c", "h", "cc", "cpp", "hpp", "cs", "swift", "sh", "bash", "zsh", "bat", "cmd", "ps1",
+            "sql", "graphql", "proto", "gradle", "gitignore", "editorconfig"));
+
+    private static final Set<String> BINARY_FILE_SUFFIXES = new HashSet<>(Arrays.asList(
+            "png", "jpg", "jpeg", "gif", "bmp", "webp", "ico", "svgz", "tif", "tiff", "psd", "pdf", "doc", "docx",
+            "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp", "zip", "rar", "7z", "gz", "tar", "bz2", "xz",
+            "mp3", "wav", "flac", "aac", "ogg", "m4a", "mp4", "mov", "avi", "mkv", "webm", "wmv", "flv", "woff",
+            "woff2", "ttf", "otf", "eot", "exe", "dll", "so", "dylib", "bin", "class", "jar", "war", "apk", "ipa"));
 
     @Autowired
     private IFileService fileService;
@@ -286,6 +310,99 @@ public class FileApplication {
                 .signatureDuration(FILE_ACCESS_URL_EXPIRY)
                 .getObjectRequest(objectRequest)
                 .build()).url().toString();
+    }
+
+    /**
+     * Read a file's bytes from object storage and return its text content when possible.
+     * <p>
+     * Text-like files are decoded as UTF-8 and truncated to the requested length;
+     * binary files only carry metadata plus a message explaining why no text was returned.
+     *
+     * @param fileId   the file-center record id
+     * @param maxChars optional maximum number of characters to return (defaults to 4000)
+     * @return content metadata plus decoded text for text files
+     */
+    @SneakyThrows
+    public FileContentVO readFileContent(Long fileId, Integer maxChars) {
+        KnowledgeFile file = requireAccessibleFile(fileId);
+        if (ossClient == null) {
+            throw new IllegalStateException("OSS client is not configured");
+        }
+
+        FileContentVO result = new FileContentVO();
+        result.setId(file.getId());
+        result.setName(file.getName());
+        result.setSuffix(file.getSuffix());
+        result.setMediaType(file.getMediaType());
+        result.setSize(file.getSize());
+
+        String objectKey = ossObjectKeyResolver.resolve(file.getPath());
+        if (StrUtil.isBlank(objectKey)) {
+            result.setMessage("File object key is not available");
+            return result;
+        }
+
+        byte[] bytes;
+        try (InputStream inputStream = ossClient.downloadFile(objectKey)) {
+            bytes = IoUtil.readBytes(inputStream);
+        }
+
+        if (!isTextFile(file.getSuffix(), bytes)) {
+            result.setMessage("This file is binary (suffix=" + StrUtil.blankToDefault(file.getSuffix(), "none")
+                    + ", size=" + bytes.length + " bytes) and cannot be read as text.");
+            return result;
+        }
+
+        String decoded = new String(bytes, StandardCharsets.UTF_8);
+        if (!decoded.isEmpty() && (int) decoded.charAt(0) == 0xFEFF) {
+            decoded = decoded.substring(1);
+        }
+
+        int limit = resolveReadLimit(maxChars);
+        boolean truncated = decoded.length() > limit;
+        result.setText(true);
+        result.setEncoding("utf-8");
+        result.setTruncated(truncated);
+        result.setContent(truncated ? decoded.substring(0, limit) : decoded);
+
+        fileService.touchAccess(fileId);
+        return result;
+    }
+
+    private static int resolveReadLimit(Integer maxChars) {
+        if (maxChars == null || maxChars <= 0) {
+            return DEFAULT_READ_MAX_CHARS;
+        }
+        return Math.min(maxChars, MAX_READ_MAX_CHARS);
+    }
+
+    private static boolean isTextFile(String suffix, byte[] bytes) {
+        String normalized = suffix == null ? "" : suffix.toLowerCase();
+        if (TEXT_FILE_SUFFIXES.contains(normalized)) {
+            return true;
+        }
+        if (BINARY_FILE_SUFFIXES.contains(normalized)) {
+            return false;
+        }
+        return looksLikeText(bytes);
+    }
+
+    private static boolean looksLikeText(byte[] bytes) {
+        int sampleSize = Math.min(bytes.length, TEXT_SNIFF_BYTES);
+        if (sampleSize == 0) {
+            return true;
+        }
+        int suspicious = 0;
+        for (int index = 0; index < sampleSize; index++) {
+            int value = bytes[index] & 0xFF;
+            if (value == 0) {
+                return false;
+            }
+            if (value < 0x09 || (value > 0x0D && value < 0x20)) {
+                suspicious++;
+            }
+        }
+        return suspicious * 10 <= sampleSize;
     }
 
     /**

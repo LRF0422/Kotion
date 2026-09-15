@@ -71,6 +71,8 @@ export interface FileManagerState {
     setCurrentItem: React.Dispatch<React.SetStateAction<FileItem | undefined>>
     repoKey: string
     handleUpload: (type: 'FOLDER' | 'FILE', name?: string) => void
+    /** 从本机选择文件夹并保留目录结构上传 */
+    handleUploadFolder: () => void
     handleDelete: (ids: string[]) => void
     loading?: boolean
     error?: string | null

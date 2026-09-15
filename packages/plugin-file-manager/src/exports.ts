@@ -1,5 +1,6 @@
 // Export all utilities
 export * from './utils/fileUtils';
+export * from './utils/folder-upload';
 
 // Export constants
 export * from './constants';

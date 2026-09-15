@@ -5,8 +5,11 @@
  *
  * 展示原则：子 agent 的进度属于「委派」这件事，不属于主回答正文 ——
  *  - 整体收成一个可折叠分组（默认只在有子任务运行时展开）；
- *  - 每个子任务只占一行：状态 + 任务首行 + 工具进度；完整任务、该子 agent
- *    自己的工具步骤和结果都在展开后才出现，绝不把整段 prompt 平铺进正文。
+ *  - 每个子任务只占一行：状态 + 任务首行 + 工具进度；
+ *  - 点击某一行在左侧以 Popover 展开该子 agent 的完整步骤时间线（与主 agent
+ *    同一套渲染，由 host 通过 renderDetail 注入），并支持 Pin 固定。
+ *
+ * 本组件不直接依赖 i18n：调用方通过 labels 传入翻译后的文案。
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
@@ -15,11 +18,15 @@ import {
     ChevronDown,
     ChevronRight,
     Loader2,
+    Pin,
+    PinOff,
     Sparkles,
     Wrench,
+    X,
     XCircle,
 } from '@kn/icon'
 import { Badge } from '../ui/badge'
+import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover'
 import { cn } from '../../lib/utils'
 
 export interface SubToolCallView {
@@ -34,11 +41,20 @@ export interface SubToolCallView {
     subRunId?: string
 }
 
+/** One step of a child's own timeline (structurally = @kn/common AgentStepRecord). */
+export interface SubRunStepView {
+    id: string
+    step: number
+    startedSeq: number
+    reasoning: string
+    text: string
+}
+
 export interface SubRunView {
     callId: string
     subRunId: string
     task?: string
-    status: 'running' | 'completed' | 'failed'
+    status: 'running' | 'completed' | 'failed' | 'cancelled'
     result?: unknown
     error?: string
     /** Per-child tool calls, when the host already grouped them. */
@@ -46,6 +62,10 @@ export interface SubRunView {
     /** The child's own live output (tail-preview), streamed by the client. */
     text?: string
     reasoning?: string
+    /** The child's own step timeline (full detail in the popover). */
+    steps?: SubRunStepView[]
+    /** Child step id chosen as the answer. */
+    answerStepId?: string
     /** The child's own token usage, when reported. */
     usage?: { promptTokens: number; completionTokens: number; cachedPromptTokens?: number }
     /** Private-document merge outcome (true-parallel fork/merge). */
@@ -57,13 +77,67 @@ export interface SubRunView {
     }
 }
 
+/** Localized strings for the tree; pass translated values from the host. */
+export interface SubAgentTreeLabels {
+    /** Group header; use the literal {count} placeholder for the delegation count. */
+    title: string
+    running: string
+    completed: string
+    failed: string
+    cancelled: string
+    task: string
+    tools: string
+    liveOutput: string
+    reasoning: string
+    steps: string
+    mergeBack: string
+    result: string
+    failureReason: string
+    noTask: string
+    usage: string
+    pin: string
+    unpin: string
+    close: string
+    runId: string
+}
+
+/** English fallbacks; hosts override with translated values. */
+export const defaultSubAgentTreeLabels: SubAgentTreeLabels = {
+    title: 'Sub-agent delegations · {count}',
+    running: 'running',
+    completed: 'completed',
+    failed: 'failed',
+    cancelled: 'cancelled',
+    task: 'Task',
+    tools: 'Tool calls',
+    liveOutput: 'Live output',
+    reasoning: 'Reasoning',
+    steps: 'Steps',
+    mergeBack: 'Merged into page',
+    result: 'Result',
+    failureReason: 'Failure',
+    noTask: '(no task description)',
+    usage: 'Token usage',
+    pin: 'Pin',
+    unpin: 'Unpin',
+    close: 'Close',
+    runId: 'run',
+}
+
 export interface SubAgentTreeProps {
     subRuns: SubRunView[]
     /**
-     * The run's whole frontend tool tape. Calls tagged with `subRunId` are
+     * The run's whole frontend tool tape. Calls tagged with a subRunId are
      * attributed to that child (and should be kept out of the parent's list).
      */
     toolCalls?: SubToolCallView[]
+    /** Localized labels; missing keys fall back to English. */
+    labels?: Partial<SubAgentTreeLabels>
+    /**
+     * Render a child's full detail (typically the same timeline component the
+     * main agent uses). When omitted a compact built-in timeline is shown.
+     */
+    renderDetail?: (sub: SubRunView, toolCalls: SubToolCallView[]) => React.ReactNode
     /** Initial expansion of the group. Defaults to open while any child runs. */
     defaultOpen?: boolean
     className?: string
@@ -76,22 +150,26 @@ function StatusIcon({ status, className }: { status: SubRunView['status']; class
     if (status === 'completed') {
         return <CheckCircle2 className={cn('h-3 w-3 text-green-500', className)} />
     }
+    if (status === 'cancelled') {
+        return <XCircle className={cn('h-3 w-3 text-muted-foreground', className)} />
+    }
     return <XCircle className={cn('h-3 w-3 text-red-500', className)} />
 }
 
-function statusLabel(status: SubRunView['status']): string {
+function statusLabel(status: SubRunView['status'], labels: SubAgentTreeLabels): string {
     switch (status) {
-        case 'running': return '运行中'
-        case 'completed': return '已完成'
-        case 'failed': return '出错'
+        case 'running': return labels.running
+        case 'completed': return labels.completed
+        case 'cancelled': return labels.cancelled
+        default: return labels.failed
     }
 }
 
 /** First non-empty line — the collapsed row never shows a whole prompt. */
-function firstLine(task?: string): string {
-    if (!task) return '（未提供任务描述）'
+function firstLine(task: string | undefined, empty: string): string {
+    if (!task) return empty
     const line = task.split('\n').map(part => part.trim()).find(Boolean)
-    return line ?? '（未提供任务描述）'
+    return line ?? empty
 }
 
 /** Last non-empty line of a child's live output — one line, never a dump. */
@@ -101,10 +179,6 @@ function lastLine(text?: string): string {
     return lines.length > 0 ? lines[lines.length - 1] : ''
 }
 
-/**
- * Child result → display text. Delegated children report `{subRunId, text}`,
- * but a plain string (or any other payload) must stay readable.
- */
 function resultText(result: unknown, error?: string): string {
     if (error) return error
     if (result == null) return ''
@@ -122,7 +196,7 @@ function resultText(result: unknown, error?: string): string {
 
 function formatDuration(ms?: number): string {
     if (ms == null || !Number.isFinite(ms) || ms <= 0) return ''
-    return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`
+    return ms < 1000 ? Math.round(ms) + 'ms' : (ms / 1000).toFixed(1) + 's'
 }
 
 function ToolSteps({ calls }: { calls: SubToolCallView[] }) {
@@ -132,17 +206,208 @@ function ToolSteps({ calls }: { calls: SubToolCallView[] }) {
             {calls.map(call => (
                 <div key={call.callId} className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
                     <Wrench className="h-2.5 w-2.5 shrink-0 opacity-70" />
-                    <span className="font-mono truncate">{call.tool}</span>
+                    <span className="truncate font-mono">{call.tool}</span>
                     {call.status === 'running' && <Loader2 className="h-2.5 w-2.5 animate-spin text-indigo-500" />}
                     {call.status === 'success' && <CheckCircle2 className="h-2.5 w-2.5 text-green-500" />}
                     {call.status === 'error' && <XCircle className="h-2.5 w-2.5 text-red-500" />}
                     {formatDuration(call.durationMs) && (
                         <span className="opacity-60">{formatDuration(call.durationMs)}</span>
                     )}
-                    {call.error && <span className="text-destructive truncate">{call.error}</span>}
+                    {call.error && <span className="truncate text-destructive">{call.error}</span>}
                 </div>
             ))}
         </div>
+    )
+}
+
+/** Compact fallback timeline when the host provides no renderDetail. */
+function FallbackDetail({
+    sub,
+    calls,
+    labels,
+}: {
+    sub: SubRunView
+    calls: SubToolCallView[]
+    labels: SubAgentTreeLabels
+}) {
+    const summary = resultText(sub.result, sub.error)
+    return (
+        <div className="space-y-3 text-[11px]">
+            <div>
+                <p className="mb-1 text-[10px] font-medium text-muted-foreground/70">{labels.task}</p>
+                <p className="max-h-32 overflow-auto whitespace-pre-wrap break-words text-muted-foreground">
+                    {sub.task || labels.noTask}
+                </p>
+            </div>
+            {(sub.steps?.length ?? 0) > 0 && (
+                <div className="space-y-2">
+                    <p className="text-[10px] font-medium text-muted-foreground/70">{labels.steps}</p>
+                    {sub.steps!.map(step => (
+                        <div key={step.id} className="border-l border-border/70 pl-2.5">
+                            {step.reasoning.trim() && (
+                                <p className="max-h-32 overflow-auto whitespace-pre-wrap break-words text-[10px] italic text-muted-foreground/70">
+                                    {step.reasoning}
+                                </p>
+                            )}
+                            {step.text.trim() && (
+                                <p className="whitespace-pre-wrap break-words text-muted-foreground">{step.text}</p>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            )}
+            {calls.length > 0 && (
+                <div>
+                    <p className="mb-1 text-[10px] font-medium text-muted-foreground/70">{labels.tools}</p>
+                    <ToolSteps calls={calls} />
+                </div>
+            )}
+            {sub.status === 'running' && sub.text && (
+                <div>
+                    <p className="mb-1 text-[10px] font-medium text-muted-foreground/70">{labels.liveOutput}</p>
+                    <p className="max-h-32 overflow-auto whitespace-pre-wrap break-words text-muted-foreground/70">
+                        {sub.text}
+                    </p>
+                </div>
+            )}
+            {summary && (
+                <div>
+                    <p className="mb-1 text-[10px] font-medium text-muted-foreground/70">
+                        {sub.status === 'failed' ? labels.failureReason : labels.result}
+                    </p>
+                    <p className={cn(
+                        'max-h-48 overflow-auto whitespace-pre-wrap break-words',
+                        sub.status === 'failed' ? 'text-destructive' : 'text-muted-foreground',
+                    )}>
+                        {summary}
+                    </p>
+                </div>
+            )}
+        </div>
+    )
+}
+
+interface SubAgentRowProps {
+    index: number
+    sub: SubRunView
+    toolCalls: SubToolCallView[]
+    labels: SubAgentTreeLabels
+    renderDetail?: SubAgentTreeProps['renderDetail']
+    open: boolean
+    pinned: boolean
+    onOpenChange: (open: boolean) => void
+    onClose: () => void
+    onTogglePin: () => void
+}
+
+const SubAgentRow: React.FC<SubAgentRowProps> = ({
+    index, sub, toolCalls, labels, renderDetail,
+    open, pinned, onOpenChange, onClose, onTogglePin,
+}) => {
+    const finishedTools = toolCalls.filter(call => call.status !== 'running').length
+
+    return (
+        <Popover open={open} onOpenChange={onOpenChange}>
+            <PopoverTrigger asChild>
+                <button
+                    type="button"
+                    aria-expanded={open}
+                    className={cn(
+                        'flex w-full items-center gap-1.5 rounded-md border border-border/40 bg-background/60 px-2 py-1 text-left',
+                        open && 'border-indigo-500/50 ring-1 ring-indigo-500/30',
+                    )}
+                >
+                    <ChevronRight className={cn('h-2.5 w-2.5 shrink-0 text-muted-foreground transition-transform', open && 'rotate-90')} />
+                    <span className="shrink-0 font-mono text-[10px] text-muted-foreground/60">#{index}</span>
+                    <StatusIcon status={sub.status} />
+                    <span className="flex min-w-0 flex-1 flex-col">
+                        <span className="truncate text-[11px]" title={sub.task}>
+                            {firstLine(sub.task, labels.noTask)}
+                        </span>
+                        {sub.status === 'running' && lastLine(sub.text) && (
+                            <span className="truncate text-[10px] italic text-muted-foreground/70" title={sub.text}>
+                                {lastLine(sub.text)}
+                            </span>
+                        )}
+                    </span>
+                    {toolCalls.length > 0 && (
+                        <span className="flex shrink-0 items-center gap-0.5 text-[10px] text-muted-foreground">
+                            <Wrench className="h-2.5 w-2.5 opacity-70" />
+                            {finishedTools}/{toolCalls.length}
+                        </span>
+                    )}
+                    <Badge variant="outline" className="shrink-0 px-1 py-0 text-[9px]">
+                        {statusLabel(sub.status, labels)}
+                    </Badge>
+                </button>
+            </PopoverTrigger>
+            <PopoverContent
+                side="left"
+                align="start"
+                sideOffset={8}
+                collisionPadding={12}
+                onOpenAutoFocus={event => event.preventDefault()}
+                className="w-[380px] max-w-[90vw] p-0"
+            >
+                <div className="flex items-start gap-2 border-b border-border/50 px-3 py-2">
+                    <StatusIcon status={sub.status} className="mt-0.5 h-3.5 w-3.5" />
+                    <div className="min-w-0 flex-1">
+                        <p className="truncate text-[11px] font-medium" title={sub.task}>
+                            {firstLine(sub.task, labels.noTask)}
+                        </p>
+                        <p className="font-mono text-[9px] text-muted-foreground/50">
+                            {labels.runId} {sub.subRunId}
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        aria-pressed={pinned}
+                        title={pinned ? labels.unpin : labels.pin}
+                        aria-label={pinned ? labels.unpin : labels.pin}
+                        onClick={onTogglePin}
+                        className={cn(
+                            'shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
+                            pinned && 'text-indigo-500',
+                        )}
+                    >
+                        {pinned ? <Pin className="h-3.5 w-3.5" /> : <PinOff className="h-3.5 w-3.5" />}
+                    </button>
+                    <button
+                        type="button"
+                        title={labels.close}
+                        aria-label={labels.close}
+                        onClick={onClose}
+                        className="shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    >
+                        <X className="h-3.5 w-3.5" />
+                    </button>
+                </div>
+                <div className="max-h-[60vh] overflow-y-auto px-3 py-2.5">
+                    {renderDetail
+                        ? renderDetail(sub, toolCalls)
+                        : <FallbackDetail sub={sub} calls={toolCalls} labels={labels} />}
+                    {sub.merge && (
+                        <div className="mt-3">
+                            <p className="mb-1 text-[10px] font-medium text-muted-foreground/70">{labels.mergeBack}</p>
+                            <p className={cn('text-[11px]', sub.merge.conflicts > 0 ? 'text-amber-600' : 'text-muted-foreground')}>
+                                {sub.merge.summary}
+                            </p>
+                        </div>
+                    )}
+                    {sub.usage && sub.usage.promptTokens > 0 && (
+                        <div className="mt-3">
+                            <p className="mb-1 text-[10px] font-medium text-muted-foreground/70">{labels.usage}</p>
+                            <p className="text-[10px] text-muted-foreground">
+                                {sub.usage.promptTokens.toLocaleString()} in · {sub.usage.completionTokens.toLocaleString()} out
+                                {sub.usage.cachedPromptTokens
+                                    ? ' · ' + sub.usage.cachedPromptTokens.toLocaleString() + ' cached'
+                                    : ''}
+                            </p>
+                        </div>
+                    )}
+                </div>
+            </PopoverContent>
+        </Popover>
     )
 }
 
@@ -152,9 +417,13 @@ function ToolSteps({ calls }: { calls: SubToolCallView[] }) {
 export const SubAgentTree: React.FC<SubAgentTreeProps> = ({
     subRuns,
     toolCalls,
+    labels,
+    renderDetail,
     defaultOpen,
     className,
 }) => {
+    const l = useMemo(() => ({ ...defaultSubAgentTreeLabels, ...labels }), [labels])
+
     /** Attribute every tagged tool call to its owning child (deduped). */
     const callsBySubRun = useMemo(() => {
         const fromTape = new Map<string, SubToolCallView[]>()
@@ -180,19 +449,29 @@ export const SubAgentTree: React.FC<SubAgentTreeProps> = ({
         let running = 0
         let completed = 0
         let failed = 0
+        let cancelled = 0
         for (const sub of subRuns) {
             if (sub.status === 'running') running += 1
             else if (sub.status === 'completed') completed += 1
+            else if (sub.status === 'cancelled') cancelled += 1
             else failed += 1
         }
-        return { running, completed, failed }
+        return { running, completed, failed, cancelled }
     }, [subRuns])
 
     const [open, setOpen] = useState(defaultOpen ?? counts.running > 0)
-    const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+    const [openRunId, setOpenRunId] = useState<string | null>(null)
+    const [pinned, setPinned] = useState(false)
 
-    // A new delegation (or the first running child) pulls the group open; a
-    // settled group stays where the user left it.
+    // Drop the popover if its child disappears from the list.
+    useEffect(() => {
+        if (openRunId && !subRuns.some(sub => sub.subRunId === openRunId)) {
+            setOpenRunId(null)
+            setPinned(false)
+        }
+    }, [openRunId, subRuns])
+
+    // A new delegation (or the first running child) pulls the group open.
     const knownCountRef = useRef(subRuns.length)
     useEffect(() => {
         if (subRuns.length !== knownCountRef.current) {
@@ -203,13 +482,19 @@ export const SubAgentTree: React.FC<SubAgentTreeProps> = ({
 
     if (subRuns.length === 0) return null
 
-    const allExpanded = subRuns.every(sub => expanded[sub.subRunId] === true)
-    const toggleAll = () => {
-        if (allExpanded) {
-            setExpanded({})
+    const handleOpenChange = (subRunId: string, nextOpen: boolean) => {
+        if (!nextOpen) {
+            // A pinned popover ignores outside-click/escape closes.
+            if (pinned && openRunId === subRunId) return
+            setOpenRunId(current => (current === subRunId ? null : current))
             return
         }
-        setExpanded(Object.fromEntries(subRuns.map(sub => [sub.subRunId, true])))
+        setOpenRunId(subRunId)
+    }
+
+    const closePopover = () => {
+        setOpenRunId(null)
+        setPinned(false)
     }
 
     return (
@@ -227,22 +512,16 @@ export const SubAgentTree: React.FC<SubAgentTreeProps> = ({
                     {counts.running > 0
                         ? <Loader2 className="h-3 w-3 shrink-0 animate-spin text-indigo-500" />
                         : <Sparkles className="h-3 w-3 shrink-0 text-indigo-400" />}
-                    <span className="truncate text-[11px] font-medium">子 Agent 委派 · {subRuns.length} 个</span>
+                    <span className="truncate text-[11px] font-medium">
+                        {l.title.replace('{count}', String(subRuns.length))}
+                    </span>
                     <span className="ml-auto flex shrink-0 items-center gap-1.5 text-[10px] text-muted-foreground">
-                        {counts.running > 0 && <span className="text-indigo-500">{counts.running} 运行中</span>}
-                        {counts.completed > 0 && <span className="text-green-600">{counts.completed} 已完成</span>}
-                        {counts.failed > 0 && <span className="text-red-500">{counts.failed} 出错</span>}
+                        {counts.running > 0 && <span className="text-indigo-500">{counts.running} {l.running}</span>}
+                        {counts.completed > 0 && <span className="text-green-600">{counts.completed} {l.completed}</span>}
+                        {counts.failed > 0 && <span className="text-red-500">{counts.failed} {l.failed}</span>}
+                        {counts.cancelled > 0 && <span>{counts.cancelled} {l.cancelled}</span>}
                     </span>
                 </button>
-                {open && (
-                    <button
-                        type="button"
-                        onClick={toggleAll}
-                        className="shrink-0 text-[10px] text-muted-foreground hover:text-foreground"
-                    >
-                        {allExpanded ? '全部收起' : '展开全部'}
-                    </button>
-                )}
             </div>
 
             {open && (
@@ -253,141 +532,15 @@ export const SubAgentTree: React.FC<SubAgentTreeProps> = ({
                             index={index + 1}
                             sub={sub}
                             toolCalls={callsBySubRun.get(sub.subRunId) ?? []}
-                            expanded={expanded[sub.subRunId] === true}
-                            onToggle={() => setExpanded(prev => ({
-                                ...prev,
-                                [sub.subRunId]: prev[sub.subRunId] !== true,
-                            }))}
+                            labels={l}
+                            renderDetail={renderDetail}
+                            open={openRunId === sub.subRunId}
+                            pinned={pinned && openRunId === sub.subRunId}
+                            onOpenChange={next => handleOpenChange(sub.subRunId, next)}
+                            onClose={closePopover}
+                            onTogglePin={() => setPinned(value => !value)}
                         />
                     ))}
-                </div>
-            )}
-        </div>
-    )
-}
-
-interface SubAgentRowProps {
-    /** 1-based delegation ordinal — a stable, human-sized handle per row. */
-    index: number
-    sub: SubRunView
-    toolCalls: SubToolCallView[]
-    expanded: boolean
-    onToggle: () => void
-}
-
-const SubAgentRow: React.FC<SubAgentRowProps> = ({ index, sub, toolCalls, expanded, onToggle }) => {
-    const summary = resultText(sub.result, sub.error)
-    const finishedTools = toolCalls.filter(call => call.status !== 'running').length
-
-    return (
-        <div className="rounded-md border border-border/40 bg-background/60">
-            <button
-                type="button"
-                onClick={onToggle}
-                aria-expanded={expanded}
-                className="flex w-full items-center gap-1.5 px-2 py-1 text-left"
-            >
-                {expanded
-                    ? <ChevronDown className="h-2.5 w-2.5 shrink-0 text-muted-foreground" />
-                    : <ChevronRight className="h-2.5 w-2.5 shrink-0 text-muted-foreground" />}
-                <span className="shrink-0 font-mono text-[10px] text-muted-foreground/60">#{index}</span>
-                <StatusIcon status={sub.status} />
-                <span className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate text-[11px]" title={sub.task}>
-                        {firstLine(sub.task)}
-                    </span>
-                    {sub.status === 'running' && lastLine(sub.text) && (
-                        <span className="truncate text-[10px] italic text-muted-foreground/70" title={sub.text}>
-                            {lastLine(sub.text)}
-                        </span>
-                    )}
-                </span>
-                {toolCalls.length > 0 && (
-                    <span className="flex shrink-0 items-center gap-0.5 text-[10px] text-muted-foreground">
-                        <Wrench className="h-2.5 w-2.5 opacity-70" />
-                        {finishedTools}/{toolCalls.length}
-                    </span>
-                )}
-                <Badge variant="outline" className="shrink-0 px-1 py-0 text-[9px]">
-                    {statusLabel(sub.status)}
-                </Badge>
-            </button>
-
-            {expanded && (
-                <div className="space-y-1.5 border-t border-border/40 px-2 py-1.5">
-                    <div>
-                        <p className="text-[10px] text-muted-foreground/70">任务</p>
-                        <p className="max-h-32 overflow-auto whitespace-pre-wrap break-words text-[11px] text-muted-foreground">
-                            {sub.task || '（未提供任务描述）'}
-                        </p>
-                    </div>
-
-                    {toolCalls.length > 0 && (
-                        <div>
-                            <p className="text-[10px] text-muted-foreground/70">工具调用</p>
-                            <ToolSteps calls={toolCalls} />
-                        </div>
-                    )}
-
-                    {sub.status === 'running' && sub.text && (
-                        <div>
-                            <p className="text-[10px] text-muted-foreground/70">实时输出</p>
-                            <p className="max-h-32 overflow-auto whitespace-pre-wrap break-words text-[11px] text-muted-foreground">
-                                {sub.text}
-                            </p>
-                        </div>
-                    )}
-
-                    {sub.reasoning && sub.status === 'running' && (
-                        <div>
-                            <p className="text-[10px] text-muted-foreground/70">推理过程</p>
-                            <p className="max-h-32 overflow-auto whitespace-pre-wrap break-words text-[10px] italic text-muted-foreground/70">
-                                {sub.reasoning}
-                            </p>
-                        </div>
-                    )}
-
-                    {sub.usage && sub.usage.promptTokens > 0 && (
-                        <div>
-                            <p className="text-[10px] text-muted-foreground/70">Token 用量</p>
-                            <p className="text-[10px] text-muted-foreground">
-                                输入 {sub.usage.promptTokens.toLocaleString()} · 输出 {sub.usage.completionTokens.toLocaleString()}
-                                {sub.usage.cachedPromptTokens
-                                    ? ' · 缓存命中 ' + sub.usage.cachedPromptTokens.toLocaleString()
-                                    : ''}
-                            </p>
-                        </div>
-                    )}
-
-                    {sub.merge && (
-                        <div>
-                            <p className="text-[10px] text-muted-foreground/70">合并回页面</p>
-                            <p className={cn(
-                                'text-[11px]',
-                                sub.merge.conflicts > 0 ? 'text-amber-600' : 'text-muted-foreground'
-                            )}>
-                                {sub.merge.summary}
-                            </p>
-                        </div>
-                    )}
-
-                    {summary && (
-                        <div>
-                            <p className="text-[10px] text-muted-foreground/70">
-                                {sub.status === 'failed' ? '失败原因' : '结果'}
-                            </p>
-                            <p
-                                className={cn(
-                                    'max-h-48 overflow-auto whitespace-pre-wrap break-words text-[11px]',
-                                    sub.status === 'failed' ? 'text-destructive' : 'text-muted-foreground'
-                                )}
-                            >
-                                {summary}
-                            </p>
-                        </div>
-                    )}
-
-                    <p className="font-mono text-[9px] text-muted-foreground/50">run {sub.subRunId}</p>
                 </div>
             )}
         </div>

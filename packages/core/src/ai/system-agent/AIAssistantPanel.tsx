@@ -41,6 +41,7 @@ import {
     buildAgentRunInputs,
     getPageNavigationBridge,
     cacheHitRate,
+    useTranslation,
     EDITOR_AGENT_PROMPT,
 } from '@kn/common'
 import { SubAgentTree } from './SubAgentTree'
@@ -172,6 +173,28 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
 
     // 编辑器工具目录 + 技能片段（保留的供应商层）
     const { getCatalog, resolveTools, isReadOnlyTool } = useCapabilityProviders(editor ?? null)
+    const { t } = useTranslation()
+    const subAgentLabels = useMemo(() => ({
+        title: t('ai.chat.subAgentTitle'),
+        running: t('ai.chat.subAgentRunning'),
+        completed: t('ai.chat.subAgentCompleted'),
+        failed: t('ai.chat.subAgentFailed'),
+        cancelled: t('ai.chat.subAgentCancelled'),
+        task: t('ai.chat.subAgentTask'),
+        tools: t('ai.chat.subAgentTools'),
+        liveOutput: t('ai.chat.subAgentLiveOutput'),
+        reasoning: t('ai.chat.subAgentReasoning'),
+        steps: t('ai.chat.subAgentSteps'),
+        mergeBack: t('ai.chat.subAgentMergeBack'),
+        result: t('ai.chat.subAgentResult'),
+        failureReason: t('ai.chat.subAgentFailureReason'),
+        noTask: t('ai.chat.subAgentNoTask'),
+        usage: t('ai.chat.subAgentUsage'),
+        pin: t('ai.chat.subAgentPin'),
+        unpin: t('ai.chat.subAgentUnpin'),
+        close: t('ai.chat.subAgentClose'),
+        runId: t('ai.chat.subAgentRunId'),
+    }), [t])
     const catalog = useMemo(() => getCatalog(), [getCatalog])
     // tools[] 常驻；技能自带的工具随 skills[] 下发，首次调用前不展开参数结构。
     const { tools: toolSpecs, skills } = useMemo(() => buildAgentRunInputs(catalog), [catalog])
@@ -360,7 +383,7 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
                                                 </Badge>
                                             )}
                                             {message.subRuns && message.subRuns.length > 0 && (
-                                                <SubAgentTree subRuns={message.subRuns} toolCalls={message.toolCalls} />
+                                                <SubAgentTree subRuns={message.subRuns} toolCalls={message.toolCalls} labels={subAgentLabels} />
                                             )}
                                             {message.usage && message.usage.promptTokens > 0 && (
                                                 <span
@@ -421,7 +444,7 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
 
                                     {/* 子 agent 树 */}
                                     {agent.state.subRuns.length > 0 && (
-                                        <SubAgentTree subRuns={agent.state.subRuns} toolCalls={agent.state.toolCalls} />
+                                        <SubAgentTree subRuns={agent.state.subRuns} toolCalls={agent.state.toolCalls} labels={subAgentLabels} />
                                     )}
 
                                     {/* 计划审批卡片 */}

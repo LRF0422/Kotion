@@ -14,6 +14,7 @@ import com.knowledge.file.api.entity.enums.FileType;
 import com.knowledge.filecenter.application.FileApplication;
 import com.knowledge.filecenter.entity.KnowledgeFile;
 import com.knowledge.filecenter.entity.KnowledgeFileRepository;
+import com.knowledge.filecenter.entity.vo.FileContentVO;
 import com.knowledge.filecenter.entity.vo.KnowledgeFileVO;
 import com.knowledge.filecenter.service.IFileRepositoryService;
 import com.knowledge.filecenter.service.IFileService;
@@ -31,6 +32,7 @@ import lombok.extern.slf4j.Slf4j;
  * <li><b>moveFile</b> - Move a file or folder to another folder</li>
  * <li><b>listFolder</b> - List files and sub-folders inside a folder</li>
  * <li><b>getFileInfo</b> - Get details of a file or folder</li>
+ * <li><b>readFile</b> - Read the text content of a file</li>
  * <li><b>deleteFile</b> - Delete a file or folder</li>
  * </ul>
  * <p>
@@ -43,7 +45,9 @@ import lombok.extern.slf4j.Slf4j;
         +
         "move files between folders, list folder contents, "
         +
-        "get file details, and delete files/folders. For downloading files from URLs, use the "
+        "get file details, read the text content of a file, and delete files/folders. "
+        +
+        "For downloading files from URLs, use the "
         +
         "download_file tool from WebDownloadSkill.", version = "1.0.0", author = "KnowledgeCloud", tier = SkillTierValue.DOMAIN, categories = {
                 "file-management", "document-operations" })
@@ -366,6 +370,65 @@ public class FileOperationSkill {
         } catch (Exception e) {
             log.error("Error getting file info for fileId={}", fileId, e);
             return "Error getting file info: " + e.getMessage();
+        }
+    }
+
+    /**
+     * Read the text content of a file.
+     *
+     * @param fileId   the file ID
+     * @param maxChars optional maximum number of characters to return
+     * @return formatted file content for LLM consumption
+     */
+    @SkillTool(name = "read_file", description = "Read the text content of a file in the file center by its ID. "
+            +
+            "Returns up to maxChars characters of UTF-8 text. "
+            +
+            "Supports text-based files such as txt, md, json, csv, log, and source code. "
+            +
+            "Binary files (images, PDF, office documents, archives) cannot be read as text "
+            +
+            "and return a notice with their metadata instead.")
+    public String readFile(
+            @ToolParam(name = "fileId", description = "The ID of the file to read", type = "number", required = true) Long fileId,
+            @ToolParam(name = "maxChars", description = "Maximum number of characters to return. Defaults to 4000.", type = "number", required = false) Integer maxChars) {
+        if (fileId == null) {
+            return "Error: Missing required parameter: fileId";
+        }
+
+        log.info("Reading file content for fileId={}, maxChars={}", fileId, maxChars);
+
+        try {
+            FileContentVO content = fileApplication.readFileContent(fileId, maxChars);
+
+            StringBuilder result = new StringBuilder();
+            result.append("# File: ").append(content.getName()).append("\n\n");
+            result.append("**ID:** ").append(content.getId()).append("\n");
+            if (StrUtil.isNotBlank(content.getSuffix())) {
+                result.append("**Extension:** ").append(content.getSuffix()).append("\n");
+            }
+            if (content.getSize() != null) {
+                result.append("**Size:** ").append(content.getSize()).append(" bytes\n");
+            }
+
+            if (!content.isText()) {
+                result.append("\n").append(StrUtil.blankToDefault(content.getMessage(),
+                        "This file cannot be read as text."));
+                log.info("File id={} is not text-readable", fileId);
+                return result.toString();
+            }
+
+            result.append("\n## Content\n\n");
+            result.append(StrUtil.nullToEmpty(content.getContent()));
+            if (content.isTruncated()) {
+                result.append("\n\n... (content truncated; request a larger maxChars to read more)");
+            }
+
+            log.info("Read file id={} (truncated={})", fileId, content.isTruncated());
+            return result.toString();
+        } catch (Exception e) {
+            log.error("Error reading file id={}", fileId, e);
+            return "Error reading file: " + e.getMessage();
         }
     }
 

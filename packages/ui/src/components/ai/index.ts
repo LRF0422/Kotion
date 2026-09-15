@@ -1,5 +1,11 @@
-export { SubAgentTree } from './SubAgentTree'
-export type { SubAgentTreeProps, SubRunView, SubToolCallView } from './SubAgentTree'
+export { SubAgentTree, defaultSubAgentTreeLabels } from './SubAgentTree'
+export type {
+    SubAgentTreeProps,
+    SubAgentTreeLabels,
+    SubRunStepView,
+    SubRunView,
+    SubToolCallView,
+} from './SubAgentTree'
 export { PlanApprovalCard } from './PlanApprovalCard'
 export type { PlanApprovalCardProps } from './PlanApprovalCard'
 export { Streamdown } from './Streamdown'

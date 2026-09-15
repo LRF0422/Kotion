@@ -78,7 +78,7 @@ export interface SubRunRecord {
     callId: string
     subRunId: string
     task?: string
-    status: 'running' | 'completed' | 'failed'
+    status: 'running' | 'completed' | 'failed' | 'cancelled'
     result?: unknown
     error?: string
     /**
@@ -87,6 +87,16 @@ export interface SubRunRecord {
      */
     text?: string
     reasoning?: string
+    /**
+     * The child's own step timeline, built from its event stream exactly like
+     * the parent's. The sub-agent detail popover renders this with the same
+     * timeline component as the main agent.
+     */
+    steps: AgentStepRecord[]
+    /** Child step id chosen as the answer. */
+    answerStepId?: string
+    /** Internal: the child step currently receiving text/reasoning deltas. */
+    activeStepId?: string
     /** The child's own token usage, reported when it settles. */
     usage?: RunUsage
     /** Private-document merge outcome, once the child settled. */
@@ -248,6 +258,9 @@ function reducer(state: EditorAgentState, action: Action): EditorAgentState {
 /** Preview cap for a child's own streamed output in the tree. */
 const SUB_RUN_PREVIEW_CHARS = 400
 
+/** Per-field cap for a child's retained timeline steps (memory/backing store). */
+const SUB_RUN_STEP_MAX_CHARS = 24000
+
 /**
  * Fold a delegated child's own event into the parent state: its text/reasoning
  * preview live on the {@link SubRunRecord}, and its frontend tool calls join the
@@ -257,6 +270,50 @@ const SUB_RUN_PREVIEW_CHARS = 400
  * Only the events the UI needs are handled — parent-only bookkeeping (steps,
  * answer selection, pending ids) must never be touched by a child's stream.
  */
+function updateSubRun(
+    state: EditorAgentState,
+    subRunId: string,
+    updater: (sub: SubRunRecord) => SubRunRecord,
+): EditorAgentState {
+    return {
+        ...state,
+        subRuns: state.subRuns.map(sub => sub.subRunId === subRunId ? updater(sub) : sub),
+    }
+}
+
+/** Append a delta to the child's active step, creating it on first token. */
+function appendChildStep(
+    sub: SubRunRecord,
+    seq: number,
+    field: 'reasoning' | 'text',
+    content: string,
+): SubRunRecord {
+    const activeId = sub.activeStepId ?? `step-${seq}`
+    const index = sub.steps.findIndex(record => record.id === activeId)
+    if (index === -1) {
+        return {
+            ...sub,
+            activeStepId: activeId,
+            steps: [...sub.steps, {
+                id: activeId,
+                step: 1,
+                startedSeq: seq,
+                reasoning: field === 'reasoning' ? content : '',
+                text: field === 'text' ? content : '',
+            }],
+        }
+    }
+    const steps = sub.steps.slice()
+    const merged = steps[index][field] + content
+    steps[index] = {
+        ...steps[index],
+        [field]: merged.length > SUB_RUN_STEP_MAX_CHARS
+            ? merged.slice(0, SUB_RUN_STEP_MAX_CHARS)
+            : merged,
+    }
+    return { ...sub, activeStepId: activeId, steps }
+}
+
 function applySubRunEvent(state: EditorAgentState, subRunId: string, event: AgentEvent): EditorAgentState {
     const next = { ...state }
     const preview = (current: string | undefined, delta: string): string => {
@@ -265,22 +322,38 @@ function applySubRunEvent(state: EditorAgentState, subRunId: string, event: Agen
     }
 
     switch (event.type) {
+        case 'step.started': {
+            const id = `step-${event.seq}`
+            return updateSubRun(next, subRunId, sub => {
+                if (sub.steps.some(record => record.id === id)) {
+                    return { ...sub, activeStepId: id }
+                }
+                return {
+                    ...sub,
+                    activeStepId: id,
+                    steps: [...sub.steps, {
+                        id,
+                        step: event.step,
+                        startedSeq: event.seq,
+                        reasoning: '',
+                        text: '',
+                    }],
+                }
+            })
+        }
         case 'text.delta':
-            return {
-                ...next,
-                subRuns: next.subRuns.map(sub =>
-                    sub.subRunId === subRunId ? { ...sub, text: preview(sub.text, event.content) } : sub
-                ),
-            }
+            return updateSubRun(next, subRunId, sub => {
+                const appended = appendChildStep(sub, event.seq, 'text', event.content)
+                return { ...appended, text: preview(sub.text, event.content) }
+            })
         case 'reasoning.delta':
-            return {
-                ...next,
-                subRuns: next.subRuns.map(sub =>
-                    sub.subRunId === subRunId ? { ...sub, reasoning: preview(sub.reasoning, event.content) } : sub
-                ),
-            }
+            return updateSubRun(next, subRunId, sub => {
+                const appended = appendChildStep(sub, event.seq, 'reasoning', event.content)
+                return { ...appended, reasoning: preview(sub.reasoning, event.content) }
+            })
         case 'tool.requested': {
             if (next.toolCalls.some(call => call.callId === event.callId)) return next
+            const sub = next.subRuns.find(item => item.subRunId === subRunId)
             return {
                 ...next,
                 toolCalls: [
@@ -291,6 +364,7 @@ function applySubRunEvent(state: EditorAgentState, subRunId: string, event: Agen
                         args: parseToolArgs(event.args),
                         status: 'running',
                         subRunId,
+                        stepId: sub?.activeStepId,
                         startedSeq: event.seq,
                     },
                 ],
@@ -479,7 +553,13 @@ function applyEvent(state: EditorAgentState, event: AgentEvent): EditorAgentStat
                 ...next,
                 subRuns: [
                     ...next.subRuns,
-                    { callId: event.callId, subRunId: event.subRunId, task: event.task, status: 'running' },
+                    {
+                        callId: event.callId,
+                        subRunId: event.subRunId,
+                        task: event.task,
+                        status: 'running',
+                        steps: [],
+                    },
                 ],
             }
         }
@@ -494,6 +574,8 @@ function applyEvent(state: EditorAgentState, event: AgentEvent): EditorAgentStat
                             status: event.ok ? 'completed' : 'failed',
                             result: event.result,
                             usage: usage ?? sub.usage,
+                            answerStepId: sub.answerStepId
+                                ?? [...sub.steps].reverse().find(step => step.text.trim())?.id,
                         }
                         : sub
                 ),
@@ -540,7 +622,16 @@ function applyEvent(state: EditorAgentState, event: AgentEvent): EditorAgentStat
                 error: event.error ?? event.code ?? 'unknown error',
             }
         case 'run.cancelled':
-            return { ...next, phase: 'cancelled', answerStepId: resolveAnswerStepId(next) }
+            return {
+                ...next,
+                phase: 'cancelled',
+                answerStepId: resolveAnswerStepId(next),
+                // Cancelling the parent cascades to children server-side; stop
+                // their spinners immediately instead of showing "running" forever.
+                subRuns: next.subRuns.map(sub =>
+                    sub.status === 'running' ? { ...sub, status: 'cancelled' } : sub
+                ),
+            }
         default:
             return next
     }

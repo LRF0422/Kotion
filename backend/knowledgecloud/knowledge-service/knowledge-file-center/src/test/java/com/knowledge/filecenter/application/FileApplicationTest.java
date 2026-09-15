@@ -1,6 +1,8 @@
 package com.knowledge.filecenter.application;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Answers.RETURNS_SELF;
@@ -15,6 +17,7 @@ import static org.mockito.Mockito.when;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -34,6 +37,7 @@ import com.knowledge.core.oss.props.OssProperties;
 import com.knowledge.file.api.entity.enums.FileType;
 import com.knowledge.filecenter.entity.KnowledgeFile;
 import com.knowledge.filecenter.entity.vo.FileAccessUrlsVO;
+import com.knowledge.filecenter.entity.vo.FileContentVO;
 import com.knowledge.filecenter.entity.vo.KnowledgeFileVO;
 import com.knowledge.filecenter.service.IFileRepositoryService;
 import com.knowledge.filecenter.service.IFileService;
@@ -237,6 +241,132 @@ class FileApplicationTest {
         application.purge(1L);
 
         verify(ossClient, never()).removeFile(anyString());
+    }
+
+    @Test
+    void readFileContentReturnsUtf8Text() {
+        KnowledgeFile file = file(1L, "upload/notes.md", "record-key");
+        file.setName("notes.md");
+        file.setSuffix("md");
+        when(fileService.getById(1L)).thenReturn(file);
+        when(ownerProvider.currentOwner()).thenReturn(new UploadOwner("tenant-a", 7L));
+        when(ossObjectKeyResolver.resolve("upload/notes.md")).thenReturn("upload/notes.md");
+        when(ossClient.downloadFile("upload/notes.md")).thenReturn(streamOf("hello 世界"));
+
+        FileContentVO result = application.readFileContent(1L, null);
+
+        assertTrue(result.isText());
+        assertEquals("hello 世界", result.getContent());
+        assertEquals("utf-8", result.getEncoding());
+        assertFalse(result.isTruncated());
+        verify(fileService).touchAccess(1L);
+    }
+
+    @Test
+    void readFileContentTruncatesToRequestedLength() {
+        KnowledgeFile file = file(1L, "upload/notes.txt", "record-key");
+        file.setName("notes.txt");
+        file.setSuffix("txt");
+        when(fileService.getById(1L)).thenReturn(file);
+        when(ownerProvider.currentOwner()).thenReturn(new UploadOwner("tenant-a", 7L));
+        when(ossObjectKeyResolver.resolve("upload/notes.txt")).thenReturn("upload/notes.txt");
+        when(ossClient.downloadFile("upload/notes.txt")).thenReturn(streamOf("0123456789"));
+
+        FileContentVO result = application.readFileContent(1L, 4);
+
+        assertTrue(result.isText());
+        assertTrue(result.isTruncated());
+        assertEquals("0123", result.getContent());
+    }
+
+    @Test
+    void readFileContentStripsUtf8Bom() {
+        KnowledgeFile file = file(1L, "upload/bom.txt", "record-key");
+        file.setName("bom.txt");
+        file.setSuffix("txt");
+        when(fileService.getById(1L)).thenReturn(file);
+        when(ownerProvider.currentOwner()).thenReturn(new UploadOwner("tenant-a", 7L));
+        when(ossObjectKeyResolver.resolve("upload/bom.txt")).thenReturn("upload/bom.txt");
+        when(ossClient.downloadFile("upload/bom.txt")).thenReturn(
+                new ByteArrayInputStream(new byte[] { (byte) 0xEF, (byte) 0xBB, (byte) 0xBF, 'h', 'i' }));
+
+        FileContentVO result = application.readFileContent(1L, null);
+
+        assertEquals("hi", result.getContent());
+    }
+
+    @Test
+    void readFileContentRejectsBinaryFile() {
+        KnowledgeFile file = file(1L, "upload/logo.png", "record-key");
+        file.setName("logo.png");
+        file.setSuffix("png");
+        when(fileService.getById(1L)).thenReturn(file);
+        when(ownerProvider.currentOwner()).thenReturn(new UploadOwner("tenant-a", 7L));
+        when(ossObjectKeyResolver.resolve("upload/logo.png")).thenReturn("upload/logo.png");
+        when(ossClient.downloadFile("upload/logo.png")).thenReturn(
+                new ByteArrayInputStream(new byte[] { 0, 1, 2, 3 }));
+
+        FileContentVO result = application.readFileContent(1L, null);
+
+        assertFalse(result.isText());
+        assertNull(result.getContent());
+        assertTrue(result.getMessage().contains("binary"));
+        verify(fileService, never()).touchAccess(1L);
+    }
+
+    @Test
+    void readFileContentSniffsUnknownSuffixAsText() {
+        KnowledgeFile file = file(1L, "upload/CHANGELOG", "record-key");
+        file.setName("CHANGELOG");
+        file.setSuffix(null);
+        when(fileService.getById(1L)).thenReturn(file);
+        when(ownerProvider.currentOwner()).thenReturn(new UploadOwner("tenant-a", 7L));
+        when(ossObjectKeyResolver.resolve("upload/CHANGELOG")).thenReturn("upload/CHANGELOG");
+        when(ossClient.downloadFile("upload/CHANGELOG")).thenReturn(streamOf("release notes"));
+
+        FileContentVO result = application.readFileContent(1L, null);
+
+        assertTrue(result.isText());
+        assertEquals("release notes", result.getContent());
+    }
+
+    @Test
+    void readFileContentUsesResolvedObjectKey() {
+        KnowledgeFile file = file(1L, "legacy-url", "record-key");
+        file.setName("notes.md");
+        file.setSuffix("md");
+        when(fileService.getById(1L)).thenReturn(file);
+        when(ownerProvider.currentOwner()).thenReturn(new UploadOwner("tenant-a", 7L));
+        when(ossObjectKeyResolver.resolve("legacy-url")).thenReturn("upload/notes.md");
+        when(ossClient.downloadFile("upload/notes.md")).thenReturn(streamOf("body"));
+
+        application.readFileContent(1L, null);
+
+        verify(ossClient).downloadFile("upload/notes.md");
+        verify(ossClient, never()).downloadFile("record-key");
+    }
+
+    @Test
+    void readFileContentRejectsAnotherTenant() {
+        KnowledgeFile file = file(1L, "upload/notes.md", "record-key");
+        file.setTenantId("tenant-b");
+        when(fileService.getById(1L)).thenReturn(file);
+        when(ownerProvider.currentOwner()).thenReturn(new UploadOwner("tenant-a", 7L));
+
+        assertThrows(IllegalArgumentException.class, () -> application.readFileContent(1L, null));
+    }
+
+    @Test
+    void readFileContentRejectsFolder() {
+        KnowledgeFile folder = file(1L, "folder", "record-key");
+        folder.setType(FileType.FOLDER);
+        when(fileService.getById(1L)).thenReturn(folder);
+
+        assertThrows(IllegalArgumentException.class, () -> application.readFileContent(1L, null));
+    }
+
+    private static InputStream streamOf(String content) {
+        return new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8));
     }
 
     private static com.knowledge.core.oss.model.KnowledgeFile ossFile(String name, String link) {

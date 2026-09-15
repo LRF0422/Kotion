@@ -11,6 +11,11 @@ export interface FileManagerEmptyStateProps {
         label: string;
         onClick: () => void;
     };
+    /** 次要操作(例如"上传文件夹"),以低强调按钮呈现 */
+    secondaryAction?: {
+        label: string;
+        onClick: () => void;
+    };
     className?: string;
 }
 
@@ -20,6 +25,7 @@ export const FileManagerEmptyState: React.FC<FileManagerEmptyStateProps> = ({
     description,
     tone = 'default',
     action,
+    secondaryAction,
     className,
 }) => {
     const isError = tone === 'error';
@@ -49,18 +55,32 @@ export const FileManagerEmptyState: React.FC<FileManagerEmptyStateProps> = ({
                     {description}
                 </p>
             )}
-            {action && (
-                <Button
-                    type="button"
-                    variant="outline"
-                    onClick={action.onClick}
-                    className={cn(
-                        "mt-4 h-11 px-4 active:bg-accent/80 lg:h-8 lg:px-3 lg:text-xs",
-                        isError && "border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive active:bg-destructive/15",
+            {(action || secondaryAction) && (
+                <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                    {action && (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={action.onClick}
+                            className={cn(
+                                "h-11 px-4 active:bg-accent/80 lg:h-8 lg:px-3 lg:text-xs",
+                                isError && "border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive active:bg-destructive/15",
+                            )}
+                        >
+                            {action.label}
+                        </Button>
                     )}
-                >
-                    {action.label}
-                </Button>
+                    {secondaryAction && (
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={secondaryAction.onClick}
+                            className="h-11 px-4 active:bg-accent/80 lg:h-8 lg:px-3 lg:text-xs"
+                        >
+                            {secondaryAction.label}
+                        </Button>
+                    )}
+                </div>
             )}
         </div>
     );

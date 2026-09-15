@@ -29,6 +29,7 @@ import com.knowledge.filecenter.entity.dto.upload.CreateUploadSessionRequest;
 import com.knowledge.filecenter.entity.dto.upload.SignUploadPartsRequest;
 import com.knowledge.filecenter.entity.dto.upload.UploadPartAcknowledgementRequest;
 import com.knowledge.filecenter.entity.vo.FileAccessUrlsVO;
+import com.knowledge.filecenter.entity.vo.FileContentVO;
 import com.knowledge.filecenter.entity.vo.KnowledgeFileVO;
 import com.knowledge.filecenter.entity.vo.upload.SignedUploadPartVO;
 import com.knowledge.filecenter.entity.vo.upload.UploadCapabilitiesVO;
@@ -147,6 +148,14 @@ public class FileController {
             @ApiParam("File ID") @PathVariable("fileId") Long fileId,
             HttpServletResponse response) {
         fileApplication.downloadFile(fileId, response);
+    }
+
+    @GetMapping("/file/{fileId}/content")
+    @ApiOperation("Read file content as text (binary files return metadata only)")
+    public R<FileContentVO> readFileContent(
+            @ApiParam("File ID") @PathVariable("fileId") Long fileId,
+            @ApiParam("Maximum characters to return") @RequestParam(value = "maxChars", required = false) Integer maxChars) {
+        return R.data(fileApplication.readFileContent(fileId, maxChars));
     }
 
     @GetMapping("/file/{fileId}/access-urls")
