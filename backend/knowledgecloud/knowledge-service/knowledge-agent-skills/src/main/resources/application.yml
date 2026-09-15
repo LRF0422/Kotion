@@ -5,7 +5,7 @@ agent:
   # LLM provider selection (consumed by LlmClientFactory; providers map
   # usually supplied via Nacos / environment config)
   default-provider: deepseek
-  default-model: deepseek-v4-fresh
+  default-model: deepseek-v4-flash
   # Vision (读图): before the agent sends image content to a model it checks
   # supportsVision. Mark a multimodal model with vision: true in its
   # agent.providers.<provider>.models[] entry (well-known names such as
