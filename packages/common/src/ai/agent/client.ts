@@ -5,7 +5,11 @@
  * typed events with automatic reconnection from the last durable seq.
  */
 
-import { authorizedFetch } from '../../utils/session'
+import {
+    AgentTransportNotConfiguredError,
+    getAgentTransport,
+    type AgentTransport,
+} from './transport'
 import {
     acceptAgentEvent,
     AgentControlError,
@@ -27,8 +31,6 @@ import type {
     ThreadView,
 } from './types'
 import { TERMINAL_EVENT_TYPES } from './types'
-
-const DEFAULT_API_BASE = '/api/knowledge-agent/api/agent/v1'
 
 const MAX_RECONNECTS = 5
 const RECONNECT_BASE_DELAY_MS = 500
@@ -87,8 +89,13 @@ function sanitizeOutgoingMessages(messages?: AgentChatMessage[]): AgentChatMessa
 }
 
 export interface AgentClientOptions {
-    /** API base (defaults to the gateway path). */
+    /**
+     * Override the agent API base. Ordinary callers omit this: the base comes
+     * from the host-registered {@link AgentTransport}.
+     */
     apiBase?: string
+    /** Explicit transport (tests / non-app hosts); defaults to the registered one. */
+    transport?: AgentTransport
 }
 
 interface ApiResponse<T> {
@@ -117,10 +124,25 @@ function normalizeRunView(view: RunView): RunView {
 }
 
 export class AgentClient {
-    private readonly apiBase: string
+    private readonly options: AgentClientOptions
+    private resolvedTransport: AgentTransport | null = null
 
     constructor(options: AgentClientOptions = {}) {
-        this.apiBase = options.apiBase || DEFAULT_API_BASE
+        this.options = options
+    }
+
+    /**
+     * Resolve the host transport lazily so constructing a client never throws
+     * at module load. Resolution happens on first request, by which point the
+     * host has registered the transport.
+     */
+    private transport(): AgentTransport {
+        if (this.resolvedTransport) return this.resolvedTransport
+        const base = this.options.transport ?? getAgentTransport()
+        if (!base) throw new AgentTransportNotConfiguredError()
+        const apiBase = (this.options.apiBase ?? base.apiBase).replace(/\/+$/, '')
+        this.resolvedTransport = { fetch: base.fetch, apiBase }
+        return this.resolvedTransport
     }
 
     // ==================== runs ====================
@@ -218,9 +240,10 @@ export class AgentClient {
         if (signal?.aborted) controller.abort()
         else signal?.addEventListener('abort', forwardAbort, { once: true })
         const timer = setTimeout(() => controller.abort(), RESUME_RESPONSE_TIMEOUT_MS)
+        const transport = this.transport()
         let response: Response
         try {
-            response = await authorizedFetch(this.apiBase + '/runs/' + encodeURIComponent(runId) + '/resume', {
+            response = await transport.fetch(transport.apiBase + '/runs/' + encodeURIComponent(runId) + '/resume', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ...payload, afterSeq }),
@@ -342,8 +365,9 @@ export class AgentClient {
     // ==================== internals ====================
 
     private async *streamOnce(runId: string, afterSeq: number, signal?: AbortSignal): AsyncGenerator<AgentEvent> {
-        const response = await authorizedFetch(
-            this.apiBase + '/runs/' + encodeURIComponent(runId) + '/events?afterSeq=' + afterSeq,
+        const transport = this.transport()
+        const response = await transport.fetch(
+            transport.apiBase + '/runs/' + encodeURIComponent(runId) + '/events?afterSeq=' + afterSeq,
             { method: 'GET', headers: {}, signal }
         )
         if (!response.ok) {
@@ -381,8 +405,9 @@ export class AgentClient {
         if (sourceSignal?.aborted) controller.abort()
         else sourceSignal?.addEventListener('abort', forwardAbort, { once: true })
         const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+        const transport = this.transport()
         try {
-            const response = await authorizedFetch(this.apiBase + path, {
+            const response = await transport.fetch(transport.apiBase + path, {
                 ...init,
                 signal: controller.signal,
                 headers: { 'Content-Type': 'application/json', ...(init.headers ?? {}) },

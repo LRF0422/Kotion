@@ -10,6 +10,7 @@
  */
 
 import type { OnToolExecution, ToolDefinition, ToolsRecord } from '../types'
+import type { SessionPageBinding } from '../session-page-binding'
 import { withDocumentWrite } from './document-write-lock'
 
 export interface ToolExecutionResult {
@@ -56,6 +57,11 @@ export interface EditorToolExecutorOptions {
     resolveDocumentId?: (owner: string | null) => string | null
     /** Execution notifications for the UI. */
     onExecution?: OnToolExecution
+    /**
+     * Host edit-target binding resolver. Injected into every tool execution
+     * context so tools do not read the global registry themselves.
+     */
+    getSessionBinding?: () => SessionPageBinding | null
 }
 
 export class EditorToolExecutor {
@@ -63,6 +69,7 @@ export class EditorToolExecutor {
     private readonly isReadOnlyTool?: EditorToolExecutorOptions['isReadOnlyTool']
     private readonly resolveDocumentId?: EditorToolExecutorOptions['resolveDocumentId']
     private readonly onExecution?: OnToolExecution
+    private readonly getSessionBinding?: EditorToolExecutorOptions['getSessionBinding']
     /** Idempotency cache: callId → result (replays/reconnects reuse it). */
     private readonly cache = new Map<string, ToolExecutionResult>()
     /** In-flight calls share one promise so rerenders cannot repeat side effects. */
@@ -73,6 +80,7 @@ export class EditorToolExecutor {
         this.isReadOnlyTool = options.isReadOnlyTool
         this.resolveDocumentId = options.resolveDocumentId
         this.onExecution = options.onExecution
+        this.getSessionBinding = options.getSessionBinding
     }
 
     /** Execute a frontend tool call; cached/in-flight results are shared by callId. */
@@ -128,7 +136,10 @@ export class EditorToolExecutor {
                 //
                 // Mutating calls take the document's write lease so two agents
                 // bound to the same document cannot interleave (lost updates).
-                const run = () => definition.execute(args, callId, { owner })
+                const run = () => definition.execute(args, callId, {
+                    owner,
+                    sessionBinding: this.getSessionBinding?.() ?? null,
+                })
                 const documentId = mutating ? (this.resolveDocumentId?.(owner) ?? null) : null
                 const result = documentId
                     ? await withDocumentWrite(documentId, run, { label: toolName })

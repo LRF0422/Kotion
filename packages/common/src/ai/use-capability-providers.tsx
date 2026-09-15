@@ -35,7 +35,7 @@ import { SkillProvider } from "./providers/SkillProvider"
 import { collectCapabilityCatalog, isReadOnlyTool, type CapabilityCatalog } from "./capabilities"
 import { builtinSkills, getSkillRegistry } from "./skills"
 import { wrapToolsWithCallback } from "./utils/tool-wrapper"
-import { getSessionPageBinding } from "./session-page-binding"
+import { getSessionPageBinding, type SessionPageBinding } from "./session-page-binding"
 
 export interface CapabilityProviders {
     toolProvider: ToolProvider
@@ -89,11 +89,22 @@ export function useCapabilityProviders(
     options?: {
         onToolExecution?: OnToolExecution
         onUserChoiceRequest?: OnUserChoiceRequest
+        /**
+         * Host edit-target binding. Defaults to the global registry for
+         * backward compatibility; hosts should pass their own so this hook no
+         * longer depends on a module-level singleton.
+         */
+        sessionBinding?: () => SessionPageBinding | null
     }
 ): CapabilityProviders {
     const { pluginManager } = useContext(AppContext)
     const onToolExecution = options?.onToolExecution
     const onUserChoiceRequest = options?.onUserChoiceRequest
+
+    // Resolved through a ref so an identity-unstable getter (or a host that
+    // registers its binding after mount) never recreates callbacks.
+    const sessionBindingRef = useRef(options?.sessionBinding ?? getSessionPageBinding)
+    sessionBindingRef.current = options?.sessionBinding ?? getSessionPageBinding
 
     // Version state for reactive updates when the catalog changes.
     const [version, setVersion] = useState(0)
@@ -331,7 +342,7 @@ export function useCapabilityProviders(
         options?: { mutating?: boolean }
     ): ToolsRecord | Promise<ToolsRecord> => {
         if (!owner) return toolProvider.getAllTools()
-        const binding = getSessionPageBinding()
+        const binding = sessionBindingRef.current()
         const activeEditor = toolProvider.getEditor()
         const ownerEditor = binding?.getEditorFor?.(owner)
         if (ownerEditor) {

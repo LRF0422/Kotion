@@ -101,10 +101,77 @@ const forbiddenPatterns = [
     /from\s*["']\.\/index["']/,
     "tool registration must import concrete modules directly",
   ],
+  // The agent SDK must consume the injected AgentTransport contract instead of
+  // hard-coding the product gateway path or the auth/session policy.
+  [
+    join(root, "packages/common/src/ai/agent/client.ts"),
+    /authorizedFetch|\/api\/knowledge-agent|utils\/session/,
+    "the agent SDK must not embed the product gateway/auth policy; use AgentTransport",
+  ],
+  // The sub-agent label map is owned by @kn/ui; hosts must call the shared
+  // builder instead of re-declaring the same 18 i18n keys.
+  [
+    join(root, "packages/core/src/ai/system-agent/AIAssistantPanel.tsx"),
+    /title:\s*t\(['"]ai\.chat\.subAgentTitle['"]\)/,
+    "the panel must build sub-agent labels via @kn/ui buildSubAgentTreeLabels(t)",
+  ],
+  [
+    join(root, "packages/plugin-ai/src/ai/menu/MessageBubble.tsx"),
+    /title:\s*t\(['"]ai\.chat\.subAgentTitle['"]\)/,
+    "the message bubble must build sub-agent labels via @kn/ui buildSubAgentTreeLabels(t)",
+  ],
+  // The off-screen target cap/lease policy lives in the extracted hook.
+  [
+    join(root, "packages/plugin-ai/src/ai/menu/Chat.tsx"),
+    /MAX_OFFSCREEN_TARGETS/,
+    "the off-screen target cap belongs to useOffscreenTargets, not Chat",
+  ],
 ];
 
 for (const [path, pattern, message] of forbiddenPatterns) {
   if (pattern.test(withoutComments(read(path)))) fail(path, message);
+}
+
+// The agent SDK must not embed browser storage/lock policy: implementations are
+// registered by @kn/core through the AgentPersistence contract.
+const agentSdkDir = join(root, "packages/common/src/ai/agent");
+for (const path of walk(agentSdkDir)) {
+  if (/localStorage|navigator\.locks/.test(withoutComments(read(path)))) {
+    fail(path, "the agent SDK must not use browser storage/lock policy; register AgentPersistence from core");
+  }
+}
+
+// Positive assertions: some seams must exist for the layering to hold.
+const requiredPatterns = [
+  [
+    join(root, "packages/common/src/ai/agent/client.ts"),
+    /from\s*["']\.\/transport["']/,
+    "the SDK client must resolve its transport from the AgentTransport contract",
+  ],
+  [
+    join(root, "packages/core/src/ai/agent/runtime.ts"),
+    /configureAgentTransport/,
+    "core must register the concrete AgentTransport at startup",
+  ],
+  [
+    join(root, "packages/core/src/ai/tools/page-tools.ts"),
+    /context\?\.sessionBinding/,
+    "page tools must resolve the session binding from the tool execution context",
+  ],
+  [
+    join(root, "packages/plugin-ai/src/ai/menu/Chat.tsx"),
+    /from\s*["']\.\/use-offscreen-targets["']/,
+    "the chat surface must delegate off-screen target management to useOffscreenTargets",
+  ],
+  [
+    join(root, "packages/ui/src/components/ai/index.ts"),
+    /buildSubAgentTreeLabels/,
+    "@kn/ui must export buildSubAgentTreeLabels for hosts",
+  ],
+];
+
+for (const [path, pattern, message] of requiredPatterns) {
+  if (!pattern.test(withoutComments(read(path)))) fail(path, message);
 }
 
 for (const path of walk(coreSrc)) {

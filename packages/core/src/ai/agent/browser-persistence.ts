@@ -1,16 +1,49 @@
 /**
- * RunStore — local persistence of the run handles the UI needs for 断点恢复
- * (reconnect/re-attach): { conversationId → runId, lastSeq, ttl }. Plus a
- * cooperative tab lock so only one tab drives a conversation at a time.
+ * Browser persistence implementation for the agent SDK contracts.
+ *
+ * Lives in @kn/core because it is product/browser policy (localStorage keys,
+ * Web Locks, TTL) — the SDK defines only the AgentRunStore/AgentTabLock
+ * contracts in @kn/common. Registered through `configureAgentPersistence()` in
+ * `./runtime.ts`.
  */
 
+/**
+ * Structural mirror of the @kn/common persistence contract. Declared locally so
+ * this file (and its standalone check harness) compiles without pulling the
+ * common barrel; `runtime.ts` asserts the shapes still satisfy AgentPersistence.
+ */
 export interface SavedRun {
     conversationId: string
     runId: string
     lastSeq: number
-    /** Status snapshot at save time (attach decision). */
     status?: string
     updatedAt: number
+}
+
+export interface SavedToolResult {
+    status?: 'started' | 'completed'
+    ok: boolean
+    result?: unknown
+    error?: string
+    resultOmitted?: boolean
+}
+
+export interface BrowserAgentRunStore {
+    save(entry: SavedRun): void
+    load(conversationId: string): SavedRun | null
+    updateLastSeq(conversationId: string, lastSeq: number, status?: string): void
+    clear(conversationId: string): void
+    saveToolStarted(runId: string, callId: string): boolean
+    saveToolResult(runId: string, callId: string, result: SavedToolResult): boolean
+    loadToolResult(runId: string, callId: string): SavedToolResult | null
+    clearToolResult(runId: string, callId: string): void
+    clearToolResults(runId: string): void
+}
+
+export interface BrowserAgentTabLock {
+    acquire(scopeId: string): Promise<number | null>
+    owns(scopeId: string): boolean
+    release(claimEpoch?: number): void
 }
 
 export interface RunStoreOptions {
@@ -22,21 +55,12 @@ export interface RunStoreOptions {
 const PREFIX = 'agentcore:run:'
 const TOOL_RESULTS_PREFIX = 'agentcore:tool-results:'
 
-export interface SavedToolResult {
-    status?: 'started' | 'completed'
-    ok: boolean
-    result?: unknown
-    error?: string
-    /** True when the body was too large to persist and was dropped. */
-    resultOmitted?: boolean
-}
-
 interface SavedToolResults {
     updatedAt: number
     results: Record<string, SavedToolResult>
 }
 
-export class RunStore {
+export class RunStore implements BrowserAgentRunStore {
     private readonly storage: Storage
     private readonly ttlMs: number
 
@@ -208,7 +232,7 @@ const LOCK_STALE_MS = 6000
  * Web Locks API provides atomic acquisition; localStorage heartbeats are the
  * compatibility fallback and expire after LOCK_STALE_MS.
  */
-export class RunLock {
+export class RunLock implements BrowserAgentTabLock {
     private keepAliveTimer: ReturnType<typeof setInterval> | null = null
     private webLockRelease: (() => void) | null = null
     private lockedScopeId: string | null = null

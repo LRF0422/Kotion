@@ -3,14 +3,26 @@
  *
  * Replaces the old harness/chat-client/v3/system-agent stack. UI code touches
  * only this package: AgentClient for the backend contract, useEditorAgent for
- * the run lifecycle, RunStore/RunLock for 断点恢复 persistence.
+ * the run lifecycle, and the AgentTransport/AgentRunStore/AgentTabLock contracts
+ * whose concrete implementations are registered by the host (@kn/core).
  */
 
 export { AgentClient } from './client'
 export type { AgentClientOptions } from './client'
+export {
+    configureAgentTransport,
+    getAgentTransport,
+    AgentTransportNotConfiguredError,
+} from './transport'
+export type { AgentFetch, AgentTransport } from './transport'
 export { parseAgentEventFrame, readSseDataLines } from './events'
-export { RunStore, RunLock } from './run-store'
-export type { SavedRun } from './run-store'
+export type { SavedRun, SavedToolResult } from './persistence'
+export {
+    configureAgentPersistence,
+    createAgentPersistence,
+    createInMemoryPersistence,
+} from './persistence'
+export type { AgentPersistence, AgentRunStore, AgentTabLock } from './persistence'
 export { EditorToolExecutor } from './tool-executor'
 export type { EditorToolExecutorOptions, ToolExecutionResult } from './tool-executor'
 export { SubRunWorker, DEFAULT_MAX_PARALLEL_CALLS } from './sub-run-worker'
@@ -24,6 +36,16 @@ export type {
     MergeResult,
 } from './document-merge'
 export { useEditorAgent } from './use-editor-agent'
+export { useSubRuns } from './use-sub-runs'
+export type { UseSubRunsApi, UseSubRunsOptions } from './use-sub-runs'
+export { useAgentStream } from './use-agent-stream'
+export type { UseAgentStreamApi, UseAgentStreamOptions } from './use-agent-stream'
+export { usePendingToolExecution } from './use-pending-tools'
+export type {
+    UsePendingToolExecutionApi,
+    UsePendingToolExecutionOptions,
+} from './use-pending-tools'
+export { MAX_TOOL_RESUME_RETRIES, isPermanentTransportError } from './retry-policy'
 export type {
     AgentStepRecord,
     EditorAgentApi,

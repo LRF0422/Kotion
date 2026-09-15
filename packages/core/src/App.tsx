@@ -21,6 +21,7 @@ import { clearContextSensitiveClientState, normalizeTokenResponse, notifyContext
 import { registerCoreToolFactories } from "./ai/tools/register"
 import { registerOffscreenEditorBridge, setMaxOffscreenSessions } from "./ai/offscreen"
 import { registerAgentDocumentBridge } from "./ai/agentdoc"
+import { registerAgentRuntime } from "./ai/agent/runtime"
 import { AIAssistantPage } from "./pages/AIAssistantPage"
 import { registerPageEditWindow } from "./components/PageEditWindowImpl"
 import { toast, AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel, Button, Input, Label } from "@kn/ui"
@@ -254,6 +255,8 @@ export interface AppProps {
 let coreRuntimeRegistered = false
 const ensureCoreRuntimeRegistered = () => {
     if (coreRuntimeRegistered) return
+    // Agent SDK runtime: gateway path + JWT-aware fetch (see ai/agent/runtime).
+    registerAgentRuntime()
     registerCoreToolFactories()
     registerOffscreenEditorBridge()
     // Per-agent private documents (真并行): delegated agents fork their own

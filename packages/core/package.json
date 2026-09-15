@@ -13,7 +13,8 @@
     "build": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\" && rollup -c && node ../../scripts/normalize-declaration-layout.mjs core common editor ui icon plugin-api",
     "check:space-page": "rm -rf .tmp-check/space-page && tsc src/domain/space-page/*.ts --rootDir src --outDir .tmp-check/space-page --module commonjs --target ES2022 --lib ES2022,DOM --skipLibCheck --noCheck && node -e \"const fs=require('fs'); const dir='.tmp-check/space-page/node_modules/@kn/common'; fs.mkdirSync(dir,{recursive:true}); fs.writeFileSync('.tmp-check/space-page/package.json','{\\\"type\\\":\\\"commonjs\\\"}'); fs.copyFileSync('.tmp-check/space-page/domain/space-page/space-page-common.check-runtime.js',dir+'/index.js'); fs.writeFileSync(dir+'/package.json','{\\\"main\\\":\\\"index.js\\\",\\\"type\\\":\\\"commonjs\\\"}')\" && node .tmp-check/space-page/domain/space-page/space-page-service.check.js",
     "check:agent-pages": "rm -rf .tmp-check/agent-pages && tsc src/ai/tools/page-tree.ts src/ai/tools/page-tree.check.ts --outDir .tmp-check/agent-pages --module commonjs --target ES2020 --lib ES2020 --skipLibCheck && node -e \"require('fs').writeFileSync('.tmp-check/agent-pages/package.json', JSON.stringify({type: 'commonjs'}))\" && node .tmp-check/agent-pages/page-tree.check.js",
-    "check": "pnpm check:space-page && pnpm check:agent-pages",
+    "check:agent": "rm -rf .tmp-check/agent && tsc src/ai/agent/browser-persistence.check.ts --rootDir src/ai/agent --outDir .tmp-check/agent --module commonjs --target ES2020 --lib ES2020,DOM --skipLibCheck && node -e \"require('fs').writeFileSync('.tmp-check/agent/package.json', JSON.stringify({type: 'commonjs'}))\" && node --localstorage-file=.tmp-check/agent/localstorage .tmp-check/agent/browser-persistence.check.js",
+    "check": "pnpm check:space-page && pnpm check:agent-pages && pnpm check:agent",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "type": "module",

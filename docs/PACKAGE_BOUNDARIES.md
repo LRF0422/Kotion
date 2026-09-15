@@ -35,6 +35,66 @@ Core is the concrete host implementation. It owns:
 
 Core consumes common contracts. It must not compile files directly from `packages/common/src`.
 
+## Agent SDK runtime seam
+
+The agent SDK in `@kn/common/src/ai/agent` is a contract + orchestration layer;
+concrete product policy is injected by the host:
+
+- `AgentTransport` (`src/ai/agent/transport.ts`) is the fetch seam. The SDK
+  never hard-codes the gateway path or the auth/session policy.
+- `@kn/core/src/ai/agent/runtime.ts` owns the concrete `apiBase` and JWT-aware
+  `authorizedFetch`, registered via `registerAgentRuntime()` from
+  `ensureCoreRuntimeRegistered()` in `App.tsx`.
+- `AgentClient` resolves the transport lazily on first request, so module-level
+  client construction stays safe before startup registration.
+- `useEditorAgent` and `useCapabilityProviders` accept an injectable
+  `sessionBinding` getter; the global `setSessionPageBinding` registry is a
+  backward-compatible default only.
+- Sub-agent lifecycle (`useSubRuns`) lives in `src/ai/agent/use-sub-runs.ts`,
+  separate from the run hook: it owns the `SubRunWorker`, attach/detach, and
+  private-document release.
+- Frontend tool execution (`usePendingToolExecution`) lives in
+  `src/ai/agent/use-pending-tools.ts`: it owns the idempotent tool-result
+  journal, batch guard, and bounded resume retries. The shared retry policy is
+  in `src/ai/agent/retry-policy.ts`.
+- The run SSE transport (`useAgentStream`: live tail, reconnect backoff, resume
+  round-trip, `lastSeq` persistence) lives in
+  `src/ai/agent/use-agent-stream.ts`. `useEditorAgent` keeps only session and
+  public-API orchestration.
+- The executor injects the binding into every tool call via
+  `ToolExecutionContext.sessionBinding`; editor tools (`@kn/core/src/ai/tools`)
+  read it from the context and only fall back to the global registry.
+- `AgentRunStore`/`AgentTabLock` (`src/ai/agent/persistence.ts`) are the
+  crash-recovery contracts; `configureAgentPersistence()` is registered by the
+  host in `@kn/core/src/ai/agent/runtime.ts`. The browser implementation
+  (`localStorage` + Web Locks) lives in `@kn/core/src/ai/agent/browser-persistence.ts`,
+  and the SDK falls back to a dependency-free in-memory store.
+- The run view-state machine (types, reducer, `applyEvent`/`applySubRunEvent`)
+  lives in `src/ai/agent/editor-agent-state.ts` — pure, no React or I/O. The hook
+  (`use-editor-agent.ts`) only owns transport/session/tool mechanics.
+- The chat surface's off-screen editor leases (the conversation target plus every
+  per-owner sub-run target: acquisition, LRU eviction, ref-counting, teardown, and
+  the private-document merge) live in
+  `plugin-ai/src/ai/menu/use-offscreen-targets.ts`; `Chat.tsx` keeps only the
+  composer, the page-binding registry, and wiring.
+- Sub-agent tree labels are built once by `buildSubAgentTreeLabels(t)` in
+  `@kn/ui` (`components/ai/SubAgentTree.tsx`); the core panel and the plugin-ai
+  message bubble both call it instead of re-declaring the same 18 keys. Because
+  `@kn/ui` may not import `@kn/common`, the builder takes `t` as a parameter.
+
+The boundary checker enforces the seams: `ai/agent/client.ts` may not reference
+`authorizedFetch`, `utils/session` or the gateway path, and must import
+`./transport`; `core/src/ai/agent/runtime.ts` must call
+`configureAgentTransport`; and no file under `packages/common/src/ai/agent` may
+reference `localStorage` or `navigator.locks`.
+
+Follow-up (tracked): split the remaining hook into
+`useAgentRun`/`useAgentTools`/`useAgentSession`. Fully merging the two AI
+panels is still open: the shared contracts/hooks already live in `@kn/common`,
+but their rendering differs and consolidating it needs an `@kn/ai-ui`-style
+package that can depend on common (`@kn/ui` cannot), which is blocked while the
+workspace install is offline.
+
 ## Compatibility surfaces
 
 The following surfaces remain temporarily for published-plugin compatibility:

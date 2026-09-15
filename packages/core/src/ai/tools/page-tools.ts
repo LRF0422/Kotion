@@ -1,6 +1,6 @@
 import type { Editor } from "@kn/editor"
 import { z } from "@kn/ui"
-import type { ToolsRecord, ToolExecutionContext } from "@kn/common"
+import type { ToolsRecord, ToolExecutionContext, SessionPageBinding } from "@kn/common"
 import {
     getPageNavigationBridge,
     getSessionPageBinding,
@@ -30,7 +30,10 @@ interface ActivePageContext {
  * When the caller passes its editor, the target is resolved for *that* agent —
  * a delegated child bound to its own page must not see the parent's target.
  */
-const resolveActivePage = (targetEditor?: Editor | null): ActivePageContext => {
+const resolveActivePage = (
+    targetEditor?: Editor | null,
+    binding?: SessionPageBinding | null,
+): ActivePageContext => {
     const current = getPageNavigationBridge()?.getCurrentPage()
     const openPage: ActivePageContext = {
         pageId: current?.pageId === undefined ? undefined : String(current.pageId),
@@ -40,9 +43,9 @@ const resolveActivePage = (targetEditor?: Editor | null): ActivePageContext => {
             ? undefined
             : String(current.parentId),
     }
-    const binding = getSessionPageBinding()
-    const bound = (targetEditor ? binding?.getPageForEditor?.(targetEditor) : null)
-        ?? binding?.getBoundPage()
+    const resolvedBinding = binding ?? getSessionPageBinding()
+    const bound = (targetEditor ? resolvedBinding?.getPageForEditor?.(targetEditor) : null)
+        ?? resolvedBinding?.getBoundPage()
     if (bound?.pageId) {
         return {
             pageId: toPageId(bound.pageId) ?? openPage.pageId,
@@ -109,12 +112,12 @@ export const createPageTools = (editor: Editor): ToolsRecord => ({
         inputSchema: z.object({
             keyword: z.string().optional().describe("按名称过滤空间，不填则返回全部")
         }),
-        execute: async ({ keyword }: { keyword?: string }) => {
+        execute: async ({ keyword }: { keyword?: string }, _callId?: string, context?: ToolExecutionContext) => {
             try {
                 const result = await resolveService('spacePageService').spaces.querySpaces(
                     keyword ? { keyword } : undefined
                 )
-                const active = resolveActivePage(editor)
+                const active = resolveActivePage(editor, context?.sessionBinding)
                 return {
                     success: true,
                     currentSpaceId: active.spaceId,
@@ -138,8 +141,8 @@ export const createPageTools = (editor: Editor): ToolsRecord => ({
             searchValue: z.string().optional().describe("按标题过滤，返回匹配页面"),
             maxNodes: z.number().optional().describe("最多返回多少个节点，默认 200")
         }),
-        execute: async ({ spaceId, searchValue, maxNodes }: { spaceId?: string; searchValue?: string; maxNodes?: number }) => {
-            const active = resolveActivePage(editor)
+        execute: async ({ spaceId, searchValue, maxNodes }: { spaceId?: string; searchValue?: string; maxNodes?: number }, _callId?: string, context?: ToolExecutionContext) => {
+            const active = resolveActivePage(editor, context?.sessionBinding)
             const resolvedSpaceId = toPageId(spaceId) ?? active.spaceId
             if (!resolvedSpaceId) {
                 return { error: '无法确定空间，请传入 spaceId（可先用 listSpaces 查询）' }
@@ -172,13 +175,13 @@ export const createPageTools = (editor: Editor): ToolsRecord => ({
         inputSchema: z.object({
             query: z.string().optional().describe("搜索关键词，不填则返回最近的页面")
         }),
-        execute: async ({ query }: { query?: string }) => {
+        execute: async ({ query }: { query?: string }, _callId?: string, context?: ToolExecutionContext) => {
             try {
                 const result = await resolveService('spacePageService').pages.queryPages({
                     searchValue: query,
                     pageSize: 30,
                 })
-                const current = resolveActivePage(editor)
+                const current = resolveActivePage(editor, context?.sessionBinding)
                 return {
                     success: true,
                     pages: result.records.map((page) => ({
@@ -219,11 +222,11 @@ export const createPageTools = (editor: Editor): ToolsRecord => ({
             asSubPage?: boolean
             linkInDocument?: boolean
             bindToSession?: boolean
-        }) => {
+        }, _callId?: string, context?: ToolExecutionContext) => {
             if (!title || title.trim().length === 0) {
                 return { error: '页面标题不能为空' }
             }
-            const active = resolveActivePage(editor)
+            const active = resolveActivePage(editor, context?.sessionBinding)
             const resolvedSpaceId = toPageId(spaceId) ?? active.spaceId
             if (!resolvedSpaceId) {
                 return { error: '无法确定当前空间，无法创建页面；请传入 spaceId' }
@@ -279,7 +282,7 @@ export const createPageTools = (editor: Editor): ToolsRecord => ({
                 let linkAnchor: string | undefined
                 let linkError: string | undefined
                 if (linkInDocument && anchorPageId) {
-                    const anchorEditor = await resolveEditorForPage(editor, anchorPageId, active.pageId)
+                    const anchorEditor = await resolveEditorForPage(editor, anchorPageId, active.pageId, context?.sessionBinding)
                     if (anchorEditor.editor) {
                         const result = await insertPageLinkInto(anchorEditor.editor, created.pageId, created.title)
                         linked = result.success
@@ -295,7 +298,7 @@ export const createPageTools = (editor: Editor): ToolsRecord => ({
                 let boundToSession = false
                 let bindError: string | undefined
                 if (bindToSession) {
-                    const bound = await resolveEditorForPage(editor, created.pageId, active.pageId)
+                    const bound = await resolveEditorForPage(editor, created.pageId, active.pageId, context?.sessionBinding)
                     // Only claim the page became the edit target when the switch
                     // actually happened (hosts without the binding cannot).
                     boundToSession = bound.switched
@@ -441,7 +444,7 @@ export const createPageTools = (editor: Editor): ToolsRecord => ({
                 return { error: `无法读取页面 ${id}: ${error instanceof Error ? error.message : '未知错误'}` }
             }
 
-            const binding = getSessionPageBinding()
+            const binding = context?.sessionBinding ?? getSessionPageBinding()
             const owner = context?.owner ?? null
 
             // A delegated child retargets only itself: the parent keeps editing
@@ -505,12 +508,12 @@ export const createPageTools = (editor: Editor): ToolsRecord => ({
             title: string
             inPageId?: string
             nearText?: string
-        }) => {
+        }, _callId?: string, context?: ToolExecutionContext) => {
             const target = toPageId(pageId)
             if (!target) return { error: 'pageId 不能为空' }
-            const active = resolveActivePage(editor)
+            const active = resolveActivePage(editor, context?.sessionBinding)
             const hostPageId = toPageId(inPageId) ?? active.pageId
-            const resolved = await resolveEditorForPage(editor, hostPageId, active.pageId)
+            const resolved = await resolveEditorForPage(editor, hostPageId, active.pageId, context?.sessionBinding)
             if (!resolved.editor) {
                 return { error: resolved.error ?? '没有可用的编辑器' }
             }
@@ -533,14 +536,14 @@ export const createPageTools = (editor: Editor): ToolsRecord => ({
             pageId: z.string().describe("要打开的页面 pageId"),
             spaceId: z.string().optional().describe("页面所属空间 id（searchPages 结果中有），不填则自动解析")
         }),
-        execute: async ({ pageId, spaceId }: { pageId: string; spaceId?: string }) => {
+        execute: async ({ pageId, spaceId }: { pageId: string; spaceId?: string }, _callId?: string, context?: ToolExecutionContext) => {
             const navigation = getPageNavigationBridge()
             if (!navigation) return { error: BRIDGE_MISSING }
 
             const target = String(pageId)
             // A page already being edited by this conversation opens in the
             // floating window — navigating away would drop the chat's context.
-            const binding = getSessionPageBinding()
+            const binding = context?.sessionBinding ?? getSessionPageBinding()
             if (binding && binding.getBoundPage()?.pageId === target) {
                 binding.openPageWindow(target)
                 return {
@@ -577,15 +580,16 @@ const resolveEditorForPage = async (
     currentEditor: Editor,
     pageId: string | undefined,
     activePageId: string | undefined,
+    binding?: SessionPageBinding | null,
 ): Promise<{ editor: Editor | null; switched: boolean; error?: string }> => {
     if (!pageId) return { editor: currentEditor, switched: false }
     if (activePageId && String(activePageId) === String(pageId)) {
         return { editor: currentEditor, switched: false }
     }
-    const binding = getSessionPageBinding()
-    if (binding?.editPage) {
+    const resolvedBinding = binding ?? getSessionPageBinding()
+    if (resolvedBinding?.editPage) {
         try {
-            const target = await binding.editPage({ pageId: String(pageId) })
+            const target = await resolvedBinding.editPage({ pageId: String(pageId) })
             return { editor: target.editor as Editor, switched: true }
         } catch (error) {
             return {

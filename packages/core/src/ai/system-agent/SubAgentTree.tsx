@@ -3,5 +3,5 @@
  * (packages/ui/src/components/ai/SubAgentTree.tsx). This shim preserves the
  * historical import path for existing consumers.
  */
-export { SubAgentTree } from '@kn/ui'
-export type { SubAgentTreeProps } from '@kn/ui'
+export { SubAgentTree, buildSubAgentTreeLabels } from '@kn/ui'
+export type { SubAgentTreeProps, SubAgentTreeLabels } from '@kn/ui'

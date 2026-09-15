@@ -19,7 +19,10 @@ export interface StreamTextOptions {
     system?: string
 }
 
-const defaultClient = new AgentClient()
+// Constructed lazily: AgentClient resolves the host transport on first use, and
+// this module may be imported before the app registers the runtime.
+let defaultClient: AgentClient | null = null
+const getDefaultClient = (): AgentClient => (defaultClient ??= new AgentClient())
 
 /**
  * Stream plain text from the AgentCore backend given a full message list
@@ -29,7 +32,7 @@ export function streamKnowledgeChat(
     messages: AgentChatMessage[],
     options: Omit<StreamTextOptions, 'system'> = {}
 ): { textStream: AsyncGenerator<string> } {
-    const client = defaultClient
+    const client = getDefaultClient()
 
     async function* textStream(): AsyncGenerator<string> {
         if (options.signal?.aborted) return

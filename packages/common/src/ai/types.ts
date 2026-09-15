@@ -1,4 +1,5 @@
 import type { Editor, Node } from "@tiptap/core"
+import type { SessionPageBinding } from "./session-page-binding"
 
 // ============ Configuration Constants ============
 export const MAX_CHUNK_SIZE = 2000
@@ -119,6 +120,12 @@ export interface ToolDefinition {
  */
 export interface ToolExecutionContext {
     owner?: string | null
+    /**
+     * Host edit-target binding for this call. Injected by the executor so tools
+     * do not have to read the module-level registry; tools fall back to the
+     * global for callers that predate the injection.
+     */
+    sessionBinding?: SessionPageBinding | null
 }
 
 export type ToolsRecord = Record<string, ToolDefinition>

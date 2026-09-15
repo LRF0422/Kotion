@@ -5,6 +5,7 @@ import {
     ChatBubbleMessage,
     Streamdown,
     SubAgentTree,
+    buildSubAgentTreeLabels,
     formatDistanceToNow,
     useCopyToClipboard,
 } from '@kn/ui'
@@ -110,27 +111,7 @@ export const MessageBubble = React.memo(function MessageBubble({
                     <SubAgentTree
                         subRuns={message.subRuns}
                         toolCalls={subToolCalls}
-                        labels={{
-                            title: t('ai.chat.subAgentTitle'),
-                            running: t('ai.chat.subAgentRunning'),
-                            completed: t('ai.chat.subAgentCompleted'),
-                            failed: t('ai.chat.subAgentFailed'),
-                            cancelled: t('ai.chat.subAgentCancelled'),
-                            task: t('ai.chat.subAgentTask'),
-                            tools: t('ai.chat.subAgentTools'),
-                            liveOutput: t('ai.chat.subAgentLiveOutput'),
-                            reasoning: t('ai.chat.subAgentReasoning'),
-                            steps: t('ai.chat.subAgentSteps'),
-                            mergeBack: t('ai.chat.subAgentMergeBack'),
-                            result: t('ai.chat.subAgentResult'),
-                            failureReason: t('ai.chat.subAgentFailureReason'),
-                            noTask: t('ai.chat.subAgentNoTask'),
-                            usage: t('ai.chat.subAgentUsage'),
-                            pin: t('ai.chat.subAgentPin'),
-                            unpin: t('ai.chat.subAgentUnpin'),
-                            close: t('ai.chat.subAgentClose'),
-                            runId: t('ai.chat.subAgentRunId'),
-                        }}
+                        labels={buildSubAgentTreeLabels(t)}
                         renderDetail={(sub, calls) => (
                             <AgentActivityTimeline
                                 activitySteps={sub.steps}

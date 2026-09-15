@@ -21,7 +21,7 @@
  */
 
 import type { ToolExecutionResult } from './tool-executor'
-import type { RunStore } from './run-store'
+import type { AgentRunStore } from './persistence'
 import type { AgentEvent, ResumePayload, RunView } from './types'
 
 /**
@@ -63,7 +63,7 @@ export interface SubRunWorkerOptions {
         owner: string
     ) => Promise<ToolExecutionResult>
     /** Tool-result journalling (crash safety), shared with the parent run. */
-    store?: RunStore
+    store?: AgentRunStore
     /** Every child event, for the UI projection (sub-agent tree). */
     onEvent?: (runId: string, event: AgentEvent) => void
     /** Child reached a terminal state (or the worker stopped driving it). */
@@ -95,7 +95,7 @@ interface ChildState {
 export class SubRunWorker {
     private readonly client: SubRunClient
     private readonly executeTool: SubRunWorkerOptions['executeTool']
-    private readonly store?: RunStore
+    private readonly store?: AgentRunStore
     private readonly onEvent?: SubRunWorkerOptions['onEvent']
     private readonly onSettled?: SubRunWorkerOptions['onSettled']
     private readonly maxParallelCalls: number

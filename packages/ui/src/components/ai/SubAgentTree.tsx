@@ -124,6 +124,35 @@ export const defaultSubAgentTreeLabels: SubAgentTreeLabels = {
     runId: 'run',
 }
 
+/**
+ * Build the tree's labels from an i18n \`t\` function. This lives in the UI layer
+ * (which cannot import @kn/common's i18n) so every host maps the same 18 keys
+ * exactly once instead of re-declaring them per panel.
+ */
+export const buildSubAgentTreeLabels = (
+    t: (key: string) => string,
+): SubAgentTreeLabels => ({
+    title: t('ai.chat.subAgentTitle'),
+    running: t('ai.chat.subAgentRunning'),
+    completed: t('ai.chat.subAgentCompleted'),
+    failed: t('ai.chat.subAgentFailed'),
+    cancelled: t('ai.chat.subAgentCancelled'),
+    task: t('ai.chat.subAgentTask'),
+    tools: t('ai.chat.subAgentTools'),
+    liveOutput: t('ai.chat.subAgentLiveOutput'),
+    reasoning: t('ai.chat.subAgentReasoning'),
+    steps: t('ai.chat.subAgentSteps'),
+    mergeBack: t('ai.chat.subAgentMergeBack'),
+    result: t('ai.chat.subAgentResult'),
+    failureReason: t('ai.chat.subAgentFailureReason'),
+    noTask: t('ai.chat.subAgentNoTask'),
+    usage: t('ai.chat.subAgentUsage'),
+    pin: t('ai.chat.subAgentPin'),
+    unpin: t('ai.chat.subAgentUnpin'),
+    close: t('ai.chat.subAgentClose'),
+    runId: t('ai.chat.subAgentRunId'),
+})
+
 export interface SubAgentTreeProps {
     subRuns: SubRunView[]
     /**

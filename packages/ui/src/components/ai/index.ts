@@ -1,4 +1,4 @@
-export { SubAgentTree, defaultSubAgentTreeLabels } from './SubAgentTree'
+export { SubAgentTree, defaultSubAgentTreeLabels, buildSubAgentTreeLabels } from './SubAgentTree'
 export type {
     SubAgentTreeProps,
     SubAgentTreeLabels,
