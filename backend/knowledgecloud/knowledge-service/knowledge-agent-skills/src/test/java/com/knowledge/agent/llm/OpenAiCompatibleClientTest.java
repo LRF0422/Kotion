@@ -110,6 +110,37 @@ class OpenAiCompatibleClientTest {
         }
     }
 
+    @Test
+    void serializesMultimodalContentPartsAsContentArray() throws Exception {
+        OpenAiCompatibleClient client = client(Collections.emptyMap());
+        Map<String, Object> imageUrl = new LinkedHashMap<>();
+        imageUrl.put("url", "data:image/png;base64,AAAA");
+        Map<String, Object> imagePart = new LinkedHashMap<>();
+        imagePart.put("type", "image_url");
+        imagePart.put("image_url", imageUrl);
+        Map<String, Object> textPart = new LinkedHashMap<>();
+        textPart.put("type", "text");
+        textPart.put("text", "look");
+        ChatMessage message = ChatMessage.builder()
+                .role("user")
+                .content("look")
+                .contentParts(Arrays.asList(textPart, imagePart))
+                .build();
+        LlmRequest request = LlmRequest.builder()
+                .model("test-model")
+                .messages(Collections.singletonList(message))
+                .build();
+
+        JsonNode body = objectMapper.readTree(client.buildRequestBody(request, false));
+
+        JsonNode content = body.path("messages").get(0).path("content");
+        assertTrue(content.isArray());
+        assertEquals(2, content.size());
+        assertEquals("image_url", content.get(1).path("type").asText());
+        assertEquals("data:image/png;base64,AAAA",
+                content.get(1).path("image_url").path("url").asText());
+    }
+
     private OpenAiCompatibleClient client(Map<String, Object> extra) {
         ModelConfig model = ModelConfig.builder()
                 .name("test-model")

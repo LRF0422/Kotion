@@ -23,6 +23,11 @@ public class ChatMessage {
     @ApiModelProperty("Message content")
     private String content;
 
+    @ApiModelProperty("Multimodal content parts (text + image_url). When present, the provider "
+            + "receives this as the content array so a vision model sees the images natively; "
+            + "the plain text content field stays as the fallback.")
+    private List<Object> contentParts;
+
     @ApiModelProperty("Tool call id (for role=tool)")
     @JsonProperty("tool_call_id")
     private String toolCallId;

@@ -29,6 +29,14 @@ public class ModelConfig {
     private String systemPrompt;
 
     /**
+     * Whether this model accepts image input (vision / multimodal). Enable it in
+     * the provider config for any model the agent may send images to; the agent
+     * degrades to a text notice when a model is not vision-capable.
+     */
+    @Builder.Default
+    private boolean vision = false;
+
+    /**
      * Raw provider request extensions. OpenAI-compatible stream options are sent
      * only for streaming requests.
      */

@@ -42,6 +42,9 @@ public class ModelController {
                 modelInfo.put("object", "model");
                 modelInfo.put("owned_by", provider);
                 modelInfo.put("provider", provider);
+                // Vision capability — lets the client surface image affordances
+                // and warn before a model silently drops the images.
+                modelInfo.put("supportsVision", llmClientFactory.supportsVision(model));
                 data.add(modelInfo);
             }
         }

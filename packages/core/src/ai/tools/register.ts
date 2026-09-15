@@ -23,6 +23,7 @@ import { createRangeTools } from './range-tools'
 import { createBlockIdTools } from './blockid-tools'
 import { createPageTools } from './page-tools'
 import { createReferenceTools } from './reference-tools'
+import { createImageTools } from './image-tools'
 
 /**
  * Register all core tool factories into the global registry.
@@ -47,5 +48,6 @@ export function registerCoreToolFactories(): void {
         createBlockIdTools,
         createPageTools,
         createReferenceTools,
+        createImageTools,
     ])
 }

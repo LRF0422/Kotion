@@ -70,7 +70,21 @@ export const MessageBubble = React.memo(function MessageBubble({
                         variant="sent"
                         className="min-w-0 rounded-2xl rounded-br-md bg-secondary px-3 py-2.5 text-[13px] leading-relaxed text-foreground dark:bg-muted/80"
                     >
-                        <div className="whitespace-pre-wrap break-words">{message.content}</div>
+                        {message.images && message.images.length > 0 && (
+                            <div className="mb-1.5 flex flex-wrap justify-end gap-1.5">
+                                {message.images.map((src, index) => (
+                                    <img
+                                        key={index}
+                                        src={src}
+                                        alt=""
+                                        className="max-h-40 max-w-[180px] rounded-lg border border-border/40 object-cover"
+                                    />
+                                ))}
+                            </div>
+                        )}
+                        {message.content
+                            ? <div className="whitespace-pre-wrap break-words">{message.content}</div>
+                            : null}
                     </ChatBubbleMessage>
                     <div className="flex min-h-11 items-center justify-end gap-1 text-[10px] text-muted-foreground/70 lg:min-h-7">
                         <button

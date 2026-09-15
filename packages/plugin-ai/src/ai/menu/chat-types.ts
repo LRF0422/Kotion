@@ -5,6 +5,11 @@ import type { SubToolCallView } from '@kn/ui'
 export interface Message {
     id: string
     content: string
+    /**
+     * Images the user attached, as `data:` URLs for display. The same bytes are
+     * sent to the model as multimodal content parts (see AgentChatMessage).
+     */
+    images?: string[]
     /** Reasoning/thinking content from reasoning models (e.g. deepseek-reasoner). */
     reasoningContent?: string
     /** Step-scoped activity used to rebuild the reasoning/tool timeline. */

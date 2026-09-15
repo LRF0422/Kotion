@@ -500,6 +500,25 @@ public class ContextManager {
             if (message.getContent() != null) {
                 tokens += message.getContent().length() / 4;
             }
+            if (message.getContentParts() != null) {
+                // Multimodal parts: text at chars/4; each image at a flat estimate
+                // (~1024) instead of base64 length/4, which would wildly overstate
+                // the provider's vision-token accounting.
+                for (Object part : message.getContentParts()) {
+                    if (part instanceof java.util.Map) {
+                        java.util.Map<?, ?> map = (java.util.Map<?, ?>) part;
+                        Object type = map.get("type");
+                        if ("text".equals(type)) {
+                            Object text = map.get("text");
+                            if (text != null) {
+                                tokens += String.valueOf(text).length() / 4;
+                            }
+                        } else if ("image_url".equals(type)) {
+                            tokens += 1024;
+                        }
+                    }
+                }
+            }
             if (message.getReasoningContent() != null) {
                 tokens += message.getReasoningContent().length() / 4;
             }

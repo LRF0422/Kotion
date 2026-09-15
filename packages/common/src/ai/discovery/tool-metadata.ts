@@ -86,6 +86,15 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
         loaded: false,
         source: 'builtin'
     },
+    {
+        name: 'readImage',
+        category: 'document-read',
+        description: '读取文档中的图片交给多模态模型直接查看（需模型支持视觉输入）',
+        priority: 7,
+        tags: ['image', 'vision', 'read', 'ocr', 'screenshot', 'chart'],
+        loaded: false,
+        source: 'builtin'
+    },
 
     // ===== Document Write Tools =====
     {

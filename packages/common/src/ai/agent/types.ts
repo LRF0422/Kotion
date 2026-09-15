@@ -5,6 +5,8 @@
 
 // ============ Messages ============
 
+import type { AgentContentPart } from '../image/image-attachments'
+
 export interface AgentToolCallInfo {
     id: string
     type?: 'function'
@@ -14,6 +16,12 @@ export interface AgentToolCallInfo {
 export interface AgentChatMessage {
     role: 'system' | 'user' | 'assistant' | 'tool'
     content?: string
+    /**
+     * Multimodal content parts (text + images). When present the backend sends
+     * these as the message's `content` array so a vision model sees the images
+     * natively. `content` stays as the plain-text fallback.
+     */
+    contentParts?: AgentContentPart[]
     tool_call_id?: string
     name?: string
     tool_calls?: AgentToolCallInfo[]

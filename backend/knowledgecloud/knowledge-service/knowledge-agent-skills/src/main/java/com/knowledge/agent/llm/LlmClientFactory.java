@@ -82,6 +82,48 @@ public class LlmClientFactory {
     }
 
     /**
+     * Whether the given model accepts image input (multimodal / vision).
+     *
+     * <p>Primary signal is the per-model {@code vision: true} config flag.
+     * Well-known vision model families are also recognised by name so a provider
+     * that only declares model names still works without extra config.
+     */
+    public boolean supportsVision(String modelName) {
+        String requested = modelName == null || modelName.trim().isEmpty()
+                ? defaultModel
+                : modelName.trim();
+        if (requested == null || requested.trim().isEmpty()) {
+            return false;
+        }
+        String bare = requested.contains("/") ? requested.split("/", 2)[1] : requested;
+        for (ProviderConfig config : providers.values()) {
+            for (ModelConfig model : config.getModels()) {
+                if (model.getName() != null
+                        && (model.getName().equals(bare) || model.getName().equals(requested))) {
+                    return model.isVision() || looksLikeVisionModel(bare);
+                }
+            }
+        }
+        return looksLikeVisionModel(bare);
+    }
+
+    /** Name heuristics for common multimodal model families. */
+    private static boolean looksLikeVisionModel(String model) {
+        String name = model.toLowerCase(Locale.ROOT);
+        String[] markers = {
+                "-vl", "vl-", "vision", "gpt-4o", "gpt-4.1", "gpt-5", "o3", "o4",
+                "claude-3", "claude-4", "gemini", "llava", "internvl", "qwen-vl",
+                "qwen2-vl", "qwen2.5-vl", "glm-4v", "pixtral", "minicpm-v", "cogvlm",
+        };
+        for (String marker : markers) {
+            if (name.contains(marker)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Get all available providers.
      */
     public List<String> getAvailableProviders() {

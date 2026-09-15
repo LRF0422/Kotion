@@ -39,6 +39,14 @@ public class LlmGateway {
         this.properties = properties;
     }
 
+    /**
+     * Whether the resolved model accepts image input. Used by the loop to decide
+     * between attaching multimodal image parts and a plain-text degradation.
+     */
+    public boolean supportsVision(String model) {
+        return clientFactory.supportsVision(model);
+    }
+
     /** Delta sink — the loop feeds text/reasoning events from here. */
     public interface Sink {
         void onText(String delta);

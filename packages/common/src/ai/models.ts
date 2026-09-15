@@ -18,6 +18,8 @@ export interface ModelInfo {
     supportsToolCalling?: boolean
     /** Whether this model supports streaming */
     supportsStreaming?: boolean
+    /** Whether this model accepts image input (vision / multimodal). */
+    supportsVision?: boolean
     /** Maximum context length */
     contextLength?: number
 }

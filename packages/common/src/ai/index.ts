@@ -39,6 +39,9 @@ export * from "./capabilities"
 // Model discovery — kept /api/v1/models endpoint
 export * from "./models"
 
+// Image attachments — multimodal (vision) content shared by readImage + chat
+export * from "./image/image-attachments"
+
 // Discovery (built-in tool metadata; still used by ToolProvider)
 export * from "./discovery"
 

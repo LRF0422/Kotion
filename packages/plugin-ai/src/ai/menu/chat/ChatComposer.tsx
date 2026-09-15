@@ -5,7 +5,7 @@ import React, {
     useRef,
     useState,
 } from 'react'
-import { Send, Square, MessageCircle, Bot, FileDiff } from '@kn/icon'
+import { Send, Square, MessageCircle, Bot, FileDiff, ImagePlus, X } from '@kn/icon'
 import {
     Button,
     ChatInput,
@@ -90,6 +90,12 @@ interface ChatComposerProps {
     tracking?: boolean
     /** Toggle the editor's change tracker; merging happens in the editor. */
     onToggleTracking?: () => void
+    /** Pending image attachments, as `data:` URLs for preview. */
+    images?: string[]
+    /** Add image files picked or pasted by the user. */
+    onAddImages?: (files: File[]) => void
+    /** Remove the attachment at the given index. */
+    onRemoveImage?: (index: number) => void
 }
 
 /**
@@ -104,12 +110,13 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
         mode, onModeChange, model, onModelChange,
         modelParams, onModelParamsChange,
         targetPage, currentPage, targetStatus, onPickPage, onClearPage, onRetryPage, onOpenPageWindow,
-        tracking, onToggleTracking,
+        tracking, onToggleTracking, images, onAddImages, onRemoveImage,
     },
     ref,
 ) {
     const { t } = useTranslation()
     const inputRef = useRef<HTMLTextAreaElement | null>(null)
+    const fileInputRef = useRef<HTMLInputElement | null>(null)
     // Popover of the @-page picker; typing `@` at a word boundary opens it.
     const [mentionOpen, setMentionOpen] = useState(false)
     // Expose the internal ref to the parent.
@@ -126,7 +133,8 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
 
     const connecting = targetStatus === 'connecting'
     const targetUnavailable = connecting || targetStatus === 'error'
-    const isValid = value.trim().length > 0 && !isLoading && !targetUnavailable
+    const hasImages = (images?.length ?? 0) > 0
+    const isValid = (value.trim().length > 0 || hasImages) && !isLoading && !targetUnavailable
 
     const handleFormSubmit = (e: FormEvent) => {
         e.preventDefault()
@@ -151,6 +159,20 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
         }
     }
 
+    const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+        const files = Array.from(e.clipboardData?.files ?? []).filter(file => file.type.startsWith('image/'))
+        if (files.length === 0) return
+        e.preventDefault()
+        onAddImages?.(files)
+    }
+
+    const handlePickFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(e.target.files ?? [])
+        if (files.length > 0) onAddImages?.(files)
+        // Allow re-picking the same file.
+        e.target.value = ''
+    }
+
     return (
         <form
             onSubmit={handleFormSubmit}
@@ -168,11 +190,41 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
                 onRetry={onRetryPage}
                 onOpenWindow={onOpenPageWindow}
             />
+            {images && images.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 px-3 pt-2.5">
+                    {images.map((src, index) => (
+                        <div key={index} className="group/image relative">
+                            <img
+                                src={src}
+                                alt=""
+                                className="h-14 w-14 rounded-lg border border-border/50 object-cover"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => onRemoveImage?.(index)}
+                                aria-label={t('ai.chat.removeImage', { defaultValue: '移除图片' })}
+                                className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-foreground/80 text-background transition-opacity hover:bg-foreground"
+                            >
+                                <X className="h-3 w-3" />
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            )}
+            <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                hidden
+                onChange={handlePickFiles}
+            />
             <ChatInput
                 ref={inputRef}
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
                 onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
                 placeholder={
                     connecting
                         ? t('ai.chat.targetPageConnectingPlaceholder', { defaultValue: '正在连接目标页面…' })
@@ -191,6 +243,16 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
                 keeps send right-aligned on whichever line it lands on. */}
             <div className="flex flex-wrap items-center gap-1 px-2 pb-1.5 pt-0.5">
                 <ModeToggle mode={mode} onModeChange={onModeChange} disabled={isLoading} />
+                <button
+                    type="button"
+                    disabled={isLoading}
+                    onClick={() => fileInputRef.current?.click()}
+                    title={t('ai.chat.attachImage', { defaultValue: '上传图片（模型可直接查看）' })}
+                    aria-label={t('ai.chat.attachImage', { defaultValue: '上传图片（模型可直接查看）' })}
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground disabled:opacity-50 lg:h-7 lg:w-7 lg:rounded-md"
+                >
+                    <ImagePlus className="h-3.5 w-3.5 shrink-0" />
+                </button>
                 <ModelSelector
                     model={model}
                     onModelChange={onModelChange}

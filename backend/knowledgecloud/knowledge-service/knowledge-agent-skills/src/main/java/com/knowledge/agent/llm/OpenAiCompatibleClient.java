@@ -282,7 +282,11 @@ public class OpenAiCompatibleClient implements LlmClient {
                 // DeepSeek API requires the "content" field to be present on all messages.
                 // For assistant messages with tool_calls, content can be null but must
                 // still be included, otherwise the API returns 400 Bad Request.
-                if (msg.getContent() != null) {
+                if (msg.getContentParts() != null && !msg.getContentParts().isEmpty()) {
+                    // Multimodal message (text + images): OpenAI-compatible providers
+                    // expect content to be the array of content parts.
+                    msgNode.set("content", objectMapper.valueToTree(msg.getContentParts()));
+                } else if (msg.getContent() != null) {
                     msgNode.put("content", msg.getContent());
                 } else if ("assistant".equals(msg.getRole()) && msg.getToolCalls() != null) {
                     msgNode.putNull("content");

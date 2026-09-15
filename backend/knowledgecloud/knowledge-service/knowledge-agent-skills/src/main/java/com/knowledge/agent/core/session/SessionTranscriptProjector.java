@@ -57,6 +57,8 @@ public class SessionTranscriptProjector {
     private static final int MAX_MODEL_MESSAGES = 400;
     private static final int MAX_CONTENT_CHARS = 20000;
     private static final int MAX_REASONING_CHARS = 20000;
+    /** Cap on persisted base64 image data per message (chars). */
+    private static final int MAX_IMAGE_PART_CHARS = 4_000_000;
 
     private final ChatSessionStore store;
     private final CheckpointStore checkpointStore;
@@ -218,11 +220,90 @@ public class SessionTranscriptProjector {
         return ChatMessage.builder()
                 .role(message.getRole())
                 .content(truncate(message.getContent(), MAX_CONTENT_CHARS))
+                .contentParts(persistedContentParts(message))
                 .toolCallId(message.getToolCallId())
                 .name(message.getName())
                 .toolCalls(message.getToolCalls())
                 .reasoningContent(truncate(message.getReasoningContent(), MAX_REASONING_CHARS))
                 .build();
+    }
+
+    /**
+     * Content parts persisted in the canonical log. Only user attachments are
+     * kept (so the UI can re-render them and the next run still sees the image);
+     * agent-injected vision turns are skipped upstream. A hard size cap keeps a
+     * pathological upload from bloating {@code model_messages_json}.
+     */
+    private List<Object> persistedContentParts(ChatMessage message) {
+        List<Object> parts = message.getContentParts();
+        if (parts == null || parts.isEmpty() || !"user".equals(role(message))) {
+            return null;
+        }
+        long total = 0;
+        List<Object> kept = new ArrayList<>();
+        for (Object part : parts) {
+            if (part instanceof java.util.Map) {
+                java.util.Map<?, ?> map = (java.util.Map<?, ?>) part;
+                if ("image_url".equals(map.get("type"))) {
+                    String url = imageUrlOf(map);
+                    total += url.length();
+                    if (total > MAX_IMAGE_PART_CHARS) {
+                        continue;
+                    }
+                }
+            }
+            kept.add(part);
+        }
+        return kept.isEmpty() ? null : kept;
+    }
+
+    @SuppressWarnings("unchecked")
+    private String imageUrlOf(java.util.Map<?, ?> part) {
+        Object imageUrl = part.get("image_url");
+        if (imageUrl instanceof java.util.Map) {
+            Object url = ((java.util.Map<String, Object>) imageUrl).get("url");
+            return url == null ? "" : String.valueOf(url);
+        }
+        return "";
+    }
+
+    /** Data URLs of a message's image parts (for the UI projection). */
+    private ArrayNode imageDataUrls(ChatMessage message) {
+        ArrayNode images = objectMapper.createArrayNode();
+        if (message.getContentParts() == null) {
+            return images;
+        }
+        for (Object part : message.getContentParts()) {
+            if (part instanceof java.util.Map
+                    && "image_url".equals(((java.util.Map<?, ?>) part).get("type"))) {
+                String url = imageUrlOf((java.util.Map<?, ?>) part);
+                if (!url.isEmpty()) {
+                    images.add(url);
+                }
+            }
+        }
+        return images;
+    }
+
+    /** Rebuild multimodal parts from a projected `images` array (legacy read). */
+    private List<Object> contentPartsFromUi(JsonNode images) {
+        if (images == null || !images.isArray() || images.size() == 0) {
+            return null;
+        }
+        List<Object> parts = new ArrayList<>();
+        for (JsonNode image : images) {
+            String url = image.asText("");
+            if (url.isEmpty()) {
+                continue;
+            }
+            java.util.Map<String, Object> imageUrl = new java.util.LinkedHashMap<>();
+            imageUrl.put("url", url);
+            java.util.Map<String, Object> part = new java.util.LinkedHashMap<>();
+            part.put("type", "image_url");
+            part.put("image_url", imageUrl);
+            parts.add(part);
+        }
+        return parts.isEmpty() ? null : parts;
     }
 
     private void trim(State state) {
@@ -249,6 +330,10 @@ public class SessionTranscriptProjector {
             if ("user".equals(role)) {
                 ObjectNode node = entry("u-" + UUID.randomUUID(), "user", timestamp);
                 node.put("content", message.getContent() == null ? "" : message.getContent());
+                ArrayNode images = imageDataUrls(message);
+                if (images.size() > 0) {
+                    node.set("images", images);
+                }
                 out.add(node);
                 currentAssistant = null;
             } else if ("assistant".equals(role)) {
@@ -315,7 +400,11 @@ public class SessionTranscriptProjector {
             }
             String sender = node.path("sender").asText();
             if ("user".equals(sender)) {
-                state.add(ChatMessage.builder().role("user").content(node.path("content").asText("")).build());
+                state.add(ChatMessage.builder()
+                        .role("user")
+                        .content(node.path("content").asText(""))
+                        .contentParts(contentPartsFromUi(node.path("images")))
+                        .build());
                 state.setLastTime(timestamp);
                 continue;
             }

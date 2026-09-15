@@ -5,7 +5,12 @@ agent:
   # LLM provider selection (consumed by LlmClientFactory; providers map
   # usually supplied via Nacos / environment config)
   default-provider: deepseek
-  default-model: deepseek-chat
+  default-model: deepseek-v4-fresh
+  # Vision (读图): before the agent sends image content to a model it checks
+  # supportsVision. Mark a multimodal model with vision: true in its
+  # agent.providers.<provider>.models[] entry (well-known names such as
+  # glm-4v / *-vl / gpt-4o are also recognised). A non-vision model gets a
+  # plain-text degradation instead of image parts (which providers would 400).
   # ---- AgentCore runtime (from-0 redesign; replaced the V2 engine config) ----
   run:
     # LLM turns allowed before the run suspends with reason "budget".

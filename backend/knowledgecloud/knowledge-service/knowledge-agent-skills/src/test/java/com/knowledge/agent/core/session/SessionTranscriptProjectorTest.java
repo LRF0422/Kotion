@@ -13,7 +13,9 @@ import org.mockito.ArgumentCaptor;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -140,6 +142,29 @@ class SessionTranscriptProjectorTest {
         run.setParentRunId("parent");
         projector.onRunTerminal(run);
         verify(store, never()).saveTranscript(any(AgentChatSessionEntity.class));
+    }
+
+    @Test
+    void userImageAttachmentIsProjectedAndPersisted() throws Exception {
+        when(store.get(1L, 2L, "conv-1")).thenReturn(null);
+        Map<String, Object> imageUrl = new LinkedHashMap<>();
+        imageUrl.put("url", "data:image/png;base64,AAAA");
+        Map<String, Object> part = new LinkedHashMap<>();
+        part.put("type", "image_url");
+        part.put("image_url", imageUrl);
+        ChatMessage imageMessage = ChatMessage.builder()
+                .role("user")
+                .content("see this")
+                .contentParts(new ArrayList<>(Collections.singletonList(part)))
+                .build();
+
+        projector.prepareHistory(run("run-1"), Collections.singletonList(imageMessage));
+
+        AgentChatSessionEntity saved = captureSaved();
+        JsonNode model = mapper.readTree(saved.getModelMessagesJson());
+        assertEquals(1, model.get(0).path("m").path("contentParts").size());
+        JsonNode ui = mapper.readTree(saved.getMessagesJson());
+        assertEquals("data:image/png;base64,AAAA", ui.get(0).path("images").get(0).asText());
     }
 
     private AgentChatSessionEntity captureSaved() {

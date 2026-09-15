@@ -11,7 +11,28 @@
 
 import type { OnToolExecution, ToolDefinition, ToolsRecord } from '../types'
 import type { SessionPageBinding } from '../session-page-binding'
+import { AGENT_IMAGES_KEY } from '../image/image-attachments'
 import { withDocumentWrite } from './document-write-lock'
+
+/**
+ * The wire result is what the backend needs (base64 included so the model can
+ * see the image); the UI tape must never hold megabytes of base64, so image
+ * payloads are replaced with a small descriptor before the execution callback.
+ */
+function redactAgentImagesForDisplay(value: unknown): unknown {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return value
+    const record = value as Record<string, unknown>
+    const images = record[AGENT_IMAGES_KEY]
+    if (!Array.isArray(images)) return value
+    return {
+        ...record,
+        [AGENT_IMAGES_KEY]: images.map(image => {
+            if (!image || typeof image !== 'object') return image
+            const { data: _data, ...rest } = image as Record<string, unknown>
+            return { ...rest, dataOmitted: true }
+        }),
+    }
+}
 
 export interface ToolExecutionResult {
     ok: boolean
@@ -156,7 +177,8 @@ export class EditorToolExecutor {
             toolName,
             args,
             status: outcome.ok ? 'success' : 'error',
-            result: outcome.result,
+            // Redacted for the UI tape; the full result rides the resume payload.
+            result: redactAgentImagesForDisplay(outcome.result),
             error: outcome.error,
             timestamp: Date.now(),
             duration: Date.now() - started,

@@ -572,11 +572,31 @@ public class AgentLoop implements Runnable {
                     runInput != null ? runInput.threadSummary() : null));
         }
         if (runInput != null && runInput.messages() != null) {
+            // A non-vision model must never receive image parts (the provider
+            // rejects them); drop them up front and keep the text fallback.
+            boolean vision = llmGateway.supportsVision(run.getModel());
             for (ChatMessage message : runInput.messages()) {
                 if (message == null || "system".equalsIgnoreCase(message.getRole())) {
                     continue; // our own system prefix is authoritative
                 }
                 normalizeBlankRole(message);
+                if (!vision && message.getContentParts() != null) {
+                    boolean hadImage = false;
+                    for (Object part : message.getContentParts()) {
+                        if (part instanceof Map
+                                && "image_url".equals(((Map<?, ?>) part).get("type"))) {
+                            hadImage = true;
+                            break;
+                        }
+                    }
+                    message.setContentParts(null);
+                    if (hadImage) {
+                        String note = "（用户发送了图片，但当前模型不支持图片输入，无法查看。）";
+                        message.setContent(message.getContent() == null || message.getContent().isEmpty()
+                                ? note
+                                : message.getContent() + "\n" + note);
+                    }
+                }
                 cp.getMessages().add(message);
             }
         }
@@ -660,11 +680,20 @@ public class AgentLoop implements Runnable {
             } catch (Exception e) {
                 outcome = ToolOutcome.failure(call.getId(), call.getName(), e.getMessage(), 0);
             }
+            List<Map<String, Object>> images = outcome.isOk()
+                    ? extractAgentImages(outcome.getResult())
+                    : java.util.Collections.emptyList();
+            // Never fan image bytes into the event log / SSE: the client already
+            // holds the result it produced, and base64 would bloat Redis + MySQL.
+            Object eventResult = images.isEmpty()
+                    ? boundResult(outcome.getResult())
+                    : imageToolSummary(images);
             emit(RunEvents.TOOL_COMPLETED,
                     RunEvents.toolCompleted(outcome.getCallId(), outcome.getTool(),
-                            outcome.isOk(), boundResult(outcome.getResult()),
+                            outcome.isOk(), eventResult,
                             outcome.getError(), outcome.getDurationMs()));
             checkpoint.getMessages().add(toolMessage(call, outcome));
+            appendImageVisionMessage(images);
             checkpoint.setScratchpad(scratchpad.read());
         }
     }
@@ -769,8 +798,11 @@ public class AgentLoop implements Runnable {
                 // Belongs to a delegated child — route it to the child run.
                 bySub.computeIfAbsent(match.getSubRunId(), k -> new ArrayList<>()).add(item);
             } else {
+                List<Map<String, Object>> images = item.isOk()
+                        ? extractAgentImages(item.getResult())
+                        : java.util.Collections.emptyList();
                 String rendered = item.isOk()
-                        ? renderResult(item.getResult())
+                        ? (images.isEmpty() ? renderResult(item.getResult()) : imageToolSummaryJson(images))
                         : "{\"error\":\"" + escapeJson(item.getError()) + "\"}";
                 checkpoint.getMessages().add(ChatMessage.builder()
                         .role("tool")
@@ -778,10 +810,11 @@ public class AgentLoop implements Runnable {
                         .name(match.getTool())
                         .content(render(rendered))
                         .build());
+                appendImageVisionMessage(images);
             }
             emit(RunEvents.TOOL_COMPLETED,
                     RunEvents.toolCompleted(item.getCallId(), match.getTool(), item.isOk(),
-                            boundResult(item.getResult()), item.getError(), 0, match.getSubRunId()));
+                            imageAwareEventResult(item.getResult()), item.getError(), 0, match.getSubRunId()));
         }
         for (java.util.Map.Entry<String, List<ResumePayload.ToolResultItem>> entry : bySub.entrySet()) {
             delegator.resumeChild(entry.getKey(), entry.getValue());
@@ -1232,15 +1265,142 @@ public class AgentLoop implements Runnable {
     }
 
     private ChatMessage toolMessage(ToolCallRequest call, ToolOutcome outcome) {
-        String content = outcome.isOk()
-                ? renderResult(outcome.getResult())
-                : "{\"error\":\"" + escapeJson(outcome.getError()) + "\"}";
+        List<Map<String, Object>> images = outcome.isOk()
+                ? extractAgentImages(outcome.getResult())
+                : java.util.Collections.emptyList();
+        String content;
+        if (!outcome.isOk()) {
+            content = "{\"error\":\"" + escapeJson(outcome.getError()) + "\"}";
+        } else if (!images.isEmpty()) {
+            // The tool text stays small; the images are attached separately as a
+            // multimodal user turn (see appendImageVisionMessage).
+            content = imageToolSummaryJson(images);
+        } else {
+            content = renderResult(outcome.getResult());
+        }
         return ChatMessage.builder()
                 .role("tool")
                 .toolCallId(call.getId())
                 .name(call.getName())
                 .content(render(content))
                 .build();
+    }
+
+    // ==================== multimodal (vision) tool results ====================
+
+    /** Frontend/backend tool-result key carrying image attachments. */
+    private static final String AGENT_IMAGES_KEY = "__agentImages";
+
+    /** Extract {@code {__agentImages:[{mimeType,data,...}]}} from a tool result. */
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> extractAgentImages(Object result) {
+        if (!(result instanceof Map)) {
+            return java.util.Collections.emptyList();
+        }
+        Object raw = ((Map<String, Object>) result).get(AGENT_IMAGES_KEY);
+        if (!(raw instanceof List)) {
+            return java.util.Collections.emptyList();
+        }
+        List<Map<String, Object>> images = new ArrayList<>();
+        for (Object item : (List<Object>) raw) {
+            if (item instanceof Map) {
+                Map<String, Object> image = (Map<String, Object>) item;
+                if (image.get("data") != null && !String.valueOf(image.get("data")).isEmpty()) {
+                    images.add(image);
+                }
+            }
+        }
+        return images;
+    }
+
+    /** Compact, base64-free representation surfaced in events. */
+    private Map<String, Object> imageToolSummary(List<Map<String, Object>> images) {
+        Map<String, Object> summary = new java.util.LinkedHashMap<>();
+        summary.put("ok", true);
+        summary.put("images", images.size());
+        summary.put("note", "图片已作为视觉输入附加到对话");
+        return summary;
+    }
+
+    private String imageToolSummaryJson(List<Map<String, Object>> images) {
+        return renderResult(imageToolSummary(images));
+    }
+
+    /** Event payload for a tool result: base64 images are replaced by a summary. */
+    private Object imageAwareEventResult(Object result) {
+        List<Map<String, Object>> images = extractAgentImages(result);
+        return images.isEmpty() ? boundResult(result) : imageToolSummary(images);
+    }
+
+    /**
+     * Attach tool-produced images to the conversation as a multimodal user
+     * message so the model's own vision reads them. The images are NOT written
+     * into the tool message (providers only accept images in user content) and
+     * are never interpreted server-side.
+     */
+    private void appendImageVisionMessage(List<Map<String, Object>> images) {
+        if (images == null || images.isEmpty()) {
+            return;
+        }
+        if (!llmGateway.supportsVision(checkpoint.getModel())) {
+            checkpoint.getMessages().add(ChatMessage.builder()
+                    .role("user")
+                    .content("（当前模型 " + checkpoint.getModel()
+                            + " 不支持图片输入，无法查看图片内容；如需读图请切换到支持视觉的模型。）")
+                    .build());
+            return;
+        }
+        List<Object> parts = new ArrayList<>();
+        Map<String, Object> instruction = new java.util.LinkedHashMap<>();
+        instruction.put("type", "text");
+        instruction.put("text", "以下是刚刚读取的图片，请直接查看图片内容后继续任务：");
+        parts.add(instruction);
+        for (Map<String, Object> image : images) {
+            String mimeType = str(image.get("mimeType"));
+            if (mimeType.isEmpty()) {
+                mimeType = "image/png";
+            }
+            String data = str(image.get("data"));
+            if (data.isEmpty()) {
+                continue;
+            }
+            Map<String, Object> imageUrl = new java.util.LinkedHashMap<>();
+            imageUrl.put("url", "data:" + mimeType + ";base64," + data);
+            Map<String, Object> part = new java.util.LinkedHashMap<>();
+            part.put("type", "image_url");
+            part.put("image_url", imageUrl);
+            parts.add(part);
+        }
+        if (parts.size() <= 1) {
+            return;
+        }
+        checkpoint.getMessages().add(ChatMessage.builder()
+                .role("user")
+                .name(TRANSIENT_VISION_NAME)
+                .content("已读取图片")
+                .contentParts(parts)
+                .build());
+    }
+
+    /**
+     * Marker on agent-injected vision turns. Their base64 parts are kept in the
+     * live checkpoint (the model needs them) but stripped before any snapshot is
+     * serialized: a crash loses the image rather than writing megabytes to Redis
+     * and MySQL on every step.
+     */
+    private static final String TRANSIENT_VISION_NAME = "__agent_vision";
+
+    /** Temporarily drop transient vision parts; returns what to restore. */
+    private Map<ChatMessage, List<Object>> stripTransientVisionParts() {
+        Map<ChatMessage, List<Object>> stripped = new HashMap<>();
+        for (ChatMessage message : checkpoint.getMessages()) {
+            if (message != null && TRANSIENT_VISION_NAME.equals(message.getName())
+                    && message.getContentParts() != null) {
+                stripped.put(message, message.getContentParts());
+                message.setContentParts(null);
+            }
+        }
+        return stripped;
     }
 
     private ChatMessage blockedMessage(ToolCallRequest call, String reason) {
@@ -1338,7 +1498,14 @@ public class AgentLoop implements Runnable {
         checkpoint.setPlanGateOpen(run.isPlanGateOpen());
         checkpoint.setToken(run.getToken());
         checkpoint.setSuspendReason(run.getSuspendReason());
-        checkpointStore.save(checkpoint);
+        Map<ChatMessage, List<Object>> transientVision = stripTransientVisionParts();
+        try {
+            checkpointStore.save(checkpoint);
+        } finally {
+            for (Map.Entry<ChatMessage, List<Object>> entry : transientVision.entrySet()) {
+                entry.getKey().setContentParts(entry.getValue());
+            }
+        }
     }
 
     private void emit(String type, Map<String, Object> payload) {

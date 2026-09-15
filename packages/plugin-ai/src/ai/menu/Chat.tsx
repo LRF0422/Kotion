@@ -23,6 +23,9 @@ import {
     useTranslation,
     DOCK_PANEL_RUNNING,
     EDITOR_AGENT_PROMPT,
+    fileToAgentImage,
+    buildImageContentParts,
+    toImageDataUrl,
 } from "@kn/common"
 import type {
     AgentDocumentMergeReport,
@@ -35,6 +38,7 @@ import type {
     ToolCallRecord,
     SessionPageBinding,
     SessionPageBindingPage,
+    AgentImageData,
 } from "@kn/common"
 
 import { PlanApprovalCard } from "@kn/ui"
@@ -551,7 +555,28 @@ export const ExpandableChatDemo: React.FC<{
 
     // ─── Composer state ───────────────────────────────────────────
     const [input, setInput] = useState("")
+    const [pendingImages, setPendingImages] = useState<AgentImageData[]>([])
+    const [imageError, setImageError] = useState<string | null>(null)
     const [error, setError] = useState<ChatError | null>(null)
+
+    const handleAddImages = useCallback(async (files: File[]) => {
+        const images: AgentImageData[] = []
+        for (const file of files) {
+            try {
+                images.push(await fileToAgentImage(file))
+            } catch (err: any) {
+                setImageError(err?.message ?? String(err))
+            }
+        }
+        if (images.length > 0) {
+            setPendingImages(prev => [...prev, ...images])
+            setImageError(null)
+        }
+    }, [])
+
+    const handleRemoveImage = useCallback((index: number) => {
+        setPendingImages(prev => prev.filter((_, i) => i !== index))
+    }, [])
 
     const isActive =
         agent.state.phase === 'creating' ||
@@ -645,10 +670,11 @@ export const ExpandableChatDemo: React.FC<{
     }, [agent, releaseRunTargetPin])
 
     // ─── Submit ───────────────────────────────────────────────────
-    const submitMessage = useCallback(async (messageText: string) => {
+    const submitMessage = useCallback(async (messageText: string, images: AgentImageData[] = []) => {
         const userMessage: Message = {
             id: generateMessageId(),
             content: messageText,
+            images: images.length > 0 ? images.map(toImageDataUrl) : undefined,
             sender: "user",
             timestamp: Date.now(),
         }
@@ -672,8 +698,16 @@ export const ExpandableChatDemo: React.FC<{
             : messageText
 
         // Conversation history is engine-owned (session model log); the client
-        // only sends the new turn.
-        const agentMessages: AgentChatMessage[] = [{ role: 'user', content: prompt }]
+        // only sends the new turn. Images ride as multimodal content parts so
+        // the model's own vision sees them (never interpreted here).
+        const contentParts = images.length > 0
+            ? buildImageContentParts(prompt, images)
+            : undefined
+        const agentMessages: AgentChatMessage[] = [{
+            role: 'user',
+            content: prompt,
+            contentParts,
+        }]
 
         try {
             await agent.start(agentMessages, {
@@ -692,14 +726,16 @@ export const ExpandableChatDemo: React.FC<{
 
     const handleSend = useCallback(() => {
         const text = input.trim()
-        if (!text || isActive || !targetToolsReady) return
+        const images = pendingImages
+        if ((!text && images.length === 0) || isActive || !targetToolsReady) return
         setInput("")
-        submitMessage(text)
+        setPendingImages([])
+        submitMessage(text, images)
         requestAnimationFrame(() => {
             if (composerRef.current) composerRef.current.style.height = 'auto'
             composerRef.current?.focus()
         })
-    }, [input, isActive, targetToolsReady, submitMessage])
+    }, [input, pendingImages, isActive, targetToolsReady, submitMessage])
 
     const handleInputChange = useCallback((value: string) => {
         setInput(value)
@@ -893,7 +929,13 @@ export const ExpandableChatDemo: React.FC<{
                     onOpenPageWindow={handleOpenPageWindow}
                     tracking={tracking}
                     onToggleTracking={handleToggleTracking}
+                    images={pendingImages.map(toImageDataUrl)}
+                    onAddImages={handleAddImages}
+                    onRemoveImage={handleRemoveImage}
                 />
+                {imageError && (
+                    <div className="px-2 pt-1 text-[11px] text-destructive">{imageError}</div>
+                )}
                 <div className="h-safe-bottom lg:hidden" aria-hidden />
             </ExpandableChatFooter>
 
