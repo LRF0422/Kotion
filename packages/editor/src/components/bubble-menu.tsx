@@ -52,6 +52,22 @@ export const BubbleMenu: React.FC<BubbleMenuProps> = ({
     return { ...defaultTippyOptions };
   }, [editor, options]);
 
+  // Node menus stay inside the editor tree (see `nodeAppendTo` below). A
+  // `fixed` strategy there is trapped by transformed ancestors such as the
+  // tab layers (`transform-gpu`), so the menu drifts with scrolling instead of
+  // staying attached to the anchored node. Keep them absolutely positioned so
+  // they scroll together with the editor content; only an explicit caller
+  // strategy overrides this.
+  const nodeTippyOptions = useMemo(() => {
+    const explicitStrategy =
+      options && typeof options === "object" ? options.strategy : undefined;
+
+    return {
+      ...wrapTippyOptions,
+      strategy: explicitStrategy ?? ("absolute" as const)
+    };
+  }, [wrapTippyOptions, options]);
+
   // Render menus at the document root so transformed editor ancestors cannot
   // trap them below body-level overlays such as margin cards.
   const defaultAppendTo = typeof document !== "undefined" ? document.body : undefined;
@@ -78,7 +94,7 @@ export const BubbleMenu: React.FC<BubbleMenuProps> = ({
         className={surfaceClass}
         editor={editor}
         appendTo={nodeAppendTo}
-        options={wrapTippyOptions}
+        options={nodeTippyOptions}
         {...rest}>
         {children}
       </NodeBubbleMenu>
