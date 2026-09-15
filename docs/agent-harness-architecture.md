@@ -1,5 +1,9 @@
 # Agent Harness 架构改造（V2 + 长任务 / 记忆 / 用户画像）
 
+> **历史文档（已废弃）**：本文描述的是被删除的 V2 `AgentJobService` / `V2AgentRuntime` 方案。
+> 当前实现是 `com.knowledge.agent.core.*`（AgentCore），设计见 `docs/agent-redesign.md`。
+> 保留本文仅作演进记录。
+
 ## 1. 背景与审计结论
 
 后端 `knowledge-agent-skills` 已有一套接近现代 harness 的 V2 引擎骨架，改造不是推倒重来，而是补齐三类缺失能力并接通前端 skills/tools 契约的剩余连线。

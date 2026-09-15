@@ -87,6 +87,8 @@ export interface SubRunRecord {
      */
     text?: string
     reasoning?: string
+    /** The child's own token usage, reported when it settles. */
+    usage?: RunUsage
     /** Private-document merge outcome, once the child settled. */
     merge?: {
         applied: number
@@ -481,15 +483,22 @@ function applyEvent(state: EditorAgentState, event: AgentEvent): EditorAgentStat
                 ],
             }
         }
-        case 'sub.completed':
+        case 'sub.completed': {
+            const usage = (event.result as { usage?: RunUsage } | null | undefined)?.usage
             return {
                 ...next,
                 subRuns: next.subRuns.map(sub =>
                     sub.subRunId === event.subRunId
-                        ? { ...sub, status: event.ok ? 'completed' : 'failed', result: event.result }
+                        ? {
+                            ...sub,
+                            status: event.ok ? 'completed' : 'failed',
+                            result: event.result,
+                            usage: usage ?? sub.usage,
+                        }
                         : sub
                 ),
             }
+        }
         case 'sub.failed':
             return {
                 ...next,
@@ -728,7 +737,15 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
                 call => call.subRunId === sub.subRunId && call.status === 'running'
             )
             if (stillRunning) continue
-            subRunWorker.detach(sub.subRunId)
+            // Pass the real settlement so the worker's onSettled performs the
+            // merge/discard with the correct commit flag. Detaching as
+            // 'detached' here raced the worker and could discard a completed
+            // child's private-document merge.
+            subRunWorker.detach(
+                sub.subRunId,
+                sub.status === 'completed' ? 'completed'
+                    : sub.status === 'failed' ? 'failed' : 'cancelled'
+            )
             releaseOwnerTarget(sub.subRunId, { commit: sub.status === 'completed' })
         }
     }, [state.subRuns, state.toolCalls, releaseOwnerTarget, subRunWorker])
@@ -1212,6 +1229,9 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
                     })
                     startStream(view.runId, 0, generation)
                     attachRetryAttemptRef.current = 0
+                    // Terminal run: drop the saved handle so a remount does not
+                    // re-attach (and re-replay) the same finished run forever.
+                    if (persist) store.clear(conversationId)
                     return true
                 }
                 if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current)
@@ -1220,15 +1240,32 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
                 reconnectAttemptRef.current = 0
                 attachRetryAttemptRef.current = 0
                 const generation = ++generationRef.current
-                attachReplayThroughRef.current = Math.max(view.lastSeq, view.replayThroughSeq)
-                dispatch({
-                    type: 'run-created',
-                    runId: view.runId,
-                    lastSeq: 0,
-                    text: '',
-                    phase: 'streaming',
-                })
-                startStream(view.runId, 0, generation)
+                // An actively streaming run can be re-attached from the durable
+                // watermark with the accumulated text, avoiding a full replay of
+                // the event log (and its re-render). Paused runs need the
+                // run.suspended/plan.proposed events to rebuild their state, so
+                // they still replay from 0.
+                if (view.status === 'RUNNING' && view.lastSeq > 0) {
+                    attachReplayThroughRef.current = view.lastSeq
+                    dispatch({
+                        type: 'run-created',
+                        runId: view.runId,
+                        lastSeq: view.lastSeq,
+                        text: view.assistantText ?? '',
+                        phase: 'streaming',
+                    })
+                    startStream(view.runId, view.lastSeq, generation)
+                } else {
+                    attachReplayThroughRef.current = Math.max(view.lastSeq, view.replayThroughSeq)
+                    dispatch({
+                        type: 'run-created',
+                        runId: view.runId,
+                        lastSeq: 0,
+                        text: '',
+                        phase: 'streaming',
+                    })
+                    startStream(view.runId, 0, generation)
+                }
                 return true
             } catch (error: any) {
                 if (acquiredClaim) lock.release(acquiredClaim)

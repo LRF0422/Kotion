@@ -10,6 +10,10 @@ import com.knowledge.agent.core.config.AgentCoreProperties;
 import com.knowledge.agent.core.llm.LlmGateway;
 import com.knowledge.agent.core.llm.LlmInferRequest;
 import com.knowledge.agent.core.llm.LlmResult;
+import com.knowledge.agent.core.run.AgentRun;
+import com.knowledge.agent.core.run.RunStore;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -20,6 +24,7 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 /** Compiles a sanitized conversation projection into a validated saved skill. */
+@Slf4j
 @Component
 public class SavedSkillCompiler {
 
@@ -34,6 +39,14 @@ public class SavedSkillCompiler {
     private final AgentCoreProperties properties;
     private final SecretRedactor redactor;
 
+    /** Optional (tests); when present, compiler token usage is billed to the run. */
+    private RunStore runStore;
+
+    @Autowired(required = false)
+    public void setRunStore(RunStore runStore) {
+        this.runStore = runStore;
+    }
+
     public SavedSkillCompiler(LlmGateway llmGateway, ObjectMapper objectMapper,
                               AgentCoreProperties properties, SecretRedactor redactor) {
         this.llmGateway = llmGateway;
@@ -44,7 +57,35 @@ public class SavedSkillCompiler {
         this.redactor = redactor;
     }
 
+    private void accountUsage(String sourceRunId, LlmResult result) {
+        if (runStore == null || sourceRunId == null || result == null) {
+            return;
+        }
+        if (result.getPromptTokens() <= 0 && result.getCompletionTokens() <= 0) {
+            return;
+        }
+        try {
+            AgentRun run = runStore.load(sourceRunId);
+            if (run == null) {
+                return;
+            }
+            run.setPromptTokens(run.getPromptTokens() + result.getPromptTokens());
+            run.setCompletionTokens(run.getCompletionTokens() + result.getCompletionTokens());
+            run.setCachedPromptTokens(run.getCachedPromptTokens() + result.getCachedPromptTokens());
+            run.touch();
+            runStore.persist(run);
+            runStore.saveHot(run);
+        } catch (Exception e) {
+            log.warn("Saved-skill compile usage accounting failed for {}: {}", sourceRunId, e.getMessage());
+        }
+    }
+
     public SavedSkillDraft compile(String sourceModel, String transcript, Set<String> allowedToolNames) {
+        return compile(sourceModel, transcript, allowedToolNames, null);
+    }
+
+    public SavedSkillDraft compile(String sourceModel, String transcript, Set<String> allowedToolNames,
+                                   String sourceRunId) {
         if (transcript == null || transcript.trim().isEmpty()) {
             throw new IllegalArgumentException("EMPTY_SKILL_TRANSCRIPT");
         }
@@ -71,6 +112,7 @@ public class SavedSkillCompiler {
                 .temperature(0.0)
                 .maxTokens(clamp(config.getCompileMaxTokens(), 256, 4096))
                 .build());
+        accountUsage(sourceRunId, result);
         return parseAndValidate(result != null ? result.getText() : null,
                 new LinkedHashSet<>(tools));
     }
@@ -82,6 +124,11 @@ public class SavedSkillCompiler {
      */
     public SavedSkillDraft compileUpdate(SavedSkill existing, String sourceModel, String transcript,
                                          Set<String> allowedToolNames) {
+        return compileUpdate(existing, sourceModel, transcript, allowedToolNames, null);
+    }
+
+    public SavedSkillDraft compileUpdate(SavedSkill existing, String sourceModel, String transcript,
+                                         Set<String> allowedToolNames, String sourceRunId) {
         if (existing == null || existing.getSkillId() == null
                 || existing.getSkillId().trim().isEmpty()) {
             throw new IllegalArgumentException("SKILL_COMPILER_UPDATE_TARGET_REQUIRED");
@@ -113,6 +160,7 @@ public class SavedSkillCompiler {
                 .temperature(0.0)
                 .maxTokens(clamp(config.getCompileMaxTokens(), 256, 4096))
                 .build());
+        accountUsage(sourceRunId, result);
         return parseAndValidate(result != null ? result.getText() : null,
                 new LinkedHashSet<>(tools));
     }

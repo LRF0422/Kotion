@@ -59,12 +59,12 @@ public class AgentRunEntity implements Serializable {
     /** Highest durably-logged event seq. */
     private Long lastSeq;
 
-    private Integer promptTokens;
+    private Long promptTokens;
 
-    private Integer completionTokens;
+    private Long completionTokens;
 
     /** Prompt tokens served from the provider's context cache. */
-    private Integer cachedPromptTokens;
+    private Long cachedPromptTokens;
 
     private Long createTime;
 

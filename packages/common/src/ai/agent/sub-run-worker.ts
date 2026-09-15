@@ -220,6 +220,12 @@ export class SubRunWorker {
                 state.knownCalls.set(event.callId, { tool: event.tool, args: safeParse(event.args) })
                 if (!state.queue.includes(event.callId)) state.queue.push(event.callId)
                 break
+            case 'sub.spawned':
+                // Nested delegation: grandchildren are ordinary child runs on
+                // the backend, but the client must drive them too or their
+                // frontend tools never execute (they would stall until timeout).
+                this.attach(event.subRunId)
+                break
             case 'run.suspended': {
                 if (event.reason === 'waiting_tools') {
                     const ids = event.pendingCallIds ?? [...state.knownCalls.keys()]
@@ -262,8 +268,21 @@ export class SubRunWorker {
         state.queue = []
         await this.ensureCallsKnown(state, ids)
 
+        // A re-attached child replays its whole log from seq 0, which includes
+        // HISTORICAL run.suspended events. Only execute calls the child still
+        // considers pending, otherwise an old editor mutation is repeated.
+        const currentPending = await this.fetchPendingCallIds(state)
+        const pendingIds = currentPending
+            ? ids.filter(callId => currentPending.has(callId))
+            : ids
+        if (pendingIds.length === 0) {
+            // Nothing actually outstanding: keep streaming instead of sending a
+            // stale resume.
+            return
+        }
+
         const toolResults: Array<{ callId: string; ok: boolean; result?: unknown; error?: string }> = []
-        for (const callId of ids) {
+        for (const callId of pendingIds) {
             if (state.settled || this.stopped) return
             const call = state.knownCalls.get(callId)
             if (!call || !call.tool) {
@@ -276,6 +295,19 @@ export class SubRunWorker {
         }
         if (state.settled || this.stopped) return
         state.resumePayload = { action: 'tool_results', toolResults }
+    }
+
+    /**
+     * The child's currently outstanding frontend calls, per the server. Used to
+     * prune historical (already answered) calls replayed from seq 0.
+     */
+    private async fetchPendingCallIds(state: ChildState): Promise<Set<string> | null> {
+        try {
+            const view = await this.client.getRun(state.runId)
+            return new Set((view.pendingTools ?? []).map(pending => pending.callId))
+        } catch {
+            return null
+        }
     }
 
     /** Re-attached children: fetch outstanding calls from the run view. */

@@ -74,8 +74,8 @@ public interface AgentChatSessionMapper extends BaseMapper<AgentChatSessionEntit
     void upsertTranscript(AgentChatSessionEntity entity);
 
     /** Explicit user "clear chat": reset the projected transcript. */
-    @Update("UPDATE agent_chat_session SET messages_json = '[]', message_count = 0, "
-            + "source_run_id = NULL, as_of_seq = 0, update_time = #{updateTime} "
+    @Update("UPDATE agent_chat_session SET messages_json = '[]', model_messages_json = NULL, "
+            + "message_count = 0, source_run_id = NULL, as_of_seq = 0, update_time = #{updateTime} "
             + "WHERE tenant_id = #{tenantId} AND user_id = #{userId} AND session_id = #{sessionId}")
     int clearTranscript(@Param("tenantId") Long tenantId,
                         @Param("userId") Long userId,

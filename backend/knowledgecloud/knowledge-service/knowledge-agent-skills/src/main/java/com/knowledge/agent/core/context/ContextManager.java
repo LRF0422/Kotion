@@ -2,13 +2,19 @@ package com.knowledge.agent.core.context;
 
 import com.knowledge.agent.api.dto.ChatMessage;
 import com.knowledge.agent.core.config.AgentCoreProperties;
+import com.knowledge.agent.core.llm.LlmGateway;
+import com.knowledge.agent.core.llm.LlmInferRequest;
+import com.knowledge.agent.core.llm.LlmResult;
 import com.knowledge.agent.core.run.AgentRun;
 import com.knowledge.agent.core.tool.ToolSpec;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Context assembly for the loop — builds the stable system prefix (base prompt
@@ -24,12 +30,26 @@ public class ContextManager {
 
     private final AgentCoreProperties properties;
 
+    /** Optional: enables the L2 summary tier. Absent in pure unit tests. */
+    private LlmGateway llmGateway;
+
+    /** Bounded cache so an unchanged middle segment is summarized once. */
+    private final Map<String, String> summaryCache = new ConcurrentHashMap<>();
+
     public ContextManager() {
         this.properties = null; // test-only fallback
     }
 
+    // @Autowired on the only production constructor: without it Spring would
+    // pick the no-arg constructor and silently ignore agent.context.* config.
+    @Autowired
     public ContextManager(AgentCoreProperties properties) {
         this.properties = properties;
+    }
+
+    @Autowired(required = false)
+    public void setLlmGateway(LlmGateway llmGateway) {
+        this.llmGateway = llmGateway;
     }
 
     private AgentCoreProperties.Context ctx() {
@@ -224,6 +244,10 @@ public class ContextManager {
      * prefix stays stable between steps.
      */
     public List<ChatMessage> assemble(List<ChatMessage> checkpointMessages) {
+        return assemble(checkpointMessages, null);
+    }
+
+    public List<ChatMessage> assemble(List<ChatMessage> checkpointMessages, String model) {
         if (checkpointMessages == null || checkpointMessages.isEmpty()) {
             return new ArrayList<>();
         }
@@ -310,13 +334,25 @@ public class ContextManager {
             }
         }
 
-        // ─── L3: Drop oldest non-system messages if still over budget ─
+        // ─── L2b: summarize the middle segment with an independent model ─
         long estimated = estimateTokens(messages, 0);
+        long compactThreshold = (long) (maxTokens * config.getCompactionThreshold());
+        if (estimated > compactThreshold) {
+            messages = summarizeMiddle(messages, keepRecent, config, model);
+            estimated = estimateTokens(messages, 0);
+        }
+
+        // ─── L3: Drop oldest non-system messages if still over budget ─
         long budget = (long) (maxTokens * 0.9); // leave 10% headroom for tool schemas
         if (estimated > budget && messages.size() > keepRecent + 1) {
             // Drop from index 1 forward (skip system) until within budget,
-            // but always preserve the last keepRecent messages.
+            // but always preserve the last keepRecent messages. Move the
+            // boundary past leading tool messages so the kept tail never starts
+            // with an orphan tool result (provider 400 / lost pairing).
             int dropEnd = messages.size() - keepRecent;
+            while (dropEnd < messages.size() && "tool".equals(roleOf(messages.get(dropEnd)))) {
+                dropEnd++;
+            }
             List<ChatMessage> compacted = new ArrayList<>();
             compacted.add(messages.get(0)); // system prefix
             // Add a summary placeholder so the model knows history was trimmed.
@@ -334,6 +370,90 @@ public class ContextManager {
         }
 
         return messages;
+    }
+
+    /**
+     * L2: replace the middle segment with an LLM summary, keeping the stable
+     * system prefix and the most recent turns verbatim. Fail-open: any error
+     * leaves the messages untouched so L3 can still bound the request.
+     */
+    private List<ChatMessage> summarizeMiddle(List<ChatMessage> messages, int keepRecent,
+                                              AgentCoreProperties.Context config, String model) {
+        if (llmGateway == null || messages.size() <= keepRecent + 2) {
+            return messages;
+        }
+        int middleStart = 1;
+        while (middleStart < messages.size() && "tool".equals(roleOf(messages.get(middleStart)))) {
+            middleStart++;
+        }
+        int middleEnd = messages.size() - keepRecent;
+        while (middleEnd > middleStart && "tool".equals(roleOf(messages.get(middleEnd)))) {
+            middleEnd++;
+        }
+        if (middleEnd - middleStart < 4) {
+            return messages;
+        }
+        int maxChars = Math.max(2000, config.getSummaryPromptMaxChars());
+        StringBuilder segment = new StringBuilder();
+        for (int i = middleStart; i < middleEnd && segment.length() < maxChars; i++) {
+            ChatMessage message = messages.get(i);
+            String content = message.getContent() == null ? "" : message.getContent();
+            if (content.length() > 2000) {
+                content = content.substring(0, 2000) + "…";
+            }
+            segment.append(roleOf(message)).append(": ").append(content).append('\n');
+        }
+        if (segment.length() == 0) {
+            return messages;
+        }
+        String cacheKey = Integer.toHexString(segment.toString().hashCode());
+        String summary = summaryCache.get(cacheKey);
+        if (summary == null) {
+            String resolvedModel = config.getCompactionModel() != null
+                    && !config.getCompactionModel().trim().isEmpty()
+                    ? config.getCompactionModel().trim() : model;
+            try {
+                LlmInferRequest request = LlmInferRequest.builder()
+                        .model(resolvedModel)
+                        .messages(java.util.Arrays.asList(ChatMessage.builder()
+                                .role("user")
+                                .content("请把下面这段 agent 对话压缩成简短要点，只保留与后续任务相关的事实、"
+                                        + "已完成的动作和未决事项，不要寒暄：\n\n" + segment)
+                                .build()))
+                        .temperature(properties != null ? properties.getLlm().getPlanningTemperature() : 0.0)
+                        .maxTokens(config.getSummaryMaxTokens())
+                        .build();
+                LlmResult result = llmGateway.infer(request);
+                summary = result != null && result.getText() != null ? result.getText().trim() : "";
+            } catch (Exception e) {
+                log.warn("Context L2 summarize failed: {}", e.getMessage());
+                return messages;
+            }
+            if (summary.isEmpty()) {
+                return messages;
+            }
+            if (summaryCache.size() > 64) {
+                summaryCache.clear();
+            }
+            summaryCache.put(cacheKey, summary);
+        }
+        if (summary.isEmpty()) {
+            return messages;
+        }
+        List<ChatMessage> compacted = new ArrayList<>();
+        for (int i = 0; i < middleStart; i++) {
+            compacted.add(messages.get(i));
+        }
+        compacted.add(ChatMessage.builder().role("system")
+                .content("[较早对话摘要（L2 压缩）]\n" + summary).build());
+        for (int i = middleEnd; i < messages.size(); i++) {
+            compacted.add(messages.get(i));
+        }
+        return compacted;
+    }
+
+    private String roleOf(ChatMessage message) {
+        return message.getRole() == null ? "" : message.getRole().toLowerCase(java.util.Locale.ROOT);
     }
 
     private String contentPrefix(String value) {

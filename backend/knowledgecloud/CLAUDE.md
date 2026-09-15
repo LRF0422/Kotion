@@ -83,13 +83,15 @@ make clean
 
 - **Run（一次执行单元）**：状态机 QUEUED→RUNNING⇄WAITING_TOOLS/SUSPENDED→COMPLETED|FAILED|CANCELLED；
   supervisor 负责生命周期/租约/配额，loop（同步驱动、每 run 一线程）负责执行。
-- **断点恢复**：事件先落 Redis ZSET 再推流（MySQL `agent_run_event` 异步镜像）；
-  `agent_run_checkpoint` 每轮推理前落快照；租约过期后 reconcile 从快照+事件日志重建 loop。
+- **断点恢复**：事件先落 Redis ZSET 再推流（Redis 失败时同步写 MySQL 冷层兜底，保证"先落盘"）；
+  MySQL `agent_run_event` 异步镜像 + `event.retention-days` 保留清理；`agent_run_checkpoint` 每轮推理前落快照，
+  hot/cold 取较新者；租约过期后 reconcile 从快照+事件日志重建 loop。
 - **记忆三层**：工作记忆（checkpoint 内 scratchpad + 工具）、会话记忆（`agent_thread` 摘要，
   ThreadSummarizer 完成时异步生成）、长期记忆（`agent_long_memory`，页面/空间/用户分级 scope，
   KeywordMemoryRetriever 打分，MemoryRetriever 接口预留 embedding）。
-- **子 agent**：`delegate` 工具 → 子 run（parent_run_id 关联、独立预算/事件日志）；父 loop 转发子任务的
-  tool.requested（带 subRunId）给客户端并路由结果；sub.spawned/sub.completed/sub.failed 进父日志；取消级联。
+- **子 agent**：`delegate` 工具 → 子 run（parent_run_id 关联、独立预算/事件日志；继承父系统提示/技能片段/记忆/采样参数，
+  受租户配额与 `run.max-children-per-run` 上限）；子 run 在独立执行器上自驱，前端 `SubRunWorker` 直接流式并执行其前端工具
+  （支持嵌套孙 run）；父日志只有 sub.spawned/sub.completed/sub.failed；取消递归级联。
 - **Plan 模式**：read-only 工具门禁 + `present_plan` 拦截 → plan.proposed + suspend(plan_approval)。
 - **API**：`/api/agent/v1/**`（EditorAgentController，SSE 事件协议 {seq,type,...}）；管理端
   `/admin/ai/**` 用量聚合改读 `agent_run`；模型列表 `/api/v1/models` 不变；远程技能注册

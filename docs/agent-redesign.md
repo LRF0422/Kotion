@@ -79,7 +79,7 @@ loop(run):
 1. **事件日志先行**：`agent:run:events:{runId}` Redis ZSET(score=seq, TTL 24h) + MySQL `agent_run_event`
    冷层（永久镜像）；回放按 `(runId, seq)` 索引，与进程内存无关。
 2. **全量快照**：快照包含 pendingToolCalls（重启后「在等什么」不丢失）；每轮推理前 + 挂起 + 结束时落盘；
-   Redis 存最新，MySQL 按 seq upsert 保留最新一份（可选保留每第 5 步一份）。
+   Redis 存最新，MySQL 按 seq/更新时间取较新者（每 run 保留最新一份）。
 3. **可重建执行器**：租约过期且状态为 RUNNING/WAITING_TOOLS 时 reconcile：加载快照 + 续接 seq，
    从断点继续（不重复推理、不重复执行已完成工具）。
 4. **幂等 resume**：按 callId 去重；重试提交不破坏工具消息配对；WAITING_TOOLS 超时（默认 10 分钟）→ FAILED(tool_timeout)。
@@ -123,13 +123,13 @@ loop(run):
 
 ## 5. 子 agent（Delegator）
 
-- 工具：`delegate`，参数 `{ task, tools?(客户端工具子集), mode?, maxSteps?, timeoutSec? }`。
+- 工具：`delegate`，参数 `{ task, tools?(客户端工具子集), maxSteps?, timeoutSec? }`。
 - 实现：子 run = 普通 Run（parentRunId 关联、继承用户/租户/会话、独立预算与事件日志）。
-  父 loop 阻塞等待子 run 终态（CompletableFuture 注册到 Supervisor，超时默认 600s）。
-- 事件：父日志追加 `sub.spawned` / `sub.completed(result)` / `sub.failed(error)`；
-  子 run 的完整事件日志通过 `GET /runs/{subRunId}/events` 按需下钻（UI 子任务树点开查看）。
-- 并发：一轮内多个 delegate 调用并行执行（受 maxParallel 限制）。
-- 深度：maxDelegateDepth（默认 3），超出拒绝。取消级联：父 cancel → 子递归 cancel。
+  父 loop 阻塞轮询子 run 的事件订阅直到终态（超时默认 600s）。
+- 事件：父日志只追加 `sub.spawned` / `sub.completed(result)` / `sub.failed(error)`；子 run 的文本/工具事件只在自己
+  的日志里，前端 `SubRunWorker` 直接流式并驱动子 run（含嵌套孙 run），父日志不再转发子工具调用。
+- 并发：同一父 run 的子 run 数量受 `run.max-children-per-run`（默认 16）限制；后端工具并行受 `tool.max-parallel` 限制。
+- 深度：maxDelegateDepth（默认 2），超出拒绝。取消级联：父 cancel → 子递归 cancel（父已终态时仍级联子 run）。
 
 ## 6. 工具网关（ToolGateway）
 
@@ -314,16 +314,17 @@ agent/
 ### 14.3 与设计稿的偏差（有意简化/增强）
 
 1. **会话表更名 agent_thread**（旧 agent_conversation 表名被 V1 占用），JSON 契约仍用 conversationId。
-2. **子任务工具协议**：child 的 tool.requested 由父 loop 转发到父事件日志（附 subRunId），
-   客户端一次 resume 同时携带父子工具结果，loop 按 PendingToolCall.subRunId 路由回子 run；
-   checkpoint 中 PendingToolCall 增加 subRunId/delegateCallId 字段支撑崩溃恢复。
+2. **子任务工具协议（已被 §16 真并行取代）**：历史上 child 的 tool.requested 曾由父 loop 转发到父日志；
+   现在子 run 自驱，父日志只有 sub.* 生命周期事件，客户端按子 run id 直接 resume。
 3. **checkpoint 只保留最新一份**（uk(run_id) 而非 (run_id,seq) 多版本）——恢复只需要最新快照。
 4. **noTools 纯文本模式**：create 请求可传 noTools=true，模型不挂任何工具（供 inline 文本流使用）。
 5. **present_plan 仅在 mode=plan 时拦截**；execute 模式下它作为普通后端工具返回。
-6. **run 增加 space_id/page_id 列**（编辑器作用域，记忆分级用）；JWT token 只存热状态与快照，不落 MySQL。
+6. **run 增加 space_id/page_id 列**（编辑器作用域，记忆分级用）；JWT token 只存 Redis 热状态，
+   checkpoint 以 `@JsonIgnore` 排除，不落 MySQL。
 7. 管理端用量聚合改读 agent_run（agent_usage_record 表废弃）；custom agent 定义（agent_definition）整体移除，
    自定义 agent 能力由 skills 系统承接。
-8. 上下文压缩（L1 淘汰/L2 摘要/L3 截断）接口已就位（ContextManager），具体压缩策略留待下一步迭代。
+8. 上下文压缩三层全部启用（ContextManager）：L1 淘汰旧工具结果、L2 用 `context.compaction-model`
+   （缺省跟随 run 模型）对中段做有界摘要、L3 对齐 tool 分组后截断。
 
 ### 14.4 验证
 

@@ -18,6 +18,7 @@ import com.knowledge.agent.core.llm.LlmResult;
 import com.knowledge.agent.core.llm.ToolCallRequest;
 import com.knowledge.agent.core.run.AgentRun;
 import com.knowledge.agent.core.run.PendingToolCall;
+import com.knowledge.agent.core.run.RunCancelFlag;
 import com.knowledge.agent.core.run.RunStatus;
 import com.knowledge.agent.core.run.RunStore;
 import com.knowledge.agent.core.savedskill.SavedSkillProvenance;
@@ -76,6 +77,15 @@ public class AgentLoop implements Runnable {
         }
 
         List<String> skillFragments();
+
+        /**
+         * Extra client system-prompt text (editor rules) appended after the
+         * base prompt. Must reach the model on root runs too — historically it
+         * was only merged for child runs, silently dropping the editor rules.
+         */
+        default String systemPrompt() {
+            return null;
+        }
 
         List<String> memoryLines();
 
@@ -143,6 +153,16 @@ public class AgentLoop implements Runnable {
     /** Gate the supervisor uses to deliver resume payloads / cancel. */
     private final ResumeGate gate;
 
+    /** Cross-instance cancel marker (cancel may arrive on a non-owning node). */
+    private final RunCancelFlag cancelFlag;
+
+    /** Throttle for the external-cancel Redis lookup. */
+    private static final long EXTERNAL_CANCEL_POLL_MS = 2000L;
+
+    private volatile long lastExternalCancelCheckMs;
+
+    private volatile boolean externallyCancelled;
+
     private final Map<String, ToolSpec> clientToolSpecs = new HashMap<>();
 
     /**
@@ -168,7 +188,8 @@ public class AgentLoop implements Runnable {
                      RunStore runStore, CheckpointStore checkpointStore, RunEventLog eventLog,
                      LlmGateway llmGateway, ToolGateway toolGateway, ContextManager contextManager,
                      Delegator delegator, ObjectMapper objectMapper, AgentCoreProperties properties,
-                     ExecutorService toolExecutor, ExitCallback exitCallback, ResumeGate gate) {
+                     ExecutorService toolExecutor, ExitCallback exitCallback, ResumeGate gate,
+                     RunCancelFlag cancelFlag) {
         this.run = run;
         this.checkpoint = checkpoint;
         this.runInput = runInput;
@@ -184,6 +205,7 @@ public class AgentLoop implements Runnable {
         this.toolExecutor = toolExecutor;
         this.exitCallback = exitCallback;
         this.gate = gate;
+        this.cancelFlag = cancelFlag;
         if (runInput != null && runInput.clientTools() != null) {
             for (ToolSpec spec : runInput.clientTools()) {
                 if (spec != null && spec.getName() != null) {
@@ -224,7 +246,35 @@ public class AgentLoop implements Runnable {
     }
 
     public boolean isCancelled() {
-        return cancelRequested;
+        if (cancelRequested) {
+            return true;
+        }
+        return checkExternalCancel();
+    }
+
+    /**
+     * Detect a cancellation published by another instance. Throttled so the
+     * per-token sink does not hit Redis on every chunk.
+     */
+    private boolean checkExternalCancel() {
+        if (externallyCancelled) {
+            return true;
+        }
+        if (cancelFlag == null || run == null || run.getRunId() == null) {
+            return false;
+        }
+        long now = System.currentTimeMillis();
+        if (now - lastExternalCancelCheckMs < EXTERNAL_CANCEL_POLL_MS) {
+            return false;
+        }
+        lastExternalCancelCheckMs = now;
+        if (cancelFlag.isMarked(run.getRunId())) {
+            externallyCancelled = true;
+            cancelRequested = true;
+            gate.cancel();
+            return true;
+        }
+        return false;
     }
 
     public AgentRun getRun() {
@@ -244,6 +294,11 @@ public class AgentLoop implements Runnable {
                 // Recovery: rebuild working memory + accumulated text.
                 run.setAssistantText(checkpoint.getAssistantText() != null ? checkpoint.getAssistantText() : "");
                 scratchpad.write(checkpoint.getScratchpad());
+                // Plan approval survives a crash: the gate is only hot state,
+                // so an approved plan must be restored from the checkpoint or
+                // every write tool would be re-blocked as PLAN_MODE_BLOCKED.
+                run.setPlanGateOpen(checkpoint.isPlanGateOpen());
+                run.setNextStep(checkpoint.getNextStep());
             }
 
             RunStatus status = run.statusEnum();
@@ -278,7 +333,7 @@ public class AgentLoop implements Runnable {
 
             // Bounded auto-continue counter for turns truncated by the token limit.
             int truncationContinues = 0;
-            while (!cancelRequested && !run.statusEnum().isTerminal()) {
+            while (!isCancelled() && !run.statusEnum().isTerminal()) {
                 run.setStatus(RunStatus.RUNNING.name());
                 run.touch();
                 persist();
@@ -286,7 +341,8 @@ public class AgentLoop implements Runnable {
                 saveCheckpoint(); // safe boundary BEFORE inference
                 emit(RunEvents.STEP_STARTED, RunEvents.stepStarted(checkpoint.getNextStep()));
 
-                List<ChatMessage> messages = contextManager.assemble(checkpoint.getMessages());
+                List<ChatMessage> messages = contextManager.assemble(checkpoint.getMessages(),
+                        checkpoint.getModel());
                 int toolCount = clientToolSpecs.size() + toolGateway.backendSpecs().size();
                 long estimatedTokens = contextManager.estimateTokens(messages, toolCount);
                 if (estimatedTokens > properties.getContext().getMaxContextTokens() * 1.5) {
@@ -413,6 +469,13 @@ public class AgentLoop implements Runnable {
 
                 executeBackend(backendCalls);
 
+                // Cancellation may have arrived during a long backend tool batch;
+                // never pause/suspend after a terminal cancel (that resurrects the
+                // run and reconcile re-drives it).
+                if (isCancelled()) {
+                    return;
+                }
+
                 if (!planCalls.isEmpty()) {
                     if (!planApprovalFlow(planCalls)) {
                         return;
@@ -443,12 +506,12 @@ public class AgentLoop implements Runnable {
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            if (!cancelRequested) {
+            if (!isCancelled()) {
                 fail("interrupted", "loop interrupted: " + e.getMessage());
             }
         } catch (Exception e) {
             log.error("AgentLoop crashed for run {}", run.getRunId(), e);
-            if (!cancelRequested && !run.statusEnum().isTerminal()) {
+            if (!isCancelled() && !run.statusEnum().isTerminal()) {
                 // A stalled provider stream is a distinct, self-describing
                 // terminal state so the UI can show "模型响应超时" instead of
                 // a generic loop error.
@@ -475,9 +538,25 @@ public class AgentLoop implements Runnable {
         cp.setNextStep(1);
         cp.setPlanGateOpen(run.isPlanGateOpen());
         cp.setToken(run.getToken());
+        // Merge skill fragments with the client-supplied system prompt. The
+        // client prompt (editor rules) must reach the model on ROOT runs too —
+        // it used to be merged only for children, silently dropping it here.
+        List<String> fragments = new ArrayList<>();
+        if (runInput != null && runInput.skillFragments() != null) {
+            fragments.addAll(runInput.skillFragments());
+        }
+        if (runInput != null && runInput.systemPrompt() != null
+                && !runInput.systemPrompt().trim().isEmpty()) {
+            fragments.add(runInput.systemPrompt().trim());
+        }
+        List<String> memoryLines = runInput != null && runInput.memoryLines() != null
+                ? new ArrayList<>(runInput.memoryLines()) : new ArrayList<>();
+        cp.setSkillFragments(fragments);
+        cp.setMemoryLines(memoryLines);
+        cp.setSystemPrompt(runInput != null ? runInput.systemPrompt() : null);
         cp.getMessages().add(contextManager.buildSystemMessage(run,
-                runInput != null ? runInput.skillFragments() : null,
-                runInput != null ? runInput.memoryLines() : null,
+                fragments,
+                memoryLines,
                 new ArrayList<>(deferredToolSpecs.values()),
                 runInput != null ? runInput.threadSummary() : null));
         if (runInput != null && runInput.messages() != null) {
@@ -517,8 +596,23 @@ public class AgentLoop implements Runnable {
                 RunEvents.toolCompleted(call.getId(), call.getName(), false, null, error, 0));
     }
 
-    /** Executes backend tool calls in parallel, bounded by the executor. */
+    /**
+     * Executes backend tool calls in bounded parallel batches. The per-step
+     * concurrency limit is {@code agent.tool.max-parallel} (previously declared
+     * but never enforced).
+     */
     private void executeBackend(List<ToolCallRequest> calls) throws InterruptedException {
+        if (calls.isEmpty()) {
+            return;
+        }
+        int maxParallel = Math.max(1, properties.getTool().getMaxParallel());
+        for (int start = 0; start < calls.size(); start += maxParallel) {
+            int end = Math.min(start + maxParallel, calls.size());
+            executeBackendBatch(calls.subList(start, end));
+        }
+    }
+
+    private void executeBackendBatch(List<ToolCallRequest> calls) throws InterruptedException {
         if (calls.isEmpty()) {
             return;
         }
@@ -565,6 +659,9 @@ public class AgentLoop implements Runnable {
 
     /** Pause the run for frontend (editor) tool execution; returns false on cancel/timeout. */
     private boolean dispatchFrontendAndWait(List<ToolCallRequest> frontendCalls) throws InterruptedException {
+        if (isCancelled()) {
+            return false;
+        }
         long now = System.currentTimeMillis();
         List<PendingToolCall> pending = new ArrayList<>();
         List<String> pendingIds = new ArrayList<>();
@@ -604,7 +701,7 @@ public class AgentLoop implements Runnable {
             earliest = Math.min(earliest, pendingCall.getRequestedAt());
         }
         long deadline = earliest + properties.getRun().getWaitingToolsTimeoutSeconds() * 1000L;
-        while (!cancelRequested && !checkpoint.getPendingToolCalls().isEmpty()) {
+        while (!isCancelled() && !checkpoint.getPendingToolCalls().isEmpty()) {
             long remaining = deadline - System.currentTimeMillis();
             if (remaining <= 0) {
                 fail("tool_timeout", "等待编辑器工具结果超时");
@@ -614,7 +711,7 @@ public class AgentLoop implements Runnable {
             if (payload == null) {
                 continue;
             }
-            if ("cancel".equals(payload.getAction()) || cancelRequested) {
+            if ("cancel".equals(payload.getAction()) || isCancelled()) {
                 return false;
             }
             if (payload.getToolResults() != null && !payload.getToolResults().isEmpty()) {
@@ -624,7 +721,7 @@ public class AgentLoop implements Runnable {
                 saveHot(false);
             }
         }
-        if (cancelRequested) {
+        if (isCancelled()) {
             return false;
         }
         run.setPendingToolCalls(new ArrayList<>());
@@ -680,7 +777,7 @@ public class AgentLoop implements Runnable {
     }
 
     private boolean waitForBudgetGrant() throws InterruptedException {
-        while (!cancelRequested) {
+        while (!isCancelled()) {
             ResumePayload payload = gate.await(1000L);
             if (payload == null) {
                 continue;
@@ -709,6 +806,14 @@ public class AgentLoop implements Runnable {
                     RunEvents.toolRequested(call.getId(), call.getName(), call.getArguments()));
             try {
                 Delegation delegation = delegator.spawn(buildToolContext(), call);
+                // A child can finish before we subscribe to its log (subscribe
+                // happens after createChild starts the loop). Synthesize its
+                // terminal now so the parent never waits the full timeout for a
+                // run that is already done.
+                AgentRun spawnedChild = runStore.load(delegation.getSubRunId());
+                if (spawnedChild != null && spawnedChild.statusEnum().isTerminal()) {
+                    delegation.setTerminal(synthesizeTerminal(spawnedChild));
+                }
                 activeDelegations.put(delegation.getCallId(), delegation);
                 checkpoint.getDelegations().add(new DelegationRecord(
                         delegation.getCallId(), delegation.getSubRunId(), delegation.getTask(),
@@ -739,25 +844,24 @@ public class AgentLoop implements Runnable {
 
     /** Rebuild delegations from the checkpoint after a crash. */
     private void rebuildDelegations() {
-        java.util.Map<String, String[]> bySub = new java.util.LinkedHashMap<>();
+        java.util.Map<String, DelegationRecord> bySub = new java.util.LinkedHashMap<>();
         for (DelegationRecord record : checkpoint.getDelegations()) {
             if (record.getSubRunId() != null && record.getCallId() != null) {
-                bySub.putIfAbsent(record.getSubRunId(),
-                        new String[]{record.getCallId(), record.getTask()});
+                bySub.putIfAbsent(record.getSubRunId(), record);
             }
         }
         // Legacy checkpoints (written before children drove their own tools)
         // recorded the delegation only through the child's pending tool calls.
         for (PendingToolCall pendingCall : checkpoint.getPendingToolCalls()) {
             if (pendingCall.getSubRunId() != null && pendingCall.getDelegateCallId() != null) {
-                bySub.putIfAbsent(pendingCall.getSubRunId(),
-                        new String[]{pendingCall.getDelegateCallId(), null});
+                bySub.putIfAbsent(pendingCall.getSubRunId(), new DelegationRecord(
+                        pendingCall.getDelegateCallId(), pendingCall.getSubRunId(), null,
+                        pendingCall.getRequestedAt()));
             }
         }
-        for (java.util.Map.Entry<String, String[]> entry : bySub.entrySet()) {
-            String subRunId = entry.getKey();
-            Delegation delegation = delegator.attach(run.getRunId(), entry.getValue()[0], subRunId);
-            delegation.setTask(entry.getValue()[1]);
+        for (DelegationRecord record : bySub.values()) {
+            String subRunId = record.getSubRunId();
+            Delegation delegation = delegator.attach(run.getRunId(), record);
             // A child that already reached terminal before the crash: drop its
             // moot pending entries and synthesize the terminal event.
             AgentRun child = runStore.load(subRunId);
@@ -767,6 +871,35 @@ public class AgentLoop implements Runnable {
                 delegation.setTerminal(synthesizeTerminal(child));
             }
             activeDelegations.put(delegation.getCallId(), delegation);
+        }
+    }
+
+    /** Rebuild a child's assistant text from its durable event log. */
+    private String replayChildText(String subRunId) {
+        try {
+            StringBuilder text = new StringBuilder();
+            long after = 0;
+            while (true) {
+                java.util.List<RunEvent> page = eventLog.replay(subRunId, after, 500);
+                if (page == null || page.isEmpty()) {
+                    break;
+                }
+                for (RunEvent event : page) {
+                    after = Math.max(after, event.getSeq());
+                    if (RunEvents.TEXT_DELTA.equals(event.getType())
+                            && event.getPayload() != null
+                            && event.getPayload().get("content") != null) {
+                        text.append(event.getPayload().get("content"));
+                    }
+                }
+                if (page.size() < 500) {
+                    break;
+                }
+            }
+            return text.length() > 0 ? text.toString() : null;
+        } catch (Exception e) {
+            log.warn("Could not rebuild sub-run text for {}: {}", subRunId, e.getMessage());
+            return null;
         }
     }
 
@@ -801,7 +934,7 @@ public class AgentLoop implements Runnable {
      * what lets several children work at the same time.
      */
     private boolean delegationWait() throws InterruptedException {
-        while (!cancelRequested && !activeDelegations.isEmpty()) {
+        while (!isCancelled() && !activeDelegations.isEmpty()) {
             long now = System.currentTimeMillis();
             List<String> finished = new ArrayList<>();
             for (Delegation delegation : activeDelegations.values()) {
@@ -856,8 +989,20 @@ public class AgentLoop implements Runnable {
         RunEvent terminal = delegation.getTerminal();
         boolean ok = RunEvents.RUN_COMPLETED.equals(terminal.getType());
         AgentRun child = runStore.load(delegation.getSubRunId());
+        String childText = child != null ? child.getAssistantText() : null;
+        if (childText == null || childText.isEmpty()) {
+            // Cold recovery/Redis eviction: AgentRun JDBC has no assistantText,
+            // but the child's durable event log can rebuild it.
+            childText = replayChildText(delegation.getSubRunId());
+        }
         Map<String, Object> result = RunEvents.payload("subRunId", delegation.getSubRunId(),
-                "text", child != null ? child.getAssistantText() : null);
+                "text", childText);
+        if (child != null) {
+            result.put("usage", RunEvents.payload(
+                    "promptTokens", child.getPromptTokens(),
+                    "completionTokens", child.getCompletionTokens(),
+                    "cachedPromptTokens", child.getCachedPromptTokens()));
+        }
         if (ok) {
             Object boundedResult = boundResult(result);
             emit(RunEvents.SUB_COMPLETED,
@@ -922,6 +1067,9 @@ public class AgentLoop implements Runnable {
 
     /** Emit plan.proposed, suspend for approval, then apply the decision. */
     private boolean planApprovalFlow(List<ToolCallRequest> planCalls) throws InterruptedException {
+        if (isCancelled()) {
+            return false;
+        }
         long now = System.currentTimeMillis();
         List<PendingToolCall> planPending = new ArrayList<>();
         List<String> callIds = new ArrayList<>();
@@ -943,7 +1091,7 @@ public class AgentLoop implements Runnable {
 
     /** Wait for the approval decision (fresh flow or crash recovery). */
     private boolean planApprovalWait(List<PendingToolCall> planPending) throws InterruptedException {
-        while (!cancelRequested) {
+        while (!isCancelled()) {
             ResumePayload payload = gate.await(1000);
             if (payload == null) {
                 continue;
@@ -984,6 +1132,9 @@ public class AgentLoop implements Runnable {
     }
 
     private void suspendBudget() {
+        if (isCancelled()) {
+            return;
+        }
         run.setStatus(RunStatus.SUSPENDED.name());
         run.setSuspendReason("budget");
         run.touch();
@@ -999,7 +1150,7 @@ public class AgentLoop implements Runnable {
     }
 
     private void complete(String finishReason) {
-        if (run.statusEnum().isTerminal()) {
+        if (run.statusEnum().isTerminal() || isCancelled()) {
             return; // cancelled/failed raced us — supervisor owns the terminal state
         }
         run.setStatus(RunStatus.COMPLETED.name());
@@ -1014,7 +1165,7 @@ public class AgentLoop implements Runnable {
     }
 
     private void fail(String code, String message) {
-        if (run.statusEnum().isTerminal()) {
+        if (run.statusEnum().isTerminal() || isCancelled()) {
             return;
         }
         run.setStatus(RunStatus.FAILED.name());
@@ -1022,7 +1173,9 @@ public class AgentLoop implements Runnable {
         run.setErrorCode(code);
         run.setErrorMessage(message);
         run.touch();
-        emit(RunEvents.RUN_FAILED, RunEvents.runFailed(code, message));
+        emit(RunEvents.RUN_FAILED, RunEvents.runFailed(code, message,
+                checkpoint.getPromptTokens(), checkpoint.getCompletionTokens(),
+                checkpoint.getCachedPromptTokens()));
         saveCheckpoint();
         persist();
         saveHot(true);
@@ -1136,7 +1289,9 @@ public class AgentLoop implements Runnable {
         context.setMode(run.getMode());
         context.setUserId(run.getUserId());
         context.setTenantId(run.getTenantId());
-        context.setToken(checkpoint.getToken());
+        // Redis hot state is authoritative for the JWT; the checkpoint no
+        // longer persists it (credential-at-rest).
+        context.setToken(run.getToken() != null ? run.getToken() : checkpoint.getToken());
         context.setSpaceId(run.getSpaceId());
         context.setPageId(run.getPageId());
         context.setStep(checkpoint.getNextStep());
@@ -1144,6 +1299,18 @@ public class AgentLoop implements Runnable {
         context.setClientTools(new ArrayList<>(clientToolSpecs.values()));
         context.setDeferredTools(new ArrayList<>(deferredToolSpecs.values()));
         context.setScratchpad(scratchpad);
+        // Frozen creation context, so a delegated child inherits the parent's
+        // editor rules / skill fragments / memory instead of a bare prompt.
+        context.setSystemPrompt(checkpoint.getSystemPrompt());
+        context.setSkillFragments(checkpoint.getSkillFragments() != null
+                ? new ArrayList<>(checkpoint.getSkillFragments()) : new ArrayList<>());
+        context.setMemoryLines(checkpoint.getMemoryLines() != null
+                ? new ArrayList<>(checkpoint.getMemoryLines()) : new ArrayList<>());
+        context.setSavedSkillProvenance(checkpoint.getSavedSkillProvenance() != null
+                ? new ArrayList<>(checkpoint.getSavedSkillProvenance()) : new ArrayList<>());
+        context.setTemperature(checkpoint.getTemperature());
+        context.setMaxTokens(checkpoint.getMaxTokens());
+        context.setNoTools(checkpoint.isNoTools());
         return context;
     }
 
@@ -1170,12 +1337,23 @@ public class AgentLoop implements Runnable {
         }
     }
 
+    /**
+     * Persist lifecycle state. A cancelled run must never be overwritten back
+     * to an active status by a late loop write, so these are no-ops once
+     * cancellation is known.
+     */
     private void persist() {
+        if (isCancelled()) {
+            return;
+        }
         runStore.persist(run);
     }
 
     /** Hot-state flush with assistantText throttled to 1/s (O(n²) guard). */
     private void saveHot(boolean forceText) {
+        if (isCancelled()) {
+            return;
+        }
         long now = System.currentTimeMillis();
         boolean flushText = forceText || now - lastHotFlushMs > properties.getRun().getAssistantFlushIntervalMs();
         if (flushText) {

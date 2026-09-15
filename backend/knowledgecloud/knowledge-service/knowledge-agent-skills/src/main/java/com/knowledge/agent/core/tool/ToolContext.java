@@ -1,6 +1,10 @@
 package com.knowledge.agent.core.tool;
 
+import com.knowledge.agent.core.savedskill.SavedSkillProvenance;
 import lombok.Data;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Per-execution context handed to backend tools. Identity/scope fields plus a
@@ -41,6 +45,26 @@ public class ToolContext {
 
     /** Deferred (skill-owned) tools of this run — inherited by sub-agents. */
     private java.util.List<com.knowledge.agent.core.tool.ToolSpec> deferredTools;
+
+    /** Client system-prompt text frozen at run creation (child inheritance). */
+    private String systemPrompt;
+
+    /** Skill system-prompt fragments frozen at run creation (child inheritance). */
+    private List<String> skillFragments = new ArrayList<>();
+
+    /** Long-term memory lines frozen at run creation (child inheritance). */
+    private List<String> memoryLines = new ArrayList<>();
+
+    /** Frozen personal-skill provenance (child inheritance / audit). */
+    private List<SavedSkillProvenance> savedSkillProvenance = new ArrayList<>();
+
+    /** Sampling settings inherited by delegated children. */
+    private Double temperature;
+
+    private Integer maxTokens;
+
+    /** Pure-text mode flag (inherited by delegated children). */
+    private boolean noTools;
 
     /** Working-memory scratchpad holder (read/write). */
     private ScratchpadHolder scratchpad = new ScratchpadHolder();

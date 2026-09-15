@@ -70,7 +70,7 @@ class SavedSkillServiceTest {
         draft.setSystemPromptFragment("Search, verify, and summarize.");
         draft.setRequiredToolNames(Collections.singletonList("wiki.search"));
         draft.setOptionalToolNames(Collections.singletonList("editor.read"));
-        when(fixture.compiler.compile(eq("deepseek-chat"), eq("safe transcript"), any()))
+        when(fixture.compiler.compile(eq("deepseek-chat"), eq("safe transcript"), any(), eq("run-1")))
                 .thenReturn(draft);
         when(fixture.store.saveIfAbsent(any(SavedSkill.class), eq(100))).thenAnswer(invocation -> {
             SavedSkill saved = invocation.getArgument(0);
@@ -121,7 +121,7 @@ class SavedSkillServiceTest {
         draft.setSystemPromptFragment("按新流程读取并整理会议内容");
         draft.setRequiredToolNames(Collections.emptyList());
         draft.setOptionalToolNames(Collections.emptyList());
-        when(fixture.compiler.compileUpdate(eq(target), eq("deepseek-chat"), eq("merge transcript"), anySet()))
+        when(fixture.compiler.compileUpdate(eq(target), eq("deepseek-chat"), eq("merge transcript"), anySet(), eq("run-1")))
                 .thenReturn(draft);
         when(fixture.store.updateOwned(any(SavedSkill.class))).thenReturn(true);
 
@@ -168,7 +168,7 @@ class SavedSkillServiceTest {
         draft.setSystemPromptFragment("Search, verify, and summarize.");
         draft.setRequiredToolNames(Collections.emptyList());
         draft.setOptionalToolNames(Collections.emptyList());
-        when(fixture.compiler.compile(eq("deepseek-chat"), eq("fresh transcript"), anySet()))
+        when(fixture.compiler.compile(eq("deepseek-chat"), eq("fresh transcript"), anySet(), eq("run-1")))
                 .thenReturn(draft);
         when(fixture.store.saveIfAbsent(any(SavedSkill.class), eq(100))).thenAnswer(invocation -> {
             SavedSkill saved = invocation.getArgument(0);

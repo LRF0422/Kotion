@@ -71,7 +71,9 @@ class CheckpointCodecTest {
         assertEquals(3, restored.getNextStep());
         assertEquals("plan", restored.getMode());
         assertEquals(Integer.valueOf(24), restored.getMaxSteps());
-        assertEquals("jwt-token", restored.getToken());
+        // The JWT must NOT round-trip: the checkpoint JSON is mirrored to
+        // MySQL, so persisting the token would be credential-at-rest.
+        assertNull(restored.getToken());
         assertEquals(1, restored.getDelegateDepth());
         assertEquals("step1 done", restored.getScratchpad());
         assertEquals(2, restored.getMessages().size());

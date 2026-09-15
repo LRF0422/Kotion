@@ -14,8 +14,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -41,11 +44,13 @@ public class RunStreamer {
                 t.setDaemon(true);
                 return t;
             });
-    private final ExecutorService streamExecutor = Executors.newCachedThreadPool(r -> {
+    /** Bounded pool: one thread per open SSE stream, with a hard ceiling. */
+    private final ExecutorService streamExecutor = new ThreadPoolExecutor(8, 256, 60L, TimeUnit.SECONDS,
+            new SynchronousQueue<>(), r -> {
         Thread t = new Thread(r, "agentcore-sse-stream");
         t.setDaemon(true);
         return t;
-    });
+    }, new ThreadPoolExecutor.AbortPolicy());
 
     public RunStreamer(RunEventLog eventLog, ObjectMapper objectMapper) {
         this.eventLog = eventLog;
@@ -90,6 +95,7 @@ public class RunStreamer {
             // best-effort; the async path reports real send failures
         }
 
+        try {
         streamExecutor.submit(() -> {
             long lastSentSeq = afterSeq;
             long observedDropped = 0;
@@ -143,7 +149,34 @@ public class RunStreamer {
                     }
 
                     RunEvent event = subscription.poll(1000L);
-                    if (event == null || event.getSeq() <= lastSentSeq) {
+                    if (event == null) {
+                        // Cross-instance live tail: the in-memory subscription
+                        // only sees events appended on THIS instance. Poll the
+                        // durable high-water mark so a run driven on another
+                        // node is still followed live (the durable log is the
+                        // shared source of truth).
+                        long high = eventLog.lastSeq(runId);
+                        if (high > lastSentSeq) {
+                            replay = replayDurable(emitter, runId, lastSentSeq, high);
+                            if (replay.disconnected) {
+                                cleanup.run();
+                                return;
+                            }
+                            if (replay.sequenceGap) {
+                                emitter.complete();
+                                cleanup.run();
+                                return;
+                            }
+                            lastSentSeq = replay.lastSentSeq;
+                            if (replay.terminal) {
+                                emitter.complete();
+                                cleanup.run();
+                                return;
+                            }
+                        }
+                        continue;
+                    }
+                    if (event.getSeq() <= lastSentSeq) {
                         continue;
                     }
                     if (event.getSeq() > lastSentSeq + 1) {
@@ -197,6 +230,14 @@ public class RunStreamer {
                 cleanup.run();
             }
         });
+        } catch (RejectedExecutionException e) {
+            // Too many concurrent streams: fail this one fast instead of
+            // queueing without bound.
+            log.warn("Run stream rejected for {}: executor saturated", runId);
+            heartbeat.cancel(false);
+            subscription.close();
+            emitter.complete();
+        }
         return emitter;
     }
 

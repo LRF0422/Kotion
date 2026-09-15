@@ -27,6 +27,12 @@ public class AgentModelPriceEntity implements Serializable {
     /** Price per 1K prompt tokens. */
     private BigDecimal promptPrice;
 
+    /**
+     * Discounted price per 1K cached prompt tokens. Null/absent falls back to
+     * {@link #promptPrice} so cost never under-charges when unset.
+     */
+    private BigDecimal cachePromptPrice;
+
     /** Price per 1K completion tokens. */
     private BigDecimal completionPrice;
 

@@ -5,6 +5,7 @@ import com.knowledge.agent.core.config.AgentCoreProperties;
 import com.knowledge.agent.core.entity.AgentRunEventEntity;
 import com.knowledge.agent.core.mapper.AgentRunEventMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.stereotype.Component;
@@ -68,7 +69,10 @@ public class DefaultRunEventLog implements RunEventLog {
 
         RunEvent event = new RunEvent(seq, type, payload != null ? payload : Collections.emptyMap(), now);
 
-        // 1. Durable hot-tier append BEFORE fan-out.
+        // 1. Durable write BEFORE fan-out. Hot tier first; if Redis fails, fall
+        //    back to a SYNCHRONOUS cold write so we never fan out an event that
+        //    would be lost on reconnect (the documented invariant).
+        boolean hotOk = false;
         try {
             String json = objectMapper.writeValueAsString(event);
             String key = ZSET_KEY_PREFIX + runId;
@@ -85,12 +89,18 @@ public class DefaultRunEventLog implements RunEventLog {
                     redis.opsForZSet().removeRange(key, 0, size - maxEvents - 1);
                 }
             }
+            hotOk = true;
         } catch (Exception e) {
             log.warn("EventLog Redis append failed for {} seq {}: {}", runId, seq, e.getMessage());
         }
 
-        // 2. Async cold-tier mirror (best-effort, ordered by seq).
-        mirrorExecutor.submit(() -> mirror(runId, event));
+        if (hotOk) {
+            // 2. Async cold-tier mirror (best-effort, ordered by seq).
+            mirrorExecutor.submit(() -> mirror(runId, event));
+        } else if (!mirror(runId, event)) {
+            log.error("EventLog append NOT durable for {} seq {} — delivered live only",
+                    runId, seq);
+        }
 
         // 3. Fan out to live subscribers.
         CopyOnWriteArrayList<EventSubscription> list = subscribers.get(runId);
@@ -117,10 +127,22 @@ public class DefaultRunEventLog implements RunEventLog {
         } catch (Exception e) {
             log.warn("EventLog Redis replay failed for {}: {}", runId, e.getMessage());
         }
-        if (!events.isEmpty()) {
+        // Redis is usable only when it starts exactly at the requested cursor.
+        // A trimmed/TTL-ed head or a partial hot write would otherwise surface
+        // as a permanent sequence gap.
+        if (!events.isEmpty() && events.get(0).getSeq() <= afterSeq + 1) {
             return events;
         }
-        // Redis hot tier empty (TTL eviction) → MySQL cold tier.
+        List<RunEvent> cold = coldReplay(runId, afterSeq, limit);
+        if (!cold.isEmpty()) {
+            return cold;
+        }
+        return events;
+    }
+
+    /** Replay from the MySQL cold tier (authoritative across Redis trim/TTL). */
+    private List<RunEvent> coldReplay(String runId, long afterSeq, int limit) {
+        List<RunEvent> events = new ArrayList<>();
         try {
             List<AgentRunEventEntity> entities = eventMapper.selectAfterSeq(runId, afterSeq, limit);
             for (AgentRunEventEntity entity : entities) {
@@ -171,6 +193,15 @@ public class DefaultRunEventLog implements RunEventLog {
     @PreDestroy
     public void shutdown() {
         mirrorExecutor.shutdown();
+        try {
+            // Do not drop queued cold mirrors on graceful shutdown.
+            if (!mirrorExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                mirrorExecutor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            mirrorExecutor.shutdownNow();
+        }
     }
 
     // ---- internals ----
@@ -197,7 +228,7 @@ public class DefaultRunEventLog implements RunEventLog {
         return new AtomicLong(max);
     }
 
-    private void mirror(String runId, RunEvent event) {
+    private boolean mirror(String runId, RunEvent event) {
         try {
             AgentRunEventEntity entity = new AgentRunEventEntity();
             entity.setRunId(runId);
@@ -206,8 +237,33 @@ public class DefaultRunEventLog implements RunEventLog {
             entity.setPayload(objectMapper.writeValueAsString(event.getPayload()));
             entity.setCreateTime(event.getCreateTime());
             eventMapper.insertEvent(entity);
+            return true;
         } catch (Exception e) {
             log.warn("EventLog JDBC mirror failed for {} seq {}: {}", runId, event.getSeq(), e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Retention sweep: drop cold events older than {@code event.retention-days}.
+     * Without this the cold tier grows without bound.
+     */
+    @Scheduled(fixedDelayString = "21600000")
+    public void retentionSweep() {
+        int days = properties.getEvent().getRetentionDays();
+        if (days <= 0) {
+            return;
+        }
+        long cutoff = System.currentTimeMillis() - (long) days * 24L * 60L * 60L * 1000L;
+        int batches = 0;
+        try {
+            int deleted;
+            do {
+                deleted = eventMapper.deleteOlderThan(cutoff, 1000);
+                batches++;
+            } while (deleted == 1000 && batches < 100);
+        } catch (Exception e) {
+            log.warn("EventLog retention sweep failed: {}", e.getMessage());
         }
     }
 }

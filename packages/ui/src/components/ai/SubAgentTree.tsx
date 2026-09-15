@@ -46,6 +46,8 @@ export interface SubRunView {
     /** The child's own live output (tail-preview), streamed by the client. */
     text?: string
     reasoning?: string
+    /** The child's own token usage, when reported. */
+    usage?: { promptTokens: number; completionTokens: number; cachedPromptTokens?: number }
     /** Private-document merge outcome (true-parallel fork/merge). */
     merge?: {
         applied: number
@@ -332,6 +334,27 @@ const SubAgentRow: React.FC<SubAgentRowProps> = ({ index, sub, toolCalls, expand
                             <p className="text-[10px] text-muted-foreground/70">实时输出</p>
                             <p className="max-h-32 overflow-auto whitespace-pre-wrap break-words text-[11px] text-muted-foreground">
                                 {sub.text}
+                            </p>
+                        </div>
+                    )}
+
+                    {sub.reasoning && sub.status === 'running' && (
+                        <div>
+                            <p className="text-[10px] text-muted-foreground/70">推理过程</p>
+                            <p className="max-h-32 overflow-auto whitespace-pre-wrap break-words text-[10px] italic text-muted-foreground/70">
+                                {sub.reasoning}
+                            </p>
+                        </div>
+                    )}
+
+                    {sub.usage && sub.usage.promptTokens > 0 && (
+                        <div>
+                            <p className="text-[10px] text-muted-foreground/70">Token 用量</p>
+                            <p className="text-[10px] text-muted-foreground">
+                                输入 {sub.usage.promptTokens.toLocaleString()} · 输出 {sub.usage.completionTokens.toLocaleString()}
+                                {sub.usage.cachedPromptTokens
+                                    ? ' · 缓存命中 ' + sub.usage.cachedPromptTokens.toLocaleString()
+                                    : ''}
                             </p>
                         </div>
                     )}

@@ -82,6 +82,8 @@ public class AgentCoreProperties {
         private int maxSteps = 100;
         /** Maximum sub-agent delegation depth. */
         private int maxDelegateDepth = 2;
+        /** Maximum child runs a single parent may create (0 = unlimited). */
+        private int maxChildrenPerRun = 16;
         /** Timeout for a delegated sub-agent run (seconds). */
         private int delegateTimeoutSeconds = 600;
         /** How long a run may wait for frontend tool results (seconds). */

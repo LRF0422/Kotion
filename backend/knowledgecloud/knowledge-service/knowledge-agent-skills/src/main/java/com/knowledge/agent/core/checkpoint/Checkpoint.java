@@ -1,5 +1,6 @@
 package com.knowledge.agent.core.checkpoint;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.knowledge.agent.api.dto.ChatMessage;
 import com.knowledge.agent.core.run.PendingToolCall;
 import com.knowledge.agent.core.savedskill.SavedSkillProvenance;
@@ -45,6 +46,19 @@ public class Checkpoint {
 
     /** Pure-text mode: no tools offered to the model at all. */
     private boolean noTools;
+
+    /**
+     * Extra client system-prompt text (editor rules) frozen at run creation.
+     * Kept on the checkpoint so delegated children inherit it and so a rebuilt
+     * loop reproduces the original system prefix.
+     */
+    private String systemPrompt;
+
+    /** Skill system-prompt fragments frozen at run creation (child inheritance). */
+    private List<String> skillFragments = new ArrayList<>();
+
+    /** Long-term memory lines frozen at run creation (child inheritance). */
+    private List<String> memoryLines = new ArrayList<>();
 
     private String mode;
 
@@ -101,7 +115,15 @@ public class Checkpoint {
     /** Cumulative prompt tokens served from the provider's context cache. */
     private long cachedPromptTokens;
 
-    /** Caller JWT token (forwarded to remote skill callbacks). */
+    /**
+     * Caller JWT token (forwarded to remote skill callbacks).
+     *
+     * <p>Never serialized: the checkpoint JSON is mirrored to MySQL, and a JWT
+     * at rest is a credential leak. Recovery prefers {@code AgentRun.token}
+     * from Redis hot state; a JC-only rebuild simply loses the token, exactly
+     * as it already did when Redis was evicted.
+     */
+    @JsonIgnore
     private String token;
 
     /** Sub-agent delegation depth (0 = root run). */

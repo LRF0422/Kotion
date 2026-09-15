@@ -16,8 +16,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -130,6 +133,10 @@ public class SessionTranscriptProjector {
                         }
                         produced.add(forLog(message));
                     }
+                    // Repair dangling assistant tool_calls (cancel/failure while
+                    // waiting for a tool) before they become the next run's
+                    // model context.
+                    repairToolPairing(produced);
                     // A newer run may already have appended its user turn; insert
                     // this run's output where its own history ended.
                     int insertAt = Math.min(Math.max(checkpoint.getInputMessageCount() - 1, 0),
@@ -140,6 +147,51 @@ public class SessionTranscriptProjector {
                 persist(run, existing, state, titleOf(existing, null), run.getLastSeq());
             } catch (Exception e) {
                 log.warn("Session projection failed for {}: {}", run.getConversationId(), e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Ensure every assistant message carrying tool_calls is followed by a tool
+     * message for each call id. A run cancelled/failed while waiting for a
+     * frontend tool otherwise leaves a structurally invalid turn in the
+     * canonical log.
+     */
+    private void repairToolPairing(List<ChatMessage> produced) {
+        for (int i = 0; i < produced.size(); i++) {
+            ChatMessage message = produced.get(i);
+            if (!"assistant".equals(role(message))
+                    || message.getToolCalls() == null || message.getToolCalls().isEmpty()) {
+                continue;
+            }
+            Set<String> expected = new LinkedHashSet<>();
+            java.util.Map<String, String> names = new java.util.HashMap<>();
+            for (ChatMessage.ToolCallInfo call : message.getToolCalls()) {
+                if (call != null && call.getId() != null) {
+                    expected.add(call.getId());
+                    if (call.getFunction() != null && call.getFunction().getName() != null) {
+                        names.put(call.getId(), call.getFunction().getName());
+                    }
+                }
+            }
+            Set<String> found = new HashSet<>();
+            int j = i + 1;
+            while (j < produced.size() && "tool".equals(role(produced.get(j)))) {
+                if (produced.get(j).getToolCallId() != null) {
+                    found.add(produced.get(j).getToolCallId());
+                }
+                j++;
+            }
+            for (String missingId : expected) {
+                if (!found.contains(missingId)) {
+                    produced.add(j, ChatMessage.builder()
+                            .role("tool")
+                            .toolCallId(missingId)
+                            .name(names.get(missingId))
+                            .content("{\"error\":\"运行结束前未返回工具结果\"}")
+                            .build());
+                    j++;
+                }
             }
         }
     }
@@ -438,16 +490,16 @@ public class SessionTranscriptProjector {
     }
 
     private boolean isDuplicateLastUser(List<ChatMessage> canonical, ChatMessage candidate) {
-        if (candidate.getContent() == null) {
+        if (candidate.getContent() == null || canonical.isEmpty()) {
             return false;
         }
-        for (int i = canonical.size() - 1; i >= 0; i--) {
-            ChatMessage message = canonical.get(i);
-            if (message != null && "user".equals(role(message))) {
-                return candidate.getContent().equals(message.getContent());
-            }
-        }
-        return false;
+        ChatMessage last = canonical.get(canonical.size() - 1);
+        // Only a TRAILING user message can be a retry of the same turn. Once the
+        // engine produced output, an identical prompt is a legitimate new turn
+        // and must not be silently dropped.
+        return last != null
+                && "user".equals(role(last))
+                && candidate.getContent().equals(last.getContent());
     }
 
     private Object lockFor(String conversationId) {

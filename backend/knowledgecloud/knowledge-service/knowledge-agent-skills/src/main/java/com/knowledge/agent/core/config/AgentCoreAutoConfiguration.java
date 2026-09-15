@@ -9,6 +9,7 @@ import org.springframework.context.annotation.Configuration;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -46,12 +47,31 @@ public class AgentCoreAutoConfiguration {
         return new JwtTokenProvider();
     }
 
-    /** One thread per running loop (loops block on LLM streams and resumes). */
+    /**
+     * One thread per running ROOT loop. Uses a SynchronousQueue so the pool
+     * actually grows to max instead of queueing work while all core threads are
+     * blocked; overflow is rejected and handled by the supervisor as a failed
+     * run rather than queueing behind a blocked parent.
+     */
     @Bean(name = "agentLoopExecutor", destroyMethod = "shutdown")
     public ExecutorService agentLoopExecutor() {
-        return new ThreadPoolExecutor(4, 32, 60L, TimeUnit.SECONDS,
-                new LinkedBlockingQueue<>(256),
+        return new ThreadPoolExecutor(8, 64, 60L, TimeUnit.SECONDS,
+                new SynchronousQueue<>(),
                 daemonThreadFactory("agentcore-loop"),
+                new ThreadPoolExecutor.AbortPolicy());
+    }
+
+    /**
+     * Child (sub-agent) loops run on their own pool. A parent thread blocks in
+     * {@code delegationWait}; if children shared the parent pool they would
+     * queue behind blocked parents and never run (deadlock). Separating them
+     * makes delegation deadlock-free regardless of parent concurrency.
+     */
+    @Bean(name = "agentChildLoopExecutor", destroyMethod = "shutdown")
+    public ExecutorService agentChildLoopExecutor() {
+        return new ThreadPoolExecutor(8, 128, 60L, TimeUnit.SECONDS,
+                new SynchronousQueue<>(),
+                daemonThreadFactory("agentcore-child-loop"),
                 new ThreadPoolExecutor.AbortPolicy());
     }
 

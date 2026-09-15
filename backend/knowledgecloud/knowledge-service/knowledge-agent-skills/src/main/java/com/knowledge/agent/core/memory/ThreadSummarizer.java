@@ -7,8 +7,11 @@ import com.knowledge.agent.core.entity.AgentThreadEntity;
 import com.knowledge.agent.core.llm.LlmGateway;
 import com.knowledge.agent.core.llm.LlmInferRequest;
 import com.knowledge.agent.core.llm.LlmResult;
+import com.knowledge.agent.core.run.AgentRun;
+import com.knowledge.agent.core.run.RunStore;
 import com.knowledge.agent.core.supervisor.ThreadStore;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.PreDestroy;
@@ -41,6 +44,8 @@ public class ThreadSummarizer {
     private final ThreadStore threadStore;
     private final CheckpointStore checkpointStore;
     private final LlmGateway llmGateway;
+    /** Optional (tests); when present, summary token usage is billed to the run. */
+    private final RunStore runStore;
     private final ExecutorService executor = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "agentcore-thread-summary");
         t.setDaemon(true);
@@ -49,9 +54,16 @@ public class ThreadSummarizer {
 
     public ThreadSummarizer(ThreadStore threadStore, CheckpointStore checkpointStore,
                             LlmGateway llmGateway) {
+        this(threadStore, checkpointStore, llmGateway, null);
+    }
+
+    @Autowired
+    public ThreadSummarizer(ThreadStore threadStore, CheckpointStore checkpointStore,
+                            LlmGateway llmGateway, RunStore runStore) {
         this.threadStore = threadStore;
         this.checkpointStore = checkpointStore;
         this.llmGateway = llmGateway;
+        this.runStore = runStore;
     }
 
     /** Fire-and-forget rolling summary update for a completed run. */
@@ -66,10 +78,13 @@ public class ThreadSummarizer {
                 // creation must never be overwritten with stale context.
                 AgentThreadEntity thread = threadStore.get(conversationId);
                 String previous = thread != null ? thread.getSummary() : null;
-                String summary = generateSummary(checkpoint, model, previous);
+                LlmResult result = generateSummary(checkpoint, model, previous);
+                String summary = result != null ? result.getText() : null;
                 if (summary != null && !summary.trim().isEmpty()) {
                     threadStore.updateMeta(conversationId, null, summary.trim());
                 }
+                // Side-channel LLM calls must be visible to cost accounting.
+                accountUsage(runId, result);
             } catch (Exception e) {
                 log.warn("Thread summary failed for {}: {}", runId, e.getMessage());
             }
@@ -91,7 +106,30 @@ public class ThreadSummarizer {
         return null;
     }
 
-    private String generateSummary(Checkpoint checkpoint, String model, String previousSummary) {
+    private void accountUsage(String runId, LlmResult result) {
+        if (runStore == null || result == null) {
+            return;
+        }
+        if (result.getPromptTokens() <= 0 && result.getCompletionTokens() <= 0) {
+            return;
+        }
+        try {
+            AgentRun run = runStore.load(runId);
+            if (run == null) {
+                return;
+            }
+            run.setPromptTokens(run.getPromptTokens() + result.getPromptTokens());
+            run.setCompletionTokens(run.getCompletionTokens() + result.getCompletionTokens());
+            run.setCachedPromptTokens(run.getCachedPromptTokens() + result.getCachedPromptTokens());
+            run.touch();
+            runStore.persist(run);
+            runStore.saveHot(run);
+        } catch (Exception e) {
+            log.warn("Thread summary usage accounting failed for {}: {}", runId, e.getMessage());
+        }
+    }
+
+    private LlmResult generateSummary(Checkpoint checkpoint, String model, String previousSummary) {
         List<ChatMessage> messages = checkpoint.getMessages() != null
                 ? checkpoint.getMessages() : Collections.emptyList();
         // Take the tail (last 12 messages) as the summarization source.
@@ -115,7 +153,7 @@ public class ThreadSummarizer {
                 .temperature(0.0)
                 .maxTokens(256)
                 .build());
-        return result.getText();
+        return result;
     }
 
     private String renderConversation(List<ChatMessage> messages) {

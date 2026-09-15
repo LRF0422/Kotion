@@ -48,6 +48,12 @@ public class DefaultCheckpointStore implements CheckpointStore {
         } catch (Exception e) {
             log.warn("CheckpointStore Redis save failed for {}: {}",
                     checkpoint.getRunId(), e.getMessage());
+            // Never let a stale hot checkpoint shadow the newer JDBC snapshot.
+            try {
+                redis.delete(KEY_PREFIX + checkpoint.getRunId());
+            } catch (Exception ignored) {
+                // best effort
+            }
         }
         try {
             AgentRunCheckpointEntity entity = new AgentRunCheckpointEntity();
@@ -67,21 +73,34 @@ public class DefaultCheckpointStore implements CheckpointStore {
         if (runId == null || runId.isEmpty()) {
             return null;
         }
+        Checkpoint hot = null;
         try {
             String json = redis.opsForValue().get(KEY_PREFIX + runId);
             if (json != null && !json.isEmpty()) {
-                return codec.fromJson(json);
+                hot = codec.fromJson(json);
             }
         } catch (Exception e) {
             log.warn("CheckpointStore Redis load failed for {}: {}", runId, e.getMessage());
         }
+        AgentRunCheckpointEntity entity = null;
         try {
-            AgentRunCheckpointEntity entity = checkpointMapper.selectByRunId(runId);
-            if (entity != null) {
-                return codec.fromJson(entity.getStateJson());
-            }
+            entity = checkpointMapper.selectByRunId(runId);
         } catch (Exception e) {
             log.warn("CheckpointStore JDBC load failed for {}: {}", runId, e.getMessage());
+        }
+        // Prefer the newer snapshot: a lower-seq hot copy must not roll the
+        // conversation back past a newer JDBC one.
+        if (hot != null && entity != null) {
+            if (entity.getSeq() != null && entity.getSeq() > hot.getSeq()) {
+                return codec.fromJson(entity.getStateJson());
+            }
+            return hot;
+        }
+        if (hot != null) {
+            return hot;
+        }
+        if (entity != null) {
+            return codec.fromJson(entity.getStateJson());
         }
         return null;
     }

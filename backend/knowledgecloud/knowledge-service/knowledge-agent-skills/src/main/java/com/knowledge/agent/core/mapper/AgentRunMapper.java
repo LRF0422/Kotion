@@ -66,33 +66,46 @@ public interface AgentRunMapper extends BaseMapper<AgentRunEntity> {
     /** Daily token trend from agent_run (epoch millis cutoff). */
     @Select("SELECT FROM_UNIXTIME(create_time / 1000, '%Y-%m-%d') AS date, " +
             "SUM(prompt_tokens) AS promptTokens, SUM(completion_tokens) AS completionTokens, " +
-            "SUM(prompt_tokens + completion_tokens) AS totalTokens, COUNT(*) AS sessions " +
+            "SUM(prompt_tokens + completion_tokens) AS totalTokens, " +
+            "SUM(CASE WHEN parent_run_id IS NULL THEN 1 ELSE 0 END) AS sessions " +
             "FROM agent_run WHERE create_time >= #{startMs} " +
+            "AND (#{tenantId} IS NULL OR tenant_id = #{tenantId}) " +
             "GROUP BY FROM_UNIXTIME(create_time / 1000, '%Y-%m-%d') ORDER BY date")
-    List<com.knowledge.agent.core.web.vo.UsageStatsVO.DailyTokens> selectDailyTokens(@Param("startMs") long startMs);
+    List<com.knowledge.agent.core.web.vo.UsageStatsVO.DailyTokens> selectDailyTokens(
+            @Param("startMs") long startMs, @Param("tenantId") Long tenantId);
 
     /** Top users by token consumption (name resolved from knowledge_user). */
-    @Select("SELECT r.user_id AS userId, MAX(u.user_name) AS userName, COUNT(*) AS sessions, " +
+    @Select("SELECT r.user_id AS userId, MAX(u.user_name) AS userName, " +
+            "SUM(CASE WHEN r.parent_run_id IS NULL THEN 1 ELSE 0 END) AS sessions, " +
             "SUM(r.prompt_tokens) AS promptTokens, SUM(r.completion_tokens) AS completionTokens, " +
             "SUM(r.prompt_tokens + r.completion_tokens) AS totalTokens " +
             "FROM agent_run r LEFT JOIN knowledge_user u ON u.id = r.user_id " +
             "WHERE r.create_time >= #{startMs} AND r.user_id IS NOT NULL " +
+            "AND (#{tenantId} IS NULL OR r.tenant_id = #{tenantId}) " +
             "GROUP BY r.user_id ORDER BY totalTokens DESC LIMIT #{limit}")
     List<com.knowledge.agent.core.web.vo.UsageStatsVO.ByUser> selectUsageByUser(@Param("startMs") long startMs,
-                                                                              @Param("limit") int limit);
+                                                                              @Param("limit") int limit,
+                                                                              @Param("tenantId") Long tenantId);
 
     /** Usage grouped by model with estimated cost from agent_model_price. */
-    @Select("SELECT r.model AS modelName, COUNT(*) AS sessions, " +
+    // Cache-aware cost: cached prompt tokens are billed at the cache unit
+    // price (falling back to the full prompt price when unset); sessions count
+    // only root runs so delegated children do not inflate the number.
+    @Select("SELECT r.model AS modelName, " +
+            "SUM(CASE WHEN r.parent_run_id IS NULL THEN 1 ELSE 0 END) AS sessions, " +
             "SUM(r.prompt_tokens) AS promptTokens, SUM(r.completion_tokens) AS completionTokens, " +
             "SUM(r.prompt_tokens + r.completion_tokens) AS totalTokens, " +
-            "ROUND(SUM(r.prompt_tokens) / 1000 * IFNULL(p.prompt_price, 0) " +
+            "ROUND(SUM(GREATEST(r.prompt_tokens - r.cached_prompt_tokens, 0)) / 1000 * IFNULL(p.prompt_price, 0) " +
+            "  + SUM(r.cached_prompt_tokens) / 1000 * IFNULL(p.cache_prompt_price, IFNULL(p.prompt_price, 0)) " +
             "  + SUM(r.completion_tokens) / 1000 * IFNULL(p.completion_price, 0), 4) AS cost, " +
             "IFNULL(p.currency, 'CNY') AS currency " +
             "FROM agent_run r LEFT JOIN agent_model_price p ON p.model_name = r.model " +
             "WHERE r.create_time >= #{startMs} " +
-            "GROUP BY r.model, p.prompt_price, p.completion_price, p.currency " +
+            "AND (#{tenantId} IS NULL OR r.tenant_id = #{tenantId}) " +
+            "GROUP BY r.model, p.prompt_price, p.cache_prompt_price, p.completion_price, p.currency " +
             "ORDER BY totalTokens DESC")
-    List<com.knowledge.agent.core.web.vo.UsageStatsVO.ByModel> selectUsageByModel(@Param("startMs") long startMs);
+    List<com.knowledge.agent.core.web.vo.UsageStatsVO.ByModel> selectUsageByModel(
+            @Param("startMs") long startMs, @Param("tenantId") Long tenantId);
 
     /** Active rows not updated since the cutoff (stale executor sweep). */
     @Select("SELECT * FROM agent_run WHERE status IN ('RUNNING','QUEUED','WAITING_TOOLS','SUSPENDED') " +

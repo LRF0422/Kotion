@@ -33,10 +33,9 @@ public class DelegateTool implements BackendTool {
 
     @Override
     public Object execute(Map<String, Object> args, ToolContext context) {
-        // The loop intercepts delegate calls before normal execution.
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("ok", true);
-        result.put("note", "delegation handled by the loop");
-        return result;
+        // The loop intercepts delegate calls before normal execution. Reaching
+        // here means the interception was bypassed; fail loudly rather than
+        // reporting a fake success.
+        throw new IllegalStateException("delegate 必须由 AgentLoop 拦截执行，不应作为普通后端工具执行");
     }
 }

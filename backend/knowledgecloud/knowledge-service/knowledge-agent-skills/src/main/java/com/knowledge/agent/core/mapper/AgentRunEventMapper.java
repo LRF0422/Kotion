@@ -29,6 +29,11 @@ public interface AgentRunEventMapper extends BaseMapper<AgentRunEventEntity> {
     @Select("SELECT COALESCE(MAX(seq), 0) FROM agent_run_event WHERE run_id = #{runId}")
     long selectMaxSeq(@Param("runId") String runId);
 
+    /** Delete cold events older than the retention cutoff, in bounded batches. */
+    @org.apache.ibatis.annotations.Delete("DELETE FROM agent_run_event " +
+            "WHERE create_time > 0 AND create_time < #{cutoffMs} LIMIT #{limit}")
+    int deleteOlderThan(@Param("cutoffMs") long cutoffMs, @Param("limit") int limit);
+
     /** Retain the most recent {@code keep} events per run (cold-tier trim). */
     @org.apache.ibatis.annotations.Delete("DELETE FROM agent_run_event WHERE run_id = #{runId} " +
             "AND seq <= (SELECT m FROM (SELECT COALESCE(MAX(seq), 0) - #{keep} AS m " +

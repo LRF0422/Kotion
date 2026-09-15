@@ -54,10 +54,11 @@ public class AdminAiUsageController {
 
     @ApiOperation("Daily token usage trend")
     @GetMapping("/usage/trend")
-    public R<List<UsageStatsVO.DailyTokens>> usageTrend(@RequestParam(defaultValue = "30") Integer days) {
+    public R<List<UsageStatsVO.DailyTokens>> usageTrend(@RequestParam(defaultValue = "30") Integer days,
+            @RequestParam(name = "tenantId", required = false) Long tenantId) {
         int range = clampDays(days);
         long startMs = startOfDayMillis(range - 1);
-        List<UsageStatsVO.DailyTokens> rows = runMapper.selectDailyTokens(startMs);
+        List<UsageStatsVO.DailyTokens> rows = runMapper.selectDailyTokens(startMs, tenantId);
         Map<String, UsageStatsVO.DailyTokens> byDate = rows.stream()
                 .collect(Collectors.toMap(UsageStatsVO.DailyTokens::getDate, Function.identity(), (a, b) -> a));
         List<UsageStatsVO.DailyTokens> result = new ArrayList<>(range);
@@ -77,24 +78,27 @@ public class AdminAiUsageController {
     @ApiOperation("Token usage ranking by user")
     @GetMapping("/usage/by-user")
     public R<List<UsageStatsVO.ByUser>> usageByUser(@RequestParam(defaultValue = "30") Integer days,
-            @RequestParam(defaultValue = "20") Integer limit) {
+            @RequestParam(defaultValue = "20") Integer limit,
+            @RequestParam(name = "tenantId", required = false) Long tenantId) {
         long startMs = startOfDayMillis(clampDays(days) - 1);
         int top = Math.max(1, Math.min(limit == null ? 20 : limit, 100));
-        return R.data(runMapper.selectUsageByUser(startMs, top));
+        return R.data(runMapper.selectUsageByUser(startMs, top, tenantId));
     }
 
     @ApiOperation("Token usage and cost by model")
     @GetMapping("/usage/by-model")
-    public R<List<UsageStatsVO.ByModel>> usageByModel(@RequestParam(defaultValue = "30") Integer days) {
+    public R<List<UsageStatsVO.ByModel>> usageByModel(@RequestParam(defaultValue = "30") Integer days,
+            @RequestParam(name = "tenantId", required = false) Long tenantId) {
         long startMs = startOfDayMillis(clampDays(days) - 1);
-        return R.data(runMapper.selectUsageByModel(startMs));
+        return R.data(runMapper.selectUsageByModel(startMs, tenantId));
     }
 
     @ApiOperation("Usage summary")
     @GetMapping("/usage/summary")
-    public R<Map<String, Object>> usageSummary(@RequestParam(defaultValue = "30") Integer days) {
+    public R<Map<String, Object>> usageSummary(@RequestParam(defaultValue = "30") Integer days,
+            @RequestParam(name = "tenantId", required = false) Long tenantId) {
         long startMs = startOfDayMillis(clampDays(days) - 1);
-        List<UsageStatsVO.ByModel> byModel = runMapper.selectUsageByModel(startMs);
+        List<UsageStatsVO.ByModel> byModel = runMapper.selectUsageByModel(startMs, tenantId);
         long totalTokens = 0L;
         long sessions = 0L;
         BigDecimal totalCost = BigDecimal.ZERO;

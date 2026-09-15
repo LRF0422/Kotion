@@ -32,6 +32,7 @@ const DEFAULT_API_BASE = '/api/knowledge-agent/api/agent/v1'
 
 const MAX_RECONNECTS = 5
 const RECONNECT_BASE_DELAY_MS = 500
+const RECONNECT_MAX_DELAY_MS = 8_000
 const RESUME_RESPONSE_TIMEOUT_MS = 30_000
 const REQUEST_TIMEOUT_MS = 15_000
 
@@ -160,6 +161,7 @@ export class AgentClient {
         let cursor = wireNumber(afterSeq)
         let reconnects = 0
         while (true) {
+            const cursorAtStart = cursor
             const events = this.streamOnce(runId, cursor, signal)
             let receivedAny = false
             let streamError: unknown
@@ -183,17 +185,21 @@ export class AgentClient {
                 streamError = error
             }
             if (signal?.aborted) return
+            // Reset the attempt counter only on genuine forward progress. A
+            // clean non-terminal close (e.g. the server's durable gap-close)
+            // must NOT reset it, otherwise the client reconnects every 500ms
+            // forever without ever surfacing an error.
+            if (receivedAny
+                && cursor > cursorAtStart
+                && !(streamError instanceof AgentSequenceGapError)) {
+                reconnects = 0
+            }
             if (reconnects >= MAX_RECONNECTS) {
                 throw new Error('Agent stream disconnected after ' + MAX_RECONNECTS + ' reconnect attempts')
             }
             reconnects += 1
-            const delay = RECONNECT_BASE_DELAY_MS * Math.pow(2, reconnects - 1)
+            const delay = Math.min(RECONNECT_MAX_DELAY_MS, RECONNECT_BASE_DELAY_MS * Math.pow(2, reconnects - 1))
             await new Promise(resolve => setTimeout(resolve, delay))
-            // A repeated durable gap must eventually fail instead of resetting
-            // forever after replaying the same valid prefix on every reconnect.
-            if (receivedAny && !(streamError instanceof AgentSequenceGapError)) {
-                reconnects = 0
-            }
         }
     }
 

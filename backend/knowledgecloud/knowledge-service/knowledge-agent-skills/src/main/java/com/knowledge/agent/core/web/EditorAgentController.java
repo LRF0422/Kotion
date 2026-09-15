@@ -145,6 +145,17 @@ public class EditorAgentController {
         }
     }
 
+    @ApiOperation("List a run's delegated child runs (sub-agent audit drill-down)")
+    @GetMapping("/runs/{runId}/children")
+    public R<List<RunView>> children(@PathVariable String runId) {
+        try {
+            return R.data(supervisor.children(runId,
+                    SecurityContextUtil.getUserId(), parseTenantId()));
+        } catch (IllegalArgumentException e) {
+            return R.fail(e.getMessage());
+        }
+    }
+
     @ApiOperation("Stream run events (replay + live)")
     @GetMapping(value = "/runs/{runId}/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter events(@PathVariable String runId,

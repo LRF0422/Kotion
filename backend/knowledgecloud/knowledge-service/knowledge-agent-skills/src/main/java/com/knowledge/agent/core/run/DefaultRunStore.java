@@ -3,6 +3,7 @@ package com.knowledge.agent.core.run;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.knowledge.agent.core.entity.AgentRunEntity;
 import com.knowledge.agent.core.mapper.AgentRunMapper;
+import com.knowledge.agent.core.savedskill.SecretRedactor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
@@ -25,12 +26,14 @@ public class DefaultRunStore implements RunStore {
     private final StringRedisTemplate redis;
     private final ObjectMapper objectMapper;
     private final AgentRunMapper runMapper;
+    private final SecretRedactor secretRedactor;
 
     public DefaultRunStore(StringRedisTemplate redis, ObjectMapper objectMapper,
-                           AgentRunMapper runMapper) {
+                           AgentRunMapper runMapper, SecretRedactor secretRedactor) {
         this.redis = redis;
         this.objectMapper = objectMapper;
         this.runMapper = runMapper;
+        this.secretRedactor = secretRedactor;
     }
 
     @Override
@@ -43,6 +46,12 @@ public class DefaultRunStore implements RunStore {
             redis.opsForValue().set(HOT_KEY_PREFIX + run.getRunId(), json, HOT_TTL_HOURS, TimeUnit.HOURS);
         } catch (Exception e) {
             log.warn("RunStore Redis save failed for {}: {}", run.getRunId(), e.getMessage());
+            // A stale hot entry must not shadow the newer JDBC mirror.
+            try {
+                redis.delete(HOT_KEY_PREFIX + run.getRunId());
+            } catch (Exception ignored) {
+                // best effort
+            }
         }
     }
 
@@ -103,11 +112,13 @@ public class DefaultRunStore implements RunStore {
         entity.setFinishReason(run.getFinishReason());
         entity.setSuspendReason(run.getSuspendReason());
         entity.setErrorCode(run.getErrorCode());
-        entity.setErrorMessage(run.getErrorMessage());
+        // Never persist credentials a provider/error string may have leaked.
+        entity.setErrorMessage(run.getErrorMessage() == null || secretRedactor == null
+                ? run.getErrorMessage() : secretRedactor.redact(run.getErrorMessage()));
         entity.setLastSeq(run.getLastSeq());
-        entity.setPromptTokens((int) run.getPromptTokens());
-        entity.setCompletionTokens((int) run.getCompletionTokens());
-        entity.setCachedPromptTokens((int) run.getCachedPromptTokens());
+        entity.setPromptTokens(run.getPromptTokens());
+        entity.setCompletionTokens(run.getCompletionTokens());
+        entity.setCachedPromptTokens(run.getCachedPromptTokens());
         entity.setCreateTime(run.getCreateTime());
         entity.setUpdateTime(run.getUpdateTime());
         return entity;

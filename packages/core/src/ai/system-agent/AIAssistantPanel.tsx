@@ -35,10 +35,12 @@ import {
 } from '@kn/ui'
 import type { Editor } from '@kn/editor'
 import {
+    AgentClient,
     useEditorAgent,
     useCapabilityProviders,
     buildAgentRunInputs,
     getPageNavigationBridge,
+    cacheHitRate,
     EDITOR_AGENT_PROMPT,
 } from '@kn/common'
 import { SubAgentTree } from './SubAgentTree'
@@ -68,6 +70,7 @@ interface Message {
     timestamp: number
     toolCalls?: import('@kn/common').ToolCallRecord[]
     subRuns?: import('@kn/common').SubRunRecord[]
+    usage?: import('@kn/common').RunUsage | null
 }
 
 const CONVERSATION_KEY = 'agentcore:editor-conversation'
@@ -111,6 +114,61 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
 
     const inputRef = useRef<HTMLTextAreaElement>(null)
     const messagesEndRef = useRef<HTMLDivElement>(null)
+    const sessionClient = useMemo(() => new AgentClient(), [])
+    const hydratedRef = useRef(false)
+
+    // Hydrate the visible history from the engine-owned session projection.
+    // The transcript is written server-side on each terminal run; without this
+    // the panel lost every prior turn on reopen.
+    useEffect(() => {
+        if (hydratedRef.current) return
+        hydratedRef.current = true
+        void (async () => {
+            try {
+                const session = await sessionClient.getChatSession(conversationId)
+                const raw = (session as { messages?: unknown } | null)?.messages
+                if (!Array.isArray(raw) || raw.length === 0) return
+                const restored: Message[] = []
+                raw.forEach((node, index) => {
+                    if (!node || typeof node !== 'object') return
+                    const entry = node as Record<string, any>
+                    const timestamp = Number(entry.timestamp) || Date.now()
+                    if (entry.sender === 'user') {
+                        restored.push({
+                            id: String(entry.id ?? 'u-' + index),
+                            role: 'user',
+                            content: String(entry.content ?? ''),
+                            timestamp,
+                        })
+                        return
+                    }
+                    const toolCalls = Array.isArray(entry.steps)
+                        ? entry.steps
+                            .filter((step: any) => step && (step.callId || step.id))
+                            .map((step: any) => ({
+                                callId: String(step.callId ?? step.id),
+                                tool: String(step.toolName ?? 'tool'),
+                                args: step.args && typeof step.args === 'object' ? step.args : {},
+                                status: 'success' as const,
+                                result: step.result,
+                            }))
+                        : []
+                    restored.push({
+                        id: String(entry.id ?? 'a-' + index),
+                        role: 'assistant',
+                        content: String(entry.content ?? ''),
+                        timestamp,
+                        toolCalls,
+                    })
+                })
+                if (restored.length > 0) {
+                    setMessages(prev => (prev.length === 0 ? restored : prev))
+                }
+            } catch {
+                // No persisted session yet — an empty panel is correct.
+            }
+        })()
+    }, [conversationId, sessionClient])
 
     // 编辑器工具目录 + 技能片段（保留的供应商层）
     const { getCatalog, resolveTools, isReadOnlyTool } = useCapabilityProviders(editor ?? null)
@@ -164,6 +222,7 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
                     timestamp: Date.now(),
                     toolCalls: agent.state.toolCalls.slice(),
                     subRuns: agent.state.subRuns.slice(),
+                    usage: agent.state.usage,
                 }
                 setMessages(prev => [...prev, snapshot])
             }
@@ -302,6 +361,22 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
                                             )}
                                             {message.subRuns && message.subRuns.length > 0 && (
                                                 <SubAgentTree subRuns={message.subRuns} toolCalls={message.toolCalls} />
+                                            )}
+                                            {message.usage && message.usage.promptTokens > 0 && (
+                                                <span
+                                                    className="text-[10px] text-muted-foreground"
+                                                    title={
+                                                        '输入 ' + message.usage.promptTokens.toLocaleString()
+                                                        + ' · 输出 ' + message.usage.completionTokens.toLocaleString()
+                                                        + (cacheHitRate(message.usage) != null
+                                                            ? ' · 缓存命中 ' + Math.round((cacheHitRate(message.usage) as number) * 100) + '%'
+                                                            : '')
+                                                    }
+                                                >
+                                                    {message.usage.promptTokens.toLocaleString()}
+                                                    {' + '}
+                                                    {message.usage.completionTokens.toLocaleString()} tokens
+                                                </span>
                                             )}
                                             <Button
                                                 variant="ghost"

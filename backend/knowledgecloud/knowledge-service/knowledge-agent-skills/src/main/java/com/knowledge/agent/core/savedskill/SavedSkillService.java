@@ -124,7 +124,7 @@ public class SavedSkillService {
         SavedSkill mergeTarget = findMergeTarget(run, checkpoint, allowedTools);
         if (mergeTarget != null) {
             SavedSkillDraft draft = compiler.compileUpdate(mergeTarget, run.getModel(),
-                    projection.getTranscript(), allowedTools);
+                    projection.getTranscript(), allowedTools, run.getRunId());
             SavedSkill updated = applyDefinition(mergeTarget, draft, run, projection);
             updated.setVersion(mergeTarget.getVersion() + 1);
             if (!store.updateOwned(updated)) {
@@ -133,7 +133,8 @@ public class SavedSkillService {
             return new SavedSkillStore.SaveResult(updated, false, true);
         }
 
-        SavedSkillDraft draft = compiler.compile(run.getModel(), projection.getTranscript(), allowedTools);
+        SavedSkillDraft draft = compiler.compile(run.getModel(), projection.getTranscript(),
+                allowedTools, run.getRunId());
         SavedSkill skill = applyDefinition(new SavedSkill(), draft, run, projection);
         skill.setSourceSchemaVersion("v1");
         skill.setEnabled(true);

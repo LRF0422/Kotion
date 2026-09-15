@@ -113,7 +113,34 @@ public final class RunEvents {
         return payload("code", code, "error", error);
     }
 
+    /**
+     * Failure terminal carrying the run's accumulated usage. Failed runs still
+     * consumed tokens, so audit/cost accounting must not lose them.
+     */
+    public static Map<String, Object> runFailed(String code, String error,
+                                                long promptTokens, long completionTokens,
+                                                long cachedPromptTokens) {
+        Map<String, Object> payload = runFailed(code, error);
+        payload.put("usage", usageMap(promptTokens, completionTokens, cachedPromptTokens));
+        return payload;
+    }
+
     public static Map<String, Object> runCancelled() {
         return payload();
+    }
+
+    /** Cancellation terminal carrying the run's accumulated usage. */
+    public static Map<String, Object> runCancelled(long promptTokens, long completionTokens,
+                                                   long cachedPromptTokens) {
+        Map<String, Object> payload = runCancelled();
+        payload.put("usage", usageMap(promptTokens, completionTokens, cachedPromptTokens));
+        return payload;
+    }
+
+    private static Map<String, Object> usageMap(long promptTokens, long completionTokens,
+                                                long cachedPromptTokens) {
+        return payload("promptTokens", promptTokens,
+                "completionTokens", completionTokens,
+                "cachedPromptTokens", cachedPromptTokens);
     }
 }

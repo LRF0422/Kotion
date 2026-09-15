@@ -22,6 +22,7 @@ import com.knowledge.agent.core.entity.AgentRunEntity;
 import com.knowledge.agent.core.entity.AgentThreadEntity;
 import com.knowledge.agent.core.run.AgentRun;
 import com.knowledge.agent.core.run.PendingToolCall;
+import com.knowledge.agent.core.run.RunCancelFlag;
 import com.knowledge.agent.core.run.RunStatus;
 import com.knowledge.agent.core.run.RunStore;
 import com.knowledge.agent.core.run.RunView;
@@ -72,7 +73,9 @@ public class DefaultRunSupervisor {
     private final ObjectMapper objectMapper;
     private final AgentCoreProperties properties;
     private final ExecutorService loopExecutor;
+    private final ExecutorService childLoopExecutor;
     private final ExecutorService toolExecutor;
+    private final RunCancelFlag cancelFlag;
 
     /** Live loops on THIS instance (reconcile and resume consult it). */
     private final Map<String, LoopHandle> handles = new ConcurrentHashMap<>();
@@ -95,7 +98,9 @@ public class DefaultRunSupervisor {
                                 ObjectMapper objectMapper,
                                 AgentCoreProperties properties,
                                 @Qualifier("agentLoopExecutor") ExecutorService loopExecutor,
-                                @Qualifier("agentToolExecutor") ExecutorService toolExecutor) {
+                                @Qualifier("agentChildLoopExecutor") ExecutorService childLoopExecutor,
+                                @Qualifier("agentToolExecutor") ExecutorService toolExecutor,
+                                RunCancelFlag cancelFlag) {
         this.runStore = runStore;
         this.checkpointStore = checkpointStore;
         this.eventLog = eventLog;
@@ -114,7 +119,9 @@ public class DefaultRunSupervisor {
         this.objectMapper = objectMapper;
         this.properties = properties;
         this.loopExecutor = loopExecutor;
+        this.childLoopExecutor = childLoopExecutor;
         this.toolExecutor = toolExecutor;
+        this.cancelFlag = cancelFlag;
     }
 
     // ==================== create ====================
@@ -144,6 +151,7 @@ public class DefaultRunSupervisor {
         run.setSpaceId(cmd.getSpaceId());
         run.setPageId(cmd.getPageId());
         run.setToken(cmd.getToken());
+        cancelFlag.clear(run.getRunId());
         runStore.persist(run);
         runStore.saveHot(run);
 
@@ -175,6 +183,9 @@ public class DefaultRunSupervisor {
 
     /** Create a child run (sub-agent) — M3 delegate support. */
     public RunView createChild(CreateRunCommand cmd, String parentRunId, int delegateDepth) {
+        // Children are real runs: they must obey the same tenant quota as roots,
+        // otherwise one parent can fan out without bound.
+        quota.checkCreateAllowed(cmd.getTenantId());
         AgentRun run = AgentRun.create(UUID.randomUUID().toString(), cmd.getConversationId(),
                 cmd.getUserId(), cmd.getTenantId(), cmd.getModel(), cmd.getMode(), System.currentTimeMillis());
         run.setParentRunId(parentRunId);
@@ -226,11 +237,21 @@ public class DefaultRunSupervisor {
         }
         checkpoint.setTemperature(cmd.getTemperature());
         checkpoint.setMaxTokens(cmd.getMaxTokens());
+        checkpoint.setNoTools(cmd.isNoTools());
+        checkpoint.setPlanGateOpen(run.isPlanGateOpen());
+        checkpoint.setSkillFragments(new ArrayList<>(systemFragments));
+        checkpoint.setSystemPrompt(cmd.getSystemPrompt());
+        checkpoint.setMemoryLines(cmd.getMemoryLines() != null
+                ? new ArrayList<>(cmd.getMemoryLines()) : new ArrayList<>());
+        if (cmd.getSavedSkillProvenance() != null) {
+            checkpoint.setSavedSkillProvenance(new ArrayList<>(cmd.getSavedSkillProvenance()));
+        }
         checkpoint.setMaxSteps(cmd.getMaxSteps() != null
                 ? cmd.getMaxSteps() : properties.getRun().getMaxSteps());
         // Record the boundary between caller-supplied history and messages the
         // run itself produces, so the projection appends only the new turns.
         checkpoint.setInputMessageCount(checkpoint.getMessages().size());
+        cancelFlag.clear(run.getRunId());
         checkpointStore.save(checkpoint);
 
         // Child runs are stateless and never projected into a session.
@@ -253,10 +274,23 @@ public class DefaultRunSupervisor {
         // that are required to reconcile a stale WAITING_TOOLS snapshot.
         RunView view = RunView.of(run);
         view.setReplayThroughSeq(eventLog.lastSeq(runId));
-        if (RunStatus.SUSPENDED.name().equals(run.getStatus())
-                && "plan_approval".equals(run.getSuspendReason())) {
-            Checkpoint checkpoint = checkpointStore.load(runId);
-            if (checkpoint != null && checkpoint.getPendingPlanCalls() != null
+        // JDBC cold state carries no pendingTools/assistantText, so merge the
+        // checkpoint; otherwise a cold-loaded WAITING_TOOLS run cannot be
+        // reconnected (the client restore path needs pendingTools).
+        Checkpoint checkpoint = checkpointStore.load(runId);
+        if (checkpoint != null) {
+            if ((view.getAssistantText() == null || view.getAssistantText().isEmpty())
+                    && checkpoint.getAssistantText() != null) {
+                view.setAssistantText(checkpoint.getAssistantText());
+            }
+            if (view.getPendingTools().isEmpty()
+                    && checkpoint.getPendingToolCalls() != null
+                    && !checkpoint.getPendingToolCalls().isEmpty()) {
+                view.getPendingTools().addAll(checkpoint.getPendingToolCalls());
+            }
+            if (RunStatus.SUSPENDED.name().equals(run.getStatus())
+                    && "plan_approval".equals(run.getSuspendReason())
+                    && checkpoint.getPendingPlanCalls() != null
                     && !checkpoint.getPendingPlanCalls().isEmpty()) {
                 PendingToolCall pendingPlan = checkpoint.getPendingPlanCalls().get(0);
                 view.setPendingPlanCallId(pendingPlan.getCallId());
@@ -264,6 +298,25 @@ public class DefaultRunSupervisor {
             }
         }
         return view;
+    }
+
+    /**
+     * Delegated child runs of a parent — audit drill-down. Owner-scoped via the
+     * parent run, and the children inherit the parent's identity.
+     */
+    public List<RunView> children(String parentRunId, Long userId, Long tenantId) {
+        requireOwned(parentRunId, userId, tenantId);
+        List<RunView> views = new java.util.ArrayList<>();
+        List<AgentRunEntity> rows = runMapper.selectByParentRunId(parentRunId);
+        if (rows != null) {
+            for (AgentRunEntity row : rows) {
+                AgentRun child = runStore.load(row.getRunId());
+                if (child != null) {
+                    views.add(RunView.of(child));
+                }
+            }
+        }
+        return views;
     }
 
     /**
@@ -275,10 +328,13 @@ public class DefaultRunSupervisor {
         if (run == null) {
             throw new IllegalArgumentException("RUN_NOT_FOUND");
         }
-        if (userId != null && run.getUserId() != null && !userId.equals(run.getUserId())) {
+        // Fail closed on missing identity: a run with a null owner (possible in
+        // the schema) must not be readable/cancellable by any authenticated
+        // caller.
+        if (userId == null || run.getUserId() == null || !userId.equals(run.getUserId())) {
             throw new IllegalArgumentException("RUN_NOT_FOUND");
         }
-        if (tenantId != null && run.getTenantId() != null && !tenantId.equals(run.getTenantId())) {
+        if (tenantId == null || run.getTenantId() == null || !tenantId.equals(run.getTenantId())) {
             throw new IllegalArgumentException("RUN_NOT_FOUND");
         }
         return run;
@@ -326,25 +382,33 @@ public class DefaultRunSupervisor {
     /** Idempotent cancel — authoritative terminal marking happens here. */
     public void cancel(String runId) {
         AgentRun run = runStore.load(runId);
-        if (run == null || run.statusEnum().isTerminal()) {
+        if (run == null) {
             return;
         }
-        LoopHandle handle = handles.get(runId);
-
-        run.setStatus(RunStatus.CANCELLED.name());
-        run.setFinishReason("cancelled");
-        run.setErrorCode(null);
-        run.setErrorMessage(null);
-        run.touch();
-        run.setLastSeq(eventLog.append(run.getRunId(), RunEvents.RUN_CANCELLED, RunEvents.runCancelled())
-                .getSeq());
-        runStore.persist(run);
-        runStore.saveHot(run);
-        threadStore.clearActive(run.getConversationId(), runId);
-        if (handle != null) {
-            handle.loop.requestCancel();
+        if (!run.statusEnum().isTerminal()) {
+            LoopHandle handle = handles.get(runId);
+            // Signal FIRST, then persist: the owning loop must stop persisting
+            // before CANCELLED is written, otherwise a late
+            // WAITING_TOOLS/SUSPENDED/RUNNING write could resurrect the run.
+            // The Redis marker also reaches an owner on another instance.
+            cancelFlag.mark(runId);
+            if (handle != null) {
+                handle.loop.requestCancel();
+            }
+            run.setStatus(RunStatus.CANCELLED.name());
+            run.setFinishReason("cancelled");
+            run.setErrorCode(null);
+            run.setErrorMessage(null);
+            run.touch();
+            run.setLastSeq(eventLog.append(run.getRunId(), RunEvents.RUN_CANCELLED,
+                    RunEvents.runCancelled(run.getPromptTokens(), run.getCompletionTokens(),
+                            run.getCachedPromptTokens())).getSeq());
+            runStore.persist(run);
+            runStore.saveHot(run);
+            threadStore.clearActive(run.getConversationId(), runId);
         }
-        // Cascade-cancel child runs (sub-agent tree).
+        // Cascade-cancel child runs even when the parent was already terminal
+        // (a root can complete while a delegated child is still running).
         try {
             List<AgentRunEntity> children = runMapper.selectByParentRunId(runId);
             for (AgentRunEntity child : children) {
@@ -373,7 +437,22 @@ public class DefaultRunSupervisor {
         handles.remove(runId);
         lease.release(runId);
         AgentRun run = runStore.load(runId);
+        // A cross-instance cancel may have marked the flag after the loop
+        // already decided to exit; make sure the durable status ends terminal
+        // so reconcile does not keep rebuilding a cancelled run.
+        boolean externallyCancelled = cancelFlag.isMarked(runId);
+        cancelFlag.clear(runId);
         if (run != null) {
+            if (externallyCancelled && !run.statusEnum().isTerminal()) {
+                run.setStatus(RunStatus.CANCELLED.name());
+                run.setFinishReason("cancelled");
+                run.touch();
+                run.setLastSeq(eventLog.append(runId, RunEvents.RUN_CANCELLED,
+                        RunEvents.runCancelled(run.getPromptTokens(), run.getCompletionTokens(),
+                                run.getCachedPromptTokens())).getSeq());
+                runStore.persist(run);
+                runStore.saveHot(run);
+            }
             threadStore.clearActive(run.getConversationId(), runId);
             // Session memory: summarize the completed conversation async.
             if (RunStatus.COMPLETED.name().equals(run.getStatus()) && run.getParentRunId() == null) {
@@ -426,7 +505,14 @@ public class DefaultRunSupervisor {
         int ttl = properties.getLease().getTtlSeconds();
         for (LoopHandle handle : handles.values()) {
             if (!handle.future.isDone()) {
-                lease.renew(handle.run.getRunId(), ttl);
+                if (!lease.renew(handle.run.getRunId(), ttl)) {
+                    // Ownership is gone: another instance may already be driving
+                    // this run. Stop this loop instead of risking split-brain
+                    // duplicate seqs/side effects.
+                    log.warn("Lease lost for {} — stopping local loop to avoid split-brain",
+                            handle.run.getRunId());
+                    handle.loop.requestCancel();
+                }
             }
         }
     }
@@ -447,14 +533,26 @@ public class DefaultRunSupervisor {
                 runStore, checkpointStore, eventLog,
                 llmGateway, toolGateway, contextManager,
                 delegator, objectMapper, properties, toolExecutor,
-                this::onLoopExit, gate);
-        Future<?> future = loopExecutor.submit(loop);
+                this::onLoopExit, gate, cancelFlag);
+        // Children run on a SEPARATE pool. A parent blocks its own thread while
+        // waiting for children; if children shared the parent pool they would
+        // queue behind blocked parents and starve (a deadlock with core=4).
+        ExecutorService executor = run.getParentRunId() != null ? childLoopExecutor : loopExecutor;
+        Future<?> future;
+        try {
+            future = executor.submit(loop);
+        } catch (java.util.concurrent.RejectedExecutionException e) {
+            log.warn("Loop submission rejected for {} (pool saturated)", run.getRunId());
+            lease.release(run.getRunId());
+            return null;
+        }
         LoopHandle handle = new LoopHandle(run, loop, gate, future);
         handles.put(run.getRunId(), handle);
         return handle;
     }
 
     private void markFailed(AgentRun run, String code, String message) {
+        cancelFlag.clear(run.getRunId());
         run.setStatus(RunStatus.FAILED.name());
         run.setFinishReason(code);
         run.setErrorCode(code);
@@ -500,6 +598,11 @@ public class DefaultRunSupervisor {
         @Override
         public List<String> skillFragments() {
             return cmd.getSkillFragments();
+        }
+
+        @Override
+        public String systemPrompt() {
+            return cmd.getSystemPrompt();
         }
 
         @Override

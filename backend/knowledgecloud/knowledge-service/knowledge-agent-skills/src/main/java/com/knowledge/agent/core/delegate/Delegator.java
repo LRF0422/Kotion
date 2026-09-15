@@ -2,8 +2,11 @@ package com.knowledge.agent.core.delegate;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.knowledge.agent.api.dto.ChatMessage;
+import com.knowledge.agent.core.checkpoint.DelegationRecord;
 import com.knowledge.agent.core.config.AgentCoreProperties;
+import com.knowledge.agent.core.entity.AgentRunEntity;
 import com.knowledge.agent.core.event.EventSubscription;
+import com.knowledge.agent.core.mapper.AgentRunMapper;
 import com.knowledge.agent.core.event.RunEvent;
 import com.knowledge.agent.core.event.RunEventLog;
 import com.knowledge.agent.core.event.RunEvents;
@@ -23,6 +26,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -43,13 +47,16 @@ public class Delegator {
     private final RunEventLog eventLog;
     private final ObjectMapper objectMapper;
     private final AgentCoreProperties properties;
+    private final AgentRunMapper runMapper;
 
     public Delegator(ObjectProvider<DefaultRunSupervisor> supervisorProvider, RunEventLog eventLog,
-                     ObjectMapper objectMapper, AgentCoreProperties properties) {
+                     ObjectMapper objectMapper, AgentCoreProperties properties,
+                     AgentRunMapper runMapper) {
         this.supervisorProvider = supervisorProvider;
         this.eventLog = eventLog;
         this.objectMapper = objectMapper;
         this.properties = properties;
+        this.runMapper = runMapper;
     }
 
     private DefaultRunSupervisor supervisor() {
@@ -70,6 +77,20 @@ public class Delegator {
         if (ctx.getDelegateDepth() >= maxDepth) {
             throw new IllegalArgumentException("委派深度已达上限 (" + maxDepth + ")");
         }
+        int maxChildren = properties.getRun().getMaxChildrenPerRun();
+        if (maxChildren > 0 && runMapper != null && ctx.getRunId() != null) {
+            List<AgentRunEntity> existing = runMapper.selectByParentRunId(ctx.getRunId());
+            long active = existing == null ? 0 : existing.stream().filter(child -> {
+                try {
+                    return com.knowledge.agent.core.run.RunStatus.valueOf(child.getStatus()).isActive();
+                } catch (Exception e) {
+                    return false;
+                }
+            }).count();
+            if (active >= maxChildren) {
+                throw new IllegalArgumentException("单个 run 的并发子 agent 数量已达上限 (" + maxChildren + ")");
+            }
+        }
 
         CreateRunCommand cmd = new CreateRunCommand();
         cmd.setConversationId(ctx.getConversationId());
@@ -80,8 +101,19 @@ public class Delegator {
         cmd.setPageId(ctx.getPageId());
         cmd.setModel(ctx.getModel());
         cmd.setMode("execute");
-        cmd.setMaxSteps(args.get("maxSteps") != null
-                ? ((Number) args.get("maxSteps")).intValue() : null);
+        cmd.setNoTools(ctx.isNoTools());
+        // Freeze the parent's creation context onto the child so it does not
+        // lose the editor rules / skill fragments / memory / sampling settings.
+        cmd.setSystemPrompt(ctx.getSystemPrompt());
+        cmd.setSkillFragments(ctx.getSkillFragments() != null
+                ? new ArrayList<>(ctx.getSkillFragments()) : new ArrayList<>());
+        cmd.setMemoryLines(ctx.getMemoryLines() != null
+                ? new ArrayList<>(ctx.getMemoryLines()) : new ArrayList<>());
+        cmd.setSavedSkillProvenance(ctx.getSavedSkillProvenance() != null
+                ? new ArrayList<>(ctx.getSavedSkillProvenance()) : new ArrayList<>());
+        cmd.setTemperature(ctx.getTemperature());
+        cmd.setMaxTokens(ctx.getMaxTokens());
+        cmd.setMaxSteps(args.get("maxSteps") != null ? intArg(args.get("maxSteps"), "maxSteps") : null);
 
         List<ChatMessage> messages = new ArrayList<>();
         messages.add(ChatMessage.builder().role("user").content(task).build());
@@ -96,8 +128,11 @@ public class Delegator {
                 RunEvents.subSpawned(call.getId(), child.getRunId(), task));
 
         int timeoutSec = args.get("timeoutSec") != null
-                ? ((Number) args.get("timeoutSec")).intValue()
+                ? intArg(args.get("timeoutSec"), "timeoutSec")
                 : properties.getRun().getDelegateTimeoutSeconds();
+        if (timeoutSec <= 0) {
+            timeoutSec = properties.getRun().getDelegateTimeoutSeconds();
+        }
 
         Delegation delegation = new Delegation();
         delegation.setCallId(call.getId());
@@ -109,16 +144,35 @@ public class Delegator {
         return delegation;
     }
 
-    /** Rebuild a delegation after a crash (re-subscribe to the child log). */
-    public Delegation attach(String parentRunId, String callId, String subRunId) {
+    /**
+     * Rebuild a delegation after a crash (re-subscribe to the child log).
+     * Preserves the original spawn time so recovery does not grant the child a
+     * fresh timeout.
+     */
+    public Delegation attach(String parentRunId, DelegationRecord record) {
         Delegation delegation = new Delegation();
-        delegation.setCallId(callId);
-        delegation.setSubRunId(subRunId);
-        delegation.setTask(null);
-        delegation.setSpawnedAt(System.currentTimeMillis());
+        delegation.setCallId(record.getCallId());
+        delegation.setSubRunId(record.getSubRunId());
+        delegation.setTask(record.getTask());
+        delegation.setSpawnedAt(record.getSpawnedAt() > 0
+                ? record.getSpawnedAt() : System.currentTimeMillis());
         delegation.setTimeoutMs(properties.getRun().getDelegateTimeoutSeconds() * 1000L);
-        delegation.setSubscription(eventLog.subscribe(subRunId));
+        delegation.setSubscription(eventLog.subscribe(record.getSubRunId()));
         return delegation;
+    }
+
+    private int intArg(Object value, String name) {
+        if (value instanceof Number) {
+            return ((Number) value).intValue();
+        }
+        if (value instanceof String) {
+            try {
+                return Integer.parseInt(((String) value).trim());
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("delegate 的 " + name + " 必须是整数");
+            }
+        }
+        throw new IllegalArgumentException("delegate 的 " + name + " 必须是整数");
     }
 
     /** Route frontend tool results to a child run. */
@@ -167,7 +221,7 @@ public class Delegator {
             for (Object item : (List<?>) toolsArg) {
                 String name = String.valueOf(item).trim();
                 if (!name.isEmpty()) {
-                    wanted.add(name.toLowerCase());
+                    wanted.add(name.toLowerCase(Locale.ROOT));
                 }
             }
         } else {
@@ -181,7 +235,7 @@ public class Delegator {
         }
         List<ToolSpec> selected = new ArrayList<>();
         for (ToolSpec spec : clientTools) {
-            if (spec.getName() != null && wanted.contains(spec.getName().toLowerCase())) {
+            if (spec.getName() != null && wanted.contains(spec.getName().toLowerCase(Locale.ROOT))) {
                 selected.add(spec);
             }
         }
