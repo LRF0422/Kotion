@@ -46,29 +46,29 @@ class ContextManagerDeferredToolsTest {
 
     @Test
     void rendersSignatureWithOptionalMarkers() {
-        ChatMessage message = contextManager.buildSystemMessage(run(), null, null,
-                new ArrayList<>(Arrays.asList(insertChart())));
+        String volatileContext = contextManager.buildVolatileContext(null, null,
+                new ArrayList<>(Arrays.asList(insertChart())), null);
 
-        assertTrue(message.getContent().contains("insertChart(chartType: string, data?: object): 插入图表"),
-                "directory must carry the call signature; was: " + message.getContent());
+        assertTrue(volatileContext.contains("insertChart(chartType: string, data?: object): 插入图表"),
+                "directory must carry the call signature; was: " + volatileContext);
     }
 
     @Test
     void withholdsTheNestedSchemaBody() {
-        ChatMessage message = contextManager.buildSystemMessage(run(), null, null,
-                new ArrayList<>(Arrays.asList(insertChart())));
+        String volatileContext = contextManager.buildVolatileContext(null, null,
+                new ArrayList<>(Arrays.asList(insertChart())), null);
 
-        assertFalse(message.getContent().contains("a very long nested schema"),
+        assertFalse(volatileContext.contains("a very long nested schema"),
                 "per-property schema details must stay out of the prompt until activation");
     }
 
     @Test
     void omitsTheSectionWhenNothingIsDeferred() {
-        String withNone = contextManager.buildSystemMessage(run(), null, null, new ArrayList<>()).getContent();
-        String withNull = contextManager.buildSystemMessage(run(), null, null).getContent();
+        String withNone = contextManager.buildVolatileContext(null, null, new ArrayList<>(), null);
+        String withNull = contextManager.buildVolatileContext(null, null, null, null);
 
-        assertFalse(withNone.contains("【按需工具】"));
-        assertFalse(withNull.contains("【按需工具】"));
+        assertFalse(withNone != null && withNone.contains("【按需工具】"));
+        assertFalse(withNull != null && withNull.contains("【按需工具】"));
     }
 
     @Test
@@ -79,9 +79,23 @@ class ContextManagerDeferredToolsTest {
         ToolSpec malformed = ToolSpec.of("weird", null, odd, ToolKind.FRONTEND, true, "client");
         List<ToolSpec> deferred = new ArrayList<>(Arrays.asList(noSchema, malformed));
 
-        String content = contextManager.buildSystemMessage(run(), null, null, deferred).getContent();
+        String content = contextManager.buildVolatileContext(null, null, deferred, null);
 
         assertTrue(content.contains("ping(): no args"));
         assertTrue(content.contains("weird()"));
+    }
+
+    /**
+     * The directory is per-turn context, not part of the immutable prefix: a
+     * turn that activates a different skill set must not rewrite the message at
+     * index 0, or the provider cache for the whole history is lost.
+     */
+    @Test
+    void keepsTheDeferredDirectoryOutOfTheSystemPrefix() {
+        ChatMessage system = contextManager.buildSystemMessage(run(), null);
+
+        assertFalse(system.getContent().contains("【按需工具】"),
+                "deferred tools belong to the volatile tail, never the system prefix");
+        assertFalse(system.getContent().contains("insertChart"));
     }
 }

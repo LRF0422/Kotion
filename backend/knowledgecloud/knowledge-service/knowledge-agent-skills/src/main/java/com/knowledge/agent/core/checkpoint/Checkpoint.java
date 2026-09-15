@@ -51,13 +51,25 @@ public class Checkpoint {
      * Extra client system-prompt text (editor rules) frozen at run creation.
      * Kept on the checkpoint so delegated children inherit it and so a rebuilt
      * loop reproduces the original system prefix.
+     *
+     * <p>Invariant for the whole conversation: this is the only caller-supplied
+     * text allowed into the cacheable system message.
      */
     private String systemPrompt;
 
-    /** Skill system-prompt fragments frozen at run creation (child inheritance). */
+    /**
+     * Skill system-prompt fragments frozen at run creation (child inheritance
+     * and provenance). They are retrieved per turn and <b>never</b> enter the
+     * system message — they ride in the volatile tail so a change of fragments
+     * cannot invalidate the provider prefix cache.
+     */
     private List<String> skillFragments = new ArrayList<>();
 
-    /** Long-term memory lines frozen at run creation (child inheritance). */
+    /**
+     * Long-term memory lines frozen at run creation (child inheritance). Like
+     * {@link #skillFragments} these are per-turn and travel in the volatile
+     * tail, never in the system prefix.
+     */
     private List<String> memoryLines = new ArrayList<>();
 
     private String mode;

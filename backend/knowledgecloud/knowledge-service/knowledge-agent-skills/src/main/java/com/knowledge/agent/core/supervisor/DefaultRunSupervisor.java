@@ -207,10 +207,10 @@ public class DefaultRunSupervisor {
         checkpoint.setNextStep(1);
         checkpoint.setPlanGateOpen(run.isPlanGateOpen());
         checkpoint.setDelegateDepth(delegateDepth);
-        // Client editor rules ride in the same fragment list as skill prompts so
-        // they land in the (cache-stable) system message.
-        List<String> systemFragments = new ArrayList<>(cmd.getSkillFragments() != null
-                ? cmd.getSkillFragments() : java.util.Collections.emptyList());
+        // Client editor rules ride in the system message — they are invariant
+        // for the whole session, so they stay prefix-cacheable. Skill fragments
+        // are retrieved per turn and therefore ride in the volatile tail.
+        List<String> systemFragments = new ArrayList<>();
         if (cmd.getSystemPrompt() != null && !cmd.getSystemPrompt().trim().isEmpty()) {
             systemFragments.add(cmd.getSystemPrompt().trim());
         }
@@ -218,8 +218,7 @@ public class DefaultRunSupervisor {
         // editor persona either — see AgentLoop#initFreshCheckpoint.
         checkpoint.getMessages().add(cmd.isNoTools()
                 ? ContextManager.buildPlainTextSystemMessage(cmd.getSystemPrompt())
-                : contextManager.buildSystemMessage(run,
-                        systemFragments, cmd.getMemoryLines(), cmd.getSkillTools()));
+                : contextManager.buildSystemMessage(run, systemFragments));
         if (cmd.getMessages() != null) {
             for (ChatMessage message : cmd.getMessages()) {
                 if (message == null || "system".equalsIgnoreCase(message.getRole())) {
@@ -233,6 +232,11 @@ public class DefaultRunSupervisor {
                 checkpoint.getMessages().add(message);
             }
         }
+        // Per-turn context last: memory and skill fragments always sit behind
+        // the (frozen) system prefix so they cannot break the provider cache.
+        contextManager.attachVolatileContext(checkpoint.getMessages(),
+                contextManager.buildVolatileContext(cmd.getMemoryLines(),
+                        cmd.getSkillFragments(), cmd.getSkillTools(), null));
         if (cmd.getTools() != null) {
             checkpoint.setClientTools(new ArrayList<>(cmd.getTools()));
         }

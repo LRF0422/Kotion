@@ -538,20 +538,22 @@ public class AgentLoop implements Runnable {
         cp.setNextStep(1);
         cp.setPlanGateOpen(run.isPlanGateOpen());
         cp.setToken(run.getToken());
-        // Merge skill fragments with the client-supplied system prompt. The
-        // client prompt (editor rules) must reach the model on ROOT runs too —
-        // it used to be merged only for children, silently dropping it here.
-        List<String> fragments = new ArrayList<>();
-        if (runInput != null && runInput.skillFragments() != null) {
-            fragments.addAll(runInput.skillFragments());
-        }
+        // The IMMUTABLE system prefix carries only what never changes inside a
+        // conversation: the base persona plus the client's editor rules. Skill
+        // fragments are retrieved per turn and long-term memory is re-scored
+        // per turn, so both belong in the appended tail (see
+        // attachVolatileContext below) — keeping them here invalidated the
+        // provider prefix cache for the whole history on every turn.
+        List<String> systemFragments = new ArrayList<>();
         if (runInput != null && runInput.systemPrompt() != null
                 && !runInput.systemPrompt().trim().isEmpty()) {
-            fragments.add(runInput.systemPrompt().trim());
+            systemFragments.add(runInput.systemPrompt().trim());
         }
+        List<String> skillFragments = runInput != null && runInput.skillFragments() != null
+                ? new ArrayList<>(runInput.skillFragments()) : new ArrayList<>();
         List<String> memoryLines = runInput != null && runInput.memoryLines() != null
                 ? new ArrayList<>(runInput.memoryLines()) : new ArrayList<>();
-        cp.setSkillFragments(fragments);
+        cp.setSkillFragments(skillFragments);
         cp.setMemoryLines(memoryLines);
         cp.setSystemPrompt(runInput != null ? runInput.systemPrompt() : null);
         // Pure-text mode (inline translate / polish / summarize, the AI block,
@@ -565,11 +567,7 @@ public class AgentLoop implements Runnable {
             cp.getMessages().add(ContextManager.buildPlainTextSystemMessage(
                     runInput.systemPrompt()));
         } else {
-            cp.getMessages().add(contextManager.buildSystemMessage(run,
-                    fragments,
-                    memoryLines,
-                    new ArrayList<>(deferredToolSpecs.values()),
-                    runInput != null ? runInput.threadSummary() : null));
+            cp.getMessages().add(contextManager.buildSystemMessage(run, systemFragments));
         }
         if (runInput != null && runInput.messages() != null) {
             // A non-vision model must never receive image parts (the provider
@@ -622,7 +620,18 @@ public class AgentLoop implements Runnable {
         cp.setMaxSteps(runInput != null && runInput.maxSteps() != null
                 ? runInput.maxSteps() : properties.getRun().getMaxSteps());
         cp.setNoTools(runInput != null && runInput.noTools());
+        // Per-turn context (memory lines + rolling summary) goes BEHIND the
+        // cacheable history, immediately before this turn's own user message.
+        // Placed here, after every caller-supplied message, so the prefix that
+        // was cached on a previous turn still matches byte-for-byte and only
+        // the tail is billed in full.
+        contextManager.attachVolatileContext(cp.getMessages(),
+                contextManager.buildVolatileContext(memoryLines, skillFragments,
+                        new ArrayList<>(deferredToolSpecs.values()),
+                        runInput != null ? runInput.threadSummary() : null));
         // Boundary between supplied history and messages this run produces.
+        // Counted AFTER the volatile tail so the session projection treats it as
+        // internal context, never as this run's output.
         cp.setInputMessageCount(cp.getMessages().size());
         this.checkpoint = cp;
         // Fresh checkpoint is persisted by the first saveCheckpoint() call.
