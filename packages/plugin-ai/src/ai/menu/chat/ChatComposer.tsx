@@ -5,7 +5,7 @@ import React, {
     useRef,
     useState,
 } from 'react'
-import { Send, Square, MessageCircle, Bot, FileDiff, ImagePlus, X } from '@kn/icon'
+import { Send, Square, MessageCircle, Bot, FileDiff, ImagePlus, ImageOff, X } from '@kn/icon'
 import {
     Button,
     ChatInput,
@@ -96,6 +96,14 @@ interface ChatComposerProps {
     onAddImages?: (files: File[]) => void
     /** Remove the attachment at the given index. */
     onRemoveImage?: (index: number) => void
+    /**
+     * Whether the selected model accepts image input. `undefined` = unknown
+     * (catalog not loaded, custom model id, or backend default) and never
+     * blocks anything — only a *known* non-vision model does.
+     */
+    visionSupported?: boolean
+    /** Model id to name in the non-vision warnings. */
+    visionModelLabel?: string
 }
 
 /**
@@ -111,6 +119,7 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
         modelParams, onModelParamsChange,
         targetPage, currentPage, targetStatus, onPickPage, onClearPage, onRetryPage, onOpenPageWindow,
         tracking, onToggleTracking, images, onAddImages, onRemoveImage,
+        visionSupported, visionModelLabel,
     },
     ref,
 ) {
@@ -134,7 +143,22 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
     const connecting = targetStatus === 'connecting'
     const targetUnavailable = connecting || targetStatus === 'error'
     const hasImages = (images?.length ?? 0) > 0
-    const isValid = (value.trim().length > 0 || hasImages) && !isLoading && !targetUnavailable
+    // The backend silently drops image parts for a model it knows cannot see
+    // them, so attaching one there only produces a confusing "看不到图片"
+    // answer. Block the upload up front — but only on a *known* non-vision
+    // model (see the prop docs), and never silently: the button tooltip and the
+    // warning below both say what to do.
+    const visionBlocked = visionSupported === false
+    const visionModel = visionModelLabel || t('ai.chat.thisModel', { defaultValue: '当前模型' })
+    const attachImageLabel = visionBlocked
+        ? t('ai.chat.attachImageBlocked', {
+            model: visionModel,
+            defaultValue: '当前模型「{{model}}」不支持图片识图，请先切换到支持识图的模型',
+        })
+        : t('ai.chat.attachImage', { defaultValue: '上传图片（模型可直接查看）' })
+    const blockedByAttachedImages = visionBlocked && hasImages
+    const isValid = (value.trim().length > 0 || hasImages)
+        && !isLoading && !targetUnavailable && !blockedByAttachedImages
 
     const handleFormSubmit = (e: FormEvent) => {
         e.preventDefault()
@@ -163,6 +187,9 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
         const files = Array.from(e.clipboardData?.files ?? []).filter(file => file.type.startsWith('image/'))
         if (files.length === 0) return
         e.preventDefault()
+        // A pasted image would be dropped by the backend on a non-vision model;
+        // swallow it and let the parent surface the reason (Chat.tsx).
+        if (visionBlocked) return
         onAddImages?.(files)
     }
 
@@ -178,6 +205,20 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
             onSubmit={handleFormSubmit}
             className="relative rounded-xl border border-border/60 bg-background transition-colors focus-within:border-ring/50 focus-within:ring-1 focus-within:ring-ring/15"
         >
+            {blockedByAttachedImages && (
+                <div
+                    role="status"
+                    className="mx-2 mt-2 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-[11px] text-amber-700 dark:text-amber-300"
+                >
+                    <ImageOff aria-hidden="true" className="mt-px h-3.5 w-3.5 shrink-0" />
+                    <span className="min-w-0 flex-1">
+                        {t('ai.chat.visionUnsupportedWarning', {
+                            model: visionModel,
+                            defaultValue: '当前模型「{{model}}」不支持图片输入，这些图片不会发送给模型。请切换到支持识图的模型，或移除图片后再发送。',
+                        })}
+                    </span>
+                </div>
+            )}
             <PageMentionPicker
                 targetPage={targetPage}
                 currentPage={currentPage}
@@ -245,10 +286,10 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
                 <ModeToggle mode={mode} onModeChange={onModeChange} disabled={isLoading} />
                 <button
                     type="button"
-                    disabled={isLoading}
+                    disabled={isLoading || visionBlocked}
                     onClick={() => fileInputRef.current?.click()}
-                    title={t('ai.chat.attachImage', { defaultValue: '上传图片（模型可直接查看）' })}
-                    aria-label={t('ai.chat.attachImage', { defaultValue: '上传图片（模型可直接查看）' })}
+                    title={attachImageLabel}
+                    aria-label={attachImageLabel}
                     className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground disabled:opacity-50 lg:h-7 lg:w-7 lg:rounded-md"
                 >
                     <ImagePlus className="h-3.5 w-3.5 shrink-0" />

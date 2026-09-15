@@ -591,6 +591,14 @@ public class AgentLoop implements Runnable {
                     }
                     message.setContentParts(null);
                     if (hadImage) {
+                        // Worth a warning: the client cannot see this degradation
+                        // in advance, so the user only learns about it from the
+                        // model's answer ("看不到图片"). Seeing it in the log is
+                        // the fastest route to "mark the model vision: true in
+                        // agent.providers.<provider>.models[]".
+                        log.warn("Run {}: dropping image parts — model {} is not vision-capable "
+                                        + "(set vision: true in agent.providers.<provider>.models[])",
+                                run.getRunId(), run.getModel());
                         String note = "（用户发送了图片，但当前模型不支持图片输入，无法查看。）";
                         message.setContent(message.getContent() == null || message.getContent().isEmpty()
                                 ? note

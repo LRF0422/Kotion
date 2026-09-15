@@ -11,6 +11,26 @@ agent:
   # agent.providers.<provider>.models[] entry (well-known names such as
   # glm-4v / *-vl / gpt-4o are also recognised). A non-vision model gets a
   # plain-text degradation instead of image parts (which providers would 400).
+  #
+  # ⚠️ The worst case is a model that DOES accept images but is not marked: the
+  # chat panel accepts the upload, the backend then drops the image parts, and
+  # the model answers "看不到图片" — with nothing in the UI explaining why.
+  # `default-model` above must therefore be flagged in the provider map
+  # (usually supplied by Nacos, not this file):
+  #
+  #   agent:
+  #     providers:
+  #       deepseek:
+  #         base-url: https://<host>/v1
+  #         api-key: ${DEEPSEEK_API_KEY:}
+  #         models:
+  #           - name: deepseek-v4-flash
+  #             vision: true
+  #
+  # The name must match the id the client sends (or `default-model`). The
+  # capability is published per model by /api/v1/models (supportsVision), which
+  # the web client uses to badge vision models and to disable image upload for
+  # the ones that cannot read images.
   # ---- AgentCore runtime (from-0 redesign; replaced the V2 engine config) ----
   run:
     # LLM turns allowed before the run suspends with reason "budget".

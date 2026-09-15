@@ -12,13 +12,13 @@ import {
 } from '@kn/ui'
 import {
     DEFAULT_MODEL,
-    fetchModels,
     useTranslation,
     type ChatModelParams,
     type ModelInfo,
 } from '@kn/common'
 
 import { ModelParamsPopover, isModelParamsCustomized } from '../menu/chat/ModelParamsPopover'
+import { loadModelCatalog, useModelCatalog } from './model-catalog'
 
 const DEFAULT_VALUE = '__backend_default__'
 
@@ -46,19 +46,22 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     contentClassName = '',
 }) => {
     const { t } = useTranslation()
-    const [models, setModels] = useState<ModelInfo[]>([])
-    const [catalogState, setCatalogState] = useState<'idle' | 'loading' | 'loaded'>('idle')
+    // Shared with the composer's vision guard (model-catalog.ts). Opening the
+    // menu is merely where the request is first *needed*, not its only consumer:
+    // the composer must already know whether the selected model can see images.
+    const catalog = useModelCatalog()
+    const models = useMemo(() => catalog ?? [], [catalog])
     const [open, setOpen] = useState(false)
     const [paramsOpen, setParamsOpen] = useState(false)
 
     useEffect(() => {
-        if (!open || catalogState !== 'idle') return
-        setCatalogState('loading')
-        fetchModels().then((items) => {
-            setModels(items)
-            setCatalogState('loaded')
-        })
-    }, [catalogState, open])
+        // Force a refresh on open: if the chat's mount-time fetch failed (or
+        // predates a backend redeploy), the picker still shows the real list —
+        // and the composer's vision guard still gets a usable capability.
+        if (open) void loadModelCatalog(true)
+    }, [open])
+
+    const catalogLoading = open && catalog === undefined
 
     const grouped = useMemo(() => {
         const groups = new Map<string, ModelInfo[]>()
@@ -72,7 +75,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
 
     const selectedModel = models.find((item) => item.id === model)
     const displayLabel = selectedModel?.name || model || DEFAULT_MODEL
-    const hasUnknownSelection = !!model && catalogState === 'loaded' && !selectedModel
+    const hasUnknownSelection = !!model && catalog !== undefined && !selectedModel
     const hasModelParams = modelParams !== undefined && onModelParamsChange !== undefined
     const paramsCustomized = modelParams ? isModelParamsCustomized(modelParams) : false
     const selectorLabel = t('ai.modelSelector.label', { defaultValue: '选择模型' })
@@ -146,13 +149,13 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
 
                     <DropdownMenuSeparator />
                     <div className="max-h-[min(320px,60vh)] overflow-y-auto">
-                        {catalogState === 'loading' && (
+                        {catalogLoading && (
                             <div className="px-2 py-3 text-xs text-muted-foreground">
                                 {t('ai.modelSelector.loading', { defaultValue: '加载模型中…' })}
                             </div>
                         )}
 
-                        {catalogState === 'loaded' && models.length === 0 && (
+                        {catalog !== undefined && models.length === 0 && (
                             <div className="px-2 py-3 text-xs text-muted-foreground">
                                 {t('ai.modelSelector.empty', { defaultValue: '暂无可用模型' })}
                             </div>
@@ -170,6 +173,16 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                                         className="min-h-11 lg:min-h-8"
                                     >
                                         <span className="truncate">{item.name || item.id}</span>
+                                        {item.supportsVision === true && (
+                                            <span
+                                                title={t('ai.modelSelector.visionBadgeHint', {
+                                                    defaultValue: '该模型支持图片输入，可直接识别图片内容',
+                                                })}
+                                                className="ml-auto shrink-0 rounded border border-primary/30 bg-primary/10 px-1 py-px text-[9px] font-medium leading-4 text-primary"
+                                            >
+                                                {t('ai.modelSelector.visionBadge', { defaultValue: '识图' })}
+                                            </span>
+                                        )}
                                     </DropdownMenuRadioItem>
                                 ))}
                             </React.Fragment>

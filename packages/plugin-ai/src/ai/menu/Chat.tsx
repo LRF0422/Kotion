@@ -55,6 +55,7 @@ import { ErrorDisplay } from "./ErrorDisplay"
 import { ChatHeader } from "./chat/ChatHeader"
 import { ChatEmptyState } from "./chat/ChatEmptyState"
 import { ChatComposer } from "./chat/ChatComposer"
+import { useModelVisionSupport } from "../components/model-catalog"
 import type { TargetPageStatus } from "./chat/PageMentionPicker"
 import { UserChoiceCard } from "./chat/UserChoiceCard"
 import { useModelPreference } from "../model-preference"
@@ -96,6 +97,14 @@ export const ExpandableChatDemo: React.FC<{
 
     // ─── Model / mode preferences (persisted) ─────────────────────
     const [selectedModel, handleModelChange] = useModelPreference()
+
+    // Vision guard: knowing up front whether the selected model can see images
+    // is what lets the composer refuse an upload instead of letting the backend
+    // silently drop the parts and the model answer "看不到图片". `known=false`
+    // (catalog still loading, unknown/custom model id, or the '' backend
+    // default) never blocks — a false negative is just the old behaviour.
+    const modelVision = useModelVisionSupport(selectedModel)
+    const visionBlocked = modelVision.known && !modelVision.supportsVision
 
     const [chatMode, setChatMode] = useState<ChatMode>(() => {
         try {
@@ -560,6 +569,16 @@ export const ExpandableChatDemo: React.FC<{
     const [error, setError] = useState<ChatError | null>(null)
 
     const handleAddImages = useCallback(async (files: File[]) => {
+        // A model the backend knows cannot see images would have the parts
+        // dropped server-side; refuse the attachment here and say why, rather
+        // than send an upload the model will answer with "看不到图片".
+        if (visionBlocked) {
+            setImageError(t('ai.chat.visionUnsupportedError', {
+                model: selectedModel,
+                defaultValue: '当前模型「{{model}}」不支持图片输入，图片未添加。请切换到支持识图的模型。',
+            }))
+            return
+        }
         const images: AgentImageData[] = []
         for (const file of files) {
             try {
@@ -572,7 +591,7 @@ export const ExpandableChatDemo: React.FC<{
             setPendingImages(prev => [...prev, ...images])
             setImageError(null)
         }
-    }, [])
+    }, [visionBlocked, selectedModel, t])
 
     const handleRemoveImage = useCallback((index: number) => {
         setPendingImages(prev => prev.filter((_, i) => i !== index))
@@ -728,6 +747,16 @@ export const ExpandableChatDemo: React.FC<{
         const text = input.trim()
         const images = pendingImages
         if ((!text && images.length === 0) || isActive || !targetToolsReady) return
+        // Images attached before switching to a non-vision model: don't send a
+        // turn whose attachments the backend would strip (the composer shows the
+        // same warning and keeps Send disabled).
+        if (visionBlocked && images.length > 0) {
+            setImageError(t('ai.chat.visionUnsupportedError', {
+                model: selectedModel,
+                defaultValue: '当前模型「{{model}}」不支持图片输入，图片未添加。请切换到支持识图的模型。',
+            }))
+            return
+        }
         setInput("")
         setPendingImages([])
         submitMessage(text, images)
@@ -735,7 +764,7 @@ export const ExpandableChatDemo: React.FC<{
             if (composerRef.current) composerRef.current.style.height = 'auto'
             composerRef.current?.focus()
         })
-    }, [input, pendingImages, isActive, targetToolsReady, submitMessage])
+    }, [input, pendingImages, isActive, targetToolsReady, submitMessage, visionBlocked, selectedModel, t])
 
     const handleInputChange = useCallback((value: string) => {
         setInput(value)
@@ -932,6 +961,8 @@ export const ExpandableChatDemo: React.FC<{
                     images={pendingImages.map(toImageDataUrl)}
                     onAddImages={handleAddImages}
                     onRemoveImage={handleRemoveImage}
+                    visionSupported={modelVision.known ? modelVision.supportsVision : undefined}
+                    visionModelLabel={selectedModel}
                 />
                 {imageError && (
                     <div className="px-2 pt-1 text-[11px] text-destructive">{imageError}</div>
