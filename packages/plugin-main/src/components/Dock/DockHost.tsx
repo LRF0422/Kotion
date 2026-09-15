@@ -170,16 +170,24 @@ export const DockHost: React.FC<DockHostProps> = ({
         return () => { event.off(DOCK_PANEL_RUNNING, handler) }
     }, [])
 
-    const PanelComponent = activePanel?.component
-
-    // Keep the last panel mounted even when collapsed so in-flight work (agent
-    // streams, live sessions) survives a collapse/re-expand cycle. The 0-width
-    // outer viewport clips the content from view, so there is no need to unmount.
-    // Switching to a *different* panel still replaces the old one via the effect.
-    const [rendered, setRendered] = React.useState<ResolvedDockPanel | undefined>(activePanel)
+    // Mount each panel the first time it becomes active and KEEP it mounted
+    // afterwards (just hidden). Unmounting the Agent panel would abort its
+    // in-flight run and drop the chat's in-memory history, so switching dock
+    // panels must not tear the previous panel down. Inactive panels are hidden
+    // with visibility (not unmounted) and cannot receive pointer events.
+    const [mountedPanels, setMountedPanels] = React.useState<ResolvedDockPanel[]>(
+        () => (activePanel ? [activePanel] : [])
+    )
     React.useEffect(() => {
-        if (activePanel) setRendered(activePanel)
+        if (!activePanel) return
+        setMountedPanels(prev => (
+            prev.some(panel => panel.id === activePanel.id) ? prev : [...prev, activePanel]
+        ))
     }, [activePanel])
+
+    // Mobile uses a single-panel Sheet, so it still resolves the active
+    // component directly.
+    const PanelComponent = activePanel?.component
 
     if (isMobile) {
         return (
@@ -208,8 +216,6 @@ export const DockHost: React.FC<DockHostProps> = ({
 
     if (panels.length === 0) return null
 
-    const RenderedComponent = rendered?.component
-
     return (
         <div
             className={cn("relative flex h-full", className)}
@@ -234,41 +240,47 @@ export const DockHost: React.FC<DockHostProps> = ({
                     // The 0-width viewport already clips the content from view.
                 }}
             >
-                {rendered && RenderedComponent && (
-                    <div
-                        id={panelId}
-                        className={cn(
-                            "kn-dock-panel absolute top-0 flex h-full flex-col border-l bg-background",
-                            // Anchored to the edge the rail sits on, so the clipped
-                            // side is the one facing the document.
-                            position === 'right' ? "right-0" : "left-0",
-                            // Hide from AT and pointer events while collapsed.
-                            !activePanel && "pointer-events-none"
-                        )}
-                        style={{ width }}
-                        aria-hidden={!activePanel}
-                    >
-                        {/* Panels that own their header (hideHeader) skip this
-                            generic bar so their title/actions don't stack twice. */}
-                        {!rendered.hideHeader && (
-                            <div className="flex h-9 flex-shrink-0 items-center justify-between border-b px-3">
-                                <span className="truncate text-xs font-medium">{panelTitle(rendered)}</span>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-6 w-6 text-muted-foreground"
-                                    aria-label={t('dock.collapse', 'Collapse panel')}
-                                    onClick={close}
-                                >
-                                    <X className="h-3.5 w-3.5" />
-                                </Button>
+                {mountedPanels.map(panel => {
+                    const PanelComponent = panel.component
+                    const isPanelActive = activePanel?.id === panel.id
+                    return (
+                        <div
+                            key={panel.id}
+                            id={isPanelActive ? panelId : undefined}
+                            className={cn(
+                                "kn-dock-panel absolute top-0 flex h-full flex-col border-l bg-background",
+                                // Anchored to the edge the rail sits on, so the
+                                // clipped side is the one facing the document.
+                                position === 'right' ? "right-0" : "left-0",
+                                // Hidden but still mounted: a panel switch must
+                                // not abort in-flight work or drop state.
+                                !isPanelActive && "invisible pointer-events-none"
+                            )}
+                            style={{ width }}
+                            aria-hidden={!isPanelActive}
+                        >
+                            {/* Panels that own their header (hideHeader) skip this
+                                generic bar so their title/actions don't stack twice. */}
+                            {!panel.hideHeader && (
+                                <div className="flex h-9 flex-shrink-0 items-center justify-between border-b px-3">
+                                    <span className="truncate text-xs font-medium">{panelTitle(panel)}</span>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-6 w-6 text-muted-foreground"
+                                        aria-label={t('dock.collapse', 'Collapse panel')}
+                                        onClick={close}
+                                    >
+                                        <X className="h-3.5 w-3.5" />
+                                    </Button>
+                                </div>
+                            )}
+                            <div className="min-h-0 flex-1 overflow-hidden">
+                                <PanelComponent {...context} close={close} />
                             </div>
-                        )}
-                        <div className="min-h-0 flex-1 overflow-hidden">
-                            <RenderedComponent {...context} close={close} />
                         </div>
-                    </div>
-                )}
+                    )
+                })}
             </div>
             {activePanel && (
                 <div

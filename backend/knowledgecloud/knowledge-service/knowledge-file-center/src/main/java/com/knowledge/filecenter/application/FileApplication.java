@@ -34,6 +34,7 @@ import com.knowledge.file.api.entity.dto.QueryFileDTO;
 import com.knowledge.file.api.entity.enums.FileType;
 import com.knowledge.filecenter.converter.KnowledgeFileConverter;
 import com.knowledge.filecenter.converter.KnowledgeFileRepositoryConverter;
+import com.knowledge.filecenter.document.OoxmlTextExtractor;
 import com.knowledge.filecenter.entity.KnowledgeFile;
 import com.knowledge.filecenter.entity.KnowledgeFileRepository;
 import com.knowledge.filecenter.entity.vo.FileAccessUrlsVO;
@@ -315,7 +316,8 @@ public class FileApplication {
     /**
      * Read a file's bytes from object storage and return its text content when possible.
      * <p>
-     * Text-like files are decoded as UTF-8 and truncated to the requested length;
+     * Text-like files are decoded as UTF-8, Office Open XML documents (.docx/.pptx/.xlsx)
+     * are text-extracted, and the result is truncated to the requested length. Other
      * binary files only carry metadata plus a message explaining why no text was returned.
      *
      * @param fileId   the file-center record id
@@ -347,26 +349,39 @@ public class FileApplication {
             bytes = IoUtil.readBytes(inputStream);
         }
 
+        String officeText = OoxmlTextExtractor.extract(bytes, file.getSuffix());
+        if (officeText != null) {
+            if (officeText.trim().isEmpty()) {
+                result.setMessage("No extractable text was found in this document.");
+                return result;
+            }
+            applyTextContent(result, officeText, maxChars);
+            fileService.touchAccess(fileId);
+            return result;
+        }
+
         if (!isTextFile(file.getSuffix(), bytes)) {
             result.setMessage("This file is binary (suffix=" + StrUtil.blankToDefault(file.getSuffix(), "none")
                     + ", size=" + bytes.length + " bytes) and cannot be read as text.");
             return result;
         }
 
-        String decoded = new String(bytes, StandardCharsets.UTF_8);
-        if (!decoded.isEmpty() && (int) decoded.charAt(0) == 0xFEFF) {
-            decoded = decoded.substring(1);
-        }
+        applyTextContent(result, new String(bytes, StandardCharsets.UTF_8), maxChars);
+        fileService.touchAccess(fileId);
+        return result;
+    }
 
+    private static void applyTextContent(FileContentVO result, String decoded, Integer maxChars) {
+        String text = decoded;
+        if (!text.isEmpty() && (int) text.charAt(0) == 0xFEFF) {
+            text = text.substring(1);
+        }
         int limit = resolveReadLimit(maxChars);
-        boolean truncated = decoded.length() > limit;
+        boolean truncated = text.length() > limit;
         result.setText(true);
         result.setEncoding("utf-8");
         result.setTruncated(truncated);
-        result.setContent(truncated ? decoded.substring(0, limit) : decoded);
-
-        fileService.touchAccess(fileId);
-        return result;
+        result.setContent(truncated ? text.substring(0, limit) : text);
     }
 
     private static int resolveReadLimit(Integer maxChars) {

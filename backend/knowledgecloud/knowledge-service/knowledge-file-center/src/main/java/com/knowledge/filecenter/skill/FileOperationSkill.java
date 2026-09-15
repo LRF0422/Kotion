@@ -1,5 +1,6 @@
 package com.knowledge.filecenter.skill;
 
+import java.util.Comparator;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,6 +34,7 @@ import lombok.extern.slf4j.Slf4j;
  * <li><b>listFolder</b> - List files and sub-folders inside a folder</li>
  * <li><b>getFileInfo</b> - Get details of a file or folder</li>
  * <li><b>readFile</b> - Read the text content of a file</li>
+ * <li><b>searchFile</b> - Search files and folders by name keyword</li>
  * <li><b>deleteFile</b> - Delete a file or folder</li>
  * </ul>
  * <p>
@@ -45,13 +47,18 @@ import lombok.extern.slf4j.Slf4j;
         +
         "move files between folders, list folder contents, "
         +
-        "get file details, read the text content of a file, and delete files/folders. "
+        "get file details, search files by name keyword, read the text content of a file, and delete files/folders. "
         +
         "For downloading files from URLs, use the "
         +
         "download_file tool from WebDownloadSkill.", version = "1.0.0", author = "KnowledgeCloud", tier = SkillTierValue.DOMAIN, categories = {
                 "file-management", "document-operations" })
 public class FileOperationSkill {
+
+    /** Default number of results returned by the search tool. */
+    private static final int DEFAULT_SEARCH_LIMIT = 20;
+    /** Hard upper bound for search results. */
+    private static final int MAX_SEARCH_LIMIT = 50;
 
     @Autowired
     private FileApplication fileApplication;
@@ -374,6 +381,83 @@ public class FileOperationSkill {
     }
 
     /**
+     * Search files and folders by name keyword.
+     *
+     * @param keyword       the name keyword to match
+     * @param repositoryKey optional repository key to restrict the search
+     * @param limit         optional maximum number of results
+     * @return formatted list of matches for LLM consumption
+     */
+    @SkillTool(name = "search_file", description = "Search files and folders in the file center by name keyword. "
+            +
+            "Returns matching items with their IDs, names, types, sizes, and parent IDs. "
+            +
+            "Use the returned file ID with read_file to read a text file's content.")
+    public String searchFile(
+            @ToolParam(name = "keyword", description = "Keyword to match against file and folder names", type = "string", required = true) String keyword,
+            @ToolParam(name = "repositoryKey", description = "The repository key. Leave empty to search the default repository.", type = "string", required = false) String repositoryKey,
+            @ToolParam(name = "limit", description = "Maximum number of results to return. Defaults to 20.", type = "number", required = false) Integer limit) {
+        if (StrUtil.isBlank(keyword)) {
+            return "Error: Missing required parameter: keyword";
+        }
+
+        log.info("Searching files with keyword='{}', repositoryKey='{}'", keyword, repositoryKey);
+
+        try {
+            List<KnowledgeFileVO> matches = fileApplication.searchFiles(keyword, repositoryKey);
+            matches.sort(Comparator
+                    .comparingInt((KnowledgeFileVO item) -> item.getType() == FileType.FOLDER ? 0 : 1)
+                    .thenComparing(item -> item.getName() == null ? "" : item.getName(),
+                            String.CASE_INSENSITIVE_ORDER));
+
+            int max = limit != null && limit > 0 ? Math.min(limit, MAX_SEARCH_LIMIT) : DEFAULT_SEARCH_LIMIT;
+
+            StringBuilder result = new StringBuilder();
+            result.append("# Search Results\n\n");
+            result.append("**Keyword:** ").append(keyword).append("\n");
+            if (StrUtil.isNotBlank(repositoryKey)) {
+                result.append("**Repository:** ").append(repositoryKey).append("\n");
+            }
+            result.append("**Matches:** ").append(matches.size()).append("\n\n");
+
+            if (matches.isEmpty()) {
+                result.append("No files or folders matched the keyword.\n");
+                return result.toString();
+            }
+
+            int shown = Math.min(matches.size(), max);
+            for (int index = 0; index < shown; index++) {
+                KnowledgeFileVO item = matches.get(index);
+                result.append(index + 1).append(". **")
+                        .append(item.getName() != null ? item.getName() : "Unnamed").append("**\n");
+                result.append("   - ID: ").append(item.getId()).append("\n");
+                result.append("   - Type: ")
+                        .append(item.getType() != null ? item.getType().name() : "UNKNOWN").append("\n");
+                if (item.getParentId() != null) {
+                    result.append("   - Parent ID: ").append(item.getParentId()).append("\n");
+                }
+                if (StrUtil.isNotBlank(item.getSuffix())) {
+                    result.append("   - Extension: ").append(item.getSuffix()).append("\n");
+                }
+                if (item.getSize() != null) {
+                    result.append("   - Size: ").append(item.getSize()).append(" bytes\n");
+                }
+                result.append("\n");
+            }
+            if (matches.size() > shown) {
+                result.append("Showing ").append(shown).append(" of ").append(matches.size())
+                        .append(" matches. Refine the keyword or raise the limit to see more.\n");
+            }
+
+            log.info("Search for '{}' returned {} matches", keyword, matches.size());
+            return result.toString();
+        } catch (Exception e) {
+            log.error("Error searching files with keyword='{}'", keyword, e);
+            return "Error searching files: " + e.getMessage();
+        }
+    }
+
+    /**
      * Read the text content of a file.
      *
      * @param fileId   the file ID
@@ -384,9 +468,11 @@ public class FileOperationSkill {
             +
             "Returns up to maxChars characters of UTF-8 text. "
             +
-            "Supports text-based files such as txt, md, json, csv, log, and source code. "
+            "Supports text-based files such as txt, md, json, csv, log, and source code, "
             +
-            "Binary files (images, PDF, office documents, archives) cannot be read as text "
+            "as well as Office documents (docx, pptx, xlsx). "
+            +
+            "Other binary files (images, PDF, archives) cannot be read as text "
             +
             "and return a notice with their metadata instead.")
     public String readFile(

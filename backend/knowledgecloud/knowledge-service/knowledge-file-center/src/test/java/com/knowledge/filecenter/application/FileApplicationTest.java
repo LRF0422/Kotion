@@ -15,10 +15,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -365,8 +368,37 @@ class FileApplicationTest {
         assertThrows(IllegalArgumentException.class, () -> application.readFileContent(1L, null));
     }
 
+    @Test
+    void readFileContentExtractsDocxText() throws Exception {
+        KnowledgeFile file = file(1L, "upload/report.docx", "record-key");
+        file.setName("report.docx");
+        file.setSuffix("docx");
+        when(fileService.getById(1L)).thenReturn(file);
+        when(ownerProvider.currentOwner()).thenReturn(new UploadOwner("tenant-a", 7L));
+        when(ossObjectKeyResolver.resolve("upload/report.docx")).thenReturn("upload/report.docx");
+        when(ossClient.downloadFile("upload/report.docx")).thenReturn(new ByteArrayInputStream(docx("hello docx")));
+
+        FileContentVO result = application.readFileContent(1L, null);
+
+        assertTrue(result.isText());
+        assertTrue(result.getContent().contains("hello docx"), result.getContent());
+        verify(fileService).touchAccess(1L);
+    }
+
     private static InputStream streamOf(String content) {
         return new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static byte[] docx(String text) throws Exception {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        try (ZipOutputStream zip = new ZipOutputStream(output)) {
+            zip.putNextEntry(new ZipEntry("word/document.xml"));
+            zip.write(("<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">"
+                    + "<w:body><w:p><w:r><w:t>" + text + "</w:t></w:r></w:p></w:body></w:document>")
+                            .getBytes(StandardCharsets.UTF_8));
+            zip.closeEntry();
+        }
+        return output.toByteArray();
     }
 
     private static com.knowledge.core.oss.model.KnowledgeFile ossFile(String name, String link) {
