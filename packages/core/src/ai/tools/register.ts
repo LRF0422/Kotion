@@ -16,6 +16,7 @@ import { createFormatTools } from './format-tools'
 import { createCalloutTools } from './callout-tools'
 import { createLinkTools } from './link-tools'
 import { createRichContentTools } from './richcontent-tools'
+import { createMathTools } from './math-tools'
 import { createHistoryTools } from './history-tools'
 import { createSelectionTools } from './selection-tools'
 import { createRangeTools } from './range-tools'
@@ -39,6 +40,7 @@ export function registerCoreToolFactories(): void {
         createCalloutTools,
         createLinkTools,
         createRichContentTools,
+        createMathTools,
         createHistoryTools,
         createSelectionTools,
         createRangeTools,

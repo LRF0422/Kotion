@@ -13,7 +13,9 @@ assert(normalizeId(" 42 ") === "42", "string ids should be trimmed");
 assert(normalizeId(42) === "42", "numeric ids should normalize to strings");
 assert(normalizeId(42n) === "42", "bigint ids should normalize without precision loss");
 assert(normalizeOptionalId(undefined) === undefined, "optional undefined ids should stay undefined");
+assert(normalizeOptionalId("   ") === undefined, "blank optional ids should become undefined (backend 'no id')");
 assert(normalizeNullableId(null) === null, "nullable ids should preserve null");
+assert(normalizeNullableId("") === null, "blank nullable ids should become null (WikiBlock.parentId)");
 assert(normalizeIds([1, "2", 3n]).join(",") === "1,2,3", "id lists should normalize in order");
 
 let rejected = 0;

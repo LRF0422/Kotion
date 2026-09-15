@@ -414,6 +414,44 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
         source: 'builtin'
     },
 
+    // ===== Math / Formula Tools =====
+    {
+        name: 'insertMath',
+        category: 'document-write',
+        description: '插入数学公式（LaTeX/KaTeX），支持行内公式与块级公式',
+        priority: 7,
+        tags: ['math', 'formula', 'latex', 'katex', 'equation', 'insert'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'getMathInfo',
+        category: 'document-read',
+        description: '列出文档中所有数学公式的索引、位置与 LaTeX 源码',
+        priority: 6,
+        tags: ['math', 'formula', 'latex', 'info', 'read', 'query'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'updateMath',
+        category: 'document-write',
+        description: '修改指定公式的 LaTeX 源码或行内/块级显示方式',
+        priority: 5,
+        tags: ['math', 'formula', 'latex', 'update', 'edit'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'deleteMath',
+        category: 'document-delete',
+        description: '删除指定的数学公式',
+        priority: 5,
+        tags: ['math', 'formula', 'latex', 'delete', 'remove'],
+        loaded: false,
+        source: 'builtin'
+    },
+
     // ===== Link Tools =====
     {
         name: 'insertLink',

@@ -26,15 +26,22 @@ export const normalizeId = (value: IdInput, label = "id"): string => {
     return normalized;
 };
 
+/**
+ * Backend string id columns (e.g. WikiBlock.parentId) serialize "no id" as an
+ * empty/blank string rather than null. For optional ids that means "absent", not
+ * an invalid id, so coerce blanks instead of throwing.
+ */
+const isBlankId = (value: IdInput): boolean => typeof value === "string" && value.trim() === "";
+
 export const normalizeOptionalId = (
     value: IdInput | null | undefined,
     label = "id"
-): string | undefined => value == null ? undefined : normalizeId(value, label);
+): string | undefined => value == null || isBlankId(value) ? undefined : normalizeId(value, label);
 
 export const normalizeNullableId = (
     value: IdInput | null | undefined,
     label = "id"
-): string | null => value == null ? null : normalizeId(value, label);
+): string | null => value == null || isBlankId(value) ? null : normalizeId(value, label);
 
 export const normalizeIds = (values: readonly IdInput[], label = "id"): string[] =>
     values.map((value, index) => normalizeId(value, `${label}[${index}]`));

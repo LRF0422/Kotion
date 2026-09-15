@@ -103,7 +103,12 @@ export const GlobalSearchDialog: React.FC<GlobalSearchDialogProps> = ({
         }
     }, [open])
 
-    // Debounced server-side block content search
+    // Debounced server-side full-text block search.
+    //
+    // The palette used to stop at page titles whenever the content call failed,
+    // so this falls back to the paged LIKE query and only ever goes empty when
+    // both fail. That keeps "search pages and content" a real promise rather
+    // than a silent pages-only search.
     useEffect(() => {
         const kw = query.trim()
         if (!kw || !spaceId) {
@@ -114,7 +119,15 @@ export const GlobalSearchDialog: React.FC<GlobalSearchDialogProps> = ({
         setSearching(true)
         const seq = ++requestSeq.current
         const timer = setTimeout(() => {
-            service.relations.searchBlocks({ keyword: kw, spaceId, pageSize: 20 })
+            const searchContent = async (): Promise<BlockSummary[]> => {
+                try {
+                    return await service.relations.searchBlocks({ keyword: kw, spaceId })
+                } catch (err) {
+                    logger.error('Full-text block search failed, falling back to paged LIKE:', err)
+                    return await service.relations.queryBlocks({ spaceId, searchValue: kw, pageSize: 20 })
+                }
+            }
+            searchContent()
                 .then((results) => {
                     if (seq !== requestSeq.current) return
                     const blocks = results

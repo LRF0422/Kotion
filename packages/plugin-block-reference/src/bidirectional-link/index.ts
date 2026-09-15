@@ -11,6 +11,7 @@ export { LinkTrigger } from './extensions/LinkTrigger';
 
 export { PageLinkPicker } from './components/PageLinkPicker';
 export { BlockLinkPicker } from './components/BlockLinkPicker';
+export { BlockPreviewPane } from './components/BlockPreviewPane';
 export { BacklinksPanel } from './components/BacklinksPanel';
 export { PageFooter } from './components/PageFooter';
 

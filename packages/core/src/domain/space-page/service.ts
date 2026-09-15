@@ -324,7 +324,8 @@ export const createSpacePageService = (
             return normalizeArrayEnvelope(await execute(E.relations.pageBacklinks, { pageId: normalizeId(pageId, "pageId"), ...query })).map(normalizeRelation);
         },
         async getSpaceGraph(request = {}) { return normalizeGraph(await execute(E.relations.graph, request)); },
-        async queryBlocks(request) { return normalizeArrayEnvelope(await execute(E.relations.blocks, request)).map(normalizeBlock); },
+        async queryBlocksPage(request) { return normalizePagedResult(await execute(E.relations.blocks, request), normalizeBlock); },
+        async queryBlocks(request) { return (await relations.queryBlocksPage(request)).records; },
         async getBlock(blockId) { return normalizeBlock(await execute(E.relations.blockDetail, { id: normalizeId(blockId, "blockId") })); },
         async searchBlocks(request) { return normalizeArrayEnvelope(await execute(E.relations.searchBlocks, request)).map(normalizeBlock); },
         async reindexBlocks() { await execute(E.relations.reindexBlocks); },

@@ -90,9 +90,77 @@ async function main(): Promise<void> {
     const summaries = await service.pages.queryPages();
     assert(summaries.records[0]?.spaceName === "Team", "page summaries preserve their owning space name", summaries);
 
-    fake.reply("/knowledge-wiki/space/page/block/detail/:id", { id: "720", pageId: "710", spaceId: "711", spaceName: "Team", text: "hit" });
+    fake.reply("/knowledge-wiki/space/page/block/detail/:id", { id: "720", pageId: "710", spaceId: "711", spaceName: "Team", parentId: "", text: "hit" });
     const block = await service.relations.getBlock("720");
     assert(block.spaceName === "Team", "block search metadata preserves the owning space name", block);
+    assert(block.parentId === null, "block detail treats a blank parentId as no parent", block);
+
+    fake.reply("/knowledge-wiki/space/page/blocks", {
+        records: [{
+            id: "b1",
+            type: "paragraph",
+            text: "Hello",
+            content: [{ type: "text", text: "Hello" }],
+            parentId: "",
+            pageId: "710",
+            pageTitle: "Page",
+            spaceId: "711",
+            spaceName: "Team",
+        }],
+        total: 1,
+        current: 1,
+        size: 10,
+    });
+    const blocks = await service.relations.queryBlocks({ spaceId: "711" });
+    assert(
+        blocks.length === 1 && blocks[0]?.id === "b1" && blocks[0]?.parentId === null,
+        "block list with blank parentIds normalizes instead of rejecting (block-reference picker)",
+        blocks,
+    );
+    fake.reply("/knowledge-wiki/space/page/blocks", {
+        records: [{
+            id: "b2",
+            type: "paragraph",
+            parentId: "",
+            pageId: "710",
+            pageTitle: "Page",
+            spaceId: "711",
+            spaceName: "Team",
+        }],
+        total: 42,
+        current: 2,
+        size: 20,
+        pages: 3,
+    });
+    const blockPage = await service.relations.queryBlocksPage({ spaceId: "711", current: 2, pageSize: 20 });
+    assert(
+        blockPage.records.length === 1 && blockPage.records[0]?.id === "b2" && blockPage.total === 42,
+        "paginated block query preserves records and total for the picker",
+        blockPage,
+    );
+
+    fake.reply("/knowledge-wiki/space/page/block/search", [{
+        id: "b3",
+        type: "paragraph",
+        text: "search hit",
+        parentId: "",
+        pageId: "710",
+        pageTitle: "Page",
+        spaceId: "711",
+        spaceName: "Team",
+    }]);
+    const hits = await service.relations.searchBlocks({ keyword: "search", spaceId: "711" });
+    const searchRequest = fake.requests.at(-1)!;
+    assert(
+        searchRequest.params?.keyword === "search" && searchRequest.params?.spaceId === "711",
+        "full-text block search sends keyword + spaceId",
+        searchRequest,
+    );
+    assert(
+        hits.length === 1 && hits[0]?.id === "b3" && hits[0]?.parentId === null,
+        "full-text block search normalizes detail rows",
+        hits,
+    );
 
     fake.reply("/knowledge-wiki/space/page/:pageId/comment/list", [{
         id: "730",

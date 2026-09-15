@@ -159,6 +159,8 @@ export interface RelationOperations {
     queryPageRelations(request: QueryRelationsRequest): Promise<PageRelation[]>;
     getSpaceGraph(request?: QuerySpaceGraphRequest): Promise<SpaceGraphData>;
     queryBlocks(request: QueryBlocksRequest): Promise<BlockSummary[]>;
+    /** Paginated block query; preserves total/pages for pickers and search UIs. */
+    queryBlocksPage(request: QueryBlocksRequest): Promise<PagedResult<BlockSummary>>;
     getBlock(blockId: BlockId): Promise<BlockSummary>;
     searchBlocks(request: SearchBlocksRequest): Promise<BlockSummary[]>;
     reindexBlocks?(): Promise<void>;

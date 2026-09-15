@@ -5,8 +5,9 @@ export const normalizeId = (value: string | number | bigint, label = "id"): stri
     if (!normalized) throw new TypeError(`${label} is invalid`);
     return normalized;
 };
-export const normalizeOptionalId = (value: any, label = "id"): string | undefined => value == null ? undefined : normalizeId(value, label);
-export const normalizeNullableId = (value: any, label = "id"): string | null => value == null ? null : normalizeId(value, label);
+const isBlankId = (value: any): boolean => typeof value === "string" && value.trim() === "";
+export const normalizeOptionalId = (value: any, label = "id"): string | undefined => value == null || isBlankId(value) ? undefined : normalizeId(value, label);
+export const normalizeNullableId = (value: any, label = "id"): string | null => value == null || isBlankId(value) ? null : normalizeId(value, label);
 
 export const createSpacePageChangeStream = () => {
     const all = new Set<(change: any) => void>();
