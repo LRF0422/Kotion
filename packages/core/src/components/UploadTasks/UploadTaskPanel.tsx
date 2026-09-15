@@ -183,7 +183,7 @@ export const UploadTaskPanel: React.FC = () => {
     const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
     const { t } = useTranslation();
     const translate = React.useCallback<Translate>((key) => t(key), [t]);
-    const { isMobile, isDesktop } = useResponsive();
+    const { isMobile, isTablet, isDesktop } = useResponsive();
     const [mobileOpen, setMobileOpen] = useState(false);
     const [desktopOpen, setDesktopOpen] = useState(false);
     const [toolbarSlot, setToolbarSlot] = useState<HTMLElement | null>(null);
@@ -208,7 +208,7 @@ export const UploadTaskPanel: React.FC = () => {
 
     if (!snapshot.initialized || snapshot.tasks.length === 0) return null;
 
-    if (isMobile) {
+    if (isMobile || isTablet) {
         return (
             <>
                 <Button

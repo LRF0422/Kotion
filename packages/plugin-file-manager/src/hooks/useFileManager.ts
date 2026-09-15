@@ -292,20 +292,39 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
     const uploadFolder = useCallback(
         async (repoKey: string, selection?: FolderUploadSelection): Promise<FolderUploadResult | null> => {
             let resolved: FolderUploadSelection | null | undefined = selection;
+            let progressToastId: string | number | undefined;
+
+            const showPreparing = () => {
+                progressToastId = toast.loading(
+                    selection ? 'Preparing folder upload…' : 'Reading folder contents…',
+                );
+            };
+            const settle = (message: string, type: 'success' | 'error' | 'info') => {
+                const id = progressToastId;
+                progressToastId = undefined;
+                if (type === 'success') toast.success(message, id === undefined ? undefined : { id });
+                else if (type === 'error') toast.error(message, id === undefined ? undefined : { id });
+                else toast.info(message, id === undefined ? undefined : { id });
+            };
+
             if (!resolved) {
                 try {
-                    resolved = await pickFolderSelection();
+                    resolved = await pickFolderSelection(showPreparing);
                 } catch (pickerError) {
-                    const message = pickerError instanceof Error ? pickerError.message : 'Failed to pick folder';
-                    toast.error(message);
+                    settle(pickerError instanceof Error ? pickerError.message : 'Failed to pick folder', 'error');
                     return null;
                 }
+            } else {
+                showPreparing();
             }
-            if (!resolved) return null; // user cancelled the folder picker
+            if (!resolved) {
+                if (progressToastId !== undefined) toast.dismiss(progressToastId);
+                return null; // user cancelled the folder picker
+            }
 
             const plan = planFolderUpload(resolved);
             if (!plan.directories.length && !plan.files.length) {
-                toast.info('No files found in the selected folder');
+                settle('No files found in the selected folder', 'info');
                 return null;
             }
 
@@ -364,14 +383,28 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
                 }
 
                 refresh({ silent: true });
+
+                const folderCount = plan.directories.length;
+                const fileCount = plan.files.length;
                 if (filesQueued > 0) {
-                    toast.success(`${filesQueued} file${filesQueued > 1 ? 's' : ''} queued for upload`);
+                    const folderNote = folderCount > 0
+                        ? ` in ${folderCount} folder${folderCount === 1 ? '' : 's'}`
+                        : '';
+                    settle(`${filesQueued} file${filesQueued > 1 ? 's' : ''} queued for upload${folderNote}`, 'success');
+                } else if (filesUploaded > 0) {
+                    settle(`Uploaded ${filesUploaded} file${filesUploaded > 1 ? 's' : ''}`, 'success');
+                } else if (filesFailed > 0) {
+                    settle(`${filesFailed} file upload${filesFailed > 1 ? 's' : ''} failed`, 'error');
+                } else if (fileCount === 0 && folderCount > 0) {
+                    settle(`Created ${folderCount} folder${folderCount === 1 ? '' : 's'}`, 'success');
                 }
-                if (filesFailed > 0) toast.error(`${filesFailed} file upload(s) failed`);
+                if (filesFailed > 0 && (filesQueued > 0 || filesUploaded > 0)) {
+                    toast.error(`${filesFailed} file upload${filesFailed > 1 ? 's' : ''} failed`);
+                }
                 return { foldersCreated, filesQueued, filesUploaded, filesFailed };
             } catch (error) {
                 const message = error instanceof Error ? error.message : 'Failed to upload folder';
-                toast.error(message);
+                settle(message, 'error');
                 return null;
             }
         },

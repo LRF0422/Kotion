@@ -176,7 +176,7 @@ const walkDirectoryHandle = async (
 };
 
 /** Chromium File System Access API picker. Must be invoked on `window` (detached calls throw Illegal invocation). */
-const pickFolderWithDirectoryPicker = async (): Promise<FolderPickOutcome> => {
+const pickFolderWithDirectoryPicker = async (onStart?: () => void): Promise<FolderPickOutcome> => {
     if (typeof window === 'undefined') return { kind: 'unsupported' };
     const pickerWindow = window as unknown as DirectoryPickerWindow;
     if (typeof pickerWindow.showDirectoryPicker !== 'function') return { kind: 'unsupported' };
@@ -189,13 +189,14 @@ const pickFolderWithDirectoryPicker = async (): Promise<FolderPickOutcome> => {
         throw error;
     }
 
+    onStart?.();
     const selection: FolderUploadSelection = { entries: [], directories: [directory.name] };
     await walkDirectoryHandle(directory, directory.name, selection);
     return { kind: 'selection', selection };
 };
 
 /** `<input webkitdirectory>` picker, used when the File System Access API is unavailable. */
-const pickFolderWithInput = (): Promise<FolderPickOutcome> => new Promise((resolve) => {
+const pickFolderWithInput = (onStart?: () => void): Promise<FolderPickOutcome> => new Promise((resolve) => {
     if (typeof document === 'undefined') {
         resolve({ kind: 'unsupported' });
         return;
@@ -223,6 +224,7 @@ const pickFolderWithInput = (): Promise<FolderPickOutcome> => new Promise((resol
 
     input.addEventListener('change', () => {
         const files = Array.from(input.files || []);
+        onStart?.();
         finish({
             kind: 'selection',
             selection: {
@@ -284,7 +286,7 @@ const walkElectronDirectory = async (
  * Electron picker. Chromium's `<input webkitdirectory>` returns an empty file list in
  * Electron, so the native dialog plus the preload file-system bridge is used instead.
  */
-const pickFolderWithElectron = async (): Promise<FolderPickOutcome> => {
+const pickFolderWithElectron = async (onStart?: () => void): Promise<FolderPickOutcome> => {
     const bridge = getElectronBridge();
     if (!bridge) return { kind: 'unsupported' };
     const result = await bridge.invoke<{ canceled: boolean; folderPath: string | null }>(
@@ -293,6 +295,7 @@ const pickFolderWithElectron = async (): Promise<FolderPickOutcome> => {
     );
     if (!result || result.canceled || !result.folderPath) return { kind: 'cancelled' };
 
+    onStart?.();
     const rootPath = result.folderPath.replace(/\\/g, '/');
     const rootName = rootPath.split('/').filter(Boolean).pop() || 'folder';
     const selection: FolderUploadSelection = { entries: [], directories: [rootName] };
@@ -302,16 +305,17 @@ const pickFolderWithElectron = async (): Promise<FolderPickOutcome> => {
 
 /**
  * Open the OS folder picker and return every file plus empty directory beneath it.
- * Returns `null` when the user cancels.
+ * Returns `null` when the user cancels. `onStart` fires once a folder has been
+ * chosen but before its contents are traversed, so callers can show progress.
  */
-export const pickFolderSelection = async (): Promise<FolderUploadSelection | null> => {
+export const pickFolderSelection = async (onStart?: () => void): Promise<FolderUploadSelection | null> => {
     let outcome: FolderPickOutcome;
 
     if (getElectronBridge()) {
-        outcome = await pickFolderWithElectron();
+        outcome = await pickFolderWithElectron(onStart);
     } else {
-        outcome = await pickFolderWithDirectoryPicker();
-        if (outcome.kind === 'unsupported') outcome = await pickFolderWithInput();
+        outcome = await pickFolderWithDirectoryPicker(onStart);
+        if (outcome.kind === 'unsupported') outcome = await pickFolderWithInput(onStart);
     }
 
     return outcome.kind === 'selection' ? outcome.selection : null;
