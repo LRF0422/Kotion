@@ -6,7 +6,6 @@ import { fileManager } from '@kn/file-manager'
 import { blockReference } from "@kn/plugin-block-reference"
 import { ai } from "@kn/plugin-ai"
 import { bitable } from "@kn/plugin-bitable"
-import { weaverOA } from "@kn/plugin-weaver-oa"
 import { theme } from "@kn/plugin-theme"
 import { speechToText } from "@kn/plugin-speech-to-text"
 import { logicFlow } from "@kn/plugin-logicflow"
@@ -70,6 +69,6 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
     <ErrorBoundary>
-        <App plugins={[DefaultPluginInstance, fileManager, bitable, blockReference, ai, weaverOA, theme, speechToText, logicFlow]} />
+        <App plugins={[DefaultPluginInstance, fileManager, bitable, blockReference, ai, theme, speechToText, logicFlow]} />
     </ErrorBoundary>
 )

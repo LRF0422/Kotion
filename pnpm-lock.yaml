@@ -241,15 +241,6 @@ importers:
       '@kn/plugin-block-reference':
         specifier: workspace:*
         version: link:../../packages/plugin-block-reference
-      '@kn/plugin-database':
-        specifier: workspace:*
-        version: link:../../packages/plugin-database
-      '@kn/plugin-drawio':
-        specifier: workspace:*
-        version: link:../../packages/plugin-drawio
-      '@kn/plugin-drawio-v2':
-        specifier: workspace:*
-        version: link:../../packages/plugin-drawio-v2
       '@kn/plugin-drawnix':
         specifier: workspace:*
         version: link:../../packages/plugin-drawnix
@@ -262,18 +253,12 @@ importers:
       '@kn/plugin-main':
         specifier: workspace:*
         version: link:../../packages/plugin-main
-      '@kn/plugin-mindmap-canvas':
-        specifier: workspace:*
-        version: link:../../packages/plugin-mindmap-canvas
       '@kn/plugin-speech-to-text':
         specifier: workspace:*
         version: link:../../packages/plugin-speech-to-text
       '@kn/plugin-theme':
         specifier: workspace:*
         version: link:../../packages/plugin-theme
-      '@kn/plugin-weaver-oa':
-        specifier: workspace:*
-        version: link:../../packages/plugin-weaver-oa
       '@kn/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -481,15 +466,6 @@ importers:
       '@kn/plugin-comment':
         specifier: workspace:*
         version: link:../../packages/plugin-comment
-      '@kn/plugin-database':
-        specifier: workspace:*
-        version: link:../../packages/plugin-database
-      '@kn/plugin-drawio':
-        specifier: workspace:*
-        version: link:../../packages/plugin-drawio
-      '@kn/plugin-drawio-v2':
-        specifier: workspace:*
-        version: link:../../packages/plugin-drawio-v2
       '@kn/plugin-drawnix':
         specifier: workspace:*
         version: link:../../packages/plugin-drawnix
@@ -505,9 +481,6 @@ importers:
       '@kn/plugin-main':
         specifier: workspace:*
         version: link:../../packages/plugin-main
-      '@kn/plugin-mindmap-canvas':
-        specifier: workspace:*
-        version: link:../../packages/plugin-mindmap-canvas
       '@kn/plugin-netease-music':
         specifier: workspace:*
         version: link:../../packages/plugin-netease-music
@@ -523,9 +496,6 @@ importers:
       '@kn/plugin-theme':
         specifier: workspace:*
         version: link:../../packages/plugin-theme
-      '@kn/plugin-weaver-oa':
-        specifier: workspace:*
-        version: link:../../packages/plugin-weaver-oa
       '@kn/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -1180,99 +1150,6 @@ importers:
         specifier: workspace:*
         version: link:../rollup-config
 
-  packages/plugin-database:
-    dependencies:
-      '@kn/common':
-        specifier: workspace:*
-        version: link:../common
-      '@kn/editor':
-        specifier: workspace:*
-        version: link:../editor
-      '@kn/icon':
-        specifier: workspace:*
-        version: link:../icon
-      '@kn/ui':
-        specifier: workspace:*
-        version: link:../ui
-      date-fns:
-        specifier: ^3.6.0
-        version: 3.6.0
-      react-big-calendar:
-        specifier: ^1.14.0
-        version: 1.19.4(react-dom@18.3.1(react@19.2.4))(react@19.2.4)
-      react-data-grid:
-        specifier: 7.0.0-beta.47
-        version: 7.0.0-beta.47(react-dom@18.3.1(react@19.2.4))(react@19.2.4)
-      react-dnd:
-        specifier: ^16.0.1
-        version: 16.0.1(@types/hoist-non-react-statics@3.3.7(@types/react@18.3.28))(@types/node@22.19.13)(@types/react@18.3.28)(react@19.2.4)
-      react-dnd-html5-backend:
-        specifier: ^16.0.1
-        version: 16.0.1
-    devDependencies:
-      '@kn/rollup-config':
-        specifier: workspace:*
-        version: link:../rollup-config
-      '@types/react-big-calendar':
-        specifier: ^1.8.11
-        version: 1.16.3
-
-  packages/plugin-drawio:
-    dependencies:
-      '@drawnix/drawnix':
-        specifier: ^0.1.4
-        version: 0.1.4(react-dom@18.3.1(react@19.2.4))(react@19.2.4)
-      '@kn/common':
-        specifier: workspace:*
-        version: link:../common
-      '@kn/editor':
-        specifier: workspace:*
-        version: link:../editor
-      '@kn/icon':
-        specifier: workspace:*
-        version: link:../icon
-      '@kn/ui':
-        specifier: workspace:*
-        version: link:../ui
-      autoprefixer:
-        specifier: ^10.4.20
-        version: 10.4.27(postcss@8.5.6)
-      postcss:
-        specifier: ^8.4.47
-        version: 8.5.6
-    devDependencies:
-      '@kn/rollup-config':
-        specifier: workspace:*
-        version: link:../rollup-config
-
-  packages/plugin-drawio-v2:
-    dependencies:
-      '@drawnix/drawnix':
-        specifier: ^0.1.4
-        version: 0.1.4(react-dom@18.3.1(react@19.2.4))(react@19.2.4)
-      '@kn/common':
-        specifier: workspace:*
-        version: link:../common
-      '@kn/editor':
-        specifier: workspace:*
-        version: link:../editor
-      '@kn/icon':
-        specifier: workspace:*
-        version: link:../icon
-      '@kn/ui':
-        specifier: workspace:*
-        version: link:../ui
-      autoprefixer:
-        specifier: ^10.4.20
-        version: 10.4.27(postcss@8.5.6)
-      postcss:
-        specifier: ^8.4.47
-        version: 8.5.6
-    devDependencies:
-      '@kn/rollup-config':
-        specifier: workspace:*
-        version: link:../rollup-config
-
   packages/plugin-drawnix:
     dependencies:
       '@kn/common':
@@ -1484,40 +1361,6 @@ importers:
         specifier: workspace:*
         version: link:../rollup-config
 
-  packages/plugin-mindmap-canvas:
-    dependencies:
-      '@kn/common':
-        specifier: workspace:*
-        version: link:../common
-      '@kn/editor':
-        specifier: workspace:*
-        version: link:../editor
-      '@kn/icon':
-        specifier: workspace:*
-        version: link:../icon
-      '@kn/ui':
-        specifier: workspace:*
-        version: link:../ui
-      lodash:
-        specifier: ^4.17.21
-        version: 4.17.23
-      nanoid:
-        specifier: ^5.0.7
-        version: 5.1.6
-    devDependencies:
-      '@kn/rollup-config':
-        specifier: workspace:*
-        version: link:../rollup-config
-      '@kn/typescript-config':
-        specifier: workspace:*
-        version: link:../typescript-config
-      '@types/react':
-        specifier: ^18.3.23
-        version: 18.3.28
-      '@types/react-dom':
-        specifier: ^18.3.1
-        version: 18.3.7(@types/react@18.3.28)
-
   packages/plugin-netease-music:
     dependencies:
       '@kn/common':
@@ -1660,34 +1503,6 @@ importers:
       '@kn/rollup-config':
         specifier: workspace:*
         version: link:../rollup-config
-
-  packages/plugin-weaver-oa:
-    dependencies:
-      '@kn/common':
-        specifier: workspace:*
-        version: link:../common
-      '@kn/editor':
-        specifier: workspace:*
-        version: link:../editor
-      '@kn/icon':
-        specifier: workspace:*
-        version: link:../icon
-      '@kn/ui':
-        specifier: workspace:*
-        version: link:../ui
-      axios:
-        specifier: ^1.6.0
-        version: 1.13.5
-    devDependencies:
-      '@kn/rollup-config':
-        specifier: workspace:*
-        version: link:../rollup-config
-      '@types/react':
-        specifier: ^18.2.0
-        version: 18.3.28
-      '@types/react-dom':
-        specifier: ^18.2.0
-        version: 18.3.7(@types/react@18.3.28)
 
   packages/rollup-config: {}
 
@@ -2173,9 +1988,6 @@ packages:
     resolution: {integrity: sha512-+MKAJEOfaBe5SmV6t34p80MMKhjvUz0vRrvVJbPT0WElzaOJ/1xs+D+KDv+tD/NE5ujfrChEcshd4fLn0wpiqg==}
     peerDependencies:
       react: '>=16.8.0'
-
-  '@drawnix/drawnix@0.1.4':
-    resolution: {integrity: sha512-r+FrYVM7xoX+GWsaEffif96Vr2dusi3i9prPzQUmaL3JMijqDlQvGOdjrXHfzNa6sxVFDS5pvAUn1J0OlZeJJA==}
 
   '@electron-toolkit/eslint-config-ts@2.0.0':
     resolution: {integrity: sha512-NGXadMyWH9+ZsgYe/u5E0mqK2qTDq01kKKnyo7oiq/7v/dWoMoPhqSkn69NZvt7WmnFNOm57l71fv6128mAx3Q==}
@@ -2687,12 +2499,6 @@ packages:
 
   '@floating-ui/react-dom@2.1.7':
     resolution: {integrity: sha512-0tLRojf/1Go2JgEVm+3Frg9A3IW8bJgKgdO0BN5RkF//ufuz2joZM63Npau2ff3J6lUVYgDSNzNkR+aH3IVfjg==}
-    peerDependencies:
-      react: '>=16.8.0'
-      react-dom: '>=16.8.0'
-
-  '@floating-ui/react@0.26.28':
-    resolution: {integrity: sha512-yORQuuAtVpiRjpMhdc0wJj06b9JFjrYF4qp96j++v2NBpbi6SEGF7donUJ3TMieerQ6qVkAv1tgr7L4r5roTqw==}
     peerDependencies:
       react: '>=16.8.0'
       react-dom: '>=16.8.0'
@@ -3388,9 +3194,6 @@ packages:
   '@pkgjs/parseargs@0.11.0':
     resolution: {integrity: sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg==}
     engines: {node: '>=14'}
-
-  '@plait-board/mermaid-to-drawnix@0.0.3':
-    resolution: {integrity: sha512-xvYBjRta3hJd/oWy4efKMJBcLEm4yHytdejALsJ4QfeIyYuMHIhxwmGIvnDWk3ZqSMCVCjt0yM+CLFlIJMozWQ==}
 
   '@popperjs/core@2.11.8':
     resolution: {integrity: sha512-P1st0aksCrn9sGZhp8GMYwBnQsbvAWsZAX44oXNNvLHGqAOcoVxmjZiohstwQ7SqKnbR47akdNi+uleWD8+g6A==}
@@ -10418,9 +10221,6 @@ packages:
   mlly@1.8.0:
     resolution: {integrity: sha512-l8D9ODSRWLe2KHJSifWGwBqpTZXIXTeo8mlKjY+E2HAakaTeNpqAyBZ8GSqLzHgw4XmHmC8whvpjJNMbFZN7/g==}
 
-  mobile-detect@1.4.5:
-    resolution: {integrity: sha512-yc0LhH6tItlvfLBugVUEtgawwFU2sIe+cSdmRJJCTMZ5GEJyLxNyC/NIOAOGk67Fa8GNpOttO3Xz/1bHpXFD/g==}
-
   mobx-preact@3.0.0:
     resolution: {integrity: sha512-ijan/cBs3WmRye87E5+3JmoFBB00KDAwNA3pm7bMwYLPHBAXlN86aC3gdrXw8aKzM5RI8V3a993PphzPv6P4FA==}
     peerDependencies:
@@ -12720,9 +12520,6 @@ packages:
     engines: {node: '>=10.13.0'}
     hasBin: true
 
-  tabbable@6.4.0:
-    resolution: {integrity: sha512-05PUHKSNE8ou2dwIxTngl4EzcnsCDZGJ/iCLtDflR/SHB/ny14rXc+qU5P4mG9JkusiV7EivzY9Mhm55AzAvCg==}
-
   tailwind-merge@2.6.0:
     resolution: {integrity: sha512-P+Vu1qXfzediirmHOC3xKGAYeZtPcV9g76X+xg2FD4tYgR71ewMA35Y3sCz3zhiN/dwefRpJX0yBcgwi1fXNQA==}
 
@@ -13774,17 +13571,6 @@ snapshots:
       react: 19.2.4
       tslib: 2.8.1
 
-  '@drawnix/drawnix@0.1.4(react-dom@18.3.1(react@19.2.4))(react@19.2.4)':
-    dependencies:
-      '@floating-ui/react': 0.26.28(react-dom@18.3.1(react@19.2.4))(react@19.2.4)
-      '@plait-board/mermaid-to-drawnix': 0.0.3
-      mobile-detect: 1.4.5
-      open-color: 1.9.1
-    transitivePeerDependencies:
-      - react
-      - react-dom
-      - supports-color
-
   '@electron-toolkit/eslint-config-ts@2.0.0(eslint@8.57.1)(typescript@5.9.3)':
     dependencies:
       '@typescript-eslint/eslint-plugin': 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)(typescript@5.9.3)
@@ -14296,14 +14082,6 @@ snapshots:
       '@floating-ui/dom': 1.7.5
       react: 19.2.4
       react-dom: 18.3.1(react@19.2.4)
-
-  '@floating-ui/react@0.26.28(react-dom@18.3.1(react@19.2.4))(react@19.2.4)':
-    dependencies:
-      '@floating-ui/react-dom': 2.1.7(react-dom@18.3.1(react@19.2.4))(react@19.2.4)
-      '@floating-ui/utils': 0.2.10
-      react: 19.2.4
-      react-dom: 18.3.1(react@19.2.4)
-      tabbable: 6.4.0
 
   '@floating-ui/utils@0.2.10': {}
 
@@ -15048,12 +14826,6 @@ snapshots:
 
   '@pkgjs/parseargs@0.11.0':
     optional: true
-
-  '@plait-board/mermaid-to-drawnix@0.0.3':
-    dependencies:
-      mermaid: 10.9.3
-    transitivePeerDependencies:
-      - supports-color
 
   '@popperjs/core@2.11.8': {}
 
@@ -24581,8 +24353,6 @@ snapshots:
       pkg-types: 1.3.1
       ufo: 1.6.3
 
-  mobile-detect@1.4.5: {}
-
   mobx-preact@3.0.0(mobx@5.15.7)(preact@10.29.8):
     dependencies:
       hoist-non-react-statics: 2.5.5
@@ -27455,8 +27225,6 @@ snapshots:
       csso: 4.2.0
       picocolors: 1.1.1
       stable: 0.1.8
-
-  tabbable@6.4.0: {}
 
   tailwind-merge@2.6.0: {}
 
