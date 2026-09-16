@@ -38,6 +38,10 @@ public class ApiLogPublisher {
 
 	public static void publishEvent(String methodName, String methodClass, ApiLog apiLog, long time) {
 		HttpServletRequest request = WebUtil.getRequest();
+		// 写日志接口自身出错时不再发布日志事件，避免 feign 自调用死循环
+		if (LogAbstractUtil.isLogWriteRequest(request)) {
+			return;
+		}
 		LogApi logApi = new LogApi();
 		logApi.setType(KnowledgeConstant.LOG_NORMAL_TYPE);
 		logApi.setTitle(apiLog.value());

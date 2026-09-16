@@ -32,6 +32,56 @@ import javax.servlet.http.HttpServletRequest;
 public class LogAbstractUtil {
 
 	/**
+	 * 日志写入接口（LogClient）的路径后缀
+	 */
+	private static final String[] LOG_WRITE_PATHS = {
+			"/log/saveApiLog", "/log/saveUsualLog", "/log/saveErrorLog", "/log/saveLoginLog"
+	};
+
+	/**
+	 * 判断当前请求是否就是日志写入接口。
+	 * <p>
+	 * 写日志链路本身是：业务失败 -> 发布错误日志事件 -> feign 调用日志服务 -> 写日志。
+	 * 一旦写日志失败（表不存在 / 字段不匹配 / 日志服务不可用等），如果继续发布日志事件，
+	 * 就会不断自我调用形成死循环，最终打爆线程池或栈。因此在发布事件前先拦截。
+	 *
+	 * @param request 当前请求，可能为 null（异步线程 / 非 web 场景）
+	 * @return true 表示当前正处于日志写入请求中
+	 */
+	public static boolean isLogWriteRequest(HttpServletRequest request) {
+		if (request == null) {
+			return false;
+		}
+		if (matchesLogWritePath(request.getRequestURI())) {
+			return true;
+		}
+		// 错误转发到 /error 时，原始请求地址保存在该属性里，同样需要识别
+		Object originalUri = request.getAttribute("javax.servlet.error.request_uri");
+		return originalUri != null && matchesLogWritePath(String.valueOf(originalUri));
+	}
+
+	private static boolean matchesLogWritePath(String uri) {
+		if (uri == null) {
+			return false;
+		}
+		String path;
+		try {
+			path = UrlUtil.getPath(uri);
+		} catch (Exception e) {
+			return false;
+		}
+		if (path == null) {
+			return false;
+		}
+		for (String writePath : LOG_WRITE_PATHS) {
+			if (path.endsWith(writePath)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * 向log中添加补齐request的信息
 	 *
 	 * @param request     请求

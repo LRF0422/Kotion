@@ -50,7 +50,12 @@ public class ErrorLogListener {
 		Map<String, Object> source = (Map<String, Object>) event.getSource();
 		LogError logError = (LogError) source.get(EventConstant.EVENT_LOG);
 		LogAbstractUtil.addOtherInfoToLog(logError, knowledgeProperties, serverInfo);
-		logService.saveErrorLog(logError);
+		try {
+			logService.saveErrorLog(logError);
+		} catch (Exception e) {
+			// 写日志失败只做本地输出：抛出去会再次进入异常处理链路，形成写日志死循环
+			log.warn("保存错误日志失败: {}", e.getMessage());
+		}
 	}
 
 }

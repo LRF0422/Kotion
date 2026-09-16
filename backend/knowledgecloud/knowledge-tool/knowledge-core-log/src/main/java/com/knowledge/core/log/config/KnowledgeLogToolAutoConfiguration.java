@@ -26,6 +26,7 @@ import com.knowledge.core.log.event.UsualLogListener;
 import com.knowledge.core.log.feign.ILogClient;
 import com.knowledge.core.log.logger.KnowledgeLogger;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
 
@@ -54,16 +55,19 @@ public class KnowledgeLogToolAutoConfiguration {
 	}
 
 	@Bean
+	@ConditionalOnProperty(prefix = "knowledge.log", name = "write-enabled", matchIfMissing = true)
 	public ApiLogListener apiLogListener() {
 		return new ApiLogListener(logService, serverInfo, knowledgeProperties);
 	}
 
 	@Bean
+	@ConditionalOnProperty(prefix = "knowledge.log", name = "write-enabled", matchIfMissing = true)
 	public ErrorLogListener errorEventListener() {
 		return new ErrorLogListener(logService, serverInfo, knowledgeProperties);
 	}
 
 	@Bean
+	@ConditionalOnProperty(prefix = "knowledge.log", name = "write-enabled", matchIfMissing = true)
 	public UsualLogListener knowledgeEventListener() {
 		return new UsualLogListener(logService, serverInfo, knowledgeProperties);
 	}

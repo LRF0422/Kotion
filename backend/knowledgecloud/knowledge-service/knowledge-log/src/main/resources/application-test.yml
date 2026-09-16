@@ -7,3 +7,8 @@ spring:
     url: ${blade.datasource.test.url}
     username: ${blade.datasource.test.username}
     password: ${blade.datasource.test.password}
+
+# 日志服务自身不再把日志写回自己（ILogClient 指向的就是本服务，写日志失败会自调用死循环）
+knowledge:
+  log:
+    write-enabled: false

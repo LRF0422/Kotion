@@ -45,6 +45,7 @@ import org.springframework.web.servlet.DispatcherServlet;
 import org.springframework.web.servlet.NoHandlerFoundException;
 
 import javax.servlet.Servlet;
+import javax.servlet.http.HttpServletRequest;
 import javax.validation.ConstraintViolation;
 import javax.validation.ConstraintViolationException;
 import java.util.Set;
@@ -155,8 +156,9 @@ public class KnowledgeRestExceptionTranslator {
 	@ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
 	public R handleError(Throwable e) {
 		log.error("服务器异常", e);
-		//发送服务异常事件
-		ErrorLogPublisher.publishEvent(e, UrlUtil.getPath(WebUtil.getRequest().getRequestURI()));
+		//发送服务异常事件（异步线程可能没有 request，避免异常处理器自身抛 NPE 再次触发异常链路）
+		HttpServletRequest request = WebUtil.getRequest();
+		ErrorLogPublisher.publishEvent(e, request == null ? null : UrlUtil.getPath(request.getRequestURI()));
 		return R.fail(ResultCode.INTERNAL_SERVER_ERROR, (Func.isEmpty(e.getMessage()) ? ResultCode.INTERNAL_SERVER_ERROR.getMessage() : e.getMessage()));
 	}
 

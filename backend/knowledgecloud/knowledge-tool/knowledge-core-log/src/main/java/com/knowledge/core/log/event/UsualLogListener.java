@@ -50,7 +50,12 @@ public class UsualLogListener {
 		Map<String, Object> source = (Map<String, Object>) event.getSource();
 		LogUsual logUsual = (LogUsual) source.get(EventConstant.EVENT_LOG);
 		LogAbstractUtil.addOtherInfoToLog(logUsual, knowledgeProperties, serverInfo);
-		logService.saveUsualLog(logUsual);
+		try {
+			logService.saveUsualLog(logUsual);
+		} catch (Exception e) {
+			// 写日志失败只做本地输出：抛出去会再次进入异常处理链路，形成写日志死循环
+			log.warn("保存通用日志失败: {}", e.getMessage());
+		}
 	}
 
 }

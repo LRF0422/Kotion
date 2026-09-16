@@ -52,7 +52,12 @@ public class ApiLogListener {
 		Map<String, Object> source = (Map<String, Object>) event.getSource();
 		LogApi logApi = (LogApi) source.get(EventConstant.EVENT_LOG);
 		LogAbstractUtil.addOtherInfoToLog(logApi, knowledgeProperties, serverInfo);
-		logService.saveApiLog(logApi);
+		try {
+			logService.saveApiLog(logApi);
+		} catch (Exception e) {
+			// 写日志失败只做本地输出：抛出去会再次进入异常处理链路，形成写日志死循环
+			log.warn("保存操作日志失败: {}", e.getMessage());
+		}
 	}
 
 }

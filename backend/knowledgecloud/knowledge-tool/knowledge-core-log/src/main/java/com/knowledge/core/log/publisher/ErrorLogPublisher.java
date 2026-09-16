@@ -38,6 +38,10 @@ public class ErrorLogPublisher {
 
 	public static void publishEvent(Throwable error, String requestUri) {
 		HttpServletRequest request = WebUtil.getRequest();
+		// 写日志接口自身出错时不再发布日志事件，避免 feign 自调用死循环
+		if (LogAbstractUtil.isLogWriteRequest(request)) {
+			return;
+		}
 		LogError logError = new LogError();
 		logError.setRequestUri(requestUri);
 		if (Func.isNotEmpty(error)) {

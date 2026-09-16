@@ -34,6 +34,7 @@ import com.knowledge.core.log.service.ILogErrorService;
 import com.knowledge.core.log.service.ILogLoginService;
 import com.knowledge.core.tool.api.R;
 import com.knowledge.core.tool.utils.BeanUtil;
+import com.knowledge.core.tool.utils.Func;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -58,7 +59,8 @@ public class LogClient implements ILogClient {
 	@Override
 	@PostMapping(API_PREFIX + "/saveUsualLog")
 	public R<Boolean> saveUsualLog(@RequestBody LogUsual log) {
-		log.setParams(log.getParams().replace("&amp;", "&"));
+		// params 可能为 null，直接 replace 会抛 NPE 让写日志接口 500，进而触发调用方的异常日志链路
+		log.setParams(Func.toStr(log.getParams(), "").replace("&amp;", "&"));
 		LogUsualDO logUsual = LogUsualConverter.INSTANCE.convertDO(log);
 		return R.data(usualLogService.save(logUsual));
 	}
@@ -66,7 +68,8 @@ public class LogClient implements ILogClient {
 	@Override
 	@PostMapping(API_PREFIX + "/saveApiLog")
 	public R<Boolean> saveApiLog(@RequestBody LogApi log) {
-		log.setParams(log.getParams().replace("&amp;", "&"));
+		// params 可能为 null，直接 replace 会抛 NPE 让写日志接口 500，进而触发调用方的异常日志链路
+		log.setParams(Func.toStr(log.getParams(), "").replace("&amp;", "&"));
 		LogApiDO logApi = LogApiConverter.INSTANCE.convertDO(log);
 		return R.data(apiLogService.save(logApi));
 	}
@@ -74,7 +77,8 @@ public class LogClient implements ILogClient {
 	@Override
 	@PostMapping(API_PREFIX + "/saveErrorLog")
 	public R<Boolean> saveErrorLog(@RequestBody LogError log) {
-		log.setParams(log.getParams().replace("&amp;", "&"));
+		// params 可能为 null，直接 replace 会抛 NPE 让写日志接口 500，进而触发调用方的异常日志链路
+		log.setParams(Func.toStr(log.getParams(), "").replace("&amp;", "&"));
 		LogErrorDO logError = LogErrorConverter.INSTANCE.convertDO(log);
 		return R.data(errorLogService.save(logError));
 	}
