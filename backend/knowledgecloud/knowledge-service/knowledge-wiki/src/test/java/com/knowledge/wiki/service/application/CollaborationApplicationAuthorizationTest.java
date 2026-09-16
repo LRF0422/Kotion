@@ -145,6 +145,45 @@ class CollaborationApplicationAuthorizationTest {
         assertEquals(IPermissionService.PERMISSION_WRITE, response.getPermission());
     }
 
+    /**
+     * The grant is best-effort: a rejected or unreachable membership call must not turn
+     * acceptance/entry into an error the invitee cannot act on. The client still receives
+     * the context to switch into (it may already be a member of that organization).
+     */
+    @Test
+    void failedContextGrantDoesNotBreakEntering() {
+        authenticate(42L);
+        CollaborationInvitation invitation = invitation(42L, InvitationStatus.ACCEPTED);
+        Page page = page("doc");
+        when(collaborationInvitationService.getByTokenForValidation("secret")).thenReturn(invitation);
+        when(pageService.getById(20L)).thenReturn(page);
+        when(spaceService.getById(10L)).thenReturn(spaceInContext("org-a"));
+        when(organizationMembershipClient.ensureMember(42L, "org-a"))
+                .thenThrow(new IllegalStateException("knowledge-system unreachable"));
+        when(permissionService.effectivePagePermission(42L, page)).thenReturn(IPermissionService.PERMISSION_WRITE);
+
+        InvitationEnterResponseDTO response = application.enterInvitation("secret");
+
+        assertEquals("org-a", response.getContextId());
+        assertEquals(Long.valueOf(20L), response.getPageId());
+    }
+
+    @Test
+    void sameContextInvitationSkipsTheRemoteGrant() {
+        authenticate(42L, "org-a");
+        CollaborationInvitation invitation = invitation(42L, InvitationStatus.ACCEPTED);
+        Page page = page("doc");
+        when(collaborationInvitationService.getByTokenForValidation("secret")).thenReturn(invitation);
+        when(pageService.getById(20L)).thenReturn(page);
+        when(spaceService.getById(10L)).thenReturn(spaceInContext("org-a"));
+        when(permissionService.effectivePagePermission(42L, page)).thenReturn(IPermissionService.PERMISSION_WRITE);
+
+        InvitationEnterResponseDTO response = application.enterInvitation("secret");
+
+        assertEquals("org-a", response.getContextId());
+        verify(organizationMembershipClient, never()).ensureMember(anyLong(), anyString());
+    }
+
     @Test
     void pendingInvitationCannotBeEntered() {
         authenticate(42L);
@@ -204,9 +243,14 @@ class CollaborationApplicationAuthorizationTest {
     }
 
     private void authenticate(Long userId) {
+        authenticate(userId, null);
+    }
+
+    private void authenticate(Long userId, String tenantId) {
         KnowledgeUser user = new KnowledgeUser();
         user.setUserId(userId);
         user.setUserName("test-user");
+        user.setTenantId(tenantId);
         SecurityContextHolder.getContext().setAuthentication(new KnowledgeUserAuthentication(user, "token"));
     }
 }

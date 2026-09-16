@@ -576,6 +576,7 @@ export const resources = {
         },
         contextSwitch: {
           failed: "无法切换到协作空间所属上下文，请稍后重试。",
+          hint: "若仍无法进入，请让邀请人在组织上下文中重新创建协作空间并重新邀请。",
         },
         error: {
           noToken: "无效的邀请链接，未提供令牌。",
@@ -1834,6 +1835,7 @@ export const resources = {
         },
         contextSwitch: {
           failed: "Could not switch to the context that owns this space. Please try again.",
+          hint: "If it still fails, ask the inviter to re-invite you from a space that lives in an organization.",
         },
         error: {
           noToken: "Invalid invitation link. No token provided.",

@@ -14,9 +14,9 @@ import com.knowledge.core.tool.api.R;
  * 都带上下文条件，因此必须先让受邀人成为该上下文的有效成员，之后客户端才能切换上下文
  * 并打开共享页面。
  *
- * <p>该接口在 knowledge-system 侧由 {@code @PreAuthorize} 限定为内部服务账号调用，
- * 因此这里必须使用 {@link OrganizationMembershipFeignConfiguration} 携带服务令牌，
- * 不能沿用默认的“透传当前用户 Authorization”拦截器。
+ * <p>该接口在 knowledge-system 侧通过自定义请求头
+ * {@link OrganizationMembershipFeignConfiguration#INTERNAL_TOKEN_HEADER} 校验内部
+ * 服务身份（见 {@link OrganizationMembershipFeignConfiguration}）。
  */
 @FeignClient(
 		value = AppConstant.APPLICATION_SYSTEM_NAME,

@@ -134,6 +134,11 @@ export const InviteCollaboration: React.FC = () => {
 
         const switched = await useApi(APIS.SWITCH_CONTEXT, { contextId: target.contextId }, {
             refreshToken: getRefreshToken() || '',
+        }).catch((error: any) => {
+            // The grant is best-effort on the backend, so the switch is where a real
+            // permission problem surfaces. Pair the platform message with the action
+            // that actually fixes it.
+            throw new Error(`${readableError(error)} ${t('inviteCollaboration.contextSwitch.hint')}`);
         });
         const tokens = normalizeTokenResponse(switched.data);
         if (!tokens.accessToken || !tokens.refreshToken) {

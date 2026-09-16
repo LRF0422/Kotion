@@ -12,6 +12,7 @@ import com.baomidou.mybatisplus.core.plugins.IgnoreStrategy;
 import com.baomidou.mybatisplus.core.plugins.InterceptorIgnoreHelper;
 import com.knowledge.core.secure.utils.SecurityContextUtil;
 import com.knowledge.core.tool.KnowledgeUser;
+import com.knowledge.core.tool.api.R;
 import com.knowledge.core.tool.utils.ApiClientUtil;
 import com.knowledge.system.feign.IUserClient;
 import com.knowledge.wiki.feign.IOrganizationMembershipClient;
@@ -168,9 +169,9 @@ public class CollaborationApplication {
         // Accept the invitation and materialize its page grant/guest membership.
         spaceService.acceptInvitation(invitation.getId());
 
-        // The invitee may live in a different context than the shared space. Grant
-        // that context's membership now so acceptance is a complete, actionable
-        // state: the client can switch into the space's context and open the page.
+        // The invitee may live in a different context than the shared space. Try to
+        // grant that context's membership so the client can switch into it and open
+        // the page; failure is non-fatal (see ensureSpaceContextMembership).
         String contextId = ensureSpaceContextMembership(invitation, page);
 
         response.setSuccess(true);
@@ -192,10 +193,10 @@ public class CollaborationApplication {
      * <p>The invitation endpoints run with the tenant line ignored, so they can see a
      * space that lives in the inviter's context. The regular space/page reads cannot:
      * a session in another context resolves {@code wiki_space} to nothing and the user
-     * sees "空间不存在". This endpoint therefore (re)materializes the invitee's
-     * membership in the space's context and reports the context the client must
-     * switch to before navigating. It is idempotent, so it also repairs invitations
-     * accepted before the membership grant existed.
+     * sees "空间不存在". This endpoint therefore reports the space/page ids plus the
+     * context the client must switch into before navigating, and makes a best-effort
+     * attempt to grant the invitee that context's membership first. It is idempotent,
+     * so it also repairs invitations accepted before the membership grant existed.
      *
      * POST /knowledge-wiki/collaboration/invitation/:token/enter
      */
@@ -231,8 +232,24 @@ public class CollaborationApplication {
     }
 
     /**
-     * Idempotently admit the invitee into the context that owns the shared space and
-     * return that context id (null when the space predates context binding).
+     * Try to admit the invitee into the context that owns the shared space, and return
+     * that context id (null when the space predates context binding).
+     *
+     * <p>The regular read paths are context-scoped, so a session in another context
+     * resolves {@code wiki_space} to nothing and the user sees "空间不存在". A successful
+     * grant lets the client switch into the space's context; that is the only reason
+     * this remote call exists.
+     *
+     * <p>It is deliberately best-effort and skips work when the caller is already in the
+     * space's context:
+     * <ul>
+     *   <li>the invitee is frequently already an active member of the organization
+     *       (same-organization collaboration), in which case no grant is needed and the
+     *       context switch alone is enough;</li>
+     *   <li>a remote failure must not break acceptance or produce an unexplainable
+     *       error — the client can still attempt the switch and report its own,
+     *       accurate reason (e.g. "无权切换到该上下文").</li>
+     * </ul>
      */
     private String ensureSpaceContextMembership(CollaborationInvitation invitation, Page page) {
         Long spaceId = invitation.getSpaceId() != null ? invitation.getSpaceId() : page.getSpaceId();
@@ -241,10 +258,34 @@ public class CollaborationApplication {
         if (contextId == null || contextId.trim().isEmpty() || invitation.getInviteeId() == null) {
             return null;
         }
-        Boolean granted = ApiClientUtil.resolvingResponse(
-                organizationMembershipClient.ensureMember(invitation.getInviteeId(), contextId));
-        if (!Boolean.TRUE.equals(granted)) {
-            throw WikiException.FORBIDDEN_ACCESS.newException();
+        // Already operating in the owning context: every read will resolve normally,
+        // and the invitee's space membership/page grant already carries the access.
+        String currentContextId = SecurityContextUtil.getTenantId();
+        if (contextId.equals(currentContextId)) {
+            return contextId;
+        }
+        // Two attempts: the first call to a freshly created Feign context can fail while
+        // the load balancer warms up (observed as a ~5s timeout surfacing through the
+        // sentinel fallback as an R with no message); the retry then succeeds.
+        for (int attempt = 1; attempt <= 2; attempt++) {
+            try {
+                R<Boolean> result = organizationMembershipClient.ensureMember(invitation.getInviteeId(), contextId);
+                if (result != null && result.getCode() == 200 && Boolean.TRUE.equals(result.getData())) {
+                    return contextId;
+                }
+                log.warn("Could not grant context membership. attempt={}, inviteeId={}, contextId={}, code={}, msg={}",
+                        attempt, invitation.getInviteeId(), contextId,
+                        result == null ? null : result.getCode(),
+                        result == null ? null : result.getMsg());
+                // A well-formed non-200 answer is a business rejection (personal context,
+                // suspended member, ...) — retrying cannot change it.
+                return contextId;
+            } catch (RuntimeException remoteFailure) {
+                // Transport/sentinel failures are not fatal: acceptance and navigation
+                // stay possible, and the client reports the switch failure itself.
+                log.warn("Context membership grant call failed. attempt={}, inviteeId={}, contextId={}",
+                        attempt, invitation.getInviteeId(), contextId, remoteFailure);
+            }
         }
         return contextId;
     }
