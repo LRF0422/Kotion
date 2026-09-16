@@ -4,6 +4,7 @@ import { Button } from "@kn/ui";
 import { ArrowRight, Github, Download } from "@kn/icon";
 import { Reveal } from "../../../components/Reveal";
 import { DESKTOP_RELEASE_URL, GITHUB_URL, LIVE_DEMO_URL } from "../../../constants/links";
+import { buildTrackedUrl, openExternal, track } from "../../../ops/analytics";
 
 export const FinalCTA: React.FC = () => {
     const { t } = useTranslation();
@@ -50,7 +51,7 @@ export const FinalCTA: React.FC = () => {
                             <Button
                                 size="lg"
                                 className="rounded-lg px-6"
-                                onClick={() => window.open(LIVE_DEMO_URL, "_blank")}
+                                onClick={() => openExternal(LIVE_DEMO_URL, { location: "final-cta", target: "demo", medium: "demo" })}
                             >
                                 {t("home.final-cta-primary")}
                                 <ArrowRight className="ml-2 h-5 w-5" />
@@ -59,15 +60,21 @@ export const FinalCTA: React.FC = () => {
                                 variant="outline"
                                 size="lg"
                                 className="rounded-lg px-6"
-                                onClick={() => window.open(GITHUB_URL, "_blank")}
+                                onClick={() => openExternal(GITHUB_URL, { location: "final-cta", target: "github", medium: "social" })}
                             >
                                 <Github className="mr-2 h-5 w-5" />
                                 {t("home.final-cta-secondary")}
                             </Button>
                             <a
-                                href={DESKTOP_RELEASE_URL}
+                                href={buildTrackedUrl(DESKTOP_RELEASE_URL, {
+                                    utm_source: "kotion-landing",
+                                    utm_medium: "download",
+                                    utm_campaign: "site",
+                                    utm_content: "final-cta",
+                                })}
                                 target="_blank"
                                 rel="noreferrer"
+                                onClick={() => track("cta_click", { location: "final-cta", target: "desktop" })}
                                 className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium hover:opacity-80"
                                 style={{ color: "var(--kn-ink-soft)" }}
                             >

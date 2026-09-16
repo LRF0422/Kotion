@@ -47,6 +47,11 @@ import {
   LogOut,
   UserCircle,
   Github,
+  BarChart3,
+  Mail,
+  Link2,
+  History,
+  Search,
 } from '@kn/icon'
 import { clearTokens, getAuthUser, hasPermission, type AuthUser } from '@/lib/auth'
 import { logout } from '@/api'
@@ -88,6 +93,17 @@ const NAV_GROUPS: NavGroup[] = [
       { title: '插件举报', url: '/plugin-reports', icon: Flag, permission: 'platform.plugins.read' },
       { title: 'AI 配置', url: '/ai', icon: Sparkles, permission: 'platform.ai.config.manage' },
       { title: 'AI 用量', url: '/ai-usage', icon: Gauge, permission: 'platform.ai.usage.read' },
+    ],
+  },
+  {
+    label: '运营',
+    items: [
+      { title: '运营看板', url: '/ops/dashboard', icon: BarChart3, permission: 'platform.dashboard.read' },
+      { title: '落地页内容', url: '/ops/content', icon: FileText, permission: 'platform.dashboard.read' },
+      { title: '订阅线索', url: '/ops/subscribers', icon: Mail, permission: 'platform.dashboard.read' },
+      { title: '渠道链接', url: '/ops/links', icon: Link2, permission: 'platform.dashboard.read' },
+      { title: '更新日志', url: '/ops/changelog', icon: History, permission: 'platform.dashboard.read' },
+      { title: '分享与 SEO', url: '/ops/seo', icon: Search, permission: 'platform.dashboard.read' },
     ],
   },
   {

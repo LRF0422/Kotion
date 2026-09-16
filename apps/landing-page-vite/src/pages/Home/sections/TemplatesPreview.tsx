@@ -5,6 +5,7 @@ import request from "../../../utils/request";
 import { Reveal } from "../../../components/Reveal";
 import { SectionHeading } from "../../../components/SectionHeading";
 import { LIVE_DEMO_URL } from "../../../constants/links";
+import { buildTrackedUrl, track } from "../../../ops/analytics";
 
 interface TemplateItem {
     id?: string | number;
@@ -80,9 +81,15 @@ export const TemplatesPreview: React.FC = () => {
                     ).map((tpl, i) => (
                         <Reveal key={String(tpl.id ?? i)} delay={i * 50}>
                             <a
-                                href={LIVE_DEMO_URL}
+                                href={buildTrackedUrl(LIVE_DEMO_URL, {
+                                    utm_source: "kotion-landing",
+                                    utm_medium: "template",
+                                    utm_campaign: "home-preview",
+                                    utm_content: String(tpl.id ?? tpl.name ?? i),
+                                })}
                                 target="_blank"
                                 rel="noreferrer"
+                                onClick={() => track("template_use", { templateId: tpl.id, templateName: tpl.name, location: "home-preview" })}
                                 className="card-lift group block overflow-hidden p-0"
                             >
                                 <MiniPreview index={i} />

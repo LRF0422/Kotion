@@ -26,6 +26,7 @@ import request from "../../utils/request";
 import { usePath } from "../../utils/use-path";
 import { Reveal } from "../../components/Reveal";
 import { DOCS_PLUGIN_DEV, GITHUB_ISSUES_URL, LIVE_DEMO_URL } from "../../constants/links";
+import { buildTrackedUrl, track } from "../../ops/analytics";
 
 type Scene = "editor" | "collab" | "bitable" | "ai" | "canvas" | "selfhost";
 
@@ -111,9 +112,16 @@ export const Plugins: React.FC = () => {
         });
     }, [plugins, selectedKey, searchQuery]);
 
-    const gotoInstall = (id?: string) => {
+    const gotoInstall = (id?: string, name?: string) => {
         if (!id) return;
-        window.open(`${LIVE_DEMO_URL}?requestPluginId=${id}`, "_blank");
+        track("plugin_install", { pluginId: id, pluginName: name });
+        const target = buildTrackedUrl(`${LIVE_DEMO_URL}?requestPluginId=${id}`, {
+            utm_source: "kotion-landing",
+            utm_medium: "plugin",
+            utm_campaign: "marketplace",
+            utm_content: id,
+        });
+        window.open(target, "_blank", "noopener,noreferrer");
     };
 
     return (
@@ -364,7 +372,7 @@ export const Plugins: React.FC = () => {
                                                                     <div className="flex gap-2 pt-4">
                                                                         <Button
                                                                             className="flex-1 rounded-lg"
-                                                                            onClick={() => gotoInstall(plugin.id)}
+                                                                            onClick={() => gotoInstall(plugin.id, plugin.name)}
                                                                         >
                                                                             {t("plugins.add-to-kotion")}
                                                                         </Button>
@@ -379,7 +387,7 @@ export const Plugins: React.FC = () => {
                                                 </Dialog>
                                                 <Button
                                                     className="rounded-lg h-9 px-3"
-                                                    onClick={() => gotoInstall(plugin.id)}
+                                                    onClick={() => gotoInstall(plugin.id, plugin.name)}
                                                     aria-label="Install"
                                                 >
                                                     <DownloadIcon className="h-4 w-4" />

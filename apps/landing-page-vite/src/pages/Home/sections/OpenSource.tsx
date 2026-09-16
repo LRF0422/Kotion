@@ -5,6 +5,7 @@ import { ArrowRight, Github, Heart, GitFork, Puzzle } from "@kn/icon";
 import { Reveal } from "../../../components/Reveal";
 import { SectionHeading } from "../../../components/SectionHeading";
 import { GITHUB_URL, DOCS_PLUGIN_DEV } from "../../../constants/links";
+import { openExternal } from "../../../ops/analytics";
 
 const CODE_SNIPPET = `import { ExtensionWrapper } from "@kn/common";
 
@@ -83,7 +84,7 @@ export const OpenSource: React.FC = () => {
                                     size="lg"
                                     variant="outline"
                                     className="rounded-lg"
-                                    onClick={() => window.open(GITHUB_URL, "_blank")}
+                                    onClick={() => openExternal(GITHUB_URL, { location: "opensource", target: "github", medium: "social" })}
                                 >
                                     <Github className="mr-2 h-4 w-4" />
                                     {t("home.opensource-cta-github")}

@@ -9,10 +9,17 @@ import { resources } from "./locales/resources";
 import { Templates } from "./pages/Templates";
 import { Plugins } from "./pages/Plugins";
 import { Docs } from "./pages/Docs";
+import { Changelog } from "./pages/Changelog";
+
+// 以 /zh、/en 路径前缀优先决定初始语言，其次才走 localStorage / navigator
+const pathLang = typeof window !== 'undefined'
+    ? window.location.pathname.match(/^\/(zh|en)(?=\/|$)/)?.[1]
+    : undefined
 
 i18n.use(initReactI18next)
     .use(LanguageDetector)
     .init({
+        lng: pathLang,
         detection: {
             lookupLocalStorage: 'language',
         },
@@ -28,18 +35,20 @@ i18n.use(initReactI18next)
 
 export const App: React.FC = () => {
 
+    // 同一套页面同时挂载在无前缀与 /:lang 前缀下，便于分语言 SEO 与看数
+    const buildRoutes = (prefix: string) => (
+        <Route key={prefix || "root"} path={prefix || "/"} element={<Layout />}>
+            <Route index element={<Home />} />
+            <Route path="templates" element={<Templates />} />
+            <Route path="plugins" element={<Plugins />} />
+            <Route path="doc" element={<Docs />} />
+            <Route path="doc/:section" element={<Docs />} />
+            <Route path="changelog" element={<Changelog />} />
+        </Route>
+    )
+
     const router = createBrowserRouter(
-        createRoutesFromElements(
-            [
-                <Route path="/" element={<Layout />}>
-                    <Route path="/" element={<Home />} />
-                    <Route path="/templates" element={<Templates />} />
-                    <Route path="/plugins" element={<Plugins />} />
-                    <Route path="/doc" element={<Docs />} />
-                    <Route path="/doc/:section" element={<Docs />} />
-                </Route>
-            ]
-        )
+        createRoutesFromElements([buildRoutes(""), buildRoutes(":lang")])
     )
 
     useEffect(() => {

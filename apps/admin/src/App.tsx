@@ -12,6 +12,12 @@ import { AISettings } from './pages/ai/AISettings'
 import { AiUsage } from './pages/ai/AiUsage'
 import { LogList } from './pages/audit/LogList'
 import { SystemSettings } from './pages/settings/SystemSettings'
+import { OpsDashboard } from './pages/ops/OpsDashboard'
+import { LandingContent } from './pages/ops/LandingContent'
+import { Subscribers } from './pages/ops/Subscribers'
+import { ChannelLinks } from './pages/ops/ChannelLinks'
+import { ChangelogAdmin } from './pages/ops/ChangelogAdmin'
+import { SeoSettings } from './pages/ops/SeoSettings'
 import { isOperatorLoggedIn } from './lib/auth'
 
 const RequireAuth = ({ children }: { children: React.ReactNode }) => {
@@ -46,6 +52,12 @@ export const App = () => {
             <Route path="ai-usage" element={<AiUsage />} />
             <Route path="logs" element={<LogList />} />
             <Route path="settings" element={<SystemSettings />} />
+            <Route path="ops/dashboard" element={<OpsDashboard />} />
+            <Route path="ops/content" element={<LandingContent />} />
+            <Route path="ops/subscribers" element={<Subscribers />} />
+            <Route path="ops/links" element={<ChannelLinks />} />
+            <Route path="ops/changelog" element={<ChangelogAdmin />} />
+            <Route path="ops/seo" element={<SeoSettings />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Route>
         </Routes>

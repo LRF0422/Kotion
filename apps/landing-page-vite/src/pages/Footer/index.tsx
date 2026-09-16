@@ -13,6 +13,8 @@ import {
     DOCS_INSTALL,
     DOCS_PLUGIN_DEV,
 } from "../../constants/links";
+import { buildTrackedUrl, track } from "../../ops/analytics";
+import { SubscribeForm } from "../../components/SubscribeForm";
 
 interface FooterLink {
     labelKey: string;
@@ -84,10 +86,11 @@ export const Footer: React.FC = () => {
                         </p>
                         <div className="flex items-center gap-3">
                             <a
-                                href={GITHUB_URL}
+                                href={buildTrackedUrl(GITHUB_URL, { utm_source: "kotion-landing", utm_medium: "social", utm_campaign: "footer", utm_content: "github" })}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 aria-label="GitHub"
+                                onClick={() => track("cta_click", { location: "footer-social", target: "github" })}
                                 className="w-10 h-10 rounded-lg flex items-center justify-center transition-all card-lift"
                                 style={{ color: "var(--kn-ink-soft)" }}
                             >
@@ -98,12 +101,14 @@ export const Footer: React.FC = () => {
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 aria-label="Zhihu"
+                                onClick={() => track("cta_click", { location: "footer-social", target: "zhihu" })}
                                 className="w-10 h-10 rounded-lg flex items-center justify-center transition-all card-lift"
                                 style={{ color: "var(--kn-ink-soft)" }}
                             >
                                 <MessageCircle className="h-4 w-4" />
                             </a>
                         </div>
+                        <SubscribeForm className="mt-6" location="footer" />
                     </div>
 
                     {/* Column links */}
@@ -128,9 +133,17 @@ export const Footer: React.FC = () => {
                                             </Link>
                                         ) : (
                                             <a
-                                                href={l.href}
+                                                href={l.href?.startsWith("http")
+                                                    ? buildTrackedUrl(l.href, {
+                                                        utm_source: "kotion-landing",
+                                                        utm_medium: "footer",
+                                                        utm_campaign: "site",
+                                                        utm_content: l.labelKey,
+                                                    })
+                                                    : l.href}
                                                 target={l.href?.startsWith("http") ? "_blank" : undefined}
                                                 rel={l.href?.startsWith("http") ? "noopener noreferrer" : undefined}
+                                                onClick={() => track("cta_click", { location: "footer", target: l.labelKey, href: l.href })}
                                                 className="text-sm hover:opacity-80 transition-opacity"
                                                 style={{ color: "var(--kn-ink-soft)" }}
                                             >

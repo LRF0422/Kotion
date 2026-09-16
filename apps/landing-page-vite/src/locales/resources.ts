@@ -1,6 +1,27 @@
 export const resources = {
     zh: {
         translation: {
+            changelog: {
+                title: "更新日志",
+                subtitle: "Kotion 的版本更新与改进记录",
+                empty: "暂无更新记录",
+                loading: "加载中…",
+                error: "更新日志暂时无法加载",
+                "view-release": "查看 Release",
+                "all-releases": "在 GitHub 查看全部版本"
+            },
+            subscribe: {
+                title: "订阅更新",
+                desc: "获取新版本、新插件与教程，最多每月一封。",
+                placeholder: "you@example.com",
+                cta: "订阅",
+                success: "订阅成功，感谢关注！",
+                invalid: "请输入有效的邮箱地址",
+                failed: "订阅失败，请稍后重试"
+            },
+            github: {
+                stars: "GitHub Star"
+            },
             header: {
                 feature: "功能",
                 workflow: "工作流",
@@ -10,6 +31,7 @@ export const resources = {
                 "template-market": "模板超市",
                 doc: "文档",
                 "self-host": "自托管",
+                changelog: "更新日志",
                 login: "登录",
                 "get-for-free": "免费获取",
                 "live-demo": "在线体验",
@@ -769,6 +791,27 @@ export const resources = {
     },
     en: {
         translation: {
+            changelog: {
+                title: "Changelog",
+                subtitle: "Release notes and improvements for Kotion",
+                empty: "No releases yet",
+                loading: "Loading…",
+                error: "Changelog is temporarily unavailable",
+                "view-release": "View release",
+                "all-releases": "View all releases on GitHub"
+            },
+            subscribe: {
+                title: "Subscribe to updates",
+                desc: "New releases, plugins and guides — at most one email a month.",
+                placeholder: "you@example.com",
+                cta: "Subscribe",
+                success: "Subscribed. Thanks for following!",
+                invalid: "Please enter a valid email address",
+                failed: "Subscription failed, please try again later"
+            },
+            github: {
+                stars: "GitHub Stars"
+            },
             header: {
                 feature: "Features",
                 workflow: "Workflow",
@@ -778,6 +821,7 @@ export const resources = {
                 "template-market": "Template Market",
                 doc: "Docs",
                 "self-host": "Self-Host",
+                changelog: "Changelog",
                 login: "Login",
                 "get-for-free": "Get for free",
                 "live-demo": "Live Demo",

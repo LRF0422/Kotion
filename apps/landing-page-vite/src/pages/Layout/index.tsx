@@ -3,6 +3,8 @@ import { Outlet } from "@kn/common";
 import { Header } from "../Header";
 import { ScrollArea } from "@kn/ui";
 import { Footer } from "../Footer";
+import { RouteAnalytics } from "../../ops/RouteAnalytics";
+import { LangSync } from "../../ops/LangSync";
 
 
 export const Layout: React.FC = () => {
@@ -11,6 +13,8 @@ export const Layout: React.FC = () => {
             className="min-h-screen"
             style={{ background: "var(--kn-paper)", color: "var(--kn-ink)" }}
         >
+            <RouteAnalytics />
+            <LangSync />
             <div className="absolute" id="ref"></div>
             <header>
                 <Header />

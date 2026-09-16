@@ -5,6 +5,8 @@ import { useTranslation } from "@kn/common";
 import { DeviceFrame } from "../../../components/DeviceFrame";
 import { EditorMock } from "../../../components/EditorMock";
 import { DESKTOP_RELEASE_URL, GITHUB_URL, LIVE_DEMO_URL } from "../../../constants/links";
+import { buildTrackedUrl, openExternal, track } from "../../../ops/analytics";
+import { StarCount } from "../../../ops/StarCount";
 
 export const Hero: React.FC = () => {
     const { t } = useTranslation();
@@ -44,7 +46,7 @@ export const Hero: React.FC = () => {
                             <Button
                                 size="lg"
                                 className="rounded-lg px-6"
-                                onClick={() => window.open(LIVE_DEMO_URL, "_blank")}
+                                onClick={() => openExternal(LIVE_DEMO_URL, { location: "hero", target: "demo", medium: "demo" })}
                             >
                                 {t("home.hero-cta-primary")}
                                 <ArrowRight className="ml-2 h-5 w-5" />
@@ -53,15 +55,21 @@ export const Hero: React.FC = () => {
                                 variant="outline"
                                 size="lg"
                                 className="rounded-lg px-6"
-                                onClick={() => window.open(GITHUB_URL, "_blank")}
+                                onClick={() => openExternal(GITHUB_URL, { location: "hero", target: "github", medium: "social" })}
                             >
                                 <Github className="mr-2 h-5 w-5" />
                                 {t("home.hero-cta-github")}
                             </Button>
                             <a
-                                href={DESKTOP_RELEASE_URL}
+                                href={buildTrackedUrl(DESKTOP_RELEASE_URL, {
+                                    utm_source: "kotion-landing",
+                                    utm_medium: "download",
+                                    utm_campaign: "site",
+                                    utm_content: "hero",
+                                })}
                                 target="_blank"
                                 rel="noreferrer"
+                                onClick={() => track("cta_click", { location: "hero", target: "desktop" })}
                                 className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium hover:opacity-80"
                                 style={{ color: "var(--kn-ink-soft)" }}
                             >
@@ -83,6 +91,10 @@ export const Hero: React.FC = () => {
                                 <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--scene-ai-500)" }} />
                                 {t("home.hero-meta-3")}
                             </span>
+                        </div>
+
+                        <div className="mt-4">
+                            <StarCount />
                         </div>
                     </div>
 

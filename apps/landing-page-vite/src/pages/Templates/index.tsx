@@ -4,6 +4,7 @@ import request from "../../utils/request";
 import { useTranslation } from "@kn/common";
 import { Reveal } from "../../components/Reveal";
 import { GITHUB_ISSUES_URL, LIVE_DEMO_URL } from "../../constants/links";
+import { buildTrackedUrl, track } from "../../ops/analytics";
 
 interface TemplateItem {
     id?: string | number;
@@ -243,9 +244,15 @@ export const Templates: React.FC = () => {
                             {filtered.map((tpl, i) => (
                                 <Reveal key={String(tpl.id ?? i)} delay={i * 30}>
                                     <a
-                                        href={LIVE_DEMO_URL}
+                                        href={buildTrackedUrl(LIVE_DEMO_URL, {
+                                            utm_source: "kotion-landing",
+                                            utm_medium: "template",
+                                            utm_campaign: "marketplace",
+                                            utm_content: String(tpl.id ?? tpl.name ?? i),
+                                        })}
                                         target="_blank"
                                         rel="noreferrer"
+                                        onClick={() => track("template_use", { templateId: tpl.id, templateName: tpl.name })}
                                         className="card-lift group block p-0 overflow-hidden"
                                     >
                                         <div className="h-40 overflow-hidden relative">
@@ -312,6 +319,7 @@ export const Templates: React.FC = () => {
                                 href={GITHUB_ISSUES_URL}
                                 target="_blank"
                                 rel="noreferrer"
+                                onClick={() => track("cta_click", { location: "templates-submit", target: "github-issues" })}
                                 className="mt-6 inline-flex items-center gap-2 rounded-lg px-6 py-2.5 text-sm font-medium btn-primary"
                             >
                                 {t("templates.submit-cta")}

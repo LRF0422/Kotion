@@ -4,6 +4,7 @@ import { LanguageToggle } from "../../locales/LanguageToggle";
 import { Link, useNavigate, useTranslation } from "@kn/common";
 import { Github, Menu, X, Download } from "@kn/icon";
 import { DESKTOP_RELEASE_URL, GITHUB_URL, LIVE_DEMO_URL } from "../../constants/links";
+import { openExternal } from "../../ops/analytics";
 
 
 interface NavItem {
@@ -18,6 +19,7 @@ const NAV: NavItem[] = [
     { labelKey: "header.plugins", to: "/plugins" },
     { labelKey: "header.template-market", to: "/templates" },
     { labelKey: "header.doc", to: "/doc" },
+    { labelKey: "header.changelog", to: "/changelog" },
     { labelKey: "header.self-host", href: "/#self-host" },
 ];
 
@@ -81,7 +83,7 @@ export const Header: React.FC = () => {
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={() => window.open(GITHUB_URL, "_blank")}
+                                onClick={() => openExternal(GITHUB_URL, { location: "header", target: "github", medium: "social" })}
                                 aria-label="GitHub"
                             >
                                 <Github className="h-4 w-4" />
@@ -93,14 +95,14 @@ export const Header: React.FC = () => {
                                 variant="ghost"
                                 size="sm"
                                 className="font-medium"
-                                onClick={() => window.open(LIVE_DEMO_URL, "_blank")}
+                                onClick={() => openExternal(LIVE_DEMO_URL, { location: "header", target: "demo", medium: "demo" })}
                             >
                                 {t("header.live-demo")}
                             </Button>
                             <Button
                                 size="sm"
                                 className="font-medium rounded-lg"
-                                onClick={() => window.open(DESKTOP_RELEASE_URL, "_blank")}
+                                onClick={() => openExternal(DESKTOP_RELEASE_URL, { location: "header", target: "desktop", medium: "download" })}
                             >
                                 <Download className="mr-1.5 h-4 w-4" />
                                 {t("header.download-desktop")}
@@ -167,13 +169,13 @@ export const Header: React.FC = () => {
                         <Button
                             variant="outline"
                             className="w-full rounded-lg"
-                            onClick={() => window.open(LIVE_DEMO_URL, "_blank")}
+                            onClick={() => openExternal(LIVE_DEMO_URL, { location: "header-mobile", target: "demo", medium: "demo" })}
                         >
                             {t("header.live-demo")}
                         </Button>
                         <Button
                             className="w-full rounded-lg"
-                            onClick={() => window.open(DESKTOP_RELEASE_URL, "_blank")}
+                            onClick={() => openExternal(DESKTOP_RELEASE_URL, { location: "header-mobile", target: "desktop", medium: "download" })}
                         >
                             <Download className="mr-2 h-4 w-4" />
                             {t("header.download-desktop")}

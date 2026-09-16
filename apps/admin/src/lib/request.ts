@@ -26,7 +26,7 @@ export interface PageResult<T> {
 export type QueryParams = Record<string, string | number | boolean | undefined | null>
 
 export interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   params?: QueryParams
   body?: unknown
   form?: QueryParams
@@ -175,6 +175,9 @@ export const postForm = <T>(path: string, form: QueryParams) =>
 
 export const put = <T>(path: string, body?: unknown, params?: QueryParams) =>
   request<T>(path, { method: 'PUT', body, params })
+
+export const patch = <T>(path: string, body?: unknown, params?: QueryParams) =>
+  request<T>(path, { method: 'PATCH', body, params })
 
 export const del = <T>(path: string, params?: QueryParams) =>
   request<T>(path, { method: 'DELETE', params })

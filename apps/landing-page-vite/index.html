@@ -1,20 +1,66 @@
 <!doctype html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>KN</title>
-</head>
-<body>
-<div id="root"></div>
-<script type="module" src="/src/main.tsx"></script>
-<script>
-  var process = {
-    env: {
-      NODE_ENV: 'production'
-    }
-  };
-</script>
-</body>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0b0b0f" media="(prefers-color-scheme: dark)" />
+
+    <title>Kotion · 一体化知识管理与协作工作台</title>
+    <meta
+      name="description"
+      content="Kotion 是开源的一体化知识工作台：文档、多维表格、白板、AI 与实时协作，支持自托管。20+ 插件，MIT 协议。"
+    />
+    <meta name="author" content="Kotion" />
+    <link rel="canonical" href="https://kotion.top/" />
+    <link rel="alternate" hreflang="zh-CN" href="https://kotion.top/" />
+    <link rel="alternate" hreflang="en" href="https://kotion.top/en" />
+    <link rel="alternate" hreflang="x-default" href="https://kotion.top/" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Kotion" />
+    <meta property="og:title" content="Kotion · 一体化知识管理与协作工作台" />
+    <meta
+      property="og:description"
+      content="文档、多维表格、白板、AI 与实时协作，支持自托管。20+ 插件，MIT 协议。"
+    />
+    <meta property="og:url" content="https://kotion.top/" />
+    <meta property="og:image" content="https://kotion.top/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Kotion 工作台界面" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:locale:alternate" content="en_US" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Kotion · 一体化知识管理与协作工作台" />
+    <meta name="twitter:description" content="文档、多维表格、白板、AI 与实时协作，支持自托管。" />
+    <meta name="twitter:image" content="https://kotion.top/og-image.png" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Kotion",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Web, Windows, macOS, Linux",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "CNY" },
+        "license": "https://opensource.org/licenses/MIT",
+        "url": "https://kotion.top/",
+        "description": "开源的一体化知识工作台：文档、多维表格、白板、AI 与实时协作，支持自托管。"
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      var process = {
+        env: {
+          NODE_ENV: 'production'
+        }
+      };
+    </script>
+  </body>
 </html>
