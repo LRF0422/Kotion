@@ -5,10 +5,12 @@ interface StatCardProps {
   title: string
   value: string
   trend?: number
+  /** 环比说明文案；默认「较上周」。按「近 N 天 vs 上一个 N 天」计算的看板应传「较上期」 */
+  trendLabel?: string
   icon: React.ComponentType<{ className?: string }>
 }
 
-export const StatCard = ({ title, value, trend, icon: Icon }: StatCardProps) => {
+export const StatCard = ({ title, value, trend, trendLabel = '较上周', icon: Icon }: StatCardProps) => {
   const isUp = (trend ?? 0) >= 0
   return (
     <Card>
@@ -21,7 +23,7 @@ export const StatCard = ({ title, value, trend, icon: Icon }: StatCardProps) => 
         {trend !== undefined && (
           <div className={`mt-1 flex items-center gap-1 text-xs ${isUp ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
             {isUp ? <TrendingUp className="size-3.5" /> : <TrendingDown className="size-3.5" />}
-            <span>{isUp ? '+' : ''}{trend}% 较上周</span>
+            <span>{isUp ? '+' : ''}{trend}% {trendLabel}</span>
           </div>
         )}
       </CardContent>

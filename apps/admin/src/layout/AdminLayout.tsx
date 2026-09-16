@@ -52,8 +52,25 @@ import {
   Link2,
   History,
   Search,
+  Briefcase,
+  Target,
+  Funnel,
+  Bell,
+  Layers,
+  Megaphone,
+  Image,
+  Tags,
+  Gift,
+  Send,
+  QrCode,
+  FlaskConical,
+  Activity,
+  ShieldCheck,
+  Download,
+  Store,
 } from '@kn/icon'
-import { clearTokens, getAuthUser, hasPermission, type AuthUser } from '@/lib/auth'
+import { clearTokens, getAuthUser, type AuthUser } from '@/lib/auth'
+import { can, OPS_READ_CODES } from '@/lib/permissions'
 import { logout } from '@/api'
 import { Button } from '@kn/ui'
 
@@ -63,7 +80,8 @@ interface NavItem {
   title: string
   url: string
   icon: React.ComponentType<{ className?: string }>
-  permission?: string
+  /** 命中任一权限码即可见（fail-closed：未配置权限码时仅管理员可见） */
+  permissions?: string[]
 }
 
 interface NavGroup {
@@ -75,48 +93,85 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: '概览',
     items: [
-      { title: '仪表盘', url: '/dashboard', icon: LayoutDashboard, permission: 'platform.dashboard.read' },
+      { title: '仪表盘', url: '/dashboard', icon: LayoutDashboard, permissions: ['platform.dashboard.read'] },
     ],
   },
   {
     label: '内容管理',
     items: [
-      { title: '空间管理', url: '/spaces', icon: FolderKanban, permission: 'platform.content.spaces.read' },
-      { title: '页面管理', url: '/pages', icon: FileText, permission: 'platform.content.pages.read' },
-      { title: '评论审核', url: '/comments', icon: MessageSquare, permission: 'platform.content.comments.read' },
+      { title: '空间管理', url: '/spaces', icon: FolderKanban, permissions: ['platform.content.spaces.read'] },
+      { title: '页面管理', url: '/pages', icon: FileText, permissions: ['platform.content.pages.read'] },
+      { title: '评论审核', url: '/comments', icon: MessageSquare, permissions: ['platform.content.comments.read'] },
     ],
   },
   {
     label: '平台能力',
     items: [
-      { title: '插件审核', url: '/plugins', icon: Blocks, permission: 'platform.plugins.read' },
-      { title: '插件举报', url: '/plugin-reports', icon: Flag, permission: 'platform.plugins.read' },
-      { title: 'AI 配置', url: '/ai', icon: Sparkles, permission: 'platform.ai.config.manage' },
-      { title: 'AI 用量', url: '/ai-usage', icon: Gauge, permission: 'platform.ai.usage.read' },
+      { title: '插件审核', url: '/plugins', icon: Blocks, permissions: ['platform.plugins.read'] },
+      { title: '插件举报', url: '/plugin-reports', icon: Flag, permissions: ['platform.plugins.read'] },
+      { title: 'AI 配置', url: '/ai', icon: Sparkles, permissions: ['platform.ai.config.manage'] },
+      { title: 'AI 用量', url: '/ai-usage', icon: Gauge, permissions: ['platform.ai.usage.read'] },
     ],
   },
   {
-    label: '运营',
+    label: '增长 · 洞察',
     items: [
-      { title: '运营看板', url: '/ops/dashboard', icon: BarChart3, permission: 'platform.dashboard.read' },
-      { title: '落地页内容', url: '/ops/content', icon: FileText, permission: 'platform.dashboard.read' },
-      { title: '订阅线索', url: '/ops/subscribers', icon: Mail, permission: 'platform.dashboard.read' },
-      { title: '渠道链接', url: '/ops/links', icon: Link2, permission: 'platform.dashboard.read' },
-      { title: '更新日志', url: '/ops/changelog', icon: History, permission: 'platform.dashboard.read' },
-      { title: '分享与 SEO', url: '/ops/seo', icon: Search, permission: 'platform.dashboard.read' },
+      { title: '运营工作台', url: '/ops/home', icon: Briefcase, permissions: OPS_READ_CODES },
+      { title: '运营看板', url: '/ops/dashboard', icon: BarChart3, permissions: OPS_READ_CODES },
+      { title: '转化目标', url: '/ops/goals', icon: Target, permissions: OPS_READ_CODES },
+      { title: '保存漏斗', url: '/ops/funnels', icon: Funnel, permissions: OPS_READ_CODES },
+      { title: '告警', url: '/ops/alerts', icon: Bell, permissions: OPS_READ_CODES },
+    ],
+  },
+  {
+    label: '增长 · 内容',
+    items: [
+      { title: '落地页内容', url: '/ops/content', icon: FileText, permissions: OPS_READ_CODES },
+      { title: '页面 SEO', url: '/ops/seo', icon: Search, permissions: OPS_READ_CODES },
+      { title: '区块编排', url: '/ops/sections', icon: Layers, permissions: OPS_READ_CODES },
+      { title: '推广位', url: '/ops/promotions', icon: Megaphone, permissions: OPS_READ_CODES },
+      { title: '素材库', url: '/ops/assets', icon: Image, permissions: OPS_READ_CODES },
+    ],
+  },
+  {
+    label: '增长 · 转化',
+    items: [
+      { title: '订阅线索', url: '/ops/subscribers', icon: Mail, permissions: OPS_READ_CODES },
+      { title: '人群标签', url: '/ops/audience', icon: Tags, permissions: OPS_READ_CODES },
+      { title: '渠道链接', url: '/ops/links', icon: Link2, permissions: OPS_READ_CODES },
+      { title: '推荐邀请', url: '/ops/referrals', icon: Gift, permissions: OPS_READ_CODES },
+      { title: '邮件活动', url: '/ops/campaigns', icon: Send, permissions: OPS_READ_CODES },
+      { title: '投放页', url: '/ops/campaign-pages', icon: QrCode, permissions: OPS_READ_CODES },
+    ],
+  },
+  {
+    label: '增长 · 实验与治理',
+    items: [
+      { title: '实验平台', url: '/ops/experiments', icon: FlaskConical, permissions: OPS_READ_CODES },
+      { title: '事件字典', url: '/ops/events', icon: Activity, permissions: OPS_READ_CODES },
+      { title: '数据口径', url: '/ops/data-quality', icon: ShieldCheck, permissions: OPS_READ_CODES },
+      { title: '变更记录', url: '/ops/audit', icon: History, permissions: OPS_READ_CODES },
+      { title: '数据导出', url: '/ops/export', icon: Download, permissions: OPS_READ_CODES },
+    ],
+  },
+  {
+    label: '生态',
+    items: [
+      { title: '模板/插件精选', url: '/ops/market', icon: Store, permissions: OPS_READ_CODES },
+      { title: '更新日志', url: '/ops/changelog', icon: History, permissions: OPS_READ_CODES },
     ],
   },
   {
     label: '系统',
     items: [
-      { title: '日志审计', url: '/logs', icon: ScrollText, permission: 'platform.audit.read' },
-      { title: '系统设置', url: '/settings', icon: Settings, permission: 'platform.settings.manage' },
+      { title: '日志审计', url: '/logs', icon: ScrollText, permissions: ['platform.audit.read'] },
+      { title: '系统设置', url: '/settings', icon: Settings, permissions: ['platform.settings.manage'] },
     ],
   },
 ]
 
 export const canAccessNavItem = (item: NavItem, user: AuthUser | null) =>
-  !item.permission || user?.permissions === undefined || hasPermission(user.permissions, item.permission)
+  can(user, ...(item.permissions ?? []))
 
 export const getVisibleNavGroups = (user: AuthUser | null) =>
   NAV_GROUPS

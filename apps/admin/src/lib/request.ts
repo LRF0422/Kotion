@@ -154,7 +154,20 @@ export const request = async <T>(path: string, options: RequestOptions = {}, ret
     throw new Error(`请求失败: ${response.status} ${response.statusText}`)
   }
 
-  const result: ApiResult<T> = await response.json()
+  // 204 / 空响应体：`del<void>` 类接口后端可能不返回 JSON，直接当成功处理，
+  // 否则 response.json() 会抛 SyntaxError 把成功当成失败。
+  const text = await response.text()
+  if (!text) {
+    return undefined as T
+  }
+
+  let result: ApiResult<T>
+  try {
+    result = JSON.parse(text) as ApiResult<T>
+  } catch {
+    // 非 JSON 响应（例如 CSV 直出）：原样返回文本，交由调用方处理。
+    return text as unknown as T
+  }
   if (result.code === 401) {
     redirectToLogin()
     throw new Error(result.msg || '登录已过期，请重新登录')
