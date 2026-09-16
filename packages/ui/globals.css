@@ -350,6 +350,56 @@ html[data-ui-style="modern"] #root {
   html[data-ui-style="modern"] .kn-workspace-dock[data-expanded="true"] {
     gap: var(--kn-workspace-gap);
   }
+
+  /* ------------------------------------------------------------------
+     macOS window chrome
+     The frameless window uses 'hiddenInset', so the native traffic lights
+     float at (x16, y12). Modern (floating panes) insets the whole shell;
+     classic (flush panes) reserves the strip on the left columns only, so the
+     editor keeps its document tab bar at the top. Height is 0 elsewhere.
+     ------------------------------------------------------------------ */
+  html[data-platform="darwin"] {
+    --kn-titlebar-height: 38px;
+  }
+
+  /* Inset the whole shell in BOTH modes so no page (space editor, file
+     manager, home, …) can place content under the lights. The band is empty, so
+     the drag region above it never covers interactive content — and it restores
+     macOS double-click-to-zoom on the title area.
+     The modern shell declares a `padding` shorthand at equal specificity, so
+     the modern variants add an extra attribute selector to win the cascade. */
+  html[data-platform="darwin"]:not([data-ui-style="modern"]) .kn-app-shell {
+    padding-top: var(--kn-titlebar-height);
+  }
+
+  html[data-platform="darwin"]:not([data-ui-style="modern"]) .kn-shell-top-drag-region {
+    display: block;
+    height: var(--kn-titlebar-height);
+  }
+
+  html[data-ui-style="modern"][data-platform="darwin"] .kn-app-shell {
+    padding-top: var(--kn-titlebar-height);
+  }
+
+  html[data-ui-style="modern"][data-platform="darwin"] .kn-shell-top-drag-region {
+    display: block;
+    height: var(--kn-titlebar-height);
+  }
+
+  /* Native fullscreen hides the traffic lights:
+     - classic is flat chrome, so it reclaims the whole band;
+     - modern keeps its normal pane gap so the floating layout stays even. */
+  html[data-ui-style="modern"][data-platform="darwin"][data-fullscreen="true"] .kn-app-shell {
+    padding-top: var(--kn-app-shell-padding);
+  }
+
+  html[data-platform="darwin"]:not([data-ui-style="modern"])[data-fullscreen="true"] .kn-app-shell {
+    padding-top: 0;
+  }
+
+  html[data-platform="darwin"][data-fullscreen="true"] .kn-shell-top-drag-region {
+    display: none;
+  }
 }
 
 /* Tablet keeps real 44px touch targets while desktop retains the compact rail. */

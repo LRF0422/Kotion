@@ -1,4 +1,6 @@
 node_modules
 out
 release
+# Local Electron distribution extracted for offline packaging
+.electron-dist
 *.log

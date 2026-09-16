@@ -379,7 +379,7 @@ export function Layout({ onPluginsReady }: LayoutProps) {
                         {/* Desktop Sidebar: SiYuan-style compact icon rail */}
                         {!isMobile && (
                             <div className="kn-app-rail min-h-0 overflow-hidden border-r bg-muted/40">
-                                <div className="flex h-full min-h-0 flex-col items-center pt-3 electron-sidebar-padding">
+                                <div className="relative flex h-full min-h-0 flex-col items-center pt-3">
                                     {/* Draggable area for window movement (Electron only) */}
                                     {isDesktopShell && <div className="absolute top-0 left-0 right-0 h-10 titlebar-drag-region" />}
                                     <div className="flex-1 w-full px-1">
@@ -394,8 +394,11 @@ export function Layout({ onPluginsReady }: LayoutProps) {
                             "relative flex w-full min-w-0 flex-col",
                             isMobile ? "h-[100dvh]" : "h-full min-h-0"
                         )}>
-                            {/* Draggable region at the top of main content area (Electron only) */}
-                            {!isMobile && isDesktopShell && <div className="absolute top-0 left-0 right-0 h-10 titlebar-drag-region" />}
+                            {/* No drag overlay here. This column hosts interactive top
+                                content (document tab bar, breadcrumb, share/save actions)
+                                and an overlay swallows their clicks. Dragging is provided
+                                by the rail's top strip and, in modern mode, by
+                                .kn-shell-top-drag-region. */}
                             {/* Mobile top app bar */}
                             {isMobile && <MobileAppBar />}
 

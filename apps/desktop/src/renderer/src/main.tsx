@@ -14,6 +14,35 @@ import React from 'react'
 
 console.log('Desktop app starting...')
 
+// Expose the host platform so the shell can reserve a macOS title band for the
+// native traffic lights (html[data-platform="darwin"] in @kn/ui/globals.css).
+document.documentElement.dataset.platform =
+    (window as any).electron?.process?.platform
+    ?? (/Mac/i.test(navigator.platform) ? 'darwin' : 'other')
+
+// Native fullscreen hides the traffic lights; drop the reserved title band.
+;(window as any).api?.on?.('window:fullscreen', (isFullscreen: boolean) => {
+    document.documentElement.dataset.fullscreen = isFullscreen ? 'true' : 'false'
+})
+
+// Keep the native traffic lights aligned with the interface style. The buttons
+// are native window controls, so only the main process can move them.
+const TRAFFIC_LIGHT_POSITION = {
+    classic: { x: 16, y: 12 },
+    modern: { x: 22, y: 20 },
+} as const
+
+const syncTrafficLights = () => {
+    const style = document.documentElement.dataset.uiStyle === 'modern' ? 'modern' : 'classic'
+    ;(window as any).api?.send?.('window:traffic-lights', TRAFFIC_LIGHT_POSITION[style])
+}
+
+new MutationObserver(syncTrafficLights).observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-ui-style'],
+})
+syncTrafficLights()
+
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean, error: Error | null }> {
     constructor(props: { children: React.ReactNode }) {
         super(props)

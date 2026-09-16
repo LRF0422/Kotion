@@ -62,7 +62,13 @@ function createWindow(): void {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      // The renderer runs on the app:// origin while the API lives on
+      // https://kotion.top:888, and the gateway answers CORS preflight OPTIONS
+      // with 401, so cross-origin XHR is blocked. Disable web security for the
+      // trusted app shell. Replace with a main-process API proxy if/when the
+      // gateway gains proper CORS handling.
+      webSecurity: false,
     }
   })
 
@@ -74,6 +80,14 @@ function createWindow(): void {
   mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
     console.error('Failed to load:', errorCode, errorDescription)
   })
+
+  // Mirror the macOS fullscreen state into the renderer. Native fullscreen hides
+  // the traffic lights, so the shell can drop its reserved title band.
+  const sendFullscreen = (isFullscreen: boolean) =>
+    mainWindow.webContents.send('window:fullscreen', isFullscreen)
+  mainWindow.on('enter-full-screen', () => sendFullscreen(true))
+  mainWindow.on('leave-full-screen', () => sendFullscreen(false))
+  mainWindow.webContents.on('did-finish-load', () => sendFullscreen(mainWindow.isFullScreen()))
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
@@ -87,9 +101,15 @@ function createWindow(): void {
   if (is.dev && rendererUrl) {
     mainWindow.loadURL(rendererUrl)
   } else {
-    // Use custom protocol for production
-    mainWindow.loadURL('app://./index.html')
+    // Load the root path, not '/index.html': the SPA router derives its route
+    // from window.location.pathname, and '/index.html' matches no route.
+    mainWindow.loadURL('app://./')
   }
+}
+
+// Optional remote-debugging port for local diagnostics (disabled by default).
+if (process.env.KN_DEBUG_PORT) {
+  app.commandLine.appendSwitch('remote-debugging-port', process.env.KN_DEBUG_PORT)
 }
 
 app.whenReady().then(async () => {
@@ -99,9 +119,30 @@ app.whenReady().then(async () => {
   // Setup IPC handlers (desktop-native capabilities only: fs/dialog/system)
   setupIpcHandlers()
 
-  // Register custom protocol handler for SPA routing
+  // Let the renderer align the native traffic lights with the interface style
+  // (classic = tight flat chrome, modern = inset floating panes).
+  ipcMain.on('window:traffic-lights', (event, position: { x: number; y: number }) => {
+    if (process.platform !== 'darwin') return
+    const win = BrowserWindow.fromWebContents(event.sender) as any
+    // Electron 33 exposes setWindowButtonPosition; older builds used
+    // setTrafficLightPosition. Pick whichever exists, and never throw here —
+    // an uncaught error in an ipcMain handler takes down the main process.
+    const setPosition = win?.setWindowButtonPosition ?? win?.setTrafficLightPosition
+    if (typeof setPosition !== 'function') {
+      console.warn('[traffic-lights] no window-button positioning API on this Electron build')
+      return
+    }
+    try {
+      setPosition.call(win, position)
+    } catch (error) {
+      console.warn('[traffic-lights] failed to set position', error)
+    }
+  })
+
+  // Register custom protocol handler for SPA routing.
   protocol.handle('app', (request) => {
     const url = new URL(request.url)
+
     let filePath = url.pathname
 
     // For SPA routing: if the path doesn't have an extension, serve index.html
