@@ -9,7 +9,7 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.knowledge.core.log.exception.ServiceException;
 import com.knowledge.system.domain.LandingChangelog;
 import com.knowledge.system.mapper.LandingChangelogMapper;
-import lombok.AllArgsConstructor;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -21,7 +21,7 @@ import java.util.List;
  * 更新日志聚合服务（抓取 GitHub Releases 并缓存）
  */
 @Service
-@AllArgsConstructor
+@RequiredArgsConstructor
 public class LandingChangelogService {
 
 	private final LandingChangelogMapper changelogMapper;
