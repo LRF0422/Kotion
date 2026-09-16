@@ -64,7 +64,7 @@ export const Member: React.FC = () => {
     const [invitation, setInvitation] = useState<{ token: string; expiresAt: string }>();
     const [copied, setCopied] = useState(false);
     const configuredWebOrigin = (import.meta as any).env?.VITE_WEB_APP_URL as string | undefined;
-    const publicAppOrigin = (configuredWebOrigin || ((window as any).api ? "https://kotion.top:888" : window.location.origin)).replace(/\/$/, "");
+    const publicAppOrigin = (configuredWebOrigin || ((window as any).knDesktop ? "https://kotion.top:888" : window.location.origin)).replace(/\/$/, "");
 
     const isTeam = currentContext?.type === "TEAM";
     const role = currentContext?.memberRole;

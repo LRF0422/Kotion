@@ -10,6 +10,7 @@ import { toast } from "@kn/ui"
 import React from "react"
 import { MobilePageHeaderProvider, useMobilePageHeader } from "@kn/common"
 import { OffscreenEditorHost } from "./ai/offscreen"
+import { CaptureTitleButton } from "./capture/CaptureTitleButton"
 import { AgentDocumentHost } from "./ai/agentdoc"
 import { UploadTaskHost } from "./components/UploadTasks/UploadTaskHost"
 import { toRemotePluginDescriptor, type PluginRecord } from "./components/Shop/plugin-model"
@@ -326,7 +327,7 @@ export function Layout({ onPluginsReady }: LayoutProps) {
     const { isOpen: keyboardOpen } = useVirtualKeyboard()
     // Frameless-window drag regions only work in the Electron shell (their CSS
     // lives in the desktop app); in the browser they'd be invisible click blockers.
-    const isDesktopShell = typeof window !== 'undefined' && typeof (window as any).api !== 'undefined'
+    const isDesktopShell = typeof window !== 'undefined' && typeof (window as any).knDesktop !== 'undefined'
 
     return (
         <MobilePageHeaderProvider>
@@ -374,7 +375,12 @@ export function Layout({ onPluginsReady }: LayoutProps) {
                         !pluginsLoaded && "opacity-0"
                     )} >
                         {!isMobile && isDesktopShell && (
-                            <div className="kn-shell-top-drag-region titlebar-drag-region absolute inset-x-0 top-0 z-50" />
+                            <div className="kn-shell-top-drag-region titlebar-drag-region absolute inset-x-0 top-0 z-50">
+                                {/* Traffic lights occupy the left; quick desktop actions sit right. */}
+                                <div className="titlebar-no-drag absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
+                                    <CaptureTitleButton />
+                                </div>
+                            </div>
                         )}
                         {/* Desktop Sidebar: SiYuan-style compact icon rail */}
                         {!isMobile && (

@@ -16,7 +16,7 @@ export interface API<TData = any, TParam = any, TBody = any> {
 // Check if running in Electron environment
 export const isElectron = (): boolean => {
     return typeof window !== 'undefined' &&
-        typeof (window as any).api !== 'undefined'
+        typeof (window as any).knDesktop !== 'undefined'
 }
 
 const fillPathParam = (url: string, param: any): string => {

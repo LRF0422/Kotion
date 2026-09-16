@@ -15,19 +15,11 @@ import { AppContext, SiderMenuItemProps, PLUGIN_CHANGED } from "@kn/common";
 import { event } from "@kn/common";
 import { useUploadFile } from "@kn/common";
 import { LanguageToggle } from "../locales/LanguageToggle";
-import { CaptureDialog } from "../capture/CaptureDialog";
 import { MessageBox } from "./MessageBox";
 import { Sparkles } from "@kn/icon";
 import { APIS, clearContextSensitiveClientState, clearTokens, getRefreshToken, notifyContextChanged, useApi } from "@kn/common";
 
 const GITHUB_URL = "https://github.com/LRF0422/knowledge-repo";
-
-const CaptureIcon = () => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-[1.2rem] w-[1.2rem]" aria-hidden="true">
-        <path d="M3 8.5A2.5 2.5 0 0 1 5.5 6h1.2l1-1.6A1 1 0 0 1 8.55 4h6.9a1 1 0 0 1 .85.4l1 1.6h1.2A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z" strokeLinejoin="round" />
-        <circle cx="12" cy="12.5" r="3.2" />
-    </svg>
-);
 
 // Memoized menu item component for better performance
 interface MenuItemProps {
@@ -102,8 +94,6 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
     const { userInfo } = useSelector((state: GlobalState) => state)
     const { pluginManager } = useContext(AppContext)
     const [flag, setFlag] = useState(0)
-    const [captureOpen, setCaptureOpen] = useState(false)
-    const isDesktopApp = typeof window !== "undefined" && Boolean((window as any).knDesktop)
     const { usePath } = useUploadFile()
 
     // Memoized handlers for better performance
@@ -306,19 +296,6 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
                             "flex gap-1.5 [&_button]:h-11 [&_button]:w-11 lg:[&_button]:h-8 lg:[&_button]:w-8",
                             isMobile ? "flex-row justify-center" : "flex-col items-center"
                         )}>
-                            {isDesktopApp && (
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="icon"
-                                    className="rounded-full"
-                                    onClick={() => setCaptureOpen(true)}
-                                    title="截图 / 录屏"
-                                    aria-label="截图 / 录屏"
-                                >
-                                    <CaptureIcon />
-                                </Button>
-                            )}
                             <ModeToggle />
                             <LanguageToggle />
                             <Button
@@ -337,7 +314,6 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
                     </div>
                 </nav>
             </TooltipProvider>
-            <CaptureDialog open={captureOpen} onClose={() => setCaptureOpen(false)} />
         </>
     );
 }

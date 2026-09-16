@@ -386,20 +386,9 @@ html[data-ui-style="modern"] #root {
     height: var(--kn-titlebar-height);
   }
 
-  /* Native fullscreen hides the traffic lights:
-     - classic is flat chrome, so it reclaims the whole band;
-     - modern keeps its normal pane gap so the floating layout stays even. */
-  html[data-ui-style="modern"][data-platform="darwin"][data-fullscreen="true"] .kn-app-shell {
-    padding-top: var(--kn-app-shell-padding);
-  }
-
-  html[data-platform="darwin"]:not([data-ui-style="modern"])[data-fullscreen="true"] .kn-app-shell {
-    padding-top: 0;
-  }
-
-  html[data-platform="darwin"][data-fullscreen="true"] .kn-shell-top-drag-region {
-    display: none;
-  }
+  /* Native fullscreen hides the traffic lights, but the band also hosts the
+     built-in screenshot / recording control, so it stays in every mode. The
+     empty left space simply becomes draggable chrome. */
 }
 
 /* Tablet keeps real 44px touch targets while desktop retains the compact rail. */
