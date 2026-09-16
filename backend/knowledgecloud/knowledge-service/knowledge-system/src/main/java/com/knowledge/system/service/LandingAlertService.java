@@ -202,7 +202,7 @@ public class LandingAlertService {
 				return BigDecimal.ZERO;
 			}
 			double changePct = doubleValue(stat.get("changePct"));
-			return changePct >= 0d ? BigDecimal.ZERO : round2(-changePct);
+			return changePct >= 0d ? BigDecimal.ZERO : round2(BigDecimal.valueOf(-changePct));
 		}
 
 		BigDecimal current = metricValue(rule, metric, currentStart, currentEnd);
@@ -224,7 +224,11 @@ public class LandingAlertService {
 		if (previous.compareTo(BigDecimal.ZERO) <= 0) {
 			return BigDecimal.ZERO;
 		}
-		return round2((previous.doubleValue() - current.doubleValue()) * 100d / previous.doubleValue());
+		// 全部用 BigDecimal 运算，避免 double 与 BigDecimal 互转带来的精度与类型问题
+		BigDecimal drop = previous.subtract(current)
+			.multiply(BigDecimal.valueOf(100L))
+			.divide(previous, 4, RoundingMode.HALF_UP);
+		return round2(drop);
 	}
 
 	private long overviewField(LandingOverviewVO overview, String metric) {
