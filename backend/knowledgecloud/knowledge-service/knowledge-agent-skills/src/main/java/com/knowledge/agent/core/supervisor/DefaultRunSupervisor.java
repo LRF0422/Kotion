@@ -218,7 +218,7 @@ public class DefaultRunSupervisor {
         // editor persona either — see AgentLoop#initFreshCheckpoint.
         checkpoint.getMessages().add(cmd.isNoTools()
                 ? ContextManager.buildPlainTextSystemMessage(cmd.getSystemPrompt())
-                : contextManager.buildSystemMessage(run, systemFragments));
+                : contextManager.buildSystemMessage(run, systemFragments, true));
         if (cmd.getMessages() != null) {
             for (ChatMessage message : cmd.getMessages()) {
                 if (message == null || "system".equalsIgnoreCase(message.getRole())) {

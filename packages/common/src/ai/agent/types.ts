@@ -222,7 +222,17 @@ export type AgentEvent =
     | { seq: number; type: 'reasoning.delta'; content: string }
     | { seq: number; type: 'tool.requested'; callId: string; tool: string; args: string; subRunId?: string }
     | { seq: number; type: 'tool.completed'; callId: string; tool: string; ok: boolean; result?: unknown; error?: string; durationMs?: number; subRunId?: string }
-    | { seq: number; type: 'sub.spawned'; callId: string; subRunId: string; task?: string }
+    | {
+        seq: number
+        type: 'sub.spawned'
+        callId: string
+        subRunId: string
+        task?: string
+        /** Human-friendly name the backend assigned to this child, when known. */
+        agentName?: string
+        /** One-line role/description for the child, when known. */
+        description?: string
+    }
     | { seq: number; type: 'sub.completed'; callId: string; subRunId: string; ok: boolean; result?: unknown }
     | { seq: number; type: 'sub.failed'; callId: string; subRunId: string; ok: false; error?: string }
     | { seq: number; type: 'plan.proposed'; callId: string; plan: string }

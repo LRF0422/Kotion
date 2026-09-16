@@ -115,8 +115,15 @@ public class Delegator {
         cmd.setMaxTokens(ctx.getMaxTokens());
         cmd.setMaxSteps(args.get("maxSteps") != null ? intArg(args.get("maxSteps"), "maxSteps") : null);
 
+        // Frame the task explicitly: the child inherits the parent's editor
+        // persona and tools, so the task message must read as a top-priority
+        // instruction (see ContextManager#DELEGATED_SUB_AGENT_RULES) rather than
+        // as just another user turn the inherited persona can reinterpret.
         List<ChatMessage> messages = new ArrayList<>();
-        messages.add(ChatMessage.builder().role("user").content(task).build());
+        messages.add(ChatMessage.builder()
+                .role("user")
+                .content("【主 Agent 委派的任务】\n\n" + task)
+                .build());
         cmd.setMessages(messages);
         cmd.setTools(selectTools(ctx.getClientTools(), args.get("tools")));
         // Deferred tools stay deferred in the child: same subsetting, same laziness.

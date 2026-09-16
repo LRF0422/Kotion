@@ -29,6 +29,65 @@ import { Badge } from '../ui/badge'
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover'
 import { cn } from '../../lib/utils'
 
+// ─── Human-friendly identity ──────────────────────────────────────
+// A delegation reads far better as a named teammate than as an anonymous
+// "#1". A backend-supplied name always wins; otherwise each child gets a stable
+// name derived from its run id, so the same sub-agent keeps the same name across
+// re-renders and reconnects (and even after a session reload).
+
+const SUB_AGENT_NAMES = [
+    'Nova', 'Atlas', 'Iris', 'Orion', 'Luna', 'Vega', 'Milo', 'Ivy',
+    'Juno', 'Remy', 'Aria', 'Kai', 'Sage', 'Leo', 'Nina', 'Theo',
+    'Cora', 'Ezra', 'Maya', 'Finn', 'Rowan', 'Lena', 'Ash', 'Noa',
+]
+
+/** Avatar tints, so each named child is visually distinct at a glance. */
+const SUB_AGENT_TONES = [
+    'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400',
+    'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
+    'bg-amber-500/15 text-amber-600 dark:text-amber-400',
+    'bg-rose-500/15 text-rose-600 dark:text-rose-400',
+    'bg-sky-500/15 text-sky-600 dark:text-sky-400',
+    'bg-violet-500/15 text-violet-600 dark:text-violet-400',
+]
+
+/** Deterministic string hash — the same run id always maps to the same name. */
+function hashString(value: string): number {
+    let hash = 0
+    for (let i = 0; i < value.length; i += 1) {
+        hash = (hash * 31 + value.charCodeAt(i)) | 0
+    }
+    return hash >>> 0
+}
+
+/** The child's display name: backend name first, generated fallback second. */
+function subAgentDisplayName(sub: Pick<SubRunView, 'name' | 'subRunId'>): string {
+    const explicit = sub.name?.trim()
+    if (explicit) return explicit
+    return SUB_AGENT_NAMES[hashString(sub.subRunId) % SUB_AGENT_NAMES.length]
+}
+
+function AgentAvatar({ name, subRunId, className }: {
+    name: string
+    subRunId: string
+    className?: string
+}) {
+    const initial = Array.from(name.trim())[0]?.toUpperCase() ?? '·'
+    const tone = SUB_AGENT_TONES[hashString(subRunId) % SUB_AGENT_TONES.length]
+    return (
+        <span
+            aria-hidden="true"
+            className={cn(
+                'flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold',
+                tone,
+                className,
+            )}
+        >
+            {initial}
+        </span>
+    )
+}
+
 export interface SubToolCallView {
     callId: string
     tool: string
@@ -54,6 +113,10 @@ export interface SubRunView {
     callId: string
     subRunId: string
     task?: string
+    /** Human-friendly display name; generated from the run id when absent. */
+    name?: string
+    /** One-line role/subtitle shown under the name. */
+    description?: string
     status: 'running' | 'completed' | 'failed' | 'cancelled'
     result?: unknown
     error?: string
@@ -317,7 +380,6 @@ function FallbackDetail({
 }
 
 interface SubAgentRowProps {
-    index: number
     sub: SubRunView
     toolCalls: SubToolCallView[]
     labels: SubAgentTreeLabels
@@ -330,10 +392,11 @@ interface SubAgentRowProps {
 }
 
 const SubAgentRow: React.FC<SubAgentRowProps> = ({
-    index, sub, toolCalls, labels, renderDetail,
+    sub, toolCalls, labels, renderDetail,
     open, pinned, onOpenChange, onClose, onTogglePin,
 }) => {
     const finishedTools = toolCalls.filter(call => call.status !== 'running').length
+    const name = subAgentDisplayName(sub)
 
     return (
         <Popover open={open} onOpenChange={onOpenChange}>
@@ -347,17 +410,27 @@ const SubAgentRow: React.FC<SubAgentRowProps> = ({
                     )}
                 >
                     <ChevronRight className={cn('h-2.5 w-2.5 shrink-0 text-muted-foreground transition-transform', open && 'rotate-90')} />
-                    <span className="shrink-0 font-mono text-[10px] text-muted-foreground/60">#{index}</span>
+                    <AgentAvatar name={name} subRunId={sub.subRunId} />
                     <StatusIcon status={sub.status} />
                     <span className="flex min-w-0 flex-1 flex-col">
-                        <span className="truncate text-[11px]" title={sub.task}>
-                            {firstLine(sub.task, labels.noTask)}
+                        <span className="truncate text-[11px] font-medium" title={name}>
+                            {name}
                         </span>
-                        {sub.status === 'running' && lastLine(sub.text) && (
-                            <span className="truncate text-[10px] italic text-muted-foreground/70" title={sub.text}>
-                                {lastLine(sub.text)}
-                            </span>
-                        )}
+                        <span
+                            className={cn(
+                                'truncate text-[10px] text-muted-foreground/70',
+                                sub.status === 'running' && lastLine(sub.text) && 'italic',
+                            )}
+                            title={
+                                sub.status === 'running' && lastLine(sub.text)
+                                    ? sub.text
+                                    : (sub.description || sub.task)
+                            }
+                        >
+                            {sub.status === 'running' && lastLine(sub.text)
+                                ? lastLine(sub.text)
+                                : firstLine(sub.description || sub.task, labels.noTask)}
+                        </span>
                     </span>
                     {toolCalls.length > 0 && (
                         <span className="flex shrink-0 items-center gap-0.5 text-[10px] text-muted-foreground">
@@ -379,10 +452,14 @@ const SubAgentRow: React.FC<SubAgentRowProps> = ({
                 className="w-[380px] max-w-[90vw] p-0"
             >
                 <div className="flex items-start gap-2 border-b border-border/50 px-3 py-2">
-                    <StatusIcon status={sub.status} className="mt-0.5 h-3.5 w-3.5" />
+                    <AgentAvatar name={name} subRunId={sub.subRunId} className="mt-0.5" />
                     <div className="min-w-0 flex-1">
-                        <p className="truncate text-[11px] font-medium" title={sub.task}>
-                            {firstLine(sub.task, labels.noTask)}
+                        <p className="flex items-center gap-1.5 text-[11px] font-medium" title={name}>
+                            <span className="truncate">{name}</span>
+                            <StatusIcon status={sub.status} className="h-3 w-3 shrink-0" />
+                        </p>
+                        <p className="truncate text-[10px] text-muted-foreground/70" title={sub.description || sub.task}>
+                            {firstLine(sub.description || sub.task, labels.noTask)}
                         </p>
                         <p className="font-mono text-[9px] text-muted-foreground/50">
                             {labels.runId} {sub.subRunId}
@@ -555,10 +632,9 @@ export const SubAgentTree: React.FC<SubAgentTreeProps> = ({
 
             {open && (
                 <div className="space-y-1 px-2.5 pb-2">
-                    {subRuns.map((sub, index) => (
+                    {subRuns.map((sub) => (
                         <SubAgentRow
                             key={sub.subRunId}
-                            index={index + 1}
                             sub={sub}
                             toolCalls={callsBySubRun.get(sub.subRunId) ?? []}
                             labels={l}

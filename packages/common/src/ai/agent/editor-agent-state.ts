@@ -47,6 +47,10 @@ export interface SubRunRecord {
     callId: string
     subRunId: string
     task?: string
+    /** Human-friendly name the backend assigned to this child, when known. */
+    name?: string
+    /** One-line role/description for the child, when known. */
+    description?: string
     status: 'running' | 'completed' | 'failed' | 'cancelled'
     result?: unknown
     error?: string
@@ -526,6 +530,8 @@ function applyEvent(state: EditorAgentState, event: AgentEvent): EditorAgentStat
                         callId: event.callId,
                         subRunId: event.subRunId,
                         task: event.task,
+                        name: event.agentName,
+                        description: event.description,
                         status: 'running',
                         steps: [],
                     },

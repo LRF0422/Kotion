@@ -21,6 +21,10 @@ import { ModelSelector } from '../../components/ModelSelector'
 import type { ChatTargetPage } from '../chat-sessions'
 import { PageMentionPicker, TargetPageStatus } from './PageMentionPicker'
 
+// TEMP(chat): the change-tracking toggle is hidden in the chat composer for now.
+// Flip this back to `true` to restore the button.
+const SHOW_TRACKING_TOGGLE: boolean = false
+
 // ─── Mode toggle ───────────────────────────────────────────────────
 
 interface ModeToggleProps {
@@ -277,11 +281,12 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
                 rows={1}
                 className="min-h-[48px] max-h-[120px] resize-none overflow-y-auto rounded-xl border-0 bg-transparent px-3 pb-1 pt-2.5 text-sm leading-relaxed shadow-none placeholder:text-muted-foreground/45 focus-visible:ring-0 lg:min-h-[38px] lg:pt-2 lg:text-[13px]"
             />
-            {/* Toolbar. Secondary controls stay icon-only (agent picker when on
-                the default agent, change-tracking toggle) and sampling params are
-                folded into the model menu, so the row fits one line even in the
-                narrow side dock. `flex-wrap` remains as a safety net; `ml-auto`
-                keeps send right-aligned on whichever line it lands on. */}
+            {/* Toolbar. Secondary controls stay icon-only (the change-tracking
+                toggle is temporarily hidden — see SHOW_TRACKING_TOGGLE) and
+                sampling params are folded into the model menu, so the row fits one
+                line even in the narrow side dock. `flex-wrap` remains as a safety
+                net; `ml-auto` keeps send right-aligned on whichever line it lands
+                on. */}
             <div className="flex flex-wrap items-center gap-1 px-2 pb-1.5 pt-0.5">
                 <ModeToggle mode={mode} onModeChange={onModeChange} disabled={isLoading} />
                 <button
@@ -302,7 +307,7 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
                     disabled={isLoading}
                     triggerClassName="hover:bg-muted/60"
                 />
-                {onToggleTracking && (
+                {SHOW_TRACKING_TOGGLE && onToggleTracking && (
                     <button
                         type="button"
                         disabled={isLoading}

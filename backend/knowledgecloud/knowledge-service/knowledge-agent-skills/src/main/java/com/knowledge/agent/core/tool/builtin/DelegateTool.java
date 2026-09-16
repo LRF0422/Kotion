@@ -20,7 +20,9 @@ public class DelegateTool implements BackendTool {
     @Override
     public ToolSpec spec() {
         Map<String, Object> props = new LinkedHashMap<>();
-        props.put("task", Schemas.str("委派给子 agent 的完整任务描述（独立、自包含，可含具体要求与验收标准）。"));
+        props.put("task", Schemas.str("委派给子 agent 的完整任务描述（独立、自包含，可含具体要求与验收标准）。"
+                + "这是子 agent 唯一的目标：请写明范围与边界，并明确是否可以修改文档"
+                + "（例如“只检索并返回结果，不要修改任何页面”），避免子 agent 擅自改动文档。"));
         props.put("tools", Schemas.strArray("子 agent 可用的客户端工具名列表（可选；名字必须与工具目录完全一致，"
                 + "大小写不敏感。缺省或全部不匹配时继承全部客户端工具）。"));
         props.put("maxSteps", Schemas.integer("子 agent 的最大步数（可选，默认继承配置）。"));
