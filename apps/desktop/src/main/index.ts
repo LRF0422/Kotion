@@ -57,7 +57,7 @@ function createWindow(): void {
     // Use hidden title bar for seamless integration with app UI
     titleBarStyle: 'hiddenInset',
     // Position traffic lights (macOS window controls) with proper spacing
-    trafficLightPosition: { x: 16, y: 12 },
+    trafficLightPosition: { x: 16, y: 13 },
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
