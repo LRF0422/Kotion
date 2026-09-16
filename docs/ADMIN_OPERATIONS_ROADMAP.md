@@ -5,6 +5,14 @@
 > 并补充**空间/页面（Space / Page）治理与运营**能力。
 >
 > 本文档为规划基线，各期功能实施时单独立项，接口与 DDL 以实施时评审为准。
+>
+> **勘误（2026-03 复核，见 [OPERATIONS_PLAN.md](./OPERATIONS_PLAN.md) §2.4）**：本文 §1.1 的
+> 「用户管理 / 角色管理」页面**在 `apps/admin` 中并不存在**（无目录、无路由、无导航、无 API）；
+> §2.2 的接口前缀实为 `/knowledge-agent/admin/ai/*` 而非 `/knowledge-agent-skills/...`；
+> 一期中「登录日志」「用户禁用/启用」的前端页面仍未实现，且 `knowledge_log_login` 只在
+> `doc/sql/blade/admin-operations-p0.sql` 中，**没有对应的 Flyway 迁移**，新库需手工执行。
+> 另：`script/migration` 下存在两个 `V29__` 前缀文件，新增迁移请从 V32 起编号。
+> 落地页获客闭环的运营能力规划见 [OPERATIONS_PLAN.md](./OPERATIONS_PLAN.md)，本文不重复。
 
 ---
 
@@ -17,8 +25,8 @@
 | 页面 | 路径 | 现有能力 |
 | --- | --- | --- |
 | 仪表盘 | `pages/dashboard` | 用户/空间/页面/评论总量卡片、页面状态饼图、最近 API 日志（均为"取 total"的拼凑统计，无趋势） |
-| 用户管理 | `pages/users` | 分页列表、搜索、新增/编辑、删除、授权角色、重置密码 |
-| 角色管理 | `pages/roles` | 列表/树、新增/编辑、删除、授权 |
+| ~~用户管理~~ | ~~`pages/users`~~ | **勘误：该页面不存在**，本文原描述有误；用户禁用/启用接口后端已具备（`POST /user/disable`）但前端未实现 |
+| ~~角色管理~~ | ~~`pages/roles`~~ | **勘误：该页面不存在** |
 | 空间管理 | `pages/spaces` | 分页列表、按类型筛选、搜索（**只读，无任何操作**） |
 | 页面管理 | `pages/pages` | 分页列表、按状态筛选、单条回收站恢复 |
 | 评论审核 | `pages/comments` | 列表、解决/重开、删除 |

@@ -4,6 +4,12 @@
 `knowledge-service/knowledge-system`，管理界面集成进 `apps/admin`。
 
 > 状态：后端接口与建表已完成并通过编译；落地页埋点/SEO/内容外置与 admin 页面进行中。
+>
+> **前进基线**：本文描述的是**已建成**的底座。后续能力演进（P0 闭环修复 / P1 无发版运营 / P2 增长自动化）
+> 见 [OPERATIONS_PLAN.md](./OPERATIONS_PLAN.md)，本文 §10「后续可做」已被该规划取代。
+>
+> **实施进展**：P0/P1/P2 的实施结果、与规划的偏差、以及尚需人工验证的部分，统一记录在
+> [OPERATIONS_PLAN.md](./OPERATIONS_PLAN.md) §12。阅读本文时请以 §12 为准判断「已实现 / 待实现」。
 
 ## 1. 总体结构
 
@@ -163,9 +169,28 @@ API 客户端：`apps/admin/src/api/ops.ts`（调用 `/knowledge-system/admin/op
 > 说明：仓库的 `tsc --noEmit` 会连带检查 `packages/*` 源码，而其中存在大量既有类型错误，
 > 因此本项目沿用仓库既有标准，以 `vite build` 作为前端构建门禁。
 
-## 10. 后续可做
+## 10. 后续演进
 
-- 事件采样与网关限流、量大时引入日汇总表。
-- 独立权限码 `platform.landing.manage` 替代复用 `settings.manage`。
-- 文案 CMS 增加「从当前线上文案导入」的一键初始化。
-- 落地页首屏代码分割（当前单包 ~1.9MB）。
+本文描述的是**已建成的底座**。其上的能力演进（P0 闭环修复 / P1 无发版运营 / P2 增长自动化）
+统一见 [OPERATIONS_PLAN.md](./OPERATIONS_PLAN.md)，该文档也是实施进展的唯一事实来源（§12）。
+
+原 §10 列出的待办已全部纳入规划并实施：
+
+| 原待办 | 归属 | 状态 |
+| --- | --- | --- |
+| 事件采样与网关限流、日汇总表 | P0-4 / P2 | 采样开关与流量过滤已落地（`landing_filter_rule` + `public.ops.sample-rate`）；日汇总表仍留待数据量增长后评估 |
+| 独立权限码 `platform.landing.manage` | P0-2 | 已落地，读 `platform.landing.read`、写 `platform.landing.manage`，过渡期兼容旧码 |
+| 文案 CMS「从当前线上文案导入」 | P1-5 | 已落地（`POST /admin/ops/content/import` + 覆盖率接口） |
+| 落地页首屏代码分割 | P1-13 | 已落地：二级路由 `React.lazy` 分包 |
+
+新增的配套能力（表结构与接口清单见 OPERATIONS_PLAN.md §5）：
+
+- **数据层**：`V32__landing_ops_p0.sql`（审计 / 过滤规则 / 事件字典 / 转化目标 / 保存漏斗）、
+  `V33__landing_ops_p1.sql`（通用配置资源 / 实验与曝光 / 订阅标签）、
+  `V34__landing_ops_p2.sql`（邮件活动 / 告警 / 推荐邀请）。
+- **公开接口扩展**：`/ops/config`（SEO + 区块 + 推广位 + 精选位一次下发）、`/ops/page/{slug}`（投放页）、
+  `/ops/experiments` 与 `/ops/exposure`（实验）、`/ops/r/{code}`（邀请）、
+  `/ops/unsubscribe`、`/ops/confirm`、`/ops/campaign/open|click/{trackingId}`、`/ops/journey`（跨域旅程）、`/ops/sitemap.xml`。
+- **构建期 SEO**：`apps/landing-page-vite/scripts/prerender.mjs` 为路由白名单产出独立 meta 的静态 HTML，
+  并生成 `sitemap.xml` / `robots.txt` / `404.html`；nginx 通过路由白名单把未知路径返回真正的 404 状态。
+  `pnpm --filter @kn/landing-page-vite build` 已包含该步骤（仅想构建 SPA 时用 `build:spa`）。
