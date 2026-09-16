@@ -1,6 +1,7 @@
-import { ipcMain, dialog, app, BrowserWindow, desktopCapturer, systemPreferences } from 'electron';
+import { ipcMain, dialog, app, BrowserWindow, desktopCapturer, nativeImage, screen, systemPreferences } from 'electron';
 import * as fs from 'fs-extra';
 import * as path from 'node:path';
+import { join } from 'node:path';
 import * as dns from 'node:dns';
 import * as net from 'node:net';
 
@@ -176,6 +177,137 @@ export function setupIpcHandlers() {
       displayId: source.display_id ?? '',
       thumbnail: source.thumbnail?.isEmpty() ? '' : source.thumbnail.toDataURL(),
     }));
+  });
+
+  // ==================== full-screen region capture ====================
+  // Main captures the display at full resolution, opens an always-on-top window
+  // covering it, and crops the selection itself — the frame never travels
+  // through IPC and only the cropped PNG comes back.
+  interface RegionSession {
+    context: { url: string; width: number; height: number; locale: 'zh' | 'en' };
+    resolve: (result: { imageDataUrl: string; width: number; height: number } | null) => void;
+    win: BrowserWindow;
+  }
+  const regionSessions = new Map<number, RegionSession>();
+
+  const permissionError = (): Error => {
+    const status = process.platform === 'darwin'
+      ? systemPreferences.getMediaAccessStatus('screen')
+      : 'unknown';
+    return new Error('CAPTURE_PERMISSION:' + status);
+  };
+
+  handle('capture.selectRegion', async (_event, raw) => {
+    const params = asRecord(raw);
+    const displays = screen.getAllDisplays();
+    const display =
+      displays.find((item) => params.displayId && String(item.id) === String(params.displayId)) ??
+      screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+    const pixelWidth = Math.max(1, Math.round(display.bounds.width * display.scaleFactor));
+    const pixelHeight = Math.max(1, Math.round(display.bounds.height * display.scaleFactor));
+
+    let frame: Electron.NativeImage | undefined;
+    try {
+      const sources = await desktopCapturer.getSources({
+        types: ['screen'],
+        thumbnailSize: { width: pixelWidth, height: pixelHeight },
+      });
+      const match = sources.find((item) => item.display_id === String(display.id)) ?? sources[0];
+      frame = match?.thumbnail;
+    } catch (error) {
+      console.warn('[capture] region frame failed:', error);
+    }
+    if (!frame || frame.isEmpty()) throw permissionError();
+
+    const size = frame.getSize();
+    const context = {
+      url: frame.toDataURL(),
+      width: size.width,
+      height: size.height,
+      locale: (params.locale === 'en' ? 'en' : 'zh') as 'zh' | 'en',
+    };
+
+    return new Promise<{ imageDataUrl: string; width: number; height: number } | null>((resolve) => {
+      const win = new BrowserWindow({
+        x: display.bounds.x,
+        y: display.bounds.y,
+        width: display.bounds.width,
+        height: display.bounds.height,
+        frame: false,
+        show: false,
+        resizable: false,
+        movable: false,
+        minimizable: false,
+        maximizable: false,
+        fullscreenable: false,
+        skipTaskbar: true,
+        hasShadow: false,
+        backgroundColor: '#000000',
+        webPreferences: {
+          preload: join(__dirname, '../preload/index.js'),
+          contextIsolation: true,
+          sandbox: false,
+        },
+      });
+      win.setAlwaysOnTop(true, 'screen-saver');
+      regionSessions.set(win.webContents.id, { context, resolve, win });
+
+      win.on('closed', () => {
+        const session = regionSessions.get(win.webContents.id);
+        if (session) {
+          regionSessions.delete(win.webContents.id);
+          session.resolve(null);
+        }
+      });
+      win.webContents.on('did-finish-load', () => {
+        win.show();
+        win.focus();
+      });
+
+      const devUrl = process.env['ELECTRON_RENDERER_URL'];
+      if (!app.isPackaged && devUrl) {
+        win.loadURL(devUrl + '/region.html');
+      } else {
+        win.loadURL('app://./region.html');
+      }
+    });
+  });
+
+  handle('capture.region.context', (event) => {
+    const session = regionSessions.get(event.sender.id);
+    if (!session) throw new Error('no active region session');
+    return session.context;
+  });
+
+  handle('capture.region.submit', async (event, raw) => {
+    const session = regionSessions.get(event.sender.id);
+    if (!session) return;
+    regionSessions.delete(event.sender.id);
+
+    const rect =
+      raw && typeof raw === 'object'
+        ? (raw as { x: number; y: number; width: number; height: number })
+        : null;
+
+    try {
+      if (!rect || rect.width < 1 || rect.height < 1) {
+        session.resolve(null);
+        return;
+      }
+      const x = Math.max(0, Math.round(rect.x));
+      const y = Math.max(0, Math.round(rect.y));
+      const width = Math.max(1, Math.min(Math.round(rect.width), session.context.width - x));
+      const height = Math.max(1, Math.min(Math.round(rect.height), session.context.height - y));
+      const cropped = nativeImage
+        .createFromDataURL(session.context.url)
+        .crop({ x, y, width, height });
+      session.resolve({ imageDataUrl: cropped.toDataURL(), width, height });
+    } catch (error) {
+      console.warn('[capture] crop failed:', error);
+      session.resolve(null);
+    } finally {
+      session.win.close();
+    }
   });
 
   // ==================== http (main-process fetch; no CORS) ====================

@@ -2,16 +2,11 @@ import React, { useEffect, useRef, useState } from 'react'
 import { useDesktop, useTranslation, useUploadFile } from '@kn/common'
 import type { DesktopCaptureSource } from '@kn/common'
 import {
-    captureFrame,
     captureScreenshot,
-    cropFrame,
     getCaptureSources,
     startRecording,
-    type CapturedFrame,
-    type CaptureRect,
     type DesktopRecording,
 } from './desktop-capture'
-import { RegionSelector } from './RegionSelector'
 
 interface CaptureDialogProps {
     open: boolean
@@ -43,11 +38,10 @@ const localizeCaptureError = (t: Translate, error: unknown): string => {
  * record, uploading the result to the file center.
  */
 export const CaptureDialog: React.FC<CaptureDialogProps> = ({ open, onClose }) => {
-    const { t } = useTranslation()
+    const { t, i18n } = useTranslation()
     const desktop = useDesktop()
     const { uploadFile } = useUploadFile()
     const [mode, setMode] = useState<'screenshot' | 'region' | 'recording'>('screenshot')
-    const [regionFrame, setRegionFrame] = useState<CapturedFrame | null>(null)
     const [sources, setSources] = useState<DesktopCaptureSource[]>([])
     const [loading, setLoading] = useState(false)
     const [busy, setBusy] = useState(false)
@@ -100,7 +94,22 @@ export const CaptureDialog: React.FC<CaptureDialogProps> = ({ open, onClose }) =
         setMessage(null)
         try {
             if (mode === 'region') {
-                setRegionFrame(await captureFrame(source.id))
+                const locale = i18n?.language?.startsWith('zh') ? 'zh' : 'en'
+                const result = await desktop.invoke('capture.selectRegion', {
+                    displayId: source.displayId,
+                    locale,
+                })
+                if (result) {
+                    const response = await fetch(result.imageDataUrl)
+                    const blob = await response.blob()
+                    const file = new File(
+                        [blob],
+                        'screenshot-' + Date.now() + '.png',
+                        { type: 'image/png' },
+                    )
+                    await save(file)
+                    onClose()
+                }
             } else if (mode === 'screenshot') {
                 const file = await captureScreenshot(source.id)
                 await save(file)
@@ -140,22 +149,6 @@ export const CaptureDialog: React.FC<CaptureDialogProps> = ({ open, onClose }) =
         recordingRef.current = null
         setRecording(null)
         setElapsed(0)
-    }
-
-    const handleRegionSelect = async (rect: CaptureRect) => {
-        const frame = regionFrame
-        if (!frame) return
-        setBusy(true)
-        try {
-            const file = await cropFrame(frame, rect)
-            setRegionFrame(null)
-            await save(file)
-            onClose()
-        } catch (error) {
-            setMessage(localizeCaptureError(t, error))
-        } finally {
-            setBusy(false)
-        }
     }
 
     if (!open) return null
@@ -269,16 +262,6 @@ export const CaptureDialog: React.FC<CaptureDialogProps> = ({ open, onClose }) =
                     <div className="border-t px-4 py-2 text-[11px] text-muted-foreground">{message}</div>
                 )}
 
-                {regionFrame && (
-                    <div onClick={(event) => event.stopPropagation()}>
-                        <RegionSelector
-                            frame={regionFrame}
-                            hint={t('desktopCapture.regionHint')}
-                            onCancel={() => setRegionFrame(null)}
-                            onSelect={handleRegionSelect}
-                        />
-                    </div>
-                )}
             </div>
         </div>
     )

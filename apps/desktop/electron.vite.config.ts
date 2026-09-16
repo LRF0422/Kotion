@@ -46,7 +46,11 @@ export default defineConfig({
     build: {
       chunkSizeWarningLimit: 2000,
       rollupOptions: {
-        input: resolve(__dirname, 'src/renderer/index.html'),
+        // Two entries: the app shell and the full-screen region-capture overlay.
+        input: {
+          main: resolve(__dirname, 'src/renderer/index.html'),
+          region: resolve(__dirname, 'src/renderer/region.html'),
+        },
         output: {
           manualChunks: {
             'vendor-react': ['react', 'react-dom'],

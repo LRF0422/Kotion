@@ -18,6 +18,9 @@ export type DesktopCapability =
     | 'system.paths'
     | 'http.request'
     | 'capture.sources'
+    | 'capture.selectRegion'
+    | 'capture.region.context'
+    | 'capture.region.submit'
     | 'dialog.openFile'
     | 'dialog.openFolder'
     | 'dialog.saveFile'
@@ -124,6 +127,29 @@ export interface DesktopTrafficLightPosition {
 
 export type DesktopCaptureSourceType = 'screen' | 'window'
 
+export interface DesktopCaptureRect {
+    x: number
+    y: number
+    width: number
+    height: number
+}
+
+/** What the full-screen region overlay renders. */
+export interface DesktopRegionContext {
+    /** PNG data URL of the display at full resolution. */
+    url: string
+    width: number
+    height: number
+    locale: 'zh' | 'en'
+}
+
+/** The cropped region returned by the overlay. */
+export interface DesktopRegionResult {
+    imageDataUrl: string
+    width: number
+    height: number
+}
+
 export interface DesktopCaptureSource {
     /** Pass as chromeMediaSourceId to getUserMedia. */
     id: string
@@ -174,6 +200,13 @@ export interface DesktopCapabilityContract {
         params?: { types?: DesktopCaptureSourceType[]; thumbnailWidth?: number }
         result: DesktopCaptureSource[]
     }
+    /** Open the full-screen region overlay; null when the user cancels. */
+    'capture.selectRegion': {
+        params?: { displayId?: string; locale?: 'zh' | 'en' }
+        result: DesktopRegionResult | null
+    }
+    'capture.region.context': { params?: void; result: DesktopRegionContext }
+    'capture.region.submit': { params: DesktopCaptureRect | null; result: void }
     'dialog.openFile': { params?: DesktopOpenFileOptions; result: DesktopDialogFileResult }
     'dialog.openFolder': { params?: DesktopOpenFolderOptions; result: DesktopDialogFolderResult }
     'dialog.saveFile': { params?: DesktopSaveFileOptions; result: DesktopDialogSaveResult }
