@@ -1,14 +1,34 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useTranslation } from "@kn/common";
 import { ChevronDown } from "@kn/icon";
 import { Reveal } from "../../../components/Reveal";
 import { SectionHeading } from "../../../components/SectionHeading";
+import { injectJsonLd, removeJsonLd } from "../../../ops/seo";
 
 const IDS = [1, 2, 3, 4, 5, 6] as const;
 
 export const FAQ: React.FC = () => {
     const { t } = useTranslation();
     const [openId, setOpenId] = useState<number | null>(1);
+
+    // 结构化数据：FAQPage（仅在本页实际渲染的问答非空时注入）
+    useEffect(() => {
+        const items = IDS.map((id) => ({
+            question: t(`home.faq-q${id}`),
+            answer: t(`home.faq-a${id}`),
+        })).filter((item) => item.question !== "" && item.answer !== "");
+        if (items.length === 0) return;
+        injectJsonLd("home-faq", {
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            mainEntity: items.map((item) => ({
+                "@type": "Question",
+                name: item.question,
+                acceptedAnswer: { "@type": "Answer", text: item.answer },
+            })),
+        });
+        return () => removeJsonLd("home-faq");
+    }, [t]);
 
     return (
         <section id="faq" className="section-padding" style={{ background: "var(--kn-paper)" }}>

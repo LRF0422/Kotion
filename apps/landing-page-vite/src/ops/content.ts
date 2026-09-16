@@ -1,13 +1,16 @@
 /**
- * 落地页文案外置：从后端 CMS 读取已发布文案并合并进 i18n。
+ * 落地页文案外置：从后端 CMS 读取文案并合并进 i18n。
  *
  * - 资源键与 i18n 的 translation 键一致，例如 "home.hero-cta-primary"；
  * - 合并采用覆盖语义（deep + overwrite），未覆盖的键继续使用内置 resources.ts；
+ * - 预览模式（`?kn_preview=`）下改读草稿，便于发布前校验；
  * - 请求超时或失败时静默回退，绝不阻塞首屏。
  */
 import { i18n } from "@kn/common";
+import { getPreviewToken } from "./preview";
 
 const CONTENT_ENDPOINT = "/api/knowledge-system/ops/content";
+const PREVIEW_CONTENT_ENDPOINT = "/api/knowledge-system/ops/preview/content";
 const TIMEOUT_MS = 2000;
 
 export interface RemoteCopyResult {
@@ -27,12 +30,22 @@ function flattenEntries(entries: unknown): Record<string, string> {
   return flat;
 }
 
-/** 拉取某语言的已发布文案并合并进 i18n。 */
+/**
+ * 拉取某语言的文案并合并进 i18n。
+ *
+ * 预览模式下（URL 带 `kn_preview`）改读 `/ops/preview/content`，
+ * 拿到的是**草稿**而不是已发布内容，因此运营可以在发布前看到效果；
+ * 预览态同时会在 `main.tsx` 里关闭埋点，避免污染线上数据。
+ */
 export async function loadRemoteCopy(locale: string): Promise<RemoteCopyResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const previewToken = getPreviewToken();
+  const endpoint = previewToken
+    ? `${PREVIEW_CONTENT_ENDPOINT}?token=${encodeURIComponent(previewToken)}&locale=${encodeURIComponent(locale)}`
+    : `${CONTENT_ENDPOINT}?locale=${encodeURIComponent(locale)}`;
   try {
-    const res = await fetch(`${CONTENT_ENDPOINT}?locale=${encodeURIComponent(locale)}`, {
+    const res = await fetch(endpoint, {
       signal: controller.signal,
       headers: { Accept: "application/json" },
     });

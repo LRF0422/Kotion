@@ -6,10 +6,31 @@ import { DeviceFrame } from "../../../components/DeviceFrame";
 import { EditorMock } from "../../../components/EditorMock";
 import { DESKTOP_RELEASE_URL, GITHUB_URL, LIVE_DEMO_URL } from "../../../constants/links";
 import { buildTrackedUrl, openExternal, track } from "../../../ops/analytics";
+import { reportExperimentConversion, useExperiment } from "../../../ops/experiment";
 import { StarCount } from "../../../ops/StarCount";
+
+/** Hero 主 CTA 实验的 payload 形状，由后台「实验平台」配置。 */
+interface HeroCtaPayload {
+    ctaLabel?: string;
+    ctaHref?: string;
+}
 
 export const Hero: React.FC = () => {
     const { t } = useTranslation();
+    // 实验挂载点：未开启实验时 variantKey 为 null，一切回退到内置文案。
+    const { variantKey, payload } = useExperiment<HeroCtaPayload>("hero-cta");
+    const ctaHref = payload?.ctaHref || LIVE_DEMO_URL;
+    const ctaLabel = payload?.ctaLabel || t("home.hero-cta-primary");
+
+    const onPrimaryCta = () => {
+        openExternal(ctaHref, {
+            location: "hero",
+            target: "demo",
+            medium: "demo",
+            props: { variant: variantKey },
+        });
+        reportExperimentConversion("hero-cta", "cta_click");
+    };
 
     return (
         <section className="relative overflow-hidden hero-paper">
@@ -46,9 +67,9 @@ export const Hero: React.FC = () => {
                             <Button
                                 size="lg"
                                 className="rounded-lg px-6"
-                                onClick={() => openExternal(LIVE_DEMO_URL, { location: "hero", target: "demo", medium: "demo" })}
+                                onClick={onPrimaryCta}
                             >
-                                {t("home.hero-cta-primary")}
+                                {ctaLabel}
                                 <ArrowRight className="ml-2 h-5 w-5" />
                             </Button>
                             <Button

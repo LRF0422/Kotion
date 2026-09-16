@@ -27,6 +27,8 @@ import { usePath } from "../../utils/use-path";
 import { Reveal } from "../../components/Reveal";
 import { DOCS_PLUGIN_DEV, GITHUB_ISSUES_URL, LIVE_DEMO_URL } from "../../constants/links";
 import { buildTrackedUrl, track } from "../../ops/analytics";
+import { appendHandoff } from "../../ops/attribution";
+import { injectJsonLd, removeJsonLd } from "../../ops/seo";
 
 type Scene = "editor" | "collab" | "bitable" | "ai" | "canvas" | "selfhost";
 
@@ -42,6 +44,16 @@ interface PluginRaw {
     reviews?: number;
     features?: string[];
     category?: { value?: string };
+    path?: string;
+    url?: string;
+}
+
+/** 安装外链：优先记录自带 URL / path，其次按 id 走安装参数，最后回退示例站首页。 */
+function resolvePluginUrl(plugin: PluginRaw): string {
+    if (typeof plugin.url === "string" && plugin.url.startsWith("http")) return plugin.url;
+    if (typeof plugin.path === "string" && plugin.path.startsWith("/")) return `${LIVE_DEMO_URL}${plugin.path}`;
+    if (plugin.id) return `${LIVE_DEMO_URL}?requestPluginId=${plugin.id}`;
+    return LIVE_DEMO_URL;
 }
 
 interface FilterItem {
@@ -97,6 +109,21 @@ export const Plugins: React.FC = () => {
             .finally(() => setLoading(false));
     }, []);
 
+    // 结构化数据：插件列表 ItemList，帮助搜索引擎理解市场页内容
+    useEffect(() => {
+        if (!Array.isArray(plugins) || plugins.length === 0) return;
+        injectJsonLd("plugins-itemlist", {
+            "@context": "https://schema.org",
+            "@type": "ItemList",
+            itemListElement: plugins.map((plugin, i) => ({
+                "@type": "ListItem",
+                position: i + 1,
+                name: plugin.name ?? "",
+            })),
+        });
+        return () => removeJsonLd("plugins-itemlist");
+    }, [plugins]);
+
     const filtered = useMemo(() => {
         const q = searchQuery.trim().toLowerCase();
         return plugins.filter((p) => {
@@ -112,15 +139,17 @@ export const Plugins: React.FC = () => {
         });
     }, [plugins, selectedKey, searchQuery]);
 
-    const gotoInstall = (id?: string, name?: string) => {
-        if (!id) return;
-        track("plugin_install", { pluginId: id, pluginName: name });
-        const target = buildTrackedUrl(`${LIVE_DEMO_URL}?requestPluginId=${id}`, {
-            utm_source: "kotion-landing",
-            utm_medium: "plugin",
-            utm_campaign: "marketplace",
-            utm_content: id,
-        });
+    const gotoInstall = (plugin: PluginRaw) => {
+        if (!plugin.id) return;
+        track("plugin_install", { pluginId: plugin.id, pluginName: plugin.name });
+        const target = appendHandoff(
+            buildTrackedUrl(resolvePluginUrl(plugin), {
+                utm_source: "kotion-landing",
+                utm_medium: "plugin",
+                utm_campaign: "marketplace",
+                utm_content: plugin.id,
+            }),
+        );
         window.open(target, "_blank", "noopener,noreferrer");
     };
 
@@ -372,7 +401,7 @@ export const Plugins: React.FC = () => {
                                                                     <div className="flex gap-2 pt-4">
                                                                         <Button
                                                                             className="flex-1 rounded-lg"
-                                                                            onClick={() => gotoInstall(plugin.id, plugin.name)}
+                                                                            onClick={() => gotoInstall(plugin)}
                                                                         >
                                                                             {t("plugins.add-to-kotion")}
                                                                         </Button>
@@ -387,7 +416,7 @@ export const Plugins: React.FC = () => {
                                                 </Dialog>
                                                 <Button
                                                     className="rounded-lg h-9 px-3"
-                                                    onClick={() => gotoInstall(plugin.id, plugin.name)}
+                                                    onClick={() => gotoInstall(plugin)}
                                                     aria-label="Install"
                                                 >
                                                     <DownloadIcon className="h-4 w-4" />

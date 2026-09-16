@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "NODE_OPTIONS='--max-old-space-size=8192' NODE_ENV=production vite build  ",
+    "build": "NODE_OPTIONS='--max-old-space-size=8192' NODE_ENV=production vite build && node scripts/prerender.mjs",
+    "build:spa": "NODE_OPTIONS='--max-old-space-size=8192' NODE_ENV=production vite build",
+    "prerender": "node scripts/prerender.mjs",
     "build:docker": "docker build -t kn/landing-page:latest .",
     "build-plugin": "rollup -c",
     "lint": "eslint . --ext ts,tsx --fix --report-unused-disable-directives --max-warnings 100",

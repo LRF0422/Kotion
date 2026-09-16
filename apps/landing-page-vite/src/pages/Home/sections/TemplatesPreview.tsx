@@ -6,6 +6,7 @@ import { Reveal } from "../../../components/Reveal";
 import { SectionHeading } from "../../../components/SectionHeading";
 import { LIVE_DEMO_URL } from "../../../constants/links";
 import { buildTrackedUrl, track } from "../../../ops/analytics";
+import { appendHandoff } from "../../../ops/attribution";
 
 interface TemplateItem {
     id?: string | number;
@@ -13,6 +14,19 @@ interface TemplateItem {
     description?: string;
     category?: string;
     [k: string]: unknown;
+}
+
+/**
+ * 模板卡片外链：优先记录自带 URL / path，其次按 id 深链，最后回退示例站首页。
+ */
+function resolveTemplateUrl(tpl: TemplateItem): string {
+    const url = tpl.url;
+    if (typeof url === "string" && url.startsWith("http")) return url;
+    const path = tpl.path;
+    if (typeof path === "string" && path.startsWith("/")) return `${LIVE_DEMO_URL}${path}`;
+    const id = tpl.id;
+    if (id !== undefined && id !== null && String(id) !== "") return `${LIVE_DEMO_URL}/template/${id}`;
+    return LIVE_DEMO_URL;
 }
 
 const PREVIEW_SCENES: Array<"editor" | "bitable" | "canvas" | "collab" | "ai" | "selfhost"> = [
@@ -81,12 +95,14 @@ export const TemplatesPreview: React.FC = () => {
                     ).map((tpl, i) => (
                         <Reveal key={String(tpl.id ?? i)} delay={i * 50}>
                             <a
-                                href={buildTrackedUrl(LIVE_DEMO_URL, {
-                                    utm_source: "kotion-landing",
-                                    utm_medium: "template",
-                                    utm_campaign: "home-preview",
-                                    utm_content: String(tpl.id ?? tpl.name ?? i),
-                                })}
+                                href={appendHandoff(
+                                    buildTrackedUrl(resolveTemplateUrl(tpl), {
+                                        utm_source: "kotion-landing",
+                                        utm_medium: "template",
+                                        utm_campaign: "home-preview",
+                                        utm_content: String(tpl.id ?? tpl.name ?? i),
+                                    }),
+                                )}
                                 target="_blank"
                                 rel="noreferrer"
                                 onClick={() => track("template_use", { templateId: tpl.id, templateName: tpl.name, location: "home-preview" })}

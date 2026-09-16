@@ -5,12 +5,24 @@ import { useTranslation } from "@kn/common";
 import { Reveal } from "../../components/Reveal";
 import { GITHUB_ISSUES_URL, LIVE_DEMO_URL } from "../../constants/links";
 import { buildTrackedUrl, track } from "../../ops/analytics";
+import { appendHandoff } from "../../ops/attribution";
+import { injectJsonLd, removeJsonLd } from "../../ops/seo";
 
 interface TemplateItem {
     id?: string | number;
     name?: string;
     description?: string;
     category?: string;
+    path?: string;
+    url?: string;
+}
+
+/** 模板卡片外链：优先记录自带 URL / path，其次按 id 深链，最后回退示例站首页。 */
+function resolveTemplateUrl(tpl: TemplateItem): string {
+    if (typeof tpl.url === "string" && tpl.url.startsWith("http")) return tpl.url;
+    if (typeof tpl.path === "string" && tpl.path.startsWith("/")) return `${LIVE_DEMO_URL}${tpl.path}`;
+    if (tpl.id !== undefined && tpl.id !== null && String(tpl.id) !== "") return `${LIVE_DEMO_URL}/template/${tpl.id}`;
+    return LIVE_DEMO_URL;
 }
 
 interface FilterItem {
@@ -102,6 +114,21 @@ export const Templates: React.FC = () => {
             .catch(() => setTemplates([]))
             .finally(() => setLoading(false));
     }, []);
+
+    // 结构化数据：模板列表 ItemList，帮助搜索引擎理解市场页内容
+    useEffect(() => {
+        if (!Array.isArray(templates) || templates.length === 0) return;
+        injectJsonLd("templates-itemlist", {
+            "@context": "https://schema.org",
+            "@type": "ItemList",
+            itemListElement: templates.map((tpl, i) => ({
+                "@type": "ListItem",
+                position: i + 1,
+                name: tpl.name ?? "",
+            })),
+        });
+        return () => removeJsonLd("templates-itemlist");
+    }, [templates]);
 
     const filtered = useMemo(() => {
         const q = searchQuery.trim().toLowerCase();
@@ -244,12 +271,14 @@ export const Templates: React.FC = () => {
                             {filtered.map((tpl, i) => (
                                 <Reveal key={String(tpl.id ?? i)} delay={i * 30}>
                                     <a
-                                        href={buildTrackedUrl(LIVE_DEMO_URL, {
-                                            utm_source: "kotion-landing",
-                                            utm_medium: "template",
-                                            utm_campaign: "marketplace",
-                                            utm_content: String(tpl.id ?? tpl.name ?? i),
-                                        })}
+                                        href={appendHandoff(
+                                            buildTrackedUrl(resolveTemplateUrl(tpl), {
+                                                utm_source: "kotion-landing",
+                                                utm_medium: "template",
+                                                utm_campaign: "marketplace",
+                                                utm_content: String(tpl.id ?? tpl.name ?? i),
+                                            }),
+                                        )}
                                         target="_blank"
                                         rel="noreferrer"
                                         onClick={() => track("template_use", { templateId: tpl.id, templateName: tpl.name })}

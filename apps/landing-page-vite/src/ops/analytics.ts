@@ -7,6 +7,9 @@
  * - 尊重 DNT / GPC，任何异常都不得影响页面本身。
  */
 
+import { isTrackingAllowed, subscribeConsent } from './consent';
+import { validateEvent, type EventName } from './events';
+
 export type TrackProps = Record<string, string | number | boolean | null | undefined>;
 
 export interface TrackContext {
@@ -53,6 +56,7 @@ let queue: QueuedEvent[] = [];
 let timer: number | undefined;
 let initialized = false;
 let disabled = false;
+let consentGateBound = false;
 
 const safeGet = (storage: Storage | undefined, key: string): string | null => {
   try {
@@ -78,6 +82,8 @@ const newId = (prefix: string): string => {
 };
 
 const isDisabled = (): boolean => {
+  // 同意门控优先：未授权（或 DNT / 全局开关命中）直接禁用
+  if (!isTrackingAllowed()) return true;
   if (disabled) return true;
   const globalFlag = (window as unknown as { __KN_OPS_DISABLED__?: boolean }).__KN_OPS_DISABLED__;
   if (globalFlag) return true;
@@ -218,6 +224,26 @@ export function initAnalytics(): void {
   window.addEventListener('pagehide', () => flushAnalytics(true));
 }
 
+/**
+ * 同意门控：未授权时不采集，用户后续授权后补一次初始化。
+ * 注意：initAnalytics() 以 initialized 做幂等保护，首次在“未授权”状态下调用会把
+ * 实例标记为已初始化且 disabled；因此授权回调里需要先复位这两个标记，
+ * 采集才会真正生效。
+ */
+export function initOpsConsentGated(): void {
+  if (consentGateBound || typeof window === 'undefined') return;
+  if (isTrackingAllowed()) return;
+  consentGateBound = true;
+  subscribeConsent((state) => {
+    if (state !== 'granted') return;
+    if (initialized && disabled) {
+      initialized = false;
+      disabled = false;
+    }
+    initAnalytics();
+  });
+}
+
 /** 记录一个自定义事件。 */
 export function track(name: string, props?: TrackProps, context?: TrackContext): void {
   if (!initialized) initAnalytics();
@@ -234,6 +260,21 @@ export function track(name: string, props?: TrackProps, context?: TrackContext):
   } else {
     scheduleFlush();
   }
+}
+
+/** 记录一个已注册的标准事件：先做 schema 校验，未通过不入队。 */
+export function trackEvent(name: EventName, props?: TrackProps, context?: TrackContext): void {
+  const result = validateEvent(name, props);
+  if (!result.ok) {
+    if (import.meta.env.DEV) {
+      console.warn('[ops] 事件校验失败', result.errors);
+    }
+    return;
+  }
+  if (import.meta.env.DEV && result.warnings.length > 0) {
+    console.warn('[ops] 事件属性未注册', result.warnings);
+  }
+  track(name, props, context);
 }
 
 /** 记录页面浏览。 */
