@@ -115,6 +115,7 @@ export class PluginScriptLoader {
                 // legacy bundles only expose their exports on window[packageName].
                 const registration: PluginRegistration | undefined =
                     window.__KN__?.getPlugin?.(packageName)
+                    ?? window.__KN__?.findPlugin?.(packageName)
                     ?? ((window as any)[packageName]
                         ? { exports: (window as any)[packageName], meta: {} }
                         : undefined)

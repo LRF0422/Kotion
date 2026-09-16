@@ -46,6 +46,13 @@ export interface KnGlobalNamespace {
     definePlugin: (packageName: string, exports: Record<string, unknown>, meta?: PluginMeta) => void
     /** Retrieve a previously registered plugin bundle. */
     getPlugin: (packageName: string) => PluginRegistration | undefined
+    /**
+     * Resolve a registration by a loosely-matching name. The marketplace's
+     * pluginKey (author-entered) often differs from the bundle's npm-derived
+     * registry keys ('apiclient' vs 'plugin-api-client' vs 'api-client'), so
+     * both sides are normalized before comparing.
+     */
+    findPlugin: (packageName: string) => PluginRegistration | undefined
 }
 
 export interface SetupGlobalNamespaceOptions {
@@ -68,6 +75,14 @@ export interface SetupGlobalNamespaceOptions {
  * libraries or the registration functions; the internal registry Map stays
  * mutable through `definePlugin`.
  */
+/** Strip scope, 'plugin-' prefix and separators for loose key matching. */
+const normalizePluginName = (value: string): string =>
+    value
+        .toLowerCase()
+        .replace(/^@[^/]+\//, '')
+        .replace(/^plugin-/, '')
+        .replace(/[^a-z0-9]/g, '')
+
 export function setupGlobalNamespace(opts: SetupGlobalNamespaceOptions): KnGlobalNamespace {
     const registry = new Map<string, PluginRegistration>()
 
@@ -85,6 +100,18 @@ export function setupGlobalNamespace(opts: SetupGlobalNamespaceOptions): KnGloba
             registry.set(packageName, { exports, meta: meta ?? {} })
         },
         getPlugin: (packageName) => registry.get(packageName),
+        findPlugin: (packageName) => {
+            const direct = registry.get(packageName)
+            if (direct) return direct
+            const target = normalizePluginName(packageName)
+            if (!target) return undefined
+            for (const [key, registration] of registry) {
+                if (normalizePluginName(key) === target) return registration
+                const metaName = registration.meta?.packageName
+                if (metaName && normalizePluginName(metaName) === target) return registration
+            }
+            return undefined
+        },
     }
 
     Object.freeze(kn)
