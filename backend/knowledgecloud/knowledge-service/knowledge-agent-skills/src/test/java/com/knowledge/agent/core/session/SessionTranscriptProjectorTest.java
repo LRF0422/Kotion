@@ -7,6 +7,7 @@ import com.knowledge.agent.core.checkpoint.Checkpoint;
 import com.knowledge.agent.core.checkpoint.CheckpointStore;
 import com.knowledge.agent.core.entity.AgentChatSessionEntity;
 import com.knowledge.agent.core.run.AgentRun;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -22,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -33,6 +35,11 @@ class SessionTranscriptProjectorTest {
     private final ObjectMapper mapper = new ObjectMapper();
     private final SessionTranscriptProjector projector =
             new SessionTranscriptProjector(store, checkpointStore, mapper, subAgentProjection);
+
+    @BeforeEach
+    void stubCasWrite() {
+        when(store.saveTranscriptCas(any(AgentChatSessionEntity.class))).thenReturn(true);
+    }
 
     @Test
     void prepareHistorySeedsUserTurnAndModelLog() throws Exception {
@@ -104,6 +111,8 @@ class SessionTranscriptProjectorTest {
         assertEquals(4, model.size());
         JsonNode ui = mapper.readTree(saved.getMessagesJson());
         assertEquals(3, ui.size());
+        // message_count caches the UI projection length, not the model-log length.
+        assertEquals(3, saved.getMessageCount());
         JsonNode step = ui.get(1).path("steps").get(0);
         assertEquals("search", step.path("toolName").asText());
         assertEquals("success", step.path("status").asText());
@@ -138,11 +147,61 @@ class SessionTranscriptProjectorTest {
     }
 
     @Test
+    void terminalProjectionIsSkippedWhenThisRunAlreadyProjected() {
+        // A cancel path and a loop-exit path can both call onRunTerminal for the
+        // same run; the second must be a no-op (provenance already records it).
+        AgentChatSessionEntity existing = new AgentChatSessionEntity();
+        existing.setSourceRunId("run-1");
+        existing.setAsOfSeq(9L);
+        when(store.get(1L, 2L, "conv-1")).thenReturn(existing);
+
+        projector.onRunTerminal(run("run-1"));
+
+        verify(store, never()).saveTranscriptCas(any(AgentChatSessionEntity.class));
+    }
+
+    @Test
     void childRunsAreNotProjected() {
         AgentRun run = run("run-child");
         run.setParentRunId("parent");
         projector.onRunTerminal(run);
-        verify(store, never()).saveTranscript(any(AgentChatSessionEntity.class));
+        verify(store, never()).saveTranscriptCas(any(AgentChatSessionEntity.class));
+    }
+
+    @Test
+    void prepareHistoryRetriesWhenTheCasWriteConflicts() {
+        when(store.get(1L, 2L, "conv-1")).thenReturn(null);
+        when(store.saveTranscriptCas(any(AgentChatSessionEntity.class))).thenReturn(false, true);
+
+        List<ChatMessage> history = projector.prepareHistory(run("run-1"),
+                Collections.singletonList(user("hi")));
+
+        assertEquals(1, history.size());
+        verify(store, times(2)).saveTranscriptCas(any(AgentChatSessionEntity.class));
+    }
+
+    @Test
+    void prepareHistoryClosesADanglingToolCallFromAnAbandonedRun() throws Exception {
+        // A run that suspended on a frontend tool and was never resumed leaves an
+        // assistant tool_calls turn without results. The next run must repair the
+        // pairing before appending its own user turn.
+        AgentChatSessionEntity existing = new AgentChatSessionEntity();
+        ChatMessage assistant = ChatMessage.builder()
+                .role("assistant")
+                .toolCalls(Collections.singletonList(toolCall("call-1")))
+                .build();
+        existing.setModelMessagesJson("[{\"m\":{\"role\":\"user\",\"content\":\"hi\"},\"t\":1},"
+                + "{\"m\":" + mapper.writeValueAsString(assistant) + ",\"t\":2}]");
+        when(store.get(1L, 2L, "conv-1")).thenReturn(existing);
+
+        List<ChatMessage> history = projector.prepareHistory(run("run-2"),
+                Collections.singletonList(user("next")));
+
+        assertEquals(4, history.size());
+        assertEquals("assistant", history.get(1).getRole());
+        assertEquals("tool", history.get(2).getRole());
+        assertEquals("call-1", history.get(2).getToolCallId());
+        assertEquals("next", history.get(3).getContent());
     }
 
     @Test
@@ -227,7 +286,7 @@ class SessionTranscriptProjectorTest {
 
     private AgentChatSessionEntity captureSaved() {
         ArgumentCaptor<AgentChatSessionEntity> captor = ArgumentCaptor.forClass(AgentChatSessionEntity.class);
-        verify(store).saveTranscript(captor.capture());
+        verify(store).saveTranscriptCas(captor.capture());
         return captor.getValue();
     }
 

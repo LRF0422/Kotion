@@ -58,6 +58,9 @@ public class AgentChatSessionEntity implements Serializable {
     /** Run event seq reflected by this projection. */
     private Long asOfSeq;
 
+    /** Optimistic-lock version, bumped by every transcript write (CAS). */
+    private Long version;
+
     private Long createTime;
 
     private Long updateTime;

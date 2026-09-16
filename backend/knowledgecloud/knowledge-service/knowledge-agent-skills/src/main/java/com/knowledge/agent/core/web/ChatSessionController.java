@@ -50,6 +50,9 @@ public class ChatSessionController {
 
     private static final int MAX_SESSION_ID_LENGTH = 128;
     private static final int MAX_TITLE_LENGTH = 255;
+    /** One-time migration upload bounds: prevents an oversized transcript blob. */
+    private static final int MAX_IMPORT_MESSAGES = 2000;
+    private static final int MAX_IMPORT_JSON_CHARS = 16 * 1024 * 1024;
 
     private final ChatSessionStore store;
     private final ObjectMapper objectMapper;
@@ -92,6 +95,9 @@ public class ChatSessionController {
                     : R.fail("会话不存在");
         } catch (IllegalArgumentException | IllegalStateException e) {
             return R.fail(e.getMessage());
+        } catch (Exception e) {
+            log.error("Chat session get failed for {}", sessionId, e);
+            return R.fail("读取会话失败");
         }
     }
 
@@ -148,15 +154,20 @@ public class ChatSessionController {
             Identity identity = identity();
             AgentChatSessionEntity existing = store.get(identity.tenantId, identity.userId, id);
             JsonNode incoming = request.getMessages();
-            // A client may only enrich an EMPTY or SHORTER projection (one-time
-            // migration of a pre-engine local history). It can never truncate or
-            // overwrite a richer engine-owned transcript.
-            int existingCount = existing != null && existing.getMessageCount() != null
-                    ? existing.getMessageCount() : 0;
-            if (existing != null && existing.getMessagesJson() != null
-                    && !existing.getMessagesJson().trim().isEmpty()
-                    && !"[]".equals(existing.getMessagesJson().trim())
-                    && incoming.size() <= existingCount) {
+            if (incoming.size() > MAX_IMPORT_MESSAGES) {
+                return R.fail("messages 数量超出上限");
+            }
+            String incomingJson = writeJson(incoming);
+            if (incomingJson == null || incomingJson.length() > MAX_IMPORT_JSON_CHARS) {
+                return R.fail("messages 体积超出上限");
+            }
+            // A client may only enrich an EMPTY or SHORTER UI projection (one-time
+            // migration of a pre-engine local history); it can never truncate or
+            // overwrite a richer engine-owned transcript. Compare UI size to UI
+            // size — the count column caches messages_json length, but older rows
+            // may hold the model-log length, so parse the actual projection.
+            int existingUiCount = uiCount(existing);
+            if (existingUiCount > 0 && incoming.size() <= existingUiCount) {
                 Map<String, Object> result = new LinkedHashMap<>();
                 result.put("sessionId", id);
                 result.put("imported", false);
@@ -170,7 +181,7 @@ public class ChatSessionController {
             entity.setTitle(truncate(request.getTitle(), MAX_TITLE_LENGTH));
             entity.setTargetPageJson(writeJson(request.getTargetPage()));
             entity.setBoundPageJson(writeJson(request.getBoundPage()));
-            entity.setMessagesJson(writeJson(messages));
+            entity.setMessagesJson(incomingJson);
             entity.setMessageCount(messages.size());
             entity.setSchemaVersion(1);
             entity.setAsOfSeq(0L);
@@ -222,6 +233,23 @@ public class ChatSessionController {
     }
 
     // ==================== internals ====================
+
+    /** Length of the stored UI projection, or 0 when absent/unparseable. */
+    private int uiCount(AgentChatSessionEntity existing) {
+        if (existing == null) {
+            return 0;
+        }
+        String json = existing.getMessagesJson();
+        if (json == null || json.trim().isEmpty()) {
+            return 0;
+        }
+        try {
+            JsonNode node = objectMapper.readTree(json);
+            return node != null && node.isArray() ? node.size() : 0;
+        } catch (Exception e) {
+            return 0;
+        }
+    }
 
     private String writeJson(JsonNode node) {
         if (node == null || node.isNull()) {

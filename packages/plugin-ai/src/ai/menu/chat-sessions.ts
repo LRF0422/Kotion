@@ -1,12 +1,15 @@
 import type { Message } from './chat-types'
 
 /**
- * LOCAL CACHE for the AI side-panel chat sessions.
+ * LOCAL INDEX + pre-migration transcript cache for the AI side-panel chat
+ * sessions.
  *
- * The durable source of truth is now the backend (`/api/agent/v1/sessions`,
- * see chat-session-api.ts); this module keeps a synchronous localStorage copy
- * so the panel can render instantly on boot and keep working offline. The
- * hook writes through to both and reconciles them on load.
+ * The durable source of truth is the backend (`/api/agent/v1/sessions`, see
+ * chat-session-api.ts). This module keeps a synchronous localStorage copy of
+ * session METADATA so the panel can render its session list instantly on boot.
+ * The transcript itself is engine-owned and never written here; the legacy
+ * `kn-ai-chat-session:*` blobs (if any survive from the pre-engine era) are
+ * read once as an import source and dropped after a successful import.
  */
 // ─── Storage keys ───────────────────────────────────────────────────
 const INDEX_KEY = 'kn-ai-chat-sessions-index'
@@ -20,6 +23,7 @@ const LEGACY_SESSION_TS_KEY = 'agent-session-timestamp'
 const LEGACY_CONVERSATION_KEY = 'agent-conversation-id'
 
 // ─── Limits ────────────────────────────────────────────────────────
+/** Cap applied only when seeding the pre-migration import copy. */
 export const MAX_MESSAGES_PER_SESSION = 100
 export const MAX_SESSIONS = 50
 
@@ -114,6 +118,7 @@ export function loadSessionMessages(sessionId: string): Message[] {
     return Array.isArray(arr) ? arr : []
 }
 
+/** Seed the one-time pre-migration copy (never called for live messages). */
 export function saveSessionMessages(sessionId: string, messages: Message[]): void {
     if (!sessionId) return
     const toSave = messages.slice(-MAX_MESSAGES_PER_SESSION)

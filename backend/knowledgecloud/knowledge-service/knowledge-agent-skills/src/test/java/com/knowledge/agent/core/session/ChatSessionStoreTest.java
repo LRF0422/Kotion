@@ -31,6 +31,18 @@ class ChatSessionStoreTest {
     }
 
     @Test
+    void metaWriteDefaultsMessageCountForNewEmptySession() {
+        // The upsert INSERT supplies message_count, and the column is NOT NULL;
+        // a metadata-only create must not pass NULL (MySQL does not use DEFAULT).
+        AgentChatSessionEntity entity = entity();
+
+        store.upsertMeta(entity);
+
+        assertTrue(entity.getMessageCount() != null && entity.getMessageCount() == 0);
+        verify(mapper).upsertMeta(entity);
+    }
+
+    @Test
     void transcriptWriteGoesThroughUpsertTranscript() {
         AgentChatSessionEntity entity = entity();
         entity.setMessagesJson("[{\"id\":\"m1\"}]");
@@ -76,6 +88,37 @@ class ChatSessionStoreTest {
         when(mapper.deleteOwned(1L, 2L, "s-1")).thenReturn(1);
         assertTrue(store.delete(1L, 2L, "s-1"));
         assertFalse(store.delete(1L, 2L, "   "));
+    }
+
+    @Test
+    void casUpdateSucceedsWhenTheVersionStillMatches() {
+        AgentChatSessionEntity entity = entity();
+        entity.setVersion(3L);
+        when(mapper.updateTranscriptIfVersion(entity)).thenReturn(1);
+
+        assertTrue(store.saveTranscriptCas(entity));
+
+        verify(mapper, never()).insertTranscriptIfAbsent(entity);
+        assertTrue(entity.getVersion() == 4L);
+    }
+
+    @Test
+    void casInsertsWhenTheRowIsAbsent() {
+        AgentChatSessionEntity entity = entity();
+        when(mapper.updateTranscriptIfVersion(entity)).thenReturn(0);
+        when(mapper.insertTranscriptIfAbsent(entity)).thenReturn(1);
+
+        assertTrue(store.saveTranscriptCas(entity));
+        assertTrue(entity.getVersion() == 1L);
+    }
+
+    @Test
+    void casFailsWhenAnotherWriterMovedFirst() {
+        AgentChatSessionEntity entity = entity();
+        when(mapper.updateTranscriptIfVersion(entity)).thenReturn(0);
+        when(mapper.insertTranscriptIfAbsent(entity)).thenReturn(0);
+
+        assertFalse(store.saveTranscriptCas(entity));
     }
 
     private AgentChatSessionEntity entity() {

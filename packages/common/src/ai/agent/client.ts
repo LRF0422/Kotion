@@ -325,13 +325,18 @@ export class AgentClient {
 
     /**
      * One-time migration: upload a pre-existing local transcript. The backend
-     * rejects the upload once it owns an engine-projected transcript.
+     * rejects the upload once it owns a richer engine-projected transcript;
+     * returns whether it actually imported (false when the upload was a no-op).
      */
-    async importChatSession(sessionId: string, input: ImportAgentChatSessionInput): Promise<void> {
-        await this.request('/sessions/' + encodeURIComponent(sessionId) + '/import', {
-            method: 'POST',
-            body: JSON.stringify(input),
-        })
+    async importChatSession(sessionId: string, input: ImportAgentChatSessionInput): Promise<boolean> {
+        const data = await this.request<{ imported?: boolean }>(
+            '/sessions/' + encodeURIComponent(sessionId) + '/import',
+            {
+                method: 'POST',
+                body: JSON.stringify(input),
+            },
+        )
+        return Boolean(data?.imported)
     }
 
     /** Explicit user command to reset the engine-owned transcript. */

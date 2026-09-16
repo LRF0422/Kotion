@@ -86,8 +86,8 @@ const CIRCULAR_MARKER = '[circular]'
 const TRUNCATED_MARKER = '[truncated]'
 
 /**
- * Redact credentials before tool records cross into localStorage-backed chat
- * history.
+ * Redact credentials before tool records are rendered from the persisted engine
+ * projection (tool args/results must never surface a secret in a transcript).
  *
  * Frontend tool results are arbitrary live objects (editor/page tools return
  * ProseMirror-ish structures with parent pointers, or objects whose `toJSON`

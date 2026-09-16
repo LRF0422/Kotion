@@ -414,6 +414,13 @@ public class DefaultRunSupervisor {
             runStore.persist(run);
             runStore.saveHot(run);
             threadStore.clearActive(run.getConversationId(), runId);
+            // No live loop will call onLoopExit for a run owned by another
+            // instance (or already gone), so project the transcript here. When a
+            // local handle exists its exit projects instead; onRunTerminal is
+            // idempotent, so a remote owner projecting too cannot double-insert.
+            if (handle == null) {
+                transcriptProjector.onRunTerminal(run);
+            }
         }
         // Cascade-cancel child runs even when the parent was already terminal
         // (a root can complete while a delegated child is still running).
@@ -572,6 +579,9 @@ public class DefaultRunSupervisor {
         runStore.saveHot(run);
         threadStore.clearActive(run.getConversationId(), run.getRunId());
         eventLog.release(run.getRunId());
+        // Project even when no loop ever exited (lease unavailable, missing
+        // checkpoint, reconcile failure). onRunTerminal is idempotent per run.
+        transcriptProjector.onRunTerminal(run);
     }
 
     /** {@link AgentLoop.RunInput} adapter over a create command. */

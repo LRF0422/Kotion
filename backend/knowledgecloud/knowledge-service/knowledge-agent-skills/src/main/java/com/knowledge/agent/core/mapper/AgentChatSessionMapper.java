@@ -70,12 +70,41 @@ public interface AgentChatSessionMapper extends BaseMapper<AgentChatSessionEntit
             + "schema_version = VALUES(schema_version), "
             + "source_run_id = VALUES(source_run_id), "
             + "as_of_seq = VALUES(as_of_seq), "
+            + "version = version + 1, "
             + "update_time = VALUES(update_time)")
     void upsertTranscript(AgentChatSessionEntity entity);
 
+    /**
+     * Compare-and-swap update of the projected transcript. Matches only while
+     * the row is still at the version the caller read; returns 0 when the row is
+     * absent or another writer moved the version (the caller must reload).
+     */
+    @Update("UPDATE agent_chat_session SET messages_json = #{messagesJson}, "
+            + "model_messages_json = #{modelMessagesJson}, message_count = #{messageCount}, "
+            + "schema_version = #{schemaVersion}, source_run_id = #{sourceRunId}, as_of_seq = #{asOfSeq}, "
+            + "update_time = #{updateTime}, version = version + 1 "
+            + "WHERE tenant_id = #{tenantId} AND user_id = #{userId} AND session_id = #{sessionId} "
+            + "AND version = #{version}")
+    int updateTranscriptIfVersion(AgentChatSessionEntity entity);
+
+    /**
+     * Initial CAS insert: succeeds only when no row exists yet. The no-op
+     * duplicate branch reports 0 affected rows, which the store treats as a
+     * conflict (another writer created the row first).
+     */
+    @Insert("INSERT INTO agent_chat_session (session_id, tenant_id, user_id, title, target_page_json, "
+            + "bound_page_json, messages_json, model_messages_json, message_count, schema_version, "
+            + "source_run_id, as_of_seq, version, create_time, update_time) "
+            + "VALUES (#{sessionId}, #{tenantId}, #{userId}, #{title}, #{targetPageJson}, #{boundPageJson}, "
+            + "#{messagesJson}, #{modelMessagesJson}, #{messageCount}, #{schemaVersion}, "
+            + "#{sourceRunId}, #{asOfSeq}, #{version}, #{createTime}, #{updateTime}) "
+            + "ON DUPLICATE KEY UPDATE id = id")
+    int insertTranscriptIfAbsent(AgentChatSessionEntity entity);
+
     /** Explicit user "clear chat": reset the projected transcript. */
     @Update("UPDATE agent_chat_session SET messages_json = '[]', model_messages_json = NULL, "
-            + "message_count = 0, source_run_id = NULL, as_of_seq = 0, update_time = #{updateTime} "
+            + "message_count = 0, source_run_id = NULL, as_of_seq = 0, "
+            + "version = version + 1, update_time = #{updateTime} "
             + "WHERE tenant_id = #{tenantId} AND user_id = #{userId} AND session_id = #{sessionId}")
     int clearTranscript(@Param("tenantId") Long tenantId,
                         @Param("userId") Long userId,

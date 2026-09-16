@@ -186,7 +186,13 @@ export function useChatSessions(): UseChatSessionsResult {
         if (local.length > 0) {
             const meta = sessionsRef.current.find(s => s.id === id)
             if (meta) {
-                void importRemoteSession(meta, local).catch(() => markSessionApiUnavailable())
+                void importRemoteSession(meta, local)
+                    .then(imported => {
+                        // Drop the pre-migration local copy once the engine owns it,
+                        // so it cannot be re-imported or linger in localStorage.
+                        if (imported) deleteSessionMessages(id)
+                    })
+                    .catch(() => markSessionApiUnavailable())
             }
             return local
         }
@@ -346,9 +352,9 @@ export function useChatSessions(): UseChatSessionsResult {
         (id: string) => {
             if (!id) return
             deleteSessionMessages(id)
-            if (isSessionApiAvailable()) {
-                void deleteRemoteSession(id).catch(() => markSessionApiUnavailable())
-            }
+            // Destructive ops are never pre-empted by a stale availability flag:
+            // attempt them and let a real failure re-mark the API.
+            void deleteRemoteSession(id).catch(() => markSessionApiUnavailable())
 
             const remaining = sessionsRef.current.filter(s => s.id !== id)
             if (id === activeIdRef.current) {
@@ -401,9 +407,7 @@ export function useChatSessions(): UseChatSessionsResult {
         applyTranscript(id, [])
         deleteSessionMessages(id)
         updateMeta(id, s => ({ ...s, title: 'New chat', updatedAt: Date.now() }))
-        if (isSessionApiAvailable()) {
-            void clearRemoteSession(id).catch(() => markSessionApiUnavailable())
-        }
+        void clearRemoteSession(id).catch(() => markSessionApiUnavailable())
     }, [applyTranscript, updateMeta])
 
     const targetPage = activeSession?.targetPage

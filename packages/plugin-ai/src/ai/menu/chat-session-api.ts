@@ -84,9 +84,13 @@ export async function upsertRemoteSession(meta: ChatSessionMeta): Promise<void> 
     available = true
 }
 
-/** One-time migration upload accepted only when the engine has no transcript. */
-export async function importRemoteSession(meta: ChatSessionMeta, messages: Message[]): Promise<void> {
-    await client.importChatSession(meta.id, {
+/**
+ * One-time migration upload accepted only when the engine has no richer
+ * transcript. Returns whether the backend actually imported it, so the caller
+ * can drop the local migration copy once the engine owns the history.
+ */
+export async function importRemoteSession(meta: ChatSessionMeta, messages: Message[]): Promise<boolean> {
+    const imported = await client.importChatSession(meta.id, {
         title: meta.title,
         targetPage: meta.targetPage ?? null,
         boundPage: meta.boundPage ?? null,
@@ -94,6 +98,7 @@ export async function importRemoteSession(meta: ChatSessionMeta, messages: Messa
         createdAt: meta.createdAt,
     })
     available = true
+    return imported
 }
 
 /** Explicit user command: reset the engine-owned transcript. */

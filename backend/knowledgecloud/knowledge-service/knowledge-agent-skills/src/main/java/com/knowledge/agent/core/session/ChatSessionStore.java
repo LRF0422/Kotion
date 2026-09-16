@@ -61,11 +61,46 @@ public class ChatSessionStore {
         if (entity.getUpdateTime() == null || entity.getUpdateTime() <= 0) {
             entity.setUpdateTime(now);
         }
+        // The INSERT always supplies message_count; a metadata-only create of an
+        // empty session has no count yet, and the column is NOT NULL. MySQL does
+        // not fall back to DEFAULT for an explicit NULL, so default it here.
+        if (entity.getMessageCount() == null) {
+            entity.setMessageCount(0);
+        }
         mapper.upsertMeta(entity);
     }
 
     /** Engine write path: materialize/replace the projected transcript. */
     public void saveTranscript(AgentChatSessionEntity entity) {
+        prepareTranscript(entity);
+        mapper.upsertTranscript(entity);
+    }
+
+    /**
+     * Compare-and-swap write of the projected transcript.
+     *
+     * <p>The projector reads the row (including its {@code version}), computes
+     * the next state, then calls this. The write only lands when no other writer
+     * moved the row in between; on conflict it returns {@code false} and the
+     * caller re-reads and recomputes. This makes the read-modify-write safe
+     * across service instances (the in-process lock only covers one JVM).
+     */
+    public boolean saveTranscriptCas(AgentChatSessionEntity entity) {
+        prepareTranscript(entity);
+        int updated = mapper.updateTranscriptIfVersion(entity);
+        if (updated > 0) {
+            entity.setVersion(entity.getVersion() + 1);
+            return true;
+        }
+        int inserted = mapper.insertTranscriptIfAbsent(entity);
+        if (inserted > 0) {
+            entity.setVersion(1L);
+            return true;
+        }
+        return false;
+    }
+
+    private void prepareTranscript(AgentChatSessionEntity entity) {
         if (entity == null) {
             throw new IllegalArgumentException("chat session is required");
         }
@@ -86,7 +121,10 @@ public class ChatSessionStore {
         if (entity.getMessageCount() == null) {
             entity.setMessageCount(0);
         }
-        mapper.upsertTranscript(entity);
+        // Expected CAS version; 0 when the caller read no row.
+        if (entity.getVersion() == null || entity.getVersion() < 0) {
+            entity.setVersion(0L);
+        }
     }
 
     /** Explicit user command: reset the projected transcript (client-owned action). */

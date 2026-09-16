@@ -24,8 +24,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Engine-owned session state for the AI side panel — the Kotion analogue of
@@ -62,13 +60,30 @@ public class SessionTranscriptProjector {
     private static final int MAX_REASONING_CHARS = 20000;
     /** Cap on persisted base64 image data per message (chars). */
     private static final int MAX_IMAGE_PART_CHARS = 4_000_000;
+    /** Bounded compare-and-swap retries before giving up on a transcript write. */
+    private static final int MAX_CAS_ATTEMPTS = 5;
 
     private final ChatSessionStore store;
     private final CheckpointStore checkpointStore;
     private final ObjectMapper objectMapper;
     private final SubAgentProjection subAgentProjection;
 
-    private final ConcurrentHashMap<String, Object> locks = new ConcurrentHashMap<>();
+    /**
+     * Fixed lock stripes, keyed by conversation hash. A per-conversation map
+     * grew without bound (one entry per conversation, forever); a fixed pool
+     * bounds memory while still serializing all writes for a given conversation.
+     * Unrelated conversations occasionally share a stripe, which is harmless.
+     */
+    private static final int LOCK_STRIPES = 64;
+    private final Object[] locks = createLocks();
+
+    private static Object[] createLocks() {
+        Object[] pool = new Object[LOCK_STRIPES];
+        for (int i = 0; i < pool.length; i++) {
+            pool[i] = new Object();
+        }
+        return pool;
+    }
 
     public SessionTranscriptProjector(ChatSessionStore store,
                                       CheckpointStore checkpointStore,
@@ -86,32 +101,43 @@ public class SessionTranscriptProjector {
             return input != null ? input : new ArrayList<ChatMessage>();
         }
         synchronized (lockFor(run.getConversationId())) {
-            try {
-                AgentChatSessionEntity existing =
-                        store.get(run.getTenantId(), run.getUserId(), run.getConversationId());
-                State state = readState(existing != null ? existing.getModelMessagesJson() : null);
-                if (state.messages.isEmpty()) {
-                    ArrayNode ui = readUi(existing != null ? existing.getMessagesJson() : null);
-                    if (ui.size() > 0) {
-                        state = fromUi(ui);
+            List<ChatMessage> history = input != null ? input : new ArrayList<ChatMessage>();
+            for (int attempt = 0; attempt < MAX_CAS_ATTEMPTS; attempt++) {
+                try {
+                    AgentChatSessionEntity existing =
+                            store.get(run.getTenantId(), run.getUserId(), run.getConversationId());
+                    State state = readState(existing != null ? existing.getModelMessagesJson() : null);
+                    if (state.messages.isEmpty()) {
+                        ArrayNode ui = readUi(existing != null ? existing.getMessagesJson() : null);
+                        if (ui.size() > 0) {
+                            state = fromUi(ui);
+                        }
                     }
-                }
-                if (state.messages.isEmpty()) {
-                    appendInput(state, input);
-                } else {
-                    ChatMessage newUser = lastUser(input);
-                    if (newUser != null && !isDuplicateLastUser(state.messages, newUser)) {
-                        state.add(forLog(newUser));
+                    // Close a turn an abandoned/suspended run left unpaired before
+                    // the canonical log becomes the next run's context.
+                    repairToolPairing(state.messages, state::insertAt);
+                    if (state.messages.isEmpty()) {
+                        appendInput(state, input);
+                    } else {
+                        ChatMessage newUser = lastUser(input);
+                        if (newUser != null && !isDuplicateLastUser(state.messages, newUser)) {
+                            state.add(forLog(newUser));
+                        }
                     }
+                    trim(state);
+                    history = state.messages;
+                    if (persist(run, existing, state, titleOf(existing, input), run.getLastSeq(), null)) {
+                        return history;
+                    }
+                    // Another instance wrote first: re-read and recompute.
+                } catch (Exception e) {
+                    log.warn("Session history prepare failed for {}: {}",
+                            run.getConversationId(), e.getMessage());
+                    return history;
                 }
-                trim(state);
-                persist(run, existing, state, titleOf(existing, input), run.getLastSeq(), null);
-                return state.messages;
-            } catch (Exception e) {
-                log.warn("Session history prepare failed for {}: {}",
-                        run.getConversationId(), e.getMessage());
-                return input != null ? input : new ArrayList<ChatMessage>();
             }
+            log.warn("Session history prepare CAS exhausted for {}", run.getConversationId());
+            return history;
         }
     }
 
@@ -121,51 +147,64 @@ public class SessionTranscriptProjector {
             return;
         }
         synchronized (lockFor(run.getConversationId())) {
-            try {
-                AgentChatSessionEntity existing =
-                        store.get(run.getTenantId(), run.getUserId(), run.getConversationId());
-                State state = readState(existing != null ? existing.getModelMessagesJson() : null);
-
-                Checkpoint checkpoint = checkpointStore.load(run.getRunId());
-                if (checkpoint != null && checkpoint.getMessages() != null) {
-                    int size = checkpoint.getMessages().size();
-                    int from = Math.min(Math.max(checkpoint.getInputMessageCount(), 0), size);
-                    List<ChatMessage> produced = new ArrayList<>();
-                    for (ChatMessage message : checkpoint.getMessages().subList(from, size)) {
-                        if (message == null) {
-                            continue;
-                        }
-                        String role = role(message);
-                        if ("system".equals(role) || "user".equals(role)) {
-                            continue; // internal truncation nudges are never context
-                        }
-                        produced.add(forLog(message));
-                    }
-                    // Repair dangling assistant tool_calls (cancel/failure while
-                    // waiting for a tool) before they become the next run's
-                    // model context.
-                    repairToolPairing(produced);
-                    // A newer run may already have appended its user turn; insert
-                    // this run's output where its own history ended.
-                    int insertAt = Math.min(Math.max(checkpoint.getInputMessageCount() - 1, 0),
-                            state.messages.size());
-                    state.insertAll(insertAt, produced);
-                }
-                trim(state);
-                // Reduce this run's delegated children from the durable log so
-                // the reloaded panel comes from the DB, not a client cache. A
-                // projection failure must never cost us the transcript itself.
-                SubAgentProjection.Projection fresh = null;
+            for (int attempt = 0; attempt < MAX_CAS_ATTEMPTS; attempt++) {
                 try {
-                    fresh = subAgentProjection.project(run.getRunId());
-                } catch (Exception projectionError) {
-                    log.warn("Sub-agent projection failed for run {}: {}",
-                            run.getRunId(), projectionError.getMessage());
+                    AgentChatSessionEntity existing =
+                            store.get(run.getTenantId(), run.getUserId(), run.getConversationId());
+                    // Idempotent per run: the cancel path and a live loop's exit can
+                    // both project the same terminal run. Provenance records whether
+                    // this run's terminal write already landed.
+                    if (alreadyProjectedTerminal(existing, run)) {
+                        return;
+                    }
+                    State state = readState(existing != null ? existing.getModelMessagesJson() : null);
+
+                    Checkpoint checkpoint = checkpointStore.load(run.getRunId());
+                    if (checkpoint != null && checkpoint.getMessages() != null) {
+                        int size = checkpoint.getMessages().size();
+                        int from = Math.min(Math.max(checkpoint.getInputMessageCount(), 0), size);
+                        List<ChatMessage> produced = new ArrayList<>();
+                        for (ChatMessage message : checkpoint.getMessages().subList(from, size)) {
+                            if (message == null) {
+                                continue;
+                            }
+                            String role = role(message);
+                            if ("system".equals(role) || "user".equals(role)) {
+                                continue; // internal truncation nudges are never context
+                            }
+                            produced.add(forLog(message));
+                        }
+                        // Repair dangling assistant tool_calls (cancel/failure while
+                        // waiting for a tool) before they become the next run's
+                        // model context.
+                        repairToolPairing(produced, produced::add);
+                        // A newer run may already have appended its user turn; insert
+                        // this run's output where its own history ended.
+                        int insertAt = Math.min(Math.max(checkpoint.getInputMessageCount() - 1, 0),
+                                state.messages.size());
+                        state.insertAll(insertAt, produced);
+                    }
+                    trim(state);
+                    // Reduce this run's delegated children from the durable log so
+                    // the reloaded panel comes from the DB, not a client cache. A
+                    // projection failure must never cost us the transcript itself.
+                    SubAgentProjection.Projection fresh = null;
+                    try {
+                        fresh = subAgentProjection.project(run.getRunId());
+                    } catch (Exception projectionError) {
+                        log.warn("Sub-agent projection failed for run {}: {}",
+                                run.getRunId(), projectionError.getMessage());
+                    }
+                    if (persist(run, existing, state, titleOf(existing, null), run.getLastSeq(), fresh)) {
+                        return;
+                    }
+                    // Another instance wrote first: re-read and recompute.
+                } catch (Exception e) {
+                    log.warn("Session projection failed for {}: {}", run.getConversationId(), e.getMessage());
+                    return;
                 }
-                persist(run, existing, state, titleOf(existing, null), run.getLastSeq(), fresh);
-            } catch (Exception e) {
-                log.warn("Session projection failed for {}: {}", run.getConversationId(), e.getMessage());
             }
+            log.warn("Session projection CAS exhausted for {}", run.getConversationId());
         }
     }
 
@@ -175,7 +214,12 @@ public class SessionTranscriptProjector {
      * frontend tool otherwise leaves a structurally invalid turn in the
      * canonical log.
      */
-    private void repairToolPairing(List<ChatMessage> produced) {
+    @FunctionalInterface
+    private interface MessageInserter {
+        void insert(int index, ChatMessage message);
+    }
+
+    private void repairToolPairing(List<ChatMessage> produced, MessageInserter inserter) {
         for (int i = 0; i < produced.size(); i++) {
             ChatMessage message = produced.get(i);
             if (!"assistant".equals(role(message))
@@ -202,7 +246,7 @@ public class SessionTranscriptProjector {
             }
             for (String missingId : expected) {
                 if (!found.contains(missingId)) {
-                    produced.add(j, ChatMessage.builder()
+                    inserter.insert(j, ChatMessage.builder()
                             .role("tool")
                             .toolCallId(missingId)
                             .name(names.get(missingId))
@@ -344,7 +388,7 @@ public class SessionTranscriptProjector {
             long timestamp = state.timeAt(index);
             String role = role(message);
             if ("user".equals(role)) {
-                ObjectNode node = entry("u-" + UUID.randomUUID(), "user", timestamp);
+                ObjectNode node = entry("u-" + index, "user", timestamp);
                 node.put("content", message.getContent() == null ? "" : message.getContent());
                 ArrayNode images = imageDataUrls(message);
                 if (images.size() > 0) {
@@ -359,7 +403,7 @@ public class SessionTranscriptProjector {
                 if (!hasContent && !hasCalls) {
                     continue;
                 }
-                ObjectNode node = entry("a-" + UUID.randomUUID(), "ai", timestamp);
+                ObjectNode node = entry("a-" + index, "ai", timestamp);
                 if (hasContent) {
                     node.put("content", message.getContent());
                 }
@@ -461,8 +505,8 @@ public class SessionTranscriptProjector {
 
     // ==================== persistence ====================
 
-    private void persist(AgentRun run, AgentChatSessionEntity existing, State state,
-                         String title, long asOfSeq, SubAgentProjection.Projection fresh) {
+    private boolean persist(AgentRun run, AgentChatSessionEntity existing, State state,
+                            String title, long asOfSeq, SubAgentProjection.Projection fresh) {
         ArrayNode ui = toUi(state);
         try {
             overlaySubAgents(ui, existing, fresh);
@@ -477,14 +521,19 @@ public class SessionTranscriptProjector {
         entity.setTitle(title);
         entity.setMessagesJson(writeUi(ui));
         entity.setModelMessagesJson(writeState(state));
-        entity.setMessageCount(state.messages.size());
+        // message_count caches the UI projection length (the column contract),
+        // not the canonical model-log length — the import guard compares UI sizes.
+        entity.setMessageCount(ui.size());
         entity.setSchemaVersion(SCHEMA_VERSION);
         entity.setSourceRunId(run.getRunId());
         entity.setAsOfSeq(asOfSeq);
+        // Expected version for the CAS: what we read, or 0 when the row is new.
+        entity.setVersion(existing != null && existing.getVersion() != null
+                ? existing.getVersion() : 0L);
         Long existingCreate = existing != null ? existing.getCreateTime() : null;
         entity.setCreateTime(existingCreate != null && existingCreate > 0
                 ? existingCreate : System.currentTimeMillis());
-        store.saveTranscript(entity);
+        return store.saveTranscriptCas(entity);
     }
 
     /**
@@ -724,7 +773,19 @@ public class SessionTranscriptProjector {
     }
 
     private Object lockFor(String conversationId) {
-        return locks.computeIfAbsent(conversationId, key -> new Object());
+        return locks[Math.floorMod(conversationId.hashCode(), LOCK_STRIPES)];
+    }
+
+    /**
+     * True when this exact run already wrote its terminal projection. Guards
+     * against a duplicate terminal hook (e.g. an explicit cancel plus the loop's
+     * own exit) re-inserting the same assistant/tool turns.
+     */
+    private boolean alreadyProjectedTerminal(AgentChatSessionEntity existing, AgentRun run) {
+        return existing != null
+                && run.getRunId().equals(existing.getSourceRunId())
+                && existing.getAsOfSeq() != null
+                && existing.getAsOfSeq() >= run.getLastSeq();
     }
 
     private boolean eligible(AgentRun run) {
@@ -748,6 +809,12 @@ public class SessionTranscriptProjector {
         private void add(ChatMessage message) {
             messages.add(message);
             times.add(System.currentTimeMillis());
+        }
+
+        /** Insert one message, keeping the parallel timestamp list aligned. */
+        private void insertAt(int index, ChatMessage message) {
+            messages.add(index, message);
+            times.add(index, System.currentTimeMillis());
         }
 
         private void insertAll(int index, List<ChatMessage> additions) {
