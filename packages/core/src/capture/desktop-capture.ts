@@ -57,11 +57,11 @@ export const captureScreenshot = async (sourceId: string): Promise<File> => {
         canvas.width = video.videoWidth
         canvas.height = video.videoHeight
         const context = canvas.getContext('2d')
-        if (!context) throw new Error('无法创建画布上下文')
+        if (!context) throw new Error('CAPTURE_CANVAS')
         context.drawImage(video, 0, 0, canvas.width, canvas.height)
 
         const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
-        if (!blob) throw new Error('截图编码失败')
+        if (!blob) throw new Error('CAPTURE_ENCODE')
         return new File([blob], 'screenshot-' + stamp() + '.png', { type: 'image/png' })
     } finally {
         stream.getTracks().forEach((track) => track.stop())

@@ -166,11 +166,9 @@ export function setupIpcHandlers() {
       const status = process.platform === 'darwin'
         ? systemPreferences.getMediaAccessStatus('screen')
         : 'unknown';
-      throw new Error(
-        '无法获取屏幕来源（屏幕录制权限: ' + status + '）。' +
-        '请在「系统设置 → 隐私与安全性 → 屏幕录制」中勾选本应用，然后重启应用。' +
-        '原始错误: ' + (error as Error).message,
-      );
+      console.warn('[capture] getSources failed:', error);
+      // The renderer localizes CAPTURE_PERMISSION:<status> into a full hint.
+      throw new Error('CAPTURE_PERMISSION:' + status);
     }
     return sources.map((source) => ({
       id: source.id,

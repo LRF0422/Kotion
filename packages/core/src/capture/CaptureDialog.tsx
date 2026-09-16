@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { useDesktop, useUploadFile } from '@kn/common'
+import { useDesktop, useTranslation, useUploadFile } from '@kn/common'
 import type { DesktopCaptureSource } from '@kn/common'
 import {
     captureScreenshot,
@@ -13,10 +13,24 @@ interface CaptureDialogProps {
     onClose: () => void
 }
 
+type Translate = (key: string, options?: Record<string, unknown>) => string
+
 const formatElapsed = (seconds: number): string => {
     const mm = String(Math.floor(seconds / 60)).padStart(2, '0')
     const ss = String(seconds % 60).padStart(2, '0')
     return mm + ':' + ss
+}
+
+/** Map service/main error codes to localized text. */
+const localizeCaptureError = (t: Translate, error: unknown): string => {
+    const message = error instanceof Error ? error.message : String(error)
+    if (message.includes('CAPTURE_PERMISSION')) {
+        const status = message.split('CAPTURE_PERMISSION:')[1]?.split(':')[0] ?? 'unknown'
+        return t('desktopCapture.permissionDenied', { status })
+    }
+    if (message === 'CAPTURE_CANVAS') return t('desktopCapture.canvasUnavailable')
+    if (message === 'CAPTURE_ENCODE') return t('desktopCapture.encodeFailed')
+    return message
 }
 
 /**
@@ -24,6 +38,7 @@ const formatElapsed = (seconds: number): string => {
  * record, uploading the result to the file center.
  */
 export const CaptureDialog: React.FC<CaptureDialogProps> = ({ open, onClose }) => {
+    const { t } = useTranslation()
     const desktop = useDesktop()
     const { uploadFile } = useUploadFile()
     const [mode, setMode] = useState<'screenshot' | 'recording'>('screenshot')
@@ -45,7 +60,7 @@ export const CaptureDialog: React.FC<CaptureDialogProps> = ({ open, onClose }) =
                 if (!cancelled) setSources(list)
             })
             .catch((error) => {
-                if (!cancelled) setMessage((error as Error).message)
+                if (!cancelled) setMessage(localizeCaptureError(t, error))
             })
             .finally(() => {
                 if (!cancelled) setLoading(false)
@@ -53,6 +68,7 @@ export const CaptureDialog: React.FC<CaptureDialogProps> = ({ open, onClose }) =
         return () => {
             cancelled = true
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, desktop])
 
     useEffect(() => {
@@ -69,7 +85,7 @@ export const CaptureDialog: React.FC<CaptureDialogProps> = ({ open, onClose }) =
 
     const save = async (file: File) => {
         await uploadFile(file)
-        setMessage('已保存到文件中心：' + file.name)
+        setMessage(t('desktopCapture.saved', { name: file.name }))
     }
 
     const handlePick = async (source: DesktopCaptureSource) => {
@@ -88,7 +104,7 @@ export const CaptureDialog: React.FC<CaptureDialogProps> = ({ open, onClose }) =
                 setElapsed(0)
             }
         } catch (error) {
-            setMessage((error as Error).message)
+            setMessage(localizeCaptureError(t, error))
         } finally {
             setBusy(false)
         }
@@ -105,7 +121,7 @@ export const CaptureDialog: React.FC<CaptureDialogProps> = ({ open, onClose }) =
             await save(file)
             onClose()
         } catch (error) {
-            setMessage((error as Error).message)
+            setMessage(localizeCaptureError(t, error))
         } finally {
             setBusy(false)
         }
@@ -130,7 +146,7 @@ export const CaptureDialog: React.FC<CaptureDialogProps> = ({ open, onClose }) =
                 onClick={(event) => event.stopPropagation()}
             >
                 <div className="flex items-center justify-between border-b px-4 py-2.5">
-                    <span className="text-sm font-medium">截图 / 录屏</span>
+                    <span className="text-sm font-medium">{t('desktopCapture.title')}</span>
                     <button
                         type="button"
                         className="text-muted-foreground hover:text-foreground"
@@ -141,7 +157,7 @@ export const CaptureDialog: React.FC<CaptureDialogProps> = ({ open, onClose }) =
                 </div>
 
                 {!desktop && (
-                    <div className="px-4 py-3 text-xs text-amber-600">该功能仅在桌面客户端可用。</div>
+                    <div className="px-4 py-3 text-xs text-amber-600">{t('desktopCapture.desktopOnly')}</div>
                 )}
 
                 {desktop && recording && (
@@ -150,7 +166,7 @@ export const CaptureDialog: React.FC<CaptureDialogProps> = ({ open, onClose }) =
                             <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-red-500" />
                             <span className="font-mono text-lg">{formatElapsed(elapsed)}</span>
                         </div>
-                        <p className="text-xs text-muted-foreground">正在录制，完成后会保存到文件中心</p>
+                        <p className="text-xs text-muted-foreground">{t('desktopCapture.recordingHint')}</p>
                         <div className="flex gap-2">
                             <button
                                 type="button"
@@ -158,7 +174,7 @@ export const CaptureDialog: React.FC<CaptureDialogProps> = ({ open, onClose }) =
                                 onClick={handleStop}
                                 className="h-8 rounded-md bg-primary px-4 text-xs font-medium text-primary-foreground disabled:opacity-50"
                             >
-                                停止并保存
+                                {t('desktopCapture.stopAndSave')}
                             </button>
                             <button
                                 type="button"
@@ -166,7 +182,7 @@ export const CaptureDialog: React.FC<CaptureDialogProps> = ({ open, onClose }) =
                                 onClick={handleCancel}
                                 className="h-8 rounded-md border px-4 text-xs disabled:opacity-50"
                             >
-                                放弃
+                                {t('desktopCapture.discard')}
                             </button>
                         </div>
                     </div>
@@ -185,10 +201,12 @@ export const CaptureDialog: React.FC<CaptureDialogProps> = ({ open, onClose }) =
                                         (mode === value ? 'bg-muted font-medium' : 'text-muted-foreground hover:bg-muted/60')
                                     }
                                 >
-                                    {value === 'screenshot' ? '截图' : '录屏'}
+                                    {value === 'screenshot'
+                                        ? t('desktopCapture.screenshotTab')
+                                        : t('desktopCapture.recordingTab')}
                                 </button>
                             ))}
-                            {loading && <span className="ml-2 text-[11px] text-muted-foreground">加载来源…</span>}
+                            {loading && <span className="ml-2 text-[11px] text-muted-foreground">{t('desktopCapture.loadingSources')}</span>}
                         </div>
 
                         <div className="min-h-0 flex-1 overflow-y-auto p-4">
@@ -205,7 +223,7 @@ export const CaptureDialog: React.FC<CaptureDialogProps> = ({ open, onClose }) =
                                             {source.thumbnail ? (
                                                 <img src={source.thumbnail} alt={source.name} className="max-h-full max-w-full" />
                                             ) : (
-                                                <span className="text-[11px] text-muted-foreground">无预览</span>
+                                                <span className="text-[11px] text-muted-foreground">{t('desktopCapture.noPreview')}</span>
                                             )}
                                         </div>
                                         <div className="truncate px-2 py-1.5 text-[11px]" title={source.name}>
@@ -214,7 +232,7 @@ export const CaptureDialog: React.FC<CaptureDialogProps> = ({ open, onClose }) =
                                     </button>
                                 ))}
                                 {!loading && sources.length === 0 && (
-                                    <p className="col-span-full text-xs text-muted-foreground">没有可捕捉的屏幕或窗口。</p>
+                                    <p className="col-span-full text-xs text-muted-foreground">{t('desktopCapture.noSources')}</p>
                                 )}
                             </div>
                         </div>

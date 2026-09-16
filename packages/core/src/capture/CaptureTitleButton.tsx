@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useTranslation } from '@kn/common'
 import { CaptureDialog } from './CaptureDialog'
 
 const CaptureIcon = () => (
@@ -17,21 +18,24 @@ const CaptureIcon = () => (
  * for position:fixed descendants (which squeezed the dialog into the button).
  */
 export const CaptureTitleButton: React.FC = () => {
+    const { t } = useTranslation()
     const [open, setOpen] = useState(false)
     const isDesktopApp = typeof window !== 'undefined' && Boolean((window as any).knDesktop)
     if (!isDesktopApp) return null
+
+    const label = t('desktopCapture.title')
 
     return (
         <>
             <button
                 type="button"
                 onClick={() => setOpen(true)}
-                title="截图 / 录屏"
-                aria-label="截图 / 录屏"
+                title={label}
+                aria-label={label}
                 className="flex h-6 items-center gap-1 rounded-md border border-transparent px-2 text-[11px] text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-foreground"
             >
                 <CaptureIcon />
-                <span>截图</span>
+                <span>{t('desktopCapture.entry')}</span>
             </button>
             {open && createPortal(
                 <CaptureDialog open={open} onClose={() => setOpen(false)} />,
