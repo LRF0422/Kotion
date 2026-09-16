@@ -376,8 +376,10 @@ export function Layout({ onPluginsReady }: LayoutProps) {
                     )} >
                         {!isMobile && isDesktopShell && (
                             <div className="kn-shell-top-drag-region titlebar-drag-region absolute inset-x-0 top-0 z-50">
-                                {/* Desktop actions sit just right of the traffic lights (x16..~74). */}
-                                <div className="titlebar-no-drag absolute bottom-0 left-[76px] top-0 flex items-center gap-1">
+                                {/* Desktop actions sit right of the traffic lights (x16..~74),
+                                    separated by a hairline so they read as their own control. */}
+                                <div className="titlebar-no-drag absolute bottom-0 left-[90px] top-0 flex items-center gap-2">
+                                    <span className="h-4 w-px bg-border/70" aria-hidden="true" />
                                     <CaptureTitleButton />
                                 </div>
                             </div>
