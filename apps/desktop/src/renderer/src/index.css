@@ -1,45 +1,11 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Desktop-only styles.
+ *
+ * Everything shared with the web - theme tokens, the Tailwind base layer and the
+ * themed scrollbars - lives in @kn/ui/globals.css, which the renderer imports
+ * first. Keeping only frameless-window rules here means the desktop cannot drift
+ * from the web palette again (it previously re-declared the whole token block).
+ */
 
-@layer base {
-  * {
-    @apply border-border;
-  }
-
-  body {
-    @apply bg-background text-foreground;
-  }
-}
-
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-::-webkit-scrollbar-track {
-  @apply bg-muted/30;
-}
-
-::-webkit-scrollbar-thumb {
-  @apply bg-muted-foreground/30 rounded-full;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  @apply bg-muted-foreground/50;
-}
-
-@layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-
-  body {
-    @apply bg-background text-foreground;
-  }
-}
-
-/* Desktop app frameless window styles */
 /* Draggable region for the top area - allows window dragging */
 .titlebar-drag-region {
   -webkit-app-region: drag;
@@ -49,10 +15,6 @@
 .titlebar-no-drag {
   -webkit-app-region: no-drag;
 }
-
-/* macOS window chrome is handled in @kn/ui/globals.css via
-   html[data-platform="darwin"] (--kn-titlebar-height), so both the classic and
-   modern shells reserve one shared, aligned title band for the traffic lights. */
 
 /* Make the entire app top bar draggable except interactive elements */
 #root>div:first-child {
