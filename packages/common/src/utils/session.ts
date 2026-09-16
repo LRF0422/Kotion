@@ -25,7 +25,7 @@ import { getAccessToken, getRefreshToken, saveTokens, clearTokens } from './auth
 // production, so a relative `/api` cannot be resolved — it must hit the cloud
 // API via an absolute URL. The web app keeps `/api` (same-origin / dev proxy)
 // to avoid browser CORS.
-const isDesktop = typeof window !== 'undefined' && typeof (window as any).api !== 'undefined'
+const isDesktop = typeof window !== 'undefined' && typeof (window as any).knDesktop !== 'undefined'
 const CLOUD_API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'https://kotion.top:888/api'
 
 /** Base URL for the auth/cloud API, shared by the axios instance and refresh. */

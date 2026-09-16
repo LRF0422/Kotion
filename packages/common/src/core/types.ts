@@ -1,4 +1,5 @@
 import type { SpacePageService } from "../domain/space-page/operations";
+import type { DesktopBridge } from "./desktop-bridge";
 
 export type KeysWithTypeOf<T, Type> = { [P in keyof T]: T[P] extends Type ? P : never }[keyof T];
 export type ValuesOf<T> = T[keyof T];
@@ -246,4 +247,9 @@ export interface Services {
     uploadTaskService?: UploadTaskService;
     aiFoundation?: AIFoundation;
     spacePageService?: SpacePageService;
+    /**
+     * Desktop (Electron) capability bridge. Registered by the host on desktop
+     * only; on the web the service is absent — use useOptionalService("desktop").
+     */
+    desktop?: DesktopBridge;
 }

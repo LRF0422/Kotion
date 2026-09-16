@@ -1,28 +1,66 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { electronAPI } from '@electron-toolkit/preload'
 
-// Custom APIs for renderer
-const api = {
-    ping: (): void => ipcRenderer.send('ping'),
-    invoke: (channel: string, ...args: any[]): Promise<any> => ipcRenderer.invoke(channel, ...args),
-    send: (channel: string, ...args: any[]): void => ipcRenderer.send(channel, ...args),
-    on: (channel: string, callback: (...args: any[]) => void): void => {
-        ipcRenderer.on(channel, (_event, ...args) => callback(...args))
+/**
+ * Desktop capability bridge.
+ *
+ * Exposes a FIXED capability list plus invoke/on instead of raw IPC. There is
+ * no generic channel escape hatch: window.api / ipcRenderer are gone.
+ *
+ * Plugins must not touch this global directly. They consume the `desktop`
+ * core service from @kn/common:
+ *   const desktop = useOptionalService('desktop')
+ *   await desktop?.invoke('system.info')
+ */
+const CAPABILITIES = [
+  'system.info',
+  'system.paths',
+  'http.request',
+  'dialog.openFile',
+  'dialog.openFolder',
+  'dialog.saveFile',
+  'dialog.message',
+  'fs.readFile',
+  'fs.writeFile',
+  'fs.exists',
+  'fs.mkdir',
+  'fs.remove',
+  'fs.readdir',
+  'fs.stat',
+  'fs.copy',
+  'fs.move',
+  'window.setFullScreen',
+  'window.isFullScreen',
+  'window.setTrafficLights',
+] as readonly string[]
+
+const knDesktop = {
+  platform: process.platform,
+  capabilities: CAPABILITIES,
+  invoke: (capability: string, params?: unknown): Promise<unknown> => {
+    if (!CAPABILITIES.includes(capability)) {
+      return Promise.reject(
+        new Error('Unknown or unauthorized desktop capability: ' + capability),
+      )
     }
+    return ipcRenderer.invoke('desktop:' + capability, params)
+  },
+  on: (event: string, listener: (value: unknown) => void): (() => void) => {
+    const channel = 'desktop:event:' + event
+    const handler = (_event: unknown, value: unknown) => listener(value)
+    ipcRenderer.on(channel, handler)
+    return () => {
+      ipcRenderer.removeListener(channel, handler)
+    }
+  },
 }
 
-// Use `contextBridge` APIs to expose Electron APIs to
-// renderer only if context isolation is enabled
 if (process.contextIsolated) {
-    try {
-        contextBridge.exposeInMainWorld('electron', electronAPI)
-        contextBridge.exposeInMainWorld('api', api)
-    } catch (error) {
-        console.error(error)
-    }
+  try {
+    contextBridge.exposeInMainWorld('knDesktop', knDesktop)
+  } catch (error) {
+    console.error(error)
+  }
 } else {
-    // @ts-ignore (define in dts)
-    window.electron = electronAPI
-    // @ts-ignore (define in dts)
-    window.api = api
+  // @ts-ignore (declared in index.d.ts)
+  window.knDesktop = knDesktop
 }

@@ -3,3 +3,4 @@ export { useUploadTaskService, useOptionalUploadTaskService } from "./upload-tas
 export * from "./plugin-config-service";
 export * from "./define-service";
 export * from "./service-resolver";
+export * from "./desktop";

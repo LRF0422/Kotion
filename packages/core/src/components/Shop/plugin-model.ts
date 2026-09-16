@@ -60,6 +60,8 @@ export interface PluginRecord {
   updateTime?: string;
   createdAt?: string;
   updatedAt?: string;
+  /** Desktop (Electron) only plugin; the web marketplace disables installing it. */
+  desktopOnly?: boolean;
 }
 
 export type PluginInstallState =
@@ -191,6 +193,7 @@ type PluginRuntimeSource = {
   resourcePath?: string;
   integrity?: string;
   currentVersion?: string | PluginVersionRecord;
+  desktopOnly?: boolean;
 };
 
 /** Normalize backend marketplace DTOs before they enter the common runtime. */
@@ -218,6 +221,7 @@ export const toRemotePluginDescriptor = (
     integrity: plugin.integrity?.trim()
       ? plugin.integrity
       : currentVersion?.integrity,
+    desktopOnly: plugin.desktopOnly,
   });
 
   return descriptor;

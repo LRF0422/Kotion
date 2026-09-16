@@ -18,6 +18,15 @@
 export const PLUGIN_API_VERSION = "2.1.0"
 
 /**
+ * Desktop capability bridge contract version (Electron only).
+ *
+ * Independent from PLUGIN_API_VERSION so the desktop surface can evolve on its
+ * own. Bump the MAJOR part on breaking changes; plugins should disable desktop
+ * features when the host reports a different major.
+ */
+export const DESKTOP_BRIDGE_VERSION = "1.0.0"
+
+/**
  * Metadata a plugin bundle registers alongside its exports.
  * Legacy bundles (built before the __KN__ namespace) have no meta at all.
  */
@@ -42,6 +51,27 @@ export interface PluginRegistration {
 // Contract types re-exported (type-only) from @kn/common so plugin authors
 // can depend on @kn/plugin-api alone for typings.
 export type {
+    DesktopBridge,
+    DesktopCapability,
+    DesktopCapabilityContract,
+    DesktopPlatform,
+    DesktopAppInfo,
+    DesktopPaths,
+    DesktopFileFilter,
+    DesktopOpenFileOptions,
+    DesktopOpenFolderOptions,
+    DesktopSaveFileOptions,
+    DesktopMessageOptions,
+    DesktopDirEntry,
+    DesktopFileStat,
+    DesktopDialogFileResult,
+    DesktopDialogFolderResult,
+    DesktopDialogSaveResult,
+    DesktopFileResult,
+    DesktopTrafficLightPosition,
+    DesktopHttpRequest,
+    DesktopHttpRedirect,
+    DesktopHttpResponse,
     PluginConfig,
     KPlugin,
     ExtensionWrapper,

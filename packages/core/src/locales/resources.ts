@@ -80,6 +80,8 @@ export const resources = {
         incompatibleHint:
           "此插件已安装，但因插件 API 版本与当前 Kotion 不兼容而被跳过。",
         details: "详情",
+        desktopOnly: "仅桌面端",
+        desktopOnlyHint: "该插件依赖桌面端能力，请在桌面客户端中使用。",
         "load-more": "加载更多",
         category: {
           all: "全部",
@@ -1294,6 +1296,8 @@ export const resources = {
         incompatibleHint:
           "This plugin is installed but was skipped because its plugin API version is incompatible with this version of Kotion.",
         details: "Details",
+        desktopOnly: "Desktop only",
+        desktopOnlyHint: "This plugin needs desktop capabilities. Use the desktop app.",
         "load-more": "Load more",
         category: {
           all: "All",

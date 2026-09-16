@@ -7,6 +7,7 @@ import {
   LayoutGrid,
   List,
   Loader2,
+  Monitor,
   SearchIcon,
   Sparkles,
   Star,
@@ -58,6 +59,10 @@ import {
   toFiniteNumber,
 } from "../plugin-model";
 
+/** True when running inside the Electron shell (desktop capabilities present). */
+const isDesktopHost =
+  typeof window !== "undefined" && Boolean((window as any).knDesktop);
+
 const CATEGORIES = ["All", "App", "Feature", "Connector"] as const;
 type SortKey = "relevance" | "popular" | "recent" | "rating";
 type ViewMode = "grid" | "list";
@@ -104,6 +109,9 @@ interface InstallButtonProps {
   activeLabel: string;
   incompatibleLabel: string;
   incompatibleHint: string;
+  /** Plugin needs desktop capabilities and this is the web app. */
+  desktopOnlyBlocked?: boolean;
+  desktopOnlyLabel: string;
 }
 
 const InstallButton: React.FC<InstallButtonProps> = ({
@@ -117,7 +125,20 @@ const InstallButton: React.FC<InstallButtonProps> = ({
   activeLabel,
   incompatibleLabel,
   incompatibleHint,
+  desktopOnlyBlocked,
+  desktopOnlyLabel,
 }) => {
+  if (desktopOnlyBlocked) {
+    return (
+      <Badge
+        variant="outline"
+        className="h-7 shrink-0 gap-1 px-2 text-[11px] font-medium text-muted-foreground"
+      >
+        <Monitor className="h-3.5 w-3.5" />
+        {desktopOnlyLabel}
+      </Badge>
+    );
+  }
   if (installed) {
     return (
       <span
@@ -208,6 +229,15 @@ const PluginCard: React.FC<CardProps> = ({
               {enumValue(plugin.category)}
             </Badge>
           )}
+          {plugin.desktopOnly && (
+            <Badge
+              variant="outline"
+              className="h-4 shrink-0 gap-1 px-1.5 text-[10px] font-normal text-muted-foreground"
+            >
+              <Monitor className="h-3 w-3" />
+              {install.desktopOnlyLabel}
+            </Badge>
+          )}
         </div>
         <div
           className="truncate text-[11px] text-muted-foreground"
@@ -263,6 +293,15 @@ const PluginRow: React.FC<CardProps> = ({
             className="h-4 shrink-0 px-1.5 text-[10px] font-normal"
           >
             {enumValue(plugin.category)}
+          </Badge>
+        )}
+        {plugin.desktopOnly && (
+          <Badge
+            variant="outline"
+            className="h-4 shrink-0 gap-1 px-1.5 text-[10px] font-normal text-muted-foreground"
+          >
+            <Monitor className="h-3 w-3" />
+            {install.desktopOnlyLabel}
           </Badge>
         )}
       </div>
@@ -505,6 +544,8 @@ export const Marketplace: React.FC = () => {
         "This plugin is installed but was skipped because its API version is incompatible.",
       ),
       detailsLabel: t("marketplace.details", "Details"),
+      desktopOnlyLabel: t("marketplace.desktopOnly", "Desktop only"),
+      desktopOnlyBlocked: Boolean(plugin.desktopOnly) && !isDesktopHost,
     };
   };
 

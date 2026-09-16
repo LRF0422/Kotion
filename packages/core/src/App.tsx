@@ -30,6 +30,7 @@ import { ErrorPage } from "./components/ErrorPage";
 import { PluginErrorBoundary } from "./components/PluginErrorBoundary";
 import ReactDOM from "react-dom";
 import { PLUGIN_API_VERSION } from "@kn/plugin-api";
+import { createDesktopBridge } from "./desktop/bridge";
 import { OrganizationInvitationAccept } from "./components/settings/OrganizationInvitationAccept";
 import { createSpacePageService } from "./domain/space-page";
 import { uploadTaskService } from "./services/upload/upload-task-service";
@@ -274,14 +275,23 @@ export const App: React.FC<AppProps> = (props) => {
     const { plugins = [] } = props
     const [router, setRouter] = useSafeState<any>()
     const { usePath } = useUploadFile()
-    const pluginManager = useMemo(() => new common.PluginManager({
-        // Plugin artifacts are served from the public (no-auth) plugin endpoint
-        // so script tags need no Authorization query param and SRI/CORS work.
-        resolveUrl: (resourcePath: string) => usePath(resourcePath)
-            .replace('/oss/endpoint/download', '/oss/endpoint/public/plugin'),
-        hostApiVersion: PLUGIN_API_VERSION,
-        coreServices: { spacePageService, uploadTaskService },
-    }, plugins), [])
+    const pluginManager = useMemo(() => {
+        // Desktop capabilities are registered as a core service on Electron and
+        // stay absent on the web, so plugins use useOptionalService("desktop").
+        const desktop = createDesktopBridge()
+        return new common.PluginManager({
+            // Plugin artifacts are served from the public (no-auth) plugin endpoint
+            // so script tags need no Authorization query param and SRI/CORS work.
+            resolveUrl: (resourcePath: string) => usePath(resourcePath)
+                .replace('/oss/endpoint/download', '/oss/endpoint/public/plugin'),
+            hostApiVersion: PLUGIN_API_VERSION,
+            coreServices: {
+                spacePageService,
+                uploadTaskService,
+                ...(desktop ? { desktop } : {}),
+            },
+        }, plugins)
+    }, [])
     const [pluginsReady, setPluginsReady] = useState(false)
     const [refreshFlag, setRefreshFlag] = useState(0)
 

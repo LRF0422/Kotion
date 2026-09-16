@@ -84,7 +84,7 @@ function createWindow(): void {
   // Mirror the macOS fullscreen state into the renderer. Native fullscreen hides
   // the traffic lights, so the shell can drop its reserved title band.
   const sendFullscreen = (isFullscreen: boolean) =>
-    mainWindow.webContents.send('window:fullscreen', isFullscreen)
+    mainWindow.webContents.send('desktop:event:fullscreen', isFullscreen)
   mainWindow.on('enter-full-screen', () => sendFullscreen(true))
   mainWindow.on('leave-full-screen', () => sendFullscreen(false))
   mainWindow.webContents.on('did-finish-load', () => sendFullscreen(mainWindow.isFullScreen()))
@@ -118,26 +118,6 @@ app.whenReady().then(async () => {
 
   // Setup IPC handlers (desktop-native capabilities only: fs/dialog/system)
   setupIpcHandlers()
-
-  // Let the renderer align the native traffic lights with the interface style
-  // (classic = tight flat chrome, modern = inset floating panes).
-  ipcMain.on('window:traffic-lights', (event, position: { x: number; y: number }) => {
-    if (process.platform !== 'darwin') return
-    const win = BrowserWindow.fromWebContents(event.sender) as any
-    // Electron 33 exposes setWindowButtonPosition; older builds used
-    // setTrafficLightPosition. Pick whichever exists, and never throw here —
-    // an uncaught error in an ipcMain handler takes down the main process.
-    const setPosition = win?.setWindowButtonPosition ?? win?.setTrafficLightPosition
-    if (typeof setPosition !== 'function') {
-      console.warn('[traffic-lights] no window-button positioning API on this Electron build')
-      return
-    }
-    try {
-      setPosition.call(win, position)
-    } catch (error) {
-      console.warn('[traffic-lights] failed to set position', error)
-    }
-  })
 
   // Register custom protocol handler for SPA routing.
   protocol.handle('app', (request) => {

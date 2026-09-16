@@ -1,98 +1,17 @@
-import { ElectronAPI } from '@electron-toolkit/preload'
+// Types for the narrow desktop capability bridge exposed by the preload script.
+// Plugins must NOT use this global directly; they consume the `desktop` service
+// from @kn/common (useOptionalService("desktop") / resolveOptionalService).
 
-// API Response types
-interface ApiResult<T = any> {
-  data?: T
-  success?: boolean
-  error?: string
-  canceled?: boolean
-}
-
-// Dialog types
-interface OpenFileOptions {
-  title?: string
-  filters?: { name: string; extensions: string[] }[]
-  multiSelections?: boolean
-}
-
-interface SaveFileOptions {
-  title?: string
-  defaultPath?: string
-  filters?: { name: string; extensions: string[] }[]
-}
-
-interface MessageBoxOptions {
-  type?: 'none' | 'info' | 'error' | 'question' | 'warning'
-  title?: string
-  message: string
-  detail?: string
-  buttons?: string[]
-}
-
-// System types
-interface AppInfo {
-  version: string
-  name: string
+interface DesktopHostBridge {
   platform: string
-  arch: string
-  userDataPath: string
-  locale: string
-}
-
-interface SystemPaths {
-  userData: string
-  downloads: string
-  documents: string
-  desktop: string
-  temp: string
-}
-
-// File stat types
-interface FileStat {
-  size: number
-  isDirectory: boolean
-  isFile: boolean
-  createdAt: number
-  modifiedAt: number
-}
-
-interface DirEntry {
-  name: string
-  isDirectory: boolean
-  isFile: boolean
+  capabilities: readonly string[]
+  invoke(capability: string, params?: unknown): Promise<unknown>
+  on(event: string, listener: (value: unknown) => void): () => void
 }
 
 declare global {
   interface Window {
-    electron: ElectronAPI
-    api: {
-      // General
-      ping: () => void
-      invoke: <T = any>(channel: string, ...args: any[]) => Promise<T>
-      send: (channel: string, ...args: any[]) => void
-      on: (channel: string, callback: (...args: any[]) => void) => void
-
-      // System
-      'system:getAppInfo': () => Promise<AppInfo>
-      'system:getPaths': () => Promise<SystemPaths>
-
-      // Dialog
-      'dialog:openFile': (options?: OpenFileOptions) => Promise<{ canceled: boolean; filePaths: string[] }>
-      'dialog:openFolder': (options?: { title?: string }) => Promise<{ canceled: boolean; folderPath: string | null }>
-      'dialog:saveFile': (options?: SaveFileOptions) => Promise<{ canceled: boolean; filePath: string | null }>
-      'dialog:showMessage': (options: MessageBoxOptions) => Promise<{ response: number }>
-
-      // FileSystem
-      'fs:readFile': (filePath: string, encoding?: BufferEncoding) => Promise<ApiResult<string>>
-      'fs:writeFile': (filePath: string, content: string | Buffer, encoding?: BufferEncoding) => Promise<ApiResult>
-      'fs:exists': (filePath: string) => Promise<boolean>
-      'fs:mkdir': (dirPath: string) => Promise<ApiResult>
-      'fs:remove': (path: string) => Promise<ApiResult>
-      'fs:readdir': (dirPath: string) => Promise<ApiResult<DirEntry[]>>
-      'fs:stat': (filePath: string) => Promise<ApiResult<FileStat>>
-      'fs:copy': (src: string, dest: string) => Promise<ApiResult>
-      'fs:move': (src: string, dest: string) => Promise<ApiResult>
-    }
+    knDesktop?: DesktopHostBridge
   }
 }
 

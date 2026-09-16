@@ -18,6 +18,11 @@ export interface RemotePluginDescriptor {
     resourcePath: string
     /** Optional Subresource Integrity hash. */
     integrity?: string
+    /**
+     * True when the plugin needs desktop (Electron) capabilities. The web
+     * marketplace shows it as desktop-only and refuses to install it.
+     */
+    desktopOnly?: boolean
 }
 
 interface LegacyPluginVersionDescriptor {
@@ -44,6 +49,10 @@ export interface LegacyRemotePluginDescriptor {
     currentVersionId?: string | number
     /** @deprecated Normalize backend DTOs in @kn/core. */
     currentVersion?: string | LegacyPluginVersionDescriptor
+    /** Legacy alias: desktop-only plugins. */
+    desktopOnly?: boolean
+    /** Optional platform list; the plugin is desktop-only unless it includes web. */
+    platforms?: string[]
 }
 
 export type RemotePluginInput = LegacyRemotePluginDescriptor
@@ -80,6 +89,13 @@ export const normalizeRemotePluginDescriptor = (
 
     if (!name || !pluginKey || !resourcePath) return null
 
+    const platforms = Array.isArray(input.platforms)
+        ? input.platforms.filter((value): value is string => typeof value === 'string')
+        : undefined
+    const desktopOnly =
+        input.desktopOnly === true ||
+        (platforms !== undefined && !platforms.includes('web'))
+
     return {
         pluginKey,
         name,
@@ -87,6 +103,7 @@ export const normalizeRemotePluginDescriptor = (
         version,
         resourcePath,
         integrity,
+        desktopOnly: desktopOnly || undefined,
     }
 }
 

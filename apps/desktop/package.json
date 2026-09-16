@@ -22,6 +22,7 @@
         "@kn/file-manager": "workspace:*",
         "@kn/mermaid-plugin": "workspace:*",
         "@kn/plugin-ai": "workspace:*",
+        "@kn/plugin-api-client": "workspace:*",
         "@kn/plugin-bilibili": "workspace:*",
         "@kn/plugin-bitable": "workspace:*",
         "@kn/plugin-block-reference": "workspace:*",

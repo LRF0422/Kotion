@@ -76,6 +76,12 @@ export interface PluginConfig {
      * Aggregated by PluginManager.resolvePageTypes().
      */
     pageTypes?: PageTypeConfig[]
+    /**
+     * True when the plugin needs desktop (Electron) capabilities. Surfaced to
+     * the marketplace so it can mark the plugin desktop-only and, on the web,
+     * refuse to install it.
+     */
+    desktopOnly?: boolean
 }
 
 export class KPlugin<T extends PluginConfig> {
@@ -92,6 +98,7 @@ export class KPlugin<T extends PluginConfig> {
     private _tours?: TourConfig[]
     private _dockPanels?: DockPanelConfig[]
     private _pageTypes?: PageTypeConfig[]
+    private _desktopOnly?: boolean
 
     constructor(config: T) {
         this.name = config.name
@@ -105,6 +112,12 @@ export class KPlugin<T extends PluginConfig> {
         this._tours = config.tours
         this._dockPanels = config.dockPanels
         this._pageTypes = config.pageTypes
+        this._desktopOnly = config.desktopOnly
+    }
+
+    /** Whether this plugin needs desktop (Electron) capabilities. */
+    get desktopOnly(): boolean {
+        return Boolean(this._desktopOnly)
     }
 
     get routes(): RouteConfig[] {

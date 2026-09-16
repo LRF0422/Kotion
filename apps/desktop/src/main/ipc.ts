@@ -1,173 +1,356 @@
-import { ipcMain, dialog, app } from 'electron';
+import { ipcMain, dialog, app, BrowserWindow } from 'electron';
 import * as fs from 'fs-extra';
+import * as path from 'node:path';
+import * as dns from 'node:dns';
+import * as net from 'node:net';
 
 /**
- * Setup IPC handlers.
+ * Desktop capability IPC handlers.
  *
- * The desktop app no longer persists data locally — all business data goes
- * through the cloud HTTP API straight from the renderer (see use-api.tsx).
- * Only desktop-native capabilities (system info, native dialogs, raw file
- * system) remain here.
+ * The preload bridge only forwards the fixed desktop:<capability> channels, and
+ * every handler validates its arguments here. File-system access is limited to
+ * an allowlist of roots expressed as absolute paths + path.sep, which is
+ * portable across macOS / Windows / Linux / HarmonyOS. Any path returned by a
+ * native dialog is granted into the runtime allowlist.
  */
+
+const resolveAllowedRoots = (): string[] => {
+  const names = ['documents', 'downloads', 'desktop', 'temp', 'userData'] as const;
+  const roots: string[] = [];
+  for (const name of names) {
+    try {
+      roots.push(path.resolve(app.getPath(name)));
+    } catch {
+      // Some platforms lack a given standard directory; skip it.
+    }
+  }
+  return roots;
+};
+
+const allowedRoots = resolveAllowedRoots();
+const grantedPaths = new Set<string>();
+
+const grantPath = (target?: string | null): void => {
+  if (!target) return;
+  try {
+    grantedPaths.add(path.resolve(target));
+  } catch {
+    // ignore malformed paths
+  }
+};
+
+const isWithin = (root: string, target: string): boolean =>
+  target === root || target.startsWith(root + path.sep);
+
+const assertAllowedPath = (target: unknown, field = 'path'): string => {
+  if (typeof target !== 'string' || !target.trim()) {
+    throw new Error('desktop fs: "' + field + '" must be a non-empty string');
+  }
+  const resolved = path.resolve(target);
+  const allowed =
+    allowedRoots.some((root) => isWithin(root, resolved)) ||
+    [...grantedPaths].some((root) => isWithin(root, resolved));
+  if (!allowed) {
+    throw new Error('desktop fs: path is outside the allowed roots: ' + resolved);
+  }
+  return resolved;
+};
+
+// ---- http.request guards (SSRF) ------------------------------------------
+// The Postman-style plugin proxies arbitrary APIs through the main process.
+// Block loopback / private / link-local / metadata targets, on every redirect
+// hop. Trusted-plugin model, but a compromised plugin must not reach the LAN.
+
+const BLOCKED_V4 = [
+  /^0\./,
+  /^10\./,
+  /^127\./,
+  /^169\.254\./,
+  /^192\.168\./,
+  /^172\.(1[6-9]|2\d|3[01])\./,
+];
+
+const isBlockedAddress = (address: string): boolean => {
+  if (net.isIPv4(address)) return BLOCKED_V4.some((re) => re.test(address));
+  const lower = address.toLowerCase();
+  if (lower === '::1' || lower === '::') return true;
+  if (lower.startsWith('fe80:') || lower.startsWith('fc') || lower.startsWith('fd')) return true;
+  if (lower.startsWith('::ffff:')) return isBlockedAddress(lower.slice(7));
+  return false;
+};
+
+const assertPublicTarget = async (raw: string): Promise<URL> => {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error('desktop http: invalid URL');
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error('desktop http: only http/https is allowed');
+  }
+  const host = url.hostname.replace(/^\[|\]$/g, '');
+  if (host === 'localhost' || host.endsWith('.localhost')) {
+    throw new Error('desktop http: localhost is blocked');
+  }
+  if (net.isIP(host)) {
+    if (isBlockedAddress(host)) throw new Error('desktop http: private address is blocked');
+    return url;
+  }
+  const records = await dns.promises.lookup(host, { all: true });
+  if (!records.length) throw new Error('desktop http: cannot resolve host');
+  if (records.some((record) => isBlockedAddress(record.address))) {
+    throw new Error('desktop http: resolves to a private address');
+  }
+  return url;
+};
+
+const toHeaderRecord = (value: unknown): Record<string, string> => {
+  const result: Record<string, string> = {};
+  if (value && typeof value === 'object') {
+    for (const [key, entry] of Object.entries(value)) {
+      if (typeof entry === 'string') result[key] = entry;
+    }
+  }
+  return result;
+};
+
+const asRecord = (value: unknown): Record<string, any> =>
+  value && typeof value === 'object' ? (value as Record<string, any>) : {};
+
+type CapabilityHandler = (event: Electron.IpcMainInvokeEvent, params: unknown) => unknown;
+
+const handle = (capability: string, fn: CapabilityHandler): void => {
+  ipcMain.handle('desktop:' + capability, (event, params) => fn(event, params));
+};
+
 export function setupIpcHandlers() {
-  // ==================== System/Desktop Handlers ====================
+  // ==================== system ====================
+  handle('system.info', () => ({
+    version: app.getVersion(),
+    name: app.getName(),
+    platform: process.platform,
+    arch: process.arch,
+    userDataPath: app.getPath('userData'),
+    locale: app.getLocale(),
+  }));
 
-  ipcMain.handle('system:getAppInfo', async () => {
-    return {
-      version: app.getVersion(),
-      name: app.getName(),
-      platform: process.platform,
-      arch: process.arch,
-      userDataPath: app.getPath('userData'),
-      locale: app.getLocale(),
-    };
-  });
+  handle('system.paths', () => ({
+    userData: app.getPath('userData'),
+    downloads: app.getPath('downloads'),
+    documents: app.getPath('documents'),
+    desktop: app.getPath('desktop'),
+    temp: app.getPath('temp'),
+  }));
 
-  ipcMain.handle('system:getPaths', async () => {
-    return {
-      userData: app.getPath('userData'),
-      downloads: app.getPath('downloads'),
-      documents: app.getPath('documents'),
-      desktop: app.getPath('desktop'),
-      temp: app.getPath('temp'),
-    };
-  });
+  // ==================== http (main-process fetch; no CORS) ====================
+  // Never injects the Kotion session token: the target is an arbitrary
+  // third-party API, so credentials must come from the request itself.
+  handle('http.request', async (_event, raw) => {
+    const params = asRecord(raw);
+    if (typeof params.url !== 'string' || !params.url.trim()) {
+      throw new Error('desktop http: "url" is required');
+    }
+    const timeoutMs = Math.min(Math.max(Number(params.timeoutMs) || 30000, 1000), 120000);
+    const maxBytes = Math.min(
+      Math.max(Number(params.maxResponseBytes) || 5 * 1024 * 1024, 1024),
+      20 * 1024 * 1024,
+    );
+    const method = String(params.method || 'GET').toUpperCase();
+    const headers = toHeaderRecord(params.headers);
+    const body =
+      typeof params.body === 'string' && method !== 'GET' && method !== 'HEAD'
+        ? params.body
+        : undefined;
 
-  // ==================== Dialog Handlers ====================
+    const started = Date.now();
+    const redirects: Array<{ status: number; location: string }> = [];
+    let current = params.url;
+    let response: Response | undefined;
 
-  ipcMain.handle('dialog:openFile', async (_event, options?: {
-    title?: string;
-    filters?: { name: string; extensions: string[] }[];
-    multiSelections?: boolean;
-  }) => {
-    const result = await dialog.showOpenDialog({
-      title: options?.title || 'Select File',
-      filters: options?.filters || [{ name: 'All Files', extensions: ['*'] }],
-      properties: options?.multiSelections
-        ? ['openFile', 'multiSelections']
-        : ['openFile'],
+    for (let hop = 0; hop <= 5; hop++) {
+      const target = await assertPublicTarget(current);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        response = await fetch(target, {
+          method,
+          headers,
+          body,
+          redirect: 'manual',
+          signal: controller.signal,
+        });
+      } catch (error) {
+        clearTimeout(timer);
+        throw new Error('desktop http: request failed (' + (error as Error).message + ')');
+      }
+      clearTimeout(timer);
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get('location');
+        if (location) {
+          redirects.push({ status: response.status, location });
+          current = new URL(location, target).toString();
+          continue;
+        }
+      }
+      break;
+    }
+    if (!response) throw new Error('desktop http: no response');
+
+    const chunks: Buffer[] = [];
+    let total = 0;
+    let truncated = false;
+    const reader = response.body?.getReader();
+    if (reader) {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (!value) continue;
+        const remaining = maxBytes - total;
+        if (value.byteLength >= remaining) {
+          chunks.push(Buffer.from(value.subarray(0, remaining)));
+          total += remaining;
+          truncated = true;
+          await reader.cancel();
+          break;
+        }
+        chunks.push(Buffer.from(value));
+        total += value.byteLength;
+      }
+    }
+
+    const responseHeaders: Record<string, string> = {};
+    response.headers.forEach((value, key) => {
+      responseHeaders[key] = value;
     });
 
-    if (result.canceled) {
-      return { canceled: true, filePaths: [] };
-    }
+    return {
+      status: response.status,
+      statusText: response.statusText,
+      headers: responseHeaders,
+      bodyText: Buffer.concat(chunks).toString('utf8'),
+      bodyBytes: total,
+      durationMs: Date.now() - started,
+      truncated,
+      redirects,
+      finalUrl: current,
+    };
+  });
+
+  // ==================== dialog ====================
+  handle('dialog.openFile', async (_event, raw) => {
+    const options = asRecord(raw);
+    const result = await dialog.showOpenDialog({
+      title: typeof options.title === 'string' ? options.title : 'Select File',
+      filters: Array.isArray(options.filters) ? options.filters : [{ name: 'All Files', extensions: ['*'] }],
+      properties: options.multiSelections ? ['openFile', 'multiSelections'] : ['openFile'],
+    });
+    if (result.canceled) return { canceled: true, filePaths: [] };
+    result.filePaths.forEach((filePath) => grantPath(filePath));
     return { canceled: false, filePaths: result.filePaths };
   });
 
-  ipcMain.handle('dialog:openFolder', async (_event, options?: {
-    title?: string;
-  }) => {
+  handle('dialog.openFolder', async (_event, raw) => {
+    const options = asRecord(raw);
     const result = await dialog.showOpenDialog({
-      title: options?.title || 'Select Folder',
+      title: typeof options.title === 'string' ? options.title : 'Select Folder',
       properties: ['openDirectory'],
     });
-
-    if (result.canceled) {
-      return { canceled: true, folderPath: null };
-    }
-    return { canceled: false, folderPath: result.filePaths[0] };
+    if (result.canceled) return { canceled: true, folderPath: null };
+    const folderPath = result.filePaths[0] ?? null;
+    grantPath(folderPath);
+    return { canceled: false, folderPath };
   });
 
-  ipcMain.handle('dialog:saveFile', async (_event, options?: {
-    title?: string;
-    defaultPath?: string;
-    filters?: { name: string; extensions: string[] }[];
-  }) => {
+  handle('dialog.saveFile', async (_event, raw) => {
+    const options = asRecord(raw);
     const result = await dialog.showSaveDialog({
-      title: options?.title || 'Save File',
-      defaultPath: options?.defaultPath || app.getPath('downloads'),
-      filters: options?.filters || [{ name: 'All Files', extensions: ['*'] }],
+      title: typeof options.title === 'string' ? options.title : 'Save File',
+      defaultPath: typeof options.defaultPath === 'string' ? options.defaultPath : app.getPath('downloads'),
+      filters: Array.isArray(options.filters) ? options.filters : [{ name: 'All Files', extensions: ['*'] }],
     });
-
-    if (result.canceled || !result.filePath) {
-      return { canceled: true, filePath: null };
-    }
+    if (result.canceled || !result.filePath) return { canceled: true, filePath: null };
+    grantPath(result.filePath);
     return { canceled: false, filePath: result.filePath };
   });
 
-  ipcMain.handle('dialog:showMessage', async (_event, options: {
-    type?: 'none' | 'info' | 'error' | 'question' | 'warning';
-    title?: string;
-    message: string;
-    detail?: string;
-    buttons?: string[];
-  }) => {
+  handle('dialog.message', async (_event, raw) => {
+    const options = asRecord(raw);
     const result = await dialog.showMessageBox({
       type: options.type || 'info',
-      title: options.title || '',
-      message: options.message,
-      detail: options.detail,
-      buttons: options.buttons || ['OK'],
+      title: typeof options.title === 'string' ? options.title : '',
+      message: typeof options.message === 'string' ? options.message : '',
+      detail: typeof options.detail === 'string' ? options.detail : undefined,
+      buttons: Array.isArray(options.buttons) ? options.buttons : ['OK'],
     });
-
     return { response: result.response };
   });
 
-  // ==================== FileSystem Handlers ====================
-
-  ipcMain.handle('fs:readFile', async (_event, filePath: string, encoding?: BufferEncoding) => {
+  // ==================== fs (allowlisted) ====================
+  handle('fs.readFile', async (_event, raw) => {
     try {
-      const content = await fs.readFile(filePath, encoding || 'utf-8');
-      return { data: content };
+      const params = asRecord(raw);
+      const filePath = assertAllowedPath(params.path);
+      const encoding = params.encoding === 'base64' ? 'base64' : 'utf-8';
+      return { data: await fs.readFile(filePath, encoding as BufferEncoding) };
     } catch (error) {
-      console.error('Failed to read file:', error);
       return { data: null, error: (error as Error).message };
     }
   });
 
-  ipcMain.handle('fs:writeFile', async (_event, filePath: string, content: string | Buffer, encoding?: BufferEncoding) => {
+  handle('fs.writeFile', async (_event, raw) => {
     try {
-      await fs.writeFile(filePath, content, encoding || 'utf-8');
+      const params = asRecord(raw);
+      const filePath = assertAllowedPath(params.path);
+      const encoding = params.encoding === 'base64' ? 'base64' : 'utf-8';
+      await fs.writeFile(filePath, String(params.data ?? ''), encoding as BufferEncoding);
       return { success: true };
     } catch (error) {
-      console.error('Failed to write file:', error);
       return { success: false, error: (error as Error).message };
     }
   });
 
-  ipcMain.handle('fs:exists', async (_event, filePath: string) => {
-    return fs.pathExists(filePath);
+  handle('fs.exists', async (_event, raw) => {
+    return fs.pathExists(assertAllowedPath(asRecord(raw).path));
   });
 
-  ipcMain.handle('fs:mkdir', async (_event, dirPath: string) => {
+  handle('fs.mkdir', async (_event, raw) => {
     try {
-      await fs.ensureDir(dirPath);
+      await fs.ensureDir(assertAllowedPath(asRecord(raw).path));
       return { success: true };
     } catch (error) {
-      console.error('Failed to create directory:', error);
       return { success: false, error: (error as Error).message };
     }
   });
 
-  ipcMain.handle('fs:remove', async (_event, path: string) => {
+  handle('fs.remove', async (_event, raw) => {
     try {
-      await fs.remove(path);
+      await fs.remove(assertAllowedPath(asRecord(raw).path));
       return { success: true };
     } catch (error) {
-      console.error('Failed to remove path:', error);
       return { success: false, error: (error as Error).message };
     }
   });
 
-  ipcMain.handle('fs:readdir', async (_event, dirPath: string) => {
+  handle('fs.readdir', async (_event, raw) => {
     try {
+      const dirPath = assertAllowedPath(asRecord(raw).path);
       const files = await fs.readdir(dirPath, { withFileTypes: true });
       return {
-        data: files.map(f => ({
-          name: f.name,
-          isDirectory: f.isDirectory(),
-          isFile: f.isFile(),
+        data: files.map((entry) => ({
+          name: entry.name,
+          isDirectory: entry.isDirectory(),
+          isFile: entry.isFile(),
         })),
       };
     } catch (error) {
-      console.error('Failed to read directory:', error);
       return { data: [], error: (error as Error).message };
     }
   });
 
-  ipcMain.handle('fs:stat', async (_event, filePath: string) => {
+  handle('fs.stat', async (_event, raw) => {
     try {
-      const stat = await fs.stat(filePath);
+      const stat = await fs.stat(assertAllowedPath(asRecord(raw).path));
       return {
         data: {
           size: stat.size,
@@ -178,30 +361,54 @@ export function setupIpcHandlers() {
         },
       };
     } catch (error) {
-      console.error('Failed to get file stats:', error);
       return { data: null, error: (error as Error).message };
     }
   });
 
-  ipcMain.handle('fs:copy', async (_event, src: string, dest: string) => {
+  handle('fs.copy', async (_event, raw) => {
     try {
-      await fs.copy(src, dest);
+      const params = asRecord(raw);
+      await fs.copy(assertAllowedPath(params.src, 'src'), assertAllowedPath(params.dest, 'dest'));
       return { success: true };
     } catch (error) {
-      console.error('Failed to copy:', error);
       return { success: false, error: (error as Error).message };
     }
   });
 
-  ipcMain.handle('fs:move', async (_event, src: string, dest: string) => {
+  handle('fs.move', async (_event, raw) => {
     try {
-      await fs.move(src, dest);
+      const params = asRecord(raw);
+      await fs.move(assertAllowedPath(params.src, 'src'), assertAllowedPath(params.dest, 'dest'));
       return { success: true };
     } catch (error) {
-      console.error('Failed to move:', error);
       return { success: false, error: (error as Error).message };
     }
   });
 
-  console.log('IPC handlers setup complete');
+  // ==================== window (host controls) ====================
+  handle('window.setFullScreen', (event, raw) => {
+    BrowserWindow.fromWebContents(event.sender)?.setFullScreen(Boolean(asRecord(raw).value));
+  });
+
+  handle('window.isFullScreen', (event) => {
+    return BrowserWindow.fromWebContents(event.sender)?.isFullScreen() ?? false;
+  });
+
+  handle('window.setTrafficLights', (event, raw) => {
+    if (process.platform !== 'darwin') return;
+    const win = BrowserWindow.fromWebContents(event.sender) as any;
+    // Electron 33 exposes setWindowButtonPosition; older builds used
+    // setTrafficLightPosition. Never throw here.
+    const setPosition = win?.setWindowButtonPosition ?? win?.setTrafficLightPosition;
+    if (typeof setPosition !== 'function') return;
+    const { x, y } = asRecord(raw);
+    if (typeof x !== 'number' || typeof y !== 'number') return;
+    try {
+      setPosition.call(win, { x, y });
+    } catch (error) {
+      console.warn('[desktop] failed to set traffic light position', error);
+    }
+  });
+
+  console.log('Desktop capability handlers ready');
 }

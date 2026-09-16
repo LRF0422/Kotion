@@ -9,6 +9,7 @@ import { bitable } from "@kn/plugin-bitable"
 import { theme } from "@kn/plugin-theme"
 import { speechToText } from "@kn/plugin-speech-to-text"
 import { logicFlow } from "@kn/plugin-logicflow"
+import { apiClient } from "@kn/plugin-api-client"
 import './index.css'
 import React from 'react'
 
@@ -17,11 +18,11 @@ console.log('Desktop app starting...')
 // Expose the host platform so the shell can reserve a macOS title band for the
 // native traffic lights (html[data-platform="darwin"] in @kn/ui/globals.css).
 document.documentElement.dataset.platform =
-    (window as any).electron?.process?.platform
+    (window as any).knDesktop?.platform
     ?? (/Mac/i.test(navigator.platform) ? 'darwin' : 'other')
 
 // Native fullscreen hides the traffic lights; drop the reserved title band.
-;(window as any).api?.on?.('window:fullscreen', (isFullscreen: boolean) => {
+;(window as any).knDesktop?.on?.('fullscreen', (isFullscreen: boolean) => {
     document.documentElement.dataset.fullscreen = isFullscreen ? 'true' : 'false'
 })
 
@@ -34,7 +35,7 @@ const TRAFFIC_LIGHT_POSITION = {
 
 const syncTrafficLights = () => {
     const style = document.documentElement.dataset.uiStyle === 'modern' ? 'modern' : 'classic'
-    ;(window as any).api?.send?.('window:traffic-lights', TRAFFIC_LIGHT_POSITION[style])
+    ;(window as any).knDesktop?.invoke?.('window.setTrafficLights', TRAFFIC_LIGHT_POSITION[style])
 }
 
 new MutationObserver(syncTrafficLights).observe(document.documentElement, {
@@ -98,6 +99,6 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
     <ErrorBoundary>
-        <App plugins={[DefaultPluginInstance, fileManager, bitable, blockReference, ai, theme, speechToText, logicFlow]} />
+        <App plugins={[DefaultPluginInstance, fileManager, bitable, blockReference, ai, theme, speechToText, logicFlow, apiClient]} />
     </ErrorBoundary>
 )

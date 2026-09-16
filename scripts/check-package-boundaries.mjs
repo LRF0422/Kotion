@@ -49,8 +49,17 @@ for (const entry of readdirSync(packagesDir, { withFileTypes: true })) {
   const src = join(packagesDir, entry.name, "src");
   try {
     for (const path of walk(src)) {
-      if (hasModuleReference(read(path), "@kn/core")) {
+      const source = read(path);
+      if (hasModuleReference(source, "@kn/core")) {
         fail(path, "plugins must not import @kn/core");
+      }
+      // Desktop capabilities are consumed through the `desktop` service from
+      // @kn/common — never through electron or the preload globals.
+      if (hasModuleReference(source, "electron")) {
+        fail(path, "plugins must not import electron; use the desktop service from @kn/common");
+      }
+      if (/(window|globalThis)\s*\.\s*(electron|electronAPI|api|knDesktop)\b/.test(withoutComments(source))) {
+        fail(path, "plugins must not touch the desktop preload globals directly; use the desktop service from @kn/common");
       }
     }
   } catch {
