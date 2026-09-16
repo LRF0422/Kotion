@@ -57,6 +57,7 @@ import {
   getPluginInstallState,
   PluginRecord,
   toFiniteNumber,
+  isDesktopOnlyPlugin,
 } from "../plugin-model";
 
 /** True when running inside the Electron shell (desktop capabilities present). */
@@ -229,7 +230,7 @@ const PluginCard: React.FC<CardProps> = ({
               {enumValue(plugin.category)}
             </Badge>
           )}
-          {plugin.desktopOnly && (
+          {isDesktopOnlyPlugin(plugin) && (
             <Badge
               variant="outline"
               className="h-4 shrink-0 gap-1 px-1.5 text-[10px] font-normal text-muted-foreground"
@@ -545,7 +546,7 @@ export const Marketplace: React.FC = () => {
       ),
       detailsLabel: t("marketplace.details", "Details"),
       desktopOnlyLabel: t("marketplace.desktopOnly", "Desktop only"),
-      desktopOnlyBlocked: Boolean(plugin.desktopOnly) && !isDesktopHost,
+      desktopOnlyBlocked: isDesktopOnlyPlugin(plugin) && !isDesktopHost,
     };
   };
 

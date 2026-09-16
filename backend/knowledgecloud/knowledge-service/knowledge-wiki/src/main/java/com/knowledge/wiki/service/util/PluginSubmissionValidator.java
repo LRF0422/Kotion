@@ -110,7 +110,7 @@ public final class PluginSubmissionValidator {
     /** Declared capability permissions must belong to the reviewed catalog. */
     private static final Set<String> PERMISSION_CATALOG = new LinkedHashSet<>(java.util.Arrays.asList(
             "NETWORK", "STORAGE", "CLIPBOARD", "DOM", "EXTERNAL_RESOURCES",
-            "EDITOR_EXTENSION", "BACKGROUND_TASKS"));
+            "EDITOR_EXTENSION", "BACKGROUND_TASKS", "DESKTOP"));
 
     public static List<String> normalizePermissions(List<String> permissions) {
         if (permissions == null || permissions.isEmpty()) {

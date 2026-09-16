@@ -28,6 +28,8 @@ export interface PluginVersionRecord {
   integrity?: string;
   version?: string;
   versionDescription?: PluginVersionDescription[];
+  /** Declared capability permissions (NETWORK, DESKTOP, ...). */
+  permissions?: string[];
 }
 
 export interface PluginVersionDescription {
@@ -221,10 +223,26 @@ export const toRemotePluginDescriptor = (
     integrity: plugin.integrity?.trim()
       ? plugin.integrity
       : currentVersion?.integrity,
-    desktopOnly: plugin.desktopOnly,
+    desktopOnly:
+      plugin.desktopOnly ??
+      (Array.isArray(currentVersion?.permissions) &&
+        currentVersion.permissions.includes("DESKTOP")),
   });
 
   return descriptor;
+};
+
+/**
+ * True when the plugin needs desktop (Electron) capabilities, either declared
+ * explicitly or via the DESKTOP capability permission on a version.
+ */
+export const isDesktopOnlyPlugin = (plugin: PluginRecord): boolean => {
+  if (plugin.desktopOnly) return true;
+  const versions = [plugin.currentVersion, ...(plugin.installeddVersions ?? [])];
+  return versions.some(
+    (version) =>
+      Array.isArray(version?.permissions) && version.permissions.includes("DESKTOP"),
+  );
 };
 
 const sectionId = (label: string, index: number) => {

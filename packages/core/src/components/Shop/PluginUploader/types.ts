@@ -23,6 +23,7 @@ export const PLUGIN_PERMISSIONS = [
   "EXTERNAL_RESOURCES",
   "EDITOR_EXTENSION",
   "BACKGROUND_TASKS",
+  "DESKTOP",
 ] as const;
 
 export type PluginPermission = (typeof PLUGIN_PERMISSIONS)[number];

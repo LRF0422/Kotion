@@ -321,6 +321,8 @@ export const resources = {
           editor_extensionHint: "向编辑器注册扩展节点或命令",
           background_tasks: "后台任务",
           background_tasksHint: "在后台持续运行定时或异步任务",
+          desktop: "仅桌面端",
+          desktopHint: "依赖桌面客户端能力（如主进程网络、原生文件系统），Web 端不可用",
         },
         tabs: {
           feature: "功能特性",
@@ -1542,6 +1544,8 @@ export const resources = {
           editor_extensionHint: "Register editor nodes or commands",
           background_tasks: "Background tasks",
           background_tasksHint: "Run recurring or async work in the background",
+          desktop: "Desktop only",
+          desktopHint: "Needs desktop capabilities (main-process network, native filesystem); unavailable on the web",
         },
         tabs: {
           feature: "Features",
