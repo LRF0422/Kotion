@@ -8,7 +8,7 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.knowledge.core.log.exception.ServiceException;
 import com.knowledge.system.domain.LandingContent;
 import com.knowledge.system.mapper.LandingContentMapper;
-import lombok.AllArgsConstructor;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,7 +32,7 @@ import java.util.Set;
  * `flattenEntries` 只遍历一层，因此这里按命名空间分组，保证导入后能被正确合并。</p>
  */
 @Service
-@AllArgsConstructor
+@RequiredArgsConstructor
 public class LandingContentExtService {
 
 	private static final String TOKEN_SEPARATOR = ".";
@@ -43,6 +43,11 @@ public class LandingContentExtService {
 	/**
 	 * 预览令牌签名密钥。未配置时使用内置默认值（仅用于本地/预发），
 	 * 生产环境请通过 `knowledge.landing.preview-secret` 覆盖。
+	 *
+	 * <p><b>注意</b>：本类必须用 {@code @RequiredArgsConstructor} 而不是
+	 * {@code @AllArgsConstructor} —— 后者会把**所有**实例字段（含下面这个
+	 * 非 final 的 {@code @Value} 字段）都放进构造函数，Spring 就会去找一个
+	 * {@code String} 类型的 Bean，启动直接失败。</p>
 	 */
 	@Value("${knowledge.landing.preview-secret:kotion-landing-preview}")
 	private String previewSecret;
