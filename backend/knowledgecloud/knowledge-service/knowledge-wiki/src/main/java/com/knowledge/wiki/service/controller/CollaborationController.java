@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.knowledge.core.tool.api.R;
 import com.knowledge.wiki.service.application.CollaborationApplication;
 import com.knowledge.wiki.service.entity.dto.InvitationAcceptResponseDTO;
+import com.knowledge.wiki.service.entity.dto.InvitationEnterResponseDTO;
 import com.knowledge.wiki.service.entity.dto.InvitationValidateResponseDTO;
 import com.knowledge.wiki.service.entity.vo.PageVO;
 import com.knowledge.wiki.service.entity.vo.PluginVersionVO;
@@ -43,6 +44,18 @@ public class CollaborationController {
     @PostMapping("/invitation/{token}/accept")
     public R<InvitationAcceptResponseDTO> acceptInvitation(@PathVariable("token") String token) {
         return R.data(collaborationApplication.acceptInvitation(token));
+    }
+
+    /**
+     * Enter an accepted invitation
+     * POST /knowledge-wiki/collaboration/invitation/:token/enter
+     *
+     * <p>Idempotently grants the invitee membership in the context that owns the
+     * shared space and returns the ids the client needs before navigating.
+     */
+    @PostMapping("/invitation/{token}/enter")
+    public R<InvitationEnterResponseDTO> enterInvitation(@PathVariable("token") String token) {
+        return R.data(collaborationApplication.enterInvitation(token));
     }
 
     /**

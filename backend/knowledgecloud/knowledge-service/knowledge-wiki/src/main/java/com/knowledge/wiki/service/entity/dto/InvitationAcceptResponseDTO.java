@@ -14,5 +14,7 @@ public class InvitationAcceptResponseDTO {
     private Long spaceId;
     private String pageType;
     private String permission;
+    /** Tenant that owns the shared space; the client switches into it before opening the page. */
+    private String contextId;
     private LocalDateTime acceptedAt;
 }

@@ -2,6 +2,8 @@ package com.knowledge.wiki.service.application;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -18,12 +20,15 @@ import org.springframework.security.core.context.SecurityContextHolder;
 
 import com.knowledge.core.secure.auth.KnowledgeUserAuthentication;
 import com.knowledge.core.tool.KnowledgeUser;
+import com.knowledge.core.tool.api.R;
 import com.knowledge.core.tool.exception.BusinessException;
 import com.knowledge.system.feign.IUserClient;
+import com.knowledge.wiki.feign.IOrganizationMembershipClient;
 import com.knowledge.wiki.service.entity.CollaborationInvitation;
 import com.knowledge.wiki.service.entity.Page;
 import com.knowledge.wiki.service.entity.Space;
 import com.knowledge.wiki.service.entity.dto.InvitationAcceptResponseDTO;
+import com.knowledge.wiki.service.entity.dto.InvitationEnterResponseDTO;
 import com.knowledge.wiki.service.entity.enums.InvitationStatus;
 import com.knowledge.wiki.service.entity.vo.PageVO;
 import com.knowledge.wiki.service.service.ICollaborationInvitationService;
@@ -43,6 +48,8 @@ class CollaborationApplicationAuthorizationTest {
     private IPageService pageService;
     @Mock
     private IUserClient userClient;
+    @Mock
+    private IOrganizationMembershipClient organizationMembershipClient;
     @Mock
     private IPluginService pluginService;
     @Mock
@@ -102,6 +109,53 @@ class CollaborationApplicationAuthorizationTest {
     }
 
     @Test
+    void acceptInvitationAdmitsInviteeIntoSpaceContext() {
+        authenticate(42L);
+        CollaborationInvitation invitation = invitation(42L, InvitationStatus.PENDING);
+        Page page = page("doc");
+        Space space = spaceInContext("org-a");
+        when(collaborationInvitationService.getByToken("secret")).thenReturn(invitation);
+        when(pageService.getById(20L)).thenReturn(page);
+        when(spaceService.getById(10L)).thenReturn(space);
+        when(organizationMembershipClient.ensureMember(42L, "org-a")).thenReturn(R.data(true));
+        when(permissionService.effectivePagePermission(42L, page)).thenReturn(IPermissionService.PERMISSION_WRITE);
+
+        InvitationAcceptResponseDTO response = application.acceptInvitation("secret");
+
+        assertEquals("org-a", response.getContextId());
+        verify(organizationMembershipClient).ensureMember(42L, "org-a");
+    }
+
+    @Test
+    void enterInvitationReportsContextToSwitchInto() {
+        authenticate(42L);
+        CollaborationInvitation invitation = invitation(42L, InvitationStatus.ACCEPTED);
+        Page page = page("doc");
+        when(collaborationInvitationService.getByTokenForValidation("secret")).thenReturn(invitation);
+        when(pageService.getById(20L)).thenReturn(page);
+        when(spaceService.getById(10L)).thenReturn(spaceInContext("org-a"));
+        when(organizationMembershipClient.ensureMember(42L, "org-a")).thenReturn(R.data(true));
+        when(permissionService.effectivePagePermission(42L, page)).thenReturn(IPermissionService.PERMISSION_WRITE);
+
+        InvitationEnterResponseDTO response = application.enterInvitation("secret");
+
+        assertEquals("org-a", response.getContextId());
+        assertEquals(Long.valueOf(10L), response.getSpaceId());
+        assertEquals(Long.valueOf(20L), response.getPageId());
+        assertEquals(IPermissionService.PERMISSION_WRITE, response.getPermission());
+    }
+
+    @Test
+    void pendingInvitationCannotBeEntered() {
+        authenticate(42L);
+        CollaborationInvitation invitation = invitation(42L, InvitationStatus.PENDING);
+        when(collaborationInvitationService.getByTokenForValidation("secret")).thenReturn(invitation);
+
+        assertThrows(BusinessException.class, () -> application.enterInvitation("secret"));
+        verify(organizationMembershipClient, never()).ensureMember(anyLong(), anyString());
+    }
+
+    @Test
     void invitationPageReturnsComponentTypeAndEffectivePermission() {
         authenticate(42L);
         CollaborationInvitation invitation = invitation(42L, InvitationStatus.ACCEPTED);
@@ -128,6 +182,13 @@ class CollaborationApplicationAuthorizationTest {
         page.setTitle("Meeting");
         page.setPageType(pageType);
         return page;
+    }
+
+    private Space spaceInContext(String tenantId) {
+        Space space = new Space();
+        space.setId(10L);
+        space.setTenantId(tenantId);
+        return space;
     }
 
     private CollaborationInvitation invitation(Long inviteeId, InvitationStatus status) {

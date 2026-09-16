@@ -235,6 +235,62 @@ public class OrganizationApplication {
         return toContextVO(tenantService.getByTenantId(invitation.getTenantId()), invitation);
     }
 
+    /**
+     * Idempotently grant an external collaborator (invited to a wiki page/space that
+     * lives in this context) an active ORG_GUEST membership, so the invitee may later
+     * switch their session into this context and read the shared content.
+     *
+     * <p>Only TEAM contexts may host external collaborators. An INDIVIDUAL (personal)
+     * context is single-user by definition, and the wiki permission model treats legacy
+     * personal spaces without an explicit visibility as readable by every member of the
+     * context — admitting a guest there would expose the owner's whole personal wiki.
+     *
+     * @throws ServiceException when the context does not exist, is disabled, or is personal
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public boolean ensureCollaborationMembership(Long userId, String contextId) {
+        if (userId == null || StrUtil.isBlank(contextId)) {
+            throw new ServiceException("协作空间未绑定组织上下文，无法加入协作");
+        }
+        User user = requireUser(userId);
+        Tenant context = tenantService.getByTenantId(contextId);
+        if (context == null || Integer.valueOf(STATUS_SUSPENDED).equals(context.getStatus())) {
+            throw new ServiceException("协作空间所属组织不存在或已停用");
+        }
+        String personalContextId = StrUtil.blankToDefault(user.getPersonalContextId(), user.getTenantId());
+        if (context.getTenantType() != TenantType.TEAM) {
+            // The owner of the personal context already has access; anyone else cannot
+            // be admitted without exposing the whole personal context.
+            if (contextId.equals(personalContextId)) {
+                return true;
+            }
+            throw new ServiceException("该协作空间创建于个人上下文，无法邀请其他账号协作；请在组织上下文中创建协作空间");
+        }
+        OrganizationMember existing = memberService.lambdaQuery()
+                .eq(OrganizationMember::getTenantId, contextId)
+                .eq(OrganizationMember::getUserId, userId)
+                .one();
+        if (existing != null) {
+            if (Integer.valueOf(STATUS_ACTIVE).equals(existing.getStatus())) {
+                return true;
+            }
+            // A page collaboration invite must never resurrect a member the
+            // organization suspended or removed, nor silently consume a pending
+            // organization invitation with a downgraded role.
+            throw new ServiceException("该账号当前不在协作空间所属组织中，请联系组织管理员");
+        }
+        OrganizationMember member = new OrganizationMember();
+        member.setTenantId(contextId);
+        member.setUserId(userId);
+        member.setMemberRole(ORG_GUEST);
+        member.setStatus(STATUS_ACTIVE);
+        member.setDisplayName(StrUtil.blankToDefault(user.getName(), user.getAccount()));
+        member.setJoinedAt(LocalDateTime.now());
+        memberService.save(member);
+        assignBuiltInRole(userId, contextId, ORG_GUEST);
+        return true;
+    }
+
     @Transactional(rollbackFor = Exception.class)
     public void updateMemberRole(Long operatorId, String contextId, Long memberId, String requestedRole) {
         requireOrganizationManager(contextId, operatorId);

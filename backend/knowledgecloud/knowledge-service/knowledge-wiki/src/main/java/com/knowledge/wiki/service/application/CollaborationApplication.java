@@ -14,6 +14,7 @@ import com.knowledge.core.secure.utils.SecurityContextUtil;
 import com.knowledge.core.tool.KnowledgeUser;
 import com.knowledge.core.tool.utils.ApiClientUtil;
 import com.knowledge.system.feign.IUserClient;
+import com.knowledge.wiki.feign.IOrganizationMembershipClient;
 import com.knowledge.wiki.service.converter.PageConverter;
 import com.knowledge.wiki.service.converter.PluginVersionConverter;
 import com.knowledge.wiki.service.entity.CollaborationInvitation;
@@ -21,6 +22,7 @@ import com.knowledge.wiki.service.entity.Page;
 import com.knowledge.wiki.service.entity.PluginVersion;
 import com.knowledge.wiki.service.entity.Space;
 import com.knowledge.wiki.service.entity.dto.InvitationAcceptResponseDTO;
+import com.knowledge.wiki.service.entity.dto.InvitationEnterResponseDTO;
 import com.knowledge.wiki.service.entity.dto.InvitationValidateResponseDTO;
 import com.knowledge.wiki.service.entity.enums.InvitationStatus;
 import com.knowledge.wiki.service.entity.vo.PageVO;
@@ -49,6 +51,8 @@ public class CollaborationApplication {
     private IPageService pageService;
     @Autowired
     private IUserClient userClient;
+    @Autowired
+    private IOrganizationMembershipClient organizationMembershipClient;
     @Autowired
     private IPluginService pluginService;
     @Autowired
@@ -164,15 +168,85 @@ public class CollaborationApplication {
         // Accept the invitation and materialize its page grant/guest membership.
         spaceService.acceptInvitation(invitation.getId());
 
+        // The invitee may live in a different context than the shared space. Grant
+        // that context's membership now so acceptance is a complete, actionable
+        // state: the client can switch into the space's context and open the page.
+        String contextId = ensureSpaceContextMembership(invitation, page);
+
         response.setSuccess(true);
         response.setPageId(invitation.getPageId());
         response.setSpaceId(invitation.getSpaceId());
+        response.setContextId(contextId);
         response.setPageType(page.getPageType());
         response.setPermission(permissionService.effectivePagePermission(SecurityContextUtil.getUserId(), page));
         response.setAcceptedAt(LocalDateTime.now());
         log.info("Invitation accepted successfully for pageId: {}", invitation.getPageId());
 
         return response;
+    }
+
+    /**
+     * Resolve the data the client needs to open an accepted invitation through the
+     * normal page route.
+     *
+     * <p>The invitation endpoints run with the tenant line ignored, so they can see a
+     * space that lives in the inviter's context. The regular space/page reads cannot:
+     * a session in another context resolves {@code wiki_space} to nothing and the user
+     * sees "空间不存在". This endpoint therefore (re)materializes the invitee's
+     * membership in the space's context and reports the context the client must
+     * switch to before navigating. It is idempotent, so it also repairs invitations
+     * accepted before the membership grant existed.
+     *
+     * POST /knowledge-wiki/collaboration/invitation/:token/enter
+     */
+    public InvitationEnterResponseDTO enterInvitation(String token) {
+        InterceptorIgnoreHelper.handle(IgnoreStrategy.builder().tenantLine(true).build());
+        try {
+            CollaborationInvitation invitation = collaborationInvitationService.getByTokenForValidation(token);
+            if (invitation == null) {
+                throw WikiException.INVITATION_NOT_FOUND.newException();
+            }
+            requireCurrentInvitee(invitation);
+            if (invitation.getStatus() != InvitationStatus.ACCEPTED) {
+                throw WikiException.INVALID_INVITATION_STATUS.newException();
+            }
+
+            Page page = pageService.getById(invitation.getPageId());
+            if (page == null) {
+                throw WikiException.PAGE_NOT_FOUND.newException();
+            }
+            requireMatchingSpace(invitation, page);
+
+            InvitationEnterResponseDTO response = new InvitationEnterResponseDTO();
+            Long spaceId = invitation.getSpaceId() != null ? invitation.getSpaceId() : page.getSpaceId();
+            response.setSpaceId(spaceId);
+            response.setPageId(page.getId());
+            response.setPageType(page.getPageType());
+            response.setContextId(ensureSpaceContextMembership(invitation, page));
+            response.setPermission(permissionService.effectivePagePermission(SecurityContextUtil.getUserId(), page));
+            return response;
+        } finally {
+            InterceptorIgnoreHelper.clearIgnoreStrategy();
+        }
+    }
+
+    /**
+     * Idempotently admit the invitee into the context that owns the shared space and
+     * return that context id (null when the space predates context binding).
+     */
+    private String ensureSpaceContextMembership(CollaborationInvitation invitation, Page page) {
+        Long spaceId = invitation.getSpaceId() != null ? invitation.getSpaceId() : page.getSpaceId();
+        Space space = spaceId == null ? null : spaceService.getById(spaceId);
+        String contextId = space == null ? null : space.getTenantId();
+        if (contextId == null || contextId.trim().isEmpty() || invitation.getInviteeId() == null) {
+            return null;
+        }
+        Boolean granted = ApiClientUtil.resolvingResponse(
+                organizationMembershipClient.ensureMember(invitation.getInviteeId(), contextId));
+        if (!Boolean.TRUE.equals(granted)) {
+            throw WikiException.FORBIDDEN_ACCESS.newException();
+        }
+        return contextId;
     }
 
     /**

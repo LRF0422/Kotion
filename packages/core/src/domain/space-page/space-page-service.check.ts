@@ -224,6 +224,21 @@ async function main(): Promise<void> {
     try { await service.pages.getPage("unsafe"); } catch { strictIdRejected = true; }
     assert(strictIdRejected, "unsafe known IDs are rejected");
 
+    fake.reply("/knowledge-wiki/collaboration/invitation/:token/enter", {
+        spaceId: 910,
+        pageId: 911,
+        pageType: "doc",
+        contextId: "org-a",
+        permission: "WRITE",
+    });
+    const entered = await service.collaboration.enterInvitation("tok");
+    const enterRequest = fake.requests.at(-1)!;
+    assert(enterRequest.endpoint.method === "POST", "entering an invitation uses POST");
+    assert(enterRequest.params?.token === "tok", "invitation token is a path parameter", enterRequest);
+    assert(entered.spaceId === "910" && entered.pageId === "911", "entered ids normalize to strings", entered);
+    assert(entered.contextId === "org-a", "entered context id is preserved verbatim", entered);
+    assert(entered.permission === "WRITE", "entered permission is preserved", entered);
+
     console.log("core space-page service checks passed");
 }
 

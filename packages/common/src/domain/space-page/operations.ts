@@ -9,6 +9,7 @@ import type {
     CreatePageRequest,
     CreateSpaceRequest,
     GenerateShareLinkRequest,
+    InvitationEnterResult,
     InvitationValidation,
     InviteSpaceMembersRequest,
     MovePageRequest,
@@ -123,6 +124,7 @@ export interface CollaborationOperations {
     createInvitation(request: CreateCollaborationInvitationRequest): Promise<CollaborationInvitation | void>;
     validateInvitation(token: string): Promise<InvitationValidation>;
     acceptInvitation(token: string): Promise<void>;
+    enterInvitation(token: string): Promise<InvitationEnterResult>;
     getInvitationPage(token: string): Promise<PageRecord>;
     getPageCollaborators(pageId: PageId): Promise<PageCollaborator[]>;
     updateCollaboratorPermission(request: UpdateCollaboratorPermissionRequest): Promise<void>;

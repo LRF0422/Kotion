@@ -219,6 +219,23 @@ export interface InvitationValidation {
     metadata?: UnknownRecord;
 }
 
+/**
+ * Result of entering an accepted collaboration invitation.
+ *
+ * `contextId` is the tenant that owns the shared space. A client whose session is
+ * bound to another context must switch into it before opening the normal page
+ * route; otherwise every space/page read resolves against the wrong context and
+ * fails with "空间不存在".
+ */
+export interface InvitationEnterResult {
+    spaceId?: SpaceId;
+    pageId?: PageId;
+    pageType?: string;
+    contextId?: string;
+    permission?: PagePermission;
+    metadata?: UnknownRecord;
+}
+
 export interface ShareLinkInfo {
     link: string;
     shortCode: ShareCode;

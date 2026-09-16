@@ -5,6 +5,7 @@ import {
     type ApplyPageOperationsResult,
     type BlockSummary,
     type CollaborationInvitation,
+    type InvitationEnterResult,
     type InvitationValidation,
     type PageCollaborator,
     type PageComment,
@@ -239,6 +240,19 @@ export const normalizeInvitationValidation = (value: unknown): InvitationValidat
         valid: !invalid,
         invitation,
         reason: invalid ? optionalString(raw.reason ?? status) : undefined,
+        metadata: raw,
+    };
+};
+
+export const normalizeInvitationEnter = (value: unknown): InvitationEnterResult => {
+    const raw = record(value);
+    return {
+        spaceId: normalizeOptionalId(raw.spaceId, "invitationEnter.spaceId"),
+        pageId: normalizeOptionalId(raw.pageId, "invitationEnter.pageId"),
+        pageType: normalizePageType(raw.pageType),
+        // The owning context is an opaque tenant id, not a numeric entity id.
+        contextId: optionalString(raw.contextId),
+        permission: raw.permission,
         metadata: raw,
     };
 };

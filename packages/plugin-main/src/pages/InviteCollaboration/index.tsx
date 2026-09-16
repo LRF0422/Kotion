@@ -2,8 +2,16 @@ import { Button } from "@kn/ui";
 import { Avatar, AvatarFallback } from "@kn/ui";
 import { Badge } from "@kn/ui";
 import {
+    APIS,
+    clearContextSensitiveClientState,
+    getRefreshToken,
+    getTokenContextState,
+    normalizeTokenResponse,
+    notifyContextChanged,
+    saveTokens,
     type CollaborationInvitation,
     type PagePermission,
+    useApi,
     useNavigator,
     useSpacePageService,
     useTranslation,
@@ -27,6 +35,13 @@ type InviteStatus = 'loading' | 'ready' | 'accepting' | 'error' | 'expired';
  * Validates the token, shows an invitation card, and on acceptance grants the
  * persistent page permission (backend also adds the invitee to the space as
  * GUEST) before redirecting into the normal editing route.
+ *
+ * The shared space usually lives in the inviter's context (tenant). A session
+ * bound to another context cannot read that space at all, so entering the page
+ * is a two-step operation: `enterInvitation` makes the invitee a member of the
+ * space's context and reports it, then this page switches the session into that
+ * context before navigating. Without the switch every space/page read resolves
+ * against the wrong context and fails with "空间不存在".
  */
 export const InviteCollaboration: React.FC = () => {
     const { t } = useTranslation();
@@ -92,25 +107,64 @@ export const InviteCollaboration: React.FC = () => {
             });
     }, [service, inviteToken, t]);
 
-    const goToPage = (inv: CollaborationInvitation) => {
-        if (!inv.spaceId || !inv.pageId) return;
-        navigator.go({ to: `/space-detail/${inv.spaceId}/page/edit/${inv.pageId}` });
+    /** Surface the backend's own message instead of a generic axios status text. */
+    const readableError = (error: any): string =>
+        error?.response?.data?.msg || error?.message || t('inviteCollaboration.error.processFailed');
+
+    /**
+     * Make the shared space reachable, then open it.
+     *
+     * The invitation endpoints deliberately ignore the tenant line, so the card can
+     * describe a space that lives in another context. Normal space/page reads cannot:
+     * a session in the wrong context resolves the space to nothing. `enterInvitation`
+     * grants the invitee context membership and reports the context to use, and this
+     * method switches the session into it before navigating.
+     */
+    const openInvitationPage = async (token: string) => {
+        const target = await service.collaboration.enterInvitation(token);
+        if (!target.spaceId || !target.pageId) {
+            throw new Error(t('inviteCollaboration.error.processFailed'));
+        }
+        const pageRoute = `/space-detail/${target.spaceId}/page/edit/${target.pageId}`;
+        const currentContextId = getTokenContextState().contextId;
+        if (!target.contextId || !currentContextId || target.contextId === currentContextId) {
+            navigator.go({ to: pageRoute });
+            return;
+        }
+
+        const switched = await useApi(APIS.SWITCH_CONTEXT, { contextId: target.contextId }, {
+            refreshToken: getRefreshToken() || '',
+        });
+        const tokens = normalizeTokenResponse(switched.data);
+        if (!tokens.accessToken || !tokens.refreshToken) {
+            throw new Error(t('inviteCollaboration.contextSwitch.failed'));
+        }
+        saveTokens(tokens.accessToken, tokens.refreshToken);
+        clearContextSensitiveClientState();
+        notifyContextChanged(target.contextId);
+        // The whole client (redux store, services, open tabs) is bound to the old
+        // context, so a hard reload is the only safe way to enter the new one.
+        window.location.assign(pageRoute);
     };
 
-    // Accept the invitation, then enter the page through the normal route
+    // Accept the invitation when needed, then enter the page through the normal route
     const handleAccept = async () => {
-        if (!invitation) return;
+        if (!invitation || !inviteToken) return;
         try {
+            setErrorMessage('');
             setInviteStatus('accepting');
-            if (invitation.status === 'PENDING' && inviteToken) {
+            if (invitation.status === 'PENDING') {
                 await service.collaboration.acceptInvitation(inviteToken);
                 toast.success(t('inviteCollaboration.toast.accepted'));
             }
-            goToPage(invitation);
+            await openInvitationPage(inviteToken);
         } catch (error: any) {
             console.error('Failed to accept invitation:', error);
+            // The request layer already toasts business errors; keep the card (and
+            // its retry affordance) and show the details inline instead of jumping
+            // to a dead-end screen with a second, vaguer toast.
             setInviteStatus('ready');
-            toast.error(error?.message || t('inviteCollaboration.error.processFailed'));
+            setErrorMessage(readableError(error));
         }
     };
 
@@ -204,14 +258,31 @@ export const InviteCollaboration: React.FC = () => {
                         </Badge>
                     </div>
 
+                    {errorMessage && (
+                        <div className="w-full rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-left text-xs text-destructive">
+                            {errorMessage}
+                        </div>
+                    )}
+
                     {invitation?.status === 'ACCEPTED' ? (
                         <div className="w-full space-y-3">
                             <div className="flex items-center justify-center gap-2 text-sm text-emerald-600">
                                 <CheckCircle2 className="h-4 w-4" />
                                 {t('inviteLanding.already-accepted')}
                             </div>
-                            <Button className="w-full" onClick={() => invitation && goToPage(invitation)}>
-                                {t('inviteLanding.open-page')}
+                            <Button
+                                className="w-full"
+                                onClick={handleAccept}
+                                disabled={inviteStatus === 'accepting'}
+                            >
+                                {inviteStatus === 'accepting' ? (
+                                    <>
+                                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                        {t('inviteCollaboration.loading.opening')}
+                                    </>
+                                ) : (
+                                    t('inviteLanding.open-page')
+                                )}
                             </Button>
                         </div>
                     ) : (

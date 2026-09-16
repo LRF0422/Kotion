@@ -572,6 +572,10 @@ export const resources = {
           default: "加载中...",
           validating: "正在验证邀请...",
           accepting: "正在接受邀请...",
+          opening: "正在打开页面...",
+        },
+        contextSwitch: {
+          failed: "无法切换到协作空间所属上下文，请稍后重试。",
         },
         error: {
           noToken: "无效的邀请链接，未提供令牌。",
@@ -1826,6 +1830,10 @@ export const resources = {
           default: "Loading...",
           validating: "Validating invitation...",
           accepting: "Accepting invitation...",
+          opening: "Opening page...",
+        },
+        contextSwitch: {
+          failed: "Could not switch to the context that owns this space. Please try again.",
         },
         error: {
           noToken: "Invalid invitation link. No token provided.",

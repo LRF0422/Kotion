@@ -62,6 +62,7 @@ export const SPACE_PAGE_ENDPOINTS = {
         createInvitation: endpoint("/knowledge-wiki/space/collaborationInvitation", "POST"),
         validateInvitation: endpoint("/knowledge-wiki/collaboration/invitation/:token/validate", "GET", "public"),
         acceptInvitation: endpoint("/knowledge-wiki/collaboration/invitation/:token/accept", "POST"),
+        enterInvitation: endpoint("/knowledge-wiki/collaboration/invitation/:token/enter", "POST"),
         invitationPage: endpoint("/knowledge-wiki/collaboration/invitation/:token/page", "GET"),
         collaborators: endpoint("/knowledge-wiki/space/page/:pageId/collaborators", "GET"),
         updatePermission: endpoint("/knowledge-wiki/space/page/:pageId/collaborator/:userId/permission", "PUT"),
