@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { CaptureDialog } from './CaptureDialog'
 
 const CaptureIcon = () => (
@@ -9,8 +10,11 @@ const CaptureIcon = () => (
 )
 
 /**
- * Screenshot / recording entry point for the macOS title band. Living in the
- * shell keeps it reachable in fullscreen, where the band is no longer hidden.
+ * Screenshot / recording entry point for the macOS title band.
+ *
+ * The dialog is portalled to document.body: the band positions its controls
+ * with a transform, and a transformed ancestor becomes the containing block
+ * for position:fixed descendants (which squeezed the dialog into the button).
  */
 export const CaptureTitleButton: React.FC = () => {
     const [open, setOpen] = useState(false)
@@ -24,12 +28,15 @@ export const CaptureTitleButton: React.FC = () => {
                 onClick={() => setOpen(true)}
                 title="截图 / 录屏"
                 aria-label="截图 / 录屏"
-                className="flex h-6 items-center gap-1 rounded-md px-2 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                className="flex h-6 items-center gap-1 rounded-md border border-transparent px-2 text-[11px] text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-foreground"
             >
                 <CaptureIcon />
-                <span className="hidden sm:inline">截图</span>
+                <span>截图</span>
             </button>
-            <CaptureDialog open={open} onClose={() => setOpen(false)} />
+            {open && createPortal(
+                <CaptureDialog open={open} onClose={() => setOpen(false)} />,
+                document.body,
+            )}
         </>
     )
 }
