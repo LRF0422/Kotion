@@ -29,9 +29,10 @@ class SessionTranscriptProjectorTest {
 
     private final ChatSessionStore store = mock(ChatSessionStore.class);
     private final CheckpointStore checkpointStore = mock(CheckpointStore.class);
+    private final SubAgentProjection subAgentProjection = mock(SubAgentProjection.class);
     private final ObjectMapper mapper = new ObjectMapper();
     private final SessionTranscriptProjector projector =
-            new SessionTranscriptProjector(store, checkpointStore, mapper);
+            new SessionTranscriptProjector(store, checkpointStore, mapper, subAgentProjection);
 
     @Test
     void prepareHistorySeedsUserTurnAndModelLog() throws Exception {
@@ -165,6 +166,63 @@ class SessionTranscriptProjectorTest {
         assertEquals(1, model.get(0).path("m").path("contentParts").size());
         JsonNode ui = mapper.readTree(saved.getMessagesJson());
         assertEquals("data:image/png;base64,AAAA", ui.get(0).path("images").get(0).asText());
+    }
+
+    @Test
+    void delegatedChildrenAreProjectedIntoTheAssistantNode() throws Exception {
+        AgentChatSessionEntity existing = new AgentChatSessionEntity();
+        existing.setSessionId("conv-1");
+        existing.setTenantId(1L);
+        existing.setUserId(2L);
+        existing.setTitle("hi");
+        existing.setModelMessagesJson("[{\"role\":\"user\",\"content\":\"hi\"}]");
+        when(store.get(1L, 2L, "conv-1")).thenReturn(existing);
+
+        SubAgentProjection.Projection projection = new SubAgentProjection.Projection();
+        com.fasterxml.jackson.databind.node.ObjectNode sub = mapper.createObjectNode();
+        sub.put("callId", "call-1");
+        sub.put("subRunId", "child-1");
+        sub.put("task", "research");
+        sub.put("status", "completed");
+        projection.subRuns().put("call-1", sub);
+        com.fasterxml.jackson.databind.node.ArrayNode childStep = mapper.createArrayNode();
+        com.fasterxml.jackson.databind.node.ObjectNode step = mapper.createObjectNode();
+        step.put("id", "c9");
+        step.put("callId", "c9");
+        step.put("toolName", "search");
+        step.put("status", "success");
+        step.put("subRunId", "child-1");
+        childStep.add(step);
+        projection.toolSteps().put("call-1", childStep);
+        when(subAgentProjection.project("run-1")).thenReturn(projection);
+
+        Checkpoint checkpoint = new Checkpoint();
+        checkpoint.setRunId("run-1");
+        checkpoint.setInputMessageCount(2);
+        checkpoint.setMessages(new ArrayList<>(Arrays.asList(
+                ChatMessage.builder().role("system").content("sys").build(),
+                ChatMessage.builder().role("user").content("hi").build(),
+                ChatMessage.builder().role("assistant").content("delegating")
+                        .toolCalls(Collections.singletonList(new ChatMessage.ToolCallInfo(
+                                "call-1", "function",
+                                new ChatMessage.ToolCallInfo.FunctionInfo("delegate", "{\"task\":\"research\"}"))))
+                        .build()
+        )));
+        when(checkpointStore.load("run-1")).thenReturn(checkpoint);
+
+        projector.onRunTerminal(run("run-1"));
+
+        JsonNode ui = mapper.readTree(captureSaved().getMessagesJson());
+        JsonNode assistant = ui.get(1);
+        assertEquals("child-1", assistant.path("subRuns").get(0).path("subRunId").asText());
+        assertEquals("research", assistant.path("subRuns").get(0).path("task").asText());
+        boolean childToolStepProjected = false;
+        for (JsonNode s : assistant.path("steps")) {
+            if ("c9".equals(s.path("callId").asText()) && "child-1".equals(s.path("subRunId").asText())) {
+                childToolStepProjected = true;
+            }
+        }
+        assertTrue(childToolStepProjected, "the child's tool call must be projected with its subRunId");
     }
 
     private AgentChatSessionEntity captureSaved() {

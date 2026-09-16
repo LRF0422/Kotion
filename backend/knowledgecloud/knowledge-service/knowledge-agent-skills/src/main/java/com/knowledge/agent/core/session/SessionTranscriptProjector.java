@@ -16,10 +16,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -63,15 +66,18 @@ public class SessionTranscriptProjector {
     private final ChatSessionStore store;
     private final CheckpointStore checkpointStore;
     private final ObjectMapper objectMapper;
+    private final SubAgentProjection subAgentProjection;
 
     private final ConcurrentHashMap<String, Object> locks = new ConcurrentHashMap<>();
 
     public SessionTranscriptProjector(ChatSessionStore store,
                                       CheckpointStore checkpointStore,
-                                      ObjectMapper objectMapper) {
+                                      ObjectMapper objectMapper,
+                                      SubAgentProjection subAgentProjection) {
         this.store = store;
         this.checkpointStore = checkpointStore;
         this.objectMapper = objectMapper;
+        this.subAgentProjection = subAgentProjection;
     }
 
     /** Accumulate the caller's new turn and return the full context history. */
@@ -99,7 +105,7 @@ public class SessionTranscriptProjector {
                     }
                 }
                 trim(state);
-                persist(run, existing, state, titleOf(existing, input), run.getLastSeq());
+                persist(run, existing, state, titleOf(existing, input), run.getLastSeq(), null);
                 return state.messages;
             } catch (Exception e) {
                 log.warn("Session history prepare failed for {}: {}",
@@ -146,7 +152,17 @@ public class SessionTranscriptProjector {
                     state.insertAll(insertAt, produced);
                 }
                 trim(state);
-                persist(run, existing, state, titleOf(existing, null), run.getLastSeq());
+                // Reduce this run's delegated children from the durable log so
+                // the reloaded panel comes from the DB, not a client cache. A
+                // projection failure must never cost us the transcript itself.
+                SubAgentProjection.Projection fresh = null;
+                try {
+                    fresh = subAgentProjection.project(run.getRunId());
+                } catch (Exception projectionError) {
+                    log.warn("Sub-agent projection failed for run {}: {}",
+                            run.getRunId(), projectionError.getMessage());
+                }
+                persist(run, existing, state, titleOf(existing, null), run.getLastSeq(), fresh);
             } catch (Exception e) {
                 log.warn("Session projection failed for {}: {}", run.getConversationId(), e.getMessage());
             }
@@ -446,13 +462,20 @@ public class SessionTranscriptProjector {
     // ==================== persistence ====================
 
     private void persist(AgentRun run, AgentChatSessionEntity existing, State state,
-                         String title, long asOfSeq) {
+                         String title, long asOfSeq, SubAgentProjection.Projection fresh) {
+        ArrayNode ui = toUi(state);
+        try {
+            overlaySubAgents(ui, existing, fresh);
+        } catch (Exception e) {
+            // An overlay bug must not drop the transcript write.
+            log.warn("Sub-agent overlay failed for {}: {}", run.getConversationId(), e.getMessage());
+        }
         AgentChatSessionEntity entity = new AgentChatSessionEntity();
         entity.setSessionId(run.getConversationId());
         entity.setTenantId(run.getTenantId());
         entity.setUserId(run.getUserId());
         entity.setTitle(title);
-        entity.setMessagesJson(writeUi(toUi(state)));
+        entity.setMessagesJson(writeUi(ui));
         entity.setModelMessagesJson(writeState(state));
         entity.setMessageCount(state.messages.size());
         entity.setSchemaVersion(SCHEMA_VERSION);
@@ -462,6 +485,115 @@ public class SessionTranscriptProjector {
         entity.setCreateTime(existingCreate != null && existingCreate > 0
                 ? existingCreate : System.currentTimeMillis());
         store.saveTranscript(entity);
+    }
+
+    /**
+     * Overlay the sub-agent tree onto the engine projection.
+     *
+     * <p>The canonical model log has no sub-agent records (a child's steps and
+     * tool calls belong to the CHILD run), so they are materialized from the run
+     * logs and embedded in the UI JSON. Because {@link #toUi} is re-derived on
+     * every write, the previous projection's records are carried over — keyed by
+     * the stable delegate call id, since engine message ids are regenerated on
+     * every projection.
+     */
+    private void overlaySubAgents(ArrayNode ui, AgentChatSessionEntity existing,
+                                  SubAgentProjection.Projection fresh) {
+        Map<String, ObjectNode> subRuns = carryOverSubRuns(existing);
+        Map<String, ArrayNode> childSteps = carryOverChildSteps(existing, subRuns);
+        if (fresh != null && !fresh.isEmpty()) {
+            subRuns.putAll(fresh.subRuns());
+            childSteps.putAll(fresh.toolSteps());
+        }
+        if (subRuns.isEmpty() && childSteps.isEmpty()) {
+            return;
+        }
+        for (JsonNode node : ui) {
+            if (!node.isObject() || !"ai".equals(node.path("sender").asText())) {
+                continue;
+            }
+            ObjectNode assistant = (ObjectNode) node;
+            if (!(assistant.get("steps") instanceof ArrayNode)) {
+                continue;
+            }
+            ArrayNode steps = (ArrayNode) assistant.get("steps");
+            ArrayNode attached = objectMapper.createArrayNode();
+            ArrayNode extraSteps = objectMapper.createArrayNode();
+            for (int i = 0; i < steps.size(); i++) {
+                String callId = steps.get(i).path("callId").asText("");
+                if (callId.isEmpty()) {
+                    continue;
+                }
+                ObjectNode subRun = subRuns.get(callId);
+                if (subRun != null) {
+                    attached.add(subRun);
+                }
+                ArrayNode extra = childSteps.get(callId);
+                if (extra != null) {
+                    extraSteps.addAll(extra);
+                }
+            }
+            if (attached.size() > 0) {
+                assistant.set("subRuns", attached);
+            }
+            if (extraSteps.size() > 0) {
+                steps.addAll(extraSteps);
+            }
+        }
+    }
+
+    /** Sub-agent records already materialized in the previous projection. */
+    private Map<String, ObjectNode> carryOverSubRuns(AgentChatSessionEntity existing) {
+        Map<String, ObjectNode> out = new LinkedHashMap<>();
+        for (JsonNode node : readUi(existing != null ? existing.getMessagesJson() : null)) {
+            JsonNode array = node.get("subRuns");
+            if (array == null || !array.isArray()) {
+                continue;
+            }
+            for (JsonNode subRun : array) {
+                if (subRun instanceof ObjectNode) {
+                    String callId = subRun.path("callId").asText("");
+                    if (!callId.isEmpty()) {
+                        out.putIfAbsent(callId, (ObjectNode) subRun);
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
+    /** Child tool steps already present in the previous projection. */
+    private Map<String, ArrayNode> carryOverChildSteps(AgentChatSessionEntity existing,
+                                                       Map<String, ObjectNode> subRuns) {
+        Map<String, String> callIdBySubRun = new HashMap<>();
+        for (Map.Entry<String, ObjectNode> entry : subRuns.entrySet()) {
+            String subRunId = entry.getValue().path("subRunId").asText("");
+            if (!subRunId.isEmpty()) {
+                callIdBySubRun.put(subRunId, entry.getKey());
+            }
+        }
+        Map<String, ArrayNode> out = new LinkedHashMap<>();
+        if (callIdBySubRun.isEmpty()) {
+            return out;
+        }
+        for (JsonNode node : readUi(existing != null ? existing.getMessagesJson() : null)) {
+            JsonNode steps = node.get("steps");
+            if (steps == null || !steps.isArray()) {
+                continue;
+            }
+            for (JsonNode step : steps) {
+                String subRunId = step.path("subRunId").asText("");
+                if (subRunId.isEmpty()) {
+                    continue;
+                }
+                String callId = callIdBySubRun.get(subRunId);
+                if (callId == null) {
+                    continue;
+                }
+                out.computeIfAbsent(callId, key -> objectMapper.createArrayNode()).add(step);
+            }
+        }
+        return out;
     }
 
     private String titleOf(AgentChatSessionEntity existing, List<ChatMessage> input) {
