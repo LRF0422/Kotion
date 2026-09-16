@@ -1,13 +1,11 @@
-import React, { useCallback, useMemo, useState } from 'react'
-import { AlertCircle, IconCopy, Loader2, StopCircle } from '@kn/icon'
+import React, { useMemo } from 'react'
+import { AlertCircle, Loader2, StopCircle } from '@kn/icon'
 import {
     ChatBubble,
     ChatBubbleMessage,
     Streamdown,
     SubAgentTree,
     buildSubAgentTreeLabels,
-    formatDistanceToNow,
-    useCopyToClipboard,
 } from '@kn/ui'
 import { useTranslation } from '@kn/common'
 import { Message, extractBlockReferences, subToolCallsFromSteps } from './chat-types'
@@ -30,21 +28,7 @@ export const MessageBubble = React.memo(function MessageBubble({
     onRevealReference,
 }: MessageBubbleProps) {
     const { t } = useTranslation()
-    const [, copy] = useCopyToClipboard()
-    const [copied, setCopied] = useState(false)
-
-    const handleCopy = useCallback(() => {
-        if (!message.content) return
-        copy(message.content).then((ok) => {
-            if (ok) {
-                setCopied(true)
-                setTimeout(() => setCopied(false), 2000)
-            }
-        })
-    }, [copy, message.content])
-
     const isAI = message.sender === 'ai'
-    const relativeTime = formatDistanceToNow(message.timestamp, { addSuffix: true })
     const blockReferences = useMemo(() => extractBlockReferences(message.steps), [message.steps])
     // A delegated child's steps belong to the sub-agent tree, not this timeline.
     const parentSteps = useMemo(
@@ -86,20 +70,6 @@ export const MessageBubble = React.memo(function MessageBubble({
                             ? <div className="whitespace-pre-wrap break-words">{message.content}</div>
                             : null}
                     </ChatBubbleMessage>
-                    <div className="flex min-h-11 items-center justify-end gap-1 text-[10px] text-muted-foreground/70 lg:min-h-7">
-                        <button
-                            type="button"
-                            onClick={handleCopy}
-                            className="flex h-11 w-11 items-center justify-center rounded-md transition-colors hover:bg-muted hover:text-foreground lg:h-7 lg:w-7"
-                            aria-label={t('ai.copy')}
-                            title={t('ai.copy')}
-                        >
-                            {copied
-                                ? <span className="text-[10px] text-emerald-600">{t('ai.copied')}</span>
-                                : <IconCopy className="h-3.5 w-3.5" />}
-                        </button>
-                        <span>{relativeTime}</span>
-                    </div>
                 </div>
             </ChatBubble>
         )
@@ -177,23 +147,6 @@ export const MessageBubble = React.memo(function MessageBubble({
             )}
 
             {!message.error && <TurnUsageMeta usage={message.usage} />}
-
-            {!isStreaming && (
-                <div className="mt-1 flex min-h-11 items-center gap-1 text-[10px] text-muted-foreground/70 lg:min-h-7">
-                    <button
-                        type="button"
-                        onClick={handleCopy}
-                        disabled={!message.content}
-                        className="flex h-11 min-w-11 items-center justify-center gap-1 rounded-md px-2 transition-colors hover:bg-muted hover:text-foreground disabled:cursor-default disabled:opacity-40 lg:h-7 lg:min-w-7"
-                        aria-label={t('ai.copy')}
-                        title={t('ai.copy')}
-                    >
-                        <IconCopy className="h-3.5 w-3.5" />
-                        {copied && <span>{t('ai.copied')}</span>}
-                    </button>
-                    <span>{relativeTime}</span>
-                </div>
-            )}
         </article>
     )
 })
