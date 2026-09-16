@@ -89,4 +89,22 @@ public class LandingLink extends BaseEntity {
 	 */
 	@ApiModelProperty(value = "是否启用")
 	private Boolean enabled;
+
+	/**
+	 * 渠道分组（P1-9）
+	 */
+	@ApiModelProperty(value = "渠道分组")
+	private String groupName;
+
+	/**
+	 * 排序（P1-9）
+	 */
+	@ApiModelProperty(value = "排序")
+	private Integer position;
+
+	/**
+	 * 备注
+	 */
+	@ApiModelProperty(value = "备注")
+	private String remark;
 }

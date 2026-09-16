@@ -83,4 +83,28 @@ public class LandingSubscriber extends BaseEntity {
 	 */
 	@ApiModelProperty(value = "备注")
 	private String note;
+
+	/**
+	 * 双重确认令牌（P1-10）
+	 */
+	@ApiModelProperty(value = "双重确认令牌")
+	private String confirmToken;
+
+	/**
+	 * 确认时间
+	 */
+	@ApiModelProperty(value = "确认时间")
+	private java.time.LocalDateTime confirmedAt;
+
+	/**
+	 * 公开退订令牌
+	 */
+	@ApiModelProperty(value = "公开退订令牌")
+	private String unsubscribeToken;
+
+	/**
+	 * 标签快照（导出用，逗号分隔）
+	 */
+	@ApiModelProperty(value = "标签快照")
+	private String tags;
 }
