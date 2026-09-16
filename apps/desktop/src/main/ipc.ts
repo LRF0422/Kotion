@@ -1,4 +1,4 @@
-import { ipcMain, dialog, app, BrowserWindow } from 'electron';
+import { ipcMain, dialog, app, BrowserWindow, desktopCapturer, systemPreferences } from 'electron';
 import * as fs from 'fs-extra';
 import * as path from 'node:path';
 import * as dns from 'node:dns';
@@ -142,6 +142,43 @@ export function setupIpcHandlers() {
     desktop: app.getPath('desktop'),
     temp: app.getPath('temp'),
   }));
+
+  // ==================== screen capture sources ====================
+  // desktopCapturer is main-process only in Electron 17+. The renderer turns the
+  // returned source ids into a MediaStream via getUserMedia(chromeMediaSource).
+  handle('capture.sources', async (_event, raw) => {
+    const params = asRecord(raw);
+    const requested = Array.isArray(params.types) ? params.types : [];
+    const types = requested.filter(
+      (type: unknown) => type === 'screen' || type === 'window',
+    ) as Array<'screen' | 'window'>;
+    const thumbnailWidth = Math.min(Math.max(Number(params.thumbnailWidth) || 320, 64), 640);
+    let sources: Electron.DesktopCapturerSource[];
+    try {
+      sources = await desktopCapturer.getSources({
+        types: types.length ? types : ['screen', 'window'],
+        thumbnailSize: { width: thumbnailWidth, height: Math.round(thumbnailWidth * 9 / 16) },
+        fetchWindowIcons: false,
+      });
+    } catch (error) {
+      // macOS gates screen capture behind TCC; surface an actionable message
+      // instead of the raw "Failed to get sources." error.
+      const status = process.platform === 'darwin'
+        ? systemPreferences.getMediaAccessStatus('screen')
+        : 'unknown';
+      throw new Error(
+        '无法获取屏幕来源（屏幕录制权限: ' + status + '）。' +
+        '请在「系统设置 → 隐私与安全性 → 屏幕录制」中勾选本应用，然后重启应用。' +
+        '原始错误: ' + (error as Error).message,
+      );
+    }
+    return sources.map((source) => ({
+      id: source.id,
+      name: source.name,
+      displayId: source.display_id ?? '',
+      thumbnail: source.thumbnail?.isEmpty() ? '' : source.thumbnail.toDataURL(),
+    }));
+  });
 
   // ==================== http (main-process fetch; no CORS) ====================
   // Never injects the Kotion session token: the target is an arbitrary

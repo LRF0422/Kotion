@@ -17,6 +17,7 @@ export type DesktopCapability =
     | 'system.info'
     | 'system.paths'
     | 'http.request'
+    | 'capture.sources'
     | 'dialog.openFile'
     | 'dialog.openFolder'
     | 'dialog.saveFile'
@@ -121,6 +122,17 @@ export interface DesktopTrafficLightPosition {
     y: number
 }
 
+export type DesktopCaptureSourceType = 'screen' | 'window'
+
+export interface DesktopCaptureSource {
+    /** Pass as chromeMediaSourceId to getUserMedia. */
+    id: string
+    name: string
+    /** PNG data URL of the source thumbnail; empty when unavailable. */
+    thumbnail: string
+    displayId: string
+}
+
 export interface DesktopHttpRequest {
     method?: string
     url: string
@@ -158,6 +170,10 @@ export interface DesktopCapabilityContract {
     'system.info': { params?: void; result: DesktopAppInfo }
     'system.paths': { params?: void; result: DesktopPaths }
     'http.request': { params: DesktopHttpRequest; result: DesktopHttpResponse }
+    'capture.sources': {
+        params?: { types?: DesktopCaptureSourceType[]; thumbnailWidth?: number }
+        result: DesktopCaptureSource[]
+    }
     'dialog.openFile': { params?: DesktopOpenFileOptions; result: DesktopDialogFileResult }
     'dialog.openFolder': { params?: DesktopOpenFolderOptions; result: DesktopDialogFolderResult }
     'dialog.saveFile': { params?: DesktopSaveFileOptions; result: DesktopDialogSaveResult }

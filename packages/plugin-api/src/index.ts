@@ -72,6 +72,8 @@ export type {
     DesktopHttpRequest,
     DesktopHttpRedirect,
     DesktopHttpResponse,
+    DesktopCaptureSource,
+    DesktopCaptureSourceType,
     PluginConfig,
     KPlugin,
     ExtensionWrapper,

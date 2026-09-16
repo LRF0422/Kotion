@@ -15,6 +15,7 @@ const CAPABILITIES = [
   'system.info',
   'system.paths',
   'http.request',
+  'capture.sources',
   'dialog.openFile',
   'dialog.openFolder',
   'dialog.saveFile',
