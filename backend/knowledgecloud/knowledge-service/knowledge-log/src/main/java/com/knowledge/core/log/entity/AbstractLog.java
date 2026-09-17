@@ -66,6 +66,6 @@ public abstract class AbstractLog implements Serializable {
 
     protected LocalDateTime createTime;
 
-    protected Long createBy;
+    protected String createBy;
 
 }
