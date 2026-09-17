@@ -11,27 +11,29 @@ export interface TabPreviewProps {
     defaultKey?: string;
     className?: string;
     tabClassName?: string;
-    /** Optional scene color for the active pill */
+    /** Kept for API compatibility; the collapsed palette ignores it. */
     scene?: "editor" | "collab" | "bitable" | "ai" | "canvas" | "selfhost";
 }
 
-const sceneVars: Record<NonNullable<TabPreviewProps["scene"]>, { bg: string; fg: string }> = {
-    editor:   { bg: "var(--scene-editor-100)",   fg: "var(--scene-editor-600)" },
-    collab:   { bg: "var(--scene-collab-100)",   fg: "var(--scene-collab-600)" },
-    bitable:  { bg: "var(--scene-bitable-100)",  fg: "var(--scene-bitable-600)" },
-    ai:       { bg: "var(--scene-ai-100)",       fg: "var(--scene-ai-600)" },
-    canvas:   { bg: "var(--scene-canvas-100)",   fg: "var(--scene-canvas-600)" },
-    selfhost: { bg: "var(--scene-selfhost-100)", fg: "var(--scene-selfhost-600)" },
-};
-
-export const TabPreview: React.FC<TabPreviewProps> = ({ tabs, defaultKey, className = "", tabClassName = "", scene = "editor" }) => {
+/**
+ * Segmented control for mock views. Active state is ink-on-paper rather
+ * than a colour pill, matching the rest of the system.
+ */
+export const TabPreview: React.FC<TabPreviewProps> = ({
+    tabs,
+    defaultKey,
+    className = "",
+    tabClassName = "",
+}) => {
     const [active, setActive] = useState<string>(defaultKey ?? tabs[0]?.key);
     const activeTab = tabs.find((t) => t.key === active) ?? tabs[0];
-    const { bg, fg } = sceneVars[scene];
 
     return (
         <div className={className}>
-            <div className={`flex flex-wrap items-center gap-1 rounded-full p-1 mb-4 border w-fit ${tabClassName}`} style={{ borderColor: "var(--kn-line)", backgroundColor: "var(--kn-paper-2)" }}>
+            <div
+                className={"mb-4 flex w-fit max-w-full flex-wrap items-center gap-0.5 rounded-md border p-0.5 " + tabClassName}
+                style={{ borderColor: "var(--kn-line)", background: "var(--kn-paper-2)" }}
+            >
                 {tabs.map((t) => {
                     const isActive = t.key === active;
                     return (
@@ -39,11 +41,11 @@ export const TabPreview: React.FC<TabPreviewProps> = ({ tabs, defaultKey, classN
                             key={t.key}
                             type="button"
                             onClick={() => setActive(t.key)}
-                            className="px-3 py-1.5 text-xs font-medium rounded-full transition-all"
+                            className="rounded px-2.5 py-1 text-xs font-medium transition-colors"
                             style={
                                 isActive
-                                    ? { backgroundColor: bg, color: fg }
-                                    : { color: "var(--kn-ink-soft)" }
+                                    ? { background: "var(--kn-paper)", color: "var(--kn-ink)", boxShadow: "0 0 0 1px var(--kn-line)" }
+                                    : { color: "var(--kn-ink-mute)" }
                             }
                         >
                             {t.label}

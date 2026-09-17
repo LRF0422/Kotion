@@ -1,6 +1,5 @@
 import React from "react";
-import { Button } from "@kn/ui";
-import { ArrowRight, Github, Download, Sparkles } from "@kn/icon";
+import { ArrowRight, Github, Download } from "@kn/icon";
 import { useTranslation } from "@kn/common";
 import { DeviceFrame } from "../../../components/DeviceFrame";
 import { EditorMock } from "../../../components/EditorMock";
@@ -8,6 +7,8 @@ import { DESKTOP_RELEASE_URL, GITHUB_URL, LIVE_DEMO_URL } from "../../../constan
 import { buildTrackedUrl, openExternal, track } from "../../../ops/analytics";
 import { reportExperimentConversion, useExperiment } from "../../../ops/experiment";
 import { StarCount } from "../../../ops/StarCount";
+import { readBoolean, readString, readStringArray, type SectionProps } from "../../../ops/section-props";
+import { stripTrailingArrow } from "../../../utils/text";
 
 /** Hero 主 CTA 实验的 payload 形状，由后台「实验平台」配置。 */
 interface HeroCtaPayload {
@@ -15,12 +16,36 @@ interface HeroCtaPayload {
     ctaHref?: string;
 }
 
-export const Hero: React.FC = () => {
+export interface HeroSectionProps {
+    props?: SectionProps;
+}
+
+/**
+ * Hero.
+ *
+ * Copy and CTA can be overridden per-locale from admin via SECTION props
+ * (badge / title1 / title2 / desc / ctaLabel / ctaHref / secondaryLabel /
+ * secondaryHref / meta / showStats). A running hero-cta experiment still
+ * takes precedence for the primary CTA so existing A/B tests keep working.
+ */
+export const Hero: React.FC<HeroSectionProps> = ({ props: sectionProps }) => {
     const { t } = useTranslation();
-    // 实验挂载点：未开启实验时 variantKey 为 null，一切回退到内置文案。
     const { variantKey, payload } = useExperiment<HeroCtaPayload>("hero-cta");
-    const ctaHref = payload?.ctaHref || LIVE_DEMO_URL;
-    const ctaLabel = payload?.ctaLabel || t("home.hero-cta-primary");
+
+    const badge = readString(sectionProps, "badge", t("home.hero-badge"));
+    const title1 = readString(sectionProps, "title1", t("home.hero-title-1"));
+    const title2 = readString(sectionProps, "title2", t("home.hero-title-2"));
+    const desc = readString(sectionProps, "desc", t("home.desc"));
+    const ctaHref = payload?.ctaHref || readString(sectionProps, "ctaHref", LIVE_DEMO_URL);
+    const ctaLabel = payload?.ctaLabel || readString(sectionProps, "ctaLabel", t("home.hero-cta-primary"));
+    const secondaryLabel = readString(sectionProps, "secondaryLabel", t("home.hero-cta-github"));
+    const secondaryHref = readString(sectionProps, "secondaryHref", GITHUB_URL);
+    const meta = readStringArray(sectionProps, "meta", [
+        t("home.hero-meta-1"),
+        t("home.hero-meta-2"),
+        t("home.hero-meta-3"),
+    ]);
+    const showStats = readBoolean(sectionProps, "showStats", true);
 
     const onPrimaryCta = () => {
         openExternal(ctaHref, {
@@ -32,55 +57,53 @@ export const Hero: React.FC = () => {
         reportExperimentConversion("hero-cta", "cta_click");
     };
 
+    const stats = [
+        { value: "20+", label: t("home.stat-plugins") },
+        { value: "7", label: t("home.stat-views") },
+        { value: "MIT", label: t("home.stat-license") },
+    ];
+
     return (
-        <section className="relative overflow-hidden hero-paper">
-            <div className="container-padding pt-16 pb-20 md:pt-24 md:pb-28">
-                <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-[1.05fr_1fr] gap-12 lg:gap-16 items-center relative z-10">
+        <section className="hero-paper relative overflow-hidden">
+            <div className="container-padding relative z-10 pb-16 pt-16 md:pb-24 md:pt-24">
+                <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-12 lg:grid-cols-[1.05fr_1fr] lg:gap-14">
                     {/* Copy column */}
                     <div className="fade-in-up">
-                        <span
-                            className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium border"
-                            style={{
-                                background: "var(--kn-paper)",
-                                borderColor: "var(--kn-line)",
-                                color: "var(--kn-ink-soft)",
-                            }}
-                        >
-                            <Sparkles className="w-3.5 h-3.5" style={{ color: "var(--scene-ai-500)" }} />
-                            {t("home.hero-badge")}
-                        </span>
+                        <div className="mb-6 flex items-center gap-2.5">
+                            <span className="h-1.5 w-1.5 rounded-full" style={{ background: "var(--kn-accent)" }} />
+                            <span className="kicker" style={{ color: "var(--kn-ink-soft)" }}>{badge}</span>
+                        </div>
 
                         <h1
-                            className="mt-6 font-serif text-4xl md:text-6xl lg:text-7xl font-semibold tracking-tight leading-[1.05]"
+                            className="text-[2.6rem] font-semibold leading-[1.03] tracking-[-0.035em] md:text-[3.75rem]"
                             style={{ color: "var(--kn-ink)" }}
                         >
-                            {t("home.hero-title-1")}
+                            {title1}
                             <br />
-                            <span className="gradient-text">{t("home.hero-title-2")}</span>
+                            <span style={{ color: "var(--kn-accent)" }}>{title2}</span>
                         </h1>
 
-                        <p className="mt-6 text-lg md:text-xl leading-relaxed max-w-xl" style={{ color: "var(--kn-ink-soft)" }}>
-                            {t("home.desc")}
+                        <p className="mt-6 max-w-xl text-base leading-relaxed md:text-lg" style={{ color: "var(--kn-ink-soft)" }}>
+                            {desc}
                         </p>
 
-                        <div className="mt-8 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                            <Button
-                                size="lg"
-                                className="rounded-lg px-6"
+                        <div className="mt-8 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
+                            <button
+                                type="button"
                                 onClick={onPrimaryCta}
+                                className="btn-accent px-5 py-2.5 text-[15px]"
                             >
-                                {ctaLabel}
-                                <ArrowRight className="ml-2 h-5 w-5" />
-                            </Button>
-                            <Button
-                                variant="outline"
-                                size="lg"
-                                className="rounded-lg px-6"
-                                onClick={() => openExternal(GITHUB_URL, { location: "hero", target: "github", medium: "social" })}
+                                {stripTrailingArrow(ctaLabel)}
+                                <ArrowRight className="h-4 w-4" />
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => openExternal(secondaryHref, { location: "hero", target: "github", medium: "social" })}
+                                className="btn-secondary px-5 py-2.5 text-[15px]"
                             >
-                                <Github className="mr-2 h-5 w-5" />
-                                {t("home.hero-cta-github")}
-                            </Button>
+                                <Github className="h-4 w-4" />
+                                {secondaryLabel}
+                            </button>
                             <a
                                 href={buildTrackedUrl(DESKTOP_RELEASE_URL, {
                                     utm_source: "kotion-landing",
@@ -91,67 +114,55 @@ export const Hero: React.FC = () => {
                                 target="_blank"
                                 rel="noreferrer"
                                 onClick={() => track("cta_click", { location: "hero", target: "desktop" })}
-                                className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium hover:opacity-80"
-                                style={{ color: "var(--kn-ink-soft)" }}
+                                className="inline-flex items-center gap-1.5 px-1 py-2 text-sm font-medium link-accent"
                             >
                                 <Download className="h-4 w-4" />
                                 {t("home.hero-cta-desktop")}
                             </a>
                         </div>
 
-                        <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs" style={{ color: "var(--kn-ink-soft)" }}>
-                            <span className="inline-flex items-center gap-1.5">
-                                <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--scene-collab-500)" }} />
-                                {t("home.hero-meta-1")}
-                            </span>
-                            <span className="inline-flex items-center gap-1.5">
-                                <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--scene-editor-500)" }} />
-                                {t("home.hero-meta-2")}
-                            </span>
-                            <span className="inline-flex items-center gap-1.5">
-                                <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--scene-ai-500)" }} />
-                                {t("home.hero-meta-3")}
-                            </span>
+                        <div className="mt-7 flex flex-wrap items-center gap-x-3 gap-y-2">
+                            {meta.map((item, index) => (
+                                <React.Fragment key={item}>
+                                    {index > 0 && <span className="h-3 w-px" style={{ background: "var(--kn-line-strong)" }} />}
+                                    <span className="font-mono text-[11px] tracking-wide" style={{ color: "var(--kn-ink-mute)" }}>
+                                        {item}
+                                    </span>
+                                </React.Fragment>
+                            ))}
                         </div>
 
-                        <div className="mt-4">
+                        <div className="mt-5">
                             <StarCount />
                         </div>
                     </div>
 
                     {/* Device column */}
                     <div className="fade-in-up relative">
-                        {/* subtle glow */}
-                        <div
-                            className="absolute -inset-4 rounded-3xl blur-3xl opacity-40 pointer-events-none"
-                            style={{
-                                background:
-                                    "radial-gradient(closest-side, var(--scene-ai-500), transparent), radial-gradient(closest-side, var(--scene-editor-500), transparent)",
-                            }}
-                        />
-                        <DeviceFrame type="browser" url="kotion.app/roadmap" className="relative">
+                        <DeviceFrame type="browser" url="kotion.top/roadmap" className="relative">
                             <EditorMock />
                         </DeviceFrame>
                     </div>
                 </div>
 
-                {/* Stats */}
-                <div className="max-w-4xl mx-auto mt-16 md:mt-20 grid grid-cols-3 gap-6 pt-10 border-t" style={{ borderColor: "var(--kn-line)" }}>
-                    {[
-                        { value: "20+", label: t("home.stat-plugins") },
-                        { value: "7", label: t("home.stat-views") },
-                        { value: "MIT", label: t("home.stat-license") },
-                    ].map((s) => (
-                        <div key={s.label} className="text-center">
-                            <div className="font-serif text-4xl md:text-5xl font-semibold tracking-tight" style={{ color: "var(--kn-ink)" }}>
-                                {s.value}
+                {showStats && (
+                    <div
+                        className="mx-auto mt-16 grid max-w-4xl grid-cols-3 gap-6 border-t pt-8"
+                        style={{ borderColor: "var(--kn-line)" }}
+                    >
+                        {stats.map((s) => (
+                            <div key={s.label}>
+                                <div
+                                    className="text-2xl font-semibold tracking-[-0.02em] md:text-3xl"
+                                    style={{ color: "var(--kn-ink)" }}
+                                >
+                                    {s.value}
+                                </div>
+                                <div className="kicker mt-1.5">{s.label}</div>
                             </div>
-                            <div className="mt-1 text-xs md:text-sm" style={{ color: "var(--kn-ink-soft)" }}>
-                                {s.label}
-                            </div>
-                        </div>
-                    ))}
-                </div>
+                        ))}
+                    </div>
+                )}
             </div>
         </section>
     );

@@ -32,18 +32,43 @@ const LOCALES = [
 
 type Locale = (typeof LOCALES)[number]['value']
 
-/** 首页区块的默认顺序与中文标签（未配置 position 时按此顺序渲染）。 */
-const DEFAULT_SECTIONS: Array<{ sectionKey: string; label: string }> = [
-  { sectionKey: 'hero', label: '首屏 Hero' },
-  { sectionKey: 'stack-cloud', label: '技术栈云' },
-  { sectionKey: 'capability-bento', label: '能力宫格' },
-  { sectionKey: 'workflows', label: '工作流' },
-  { sectionKey: 'ecosystem-spotlight', label: '生态聚焦' },
-  { sectionKey: 'everywhere-you-work', label: '全平台' },
-  { sectionKey: 'templates-preview', label: '模板预览' },
-  { sectionKey: 'open-source', label: '开源' },
-  { sectionKey: 'faq', label: '常见问题' },
-  { sectionKey: 'final-cta', label: '结尾行动号召' },
+/**
+ * 首页区块的默认顺序、中文标签与可配置 props 提示。
+ *
+ * 提示文案对应 landing-page-vite 的 `ops/section-props.ts` 读取逻辑：
+ * 未列出的键会被静默忽略，因此这里只提示实际生效的字段。
+ */
+const DEFAULT_SECTIONS: Array<{ sectionKey: string; label: string; propsHint?: string }> = [
+  {
+    sectionKey: 'hero',
+    label: '首屏 Hero',
+    propsHint: 'badge, title1, title2, desc, ctaLabel, ctaHref, secondaryLabel, secondaryHref, meta[], showStats（hero-cta 实验的 CTA 仍优先）',
+  },
+  { sectionKey: 'stack-cloud', label: '技术栈条', propsHint: 'heading, items[]' },
+  {
+    sectionKey: 'capability-bento',
+    label: '能力宫格',
+    propsHint: 'eyebrow, title, desc, cards[]（editor / collab / bitable / ai / canvas / links）, hidden[]',
+  },
+  { sectionKey: 'workflows', label: '工作流', propsHint: 'eyebrow, title, desc' },
+  {
+    sectionKey: 'ecosystem-spotlight',
+    label: '插件生态',
+    propsHint: 'eyebrow, title, desc, limit（1-12）；精选插件请在「市场运营 → 精选位」配置',
+  },
+  { sectionKey: 'everywhere-you-work', label: '全平台', propsHint: 'eyebrow, title, desc' },
+  {
+    sectionKey: 'templates-preview',
+    label: '模板预览',
+    propsHint: 'eyebrow, title, desc, limit（1-12）；精选模板请在「市场运营 → 精选位」配置',
+  },
+  { sectionKey: 'open-source', label: '开源', propsHint: 'eyebrow, title, desc' },
+  { sectionKey: 'faq', label: '常见问题', propsHint: 'eyebrow, title, desc' },
+  {
+    sectionKey: 'final-cta',
+    label: '结尾行动号召',
+    propsHint: 'eyebrow, title1, title2, desc, primaryLabel, primaryHref',
+  },
 ]
 
 /** 首页区块资源统一挂在 resKey = home 下。 */
@@ -54,6 +79,8 @@ interface SectionRow {
   label: string
   enabled: boolean
   propsText: string
+  /** 该区块实际支持的 props 字段，来自 DEFAULT_SECTIONS */
+  propsHint?: string
 }
 
 interface MergedSection extends SectionRow {
@@ -83,6 +110,7 @@ const mergeSections = (resources: OpsResource[]): SectionRow[] => {
       label: item.label,
       enabled: hit ? hit.enabled : true,
       propsText: toJsonText(hit?.props ?? {}, '{}'),
+      propsHint: item.propsHint,
       storedPosition: hit?.position,
       defaultIndex: index,
     }
@@ -94,6 +122,7 @@ const mergeSections = (resources: OpsResource[]): SectionRow[] => {
     label: key,
     enabled: value.enabled,
     propsText: toJsonText(value.props, '{}'),
+    propsHint: undefined,
     storedPosition: value.position,
     defaultIndex: DEFAULT_SECTIONS.length + index,
   }))
@@ -104,7 +133,7 @@ const mergeSections = (resources: OpsResource[]): SectionRow[] => {
       const right = b.storedPosition ?? b.defaultIndex
       return left === right ? a.defaultIndex - b.defaultIndex : left - right
     })
-    .map(({ sectionKey, label, enabled, propsText }) => ({ sectionKey, label, enabled, propsText }))
+    .map(({ sectionKey, label, enabled, propsText, propsHint }) => ({ sectionKey, label, enabled, propsText, propsHint }))
 }
 
 /** 首页区块编排：`landing_resource` kind `SECTION`，resKey = 页面 key。 */
@@ -187,7 +216,7 @@ export const Sections = () => {
     <div>
       <PageHeader
         title="首页区块"
-        description="调整首页区块的展示顺序与启用状态，支持为单个区块覆盖自定义 props"
+        description="调整首页区块的展示顺序与启用状态；每个区块支持的自定义 props 见展开项。精选模板 / 插件请在「市场运营 → 精选位」维护"
         actions={
           <>
             <div className="flex rounded-lg border p-0.5">
@@ -292,11 +321,16 @@ export const Sections = () => {
                       自定义 props
                     </CollapsibleTrigger>
                     <CollapsibleContent className="border-t px-3 py-3">
+                      {row.propsHint && (
+                        <p className="mb-2 text-xs text-muted-foreground">
+                          该区块支持：<span className="font-mono">{row.propsHint}</span>
+                        </p>
+                      )}
                       <JsonField
                         value={row.propsText}
                         rows={5}
                         disabled={!canManage}
-                        hint="仅在该区块支持时生效；留空为 {}"
+                        hint="仅在上方列出的字段生效；留空为 {}"
                         onChange={(value) =>
                           setRows((prev) =>
                             prev.map((item) =>

@@ -194,3 +194,58 @@ API 客户端：`apps/admin/src/api/ops.ts`（调用 `/knowledge-system/admin/op
 - **构建期 SEO**：`apps/landing-page-vite/scripts/prerender.mjs` 为路由白名单产出独立 meta 的静态 HTML，
   并生成 `sitemap.xml` / `robots.txt` / `404.html`；nginx 通过路由白名单把未知路径返回真正的 404 状态。
   `pnpm --filter @kn/landing-page-vite build` 已包含该步骤（仅想构建 SPA 时用 `build:spa`）。
+
+---
+
+## 11. 界面重构后的可运营面（区块 props 与精选位）
+
+apps/landing-page-vite 首页已重构为「Ink & Vermilion」编辑风格：暖纸底、近黑墨色、单一朱红强调色。
+原先的六色 scene 调色板折叠为中性色 + 单强调色（--scene-* 保留为别名，仍引用它们的运营 payload 不会失效）。
+重构同时把「运营能改的东西」继续收敛到既有的两条管道，没有新增硬编码。
+
+### 11.1 区块 props（SECTION 资源）
+
+Home 会把每个区块的 props 透传给对应组件，读取逻辑集中在
+apps/landing-page-vite/src/ops/section-props.ts（未知键静默忽略，类型不符回退内置默认值）。
+admin「运营 → 首页区块 → 自定义 props」展开项已内置各区块可用字段提示。
+
+| sectionKey | 可用 props |
+| --- | --- |
+| hero | badge, title1, title2, desc, ctaLabel, ctaHref, secondaryLabel, secondaryHref, meta[], showStats |
+| stack-cloud | heading, items[] |
+| capability-bento | eyebrow, title, desc, cards[], hidden[]（card: editor / collab / bitable / ai / canvas / links） |
+| workflows | eyebrow, title, desc |
+| ecosystem-spotlight | eyebrow, title, desc, limit（1-12） |
+| everywhere-you-work | eyebrow, title, desc |
+| templates-preview | eyebrow, title, desc, limit（1-12） |
+| open-source | eyebrow, title, desc |
+| faq | eyebrow, title, desc |
+| final-cta | eyebrow, title1, title2, desc, primaryLabel, primaryHref |
+
+优先级：内置文案 < 区块 props < 运行中的实验变体（目前 hero-cta 的 ctaLabel / ctaHref 仍以实验为准）。
+
+示例（admin 的「自定义 props」输入框，JSON）：
+
+    { "limit": 4, "eyebrow": "精选插件" }
+
+### 11.2 精选位（FEATURED 资源）
+
+/ops/config 下发的 featured 现在被落地页消费：
+
+- ecosystem-spotlight：目标为 plugin 的精选位渲染为「运营精选」区块，排在官方插件网格之前，
+  深链到 LIVE_DEMO_URL/plugin/{targetId}。
+- templates-preview：目标为 template 的精选位按 position 置顶，并展示 badge / blurb，
+  深链到 LIVE_DEMO_URL/template/{targetId}。
+
+维护入口：admin「运营 → 市场运营 → 精选位」，字段 targetType / targetId / name / badge / blurb / 顺序。
+
+### 11.3 视觉系统速查
+
+- 设计令牌集中在 apps/landing-page-vite/src/index.css（:root 与 .dark）。强调色为 --kn-accent，
+  语义色只有这一处，其余是暖纸 / 墨色中性阶。
+- 品牌 logo 使用与 public/favicon.svg 同源的橙→粉渐变 K（components/Logo.tsx），是页面上唯一的多色元素；
+  文字标识跟随 --kn-ink 自适应深浅色。
+- 区块标题统一走 components/SectionHeading.tsx（强调色短线 + 等宽 eyebrow + 左对齐标题），
+  通过 index 传入序号 01–08。
+- 移动端：Radix ScrollArea 的内容包裹层默认为 display:table，会被视口的 overflow-x:hidden 裁剪；
+  index.css 末尾已用属性选择器强制其为 block 盒，避免首页在窄屏横向溢出。

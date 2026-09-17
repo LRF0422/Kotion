@@ -5,47 +5,54 @@ export interface SectionHeadingProps {
     title: React.ReactNode;
     description?: React.ReactNode;
     align?: "left" | "center";
+    /** Kept for API compatibility with older call sites; the collapsed
+     *  palette means every scene renders in the same ink + accent tones. */
     scene?: "editor" | "collab" | "bitable" | "ai" | "canvas" | "selfhost";
     className?: string;
+    /** Optional mono index shown before the eyebrow, e.g. "01". */
+    index?: string;
 }
 
-const sceneVars: Record<NonNullable<SectionHeadingProps["scene"]>, { bg: string; fg: string }> = {
-    editor:   { bg: "var(--scene-editor-50)",   fg: "var(--scene-editor-600)" },
-    collab:   { bg: "var(--scene-collab-50)",   fg: "var(--scene-collab-600)" },
-    bitable:  { bg: "var(--scene-bitable-50)",  fg: "var(--scene-bitable-600)" },
-    ai:       { bg: "var(--scene-ai-50)",       fg: "var(--scene-ai-600)" },
-    canvas:   { bg: "var(--scene-canvas-50)",   fg: "var(--scene-canvas-600)" },
-    selfhost: { bg: "var(--scene-selfhost-50)", fg: "var(--scene-selfhost-600)" },
-};
-
+/**
+ * Editorial section heading: an accent rule + mono kicker above a tight,
+ * left-aligned title. Replaces the centred colour-pill eyebrow pattern.
+ */
 export const SectionHeading: React.FC<SectionHeadingProps> = ({
     eyebrow,
     title,
     description,
-    align = "center",
-    scene = "editor",
+    align = "left",
     className = "",
+    index,
 }) => {
-    const { bg, fg } = sceneVars[scene];
-    const alignClass = align === "center" ? "text-center mx-auto" : "text-left";
+    const centered = align === "center";
+    const rootClass = [
+        centered ? "items-center text-center mx-auto" : "items-start text-left",
+        "flex flex-col max-w-2xl",
+        className,
+    ].join(" ");
+
     return (
-        <div className={`${alignClass} max-w-3xl ${className}`}>
+        <div className={rootClass}>
             {eyebrow && (
-                <span
-                    className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium mb-4"
-                    style={{ backgroundColor: bg, color: fg }}
-                >
-                    {eyebrow}
-                </span>
+                <div className="mb-5 flex items-center gap-2.5">
+                    <span className="h-px w-6" style={{ background: "var(--kn-accent)" }} />
+                    {index && (
+                        <span className="font-mono text-[11px] tracking-[0.16em]" style={{ color: "var(--kn-accent)" }}>
+                            {index}
+                        </span>
+                    )}
+                    <span className="kicker">{eyebrow}</span>
+                </div>
             )}
             <h2
-                className="font-serif text-3xl md:text-5xl font-semibold tracking-tight leading-[1.1]"
+                className="text-[1.75rem] font-semibold leading-[1.12] tracking-[-0.025em] md:text-[2.5rem]"
                 style={{ color: "var(--kn-ink)" }}
             >
                 {title}
             </h2>
             {description && (
-                <p className="mt-5 text-base md:text-lg leading-relaxed" style={{ color: "var(--kn-ink-soft)" }}>
+                <p className="mt-4 max-w-xl text-[15px] leading-relaxed md:text-base" style={{ color: "var(--kn-ink-soft)" }}>
                     {description}
                 </p>
             )}

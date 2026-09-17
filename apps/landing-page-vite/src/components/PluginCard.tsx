@@ -8,45 +8,50 @@ export interface PluginCardProps {
     tag?: string;
     href?: string;
     onClick?: () => void;
+    /** Optional ops-set label rendered as a small accent marker. */
+    featured?: boolean;
 }
 
 /**
- * A compact plugin card with gradient icon, scene-colored tag and hover lift.
+ * Dense, flat plugin card: hairline border, tile icon, mono tag.
+ * Scene colour is intentionally ignored — the palette is collapsed.
  */
 export const PluginCard: React.FC<PluginCardProps> = ({
     icon,
     name,
     description,
-    scene,
     tag,
     href,
     onClick,
+    featured = false,
 }) => {
     const Wrapper: React.ElementType = href ? "a" : "button";
     return (
         <Wrapper
             {...(href ? { href, target: "_blank", rel: "noreferrer" } : { type: "button", onClick })}
-            className="card-lift group text-left p-5 flex flex-col gap-3 h-full"
+            className="card-lift group flex h-full w-full flex-col gap-3 p-5 text-left"
         >
-            <div className="flex items-start justify-between">
-                <div
-                    className="w-10 h-10 rounded-lg grid place-items-center text-lg"
-                    style={{ background: `var(--scene-${scene}-100)`, color: `var(--scene-${scene}-600)` }}
+            <div className="flex items-start justify-between gap-3">
+                <span
+                    className="grid h-9 w-9 place-items-center rounded-md"
+                    style={{ background: "var(--kn-tile)", color: "var(--kn-ink)" }}
                 >
                     {icon}
-                </div>
+                </span>
                 {tag && (
                     <span
-                        className="chip"
-                        style={{ background: `var(--scene-${scene}-50)`, color: `var(--scene-${scene}-600)` }}
+                        className="font-mono text-[10px] uppercase tracking-[0.14em]"
+                        style={{ color: featured ? "var(--kn-accent-ink)" : "var(--kn-ink-mute)" }}
                     >
                         {tag}
                     </span>
                 )}
             </div>
             <div>
-                <div className="font-semibold" style={{ color: "var(--kn-ink)" }}>{name}</div>
-                <div className="mt-1 text-sm leading-relaxed line-clamp-2" style={{ color: "var(--kn-ink-soft)" }}>
+                <div className="text-[15px] font-semibold" style={{ color: "var(--kn-ink)" }}>
+                    {name}
+                </div>
+                <div className="mt-1 line-clamp-2 text-[13px] leading-relaxed" style={{ color: "var(--kn-ink-soft)" }}>
                     {description}
                 </div>
             </div>

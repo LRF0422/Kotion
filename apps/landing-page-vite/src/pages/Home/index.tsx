@@ -15,6 +15,7 @@ import {
     getCachedConfig,
     loadOpsConfig,
     subscribeConfig,
+    type FeaturedItem,
     type OpsConfig,
     type SectionItem,
 } from "../../ops/config";
@@ -36,12 +37,17 @@ const DEFAULT_ORDER = [
 ] as const;
 
 /**
- * sectionKey → 区块组件。
- *
- * 注：现有区块组件都不接受 props，因此 CMS 的 `props` 暂时不向下传递，
- * 保留给未来的可配置区块；未知 sectionKey 一律静默跳过。
+ * 每个区块都会收到：
+ * - `props`：admin「首页区块」里为该区块填写的自定义 JSON（见 ops/section-props.ts）；
+ * - `featured`：admin「市场精选位」配置的精选模板 / 插件（消费 FEATURED 资源）。
+ * 未知 sectionKey 一律静默跳过。
  */
-const SECTION_COMPONENTS: Record<string, React.ComponentType> = {
+export interface SectionComponentProps {
+    props?: Record<string, unknown>;
+    featured?: FeaturedItem[];
+}
+
+const SECTION_COMPONENTS: Record<string, React.ComponentType<SectionComponentProps>> = {
     hero: Hero,
     "stack-cloud": StackCloud,
     "capability-bento": CapabilityBento,
@@ -103,6 +109,9 @@ export const Home: React.FC = () => {
             .sort((a, b) => a.position - b.position)
             .filter((item) => Boolean(SECTION_COMPONENTS[item.sectionKey]));
     }, [config]);
+
+    // 运营精选位（admin → 市场运营 → FEATURED），供生态 / 模板区块消费
+    const featured = useMemo<FeaturedItem[]>(() => config?.featured ?? [], [config]);
 
     const rootRef = useRef<HTMLDivElement | null>(null);
     const seenRef = useRef<Set<string>>(new Set());
@@ -180,7 +189,7 @@ export const Home: React.FC = () => {
                 if (!Section) return null;
                 return (
                     <div key={item.sectionKey} data-section={item.sectionKey} data-section-index={index}>
-                        <Section />
+                        <Section props={item.props} featured={featured} />
                     </div>
                 );
             })}

@@ -15,6 +15,7 @@ import {
 } from "../../constants/links";
 import { buildTrackedUrl, track } from "../../ops/analytics";
 import { SubscribeForm } from "../../components/SubscribeForm";
+import { Logo } from "../../components/Logo";
 
 interface FooterLink {
     labelKey: string;
@@ -34,7 +35,7 @@ const COLUMNS: FooterColumn[] = [
             { labelKey: "footer.link-web", href: LIVE_DEMO_URL },
             { labelKey: "footer.link-desktop", href: DESKTOP_RELEASE_URL },
             { labelKey: "footer.link-selfhost", to: DOCS_INSTALL },
-            { labelKey: "footer.link-roadmap", href: `${GITHUB_URL}/projects` },
+            { labelKey: "footer.link-roadmap", href: GITHUB_URL + "/projects" },
         ],
     },
     {
@@ -59,8 +60,8 @@ const COLUMNS: FooterColumn[] = [
         titleKey: "footer.col-legal",
         links: [
             { labelKey: "footer.link-license", href: GITHUB_LICENSE_URL },
-            { labelKey: "footer.link-privacy", href: `${GITHUB_URL}/blob/main/PRIVACY.md` },
-            { labelKey: "footer.link-terms", href: `${GITHUB_URL}/blob/main/TERMS.md` },
+            { labelKey: "footer.link-privacy", href: GITHUB_URL + "/blob/main/PRIVACY.md" },
+            { labelKey: "footer.link-terms", href: GITHUB_URL + "/blob/main/TERMS.md" },
         ],
     },
 ];
@@ -70,29 +71,21 @@ export const Footer: React.FC = () => {
     return (
         <footer className="border-t" style={{ borderColor: "var(--kn-line)", background: "var(--kn-paper)" }}>
             <div className="container-padding py-16">
-                <div className="grid grid-cols-2 md:grid-cols-6 gap-8 lg:gap-12">
+                <div className="grid grid-cols-2 gap-10 md:grid-cols-6 lg:gap-12">
                     {/* Brand column */}
                     <div className="col-span-2">
-                        <div className="flex items-center mb-5">
-                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-400 to-pink-500 flex items-center justify-center">
-                                <span className="text-white font-bold text-sm">K</span>
-                            </div>
-                            <span className="ml-2 text-xl font-semibold tracking-tight" style={{ color: "var(--kn-ink)" }}>
-                                Kotion
-                            </span>
-                        </div>
-                        <p className="text-sm max-w-xs mb-6" style={{ color: "var(--kn-ink-soft)" }}>
+                        <Logo />
+                        <p className="mb-6 mt-4 max-w-xs text-sm leading-relaxed" style={{ color: "var(--kn-ink-soft)" }}>
                             {t("footer.strapline")}
                         </p>
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2.5">
                             <a
                                 href={buildTrackedUrl(GITHUB_URL, { utm_source: "kotion-landing", utm_medium: "social", utm_campaign: "footer", utm_content: "github" })}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 aria-label="GitHub"
                                 onClick={() => track("cta_click", { location: "footer-social", target: "github" })}
-                                className="w-10 h-10 rounded-lg flex items-center justify-center transition-all card-lift"
-                                style={{ color: "var(--kn-ink-soft)" }}
+                                className="icon-sq"
                             >
                                 <Github className="h-4 w-4" />
                             </a>
@@ -102,8 +95,7 @@ export const Footer: React.FC = () => {
                                 rel="noopener noreferrer"
                                 aria-label="Zhihu"
                                 onClick={() => track("cta_click", { location: "footer-social", target: "zhihu" })}
-                                className="w-10 h-10 rounded-lg flex items-center justify-center transition-all card-lift"
-                                style={{ color: "var(--kn-ink-soft)" }}
+                                className="icon-sq"
                             >
                                 <MessageCircle className="h-4 w-4" />
                             </a>
@@ -115,7 +107,7 @@ export const Footer: React.FC = () => {
                     {COLUMNS.map((col) => (
                         <div key={col.titleKey}>
                             <h3
-                                className="text-xs font-semibold mb-4 uppercase tracking-wider"
+                                className="kicker mb-4"
                                 style={{ color: "var(--kn-ink)" }}
                             >
                                 {t(col.titleKey)}
@@ -124,11 +116,7 @@ export const Footer: React.FC = () => {
                                 {col.links.map((l) => (
                                     <li key={l.labelKey}>
                                         {l.to ? (
-                                            <Link
-                                                to={l.to}
-                                                className="text-sm hover:opacity-80 transition-opacity"
-                                                style={{ color: "var(--kn-ink-soft)" }}
-                                            >
+                                            <Link to={l.to} className="footer-link text-sm">
                                                 {t(l.labelKey)}
                                             </Link>
                                         ) : (
@@ -144,8 +132,7 @@ export const Footer: React.FC = () => {
                                                 target={l.href?.startsWith("http") ? "_blank" : undefined}
                                                 rel={l.href?.startsWith("http") ? "noopener noreferrer" : undefined}
                                                 onClick={() => track("cta_click", { location: "footer", target: l.labelKey, href: l.href })}
-                                                className="text-sm hover:opacity-80 transition-opacity"
-                                                style={{ color: "var(--kn-ink-soft)" }}
+                                                className="footer-link text-sm"
                                             >
                                                 {t(l.labelKey)}
                                             </a>
@@ -158,17 +145,15 @@ export const Footer: React.FC = () => {
                 </div>
 
                 {/* Bottom bar */}
-                <div className="mt-12 pt-8 border-t" style={{ borderColor: "var(--kn-line)" }}>
-                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                        <p className="text-sm" style={{ color: "var(--kn-ink-soft)" }}>
-                            © {new Date().getFullYear()} Kotion · {t("footer.copyright")}
-                        </p>
-                        <p className="text-sm inline-flex items-center gap-1.5" style={{ color: "var(--kn-ink-soft)" }}>
-                            {t("footer.made-with")}
-                            <Heart className="h-3.5 w-3.5" style={{ color: "var(--scene-ai-500)" }} />
-                            · {t("footer.mit-line")}
-                        </p>
-                    </div>
+                <div className="mt-14 flex flex-col gap-4 border-t pt-8 md:flex-row md:items-center md:justify-between" style={{ borderColor: "var(--kn-line)" }}>
+                    <p className="font-mono text-[11px] tracking-wide" style={{ color: "var(--kn-ink-mute)" }}>
+                        © {new Date().getFullYear()} KOTION · {t("footer.copyright")}
+                    </p>
+                    <p className="inline-flex items-center gap-1.5 text-sm" style={{ color: "var(--kn-ink-soft)" }}>
+                        {t("footer.made-with")}
+                        <Heart className="h-3.5 w-3.5" style={{ color: "var(--kn-accent)" }} />
+                        · {t("footer.mit-line")}
+                    </p>
                 </div>
             </div>
         </footer>
