@@ -12,14 +12,19 @@
         "build": "rollup -c rollup.config.js",
         "clean": "rm -rf dist"
     },
-    "keywords": ["api", "http", "postman", "rest", "desktop", "plugin"],
+    "keywords": [
+        "api",
+        "http",
+        "postman",
+        "rest",
+        "desktop",
+        "plugin"
+    ],
     "author": "",
     "license": "MIT",
     "dependencies": {
         "@kn/common": "workspace:*",
-        "@kn/editor": "workspace:*",
-        "@kn/ui": "workspace:*",
-        "@kn/icon": "workspace:*"
+        "@kn/editor": "workspace:*"
     },
     "devDependencies": {
         "@kn/rollup-config": "workspace:*",

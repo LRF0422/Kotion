@@ -17,9 +17,7 @@
         "@kn/editor": "workspace:*",
         "@kn/icon": "workspace:*",
         "@kn/ui": "workspace:*",
-        "uuid": "^9.0.0",
-        "autoprefixer": "^10.4.20",
-        "postcss": "^8.4.47"
+        "uuid": "^9.0.0"
     },
     "keywords": [
         "sticky-note",

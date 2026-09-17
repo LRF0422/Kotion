@@ -20,9 +20,7 @@
     "@kn/icon": "workspace:*",
     "@kn/ui": "workspace:*",
     "@xyflow/react": "^12.11.6",
-    "autoprefixer": "^10.4.20",
-    "nanoid": "^5.0.7",
-    "postcss": "^8.4.47"
+    "nanoid": "^5.0.7"
   },
   "keywords": [],
   "author": "",

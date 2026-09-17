@@ -16,9 +16,7 @@
     "@kn/common": "workspace:*",
     "@kn/editor": "workspace:*",
     "@kn/icon": "workspace:*",
-    "@kn/ui": "workspace:*",
-    "autoprefixer": "^10.4.20",
-    "postcss": "^8.4.47"
+    "@kn/ui": "workspace:*"
   },
   "keywords": [],
   "author": "",

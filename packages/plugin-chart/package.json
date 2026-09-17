@@ -16,12 +16,13 @@
     "@kn/common": "workspace:*",
     "@kn/editor": "workspace:*",
     "@kn/icon": "workspace:*",
-    "@kn/ui": "workspace:*",
-    "autoprefixer": "^10.4.20",
-    "postcss": "^8.4.47",
-    "recharts": "^2.15.0"
+    "@kn/ui": "workspace:*"
   },
-  "keywords": ["chart", "visualization", "data"],
+  "keywords": [
+    "chart",
+    "visualization",
+    "data"
+  ],
   "author": "",
   "license": "ISC",
   "devDependencies": {

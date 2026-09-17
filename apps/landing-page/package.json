@@ -4,12 +4,9 @@
   "private": true,
   "dependencies": {
     "@kn/ui": "workspace:*",
-    "@kn/icon": "workspace:*",
     "next": "latest",
     "next-themes": "^0.3.0",
-    "lucide-react": "^0.541.0",
-    "@tailwindcss/typography": "^0.5.16",
-    "tailwindcss-animate": "^1.0.7"
+    "lucide-react": "^0.541.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
