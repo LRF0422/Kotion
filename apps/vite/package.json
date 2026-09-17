@@ -25,6 +25,7 @@
     "@kn/mermaid-plugin": "workspace:*",
     "@kn/plugin-bitable": "workspace:*",
     "@kn/plugin-github": "workspace:*",
+    "@kn/plugin-zhihu": "workspace:*",
     "@kn/plugin-office": "workspace:*",
     "@kn/plugin-comment": "workspace:*",
     "@kn/chart-plugin": "workspace:*",

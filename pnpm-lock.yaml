@@ -202,6 +202,9 @@ importers:
       '@kn/plugin-theme':
         specifier: workspace:*
         version: link:../../packages/plugin-theme
+      '@kn/plugin-zhihu':
+        specifier: workspace:*
+        version: link:../../packages/plugin-zhihu
       '@kn/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -381,6 +384,9 @@ importers:
       '@kn/plugin-theme':
         specifier: workspace:*
         version: link:../../packages/plugin-theme
+      '@kn/plugin-zhihu':
+        specifier: workspace:*
+        version: link:../../packages/plugin-zhihu
       '@kn/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -1263,6 +1269,28 @@ importers:
       '@kn/rollup-config':
         specifier: workspace:*
         version: link:../rollup-config
+
+  packages/plugin-zhihu:
+    dependencies:
+      '@kn/common':
+        specifier: workspace:*
+        version: link:../common
+      '@kn/editor':
+        specifier: workspace:*
+        version: link:../editor
+      '@kn/icon':
+        specifier: workspace:*
+        version: link:../icon
+      '@kn/ui':
+        specifier: workspace:*
+        version: link:../ui
+    devDependencies:
+      '@kn/rollup-config':
+        specifier: workspace:*
+        version: link:../rollup-config
+      '@types/react':
+        specifier: ^18.2.0
+        version: 18.3.28
 
   packages/rollup-config: {}
 

@@ -8,6 +8,7 @@ import { theme } from "@kn/plugin-theme";
 import { office } from "@kn/plugin-office";
 import { drawnix } from "@kn/plugin-drawnix";
 import { github } from "@kn/plugin-github";
+import { zhihu } from "@kn/plugin-zhihu";
 import { systemPlugins } from "./system-plugins";
 import { mermaid } from "@kn/mermaid-plugin";
 import { logicFlow} from "@kn/plugin-logicflow"
@@ -27,5 +28,6 @@ export const bundledPlugins = [
   ...systemPlugins,
   mermaid,
   github,
+  zhihu,
   logicFlow,
 ];

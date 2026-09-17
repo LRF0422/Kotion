@@ -1,0 +1,36 @@
+{
+  "name": "@kn/plugin-zhihu",
+  "version": "0.0.1",
+  "description": "Zhihu connector plugin for Kotion - search, hot list, Zhida answer and quota via the official Zhihu Open Platform",
+  "main": "src/index.tsx",
+  "publishConfig": {
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "registry": "http://localhost:8081/repository/npm-hosted/"
+  },
+  "scripts": {
+    "build": "rollup -c",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "zhihu",
+    "知乎",
+    "connector",
+    "search",
+    "open-platform",
+    "editor",
+    "plugin"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@kn/common": "workspace:*",
+    "@kn/editor": "workspace:*",
+    "@kn/icon": "workspace:*",
+    "@kn/ui": "workspace:*"
+  },
+  "devDependencies": {
+    "@kn/rollup-config": "workspace:*",
+    "@types/react": "^18.2.0"
+  }
+}

@@ -25,6 +25,7 @@
         "@kn/plugin-bitable": "workspace:*",
         "@kn/plugin-block-reference": "workspace:*",
         "@kn/plugin-github": "workspace:*",
+        "@kn/plugin-zhihu": "workspace:*",
         "@kn/plugin-logicflow": "workspace:*",
         "@kn/plugin-main": "workspace:*",
         "@kn/plugin-speech-to-text": "workspace:*",

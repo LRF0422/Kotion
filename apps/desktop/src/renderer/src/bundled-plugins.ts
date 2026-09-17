@@ -8,6 +8,7 @@ import { speechToText } from '@kn/plugin-speech-to-text'
 import { logicFlow } from '@kn/plugin-logicflow'
 import { apiClient } from '@kn/plugin-api-client'
 import { github } from '@kn/plugin-github'
+import { zhihu } from '@kn/plugin-zhihu'
 
 /**
  * Development-only compatibility set. Imported lazily behind `import.meta.env.DEV`
@@ -24,4 +25,5 @@ export const bundledPlugins = [
     logicFlow,
     apiClient,
     github,
+    zhihu,
 ]
