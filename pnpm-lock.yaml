@@ -232,6 +232,9 @@ importers:
       '@kn/plugin-ai':
         specifier: workspace:*
         version: link:../../packages/plugin-ai
+      '@kn/plugin-api-client':
+        specifier: workspace:*
+        version: link:../../packages/plugin-api-client
       '@kn/plugin-bilibili':
         specifier: workspace:*
         version: link:../../packages/plugin-bilibili
@@ -991,6 +994,34 @@ importers:
       '@kn/common':
         specifier: workspace:*
         version: link:../common
+
+  packages/plugin-api-client:
+    dependencies:
+      '@kn/common':
+        specifier: workspace:*
+        version: link:../common
+      '@kn/editor':
+        specifier: workspace:*
+        version: link:../editor
+      '@kn/icon':
+        specifier: workspace:*
+        version: link:../icon
+      '@kn/ui':
+        specifier: workspace:*
+        version: link:../ui
+    devDependencies:
+      '@kn/rollup-config':
+        specifier: workspace:*
+        version: link:../rollup-config
+      '@kn/typescript-config':
+        specifier: workspace:*
+        version: link:../typescript-config
+      '@types/node':
+        specifier: ^20.11.24
+        version: 20.19.35
+      typescript:
+        specifier: ^5.3.3
+        version: 5.9.3
 
   packages/plugin-bilibili:
     dependencies:
@@ -17654,7 +17685,7 @@ snapshots:
     dependencies:
       '@types/http-cache-semantics': 4.2.0
       '@types/keyv': 3.1.4
-      '@types/node': 22.19.13
+      '@types/node': 20.19.35
       '@types/responselike': 1.0.3
 
   '@types/d3-array@3.2.2': {}
@@ -17799,7 +17830,7 @@ snapshots:
 
   '@types/fs-extra@9.0.13':
     dependencies:
-      '@types/node': 22.19.13
+      '@types/node': 20.19.35
 
   '@types/geojson@7946.0.16': {}
 
@@ -17837,7 +17868,7 @@ snapshots:
 
   '@types/jsonfile@6.1.4':
     dependencies:
-      '@types/node': 22.19.13
+      '@types/node': 20.19.35
 
   '@types/katex@0.16.8': {}
 
@@ -17947,7 +17978,7 @@ snapshots:
 
   '@types/responselike@1.0.3':
     dependencies:
-      '@types/node': 22.19.13
+      '@types/node': 20.19.35
 
   '@types/semver@7.7.1': {}
 
@@ -23205,7 +23236,7 @@ snapshots:
   jest-mock@30.2.0:
     dependencies:
       '@jest/types': 30.2.0
-      '@types/node': 22.19.13
+      '@types/node': 20.19.35
       jest-util: 30.2.0
 
   jest-regex-util@30.0.1: {}
@@ -23213,7 +23244,7 @@ snapshots:
   jest-util@30.2.0:
     dependencies:
       '@jest/types': 30.2.0
-      '@types/node': 22.19.13
+      '@types/node': 20.19.35
       chalk: 4.1.2
       ci-info: 4.4.0
       graceful-fs: 4.2.11
@@ -23221,7 +23252,7 @@ snapshots:
 
   jest-worker@26.6.2:
     dependencies:
-      '@types/node': 22.19.13
+      '@types/node': 20.19.35
       merge-stream: 2.0.0
       supports-color: 7.2.0
 

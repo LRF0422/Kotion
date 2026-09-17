@@ -11,6 +11,7 @@ import { fileManager } from "@kn/file-manager";
 import { github } from "@kn/plugin-github";
 import { systemPlugins } from "./system-plugins";
 import { mermaid } from "@kn/mermaid-plugin";
+import { logicFlow} from "@kn/plugin-logicflow"
 
 // Development and public shares load the complete source-plugin compatibility
 // set. Host-owned system plugins are shared with the production main boot.
@@ -23,9 +24,10 @@ export const bundledPlugins = [
   stickyNote,
   theme,
   office,
-  // drawnix,
+  drawnix,
   ...systemPlugins,
   fileManager,
   mermaid,
-  // github,
+  github,
+  logicFlow,
 ];
