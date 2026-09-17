@@ -2,17 +2,9 @@ import { Button } from "@kn/ui";
 import { Avatar, AvatarFallback } from "@kn/ui";
 import { Badge } from "@kn/ui";
 import {
-    APIS,
-    clearContextSensitiveClientState,
-    getRefreshToken,
-    getTokenContextState,
-    normalizeTokenResponse,
-    notifyContextChanged,
-    saveTokens,
     type CollaborationInvitation,
     type PagePermission,
     type PageRecord,
-    useApi,
     useNavigator,
     useSpacePageService,
     useTranslation,
@@ -38,12 +30,11 @@ type InviteStatus = 'loading' | 'ready' | 'accepting' | 'error' | 'expired';
  * persistent page permission (backend also adds the invitee to the space as
  * GUEST) before redirecting into the normal editing route.
  *
- * The shared space usually lives in the inviter's context (tenant). A session
- * bound to another context cannot read that space at all, so entering the page
- * is a two-step operation: `enterInvitation` makes the invitee a member of the
- * space's context and reports it, then this page switches the session into that
- * context before navigating. Without the switch every space/page read resolves
- * against the wrong context and fails with "空间不存在".
+ * The shared space usually lives in the inviter's context (tenant), which the
+ * invitee's session cannot read through the normal routes. The invitee therefore
+ * opens the page in a token-scoped guest workspace: reads are authorized by the
+ * invitation token, the inviter is the host and the only writer, and the editor
+ * waits for the inviter's presence before opening.
  */
 export const InviteCollaboration: React.FC = () => {
     const { t } = useTranslation();
@@ -116,12 +107,13 @@ export const InviteCollaboration: React.FC = () => {
         error?.response?.data?.msg || error?.message || t('inviteCollaboration.error.processFailed');
 
     /**
-     * Open the page in place with invitation-token-scoped document operations.
+     * Open the invited page in the token-scoped guest workspace.
      *
-     * Used when the server could not admit this account into the context that owns
-     * the space (for example a page created in the owner's personal context), or
-     * when the context switch itself fails. The invitee stays in their own context
-     * and every read/write is authorized by the invitation token.
+     * This is the only path an accepted invitee takes, for TEAM and personal
+     * contexts alike. The guest stays in their own identity context; reads are
+     * authorized by the invitation token, and the inviter — not the invitee —
+     * owns the write lease and persists. The editor itself waits for the
+     * inviter's presence before opening.
      */
     const enterWorkspace = async (token: string) => {
         const record = await service.collaboration.getInvitationPage(token);
@@ -130,45 +122,15 @@ export const InviteCollaboration: React.FC = () => {
     };
 
     const openInvitationPage = async (token: string) => {
+        // Idempotently mark the invitation as entered (this is also what grants
+        // the space organization's membership for TEAM contexts). We deliberately
+        // do not switch the session's context or navigate to the normal route:
+        // the guest's editor is host-gated and never persists.
         const target = await service.collaboration.enterInvitation(token);
         if (!target.spaceId || !target.pageId) {
             throw new Error(t('inviteCollaboration.error.processFailed'));
         }
-        const pageRoute = `/space-detail/${target.spaceId}/page/edit/${target.pageId}`;
-        const currentContextId = getTokenContextState().contextId;
-        if (!target.contextId || !currentContextId || target.contextId === currentContextId) {
-            navigator.go({ to: pageRoute });
-            return;
-        }
-        // The server refused (or could not grant) membership in the owning context,
-        // e.g. a space created in the owner's personal context. A switch would fail
-        // with a raw backend error and hide the page, so edit in place instead.
-        if (target.contextSwitchAllowed === false) {
-            console.info('Context grant unavailable, using invitation-token editor:', target.contextMessage);
-            await enterWorkspace(token);
-            return;
-        }
-
-        try {
-            const switched = await useApi(APIS.SWITCH_CONTEXT, { contextId: target.contextId }, {
-                refreshToken: getRefreshToken() || '',
-            });
-            const tokens = normalizeTokenResponse(switched.data);
-            if (!tokens.accessToken || !tokens.refreshToken) {
-                throw new Error(t('inviteCollaboration.contextSwitch.failed'));
-            }
-            saveTokens(tokens.accessToken, tokens.refreshToken);
-            clearContextSensitiveClientState();
-            notifyContextChanged(target.contextId);
-            // The whole client (redux store, services, open tabs) is bound to the old
-            // context, so a hard reload is the only safe way to enter the new one.
-            window.location.assign(pageRoute);
-        } catch (error: any) {
-            // The grant can race (organization suspended between enter and switch).
-            // Fall back to the token-scoped editor rather than a dead end.
-            console.error('Context switch failed, using invitation-token editor:', error);
-            await enterWorkspace(token);
-        }
+        await enterWorkspace(token);
     };
 
     // Accept the invitation when needed, then enter the page through the normal route
