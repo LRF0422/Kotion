@@ -9,6 +9,8 @@
   "scripts": {
     "build": "pnpm check:boundaries && turbo build",
     "build:select": "bash scripts/build.sh",
+    "build:backend": "bash scripts/build-backend.sh",
+    "build:backend:list": "bash scripts/build-backend.sh --list",
     "build:core": "pnpm --filter @kn/core build",
     "build:icon": "pnpm --filter @kn/icon build",
     "build:ui": "pnpm --filter @kn/ui build",
