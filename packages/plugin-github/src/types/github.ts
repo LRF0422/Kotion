@@ -158,16 +158,74 @@ export interface GitHubTag {
     tarball_url?: string
 }
 
+export type GitHubReleaseAssetState = 'uploaded' | 'open'
+
+export interface GitHubReleaseAsset {
+    id: number
+    name: string
+    label: string | null
+    content_type: string
+    size: number
+    download_count: number
+    state: GitHubReleaseAssetState
+    browser_download_url: string
+    created_at: string
+    updated_at: string
+}
+
 export interface GitHubRelease {
     id: number
     tag_name: string
+    target_commitish?: string
     name: string | null
     body: string | null
     draft: boolean
     prerelease: boolean
     html_url: string
+    url?: string
+    assets_url?: string
+    upload_url?: string
+    tarball_url?: string | null
+    zipball_url?: string | null
+    author?: GitHubUser
+    assets?: GitHubReleaseAsset[]
     published_at: string | null
     created_at: string
+}
+
+/** Make-latest semantics accepted by the create/update release APIs. */
+export type GitHubReleaseMakeLatest = 'true' | 'false' | 'legacy'
+
+/** Payload for creating a release; tag may be created automatically by GitHub. */
+export interface GitHubCreateReleaseInput {
+    tagName: string
+    targetCommitish?: string
+    name?: string
+    body?: string
+    draft?: boolean
+    prerelease?: boolean
+    generateReleaseNotes?: boolean
+    makeLatest?: GitHubReleaseMakeLatest
+    discussionCategoryName?: string
+}
+
+/** Partial update for an existing release (addressed by id or tag). */
+export interface GitHubUpdateReleaseInput {
+    releaseId?: number
+    tagName?: string
+    newTagName?: string
+    targetCommitish?: string
+    name?: string
+    body?: string
+    draft?: boolean
+    prerelease?: boolean
+    makeLatest?: GitHubReleaseMakeLatest
+    discussionCategoryName?: string
+}
+
+export interface GitHubReleaseNotes {
+    name: string
+    body: string
 }
 
 export interface GitHubTreeEntry {

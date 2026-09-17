@@ -3,9 +3,9 @@ import { Card, Input, Label, Switch, Button, cn } from '@kn/ui'
 import { usePluginConfig } from '@kn/common'
 import type { GitHubPluginConfig } from '../types/config'
 import { DEFAULT_GITHUB_CONFIG } from '../types/config'
-import { testConnection } from '../services/github-client'
+import { testConnection, checkRepoWriteAccess } from '../services/github-client'
 import { GITHUB_PLUGIN_KEY } from '../hooks/use-github-config'
-import { RefreshCw, CheckCircle2, XCircle, Eye, EyeOff, KeyRound, FolderGit2, Database } from '@kn/icon'
+import { RefreshCw, CheckCircle2, XCircle, Eye, EyeOff, KeyRound, FolderGit2, Database, Tag, Rocket } from '@kn/icon'
 import { GitHubLogo } from './GitHubLogo'
 
 const SectionCard: React.FC<{
@@ -37,6 +37,16 @@ export const GitHubSettings: React.FC<{ pluginKey?: string }> = () => {
     const [testing, setTesting] = useState(false)
     const [testResult, setTestResult] = useState<{ success: boolean; login?: string; error?: string } | null>(null)
     const [showToken, setShowToken] = useState(false)
+    const [checkingWrite, setCheckingWrite] = useState(false)
+    const [writeResult, setWriteResult] = useState<{ success: boolean; canPush: boolean; permission?: string; error?: string } | null>(null)
+
+    const handleCheckWrite = async () => {
+        if (!config.personalAccessToken || !config.defaultOwner || !config.defaultRepo) return
+        setCheckingWrite(true)
+        setWriteResult(null)
+        setWriteResult(await checkRepoWriteAccess(config.personalAccessToken, config.defaultOwner, config.defaultRepo))
+        setCheckingWrite(false)
+    }
 
     const handleTest = async () => {
         if (!config.personalAccessToken) return
@@ -109,7 +119,51 @@ export const GitHubSettings: React.FC<{ pluginKey?: string }> = () => {
 
                     <p className="text-[11px] leading-relaxed text-muted-foreground">
                         The token needs the <code className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">repo</code> scope to read private repositories.
+                        Publishing releases requires write access — a classic token with <code className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">repo</code>,
+                        or a fine-grained token with <code className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">Contents: Read and write</code>.
+                        GitHub's native generate-notes endpoint needs Contents write; when unavailable the plugin falls back to a commit-based changelog.
                     </p>
+
+                    {config.defaultOwner && config.defaultRepo && (
+                        <div className="space-y-1.5 rounded-lg border px-3 py-2.5">
+                            <div className="flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                    <p className="text-xs font-medium">Release write access</p>
+                                    <p className="text-[11px] text-muted-foreground">
+                                        Verify the token can publish releases in {config.defaultOwner}/{config.defaultRepo}
+                                    </p>
+                                </div>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="shrink-0"
+                                    onClick={handleCheckWrite}
+                                    disabled={checkingWrite || !config.personalAccessToken}
+                                >
+                                    {checkingWrite ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : 'Check'}
+                                </Button>
+                            </div>
+                            {writeResult && (
+                                <div
+                                    className={cn(
+                                        'flex items-start gap-1.5 rounded-md px-2 py-1 text-xs',
+                                        writeResult.canPush
+                                            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                            : 'bg-destructive/10 text-destructive'
+                                    )}
+                                >
+                                    {writeResult.canPush
+                                        ? <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                        : <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />}
+                                    <span className="min-w-0 break-words">
+                                        {writeResult.canPush
+                                            ? 'Can publish releases (permission: ' + (writeResult.permission || 'write') + ')'
+                                            : 'Cannot publish releases' + (writeResult.error ? ' — ' + writeResult.error : ' — token lacks write access')}
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </SectionCard>
 
@@ -136,6 +190,58 @@ export const GitHubSettings: React.FC<{ pluginKey?: string }> = () => {
                             onChange={(e) => updateConfig({ defaultRepo: e.target.value })}
                         />
                     </div>
+                </div>
+            </SectionCard>
+
+            {/* Release Defaults */}
+            <SectionCard
+                icon={<Rocket className="h-4 w-4" />}
+                title="Release Defaults"
+                description="Pre-fill the release composer and control how versions are published"
+            >
+                <div className="space-y-1.5">
+                    <Label className="text-xs">
+                        <Tag className="mr-1 inline h-3 w-3" /> Tag prefix
+                    </Label>
+                    <Input
+                        placeholder="v"
+                        value={config.releaseTagPrefix}
+                        onChange={(e) => updateConfig({ releaseTagPrefix: e.target.value })}
+                        className="w-24 font-mono text-xs"
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                        Pre-filled when composing a release, e.g. <code className="rounded bg-muted px-1 font-mono text-[10px]">v</code> → v1.2.0.
+                    </p>
+                </div>
+                <div className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5">
+                    <div className="min-w-0">
+                        <p className="text-xs font-medium">Auto-generate release notes</p>
+                        <p className="text-[11px] text-muted-foreground">Use GitHub's native generated notes by default</p>
+                    </div>
+                    <Switch
+                        checked={config.releaseAutoGenerateNotes}
+                        onCheckedChange={(checked) => updateConfig({ releaseAutoGenerateNotes: checked })}
+                    />
+                </div>
+                <div className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5">
+                    <div className="min-w-0">
+                        <p className="text-xs font-medium">Default to draft</p>
+                        <p className="text-[11px] text-muted-foreground">Start new releases as unpublished drafts</p>
+                    </div>
+                    <Switch
+                        checked={config.releaseDraftDefault}
+                        onCheckedChange={(checked) => updateConfig({ releaseDraftDefault: checked })}
+                    />
+                </div>
+                <div className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5">
+                    <div className="min-w-0">
+                        <p className="text-xs font-medium">Default to pre-release</p>
+                        <p className="text-[11px] text-muted-foreground">Mark new releases as pre-release by default</p>
+                    </div>
+                    <Switch
+                        checked={config.releasePrereleaseDefault}
+                        onCheckedChange={(checked) => updateConfig({ releasePrereleaseDefault: checked })}
+                    />
                 </div>
             </SectionCard>
 

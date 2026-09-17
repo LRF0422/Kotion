@@ -2,14 +2,6 @@ import ReactDOM from 'react-dom/client'
 import { App } from "@kn/core"
 import { DefaultPluginInstance } from '@kn/plugin-main'
 import "@kn/ui/globals.css"
-import { fileManager } from '@kn/file-manager'
-import { blockReference } from "@kn/plugin-block-reference"
-import { ai } from "@kn/plugin-ai"
-import { bitable } from "@kn/plugin-bitable"
-import { theme } from "@kn/plugin-theme"
-import { speechToText } from "@kn/plugin-speech-to-text"
-import { logicFlow } from "@kn/plugin-logicflow"
-import { apiClient } from "@kn/plugin-api-client"
 import './index.css'
 import React from 'react'
 
@@ -101,8 +93,35 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
     }
 }
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-    <ErrorBoundary>
-        <App plugins={[DefaultPluginInstance, fileManager, bitable, blockReference, ai, theme, speechToText, logicFlow, apiClient]} />
-    </ErrorBoundary>
-)
+/**
+ * Production packages only bundle the host-owned system plugins; optional
+ * plugins (GitHub, AI, bitable, …) are loaded at runtime by PluginManager from
+ * the user's installed plugins. Development still bundles them for convenience.
+ */
+const loadInitialPlugins = async () => {
+    if (import.meta.env.DEV) {
+        try {
+            const { bundledPlugins } = await import('./bundled-plugins')
+            return bundledPlugins
+        } catch (error) {
+            console.error('Failed to load bundled plugins:', error)
+            return [DefaultPluginInstance]
+        }
+    }
+    try {
+        const { systemPlugins } = await import('./system-plugins')
+        return systemPlugins
+    } catch (error) {
+        console.error('Failed to load system plugins:', error)
+        return [DefaultPluginInstance]
+    }
+}
+
+void (async () => {
+    const plugins = await loadInitialPlugins()
+    ReactDOM.createRoot(document.getElementById('root')!).render(
+        <ErrorBoundary>
+            <App plugins={plugins} />
+        </ErrorBoundary>
+    )
+})()

@@ -15,9 +15,11 @@
         "package:linux": "NODE_OPTIONS='--max-old-space-size=16384' electron-vite build && electron-builder --linux",
         "lint": "eslint . --ext .js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix"
     },
-    "dependencies": {
+    "devDependencies": {
+        "@electron-toolkit/eslint-config-ts": "^2.0.0",
         "@electron-toolkit/preload": "^3.0.1",
         "@electron-toolkit/utils": "^3.0.0",
+        "@electron/rebuild": "^4.0.3",
         "@kn/core": "workspace:*",
         "@kn/file-manager": "workspace:*",
         "@kn/mermaid-plugin": "workspace:*",
@@ -27,6 +29,7 @@
         "@kn/plugin-bitable": "workspace:*",
         "@kn/plugin-block-reference": "workspace:*",
         "@kn/plugin-drawnix": "workspace:*",
+        "@kn/plugin-github": "workspace:*",
         "@kn/plugin-logicflow": "workspace:*",
         "@kn/plugin-excalidraw": "workspace:*",
         "@kn/plugin-main": "workspace:*",
@@ -34,11 +37,7 @@
         "@kn/plugin-theme": "workspace:*",
         "@kn/ui": "workspace:*",
         "fs-extra": "^11.2.0",
-        "next-themes": "^0.3.0"
-    },
-    "devDependencies": {
-        "@electron-toolkit/eslint-config-ts": "^2.0.0",
-        "@electron/rebuild": "^4.0.3",
+        "next-themes": "^0.3.0",
         "@types/fs-extra": "^11.0.4",
         "@types/node": "^22.7.4",
         "@types/react": "^18.3.23",
@@ -65,7 +64,7 @@
         },
         "files": [
             "out/**/*",
-            "!node_modules"
+            "!**/node_modules/**/*"
         ],
         "mac": {
             "target": [

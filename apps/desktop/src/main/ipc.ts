@@ -325,10 +325,15 @@ export function setupIpcHandlers() {
     );
     const method = String(params.method || 'GET').toUpperCase();
     const headers = toHeaderRecord(params.headers);
-    const body =
-      typeof params.body === 'string' && method !== 'GET' && method !== 'HEAD'
-        ? params.body
-        : undefined;
+    const hasBody = method !== 'GET' && method !== 'HEAD';
+    // Prefer a base64 binary body (e.g. release-asset uploads) over a text body.
+    const body: string | Buffer | undefined = !hasBody
+      ? undefined
+      : typeof params.bodyBase64 === 'string' && params.bodyBase64.length > 0
+        ? Buffer.from(params.bodyBase64, 'base64')
+        : typeof params.body === 'string'
+          ? params.body
+          : undefined;
 
     const started = Date.now();
     const redirects: Array<{ status: number; location: string }> = [];
@@ -343,7 +348,8 @@ export function setupIpcHandlers() {
         response = await fetch(target, {
           method,
           headers,
-          body,
+          // Buffer is a valid undici BodyInit at runtime; the DOM lib types omit it.
+          body: body as any,
           redirect: 'manual',
           signal: controller.signal,
         });

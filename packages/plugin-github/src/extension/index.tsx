@@ -3,6 +3,7 @@ import { GitHubIssueNode } from './nodes/github-issue-node'
 import { GitHubPRNode } from './nodes/github-pr-node'
 import { GitHubRepoNode } from './nodes/github-repo-node'
 import { GitHubCodeNode } from './nodes/github-code-node'
+import { GitHubReleaseNode } from './nodes/github-release-node'
 import { issueTools } from './tools/issue-tools'
 import { prTools } from './tools/pr-tools'
 import { repoTools } from './tools/repo-tools'
@@ -10,16 +11,18 @@ import { codeTools } from './tools/code-tools'
 import { searchTools } from './tools/search-tools'
 import { historyTools } from './tools/history-tools'
 import { structureTools } from './tools/structure-tools'
+import { releaseTools } from './tools/release-tools'
 import { githubProjectManagerSkill } from './skills/github-project-manager'
 import { githubCodeReviewerSkill } from './skills/github-code-reviewer'
 import { githubChangelogWriterSkill } from './skills/github-changelog-writer'
 import { githubProjectDocumenterSkill } from './skills/github-project-documenter'
-import { CircleDot, GitPullRequest, FolderGit2, FileCode } from '@kn/icon'
+import { githubReleaseManagerSkill } from './skills/github-release-manager'
+import { CircleDot, GitPullRequest, FolderGit2, FileCode, Tag } from '@kn/icon'
 import React from 'react'
 
 export const GitHubExtension: ExtensionWrapper = {
     name: 'github',
-    extendsion: [GitHubIssueNode, GitHubPRNode, GitHubRepoNode, GitHubCodeNode],
+    extendsion: [GitHubIssueNode, GitHubPRNode, GitHubRepoNode, GitHubCodeNode, GitHubReleaseNode],
     slashConfig: [
         {
             divider: true,
@@ -69,6 +72,17 @@ export const GitHubExtension: ExtensionWrapper = {
                 })
             },
         },
+        {
+            icon: <Tag className="h-4 w-4" />,
+            text: 'GitHub Release',
+            slash: '/github-release',
+            action: (editor) => {
+                editor.commands.insertContent({
+                    type: 'githubRelease',
+                    attrs: {},
+                })
+            },
+        },
     ],
     tools: [
         ...issueTools,
@@ -78,11 +92,13 @@ export const GitHubExtension: ExtensionWrapper = {
         ...searchTools,
         ...historyTools,
         ...structureTools,
+        ...releaseTools,
     ],
     skills: [
         githubProjectManagerSkill,
         githubCodeReviewerSkill,
         githubChangelogWriterSkill,
         githubProjectDocumenterSkill,
+        githubReleaseManagerSkill,
     ],
 }

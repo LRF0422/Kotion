@@ -163,8 +163,14 @@ export interface DesktopHttpRequest {
     method?: string
     url: string
     headers?: Record<string, string>
-    /** Raw request body (text). Binary uploads are out of scope for v1. */
+    /** Raw request body (text). */
     body?: string
+    /**
+     * Base64-encoded binary request body. Takes precedence over `body` when
+     * present, letting plugins stream binary uploads through the main process
+     * (e.g. a release asset) without a browser CORS preflight.
+     */
+    bodyBase64?: string
     timeoutMs?: number
     maxResponseBytes?: number
 }

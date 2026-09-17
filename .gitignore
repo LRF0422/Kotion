@@ -92,3 +92,10 @@ Thumbs.db
 .history
 .fastRequest
 .VSCodeCounter
+
+# Electron dev artifacts #
+.electron-cache
+.kn-desktop-user-data
+
+# TypeScript incremental build info #
+*.tsbuildinfo
