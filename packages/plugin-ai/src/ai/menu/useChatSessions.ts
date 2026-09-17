@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 
+import { i18n } from '@kn/common'
+
 import type { Message } from './chat-types'
 import {
     ChatSessionMeta,
@@ -60,6 +62,28 @@ export interface UseChatSessionsResult {
 
 /** Upper bound on sessions fetched from the backend. */
 const SESSION_LIST_LIMIT = 100
+
+/**
+ * Drop the legacy bound-page notice the client used to prepend to the user turn.
+ *
+ * It was baked into the message content, so the engine persisted it and a reload
+ * rendered it inside the bubble. New turns carry it as this run's system prompt
+ * instead; this only cleans transcripts written before that change.
+ */
+function stripLegacyBoundPagePrefix(messages: Message[], title?: string): Message[] {
+    if (!title || messages.length === 0) return messages
+    const template = i18n.t('ai.chat.boundPagePrefix', { title })
+    if (!template || template === 'ai.chat.boundPagePrefix') return messages
+    const needle = template + '\n'
+    let changed = false
+    const next = messages.map(message => {
+        if (message.sender !== 'user' || typeof message.content !== 'string') return message
+        if (!message.content.startsWith(needle)) return message
+        changed = true
+        return { ...message, content: message.content.slice(needle.length) }
+    })
+    return changed ? next : messages
+}
 
 function createMeta(id: string, boundPage?: ChatTargetPage): ChatSessionMeta {
     const now = Date.now()
@@ -160,10 +184,14 @@ export function useChatSessions(): UseChatSessionsResult {
 
     // ── Engine transcript loading (with one-time import of local history) ──
     const applyTranscript = useCallback((id: string, transcript: Message[]) => {
+        // Clean the notice older versions persisted inside the user turn; the
+        // session's bound title is exactly what was interpolated at send time.
+        const meta = sessionsRef.current.find(session => session.id === id)
+        const cleaned = stripLegacyBoundPagePrefix(transcript, meta?.targetPage?.title)
         messagesSessionRef.current = id
-        lastSyncedRef.current = transcript
-        messagesRef.current = transcript
-        setMessages(transcript)
+        lastSyncedRef.current = cleaned
+        messagesRef.current = cleaned
+        setMessages(cleaned)
     }, [])
 
     const loadTranscript = useCallback(async (id: string, local: Message[]): Promise<Message[]> => {

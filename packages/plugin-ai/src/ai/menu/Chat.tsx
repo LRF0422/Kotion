@@ -712,19 +712,22 @@ export const ExpandableChatDemo: React.FC<{
             setTargetPage(runTarget)
         }
 
-        const prompt = runTarget
-            ? t('ai.chat.boundPagePrefix', { title: runTarget.title }) + '\n' + messageText
-            : messageText
+        // The bound-page notice is model context, not part of the user's turn:
+        // send it as this run's system prompt. Baking it into the user message
+        // persisted it with the transcript, so a reload showed it in the bubble.
+        const boundPageNote = runTarget
+            ? t('ai.chat.boundPagePrefix', { title: runTarget.title })
+            : undefined
 
         // Conversation history is engine-owned (session model log); the client
         // only sends the new turn. Images ride as multimodal content parts so
         // the model's own vision sees them (never interpreted here).
         const contentParts = images.length > 0
-            ? buildImageContentParts(prompt, images)
+            ? buildImageContentParts(messageText, images)
             : undefined
         const agentMessages: AgentChatMessage[] = [{
             role: 'user',
-            content: prompt,
+            content: messageText,
             contentParts,
         }]
 
@@ -734,6 +737,7 @@ export const ExpandableChatDemo: React.FC<{
                 mode: 'execute',
                 temperature: modelParams.temperature,
                 maxTokens: modelParams.maxTokens,
+                systemPrompt: boundPageNote,
             })
         } catch (err: any) {
             setError(classifyError(err))

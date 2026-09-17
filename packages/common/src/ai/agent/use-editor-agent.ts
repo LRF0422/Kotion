@@ -96,6 +96,13 @@ export interface StartTurnOptions {
     mode?: 'execute' | 'plan'
     temperature?: number
     maxTokens?: number
+    /**
+     * Extra system-prompt text for THIS run only, appended after the host's
+     * {@link UseEditorAgentOptions.systemPrompt}. It rides in the run's system
+     * message (and checkpoint), never in the persisted user turn, so per-turn
+     * context (e.g. the bound page) cannot leak into the visible transcript.
+     */
+    systemPrompt?: string
 }
 
 export interface EditorAgentApi {
@@ -241,12 +248,18 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
                 }
                 if (!mountedRef.current || generation !== generationRef.current) return
                 createAttempted = true
+                // Host rules stay prefix-cacheable; a per-run fragment (the bound
+                // page) is appended behind them for this run only.
+                const runSystemPrompt = [systemPrompt, opts.systemPrompt]
+                    .map(part => (part ?? '').trim())
+                    .filter(part => part.length > 0)
+                    .join('\n\n')
                 const run = await client.createRun({
                     conversationId,
                     messages,
                     tools,
                     skills,
-                    systemPrompt,
+                    systemPrompt: runSystemPrompt.length > 0 ? runSystemPrompt : undefined,
                     spaceId,
                     pageId,
                     model: opts.model,
@@ -299,7 +312,7 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
             startInFlightRef.current = tracked
             return tracked
         },
-        [client, conversationId, tools, skills, spaceId, pageId, persist, store, lock, executor, startStream]
+        [client, conversationId, tools, skills, systemPrompt, spaceId, pageId, persist, store, lock, executor, startStream]
     )
 
     // Frontend tool execution is its own concern (see ./use-pending-tools).
