@@ -1,7 +1,7 @@
 import { Editor, NodeRange, objectIncludes } from "@tiptap/core";
 import { EditorState, NodeSelection } from "@tiptap/pm/state";
 import { Node } from "@tiptap/pm/model";
-import { NodeType, Schema } from "@tiptap/pm/model";
+import { NodeType, ResolvedPos, Schema } from "@tiptap/pm/model";
 
 export function getCurrentNode(state: EditorState): Node | null {
   const $head = state.selection.$head;
@@ -196,3 +196,112 @@ export const findNodesByBlockIds = (
 export const isListActive = (editor: Editor) => {
   return editor.isActive('bulletList') || editor.isActive('orderedList') || editor.isActive('taskList');
 };
+
+export type ListKind = 'bulletList' | 'orderedList' | 'taskList';
+
+/** Item node type each list kind holds. */
+const LIST_ITEM_TYPE: Record<ListKind, string> = {
+  bulletList: 'listItem',
+  orderedList: 'listItem',
+  taskList: 'taskItem',
+};
+
+/**
+ * The list node enclosing the current selection, if any, plus its position
+ * (the position *before* the list node).
+ */
+export function locateList(
+  doc: Node,
+  $from: ResolvedPos,
+): { node: Node; pos: number; depth: number } | null {
+  for (let depth = $from.depth; depth > 0; depth -= 1) {
+    const node = $from.node(depth);
+    if (isListNode(node)) return { node, pos: $from.before(depth), depth };
+  }
+  return null;
+}
+
+/** The list node enclosing the current selection, if any. */
+export function findParentList(
+  editor: Editor,
+): { node: Node; pos: number } | null {
+  return locateList(editor.state.doc, editor.state.selection.$from);
+}
+
+/**
+ * Rebuild `list` as `target`, converting every item node
+ * (`listItem` <-> `taskItem`) and preserving id/rank attrs. Returns null when
+ * the schema doesn't provide the target list/item types.
+ */
+export function buildConvertedList(
+  schema: Schema,
+  list: Node,
+  target: ListKind,
+): Node | null {
+  const targetListType = schema.nodes[target];
+  const targetItemType = schema.nodes[LIST_ITEM_TYPE[target]];
+  if (!targetListType || !targetItemType) return null;
+
+  const items: Node[] = [];
+  list.forEach(item => {
+    const attrs: Record<string, any> = { ...item.attrs };
+    if (targetItemType.name === 'taskItem') attrs.checked = Boolean(attrs.checked);
+    else delete attrs.checked;
+    items.push(targetItemType.create(attrs, item.content, item.marks));
+  });
+
+  return targetListType.create({ ...list.attrs }, items, list.marks);
+}
+
+/**
+ * Convert the list enclosing the current selection between bullet / ordered /
+ * task lists.
+ *
+ * Tiptap's `toggleList` only re-types the list node when its existing items are
+ * valid for the new list type. `listItem` and `taskItem` are different node
+ * types, so that check always fails for task lists and a plain
+ * `toggleTaskList()` inside a normal list is a no-op (and vice versa). This
+ * rebuilds the list and its items atomically instead.
+ *
+ * - When the active list already is `target`, the selected item is lifted,
+ *   matching the toggle-off behaviour of `toggleBulletList` / `toggleTaskList`.
+ * - Otherwise the whole list is re-typed in one transaction (one undo step);
+ *   item attributes (id/rank) survive and `checked` is preserved across
+ *   task-item conversions.
+ * - Outside any list it falls back to Tiptap's own wrap command, so converting
+ *   a plain paragraph still works.
+ */
+export function convertListType(editor: Editor, target: ListKind): boolean {
+  const current = findParentList(editor);
+  const itemName = LIST_ITEM_TYPE[target];
+
+  if (!current) {
+    switch (target) {
+      case 'bulletList':
+        return editor.chain().focus().toggleBulletList().run();
+      case 'orderedList':
+        return editor.chain().focus().toggleOrderedList().run();
+      case 'taskList':
+        return editor.chain().focus().toggleTaskList().run();
+      default:
+        return false;
+    }
+  }
+
+  if (current.node.type.name === target) {
+    return editor.chain().focus().liftListItem(itemName).run();
+  }
+
+  const { node: list, pos } = current;
+  const converted = buildConvertedList(editor.state.schema, list, target);
+  if (!converted) return false;
+
+  return editor
+    .chain()
+    .focus()
+    .command(({ tr }) => {
+      tr.replaceWith(pos, pos + list.nodeSize, converted);
+      return true;
+    })
+    .run();
+}

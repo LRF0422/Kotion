@@ -1,6 +1,32 @@
 /**
  * Parse Markdown to ProseMirror-compatible JSON nodes
  */
+
+/** List kinds the parser tracks; each maps to a distinct ProseMirror list node. */
+type MarkdownListKind = 'bullet' | 'ordered'
+
+/**
+ * Node type name for a tracked list kind. A null kind only appears before the
+ * first item is collected and resolves to a bullet list for safety.
+ */
+const listNodeTypeOf = (kind: MarkdownListKind | null): 'bulletList' | 'orderedList' =>
+    kind === 'ordered' ? 'orderedList' : 'bulletList'
+
+/**
+ * Parse a list item's text. A leading checkbox marker ("[]"/"[ ]"/"[x]") is
+ * emitted as an inline `checkbox` node so the item stays a bullet/ordered list
+ * item and renders as "• □ text" — the checkbox lives *inside* the list instead
+ * of replacing it with a separate task-list node.
+ */
+const parseListItemContent = (text: string): any[] => {
+    const marker = text.match(/^\[([ xX]?)\]\s*(.*)$/)
+    if (!marker) return parseInlineMarkdown(text)
+    return [
+        { type: 'checkbox', attrs: { checked: marker[1].toLowerCase() === 'x' } },
+        ...parseInlineMarkdown(marker[2]),
+    ]
+}
+
 export const parseMarkdownToNodes = (markdown: string): any[] => {
     // Normalize line endings to ensure consistent parsing
     const normalizedMarkdown = markdown.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
@@ -10,7 +36,7 @@ export const parseMarkdownToNodes = (markdown: string): any[] => {
     let codeContent: string[] = []
     let codeLanguage = ''
     let inList = false
-    let listType: 'bullet' | 'ordered' | null = null
+    let listType: MarkdownListKind | null = null
     let currentListItems: any[] = []
     let inTable = false
     let tableHeaders: string[] = []
@@ -24,7 +50,7 @@ export const parseMarkdownToNodes = (markdown: string): any[] => {
             // Close any open list before code block
             if (inList && currentListItems.length > 0) {
                 nodes.push({
-                    type: listType === 'bullet' ? 'bulletList' : 'orderedList',
+                    type: listNodeTypeOf(listType),
                     content: currentListItems
                 })
                 inList = false
@@ -58,7 +84,7 @@ export const parseMarkdownToNodes = (markdown: string): any[] => {
         if (line.trim() === '') {
             if (inList && currentListItems.length > 0) {
                 nodes.push({
-                    type: listType === 'bullet' ? 'bulletList' : 'orderedList',
+                    type: listNodeTypeOf(listType),
                     content: currentListItems
                 })
                 inList = false
@@ -130,7 +156,7 @@ export const parseMarkdownToNodes = (markdown: string): any[] => {
             // Close any open list before heading
             if (inList && currentListItems.length > 0) {
                 nodes.push({
-                    type: listType === 'bullet' ? 'bulletList' : 'orderedList',
+                    type: listNodeTypeOf(listType),
                     content: currentListItems
                 })
                 inList = false
@@ -146,7 +172,9 @@ export const parseMarkdownToNodes = (markdown: string): any[] => {
             continue
         }
 
-        // Bullet list item
+        // Bullet list item. A leading checkbox marker stays inside the item
+        // (see parseListItemContent), so a bullet and a to-do coexist in the
+        // same list instead of one replacing the other.
         const bulletMatch = line.match(/^\s*([-*+])\s+(.+)$/)
         if (bulletMatch) {
             const indentLevel = line.match(/^\s*/)?.[0]?.length || 0
@@ -156,7 +184,7 @@ export const parseMarkdownToNodes = (markdown: string): any[] => {
                 // Close any existing list before starting a new one
                 if (inList && currentListItems.length > 0) {
                     nodes.push({
-                        type: listType === 'bullet' ? 'bulletList' : 'orderedList',
+                        type: listNodeTypeOf(listType),
                         content: currentListItems
                     })
                 }
@@ -169,7 +197,7 @@ export const parseMarkdownToNodes = (markdown: string): any[] => {
                 type: 'listItem',
                 content: [{
                     type: 'paragraph',
-                    content: parseInlineMarkdown(itemContent)
+                    content: parseListItemContent(itemContent)
                 }]
             })
             continue
@@ -185,7 +213,7 @@ export const parseMarkdownToNodes = (markdown: string): any[] => {
                 // Close any existing list before starting a new one
                 if (inList && currentListItems.length > 0) {
                     nodes.push({
-                        type: listType === 'bullet' ? 'bulletList' : 'orderedList',
+                        type: listNodeTypeOf(listType),
                         content: currentListItems
                     })
                 }
@@ -198,7 +226,7 @@ export const parseMarkdownToNodes = (markdown: string): any[] => {
                 type: 'listItem',
                 content: [{
                     type: 'paragraph',
-                    content: parseInlineMarkdown(itemContent)
+                    content: parseListItemContent(itemContent)
                 }]
             })
             continue
@@ -210,7 +238,7 @@ export const parseMarkdownToNodes = (markdown: string): any[] => {
             // Close any open list before blockquote
             if (inList && currentListItems.length > 0) {
                 nodes.push({
-                    type: listType === 'bullet' ? 'bulletList' : 'orderedList',
+                    type: listNodeTypeOf(listType),
                     content: currentListItems
                 })
                 inList = false
@@ -233,7 +261,7 @@ export const parseMarkdownToNodes = (markdown: string): any[] => {
             // Close any open list before horizontal rule
             if (inList && currentListItems.length > 0) {
                 nodes.push({
-                    type: listType === 'bullet' ? 'bulletList' : 'orderedList',
+                    type: listNodeTypeOf(listType),
                     content: currentListItems
                 })
                 inList = false
@@ -248,7 +276,7 @@ export const parseMarkdownToNodes = (markdown: string): any[] => {
         // Close any open list before paragraph
         if (inList && currentListItems.length > 0) {
             nodes.push({
-                type: listType === 'bullet' ? 'bulletList' : 'orderedList',
+                type: listNodeTypeOf(listType),
                 content: currentListItems
             })
             inList = false
@@ -283,7 +311,7 @@ export const parseMarkdownToNodes = (markdown: string): any[] => {
     // Handle unclosed list
     if (inList && currentListItems.length > 0) {
         nodes.push({
-            type: listType === 'bullet' ? 'bulletList' : 'orderedList',
+            type: listNodeTypeOf(listType),
             content: currentListItems
         })
     }

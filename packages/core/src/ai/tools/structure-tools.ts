@@ -1,5 +1,5 @@
 import type { Editor } from "@kn/editor"
-import { findNodeByBlockId } from "@kn/editor"
+import { convertListType, findNodeByBlockId } from "@kn/editor"
 import { z } from "@kn/ui"
 import type { ToolsRecord } from "@kn/common"
 import { discoverBlocks, findBlockByText } from "@kn/common"
@@ -70,28 +70,19 @@ export const createStructureTools = (editor: Editor): ToolsRecord => ({
                     case 'codeBlock':
                         success = chain.toggleCodeBlock().run()
                         break
-                    case 'bulletList': {
-                        // If currently another list type, toggle off first
-                        if (previousType === 'listItem' || previousType === 'orderedList' || previousType === 'taskList' || previousType === 'taskItem') {
-                            editor.chain().focus().setTextSelection(selPos).liftListItem('listItem').run()
-                        }
-                        success = chain.toggleBulletList().run()
+                    case 'bulletList':
+                        // convertListType rewrites the enclosing list — including
+                        // listItem <-> taskItem — in one step. Tiptap's toggle*
+                        // commands are no-ops across differing item types, which
+                        // is why a plain list could never become a task list.
+                        success = convertListType(editor, 'bulletList')
                         break
-                    }
-                    case 'orderedList': {
-                        if (previousType === 'listItem' || previousType === 'bulletList' || previousType === 'taskList' || previousType === 'taskItem') {
-                            editor.chain().focus().setTextSelection(selPos).liftListItem('listItem').run()
-                        }
-                        success = chain.toggleOrderedList().run()
+                    case 'orderedList':
+                        success = convertListType(editor, 'orderedList')
                         break
-                    }
-                    case 'taskList': {
-                        if (previousType === 'listItem' || previousType === 'bulletList' || previousType === 'orderedList') {
-                            editor.chain().focus().setTextSelection(selPos).liftListItem('listItem').run()
-                        }
-                        success = chain.toggleTaskList().run()
+                    case 'taskList':
+                        success = convertListType(editor, 'taskList')
                         break
-                    }
                 }
 
                 return {
