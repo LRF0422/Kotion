@@ -275,6 +275,15 @@ public class CollaborationPageController {
         if (!hasPermission(invitation.getPermission(), requiredPermission)) {
             throw WikiException.FORBIDDEN_ACCESS.newException();
         }
+        // The invitee edits in realtime but never persists. The inviter is the host
+        // and owns the write lease; a guest's writes would land without a host to
+        // keep the document's revision coherent. Read endpoints stay open so the
+        // editor can load the document and follow the host's presence.
+        if (IPermissionService.PERMISSION_WRITE.equals(requiredPermission)
+                || IPermissionService.PERMISSION_ADMIN.equals(requiredPermission)) {
+            throw WikiException.FORBIDDEN_ACCESS.newException(
+                    "受邀协作者不能直接保存改动，请保持邀请人在线，由邀请人保存");
+        }
         return invitation;
     }
 

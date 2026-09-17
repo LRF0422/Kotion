@@ -18,6 +18,14 @@ export interface UsePageSessionOptions {
    * lease is pinned to the document actually being edited, not to the user.
    */
   clientId: string
+  /**
+   * Whether this client may take the write lease at all. False for an invited
+   * collaborator: the inviter is the host, and the guest's edits reach the
+   * database only through the host's shared Y.Doc. A guest still heartbeats, so
+   * it can follow the host's presence and learn when the session ends, but it
+   * never claims and therefore never writes.
+   */
+  canHost?: boolean
   onClaim: (clientId: string) => Promise<PageSessionState>
   onHeartbeat: (clientId: string) => Promise<PageSessionState>
   /**
@@ -120,7 +128,7 @@ export interface UsePageSessionReturn {
  */
 export function usePageSession(options: UsePageSessionOptions): UsePageSessionReturn {
   const {
-    enabled, clientId, onClaim, onHeartbeat, onRelease, onBeforeRelease,
+    enabled, clientId, canHost = true, onClaim, onHeartbeat, onRelease, onBeforeRelease,
     heartbeatMs = 10_000,
     connected = true, hostPresent = false, hostSeen = false, graceMs = 30_000,
   } = options
@@ -174,6 +182,7 @@ export function usePageSession(options: UsePageSessionOptions): UsePageSessionRe
   }, [])
 
   const claim = useCallback(async () => {
+    if (!canHost) return
     if (claimingRef.current) return
     claimingRef.current = true
     try {
@@ -186,7 +195,7 @@ export function usePageSession(options: UsePageSessionOptions): UsePageSessionRe
     } finally {
       claimingRef.current = false
     }
-  }, [clientId, apply])
+  }, [canHost, clientId, apply])
 
   /**
    * One heartbeat: renew if we hold the lease, and act on what comes back.
@@ -216,9 +225,13 @@ export function usePageSession(options: UsePageSessionOptions): UsePageSessionRe
         // deliberately not answered here: someone else may have held and
         // edited the page in the meantime. The rev watermark is what
         // catches that, and the writer refuses to write while behind.
-        console.warn('[usePageSession] lease lost; re-claiming')
+        // A guest never claims: the inviter is the host, so a same-user host
+        // signal must not hand this client the lease.
         apply(next)
-        await claim()
+        if (canHost) {
+          console.warn('[usePageSession] lease lost; re-claiming')
+          await claim()
+        }
         return
       }
 
@@ -243,13 +256,19 @@ export function usePageSession(options: UsePageSessionOptions): UsePageSessionRe
       // whole lease period of silence to do it.
       console.warn('[usePageSession] heartbeat failed:', err)
     }
-  }, [clientId, apply, claim])
+  }, [canHost, clientId, apply, claim])
 
   useEffect(() => {
     if (!enabled || !clientId) return
     liveRef.current = true
 
-    void claim()
+    // A guest does not claim; an immediate heartbeat tells it who the host is
+    // (and, for a guest opening before the host, that there is no session yet).
+    if (canHost) {
+      void claim()
+    } else {
+      void beat()
+    }
 
     const timer = setInterval(() => { void beat() }, heartbeatMs)
 
@@ -272,7 +291,7 @@ export function usePageSession(options: UsePageSessionOptions): UsePageSessionRe
       // is not made to wait out the TTL.
       release()
     }
-  }, [enabled, clientId, heartbeatMs, claim, beat])
+  }, [enabled, clientId, canHost, heartbeatMs, claim, beat])
 
   // Host departure. Awareness is the fast signal; the server is the verdict.
   //

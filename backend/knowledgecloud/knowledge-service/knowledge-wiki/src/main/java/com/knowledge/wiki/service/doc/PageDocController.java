@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.knowledge.core.secure.utils.SecurityContextUtil;
 import com.knowledge.core.tool.api.R;
 import com.knowledge.wiki.service.collab.CollabSessionService;
+import com.knowledge.wiki.service.entity.CollaborationInvitation;
 import com.knowledge.wiki.service.entity.Page;
 import com.knowledge.wiki.service.entity.dto.ApplyOpsDTO;
 import com.knowledge.wiki.service.entity.dto.CreatePageCheckpointDTO;
@@ -27,7 +28,9 @@ import com.knowledge.wiki.service.entity.vo.PageDocHistoryVO;
 import com.knowledge.wiki.service.entity.vo.PageDocVO;
 import com.knowledge.wiki.service.entity.vo.PageSessionVO;
 import com.knowledge.wiki.service.entity.vo.RestorePageDocVO;
+import com.knowledge.wiki.service.entity.enums.InvitationStatus;
 import com.knowledge.wiki.service.exception.WikiException;
+import com.knowledge.wiki.service.service.ICollaborationInvitationService;
 import com.knowledge.wiki.service.service.IPageService;
 import com.knowledge.wiki.service.service.IPermissionService;
 
@@ -80,6 +83,9 @@ public class PageDocController {
 
     @Autowired
     private CollabSessionService collabSessionService;
+
+    @Autowired
+    private ICollaborationInvitationService collaborationInvitationService;
 
     @GetMapping("/{pageId}/doc")
     @ApiOperation("读取页面当前文档与 rev")
@@ -248,6 +254,30 @@ public class PageDocController {
             throw WikiException.PAGE_NOT_FOUND.newException();
         }
         permissionService.checkPagePermission(SecurityContextUtil.getUserId(), page, permission);
+        // A page-level collaboration invitee may edit in realtime, but never owns the
+        // write lease or persists: the invitee's client streams edits into the shared
+        // Y.Doc and the inviter's client (the host) writes them. Denying here means a
+        // guest cannot save even by calling the normal endpoint directly.
+        if (IPermissionService.PERMISSION_WRITE.equals(permission)
+                || IPermissionService.PERMISSION_ADMIN.equals(permission)) {
+            requireNotCollaborationInvitee(pageId);
+        }
+    }
+
+    private void requireNotCollaborationInvitee(Long pageId) {
+        Long userId = SecurityContextUtil.getUserId();
+        if (userId == null) {
+            return;
+        }
+        boolean invitee = collaborationInvitationService.lambdaQuery()
+                .eq(CollaborationInvitation::getPageId, pageId)
+                .eq(CollaborationInvitation::getInviteeId, userId)
+                .eq(CollaborationInvitation::getStatus, InvitationStatus.ACCEPTED)
+                .exists();
+        if (invitee) {
+            throw WikiException.FORBIDDEN_ACCESS.newException(
+                    "受邀协作者不能成为页面编辑主持人，改动由邀请人在线时保存");
+        }
     }
 
 }

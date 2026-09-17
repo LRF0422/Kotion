@@ -111,6 +111,54 @@ export interface PageEditorProps {
     documentOps?: PageDocumentOperations
     /** Collab provider token. Defaults to the current OAuth access token. */
     collabToken?: string
+    /**
+     * Invited collaborator mode: never take the page's write lease and never
+     * persist. The inviter is the host; this client's edits reach the database
+     * only through the shared Y.Doc. The editor also waits for the inviter to be
+     * present before opening.
+     */
+    guestMode?: boolean
+    /** The inviter's user id; the editor waits for this presence in guest mode. */
+    hostUserId?: string
+    /** Display name of the inviter, for the waiting/ended notice. */
+    guestHostName?: string
+    /** Leave the guest editor (session ended, or the user chose to exit). */
+    onGuestExit?: () => void
+}
+
+/**
+ * Shown to an invited collaborator while the inviter (the session host) is not in
+ * the page. A guest may not open the editor first: with no host present nobody is
+ * persisting, so edits typed into the shared document would never reach the DB.
+ */
+const GuestWaiting: React.FC<{ waiting: boolean; hostName?: string; onExit?: () => void }> = ({ waiting, hostName, onExit }) => {
+    const { t } = useTranslation()
+    return (
+        <div className="w-full h-full flex flex-col items-center justify-center gap-5 p-8 text-center">
+            <div className={`p-4 rounded-full ${waiting ? 'bg-primary/10' : 'bg-amber-100 dark:bg-amber-900/30'}`}>
+                {waiting
+                    ? <UserPlus className="h-10 w-10 text-primary" />
+                    : <CloudOff className="h-10 w-10 text-amber-600 dark:text-amber-400" />}
+            </div>
+            <div className="max-w-md">
+                <h2 className="text-xl font-semibold">
+                    {waiting
+                        ? t('inviteCollaboration.waitingForHost.title', 'Waiting for the host')
+                        : t('inviteCollaboration.sessionEnded.title', 'Session ended')}
+                </h2>
+                <p className="mt-2 text-sm text-muted-foreground">
+                    {waiting
+                        ? `${hostName ? hostName + ' · ' : ''}${t('inviteCollaboration.waitingForHost.autoOpen', 'The editor will open once the host connects.')}`
+                        : t('inviteCollaboration.sessionEnded.message', { name: hostName || 'The host' })}
+                </p>
+            </div>
+            {!waiting && onExit && (
+                <Button variant="outline" onClick={onExit}>
+                    {t('inviteCollaboration.sessionEnded.exitNow', 'Exit')}
+                </Button>
+            )}
+        </div>
+    )
 }
 
 export const PageEditor: React.FC<PageEditorProps> = (props) => {
@@ -561,6 +609,21 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
     // a host leaving; the server still decides whether the session is over.
     const { hostPresent, hostSeen } = useHostPresence(provider?.awareness as any)
 
+    // Guest mode: the inviter is the host. Match presence by user id rather than the
+    // generic host flag, because the guest announces a role in awareness too.
+    const inviterPresent = React.useMemo(() => {
+        if (!props.guestMode) return true
+        if (!props.hostUserId) return false
+        const target = String(props.hostUserId)
+        return users.some((entry: any) => entry?.user?.id != null && String(entry.user.id) === target)
+    }, [props.guestMode, props.hostUserId, users])
+    const [inviterSeen, setInviterSeen] = useState(false)
+    React.useEffect(() => {
+        if (props.guestMode && inviterPresent && !inviterSeen) setInviterSeen(true)
+    }, [props.guestMode, inviterPresent, inviterSeen])
+    const guestWaiting = !!props.guestMode && !inviterPresent && !inviterSeen
+    const guestEnded = !!props.guestMode && !inviterPresent && inviterSeen
+
     const pageSave = usePageSave({
         editor: editor.current,
         pageId: pageId || null,
@@ -569,6 +632,8 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         // worse than not saving is saving content we could not verify.
         enabled: !props.readOnly && !!page && !!pageId && editorContentReady && !!seed?.trusted,
         clientId,
+        // A guest never hosts: the inviter owns the write lease.
+        canHost: !props.guestMode,
         presence: {
             connected: connectionStatus === 'connected',
             hostPresent,
@@ -867,7 +932,13 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                 </div>
             </div>
         </main>
-    </div> : (page && <div className="w-full h-full flex flex-col">
+    </div> : guestWaiting || guestEnded ? (
+        <GuestWaiting
+            waiting={guestWaiting}
+            hostName={props.guestHostName}
+            onExit={props.onGuestExit}
+        />
+    ) : (page && <div className="w-full h-full flex flex-col">
         <header className="h-11 flex-shrink-0 w-full flex flex-row justify-between px-1 border-b relative">
             <div className="flex flex-row items-center gap-2 px-1 text-sm flex-1 min-w-0 overflow-hidden">
                 <PageBreadcrumb

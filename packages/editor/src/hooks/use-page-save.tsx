@@ -34,6 +34,11 @@ export interface UsePageSaveOptions {
     enabled: boolean
     clientId: string
     /**
+     * Whether this client may take the write lease. False for an invited
+     * collaborator: the inviter is the host and writes both users' edits.
+     */
+    canHost?: boolean
+    /**
      * How the realtime layer sees the room. Feeds host-departure detection; see
      * `usePageSession`, which treats it as a hint and never as a verdict.
      */
@@ -68,7 +73,7 @@ export interface UsePageSaveReturn {
  * should go through this rather than owning its own copy.
  */
 export function usePageSave(options: UsePageSaveOptions): UsePageSaveReturn {
-    const { editor, pageId, enabled, clientId, presence, reconcileOnly, documents, onSaved } = options
+    const { editor, pageId, enabled, clientId, canHost = true, presence, reconcileOnly, documents, onSaved } = options
 
     // Read at call time rather than captured, so the caller can hand in a fresh
     // service capability (or a stable one) without this hook re-subscribing.
@@ -112,6 +117,7 @@ export function usePageSave(options: UsePageSaveOptions): UsePageSaveReturn {
     const session = usePageSession({
         enabled,
         clientId,
+        canHost,
         onClaim: handleClaim,
         onHeartbeat: handleHeartbeat,
         onRelease: handleRelease,
