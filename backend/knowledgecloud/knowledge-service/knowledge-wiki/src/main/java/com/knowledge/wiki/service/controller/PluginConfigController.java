@@ -4,6 +4,7 @@ import com.knowledge.core.tool.api.R;
 import com.knowledge.core.tool.api.ResultCode;
 import com.knowledge.wiki.service.application.PluginConfigApplication;
 import com.knowledge.wiki.service.entity.dto.PluginConfigDTO;
+import com.knowledge.wiki.service.entity.vo.PluginConfigSecretsVO;
 import com.knowledge.wiki.service.entity.vo.PluginConfigVO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
@@ -79,5 +80,29 @@ public class PluginConfigController {
     @GetMapping
     public R<List<PluginConfigVO>> getAllPluginConfigs() {
         return R.data(pluginConfigApplication.getAllPluginConfigs());
+    }
+
+    /**
+     * Reveal the decrypted credentials of one plugin config.
+     *
+     * <p>
+     * Credentials are never part of the normal read responses. A client that has
+     * to call a third-party API directly from the browser (GitHub, Zhihu, …)
+     * pulls them here into memory and must not persist them.
+     * </p>
+     *
+     * <p>
+     * User-scoped like every other endpoint: the JWT determines whose config is
+     * read, so this only returns what the caller themselves stored. The response
+     * must not be cached by intermediaries — callers should treat it as
+     * sensitive material.
+     * </p>
+     */
+    @GetMapping("/{pluginKey}/reveal")
+    public R<PluginConfigSecretsVO> revealPluginSecrets(
+            @PathVariable("pluginKey") @NotBlank(message = "pluginKey cannot be blank") @Size(max = 128, message = "pluginKey length must be <= 128") @Pattern(regexp = PLUGIN_KEY_PATTERN, message = "pluginKey contains illegal characters") String pluginKey) {
+        PluginConfigSecretsVO vo = new PluginConfigSecretsVO();
+        vo.setSecrets(pluginConfigApplication.revealSecrets(pluginKey));
+        return R.data(vo);
     }
 }

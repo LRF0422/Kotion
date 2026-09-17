@@ -2,7 +2,7 @@ import React from "react";
 import { Label, Input, Button, Separator, Switch } from "@kn/ui";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@kn/ui";
 import { Save, Key, Globe, Sparkles, Loader2 } from "@kn/icon";
-import { PluginConfigData, usePluginConfig } from "@kn/common";
+import { PluginConfigData, isSecretMask, usePluginConfig } from "@kn/common";
 
 interface AISettingsState extends PluginConfigData {
     apiEndpoint: string;
@@ -34,7 +34,12 @@ export const AISettings: React.FC<{ pluginKey?: string }> = ({ pluginKey = 'ai-a
     } = usePluginConfig<AISettingsState>({
         pluginKey,
         defaultConfig: DEFAULT_AI_CONFIG,
+        // Never persisted in the clear: the form only ever shows the mask, and
+        // the input is driven empty until the user types a replacement.
+        secretFields: ['apiKey'],
     });
+
+    const apiKeyConfigured = isSecretMask(settings.apiKey);
 
     const handleSave = async () => {
         await saveConfig();
@@ -106,13 +111,15 @@ export const AISettings: React.FC<{ pluginKey?: string }> = ({ pluginKey = 'ai-a
                         <Input
                             id="apiKey"
                             type="password"
-                            placeholder="sk-..."
-                            value={settings.apiKey}
+                            placeholder={apiKeyConfigured ? '已配置，留空保持不变' : 'sk-...'}
+                            value={apiKeyConfigured ? '' : settings.apiKey}
                             onChange={(e) => updateConfig({ apiKey: e.target.value })}
                             className="h-9 font-mono"
                         />
                         <p className="text-xs text-muted-foreground">
-                            您的 API 密钥将被安全存储
+                            {apiKeyConfigured
+                                ? '密钥已加密存储在服务端，本地不保存明文。输入新值可替换。'
+                                : '密钥将加密存储在服务端，本地不保存明文。'}
                         </p>
                     </div>
                 </CardContent>

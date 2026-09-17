@@ -4,16 +4,7 @@ import { PluginConfigStore, parseMarkdownToNodes } from '@kn/common'
 import { getRepoContents, getRepoTree } from '../../services/github-repo-service'
 import { buildAsciiTree, generateProjectDoc } from '../../services/github-doc-service'
 import type { GitHubPluginConfig } from '../../types/config'
-import { GITHUB_PLUGIN_KEY } from '../../hooks/use-github-config'
-
-async function getToken(): Promise<string> {
-    const store = PluginConfigStore.getInstance()
-    await store.initialize()
-    const config = await store.getConfig<GitHubPluginConfig>(GITHUB_PLUGIN_KEY)
-    const token = config?.personalAccessToken || ''
-    if (!token) throw new Error('GitHub PAT not configured. Please set it in Settings -> GitHub.')
-    return token
-}
+import { GITHUB_PLUGIN_KEY, requireGitHubToken as getToken } from '../../hooks/use-github-config'
 
 async function getDefaults(): Promise<{ owner: string; repo: string }> {
     const store = PluginConfigStore.getInstance()

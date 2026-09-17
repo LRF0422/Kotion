@@ -24,6 +24,11 @@ export function useGitHubData<T>(options: UseGitHubDataOptions<T>): UseGitHubDat
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [config, setConfig] = useState<GitHubPluginConfig>(DEFAULT_GITHUB_CONFIG)
+    /**
+     * Decrypted PAT. Credentials are never part of the persisted config, so the
+     * token is resolved separately and kept in memory only.
+     */
+    const [token, setToken] = useState('')
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
     const fetcherRef = useRef(fetcher)
     const fetchedRef = useRef(false)
@@ -41,20 +46,28 @@ export function useGitHubData<T>(options: UseGitHubDataOptions<T>): UseGitHubDat
             if (!cancelled && saved) {
                 setConfig({ ...DEFAULT_GITHUB_CONFIG, ...saved })
             }
+            const secret = await store.getSecret(GITHUB_PLUGIN_KEY, 'personalAccessToken')
+            if (!cancelled) setToken(secret)
         }
         load()
         const unsub = store.subscribe(GITHUB_PLUGIN_KEY, (updated) => {
-            if (!cancelled) setConfig({ ...DEFAULT_GITHUB_CONFIG, ...updated })
+            if (cancelled) return
+            setConfig({ ...DEFAULT_GITHUB_CONFIG, ...updated })
+            // A token just saved from the settings panel is cached in memory, so
+            // this resolves without another round trip.
+            void store.getSecret(GITHUB_PLUGIN_KEY, 'personalAccessToken').then((secret) => {
+                if (!cancelled) setToken(secret)
+            })
         })
         return () => { cancelled = true; unsub() }
     }, [])
 
     const fetchData = useCallback(async () => {
-        if (!config.personalAccessToken || !enabled) return
+        if (!token || !enabled) return
         setLoading(true)
         setError(null)
         try {
-            const result = await fetcherRef.current(config.personalAccessToken)
+            const result = await fetcherRef.current(token)
             setData(result)
         } catch (err: any) {
             const msg = err.status === 404 ? 'Not found'
@@ -65,26 +78,26 @@ export function useGitHubData<T>(options: UseGitHubDataOptions<T>): UseGitHubDat
         } finally {
             setLoading(false)
         }
-    }, [config.personalAccessToken, enabled])
+    }, [token, enabled])
 
     // Initial fetch
     useEffect(() => {
         if (fetchedRef.current) return
-        if (config.personalAccessToken && enabled) {
+        if (token && enabled) {
             fetchedRef.current = true
             fetchData()
         }
-    }, [fetchData])
+    }, [fetchData, token, enabled])
 
     // Auto refresh
     useEffect(() => {
         if (intervalRef.current) clearInterval(intervalRef.current)
-        if (config.autoRefreshEnabled && config.personalAccessToken && enabled) {
+        if (config.autoRefreshEnabled && token && enabled) {
             const interval = config.autoRefreshIntervalMinutes * 60 * 1000
             intervalRef.current = setInterval(fetchData, interval)
         }
         return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
-    }, [config.autoRefreshEnabled, config.autoRefreshIntervalMinutes, config.personalAccessToken, fetchData, enabled])
+    }, [config.autoRefreshEnabled, config.autoRefreshIntervalMinutes, token, fetchData, enabled])
 
-    return { data, loading, error, token: config.personalAccessToken || null, refresh: fetchData }
+    return { data, loading, error, token: token || null, refresh: fetchData }
 }

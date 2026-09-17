@@ -59,7 +59,7 @@ const SectionCard: React.FC<{
 
 export const ZhihuSettings: React.FC<{ pluginKey?: string }> = () => {
     const { t } = useTranslation();
-    const { config, updateConfig, saving, saveError, isDirty } = useZhihuConfig();
+    const { config, updateConfig, saving, saveError, isDirty, getSecret, isConfigured } = useZhihuConfig();
 
     const [showSecret, setShowSecret] = useState(false);
     const [testing, setTesting] = useState(false);
@@ -72,13 +72,23 @@ export const ZhihuSettings: React.FC<{ pluginKey?: string }> = () => {
     const [quotaLoading, setQuotaLoading] = useState(false);
     const [quotaError, setQuotaError] = useState<string | null>(null);
 
-    const serviceOptions = toZhihuServiceOptions(config);
+    /** The stored secret is masked, so "configured" means it exists server-side. */
+    const secretConfigured = isConfigured("accessSecret");
+
+    /**
+     * Service options carrying the credential. The config in form state holds
+     * the mask for an untouched secret, so the real value is resolved on demand.
+     */
+    const resolveServiceOptions = async () => {
+        const accessSecret = await getSecret("accessSecret");
+        return { ...toZhihuServiceOptions(config), accessSecret };
+    };
 
     const handleRefreshQuota = async () => {
         setQuotaLoading(true);
         setQuotaError(null);
         try {
-            const items = await getZhihuQuota(serviceOptions);
+            const items = await getZhihuQuota(await resolveServiceOptions());
             setQuota(items);
         } catch (error) {
             setQuotaError(describeZhihuError(error));
@@ -90,7 +100,7 @@ export const ZhihuSettings: React.FC<{ pluginKey?: string }> = () => {
     const handleTest = async () => {
         setTesting(true);
         setTestResult(null);
-        const result = await testZhihuConnection(serviceOptions);
+        const result = await testZhihuConnection(await resolveServiceOptions());
         setTestResult(result);
         setTesting(false);
         if (result.success) void handleRefreshQuota();
@@ -124,8 +134,14 @@ export const ZhihuSettings: React.FC<{ pluginKey?: string }> = () => {
                             <Input
                                 id="zhihu-access-secret"
                                 type={showSecret ? "text" : "password"}
-                                placeholder={t("zhihu.auth.secretPlaceholder")}
-                                value={config.accessSecret}
+                                placeholder={
+                                    secretConfigured
+                                        ? t("zhihu.auth.secretConfiguredPlaceholder")
+                                        : t("zhihu.auth.secretPlaceholder")
+                                }
+                                value={
+                                    secretConfigured ? "" : config.accessSecret
+                                }
                                 onChange={(e) =>
                                     updateConfig({ accessSecret: e.target.value })
                                 }
@@ -152,7 +168,7 @@ export const ZhihuSettings: React.FC<{ pluginKey?: string }> = () => {
                             size="sm"
                             variant="outline"
                             onClick={handleTest}
-                            disabled={testing || !config.accessSecret}
+                            disabled={testing || !secretConfigured}
                             className="shrink-0"
                         >
                             {testing ? (
@@ -214,7 +230,7 @@ export const ZhihuSettings: React.FC<{ pluginKey?: string }> = () => {
                         size="sm"
                         variant="outline"
                         onClick={handleRefreshQuota}
-                        disabled={quotaLoading || !config.accessSecret}
+                        disabled={quotaLoading || !secretConfigured}
                     >
                         <RefreshCw
                             className={cn(

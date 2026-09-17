@@ -1,10 +1,10 @@
 import React, { useState } from 'react'
 import { Card, Input, Label, Switch, Button, cn } from '@kn/ui'
-import { usePluginConfig } from '@kn/common'
+import { usePluginConfig, SECRET_MASK } from '@kn/common'
 import type { GitHubPluginConfig } from '../types/config'
 import { DEFAULT_GITHUB_CONFIG } from '../types/config'
 import { testConnection, checkRepoWriteAccess } from '../services/github-client'
-import { GITHUB_PLUGIN_KEY } from '../hooks/use-github-config'
+import { GITHUB_PLUGIN_KEY, GITHUB_SECRET_FIELDS } from '../hooks/use-github-config'
 import { RefreshCw, CheckCircle2, XCircle, Eye, EyeOff, KeyRound, FolderGit2, Database, Tag, Rocket } from '@kn/icon'
 import { GitHubLogo } from './GitHubLogo'
 
@@ -29,9 +29,10 @@ const SectionCard: React.FC<{
 )
 
 export const GitHubSettings: React.FC<{ pluginKey?: string }> = () => {
-    const { config, updateConfig, saving, saveError, isDirty } = usePluginConfig<GitHubPluginConfig>({
+    const { config, updateConfig, saving, saveError, isDirty, getSecret, isConfigured } = usePluginConfig<GitHubPluginConfig>({
         pluginKey: GITHUB_PLUGIN_KEY,
         defaultConfig: DEFAULT_GITHUB_CONFIG,
+        secretFields: GITHUB_SECRET_FIELDS,
     })
 
     const [testing, setTesting] = useState(false)
@@ -40,19 +41,24 @@ export const GitHubSettings: React.FC<{ pluginKey?: string }> = () => {
     const [checkingWrite, setCheckingWrite] = useState(false)
     const [writeResult, setWriteResult] = useState<{ success: boolean; canPush: boolean; permission?: string; error?: string } | null>(null)
 
+    // The stored PAT is masked; "configured" means a value exists server-side.
+    const tokenConfigured = isConfigured('personalAccessToken')
+
     const handleCheckWrite = async () => {
-        if (!config.personalAccessToken || !config.defaultOwner || !config.defaultRepo) return
+        const token = await getSecret('personalAccessToken')
+        if (!token || !config.defaultOwner || !config.defaultRepo) return
         setCheckingWrite(true)
         setWriteResult(null)
-        setWriteResult(await checkRepoWriteAccess(config.personalAccessToken, config.defaultOwner, config.defaultRepo))
+        setWriteResult(await checkRepoWriteAccess(token, config.defaultOwner, config.defaultRepo))
         setCheckingWrite(false)
     }
 
     const handleTest = async () => {
-        if (!config.personalAccessToken) return
+        const token = await getSecret('personalAccessToken')
+        if (!token) return
         setTesting(true)
         setTestResult(null)
-        const result = await testConnection(config.personalAccessToken)
+        const result = await testConnection(token)
         setTestResult(result)
         setTesting(false)
     }
@@ -83,8 +89,8 @@ export const GitHubSettings: React.FC<{ pluginKey?: string }> = () => {
                             <Input
                                 id="github-pat"
                                 type={showToken ? 'text' : 'password'}
-                                placeholder="ghp_xxxxxxxxxxxx"
-                                value={config.personalAccessToken}
+                                placeholder={tokenConfigured ? 'Configured — leave blank to keep' : 'ghp_xxxxxxxxxxxx'}
+                                value={config.personalAccessToken === SECRET_MASK ? '' : config.personalAccessToken}
                                 onChange={(e) => updateConfig({ personalAccessToken: e.target.value })}
                                 className="pr-9 font-mono text-xs"
                             />
@@ -97,7 +103,7 @@ export const GitHubSettings: React.FC<{ pluginKey?: string }> = () => {
                                 {showToken ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                             </button>
                         </div>
-                        <Button size="sm" variant="outline" onClick={handleTest} disabled={testing || !config.personalAccessToken} className="shrink-0">
+                        <Button size="sm" variant="outline" onClick={handleTest} disabled={testing || !tokenConfigured} className="shrink-0">
                             {testing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : 'Test'}
                         </Button>
                     </div>
@@ -138,7 +144,7 @@ export const GitHubSettings: React.FC<{ pluginKey?: string }> = () => {
                                     variant="outline"
                                     className="shrink-0"
                                     onClick={handleCheckWrite}
-                                    disabled={checkingWrite || !config.personalAccessToken}
+                                    disabled={checkingWrite || !tokenConfigured}
                                 >
                                     {checkingWrite ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : 'Check'}
                                 </Button>

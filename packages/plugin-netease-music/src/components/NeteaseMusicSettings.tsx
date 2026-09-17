@@ -4,10 +4,10 @@ import {
     Input, Label, Switch, Button, cn,
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@kn/ui'
-import { usePluginConfig } from "@kn/common"
+import { usePluginConfig, isSecretMask } from "@kn/common"
 import type { NeteaseMusicPluginConfig } from '../types/config'
 import { DEFAULT_NETEASE_MUSIC_CONFIG } from '../types/config'
-import { NETEASE_MUSIC_PLUGIN_KEY } from '../hooks/use-netease-config'
+import { NETEASE_MUSIC_PLUGIN_KEY, NETEASE_MUSIC_SECRET_FIELDS } from '../hooks/use-netease-config'
 import { testApiConnection } from '../services/netease-client'
 import { RefreshCw, CheckCircle2, XCircle, Eye, EyeOff } from '@kn/icon'
 
@@ -15,11 +15,15 @@ export const NeteaseMusicSettings: React.FC<{ pluginKey?: string }> = () => {
     const { config, updateConfig, saving, saveError, isDirty } = usePluginConfig<NeteaseMusicPluginConfig>({
         pluginKey: NETEASE_MUSIC_PLUGIN_KEY,
         defaultConfig: DEFAULT_NETEASE_MUSIC_CONFIG,
+        secretFields: NETEASE_MUSIC_SECRET_FIELDS,
     })
 
     const [testing, setTesting] = useState(false)
     const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null)
     const [showCookie, setShowCookie] = useState(false)
+
+    /** The stored cookie is masked; it only ever lives server-side. */
+    const cookieConfigured = isSecretMask(config.cookie)
 
     const handleTestApi = async () => {
         if (!config.apiBaseUrl) return
@@ -86,8 +90,8 @@ export const NeteaseMusicSettings: React.FC<{ pluginKey?: string }> = () => {
                         <div className="relative">
                             <Input
                                 type={showCookie ? 'text' : 'password'}
-                                placeholder="MUSIC_U=xxxxxxxx; __csrf=xxxxxxxx"
-                                value={config.cookie}
+                                placeholder={cookieConfigured ? '已配置（留空保持不变）' : 'MUSIC_U=xxxxxxxx; __csrf=xxxxxxxx'}
+                                value={cookieConfigured ? '' : config.cookie}
                                 onChange={(e) => updateConfig({ cookie: e.target.value })}
                                 className="pr-8"
                             />

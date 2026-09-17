@@ -18,7 +18,7 @@ import {
 import { generateChangelog } from '../../services/github-doc-service'
 import type { GitHubPluginConfig } from '../../types/config'
 import type { GitHubRelease } from '../../types/github'
-import { GITHUB_PLUGIN_KEY } from '../../hooks/use-github-config'
+import { GITHUB_PLUGIN_KEY, requireGitHubToken } from '../../hooks/use-github-config'
 import { describeGitHubError } from '../../services/github-errors'
 
 async function getConfig(): Promise<GitHubPluginConfig> {
@@ -29,10 +29,8 @@ async function getConfig(): Promise<GitHubPluginConfig> {
 }
 
 async function getToken(): Promise<string> {
-    const config = await getConfig()
-    const token = config.personalAccessToken || ''
-    if (!token) throw new Error('GitHub PAT not configured. Please set it in Settings -> GitHub.')
-    return token
+    // The PAT is never part of the persisted config; reveal it into memory.
+    return requireGitHubToken()
 }
 
 async function resolveOwnerRepo(params: { owner?: string; repo?: string }): Promise<{ owner: string; repo: string }> {

@@ -53,14 +53,58 @@ reaching the service.
 
 ## API Endpoints
 
-All three endpoints are mounted under `/knowledge-wiki/plugin-config` when
+All endpoints are mounted under `/knowledge-wiki/plugin-config` when
 accessed through the gateway.
 
-| Method | Path                                       | Purpose                               |
-|--------|--------------------------------------------|---------------------------------------|
-| `GET`  | `/knowledge-wiki/plugin-config/:pluginKey` | Read the current user's config        |
-| `POST` | `/knowledge-wiki/plugin-config/:pluginKey` | Upsert (create or replace) the config |
-| `GET`  | `/knowledge-wiki/plugin-config`            | Batch read all configs for the user   |
+| Method | Path                                              | Purpose                               |
+|--------|---------------------------------------------------|---------------------------------------|
+| `GET`  | `/knowledge-wiki/plugin-config/:pluginKey`        | Read the current user's config        |
+| `POST` | `/knowledge-wiki/plugin-config/:pluginKey`        | Upsert (create or replace) the config |
+| `GET`  | `/knowledge-wiki/plugin-config`                   | Batch read all configs for the user   |
+| `GET`  | `/knowledge-wiki/plugin-config/:pluginKey/reveal` | Decrypt the credentials of one config |
+
+### Credentials are masked, never returned in the clear
+
+A plugin config may carry credentials — an AI `apiKey`, a GitHub
+`personalAccessToken`, a Zhihu `accessSecret`, a NetEase `cookie`. Those are
+encrypted at rest (AES-256-GCM, in the dedicated `secret_config` column) and are
+removed from every normal read response, where each configured one is replaced
+by the sentinel:
+
+```
+__KN_SECRET_MASK__
+```
+
+The save contract is therefore:
+
+| What you POST for a credential field | Effect                        |
+|--------------------------------------|-------------------------------|
+| The sentinel `__KN_SECRET_MASK__`    | Keep the stored value (no-op) |
+| A real value (`"sk-..."`)            | Replace the stored value      |
+| `""` or `null`                       | Clear the stored value        |
+| Omit the field entirely              | Keep the stored value         |
+
+So a client can load a config, edit a non-secret field, and POST the whole
+object back verbatim — the masked credentials survive untouched.
+
+The response also lists the masked field names in `secretFields`, so a settings
+UI can render "configured — leave blank to keep" without hard-coding the
+registry.
+
+`GET /:pluginKey/reveal` is the only path that returns plaintext credentials:
+
+```json
+{
+  "code": 200,
+  "success": true,
+  "msg": "success",
+  "data": { "secrets": { "personalAccessToken": "ghp_xxx" } }
+}
+```
+
+Use it only when the browser itself has to call a third-party API. Keep the
+values in memory — never in `localStorage`/IndexedDB/persisted state — and never
+log them.
 
 ### pluginKey constraints
 
@@ -239,7 +283,13 @@ export interface PluginConfig<TConfig = Record<string, unknown>> {
   id: number;
   userId: number;
   pluginKey: string;
+  /**
+   * Non-secret configuration. Each configured credential field is present as
+   * the sentinel `__KN_SECRET_MASK__` instead of its value.
+   */
   config: TConfig;
+  /** Names of the credential fields in `config` that are masked. */
+  secretFields: string[];
   /** ISO-8601 local date-time (no timezone suffix). */
   createdAt: string;
   updatedAt: string;
@@ -249,7 +299,23 @@ export interface PluginConfig<TConfig = Record<string, unknown>> {
 export interface SavePluginConfigRequest<TConfig = Record<string, unknown>> {
   config: TConfig;
 }
+
+/** Body of `data` for GET /plugin-config/:pluginKey/reveal. */
+export interface PluginConfigSecrets {
+  /** Field name → decrypted value. Keep in memory only. */
+  secrets: Record<string, string>;
+}
 ```
+
+### Credential field names
+
+The server decides which fields are credentials: an explicit registry
+(`ai-settings` → `apiKey`, `github-settings` → `personalAccessToken`,
+`zhihu-settings` → `accessSecret`, `netease-music-settings` → `cookie`) unioned
+with a name heuristic (`…Key`, `…Secret`, `…Token`, `password`, `cookie`,
+`authorization`, …). Declare the same list client-side so the settings UI can
+render the mask correctly; the heuristic means a forgotten declaration is still
+encrypted rather than stored in the clear.
 
 ### Timestamp format
 
@@ -457,7 +523,7 @@ headers and normalising the response to the same `ApiResponse<T>` envelope.
 | 200  | 404    | `GET /:pluginKey` on a key the user never saved        | Use defaults; keep local-only until next save       |
 | 400  | 400    | Malformed `pluginKey`, missing `config`, bad JSON      | Surface the `msg`, do not retry                     |
 | 401  | 401    | Missing/expired token                                  | Trigger re-auth flow, then retry                    |
-| 500  | 500    | Backend error (DB down, unhandled exception)           | Keep local cache, show transient toast, retry later |
+| 500  | 500    | Backend error, **or** `knowledge.plugin-config.crypto-key` is unset while the payload carries a credential | Keep local cache, show the `msg`; do not retry — it needs an operator |
 
 A minimal interceptor:
 
@@ -510,12 +576,19 @@ plugin, validate on **both** sides:
 
 ### 5. Handle secrets carefully
 
-`config` can legitimately contain API keys. The field is transferred over the
-gateway's TLS and is user-scoped (a user can only read their own record), but:
+`config` can legitimately contain API keys. They are encrypted at rest and
+masked on read, so:
 
-- **Never log the raw `config` object.**
-- Mask secrets in any settings UI (show `sk-••••••••1234`).
-- Consider an opt-in "clear API key on logout" in the plugin settings.
+- **Never log the raw config or the reveal response.**
+- **Never persist a revealed credential.** Credentials live in memory only;
+  `localStorage` must only ever hold the mask.
+- **Resolve credentials on demand.** In the Knowledge Repo client this is
+  `PluginConfigStore.getSecret(pluginKey, field)`; in a custom integration it is
+  a `GET /:pluginKey/reveal` call at the moment of use.
+- **Leave the mask untouched when the field was not edited.** Echoing it back
+  is what preserves the stored value.
+- The reveal response must not be cached by intermediaries; the gateway and the
+  client should both treat it as one-shot sensitive material.
 
 ### 6. First-device vs. new-device flow
 
@@ -537,3 +610,4 @@ at `debug`, not `warn`, so your observability stays useful.
 |---------|------------|---------------------------------------------------------------------------|
 | 1.0.0   | 2025-06-15 | Initial three-endpoint contract, Hybrid Storage pattern, Electron bridge. |
 | 1.1.0   | 2026-05-09 | `GET /:pluginKey` returns `code: 404` instead of auto-creating an empty record; `pluginKey` charset/length now validated server-side; concurrent `POST` is race-safe via unique-index retry. |
+| 1.2.0   | 2026-05-16 | Credentials are encrypted at rest (`secret_config`, AES-256-GCM) and masked as `__KN_SECRET_MASK__` on read; added `GET /:pluginKey/reveal` and the `secretFields` response field; legacy plaintext rows migrate on first read. |

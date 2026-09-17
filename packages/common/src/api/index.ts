@@ -244,5 +244,14 @@ export const APIS = {
     GET_ALL_PLUGIN_CONFIGS: {
         url: '/knowledge-wiki/plugin-config',
         method: 'GET'
+    } as API,
+    /**
+     * Reveal the decrypted secret fields of one plugin config.
+     * Credentials are never part of GET_PLUGIN_CONFIG; callers that must talk
+     * to a third-party API from the browser pull them into memory on demand.
+     */
+    REVEAL_PLUGIN_CONFIG: {
+        url: '/knowledge-wiki/plugin-config/:pluginKey/reveal',
+        method: 'GET'
     } as API
 }

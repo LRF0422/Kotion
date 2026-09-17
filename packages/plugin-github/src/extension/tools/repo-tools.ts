@@ -1,18 +1,7 @@
 import { Editor } from '@kn/editor'
 import { z } from '@kn/ui'
-import { PluginConfigStore } from "@kn/common"
 import { getRepo } from '../../services/github-repo-service'
-import type { GitHubPluginConfig } from '../../types/config'
-import { GITHUB_PLUGIN_KEY } from '../../hooks/use-github-config'
-
-async function getToken(): Promise<string> {
-    const store = PluginConfigStore.getInstance()
-    await store.initialize()
-    const config = await store.getConfig<GitHubPluginConfig>(GITHUB_PLUGIN_KEY)
-    const token = config?.personalAccessToken || ''
-    if (!token) throw new Error('GitHub PAT not configured. Please set it in Settings → GitHub.')
-    return token
-}
+import { requireGitHubToken as getToken } from '../../hooks/use-github-config'
 
 export const insertGitHubRepoTool = {
     name: 'insertGitHubRepo',

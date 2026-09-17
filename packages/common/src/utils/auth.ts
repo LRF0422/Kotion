@@ -4,6 +4,7 @@
  */
 
 import type { ContextTokenResponse, TokenContextState } from '../api/types'
+import { clearCachedPluginSecrets } from '../services/plugin-secrets'
 
 const ACCESS_TOKEN_KEY = 'knowledge-access-token';
 const REFRESH_TOKEN_KEY = 'knowledge-refresh-token';
@@ -59,6 +60,9 @@ export function getBearerHeader(): Record<string, string> {
 
 /** Clear local data that must not cross an authorization-context boundary. */
 export function clearContextSensitiveClientState(): void {
+    // Decrypted plugin credentials are memory-only; drop them so they cannot
+    // outlive the authorization context that revealed them.
+    clearCachedPluginSecrets()
     if (typeof localStorage === 'undefined') return
     try {
         const prefixes = ['kn:page-tabs:', 'agentcore:', 'kn-ai-chat-', 'kn_plugin_configs']

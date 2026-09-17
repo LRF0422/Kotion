@@ -38,10 +38,11 @@ public class PluginConfigServiceImpl extends MPJBaseServiceImpl<PluginConfigMapp
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public PluginConfig saveOrUpdate(Long userId, String pluginKey, Map<String, Object> config) {
+    public PluginConfig saveOrUpdate(Long userId, String pluginKey, Map<String, Object> config, String secretConfig) {
         PluginConfig existing = getByUserIdAndPluginKey(userId, pluginKey);
         if (existing != null) {
             existing.setConfig(config);
+            existing.setSecretConfig(secretConfig);
             this.updateById(existing);
             return existing;
         }
@@ -50,6 +51,7 @@ public class PluginConfigServiceImpl extends MPJBaseServiceImpl<PluginConfigMapp
         entity.setUserId(userId);
         entity.setPluginKey(pluginKey);
         entity.setConfig(config);
+        entity.setSecretConfig(secretConfig);
         try {
             this.save(entity);
             return entity;
@@ -61,6 +63,7 @@ public class PluginConfigServiceImpl extends MPJBaseServiceImpl<PluginConfigMapp
                 throw dup;
             }
             winner.setConfig(config);
+            winner.setSecretConfig(secretConfig);
             this.updateById(winner);
             return winner;
         }
