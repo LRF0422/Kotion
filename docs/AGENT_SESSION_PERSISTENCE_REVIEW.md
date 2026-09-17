@@ -26,7 +26,7 @@
 | M8 | ✅ 已修 | 投影锁改为固定 64 条 striped，消除无界增长 |
 | L5 | ✅ 已修 | `ChatSessionController.get` 增加兜底 catch |
 | H3 | ✅ 已修 | V29 给 `agent_chat_session` 加 `version`；投影改为 CAS（`updateTranscriptIfVersion` / `insertTranscriptIfAbsent`）+ 有界重试（读到冲突就重读重算）；显式清空也会推进版本 |
-| M3 | ➖ 无需改 | 前端 `MessageBubble` 已传 `reasoningFallback=message.reasoningContent`，工具 `steps` 也独立渲染；恢复后时间线已可用。仅多步 reasoning 的逐段划分与 `answerStepId` 未还原，属于精度损失 |
+| M3 | ✅ 已修 | `SessionTranscriptProjector.toUi` 改为按用户轮折叠：一个 run 的多个 assistant turn 合并回单个 `ai` 节点，并把每个 turn 合成为 `activitySteps`（含 `startedSeq`）与工具的 `sequence`，同时回填 `answerStepId` 与合并后的 `reasoningContent`。恢复后整条时间线不再按模型 turn 断成多个 `N steps` 段，与 live 一致（模型日志本身不含事件 seq/工具成败/时长，仍为纯投影的固有精度损失） |
 | M7 | ✅ 已修 | `prepareHistory` 在下一条 run 累积新用户轮前，对规范日志做一次 `repairToolPairing`，把被放弃/挂起 run 留下的 assistant tool_calls 补成合法配对；配合 H2 的 cancel 投影，跨 run 上下文不再出现连续的裸 user 轮 |
 | L1–L4 | ⏸ 暂缓 | 低风险，未改 |
 

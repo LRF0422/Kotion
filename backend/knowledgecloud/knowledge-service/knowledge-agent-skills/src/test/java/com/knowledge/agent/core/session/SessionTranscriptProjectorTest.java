@@ -110,14 +110,26 @@ class SessionTranscriptProjectorTest {
         // user + assistant(tool_calls) + tool + assistant(text)
         assertEquals(4, model.size());
         JsonNode ui = mapper.readTree(saved.getMessagesJson());
-        assertEquals(3, ui.size());
+        // One user node + ONE folded assistant run: the tool turn and the final
+        // text turn must not become separate timelines after a reload.
+        assertEquals(2, ui.size());
         // message_count caches the UI projection length, not the model-log length.
-        assertEquals(3, saved.getMessageCount());
-        JsonNode step = ui.get(1).path("steps").get(0);
+        assertEquals(2, saved.getMessageCount());
+        JsonNode assistant = ui.get(1);
+        assertEquals("ai", assistant.path("sender").asText());
+        JsonNode step = assistant.path("steps").get(0);
         assertEquals("search", step.path("toolName").asText());
         assertEquals("success", step.path("status").asText());
         assertTrue(step.path("result").path("found").asBoolean());
-        assertEquals("done", ui.get(2).path("content").asText());
+        assertEquals("done", assistant.path("content").asText());
+        // The folded timeline keeps every model turn and interleaves its tools.
+        JsonNode activity = assistant.path("activitySteps");
+        assertEquals(2, activity.size());
+        assertEquals("let me check", activity.get(0).path("text").asText());
+        assertEquals("done", activity.get(1).path("text").asText());
+        assertEquals(activity.get(1).path("id").asText(), assistant.path("answerStepId").asText());
+        assertTrue(activity.get(0).path("startedSeq").asLong() < step.path("sequence").asLong());
+        assertTrue(step.path("sequence").asLong() < activity.get(1).path("startedSeq").asLong());
     }
 
     @Test

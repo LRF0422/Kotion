@@ -379,7 +379,21 @@ public class SessionTranscriptProjector {
 
     private ArrayNode toUi(State state) {
         ArrayNode out = objectMapper.createArrayNode();
-        ObjectNode currentAssistant = null;
+        // One assistant node per user turn. The live client keeps a whole run —
+        // its reasoning turns and every tool call — inside a single Message, so a
+        // projection that emitted one node per model turn made a restored run
+        // shatter into one disconnected mini-timeline per turn.
+        ObjectNode run = null;
+        ArrayNode runSteps = null;
+        ArrayNode runActivity = null;
+        StringBuilder runReasoning = new StringBuilder();
+        String answerStepId = null;
+        String answerText = null;
+        int turnStep = 0;
+        // Synthesized ordering keys. The model log carries no event seq, so an
+        // increasing counter reproduces the live interleaving (a turn's reasoning
+        // precedes the tools it requested, which precede the next turn).
+        long sequence = 0;
         for (int index = 0; index < state.messages.size(); index++) {
             ChatMessage message = state.messages.get(index);
             if (message == null) {
@@ -388,6 +402,16 @@ public class SessionTranscriptProjector {
             long timestamp = state.timeAt(index);
             String role = role(message);
             if ("user".equals(role)) {
+                finalizeRun(run, runActivity, runSteps, answerStepId, answerText, runReasoning);
+                run = null;
+                runSteps = null;
+                runActivity = null;
+                runReasoning = new StringBuilder();
+                answerStepId = null;
+                answerText = null;
+                turnStep = 0;
+                sequence = 0;
+
                 ObjectNode node = entry("u-" + index, "user", timestamp);
                 node.put("content", message.getContent() == null ? "" : message.getContent());
                 ArrayNode images = imageDataUrls(message);
@@ -395,22 +419,44 @@ public class SessionTranscriptProjector {
                     node.set("images", images);
                 }
                 out.add(node);
-                currentAssistant = null;
             } else if ("assistant".equals(role)) {
-                currentAssistant = null;
                 boolean hasContent = message.getContent() != null && !message.getContent().isEmpty();
                 boolean hasCalls = message.getToolCalls() != null && !message.getToolCalls().isEmpty();
                 if (!hasContent && !hasCalls) {
                     continue;
                 }
-                ObjectNode node = entry("a-" + index, "ai", timestamp);
+                if (run == null) {
+                    run = entry("a-" + index, "ai", timestamp);
+                    runSteps = objectMapper.createArrayNode();
+                    runActivity = objectMapper.createArrayNode();
+                    out.add(run);
+                }
+                // The latest turn in the run is the visible timestamp/answer.
+                run.put("timestamp", timestamp > 0 ? timestamp : System.currentTimeMillis());
+
+                turnStep++;
+                String stepId = "step-" + index;
+                String text = message.getContent() == null ? "" : message.getContent();
+                String reasoning = message.getReasoningContent() == null ? "" : message.getReasoningContent();
+                ObjectNode activity = objectMapper.createObjectNode();
+                activity.put("id", stepId);
+                activity.put("step", turnStep);
+                activity.put("startedSeq", sequence++);
+                activity.put("reasoning", reasoning);
+                activity.put("text", text);
+                runActivity.add(activity);
+                if (reasoning.length() > 0) {
+                    if (runReasoning.length() > 0) {
+                        runReasoning.append("\n\n");
+                    }
+                    runReasoning.append(reasoning);
+                }
+                // The last assistant turn that produced text is the answer, exactly
+                // like the live reducer's resolveAnswerStepId (reverse scan).
                 if (hasContent) {
-                    node.put("content", message.getContent());
+                    answerStepId = stepId;
+                    answerText = text;
                 }
-                if (message.getReasoningContent() != null && !message.getReasoningContent().isEmpty()) {
-                    node.put("reasoningContent", message.getReasoningContent());
-                }
-                ArrayNode steps = objectMapper.createArrayNode();
                 if (hasCalls) {
                     for (ChatMessage.ToolCallInfo call : message.getToolCalls()) {
                         if (call == null || call.getFunction() == null) {
@@ -423,20 +469,14 @@ public class SessionTranscriptProjector {
                         step.set("args", parseJson(call.getFunction().getArguments()));
                         step.put("status", "success");
                         step.put("timestamp", timestamp);
-                        steps.add(step);
+                        step.put("step", turnStep);
+                        step.put("stepId", stepId);
+                        step.put("sequence", sequence++);
+                        runSteps.add(step);
                     }
                 }
-                if (steps.size() > 0) {
-                    node.set("steps", steps);
-                }
-                out.add(node);
-                currentAssistant = node;
-            } else if ("tool".equals(role) && currentAssistant != null) {
-                JsonNode steps = currentAssistant.get("steps");
-                if (steps == null || !steps.isArray()) {
-                    continue;
-                }
-                for (JsonNode stepNode : steps) {
+            } else if ("tool".equals(role) && runSteps != null) {
+                for (JsonNode stepNode : runSteps) {
                     ObjectNode step = (ObjectNode) stepNode;
                     if (message.getToolCallId() == null
                             || !message.getToolCallId().equals(step.path("callId").asText())) {
@@ -447,7 +487,34 @@ public class SessionTranscriptProjector {
                 }
             }
         }
+        finalizeRun(run, runActivity, runSteps, answerStepId, answerText, runReasoning);
         return out;
+    }
+
+    /**
+     * Close a folded run node: attach the synthesized timeline and tool tape and
+     * pick the visible answer, mirroring what the live client's Message carries.
+     */
+    private void finalizeRun(ObjectNode run, ArrayNode activity, ArrayNode steps,
+                             String answerStepId, String answerText, StringBuilder reasoning) {
+        if (run == null) {
+            return;
+        }
+        if (activity != null && activity.size() > 0) {
+            run.set("activitySteps", activity);
+        }
+        if (steps != null && steps.size() > 0) {
+            run.set("steps", steps);
+        }
+        if (answerText != null && !answerText.isEmpty()) {
+            run.put("content", answerText);
+        }
+        if (answerStepId != null) {
+            run.put("answerStepId", answerStepId);
+        }
+        if (reasoning != null && reasoning.length() > 0) {
+            run.put("reasoningContent", reasoning.toString());
+        }
     }
 
     /** Rebuild canonical state from a pre-refactor UI projection. */
