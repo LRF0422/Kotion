@@ -7,7 +7,6 @@ import { stickyNote } from "@kn/plugin-sticky-note";
 import { theme } from "@kn/plugin-theme";
 import { office } from "@kn/plugin-office";
 import { drawnix } from "@kn/plugin-drawnix";
-import { fileManager } from "@kn/file-manager";
 import { github } from "@kn/plugin-github";
 import { systemPlugins } from "./system-plugins";
 import { mermaid } from "@kn/mermaid-plugin";
@@ -26,7 +25,6 @@ export const bundledPlugins = [
   office,
   drawnix,
   ...systemPlugins,
-  fileManager,
   mermaid,
   github,
   logicFlow,
