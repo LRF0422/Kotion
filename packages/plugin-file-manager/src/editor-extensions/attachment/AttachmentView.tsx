@@ -1,9 +1,10 @@
 import { NodeViewProps, NodeViewWrapper } from "@kn/editor";
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { useFileService } from "@kn/common";
 import { cn } from "@kn/ui";
 import { useI18n } from "../../i18n/use-i18n";
 import { isPreviewable } from "../../utils/fileUtils";
+import { useDownloadFile } from "../../hooks/useDownloadFile";
 import { FilePreviewDialog } from "../component/dialogs";
 import type { FileItem } from "../component/FileContext";
 import {
@@ -128,13 +129,22 @@ export const AttachmentView: React.FC<NodeViewProps> = (props) => {
         size: size || undefined,
     }), [id, name, path, size]);
 
+    /** Save the attachment locally instead of navigating to the raw bytes. */
+    const runDownload = useDownloadFile();
+    const downloadAttachment = useCallback(() => {
+        void runDownload({
+            id: id || undefined,
+            name,
+            path,
+            size: size || undefined,
+        });
+    }, [id, name, path, runDownload, size]);
+
     // Handle download
     const handleDownload = (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        if (downloadUrl) {
-            window.open(downloadUrl, "_blank");
-        }
+        void downloadAttachment();
     };
 
     // Click on the card: preview when possible, otherwise download
@@ -143,8 +153,8 @@ export const AttachmentView: React.FC<NodeViewProps> = (props) => {
         e.stopPropagation();
         if (canPreview) {
             setPreviewOpen(true);
-        } else if (downloadUrl) {
-            window.open(downloadUrl, "_blank");
+        } else {
+            void downloadAttachment();
         }
     };
 
@@ -154,6 +164,7 @@ export const AttachmentView: React.FC<NodeViewProps> = (props) => {
             open={previewOpen}
             onOpenChange={setPreviewOpen}
             file={previewFile}
+            onDownload={() => void downloadAttachment()}
         />
     ) : null;
 

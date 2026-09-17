@@ -13,7 +13,9 @@
     "check:selection": "tsc src/utils/file-selection.check.ts --outDir .tmp-check --module commonjs --target ES2020 --jsx react --skipLibCheck --esModuleInterop && node .tmp-check/utils/file-selection.check.js",
     "check:media": "rm -rf .tmp-check/media && tsc src/utils/media-preview.check.ts --rootDir src --outDir .tmp-check/media --module commonjs --target ES2020 --jsx react --skipLibCheck --esModuleInterop && node .tmp-check/media/utils/media-preview.check.js",
     "check:folder": "rm -rf .tmp-check/folder && tsc src/utils/folder-upload.check.ts --rootDir src --outDir .tmp-check/folder --module commonjs --target ES2020 --jsx react --skipLibCheck --esModuleInterop && node .tmp-check/folder/utils/folder-upload.check.js",
-    "test": "pnpm check:selection && pnpm check:media && pnpm check:folder"
+    "check:download": "rm -rf .tmp-check/download && tsc src/utils/download-target.check.ts --rootDir src --outDir .tmp-check/download --module commonjs --target ES2020 --jsx react --skipLibCheck --esModuleInterop && node .tmp-check/download/utils/download-target.check.js",
+    "check:download-flow": "rm -rf .tmp-check/download-flow && tsc -p checks/download-flow/tsconfig.json && node -r ./checks/download-flow/preload.cjs .tmp-check/download-flow/checks/download-flow/download-flow.check.js",
+    "test": "pnpm check:selection && pnpm check:media && pnpm check:folder && pnpm check:download && pnpm check:download-flow"
   },
   "dependencies": {
     "@kn/common": "workspace:*",

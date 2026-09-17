@@ -10,6 +10,7 @@ import {
 } from '@kn/common';
 import { toast } from '@kn/ui';
 import { APIS } from '../api';
+import { useDownloadFile } from './useDownloadFile';
 import { FileItem, BreadcrumbItem } from '../editor-extensions/component/FileContext';
 import { normalizeFileName } from '../utils/fileUtils';
 import {
@@ -537,24 +538,16 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
     }, []);
 
     /** 下载 */
+    const runDownload = useDownloadFile();
     const downloadFile = useCallback(async (file: FileItem) => {
         if (file.isFolder) {
             toast.info('Cannot download a folder');
             return;
         }
-        try {
-            if (file.path && fileService.download) {
-                await fileService.download(file.path);
-            } else if (fileService.getDownloadUrl) {
-                window.open(fileService.getDownloadUrl(file.path || ''), '_blank');
-            }
-            // 标记最近访问
-            useApi(APIS.GET_BY_ID, { fileId: file.id }).catch(() => { });
-        } catch (err) {
-            const msg = err instanceof Error ? err.message : 'Failed to download';
-            toast.error(msg);
-        }
-    }, [fileService]);
+        await runDownload({ id: file.id, name: file.name, path: file.path, size: file.size });
+        // 标记最近访问
+        useApi(APIS.GET_BY_ID, { fileId: file.id }).catch(() => { });
+    }, [runDownload]);
 
     // Navigation functions
     const navigateToFolder = useCallback((folderId: string, folderName: string = 'Folder') => {

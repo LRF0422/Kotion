@@ -77,6 +77,71 @@ pnpm package:mac
 pnpm package:linux
 ```
 
+### macOS 签名与“已损坏，无法打开”
+
+**症状**：把打包好的 dmg 通过浏览器（Chrome/Edge 等）下载后安装，双击提示
+
+> “KN Desktop” is damaged and can't be opened. You should move it to the Bin.
+
+**原因**：这不是安装包本身坏了，而是 macOS Gatekeeper 拒绝未签名/签名无效的 App：
+
+1. 未配置 Developer ID 时 electron-builder 会**跳过整个签名步骤**，产物只剩链接器写入的
+   ad-hoc 签名（`Info.plist=not bound`、`Sealed Resources=none`），`app.asar` 与 `Info.plist`
+   没有被封印，`codesign --verify --deep --strict` 直接报
+   `code has no resources but signature indicates they must be present` —— 这就是“已损坏”。
+2. 浏览器下载会给文件打上 `com.apple.quarantine` 隔离属性，触发 Gatekeeper 评估，
+   于是弹出上面的对话框（终端里 `open` 或从本地目录复制则不会有该属性）。
+
+**本仓库的处理**：`scripts/afterPack.cjs` 会在打包后自动做一次 ad-hoc 重新签名，使签名覆盖
+`Info.plist` 与 `Resources`，保证产物是可校验的（默认开启，`KN_ADHOC_SIGN=false` 可关闭；
+检测到 `CSC_LINK`/`CSC_NAME` 等正式签名凭证时自动跳过）。
+
+**拿到包的人如何打开**（ad-hoc 签名无法通过公证，仍需手动放行一次）：
+
+```bash
+# 方案 A：移除隔离属性（推荐，一次即可）
+xattr -dr com.apple.quarantine "/Applications/KN Desktop.app"
+
+# 方案 B：重新做一次 ad-hoc 签名（签名被破坏时使用）
+codesign --force --deep --sign - "/Applications/KN Desktop.app"
+
+# 方案 C：图形界面放行
+# 先尝试打开一次 → 系统设置 → 隐私与安全性 → 仍要打开
+```
+
+自查命令：
+
+```bash
+codesign -dv --verbose=4 "/Applications/KN Desktop.app"   # 期望 Identifier=com.kn.desktop、Sealed Resources version=2
+codesign --verify --deep --strict "/Applications/KN Desktop.app"  # 期望无输出、退出码 0
+spctl -a -vvv "/Applications/KN Desktop.app"              # ad-hoc 包会显示 rejected，属预期
+```
+
+**对外正式分发**（要做到双击即开、无任何警告）：需要 Apple Developer Program 账号
+（$99/年），用 Developer ID Application 证书签名并公证：
+
+```bash
+# 1) 证书：导出 .p12 后通过环境变量提供（CI 上同样如此）
+export CSC_LINK=/path/to/developer-id-application.p12
+export CSC_KEY_PASSWORD='<p12 password>'
+
+# 2) 公证凭证（二选一）
+#    a. Apple ID + App 专用密码
+export APPLE_ID='you@example.com'
+export APPLE_APP_SPECIFIC_PASSWORD='<app-specific password>'
+export APPLE_TEAM_ID='<team id>'
+#    b. 或 App Store Connect API Key
+# export APPLE_API_KEY='/path/to/AuthKey_XXXX.p8'
+# export APPLE_API_KEY_ID='XXXXXXXXXX'
+# export APPLE_API_ISSUER='xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
+
+pnpm package:mac
+```
+
+electron-builder 默认已开启 `hardenedRuntime`，并在检测到上述变量后自动完成签名 + 公证；
+如需在钩子里自行公证，可使用 `afterSign` + `@electron/notarize`。
+未公证的包在 macOS 15+ 上右键“打开”已不再能绕过 Gatekeeper，只能走系统设置的“仍要打开”。
+
 ## 存储模式
 
 应用会根据用户身份自动选择存储模式:

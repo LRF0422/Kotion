@@ -1,5 +1,7 @@
 import {
     FileAccessUrls,
+    FileDownloadOptions,
+    FileDownloadOutcome,
     FileService,
     UploadedFile,
     UploadOptions,
@@ -13,6 +15,7 @@ import { request, useApi, APIS as CORE_APIS } from "@kn/common";
 import { fileOpen } from "browser-fs-access";
 import { APIS } from "../api";
 import { showFileSelector } from "../editor-extensions/utils/showFileSelector";
+import { downloadTarget } from "../utils/download";
 
 /**
  * FileService implementation provided by FileManager plugin
@@ -110,11 +113,20 @@ export class FileServiceImpl implements FileService {
     }
 
     /**
-     * Download a file (opens in new tab)
+     * Download a file to the local disk.
+     *
+     * Asks for the destination first (the save dialog needs the click's user
+     * activation) and then streams the bytes into it, so large files neither
+     * buffer in memory nor hit the API timeout. Never navigates to the raw OSS
+     * URL, which would render the payload as garbled text.
      */
-    async download(fileName: string): Promise<void> {
-        const url = this.getDownloadUrl(fileName);
-        window.open(url, '_blank');
+    async download(fileName: string, options?: FileDownloadOptions): Promise<FileDownloadOutcome> {
+        return downloadTarget(this, {
+            id: options?.fileId,
+            name: options?.fileName,
+            path: fileName,
+            size: options?.size,
+        }, options?.onProgress ? { onProgress: options.onProgress } : {});
     }
 
     /**

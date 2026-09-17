@@ -156,6 +156,30 @@ export interface FileAccessUrls {
     expiresAt: string;
 }
 
+/** Byte progress emitted while a file download runs. */
+export interface FileDownloadProgress {
+    loaded: number;
+    total?: number;
+}
+
+/**
+ * `saved` — written to local disk, `cancelled` — the user dismissed the save
+ * dialog, `handed-off` — the browser owns the transfer (no local write).
+ */
+export type FileDownloadOutcome = 'saved' | 'cancelled' | 'handed-off';
+
+/** Optional context that lets a download skip the storage URL round trip. */
+export interface FileDownloadOptions {
+    /** File-center record id — enables the authenticated API download path. */
+    fileId?: string;
+    /** Name used for the saved file; defaults to the last segment of the source. */
+    fileName?: string;
+    /** Size in bytes; drives progress and the large-file streaming strategy. */
+    size?: number;
+    /** Called as bytes arrive so callers can show download progress. */
+    onProgress?: (progress: FileDownloadProgress) => void;
+}
+
 /**
  * FileService interface - centralized file operations for the entire application
  * All plugins must use this interface for file operations instead of direct API calls
@@ -169,7 +193,13 @@ export interface FileService {
     getFileAccessUrls?: (fileId: string) => Promise<FileAccessUrls>;
     /** Download a file-center record through the authenticated API. */
     getFileBlob?: (fileId: string) => Promise<Blob>;
-    download: (fileName: string) => Promise<void>;
+    /**
+     * Download a file (`fileName` is an OSS object key or absolute URL).
+     * `options.fileId` prefers the authenticated file-center download; the
+     * returned outcome lets callers distinguish a saved file from a cancelled
+     * dialog or a browser-owned transfer.
+     */
+    download: (fileName: string, options?: FileDownloadOptions) => Promise<FileDownloadOutcome | void>;
     deleteFile?: (fileId: string) => Promise<void>;
     createFolder?: (name: string, parentId?: string, repositoryKey?: string) => Promise<any>;
     renameFile?: (fileId: string, newName: string) => Promise<void>;

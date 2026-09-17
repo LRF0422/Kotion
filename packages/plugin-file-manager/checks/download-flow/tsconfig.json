@@ -1,0 +1,23 @@
+{
+    "compilerOptions": {
+        "target": "ES2020",
+        "lib": ["ES2020", "DOM"],
+        "module": "commonjs",
+        "moduleResolution": "node",
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "strict": false,
+        "rootDir": "../..",
+        "outDir": "../../.tmp-check/download-flow",
+        "baseUrl": ".",
+        "paths": {
+            "@kn/common": ["./download-flow.stubs.ts"]
+        }
+    },
+    "include": [
+        "download-flow.check.ts",
+        "download-flow.stubs.ts",
+        "../../src/utils/download.ts",
+        "../../src/utils/download-target.ts"
+    ]
+}

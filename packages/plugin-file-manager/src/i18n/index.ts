@@ -171,6 +171,13 @@ export const translations = {
             downloadTitle: 'Download {{name}}',
             previewTitle: 'Preview {{name}}',
         },
+        download: {
+            preparing: 'Preparing to download {{name}}…',
+            progress: 'Downloading {{name}} · {{percent}}%',
+            saved: 'Saved {{name}}',
+            started: 'Download started: {{name}}',
+            failed: 'Download failed. Please try again.',
+        },
         image: {
             loading: 'Loading...',
             failedToLoad: 'Failed to load image',
@@ -378,6 +385,13 @@ export const translations = {
             empty: '空附件',
             downloadTitle: '下载 {{name}}',
             previewTitle: '预览 {{name}}',
+        },
+        download: {
+            preparing: '正在准备下载 {{name}}…',
+            progress: '正在下载 {{name}} · {{percent}}%',
+            saved: '已保存 {{name}}',
+            started: '已开始下载：{{name}}',
+            failed: '下载失败，请重试。',
         },
         image: {
             loading: '加载中...',

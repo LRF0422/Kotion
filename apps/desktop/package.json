@@ -59,6 +59,7 @@
             "out/**/*",
             "!**/node_modules/**/*"
         ],
+        "afterPack": "./scripts/afterPack.cjs",
         "mac": {
             "target": [
                 "dmg",

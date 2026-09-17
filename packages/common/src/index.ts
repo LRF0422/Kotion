@@ -20,14 +20,15 @@ export type {
     KeysWithTypeOf, ValuesOf,
     UploadedFile, UploadOptions, UploadTaskStatus, UploadDestination, UploadFileHandle,
     UploadSource, UploadTask, UploadTaskSnapshot, UploadTaskService,
-    FileSelectorOptions, SelectedFile, FileAccessUrls, FileService, AIFoundation, Services
+    FileSelectorOptions, SelectedFile, FileAccessUrls, FileDownloadOptions, FileDownloadOutcome,
+    FileDownloadProgress, FileService, AIFoundation, Services
 } from "./core/types"
 export * from "./entity"
 export * from "./domain/space-page"
 export * from "./utils/logger"
 export * from "./utils/env-utils"
 export * from "./utils/auth"
-export { authorizedFetch } from "./utils/session"
+export { API_BASE_URL, authorizedFetch } from "./utils/session"
 export * from "./api"
 export * from "./hooks/use-navigator"
 export * from "./hooks/use-upload-file"
