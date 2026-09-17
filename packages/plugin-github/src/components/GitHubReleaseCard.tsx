@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { NodeViewWrapper, NodeViewProps } from '@kn/editor'
-import { useDesktop, useOptionalFileService, type SelectedFile } from '@kn/common'
+import { useDesktop, useOptionalFileService, useTranslation, type SelectedFile } from '@kn/common'
 import {
     Badge,
     Button,
@@ -132,34 +132,37 @@ function guessContentType(name: string, fallback?: string): string {
     return ARTIFACT_CONTENT_TYPES[extension] || 'application/octet-stream'
 }
 
-const NOTES_SOURCES: { value: NotesSource; label: string; hint: string }[] = [
-    { value: 'auto', label: 'Auto (GitHub)', hint: "GitHub 原生 generate-notes：按合并的 PR 自动生成" },
-    { value: 'commits', label: 'Commits', hint: '基于 commit 的 changelog' },
-    { value: 'custom', label: 'Custom', hint: '使用下方自定义内容' },
-    { value: 'none', label: 'None', hint: '留空' },
+const NOTES_SOURCES: { value: NotesSource; labelKey: string; hintKey: string }[] = [
+    { value: 'auto', labelKey: 'notesAuto', hintKey: 'notesAutoHint' },
+    { value: 'commits', labelKey: 'notesCommits', hintKey: 'notesCommitsHint' },
+    { value: 'custom', labelKey: 'notesCustom', hintKey: 'notesCustomHint' },
+    { value: 'none', labelKey: 'notesNone', hintKey: 'notesNoneHint' },
 ]
 
 const tabTriggerClass = 'h-7 gap-1.5 rounded-md px-2.5 text-xs'
 
-const ReleaseStateBadges: React.FC<{ release: GitHubRelease; isLatest: boolean }> = ({ release, isLatest }) => (
-    <span className="flex shrink-0 items-center gap-1">
-        {release.draft && (
-            <Badge variant="outline" className="h-5 rounded-full border-amber-500/40 bg-amber-500/10 px-2 text-[10px] text-amber-600 dark:text-amber-400">
-                Draft
-            </Badge>
-        )}
-        {release.prerelease && (
-            <Badge variant="outline" className="h-5 rounded-full border-violet-500/40 bg-violet-500/10 px-2 text-[10px] text-violet-600 dark:text-violet-400">
-                Pre-release
-            </Badge>
-        )}
-        {!release.draft && !release.prerelease && isLatest && (
-            <Badge variant="outline" className="h-5 rounded-full border-emerald-500/40 bg-emerald-500/10 px-2 text-[10px] text-emerald-600 dark:text-emerald-400">
-                Latest
-            </Badge>
-        )}
-    </span>
-)
+const ReleaseStateBadges: React.FC<{ release: GitHubRelease; isLatest: boolean }> = ({ release, isLatest }) => {
+    const { t } = useTranslation()
+    return (
+        <span className="flex shrink-0 items-center gap-1">
+            {release.draft && (
+                <Badge variant="outline" className="h-5 rounded-full border-amber-500/40 bg-amber-500/10 px-2 text-[10px] text-amber-600 dark:text-amber-400">
+                    {t('github.release.draft')}
+                </Badge>
+            )}
+            {release.prerelease && (
+                <Badge variant="outline" className="h-5 rounded-full border-violet-500/40 bg-violet-500/10 px-2 text-[10px] text-violet-600 dark:text-violet-400">
+                    {t('github.release.prerelease')}
+                </Badge>
+            )}
+            {!release.draft && !release.prerelease && isLatest && (
+                <Badge variant="outline" className="h-5 rounded-full border-emerald-500/40 bg-emerald-500/10 px-2 text-[10px] text-emerald-600 dark:text-emerald-400">
+                    {t('github.release.latest')}
+                </Badge>
+            )}
+        </span>
+    )
+}
 
 const AssetRow: React.FC<{ asset: GitHubReleaseAsset }> = ({ asset }) => (
     <div className="flex items-center justify-between gap-2 px-2 py-1.5 text-[11px]">
@@ -188,17 +191,15 @@ const AssetRow: React.FC<{ asset: GitHubReleaseAsset }> = ({ asset }) => (
  * GitHub's asset host (uploads.github.com) sends no CORS headers. On the web we
  * surface that limitation up-front instead of letting the upload fail.
  */
-const DesktopOnlyNotice: React.FC = () => (
-    <div className="flex items-start gap-1.5 rounded-md border border-dashed bg-muted/20 px-2.5 py-1.5 text-[11px] leading-relaxed text-muted-foreground">
-        <Monitor className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-        <span>
-            上传 release 产物是<strong className="font-medium text-foreground/80">桌面端功能</strong>：
-            浏览器受 GitHub CORS 限制（uploads.github.com 不返回 CORS 头）无法直传。
-            Web 端请在 GitHub release 页面拖拽上传，或运行{' '}
-            <code className="rounded bg-muted px-1 font-mono text-[10px]">gh release upload &lt;tag&gt; &lt;文件&gt;</code>。
-        </span>
-    </div>
-)
+const DesktopOnlyNotice: React.FC = () => {
+    const { t } = useTranslation()
+    return (
+        <div className="flex items-start gap-1.5 rounded-md border border-dashed bg-muted/20 px-2.5 py-1.5 text-[11px] leading-relaxed text-muted-foreground">
+            <Monitor className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>{t('github.release.desktopOnlyNotice')}</span>
+        </div>
+    )
+}
 
 export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttributes, editor, deleteNode }) => {
     const {
@@ -224,6 +225,7 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
     const collapsed = Boolean(attrCollapsed)
     const toggleCollapsed = () => updateAttributes({ collapsed: !collapsed })
 
+    const { t } = useTranslation()
     const { config } = useGitHubConfig()
     const fileService = useOptionalFileService()
     const desktop = useDesktop()
@@ -346,7 +348,7 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
     const handleGenerateNotes = useCallback(async () => {
         if (!token) return
         if (!formTag.trim()) {
-            setFormError('请先填写 tag 名称。')
+            setFormError(t('github.release.enterTagFirst'))
             return
         }
         setGenerating(true)
@@ -369,10 +371,10 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
                 })
                 setFormBody(notes.body)
                 if (!formTitle && notes.name) setFormTitle(notes.name)
-                setNotice(notes.warning || 'Release notes 已生成。')
+                setNotice(notes.warning || t('github.release.notesGenerated'))
                 return
             }
-            setNotice('Release notes 已生成。')
+            setNotice(t('github.release.notesGenerated'))
         } catch (err: any) {
             setFormError(describeGitHubError(err))
         } finally {
@@ -400,7 +402,7 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
                     if (!response.ok) throw new Error('HTTP ' + response.status)
                     blob = await response.blob()
                 }
-                if (!blob) throw new Error('无法读取文件内容')
+                if (!blob) throw new Error(t('github.release.unreadableFile'))
                 await uploadReleaseAsset(token, owner, repo, {
                     releaseId: release.id,
                     tagName: release.tag_name,
@@ -420,14 +422,14 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
     const handleStageFromFileManager = useCallback(async () => {
         const fs = fileService
         if (!fs?.openFileSelector) {
-            setFormError('文件管理器不可用，请确认 File Manager 插件已启用。')
+            setFormError(t('github.release.fileManagerUnavailable'))
             return
         }
         setFormError(null)
         let selected: SelectedFile[] | null = null
         try {
             selected = await fs.openFileSelector(
-                { multiple: true, target: 'file', title: '选择要作为 release 产物的文件' },
+                { multiple: true, target: 'file', title: t('github.release.selectAssetsTitle') },
                 editor,
             )
         } catch (err: any) {
@@ -457,7 +459,7 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
         if (!token) return
         const tag = formTag.trim()
         if (!tag) {
-            setFormError('Tag 名称为必填项。')
+            setFormError(t('github.release.tagRequired'))
             return
         }
         setBusy(true)
@@ -512,7 +514,7 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
                     prerelease: release.prerelease,
                     lastSyncAt: new Date().toISOString(),
                 })
-                actionNotice = 'Release ' + release.tag_name + ' 已更新。' + (notesGenerator ? '（notes: ' + notesGenerator + '）' : '')
+                actionNotice = t('github.release.updated', { tag: release.tag_name }) + (notesGenerator ? t('github.release.notesSuffix', { gen: notesGenerator }) : '')
                 setEditing(null)
             } else {
                 if (formCreateTag) {
@@ -545,8 +547,8 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
                     lastSyncAt: new Date().toISOString(),
                 })
                 actionNotice = release.draft
-                    ? 'Release ' + release.tag_name + ' 已保存为草稿。'
-                    : 'Release ' + release.tag_name + ' 已发布！'
+                    ? t('github.release.savedDraft', { tag: release.tag_name })
+                    : t('github.release.published', { tag: release.tag_name })
             }
 
             // Attach any staged File Manager artifacts to the freshly saved release.
@@ -555,11 +557,11 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
                 const { uploaded, failed } = await uploadAssetFiles(savedRelease, stagedAssets)
                 setUploadingId(null)
                 if (uploaded.length > 0) {
-                    actionNotice += ' 已上传 ' + uploaded.length + ' 个产物。'
+                    actionNotice += ' ' + t('github.release.assetsUploaded', { count: uploaded.length })
                     setStagedAssets([])
                 }
                 if (failed.length > 0) {
-                    setFormError('部分产物上传失败：' + failed.join('；'))
+                    setFormError(t('github.release.assetsUploadFailed', { details: failed.join('; ') }))
                 }
             }
 
@@ -582,7 +584,7 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
         setFormError(null)
         try {
             await updateRelease(token, owner, repo, { releaseId: release.id, draft: false })
-            setNotice('Release ' + release.tag_name + ' 已正式发布。')
+            setNotice(t('github.release.publishedDraft', { tag: release.tag_name }))
             refresh()
         } catch (err: any) {
             setFormError(describeGitHubError(err))
@@ -593,12 +595,12 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
 
     const handleDelete = useCallback(async (release: GitHubRelease) => {
         if (!token) return
-        if (typeof window !== 'undefined' && !window.confirm('Delete release ' + release.tag_name + '? This cannot be undone.')) return
+        if (typeof window !== 'undefined' && !window.confirm(t('github.release.deleteConfirm', { tag: release.tag_name }))) return
         setBusy(true)
         setFormError(null)
         try {
             await deleteRelease(token, owner, repo, { releaseId: release.id })
-            setNotice('Release ' + release.tag_name + ' 已删除。')
+            setNotice(t('github.release.deleted', { tag: release.tag_name }))
             if (editing?.releaseId === release.id) resetForm()
             refresh()
         } catch (err: any) {
@@ -611,7 +613,7 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
     const handleCopy = useCallback((text: string) => {
         if (!text) return
         navigator.clipboard.writeText(text)
-        setNotice('已复制到剪贴板。')
+        setNotice(t('github.release.copied'))
     }, [])
 
     /** Pick one or more files from the File Manager and attach them as release assets. */
@@ -619,7 +621,7 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
         if (!token) return
         const fs = fileService
         if (!fs?.openFileSelector) {
-            setFormError('文件管理器不可用，请确认 File Manager 插件已启用。')
+            setFormError(t('github.release.fileManagerUnavailable'))
             return
         }
         setFormError(null)
@@ -631,7 +633,7 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
                 {
                     multiple: true,
                     target: 'file',
-                    title: '选择要上传到 ' + release.tag_name + ' 的产物',
+                    title: t('github.release.selectUploadTitle', { tag: release.tag_name }),
                 },
                 editor,
             )
@@ -647,10 +649,10 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
         const { uploaded, failed } = await uploadAssetFiles(release, files)
         setUploadingId(null)
         if (uploaded.length > 0) {
-            setNotice('已从文件管理器上传 ' + uploaded.length + ' 个产物：' + uploaded.join('、'))
+            setNotice(t('github.release.assetsUploadedFromFM', { count: uploaded.length, names: uploaded.join(', ') }))
         }
         if (failed.length > 0) {
-            setFormError('部分产物上传失败：' + failed.join('；'))
+            setFormError(t('github.release.assetsUploadFailed', { details: failed.join('; ') }))
         }
         refresh()
     }, [token, fileService, editor, uploadAssetFiles, refresh])
@@ -669,7 +671,7 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
         )
     }
 
-    const notesHint = NOTES_SOURCES.find(source => source.value === notesSource)?.hint || ''
+    const notesHint = t('github.release.' + (NOTES_SOURCES.find(source => source.value === notesSource)?.hintKey || 'notesAutoHint'))
 
     return (
         <NodeViewWrapper>
@@ -677,7 +679,7 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
                 <div className={ghHeader}>
                     <div className={ghHeaderStart}>
                         <GhIconButton
-                            label={collapsed ? 'Expand card' : 'Collapse card'}
+                            label={collapsed ? t('github.release.expandCard') : t('github.release.collapseCard')}
                             onClick={toggleCollapsed}
                             className="-ml-1 h-6 w-6"
                         >
@@ -696,25 +698,25 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
                         )}
                         {(node.attrs.draft || node.attrs.prerelease) && (
                             <span className="hidden items-center gap-1 sm:flex">
-                                {node.attrs.draft && <Badge variant="outline" className="h-5 rounded-full px-2 text-[10px]">Draft</Badge>}
-                                {node.attrs.prerelease && <Badge variant="outline" className="h-5 rounded-full px-2 text-[10px]">Pre-release</Badge>}
+                                {node.attrs.draft && <Badge variant="outline" className="h-5 rounded-full px-2 text-[10px]">{t('github.release.draft')}</Badge>}
+                                {node.attrs.prerelease && <Badge variant="outline" className="h-5 rounded-full px-2 text-[10px]">{t('github.release.prerelease')}</Badge>}
                             </span>
                         )}
                     </div>
                     <div className="flex shrink-0 items-center gap-0.5">
                         {loading && <RefreshCw className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-label="Loading" />}
                         {!loading && editable && (
-                            <GhIconButton label="Refresh" onClick={refresh}>
+                            <GhIconButton label={t('github.release.refresh')} onClick={refresh}>
                                 <RefreshCw className="h-3.5 w-3.5" />
                             </GhIconButton>
                         )}
                         {htmlUrl && (
-                            <GhIconLink label="Open on GitHub" href={htmlUrl}>
+                            <GhIconLink label={t('github.release.openOnGitHub')} href={htmlUrl}>
                                 <ExternalLink className="h-3.5 w-3.5" />
                             </GhIconLink>
                         )}
                         {editable && (
-                            <GhIconButton label="Remove card" onClick={deleteNode}>
+                            <GhIconButton label={t('github.release.removeCard')} onClick={deleteNode}>
                                 <X className="h-3.5 w-3.5" />
                             </GhIconButton>
                         )}
@@ -726,10 +728,10 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
                     <div className="border-b px-3 py-2">
                         <TabsList className="h-8 w-full justify-start gap-1 bg-transparent p-0">
                             <TabsTrigger value="publish" className={tabTriggerClass}>
-                                <Rocket className="h-3.5 w-3.5" /> {editing ? 'Edit release' : 'Publish'}
+                                <Rocket className="h-3.5 w-3.5" /> {editing ? t('github.release.tabEdit') : t('github.release.tabPublish')}
                             </TabsTrigger>
                             <TabsTrigger value="releases" className={tabTriggerClass}>
-                                <History className="h-3.5 w-3.5" /> Releases
+                                <History className="h-3.5 w-3.5" /> {t('github.release.tabReleases')}
                                 {releases.length > 0 && <span className="text-muted-foreground">· {releases.length}</span>}
                             </TabsTrigger>
                         </TabsList>
@@ -739,20 +741,20 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
                     <TabsContent value="publish" className="mt-0 space-y-3 p-3">
                         {!editable && (
                             <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
-                                只读模式：编辑文档后才能发布 release。
+                                {t('github.release.readOnly')}
                             </div>
                         )}
 
                         {!token && (
                             <div className="rounded-lg border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                                未配置 Personal Access Token，请前往 设置 → GitHub 配置后即可发布。
+                                {t('github.release.noToken')}
                             </div>
                         )}
 
                         <div className="grid gap-3 sm:grid-cols-2">
                             <div className="space-y-1.5">
                                 <Label className="text-xs" htmlFor={tagListId + '-tag'}>
-                                    <Tag className="mr-1 inline h-3 w-3" /> Tag <span className="text-destructive">*</span>
+                                    <Tag className="mr-1 inline h-3 w-3" /> {t('github.release.tag')} <span className="text-destructive">*</span>
                                 </Label>
                                 <Input
                                     id={tagListId + '-tag'}
@@ -767,13 +769,13 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
                                     {tagNames.map(name => <option key={name} value={name} />)}
                                 </datalist>
                                 {previousTag && (
-                                    <p className="text-[11px] text-muted-foreground">detected previous: <span className="font-mono">{previousTag}</span></p>
+                                    <p className="text-[11px] text-muted-foreground">{t('github.release.detectedPrevious')} <span className="font-mono">{previousTag}</span></p>
                                 )}
                             </div>
 
                             <div className="space-y-1.5">
                                 <Label className="text-xs" htmlFor={tagListId + '-target'}>
-                                    <GitBranch className="mr-1 inline h-3 w-3" /> Target branch / commit
+                                    <GitBranch className="mr-1 inline h-3 w-3" /> {t('github.release.target')}
                                 </Label>
                                 <Input
                                     id={tagListId + '-target'}
@@ -787,7 +789,7 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
                         </div>
 
                         <div className="space-y-1.5">
-                            <Label className="text-xs" htmlFor={tagListId + '-title'}>Release title</Label>
+                            <Label className="text-xs" htmlFor={tagListId + '-title'}>{t('github.release.title')}</Label>
                             <Input
                                 id={tagListId + '-title'}
                                 value={formTitle}
@@ -799,14 +801,14 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
 
                         <div className="space-y-1.5">
                             <div className="flex flex-wrap items-center justify-between gap-2">
-                                <Label className="text-xs"><FileText className="mr-1 inline h-3 w-3" /> Release notes</Label>
+                                <Label className="text-xs"><FileText className="mr-1 inline h-3 w-3" /> {t('github.release.notes')}</Label>
                                 <div className="flex flex-wrap items-center gap-1">
                                     {NOTES_SOURCES.map(source => (
                                         <button
                                             key={source.value}
                                             type="button"
                                             disabled={!editable}
-                                            title={source.hint}
+                                            title={t('github.release.' + source.hintKey)}
                                             onClick={() => setNotesSource(source.value)}
                                             className={cn(
                                                 'rounded-md border px-1.5 py-0.5 text-[11px] transition-colors disabled:opacity-50',
@@ -815,7 +817,7 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
                                                     : 'bg-background hover:bg-muted',
                                             )}
                                         >
-                                            {source.label}
+                                            {t('github.release.' + source.labelKey)}
                                         </button>
                                     ))}
                                     <Button
@@ -828,7 +830,7 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
                                         {generating
                                             ? <Loader2 className="h-3 w-3 animate-spin" />
                                             : <Sparkles className="h-3 w-3" />}
-                                        Generate
+                                        {t('github.release.generate')}
                                     </Button>
                                 </div>
                             </div>
@@ -847,8 +849,8 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
                             <div className="space-y-2 rounded-lg border px-3 py-2.5">
                                 <div className="flex items-center justify-between gap-3">
                                     <div className="min-w-0">
-                                        <p className="text-xs font-medium">Create git tag first</p>
-                                        <p className="text-[11px] text-muted-foreground">在创建 release 前显式创建附注 tag</p>
+                                        <p className="text-xs font-medium">{t('github.release.createTagFirst')}</p>
+                                        <p className="text-[11px] text-muted-foreground">{t('github.release.createTagFirstHint')}</p>
                                     </div>
                                     <Switch checked={formCreateTag} disabled={!editable} onCheckedChange={setFormCreateTag} />
                                 </div>
@@ -857,7 +859,7 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
                                         value={formTagMessage}
                                         disabled={!editable}
                                         onChange={(e) => setFormTagMessage(e.target.value)}
-                                        placeholder="Tag message (optional, creates annotated tag)"
+                                        placeholder={t('github.release.tagMessagePlaceholder')}
                                         className="text-xs"
                                     />
                                 )}
@@ -868,7 +870,7 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
                             <div className="space-y-2 rounded-lg border px-3 py-2.5">
                                 <div className="flex items-center justify-between gap-2">
                                     <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium">
-                                        <Package className="h-3.5 w-3.5 shrink-0" /> Release assets
+                                        <Package className="h-3.5 w-3.5 shrink-0" /> {t('github.release.assetsTitle')}
                                         {stagedAssets.length > 0 ? ' · ' + stagedAssets.length : ''}
                                     </span>
                                     <Button
@@ -878,7 +880,7 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
                                         disabled={!editable || !token || busy || !desktopUploadAvailable}
                                         onClick={handleStageFromFileManager}
                                     >
-                                        <Upload className="h-3 w-3" /> Add from File Manager
+                                        <Upload className="h-3 w-3" /> {t('github.release.addFromFileManager')}
                                     </Button>
                                 </div>
                                 {!desktopUploadAvailable ? (
@@ -904,7 +906,7 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
                                     </div>
                                 ) : (
                                     <p className="text-[11px] text-muted-foreground">
-                                        可从文件管理器选择构建产物（zip、jar、dmg、exe 等），保存 release 时自动上传。
+                                        {t('github.release.assetsHint')}
                                     </p>
                                 )}
                             </div>
@@ -913,15 +915,15 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
                         <div className="grid gap-3 sm:grid-cols-2">
                             <div className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5">
                                 <div className="min-w-0">
-                                    <p className="text-xs font-medium">Draft</p>
-                                    <p className="text-[11px] text-muted-foreground">保存为草稿，暂不公开</p>
+                                    <p className="text-xs font-medium">{t('github.release.draft')}</p>
+                                    <p className="text-[11px] text-muted-foreground">{t('github.release.draftHint')}</p>
                                 </div>
                                 <Switch checked={formDraft} disabled={!editable} onCheckedChange={setFormDraft} />
                             </div>
                             <div className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5">
                                 <div className="min-w-0">
-                                    <p className="text-xs font-medium">Pre-release</p>
-                                    <p className="text-[11px] text-muted-foreground">标记为预发布版本</p>
+                                    <p className="text-xs font-medium">{t('github.release.prerelease')}</p>
+                                    <p className="text-[11px] text-muted-foreground">{t('github.release.prereleaseHint')}</p>
                                 </div>
                                 <Switch checked={formPrerelease} disabled={!editable} onCheckedChange={setFormPrerelease} />
                             </div>
@@ -932,7 +934,7 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
                                 <div className="flex items-center justify-between gap-2">
                                     <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium">
                                         <Package className="h-3.5 w-3.5 shrink-0" />
-                                        <span className="truncate">Assets · <span className="font-mono">{editingRelease.tag_name}</span></span>
+                                        <span className="truncate">{t('github.release.assetsFor', { tag: editingRelease.tag_name })}</span>
                                     </span>
                                     <Button
                                         size="sm"
@@ -944,7 +946,7 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
                                         {uploadingId === editingRelease.id
                                             ? <Loader2 className="h-3 w-3 animate-spin" />
                                             : <Upload className="h-3 w-3" />}
-                                        Upload from File Manager
+                                        {t('github.release.uploadFromFileManager')}
                                     </Button>
                                 </div>
                                 {(editingRelease.assets || []).length > 0 ? (
@@ -953,7 +955,7 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
                                     </div>
                                 ) : (
                                     <p className="text-[11px] text-muted-foreground">
-                                        暂无产物。可从文件管理器上传构建产物（zip、jar、dmg、exe 等）。
+                                        {t('github.release.noAssetsUpload')}
                                     </p>
                                 )}
                                 {!desktopUploadAvailable && <DesktopOnlyNotice />}
@@ -962,24 +964,24 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
 
                         <div className="flex flex-wrap items-center justify-between gap-2">
                             <div className="flex items-center gap-2">
-                                <Label className="text-xs text-muted-foreground">Make latest</Label>
+                                <Label className="text-xs text-muted-foreground">{t('github.release.makeLatest')}</Label>
                                 <select
                                     value={formMakeLatest}
                                     disabled={!editable}
                                     onChange={(e) => setFormMakeLatest(e.target.value as '' | GitHubReleaseMakeLatest)}
                                     className="h-7 rounded-md border bg-background px-2 text-xs"
                                 >
-                                    <option value="">Default</option>
-                                    <option value="true">Set as latest</option>
-                                    <option value="false">Not latest</option>
-                                    <option value="legacy">Legacy</option>
+                                    <option value="">{t('github.release.makeLatestDefault')}</option>
+                                    <option value="true">{t('github.release.makeLatestTrue')}</option>
+                                    <option value="false">{t('github.release.makeLatestFalse')}</option>
+                                    <option value="legacy">{t('github.release.makeLatestLegacy')}</option>
                                 </select>
                             </div>
 
                             <div className="flex items-center gap-2">
                                 {editing && (
                                     <Button variant="ghost" size="sm" onClick={resetForm} disabled={busy}>
-                                        Cancel edit
+                                        {t('github.release.cancelEdit')}
                                     </Button>
                                 )}
                                 <Button
@@ -994,7 +996,7 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
                                         : formDraft
                                             ? <Package className="h-3.5 w-3.5" />
                                             : <Rocket className="h-3.5 w-3.5" />}
-                                    {editing ? 'Update release' : formDraft ? 'Save draft' : 'Publish release'}
+                                    {editing ? t('github.release.updateRelease') : formDraft ? t('github.release.saveDraft') : t('github.release.publishRelease')}
                                 </Button>
                             </div>
                         </div>
@@ -1004,13 +1006,13 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
                     <TabsContent value="releases" className="mt-0 p-3">
                         {loading && releases.length === 0 && (
                             <div className="flex items-center justify-center gap-2 py-8 text-xs text-muted-foreground">
-                                <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Loading releases…
+                                <RefreshCw className="h-3.5 w-3.5 animate-spin" /> {t('github.release.loadingReleases')}
                             </div>
                         )}
                         {!loading && releases.length === 0 && (
                             <div className={ghEmptyState}>
                                 <Package className="h-5 w-5" />
-                                No releases yet. Use the Publish tab to create the first one.
+                                {t('github.release.noReleases')}
                             </div>
                         )}
                         <ScrollArea className="max-h-[440px]">
@@ -1025,7 +1027,7 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
                                                     type="button"
                                                     className="mt-0.5 shrink-0 text-muted-foreground"
                                                     onClick={() => setExpandedId(isExpanded ? null : release.id)}
-                                                    aria-label={isExpanded ? 'Collapse' : 'Expand'}
+                                                    aria-label={isExpanded ? t('github.release.collapse') : t('github.release.expand')}
                                                 >
                                                     {isExpanded
                                                         ? <ChevronDown className="h-3.5 w-3.5" />
@@ -1048,7 +1050,7 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
                                                     </div>
                                                 </div>
                                                 <div className="flex shrink-0 items-center gap-0.5">
-                                                    <GhIconButton label="Copy notes" onClick={() => handleCopy(release.body || '')}>
+                                                    <GhIconButton label={t('github.release.copyNotes')} onClick={() => handleCopy(release.body || '')}>
                                                         <Copy className="h-3.5 w-3.5" />
                                                     </GhIconButton>
                                                     <GhIconLink label="Open release" href={release.html_url}>
@@ -1057,14 +1059,14 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
                                                     {editable && (
                                                         <>
                                                             {release.draft && (
-                                                                <GhIconButton label="Publish draft" onClick={() => handlePublishDraft(release)}>
+                                                                <GhIconButton label={t('github.release.publishDraft')} onClick={() => handlePublishDraft(release)}>
                                                                     <Rocket className="h-3.5 w-3.5" />
                                                                 </GhIconButton>
                                                             )}
-                                                            <GhIconButton label="Edit release" onClick={() => startEdit(release)}>
+                                                            <GhIconButton label={t('github.release.editRelease')} onClick={() => startEdit(release)}>
                                                                 <Pencil className="h-3.5 w-3.5" />
                                                             </GhIconButton>
-                                                            <GhIconButton label="Delete release" onClick={() => handleDelete(release)}>
+                                                            <GhIconButton label={t('github.release.deleteRelease')} onClick={() => handleDelete(release)}>
                                                                 <Trash2 className="h-3.5 w-3.5" />
                                                             </GhIconButton>
                                                         </>
@@ -1079,12 +1081,12 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
                                                             {release.body.length > 4000 ? release.body.slice(0, 4000) + '…' : release.body}
                                                         </p>
                                                     ) : (
-                                                        <p className="text-[11px] text-muted-foreground">No release notes.</p>
+                                                        <p className="text-[11px] text-muted-foreground">{t('github.release.noReleaseNotes')}</p>
                                                     )}
                                                     <div className="mt-2">
                                                         <div className="mb-1.5 flex items-center justify-between gap-2">
                                                             <span className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
-                                                                <Package className="h-3 w-3" /> Assets
+                                                                <Package className="h-3 w-3" /> {t('github.release.assets')}
                                                                 {(release.assets || []).length > 0 ? ' · ' + (release.assets || []).length : ''}
                                                             </span>
                                                             {editable && (
@@ -1098,7 +1100,7 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
                                                                     {uploadingId === release.id
                                                                         ? <Loader2 className="h-3 w-3 animate-spin" />
                                                                         : <Upload className="h-3 w-3" />}
-                                                                    Upload from File Manager
+                                                                    {t('github.release.uploadFromFileManager')}
                                                                 </Button>
                                                             )}
                                                         </div>
@@ -1108,7 +1110,7 @@ export const GitHubReleaseCard: React.FC<NodeViewProps> = ({ node, updateAttribu
                                                             </div>
                                                         ) : (
                                                             <div className="rounded-md border border-dashed px-3 py-2 text-[11px] text-muted-foreground">
-                                                                暂无产物。可从文件管理器选择文件作为 release 资产上传。
+                                                                {t('github.release.noAssetsSelect')}
                                                             </div>
                                                         )}
                                                         {!desktopUploadAvailable && (
