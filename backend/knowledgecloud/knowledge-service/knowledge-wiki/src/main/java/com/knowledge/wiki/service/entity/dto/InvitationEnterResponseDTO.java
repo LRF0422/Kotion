@@ -17,5 +17,13 @@ public class InvitationEnterResponseDTO {
     private Long pageId;
     private String pageType;
     private String contextId;
+    /**
+     * True when the invitee was admitted to (or already belonged to) the context
+     * that owns the space, so the client may switch into it. False means the client
+     * must fall back to invitation-token-scoped editing instead.
+     */
+    private Boolean contextSwitchAllowed;
+    /** Server reason when the context grant was rejected (shown to the invitee). */
+    private String contextMessage;
     private String permission;
 }

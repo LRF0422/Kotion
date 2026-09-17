@@ -39,6 +39,7 @@ import {
     normalizeUser,
 } from "./normalizers";
 import { createCommonSpacePageTransport, type SpacePageTransport } from "./transport";
+import { createInvitationDocumentOperations } from "./invitation-documents";
 
 const params = (value: object): Record<string, unknown> => value as Record<string, unknown>;
 const serializePageContent = (content: unknown): unknown =>
@@ -290,6 +291,7 @@ export const createSpacePageService = (
         async getPageCollaborators(pageId) { return normalizeArrayEnvelope(await execute(E.collaboration.collaborators, { pageId: normalizeId(pageId, "pageId") })).map(normalizeCollaborator); },
         async updateCollaboratorPermission(request) { const p = normalizeId(request.pageId, "pageId"), u = normalizeId(request.userId, "userId"); await execute(E.collaboration.updatePermission, { pageId: p, userId: u }, { permission: request.permission }); changes.emit("page.permissions.changed", { pageId: p, userId: u }); },
         async removePageCollaborator(pageId, userId) { const p = normalizeId(pageId, "pageId"), u = normalizeId(userId, "userId"); await execute(E.collaboration.removeCollaborator, { pageId: p, userId: u }); changes.emit("page.permissions.changed", { pageId: p, userId: u }); },
+        createInvitationDocumentOperations(token) { return createInvitationDocumentOperations(token, transport); },
     };
 
     const shares: SpacePageService["shares"] = {

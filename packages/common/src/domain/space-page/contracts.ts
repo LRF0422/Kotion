@@ -232,6 +232,15 @@ export interface InvitationEnterResult {
     pageId?: PageId;
     pageType?: string;
     contextId?: string;
+    /**
+     * Whether the server granted membership in {@link contextId}, so the client can
+     * switch into it and use the normal space/page routes. When false (for example a
+     * space created in the owner's personal context) the client edits in place with
+     * invitation-token-scoped operations instead.
+     */
+    contextSwitchAllowed?: boolean;
+    /** Human-readable server reason when the context grant was rejected. */
+    contextMessage?: string;
     permission?: PagePermission;
     metadata?: UnknownRecord;
 }

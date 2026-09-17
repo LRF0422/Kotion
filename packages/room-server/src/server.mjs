@@ -54,10 +54,38 @@ const parsePageId = (documentName) => {
  * open is not a control, and the collaboration server is useless without the
  * backend anyway (page content lives in the DB).
  */
-const authorizePage = async (pageId, token) => {
-    const url = `${authApiBaseUrl}/knowledge-wiki/space/page/${pageId}/collab/authorize`;
+/**
+ * Collaboration invitations are accepted by users living in a different identity
+ * context than the page owner, so their OAuth token cannot authorize the room
+ * through the tenant-scoped `/space/page/:id/collab/authorize` route. The
+ * invitation token is an additional bearer credential scoped to exactly one
+ * page, and the invitee's access token is still required to bind it to a user,
+ * so both are sent as a JSON payload: { accessToken, invitationToken }.
+ */
+const parseAuthToken = (raw) => {
+    if (typeof raw === "string" && raw.trim().startsWith("{")) {
+        try {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === "object") {
+                return {
+                    accessToken: typeof parsed.accessToken === "string" ? parsed.accessToken : "",
+                    invitationToken: typeof parsed.invitationToken === "string" ? parsed.invitationToken : "",
+                };
+            }
+        } catch {
+            // Not our JSON envelope — fall through and treat it as a bare token.
+        }
+    }
+    return { accessToken: typeof raw === "string" ? raw : "", invitationToken: "" };
+};
+
+const authorizePage = async (pageId, rawToken) => {
+    const { accessToken, invitationToken } = parseAuthToken(rawToken);
+    const url = invitationToken
+        ? `${authApiBaseUrl}/knowledge-wiki/collaboration/invitation/${encodeURIComponent(invitationToken)}/collab/authorize?pageId=${encodeURIComponent(pageId)}`
+        : `${authApiBaseUrl}/knowledge-wiki/space/page/${pageId}/collab/authorize`;
     const response = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${accessToken}` },
         signal: AbortSignal.timeout(authTimeoutMs),
     });
     if (!response.ok) {

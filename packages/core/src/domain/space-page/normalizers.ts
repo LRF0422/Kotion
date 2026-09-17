@@ -252,6 +252,8 @@ export const normalizeInvitationEnter = (value: unknown): InvitationEnterResult 
         pageType: normalizePageType(raw.pageType),
         // The owning context is an opaque tenant id, not a numeric entity id.
         contextId: optionalString(raw.contextId),
+        contextSwitchAllowed: optionalBoolean(raw.contextSwitchAllowed),
+        contextMessage: optionalString(raw.contextMessage),
         permission: raw.permission,
         metadata: raw,
     };

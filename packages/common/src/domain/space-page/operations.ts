@@ -129,6 +129,12 @@ export interface CollaborationOperations {
     getPageCollaborators(pageId: PageId): Promise<PageCollaborator[]>;
     updateCollaboratorPermission(request: UpdateCollaboratorPermissionRequest): Promise<void>;
     removePageCollaborator(pageId: PageId, userId: UserId): Promise<void>;
+    /**
+     * Document read/write operations bound to an invitation token rather than the
+     * caller's identity context, for collaborators the session cannot switch to
+     * (e.g. a page created in the owner's personal context).
+     */
+    createInvitationDocumentOperations(token: string): PageDocumentOperations;
 }
 
 export interface ShareOperations {

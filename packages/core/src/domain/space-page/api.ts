@@ -67,6 +67,20 @@ export const SPACE_PAGE_ENDPOINTS = {
         collaborators: endpoint("/knowledge-wiki/space/page/:pageId/collaborators", "GET"),
         updatePermission: endpoint("/knowledge-wiki/space/page/:pageId/collaborator/:userId/permission", "PUT"),
         removeCollaborator: endpoint("/knowledge-wiki/space/page/:pageId/collaborator/:userId", "DELETE"),
+        // Invitation-scoped document API for collaborators whose session cannot
+        // switch into the space's context. The token is the authorization.
+        invitationDocument: endpoint("/knowledge-wiki/collaboration/invitation/:token/doc", "GET"),
+        invitationOperations: endpoint("/knowledge-wiki/collaboration/invitation/:token/ops", "POST"),
+        invitationReconcile: endpoint("/knowledge-wiki/collaboration/invitation/:token/reconcile", "POST"),
+        invitationHistory: endpoint("/knowledge-wiki/collaboration/invitation/:token/history", "GET"),
+        invitationHistoryDocument: endpoint("/knowledge-wiki/collaboration/invitation/:token/history/:rev/doc", "GET"),
+        invitationCheckpoint: endpoint("/knowledge-wiki/collaboration/invitation/:token/checkpoints", "POST"),
+        invitationRestore: endpoint("/knowledge-wiki/collaboration/invitation/:token/restore", "POST"),
+        invitationClaimSession: endpoint("/knowledge-wiki/collaboration/invitation/:token/session/claim", "POST"),
+        invitationHeartbeatSession: endpoint("/knowledge-wiki/collaboration/invitation/:token/session/heartbeat", "POST"),
+        invitationReleaseSession: endpoint("/knowledge-wiki/collaboration/invitation/:token/session", "DELETE"),
+        invitationClaimSeed: endpoint("/knowledge-wiki/collaboration/invitation/:token/seed-claim", "POST"),
+        invitationReleaseSeed: endpoint("/knowledge-wiki/collaboration/invitation/:token/seed-claim", "DELETE"),
     },
     shares: {
         get: endpoint("/knowledge-wiki/space/page/:pageId/share-link", "GET"),

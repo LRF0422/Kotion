@@ -11,6 +11,7 @@ import {
     saveTokens,
     type CollaborationInvitation,
     type PagePermission,
+    type PageRecord,
     useApi,
     useNavigator,
     useSpacePageService,
@@ -27,6 +28,7 @@ import {
 import React, { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "@kn/common";
 import { toast } from "@kn/ui";
+import { CollaborationWorkspace } from "./CollaborationWorkspace";
 
 type InviteStatus = 'loading' | 'ready' | 'accepting' | 'error' | 'expired';
 
@@ -53,6 +55,8 @@ export const InviteCollaboration: React.FC = () => {
     const [inviteStatus, setInviteStatus] = useState<InviteStatus>('loading');
     const [invitation, setInvitation] = useState<CollaborationInvitation | null>(null);
     const [errorMessage, setErrorMessage] = useState<string>('');
+    const [page, setPage] = useState<PageRecord | null>(null);
+    const [entered, setEntered] = useState(false);
 
     const inviteToken = params.token ? String(params.token) : searchParams.get('token');
 
@@ -112,14 +116,19 @@ export const InviteCollaboration: React.FC = () => {
         error?.response?.data?.msg || error?.message || t('inviteCollaboration.error.processFailed');
 
     /**
-     * Make the shared space reachable, then open it.
+     * Open the page in place with invitation-token-scoped document operations.
      *
-     * The invitation endpoints deliberately ignore the tenant line, so the card can
-     * describe a space that lives in another context. Normal space/page reads cannot:
-     * a session in the wrong context resolves the space to nothing. `enterInvitation`
-     * grants the invitee context membership and reports the context to use, and this
-     * method switches the session into it before navigating.
+     * Used when the server could not admit this account into the context that owns
+     * the space (for example a page created in the owner's personal context), or
+     * when the context switch itself fails. The invitee stays in their own context
+     * and every read/write is authorized by the invitation token.
      */
+    const enterWorkspace = async (token: string) => {
+        const record = await service.collaboration.getInvitationPage(token);
+        setPage(record);
+        setEntered(true);
+    };
+
     const openInvitationPage = async (token: string) => {
         const target = await service.collaboration.enterInvitation(token);
         if (!target.spaceId || !target.pageId) {
@@ -131,25 +140,35 @@ export const InviteCollaboration: React.FC = () => {
             navigator.go({ to: pageRoute });
             return;
         }
-
-        const switched = await useApi(APIS.SWITCH_CONTEXT, { contextId: target.contextId }, {
-            refreshToken: getRefreshToken() || '',
-        }).catch((error: any) => {
-            // The grant is best-effort on the backend, so the switch is where a real
-            // permission problem surfaces. Pair the platform message with the action
-            // that actually fixes it.
-            throw new Error(`${readableError(error)} ${t('inviteCollaboration.contextSwitch.hint')}`);
-        });
-        const tokens = normalizeTokenResponse(switched.data);
-        if (!tokens.accessToken || !tokens.refreshToken) {
-            throw new Error(t('inviteCollaboration.contextSwitch.failed'));
+        // The server refused (or could not grant) membership in the owning context,
+        // e.g. a space created in the owner's personal context. A switch would fail
+        // with a raw backend error and hide the page, so edit in place instead.
+        if (target.contextSwitchAllowed === false) {
+            console.info('Context grant unavailable, using invitation-token editor:', target.contextMessage);
+            await enterWorkspace(token);
+            return;
         }
-        saveTokens(tokens.accessToken, tokens.refreshToken);
-        clearContextSensitiveClientState();
-        notifyContextChanged(target.contextId);
-        // The whole client (redux store, services, open tabs) is bound to the old
-        // context, so a hard reload is the only safe way to enter the new one.
-        window.location.assign(pageRoute);
+
+        try {
+            const switched = await useApi(APIS.SWITCH_CONTEXT, { contextId: target.contextId }, {
+                refreshToken: getRefreshToken() || '',
+            });
+            const tokens = normalizeTokenResponse(switched.data);
+            if (!tokens.accessToken || !tokens.refreshToken) {
+                throw new Error(t('inviteCollaboration.contextSwitch.failed'));
+            }
+            saveTokens(tokens.accessToken, tokens.refreshToken);
+            clearContextSensitiveClientState();
+            notifyContextChanged(target.contextId);
+            // The whole client (redux store, services, open tabs) is bound to the old
+            // context, so a hard reload is the only safe way to enter the new one.
+            window.location.assign(pageRoute);
+        } catch (error: any) {
+            // The grant can race (organization suspended between enter and switch).
+            // Fall back to the token-scoped editor rather than a dead end.
+            console.error('Context switch failed, using invitation-token editor:', error);
+            await enterWorkspace(token);
+        }
     };
 
     // Accept the invitation when needed, then enter the page through the normal route
@@ -177,6 +196,19 @@ export const InviteCollaboration: React.FC = () => {
     const spaceName = typeof invitation?.metadata?.spaceName === 'string'
         ? invitation.metadata.spaceName
         : undefined;
+
+    // The token-scoped editor keeps the guest in their own context; the workspace
+    // owns the whole viewport once chosen.
+    if (entered && page && invitation && inviteToken) {
+        return (
+            <CollaborationWorkspace
+                token={inviteToken}
+                invitation={invitation}
+                page={page}
+                onExit={() => setEntered(false)}
+            />
+        );
+    }
 
     // Loading state
     if (inviteStatus === 'loading') {

@@ -172,12 +172,12 @@ public class CollaborationApplication {
         // The invitee may live in a different context than the shared space. Try to
         // grant that context's membership so the client can switch into it and open
         // the page; failure is non-fatal (see ensureSpaceContextMembership).
-        String contextId = ensureSpaceContextMembership(invitation, page);
+        SpaceContext context = ensureSpaceContextMembership(invitation, page);
 
         response.setSuccess(true);
         response.setPageId(invitation.getPageId());
         response.setSpaceId(invitation.getSpaceId());
-        response.setContextId(contextId);
+        response.setContextId(context.contextId);
         response.setPageType(page.getPageType());
         response.setPermission(permissionService.effectivePagePermission(SecurityContextUtil.getUserId(), page));
         response.setAcceptedAt(LocalDateTime.now());
@@ -223,7 +223,10 @@ public class CollaborationApplication {
             response.setSpaceId(spaceId);
             response.setPageId(page.getId());
             response.setPageType(page.getPageType());
-            response.setContextId(ensureSpaceContextMembership(invitation, page));
+            SpaceContext context = ensureSpaceContextMembership(invitation, page);
+            response.setContextId(context.contextId);
+            response.setContextSwitchAllowed(context.switchAllowed);
+            response.setContextMessage(context.message);
             response.setPermission(permissionService.effectivePagePermission(SecurityContextUtil.getUserId(), page));
             return response;
         } finally {
@@ -232,37 +235,48 @@ public class CollaborationApplication {
     }
 
     /**
-     * Try to admit the invitee into the context that owns the shared space, and return
-     * that context id (null when the space predates context binding).
+     * Outcome of trying to admit the invitee into the context that owns the shared
+     * space: the context id (null when the space predates context binding), whether
+     * the client may switch into it, and the server reason when it may not.
+     */
+    private static final class SpaceContext {
+        private final String contextId;
+        private final boolean switchAllowed;
+        private final String message;
+
+        private SpaceContext(String contextId, boolean switchAllowed, String message) {
+            this.contextId = contextId;
+            this.switchAllowed = switchAllowed;
+            this.message = message;
+        }
+    }
+
+    /**
+     * Try to admit the invitee into the context that owns the shared space.
      *
      * <p>The regular read paths are context-scoped, so a session in another context
      * resolves {@code wiki_space} to nothing and the user sees "空间不存在". A successful
-     * grant lets the client switch into the space's context; that is the only reason
-     * this remote call exists.
+     * grant lets the client switch into the space's context and use the normal page
+     * route. When the grant is impossible — most importantly a space created in the
+     * owner's personal (INDIVIDUAL) context, where admitting a guest would expose the
+     * whole personal wiki — {@code switchAllowed} is false and the client falls back
+     * to invitation-token-scoped editing.
      *
-     * <p>It is deliberately best-effort and skips work when the caller is already in the
-     * space's context:
-     * <ul>
-     *   <li>the invitee is frequently already an active member of the organization
-     *       (same-organization collaboration), in which case no grant is needed and the
-     *       context switch alone is enough;</li>
-     *   <li>a remote failure must not break acceptance or produce an unexplainable
-     *       error — the client can still attempt the switch and report its own,
-     *       accurate reason (e.g. "无权切换到该上下文").</li>
-     * </ul>
+     * <p>Skipped when the caller is already in the space's context, where the normal
+     * route resolves on its own.
      */
-    private String ensureSpaceContextMembership(CollaborationInvitation invitation, Page page) {
+    private SpaceContext ensureSpaceContextMembership(CollaborationInvitation invitation, Page page) {
         Long spaceId = invitation.getSpaceId() != null ? invitation.getSpaceId() : page.getSpaceId();
         Space space = spaceId == null ? null : spaceService.getById(spaceId);
         String contextId = space == null ? null : space.getTenantId();
         if (contextId == null || contextId.trim().isEmpty() || invitation.getInviteeId() == null) {
-            return null;
+            return new SpaceContext(contextId, false, null);
         }
         // Already operating in the owning context: every read will resolve normally,
         // and the invitee's space membership/page grant already carries the access.
         String currentContextId = SecurityContextUtil.getTenantId();
         if (contextId.equals(currentContextId)) {
-            return contextId;
+            return new SpaceContext(contextId, true, null);
         }
         // Two attempts: the first call to a freshly created Feign context can fail while
         // the load balancer warms up (observed as a ~5s timeout surfacing through the
@@ -271,23 +285,24 @@ public class CollaborationApplication {
             try {
                 R<Boolean> result = organizationMembershipClient.ensureMember(invitation.getInviteeId(), contextId);
                 if (result != null && result.getCode() == 200 && Boolean.TRUE.equals(result.getData())) {
-                    return contextId;
+                    return new SpaceContext(contextId, true, null);
                 }
                 log.warn("Could not grant context membership. attempt={}, inviteeId={}, contextId={}, code={}, msg={}",
                         attempt, invitation.getInviteeId(), contextId,
                         result == null ? null : result.getCode(),
                         result == null ? null : result.getMsg());
                 // A well-formed non-200 answer is a business rejection (personal context,
-                // suspended member, ...) — retrying cannot change it.
-                return contextId;
+                // suspended member, ...) — retrying cannot change it. Report it so the
+                // client can fall back to token-scoped editing with an accurate reason.
+                return new SpaceContext(contextId, false, result == null ? null : result.getMsg());
             } catch (RuntimeException remoteFailure) {
-                // Transport/sentinel failures are not fatal: acceptance and navigation
-                // stay possible, and the client reports the switch failure itself.
+                // Transport/sentinel failures are retried once; if the retry also fails
+                // the client falls back to token-scoped editing rather than a dead end.
                 log.warn("Context membership grant call failed. attempt={}, inviteeId={}, contextId={}",
                         attempt, invitation.getInviteeId(), contextId, remoteFailure);
             }
         }
-        return contextId;
+        return new SpaceContext(contextId, false, null);
     }
 
     /**

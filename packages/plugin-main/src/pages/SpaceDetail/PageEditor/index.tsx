@@ -13,7 +13,7 @@ import {
 } from "@kn/editor";
 import type { BlockStoreRead } from "@kn/editor";
 import { deepEqual, useUploadFile, parseMarkdownToNodes, useTranslation, getAccessToken, getAppEnv, useSpacePageService } from "@kn/common";
-import type { PageRecord } from "@kn/common";
+import type { PageRecord, PageDocumentOperations } from "@kn/common";
 import { useNavigator, usePageTabs } from "@kn/common";
 import { setPageNavigationBridge, clearPageNavigationBridge, type PageNavigationBridge } from "@kn/common";
 import { setActiveEditor, clearActiveEditor } from "@kn/common";
@@ -103,6 +103,14 @@ export interface PageEditorProps {
     presentation?: 'document' | 'component'
     /** Prevent local edits and persistence for read-only page permissions. */
     readOnly?: boolean
+    /**
+     * Document capability to use instead of the space-scoped service. Collaborative
+     * invitation guests pass a token-bound implementation because the page lives in
+     * a different identity context.
+     */
+    documentOps?: PageDocumentOperations
+    /** Collab provider token. Defaults to the current OAuth access token. */
+    collabToken?: string
 }
 
 export const PageEditor: React.FC<PageEditorProps> = (props) => {
@@ -133,6 +141,10 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
     const editor = useRef<Editor>(null)
     const navigator = useNavigator()
     const service = useSpacePageService()
+    // Invitation guests inject a token-bound capability because the page is in a
+    // different identity context than the caller.
+    const documentOps = props.documentOps ?? service.documents
+    const collabToken = props.collabToken ?? getAccessToken() ?? ''
     const { usePath } = useUploadFile();
     const [editorContentReady, setEditorContentReady] = useState(false)
     const [versionHistoryOpen, setVersionHistoryOpen] = useState(false)
@@ -192,12 +204,13 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
 
         const doc = new Y.Doc();
         const collabProvider = new TiptapCollabProvider({
-            // Env-configurable collab endpoint; auth token is the user's
-            // OAuth2 access token — never the pageId (pageId-as-token lets
-            // anyone join any page's collaboration room).
+            // Env-configurable collab endpoint. The token is the user's OAuth2
+            // access token, or — for an invited collaborator from another
+            // tenant — a JSON envelope carrying both that access token and the
+            // page-scoped invitation token. Never the bare pageId.
             baseUrl: getAppEnv('VITE_COLLABORATION_WS_URL') || 'wss://kotion.top:8877/ws',
             name: `page:${deferredPageId}`,
-            token: getAccessToken() || '',
+            token: collabToken,
             document: doc,
             onAwarenessUpdate: ({ states }) => {
                 const updatedUsers = states
@@ -234,7 +247,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
             collabProvider.disconnect();
             collabProvider.destroy();
         };
-    }, [deferredPageId]);
+    }, [deferredPageId, collabToken]);
 
     useEffect(() => {
         // Both flags describe *this* page's sync. This component is reused across
@@ -304,7 +317,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         setBlockDoc(undefined)
         if (!pageId) return
         let cancelled = false
-        service.documents.getPageDocument(pageId)
+        documentOps.getPageDocument(pageId)
             .then((document) => {
                 if (cancelled) return
                 setBlockDoc({
@@ -318,7 +331,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                 setBlockDoc(null)
             })
         return () => { cancelled = true }
-    }, [pageId, service])
+    }, [pageId, service, documentOps])
 
     // The legacy content column, parsed and HTML-unescaped off the render path.
     // No longer the authority — it survives only as the migration bridge below.
@@ -564,7 +577,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         // Sync never completed, so this client cannot claim its document matches
         // the server's; only a whole-document reconcile is safe from here.
         reconcileOnly: syncTimedOut && !syncStatus,
-        documents: service.documents,
+        documents: documentOps,
         onSaved: notifySaved,
     })
     const { saving, dirty, error: saveError, progress: saveProgress, behindServer, session, saveNow } = pageSave
@@ -649,7 +662,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         try {
             const [pageRecord, document] = await Promise.all([
                 service.pages.getPage(pageId),
-                service.documents.getPageDocument(pageId),
+                documentOps.getPageDocument(pageId),
             ])
             setPage(toEditorPage(pageRecord))
             const restored = document.doc ?? document.content
@@ -670,7 +683,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
             console.error('Failed to refresh page after restore:', err)
             toast.error(t('editor.version.refreshFailed', 'Restored on server — reload the page to see it'))
         }
-    }, [pageId, service, spaceId, t, adoptRev])
+    }, [pageId, service, documentOps, spaceId, t, adoptRev])
 
     // Markdown import handler
     const handleImportMarkdown = useCallback(() => {
@@ -753,7 +766,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
             }
 
             try {
-                await service.documents.createPageCheckpoint(pageId, clientId)
+                await documentOps.createPageCheckpoint(pageId, clientId)
                 toast.success(t('editor.version.checkpointSuccess', 'Checkpoint created'))
             } catch (err) {
                 console.error('Failed to create page checkpoint:', err)
@@ -1080,7 +1093,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                     ref={editor}
                     synced={syncStatus}
                     provider={provider}
-                    pageDocuments={service.documents}
+                    pageDocuments={documentOps}
                     className="h-full"
                     id={pageId as string}
                     user={collaborationUser}
