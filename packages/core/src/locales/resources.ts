@@ -249,7 +249,7 @@ export const resources = {
       },
       messageBox: {
         title: "消息盒子",
-        unreadCount: "{{n}} 条未读消息",
+        unreadCount_other: "{{count}} 条未读消息",
         tabs: {
           all: "全部",
           system: "系统",
@@ -268,6 +268,7 @@ export const resources = {
           markAllRead: "全部已读",
           delete: "删除",
           clickToOpen: "点击打开",
+          close: "关闭",
         },
         time: {
           justNow: "刚刚",
@@ -276,6 +277,16 @@ export const resources = {
           daysAgo: "{{n}} 天前",
         },
         viewAll: "查看全部消息",
+        today: "今天",
+        yesterday: "昨天",
+        catchUp: "暂无未读消息",
+        refresh: "刷新",
+        messageCount_other: "共 {{count}} 条消息",
+        type: {
+          system: "系统",
+          collaboration: "协作",
+          mention: "提及",
+        },
       },
       pluginUploader: {
         dialogTitle: "提交插件",
@@ -1497,7 +1508,8 @@ export const resources = {
       },
       messageBox: {
         title: "Messages",
-        unreadCount: "{{n}} unread messages",
+        unreadCount_one: "{{count}} unread message",
+        unreadCount_other: "{{count}} unread messages",
         tabs: {
           all: "All",
           system: "System",
@@ -1516,6 +1528,7 @@ export const resources = {
           markAllRead: "Mark all read",
           delete: "Delete",
           clickToOpen: "Click to open",
+          close: "Close",
         },
         time: {
           justNow: "Just now",
@@ -1524,6 +1537,17 @@ export const resources = {
           daysAgo: "{{n}} days ago",
         },
         viewAll: "View all messages",
+        today: "Today",
+        yesterday: "Yesterday",
+        catchUp: "You're all caught up",
+        refresh: "Refresh",
+        messageCount_one: "{{count}} message",
+        messageCount_other: "{{count}} messages",
+        type: {
+          system: "System",
+          collaboration: "Collaboration",
+          mention: "Mention",
+        },
       },
       pluginUploader: {
         dialogTitle: "Submit Plugin",
