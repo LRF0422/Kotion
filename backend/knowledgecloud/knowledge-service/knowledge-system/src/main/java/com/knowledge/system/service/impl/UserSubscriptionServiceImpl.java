@@ -23,7 +23,9 @@ import com.knowledge.system.service.ISubscriptionPlanService;
 import com.knowledge.system.service.IUserSubscriptionService;
 import com.knowledge.core.entitlement.EntitlementGate;
 import lombok.AllArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -43,6 +45,7 @@ import java.util.stream.Collectors;
  *
  * @author Kotion
  */
+@Slf4j
 @Service
 @AllArgsConstructor
 public class UserSubscriptionServiceImpl extends ServiceImpl<UserSubscriptionMapper, UserSubscription>
@@ -53,6 +56,7 @@ public class UserSubscriptionServiceImpl extends ServiceImpl<UserSubscriptionMap
 	private final UserMapper userMapper;
 	private final IEntitlementService entitlementService;
 	private final ObjectProvider<EntitlementGate> entitlementGateProvider;
+	private final ObjectProvider<StringRedisTemplate> redisProvider;
 
 	@Override
 	public UserSubscriptionVO getEffective(Long userId) {
@@ -111,6 +115,7 @@ public class UserSubscriptionServiceImpl extends ServiceImpl<UserSubscriptionMap
 		writeLog(dto.getUserId(), from, code, SubscriptionSource.ADMIN, operatorId, now, end, dto.getRemark());
 		entitlementService.evict(dto.getUserId());
 		evictGate(dto.getUserId());
+		bumpVersion(dto.getUserId());
 	}
 
 	@Override
@@ -137,6 +142,7 @@ public class UserSubscriptionServiceImpl extends ServiceImpl<UserSubscriptionMap
 		writeLog(userId, from, PlanCode.FREE, SubscriptionSource.ADMIN, operatorId, now, null, remark);
 		entitlementService.evict(userId);
 		evictGate(userId);
+		bumpVersion(userId);
 	}
 
 	@Override
@@ -221,6 +227,22 @@ public class UserSubscriptionServiceImpl extends ServiceImpl<UserSubscriptionMap
 		EntitlementGate gate = entitlementGateProvider.getIfAvailable();
 		if (gate != null) {
 			gate.evict(userId);
+		}
+	}
+
+	/** 递增 Redis 版本号，让其它实例的 EntitlementGate 缓存秒级失效。 */
+	private void bumpVersion(Long userId) {
+		if (userId == null) {
+			return;
+		}
+		StringRedisTemplate redis = redisProvider == null ? null : redisProvider.getIfAvailable();
+		if (redis == null) {
+			return;
+		}
+		try {
+			redis.opsForValue().increment(com.knowledge.core.entitlement.EntitlementCacheKeys.VERSION_PREFIX + userId);
+		} catch (Exception e) {
+			log.warn("Failed to bump entitlement version for user {}: {}", userId, e.getMessage());
 		}
 	}
 

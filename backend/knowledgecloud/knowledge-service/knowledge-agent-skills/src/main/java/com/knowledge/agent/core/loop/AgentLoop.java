@@ -155,6 +155,7 @@ public class AgentLoop implements Runnable {
 
     /** Cross-instance cancel marker (cancel may arrive on a non-owning node). */
     private final RunCancelFlag cancelFlag;
+    private final java.util.function.LongConsumer dailyTokenGuard;
 
     /** Throttle for the external-cancel Redis lookup. */
     private static final long EXTERNAL_CANCEL_POLL_MS = 2000L;
@@ -189,7 +190,7 @@ public class AgentLoop implements Runnable {
                      LlmGateway llmGateway, ToolGateway toolGateway, ContextManager contextManager,
                      Delegator delegator, ObjectMapper objectMapper, AgentCoreProperties properties,
                      ExecutorService toolExecutor, ExitCallback exitCallback, ResumeGate gate,
-                     RunCancelFlag cancelFlag) {
+                     RunCancelFlag cancelFlag, java.util.function.LongConsumer dailyTokenGuard) {
         this.run = run;
         this.checkpoint = checkpoint;
         this.runInput = runInput;
@@ -206,6 +207,7 @@ public class AgentLoop implements Runnable {
         this.exitCallback = exitCallback;
         this.gate = gate;
         this.cancelFlag = cancelFlag;
+        this.dailyTokenGuard = dailyTokenGuard;
         if (runInput != null && runInput.clientTools() != null) {
             for (ToolSpec spec : runInput.clientTools()) {
                 if (spec != null && spec.getName() != null) {
@@ -382,6 +384,13 @@ public class AgentLoop implements Runnable {
                 run.setCompletionTokens(checkpoint.getCompletionTokens());
                 run.setCachedPromptTokens(checkpoint.getCachedPromptTokens());
 
+                // Mid-run cutoff: a single run can otherwise blow far past the
+                // daily budget. Throwing here lets run() fail the run with a
+                // quota_exceeded terminal state.
+                if (dailyTokenGuard != null && run.getUserId() != null) {
+                    dailyTokenGuard.accept(run.getUserId());
+                }
+
                 if (isCancelled()) {
                     return;
                 }
@@ -516,7 +525,8 @@ public class AgentLoop implements Runnable {
                 // terminal state so the UI can show "模型响应超时" instead of
                 // a generic loop error.
                 boolean llmTimeout = e instanceof LlmGateway.LlmTimeoutException;
-                fail(llmTimeout ? "llm_timeout" : "loop_error",
+                boolean quotaExceeded = e instanceof com.knowledge.core.entitlement.error.EntitlementException;
+                fail(quotaExceeded ? "quota_exceeded" : llmTimeout ? "llm_timeout" : "loop_error",
                         e.getMessage() != null ? e.getMessage() : e.toString());
             }
         } finally {

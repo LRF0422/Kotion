@@ -211,18 +211,13 @@ public class SpaceApplication {
 
     /** 空间数量配额：只统计用户自建的普通/协作空间，不含个人空间与模板。 */
     private void assertSpaceQuota(Long userId) {
-        long limit = entitlementGate.getQuota(userId,
-                com.knowledge.core.entitlement.constant.EntitlementCodes.SPACE_COUNT);
-        if (limit <= 0) {
-            return;
-        }
         long used = spaceService.lambdaQuery()
                 .eq(Space::getUserId, userId)
                 .in(Space::getType, java.util.Arrays.asList(SpaceType.SPACE, SpaceType.COLLABORATION))
                 .count();
-        if (used >= limit) {
-            throw WikiException.SPACE_QUOTA_EXCEEDED.newException();
-        }
+        entitlementGate.requireQuota(userId,
+                com.knowledge.core.entitlement.constant.EntitlementCodes.SPACE_COUNT,
+                used, 1, "空间数量已达套餐上限，请升级套餐后重试");
     }
 
     public List<PageVO> queryFavoritePage(QueryFavoriteDTO dto) {
@@ -353,9 +348,9 @@ public class SpaceApplication {
         log.info("Creating collaboration invitation for pageId: {}, spaceId: {}",
                 dto.getPageId(), dto.getSpaceId());
         Long currentUserId = SecurityContextUtil.getUserId();
-        if (currentUserId != null && !entitlementGate.hasFeature(currentUserId,
-                com.knowledge.core.entitlement.constant.EntitlementCodes.COLLABORATION_GUEST)) {
-            throw WikiException.ENTITLEMENT_REQUIRED.newException();
+        if (currentUserId != null) {
+            entitlementGate.requireFeature(currentUserId,
+                    com.knowledge.core.entitlement.constant.EntitlementCodes.COLLABORATION_GUEST, null);
         }
         Page page = requirePagePermission(dto.getPageId(), IPermissionService.PERMISSION_ADMIN);
         if (!dto.getSpaceId().equals(page.getSpaceId())) {

@@ -531,9 +531,9 @@ public class PluginApplication {
     /** 发布能力门禁：免费版不可提交/发布插件。 */
     private void requirePublishEntitlement() {
         Long userId = SecurityContextUtil.getUserId();
-        if (userId != null && !entitlementGate.hasFeature(userId,
-                com.knowledge.core.entitlement.constant.EntitlementCodes.PLUGIN_PUBLISH)) {
-            throw WikiException.ENTITLEMENT_REQUIRED.newException();
+        if (userId != null) {
+            entitlementGate.requireFeature(userId,
+                    com.knowledge.core.entitlement.constant.EntitlementCodes.PLUGIN_PUBLISH, null);
         }
     }
 
@@ -543,17 +543,13 @@ public class PluginApplication {
         if (userId == null) {
             return;
         }
-        if (!entitlementGate.hasFeature(userId,
-                com.knowledge.core.entitlement.constant.EntitlementCodes.PLUGIN_INSTALL)) {
-            throw WikiException.ENTITLEMENT_REQUIRED.newException();
-        }
-        long limit = entitlementGate.getQuota(userId,
-                com.knowledge.core.entitlement.constant.EntitlementCodes.PLUGIN_INSTALLED_COUNT);
-        if (limit > 0 && CollUtil.isNotEmpty(pluginService.getInstalledPlugins(null, userId))
-                && CollUtil.isEmpty(pluginService.checkInstall(plugin.getId()))
-                && pluginService.getInstalledPlugins(null, userId).size() >= limit) {
-            throw WikiException.PLUGIN_QUOTA_EXCEEDED.newException();
-        }
+        entitlementGate.requireFeature(userId,
+                com.knowledge.core.entitlement.constant.EntitlementCodes.PLUGIN_INSTALL, null);
+        boolean alreadyInstalled = CollUtil.isNotEmpty(pluginService.checkInstall(plugin.getId()));
+        long installed = pluginService.getInstalledPlugins(null, userId).size();
+        entitlementGate.requireQuota(userId,
+                com.knowledge.core.entitlement.constant.EntitlementCodes.PLUGIN_INSTALLED_COUNT,
+                installed, alreadyInstalled ? 0 : 1, "已安装插件数量已达套餐上限，请升级方案");
     }
 
     private Plugin submitInternal(PluginSubmissionDTO dto, Long ownerId, boolean requireIntegrity) {

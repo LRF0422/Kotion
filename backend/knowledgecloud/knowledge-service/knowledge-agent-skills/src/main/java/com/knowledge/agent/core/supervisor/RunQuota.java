@@ -89,25 +89,25 @@ public class RunQuota {
             return;
         }
         try {
-            long dailyLimit = entitlementGate.getQuota(userId, EntitlementCodes.AI_TOKENS_DAILY);
-            if (dailyLimit > 0) {
-                long used = runMapper.sumDailyTokensByUser(userId, startOfDayMillis());
-                if (used >= dailyLimit) {
-                    throw new QuotaExceededException("今日 AI 用量已达套餐上限，请升级套餐或明天再试");
-                }
-            }
-            long concurrentLimit = entitlementGate.getQuota(userId, EntitlementCodes.AI_RUNS_CONCURRENT);
-            if (concurrentLimit > 0) {
-                long active = runMapper.countActiveByUser(userId);
-                if (active >= concurrentLimit) {
-                    throw new QuotaExceededException("并发任务数已达套餐上限，请等待当前任务结束");
-                }
-            }
-        } catch (QuotaExceededException e) {
+            checkUserDailyTokenBudget(userId);
+            long active = runMapper.countActiveByUser(userId);
+            entitlementGate.requireQuota(userId, EntitlementCodes.AI_RUNS_CONCURRENT, active, 1,
+                    "并发任务数已达套餐上限，请等待当前任务结束");
+        } catch (com.knowledge.core.entitlement.error.EntitlementException e) {
             throw e;
         } catch (Exception e) {
             log.warn("Entitlement quota check failed for user {}: {}", userId, e.getMessage());
         }
+    }
+
+    /** 当日 token 额度校验；run 执行途中也会调用（熔断）。 */
+    public void checkUserDailyTokenBudget(Long userId) {
+        if (userId == null || entitlementGate == null) {
+            return;
+        }
+        long used = runMapper.sumDailyTokensByUser(userId, startOfDayMillis());
+        entitlementGate.requireQuota(userId, EntitlementCodes.AI_TOKENS_DAILY, used, 0,
+                "今日 AI 用量已达套餐上限，请升级套餐或明天再试");
     }
 
     private long startOfDayMillis() {

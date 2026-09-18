@@ -173,9 +173,9 @@ public class SpaceMemberApplication {
         }
 
         Long quotaSubject = resolveSpaceOwnerUserId(spaceId, currentUserId);
-        if (quotaSubject != null && !entitlementGate.hasFeature(quotaSubject,
-                com.knowledge.core.entitlement.constant.EntitlementCodes.COLLABORATION_TEAM)) {
-            throw WikiException.ENTITLEMENT_REQUIRED.newException();
+        if (quotaSubject != null) {
+            entitlementGate.requireFeature(quotaSubject,
+                    com.knowledge.core.entitlement.constant.EntitlementCodes.COLLABORATION_TEAM, null);
         }
         assertMemberQuota(spaceId, quotaSubject, userIds);
 
@@ -202,9 +202,7 @@ public class SpaceMemberApplication {
 
     /** 空间成员配额：只统计新增成员，重复邀请不重复计数。 */
     private void assertMemberQuota(Long spaceId, Long subjectUserId, List<Long> userIds) {
-        long limit = entitlementGate.getQuota(subjectUserId,
-                com.knowledge.core.entitlement.constant.EntitlementCodes.SPACE_MEMBERS);
-        if (limit <= 0) {
+        if (subjectUserId == null) {
             return;
         }
         List<SpaceMember> members = spaceMemberService.getSpaceMembers(spaceId);
@@ -224,9 +222,9 @@ public class SpaceMemberApplication {
                 additions++;
             }
         }
-        if (existing + additions > limit) {
-            throw WikiException.MEMBER_QUOTA_EXCEEDED.newException();
-        }
+        entitlementGate.requireQuota(subjectUserId,
+                com.knowledge.core.entitlement.constant.EntitlementCodes.SPACE_MEMBERS,
+                existing, additions, "空间成员数量已达套餐上限，请升级方案");
     }
 
     /**

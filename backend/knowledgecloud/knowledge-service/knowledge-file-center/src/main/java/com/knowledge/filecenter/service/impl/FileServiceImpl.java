@@ -39,6 +39,9 @@ public class FileServiceImpl extends BaseService<FileMapper, KnowledgeFile> impl
     @Autowired
     private IFileRepositoryService fileRepositoryService;
 
+    @Autowired
+    private com.knowledge.filecenter.upload.StorageQuotaGuard storageQuotaGuard;
+
     @Override
     public KnowledgeFile createOrSaveFile(KnowledgeFile file) {
 
@@ -52,6 +55,14 @@ public class FileServiceImpl extends BaseService<FileMapper, KnowledgeFile> impl
         if (file.getType() == FileType.FILE) {
             file.setSuffix(FileUtil.getSuffix(file.getName()));
             file.setMediaType(resolveMediaType(file.getSuffix()));
+        }
+
+        if (file.getId() == null && file.getType() == FileType.FILE
+                && file.getSize() != null && file.getSize() > 0) {
+            storageQuotaGuard.check(
+                    com.knowledge.core.secure.utils.SecurityContextUtil.getUserId(),
+                    com.knowledge.core.secure.utils.SecurityContextUtil.getTenantId(),
+                    file.getSize());
         }
 
         if (file.getId() != null) {
