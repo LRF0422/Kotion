@@ -52,6 +52,9 @@ public class SpaceMemberApplication {
     @Autowired
     private SpaceActivityApplication spaceActivityApplication;
 
+    @Autowired
+    private com.knowledge.core.entitlement.EntitlementGate entitlementGate;
+
     /**
      * List all members of a space with user details
      */
@@ -169,6 +172,13 @@ public class SpaceMemberApplication {
             return;
         }
 
+        Long quotaSubject = resolveSpaceOwnerUserId(spaceId, currentUserId);
+        if (quotaSubject != null && !entitlementGate.hasFeature(quotaSubject,
+                com.knowledge.core.entitlement.constant.EntitlementCodes.COLLABORATION_TEAM)) {
+            throw WikiException.ENTITLEMENT_REQUIRED.newException();
+        }
+        assertMemberQuota(spaceId, quotaSubject, userIds);
+
         for (Long userId : userIds) {
             spaceMemberService.addMember(spaceId, userId, role, currentUserId);
         }
@@ -183,6 +193,40 @@ public class SpaceMemberApplication {
         }
 
         log.info("Invited {} members to space {} with role {}", userIds.size(), spaceId, role);
+    }
+
+    private Long resolveSpaceOwnerUserId(Long spaceId, Long fallback) {
+        Space space = spaceService.getById(spaceId);
+        return space != null && space.getUserId() != null ? space.getUserId() : fallback;
+    }
+
+    /** 空间成员配额：只统计新增成员，重复邀请不重复计数。 */
+    private void assertMemberQuota(Long spaceId, Long subjectUserId, List<Long> userIds) {
+        long limit = entitlementGate.getQuota(subjectUserId,
+                com.knowledge.core.entitlement.constant.EntitlementCodes.SPACE_MEMBERS);
+        if (limit <= 0) {
+            return;
+        }
+        List<SpaceMember> members = spaceMemberService.getSpaceMembers(spaceId);
+        java.util.Set<Long> present = new java.util.HashSet<>();
+        int existing = 0;
+        if (members != null) {
+            existing = members.size();
+            for (SpaceMember member : members) {
+                if (member.getUserId() != null) {
+                    present.add(member.getUserId());
+                }
+            }
+        }
+        long additions = 0;
+        for (Long userId : userIds) {
+            if (userId != null && present.add(userId)) {
+                additions++;
+            }
+        }
+        if (existing + additions > limit) {
+            throw WikiException.MEMBER_QUOTA_EXCEEDED.newException();
+        }
     }
 
     /**

@@ -14,7 +14,7 @@
 | 后端 | 方案目录、权益解析（60s 缓存）、客户端与平台端接口、授予/撤销与审计 |
 | 共享模块 | `knowledge-tool/knowledge-core-entitlement`：注解/SPI/Gate/拦截器/Feign 客户端/自动装配 |
 | 内部鉴权 | `Knowledge-Internal-Token` 服务令牌；knowledge-system 实现 `/entitlement/internal/*` |
-| 配额拦截 | `space.count`（wiki）、`storage.bytes` + `file.maxSize`（file-center）、`ai.tokens.daily` + `ai.runs.concurrent`（agent） |
+| 配额拦截 | `space.count` + `space.members` + 插件/协作门禁（wiki）、`storage.bytes` + `file.maxSize`（file-center）、`ai.tokens.daily` + `ai.runs.concurrent`（agent）、`export.pdf`（前端） |
 | 前端 | `useEntitlements`、设置页「订阅方案」、方案对比、升级占位、`PaywallGate`（组件已有，**未铺开**） |
 | Admin | 用户订阅列表、授予/撤销；方案目录接口 |
 
@@ -37,15 +37,17 @@
 
 ### 2.1 P1-a 剩余权益接入
 
-| 权益编码 | 落点 | 说明 |
-| --- | --- | --- |
-| `space.members` | `knowledge-wiki` `SpaceMemberApplication.inviteMembers`（`addMember` 前） | 按空间统计成员数；需定「成员」是否含访客/邀请中 |
-| `plugin.install` + `plugin.installed.count` | `PluginApplication.installPlugin`（L466） | 安装前查能力开关 + 已装数量；注意区分 plugin 与 version |
-| `plugin.publish` | `PluginApplication.publishVersion` / 提交审核入口 | 关掉免费用户发布入口 |
-| `ai.advancedModels` | `knowledge-agent-skills` `ModelController` `GET /api/v1/models` | 过滤或标注高级模型；创建 run 时二次校验，防止绕过 |
-| `collaboration.team` | `SpaceApplication.createCollaborationInvitation`（`SpaceController` L366） | 免费用户禁止建协作空间/邀请成员 |
-| `collaboration.guest` | 访客协作入口 | Pro+ 才允许外部访客 |
-| `export.pdf` | 前端 `packages/plugin-main/src/pages/SpaceDetail/PageEditor/index.tsx` 导出入口 + 后端导出能力 | 前端先门禁，后端仍需校验（导出可能走独立接口） |
+> **进度（2026-09）**：`space.members`、`plugin.install` + `plugin.installed.count`、`plugin.publish`、`collaboration.team`、`collaboration.guest`、`export.pdf` **已落地**；`ai.advancedModels` **阻塞**（见下）。
+
+| 权益编码 | 状态 | 落点 | 说明 |
+| --- | --- | --- | --- |
+| `space.members` | ✅ 已接入 | `SpaceMemberApplication.inviteMembers` | 按空间统计成员，仅计新增；超出抛 `MEMBER_QUOTA_EXCEEDED` |
+| `plugin.install` + `plugin.installed.count` | ✅ 已接入 | `PluginApplication.installPlugin` | 能力开关 + 已装数量；超出抛 `PLUGIN_QUOTA_EXCEEDED` |
+| `plugin.publish` | ✅ 已接入 | `PluginApplication` submit / resubmit / publishVersion / createPlugin | 免费版抛 `ENTITLEMENT_REQUIRED` |
+| `collaboration.team` | ✅ 已接入 | `SpaceMemberApplication.inviteMembers` | 邀请成员需团队协作能力 |
+| `collaboration.guest` | ✅ 已接入 | `SpaceApplication.createCollaborationInvitation` | 页面级访客协作需 Pro+ |
+| `export.pdf` | ✅ 已接入（前端） | `PageEditor/index.tsx` 导出菜单 | 无权限时禁用并提示升级；**后端导出接口仍需补校验** |
+| `ai.advancedModels` | ⛔ 阻塞 | `knowledge-agent-skills` `ModelController` / 创建 run | `LlmClientFactory` 无法区分「基础/高级」模型，需先定义模型档位配置，再过滤列表 + 创建 run 二次校验 |
 
 > `core.editor` / `ai.agent` 三档均为 true，可暂不拦。
 

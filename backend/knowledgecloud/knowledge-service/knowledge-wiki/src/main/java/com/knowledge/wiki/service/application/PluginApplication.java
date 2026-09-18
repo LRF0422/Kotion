@@ -85,12 +85,16 @@ public class PluginApplication {
     @Autowired(required = false)
     private PluginReviewNotifier reviewNotifier;
 
+    @Autowired
+    private com.knowledge.core.entitlement.EntitlementGate entitlementGate;
+
     /**
      * Backward-compatible adapter for the historical POST /plugin payload. New
      * clients should use /plugin/submissions and /plugin/{id}/versions.
      */
     @Transactional(rollbackFor = Exception.class)
     public void createPlugin(PluginDTO dto) {
+        requirePublishEntitlement();
         createLegacyPlugin(dto, false);
     }
 
@@ -142,6 +146,7 @@ public class PluginApplication {
 
     @Transactional(rollbackFor = Exception.class)
     public PluginVO submit(PluginSubmissionDTO dto) {
+        requirePublishEntitlement();
         return toSubmissionVO(submitInternal(dto, currentUserId(), true));
     }
 
@@ -149,6 +154,7 @@ public class PluginApplication {
     public PluginVO resubmit(Long id, PluginSubmissionDTO dto) {
         Plugin plugin = requirePlugin(id);
         requireOwner(plugin, currentUserId());
+        requirePublishEntitlement();
         return toSubmissionVO(resubmitInternal(plugin, dto, true));
     }
 
@@ -156,6 +162,7 @@ public class PluginApplication {
     public PluginVO publishVersion(Long pluginId, PluginVersionPublishDTO dto) {
         Plugin plugin = requirePlugin(pluginId);
         requireOwner(plugin, currentUserId());
+        requirePublishEntitlement();
         createVersionInternal(plugin, dto, true);
         return toSubmissionVO(plugin);
     }
@@ -475,6 +482,7 @@ public class PluginApplication {
         if (Boolean.TRUE.equals(plugin.getSuspended())) {
             throw WikiException.PLUGIN_INVALID_STATE.newException("插件已下架");
         }
+        requireInstallEntitlement(plugin);
         this.pluginService.installPlugin(pluginVersionId);
     }
 
@@ -518,6 +526,34 @@ public class PluginApplication {
 
     public void deleteInstalled(Long versionId) {
         this.pluginService.deleteInstalledPlugin(versionId);
+    }
+
+    /** 发布能力门禁：免费版不可提交/发布插件。 */
+    private void requirePublishEntitlement() {
+        Long userId = SecurityContextUtil.getUserId();
+        if (userId != null && !entitlementGate.hasFeature(userId,
+                com.knowledge.core.entitlement.constant.EntitlementCodes.PLUGIN_PUBLISH)) {
+            throw WikiException.ENTITLEMENT_REQUIRED.newException();
+        }
+    }
+
+    /** 安装能力与已装插件数量门禁。 */
+    private void requireInstallEntitlement(Plugin plugin) {
+        Long userId = SecurityContextUtil.getUserId();
+        if (userId == null) {
+            return;
+        }
+        if (!entitlementGate.hasFeature(userId,
+                com.knowledge.core.entitlement.constant.EntitlementCodes.PLUGIN_INSTALL)) {
+            throw WikiException.ENTITLEMENT_REQUIRED.newException();
+        }
+        long limit = entitlementGate.getQuota(userId,
+                com.knowledge.core.entitlement.constant.EntitlementCodes.PLUGIN_INSTALLED_COUNT);
+        if (limit > 0 && CollUtil.isNotEmpty(pluginService.getInstalledPlugins(null, userId))
+                && CollUtil.isEmpty(pluginService.checkInstall(plugin.getId()))
+                && pluginService.getInstalledPlugins(null, userId).size() >= limit) {
+            throw WikiException.PLUGIN_QUOTA_EXCEEDED.newException();
+        }
     }
 
     private Plugin submitInternal(PluginSubmissionDTO dto, Long ownerId, boolean requireIntegrity) {

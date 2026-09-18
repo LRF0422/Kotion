@@ -352,6 +352,11 @@ public class SpaceApplication {
     public CollaborationInvitationResponseDTO createCollaborationInvitation(CollaborationInvitationRequestDTO dto) {
         log.info("Creating collaboration invitation for pageId: {}, spaceId: {}",
                 dto.getPageId(), dto.getSpaceId());
+        Long currentUserId = SecurityContextUtil.getUserId();
+        if (currentUserId != null && !entitlementGate.hasFeature(currentUserId,
+                com.knowledge.core.entitlement.constant.EntitlementCodes.COLLABORATION_GUEST)) {
+            throw WikiException.ENTITLEMENT_REQUIRED.newException();
+        }
         Page page = requirePagePermission(dto.getPageId(), IPermissionService.PERMISSION_ADMIN);
         if (!dto.getSpaceId().equals(page.getSpaceId())) {
             throw WikiException.INVALID_PARAMETER.newException();

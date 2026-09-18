@@ -12,7 +12,7 @@ import {
     HOST_AWARENESS_FIELD, HOST_AWARENESS_HOST, TiptapCollabProvider, chooseSeed, toRev,
 } from "@kn/editor";
 import type { BlockStoreRead } from "@kn/editor";
-import { deepEqual, useUploadFile, parseMarkdownToNodes, useTranslation, getAccessToken, getAppEnv, useSpacePageService } from "@kn/common";
+import { deepEqual, useUploadFile, parseMarkdownToNodes, useTranslation, getAccessToken, getAppEnv, useSpacePageService, useEntitlements, ENTITLEMENT_CODES } from "@kn/common";
 import type { PageRecord, PageDocumentOperations } from "@kn/common";
 import { useNavigator, usePageTabs } from "@kn/common";
 import { setPageNavigationBridge, clearPageNavigationBridge, type PageNavigationBridge } from "@kn/common";
@@ -163,6 +163,7 @@ const GuestWaiting: React.FC<{ waiting: boolean; hostName?: string; onExit?: () 
 
 export const PageEditor: React.FC<PageEditorProps> = (props) => {
     const { t } = useTranslation()
+    const { hasFeature } = useEntitlements()
     const [showToc, setShowToc] = useState(true)
     // 宽窄模式：持久化在 title 节点的 fullWidth attr 上（随 PATCH 入库、随 Yjs 协作同步）。
     const [fullWidth, setFullWidth] = useState(false)
@@ -1129,6 +1130,10 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                                 <DropdownMenuPortal>
                                     <DropdownMenuSubContent>
                                         <DropdownMenuItem onClick={async () => {
+                                            if (!hasFeature(ENTITLEMENT_CODES.EXPORT_PDF)) {
+                                                toast.error(t('settings.subscription.locked', '需升级'))
+                                                return
+                                            }
                                             if (editor.current) {
                                                 exportToPDF(editor.current.view, {
                                                     filename: `${page.title || 'document'}.pdf`,
@@ -1140,7 +1145,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                                         }}>
                                             <div className="flex flex-row items-center gap-2">
                                                 <FileIcon className="h-4 w-4" />
-                                                <span>{t('editor.asPdf', 'As PDF')}</span>
+                                                <span>{t('editor.asPdf', 'As PDF')}{!hasFeature(ENTITLEMENT_CODES.EXPORT_PDF) ? ' · ' + t('settings.subscription.locked', '需升级') : ''}</span>
                                             </div>
                                         </DropdownMenuItem>
                                         <DropdownMenuItem onClick={handleExportMarkdown}>

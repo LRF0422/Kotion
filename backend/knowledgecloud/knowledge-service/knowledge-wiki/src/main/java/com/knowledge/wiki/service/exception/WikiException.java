@@ -21,12 +21,15 @@ public enum WikiException implements BusinessExceptionAssert {
     PLUGIN_REVIEW_REASON_CODE_REQUIRED(1008, "驳回插件必须选择驳回原因分类"),
     PLUGIN_ALREADY_CLAIMED(1009, "该候选版本已被其他审核员认领"),
     PLUGIN_NOT_CLAIMED_BY_YOU(1010, "该候选版本未被您认领"),
+    PLUGIN_QUOTA_EXCEEDED(1011, "已安装插件数量已达套餐上限，请升级方案"),
 
     // Space related (2000-2999)
     SPACE_NOT_FOUND(2001, "空间不存在"),
     SPACE_ALREADY_EXISTS(2002, "空间已存在"),
     PERSONAL_SPACE_CREATION_FAILED(2003, "个人空间创建失败"),
     SPACE_QUOTA_EXCEEDED(2004, "空间数量已达套餐上限，请升级套餐后重试"),
+    ENTITLEMENT_REQUIRED(2005, "当前套餐不支持该功能，请升级方案"),
+    MEMBER_QUOTA_EXCEEDED(2006, "空间成员数量已达套餐上限，请升级方案"),
 
     // Page related (3000-3999)
     PAGE_NOT_FOUND(3001, "页面不存在"),
