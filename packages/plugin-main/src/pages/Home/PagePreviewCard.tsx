@@ -18,6 +18,7 @@ import React, {
     useRef,
     useState,
 } from "react";
+import { createPortal } from "react-dom";
 import {
     AnyExtension,
     Content,
@@ -394,7 +395,7 @@ export const PagePreviewProvider: React.FC<{ children: React.ReactNode }> = ({ c
     return (
         <PreviewContext.Provider value={ctx}>
             {children}
-            {target && pos && (
+            {target && pos && createPortal(
                 <div
                     ref={cardRef}
                     className={cn(
@@ -426,7 +427,8 @@ export const PagePreviewProvider: React.FC<{ children: React.ReactNode }> = ({ c
                             pageType={target.pageType}
                         />
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </PreviewContext.Provider>
     );

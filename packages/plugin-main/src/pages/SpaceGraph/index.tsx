@@ -5,6 +5,8 @@ import {
     forceLink,
     forceManyBody,
     forceSimulation,
+    forceX,
+    forceY,
     type Simulation,
 } from "d3-force";
 import { useSpacePageService, useNavigator, useParams, useSearchParams, useTranslation } from "@kn/common";
@@ -46,13 +48,55 @@ const focusZoom = (w: number) => (w < COMPACT_WIDTH ? 1 : 1.3);
  * 80+ nodes far wider than a dock column can show, so a narrow host gets a
  * tighter layout instead of a graph that only makes sense when zoomed out.
  */
-const forceTuning = (w: number, h: number) => {
+const forceTuning = (w: number, h: number, count: number) => {
     const narrow = Math.min(w, h) < 480;
+    // Scale with graph size: more nodes need shorter links and weaker, range
+    // limited repulsion, otherwise the layout explodes into a sparse cloud.
+    const density = Math.min(2.5, Math.max(1, Math.sqrt(Math.max(1, count / 40))));
     return {
-        linkDistance: narrow ? 40 : 70,
-        charge: narrow ? -110 : -220,
+        linkDistance: (narrow ? 40 : 70) / density,
+        charge: (narrow ? -110 : -220) / Math.min(density, 2),
         collidePad: narrow ? 3 : 6,
+        // Cap how far a node repels. Without this, disconnected and leaf nodes
+        // drift far from the main structure and fill the canvas with empty space.
+        chargeMaxDist: 260 * density,
+        // Pull toward the node's space anchor. Groups pages of the same space
+        // together and keeps disconnected pieces compact.
+        clusterStrength: 0.1,
     };
+};
+
+/**
+ * Arrange one anchor per space around the canvas centre. Nodes are pulled
+ * toward their space's anchor, so pages of the same space cluster together
+ * instead of interleaving in one undifferentiated cloud. Arc length is
+ * proportional to sqrt(size) so larger spaces are not squeezed against
+ * their neighbours.
+ */
+const layoutSpaceAnchors = (
+    spaces: { id: string; weight: number }[],
+    w: number,
+    h: number,
+): Map<string, { x: number; y: number }> => {
+    const anchors = new Map<string, { x: number; y: number }>();
+    const cx = w / 2;
+    const cy = h / 2;
+    if (spaces.length === 0) return anchors;
+    if (spaces.length === 1) {
+        anchors.set(spaces[0].id, { x: cx, y: cy });
+        return anchors;
+    }
+    const total = spaces.reduce((sum, s) => sum + Math.sqrt(Math.max(1, s.weight)), 0);
+    const radius =
+        Math.min(w, h) * (spaces.length <= 2 ? 0.28 : spaces.length <= 4 ? 0.32 : 0.38);
+    let cursor = -Math.PI / 2;
+    spaces.forEach((s) => {
+        const arc = (Math.sqrt(Math.max(1, s.weight)) / total) * Math.PI * 2;
+        const mid = cursor + arc / 2;
+        anchors.set(s.id, { x: cx + Math.cos(mid) * radius, y: cy + Math.sin(mid) * radius });
+        cursor += arc;
+    });
+    return anchors;
 };
 
 export interface SpaceGraphProps {
@@ -101,6 +145,11 @@ export const SpaceGraph: React.FC<SpaceGraphProps> = ({
     // Set from a ResizeObserver on the canvas, so the layout follows the host
     // container rather than the viewport (see COMPACT_WIDTH).
     const [compact, setCompact] = useState(false);
+    // Space anchors are owned by the force layout but mirrored here so cluster
+    // name watermarks can render in graph coordinates.
+    const [clusterAnchors, setClusterAnchors] = useState<Map<string, { x: number; y: number }>>(
+        () => new Map(),
+    );
 
     const containerRef = useRef<HTMLDivElement>(null);
     const simRef = useRef<Simulation<SimNode, SimLink> | null>(null);
@@ -230,6 +279,14 @@ export const SpaceGraph: React.FC<SpaceGraphProps> = ({
         return Math.min(MAX_RADIUS, MIN_RADIUS + Math.sqrt(n.degree) * 2.5);
     }, []);
 
+    // Cap the always-on labels: past a few dozen nodes the graph is only
+    // readable if the busiest pages are named, while the rest appear on
+    // hover/focus or once the user zooms in.
+    const labeledNodes = useMemo(() => {
+        const sorted = [...nodes].sort((a, b) => b.degree - a.degree);
+        return new Set(sorted.slice(0, 24).map((n) => n.id));
+    }, [nodes]);
+
     // --- Build / tear down the force simulation when data or size changes ---
     useEffect(() => {
         const el = containerRef.current;
@@ -240,19 +297,47 @@ export const SpaceGraph: React.FC<SpaceGraphProps> = ({
         const linkForce = forceLink<SimNode, SimLink>(links).id((d) => d.id).strength(0.4);
         const chargeForce = forceManyBody<SimNode>();
         const collideForce = forceCollide<SimNode>();
+        // Weak positional attraction toward the center, so disconnected pieces
+        // stay near the main structure instead of drifting to the canvas edges.
+        const xForce = forceX<SimNode>();
+        const yForce = forceY<SimNode>();
 
-        const applyTuning = (w: number, h: number) => {
-            const { linkDistance, charge, collidePad } = forceTuning(w, h);
+        // Stable space order (first appearance in the node list) with sizes, so
+        // anchors line up with the legend colour assignment.
+        const spaceMeta = (() => {
+            const order: string[] = [];
+            const weight = new Map<string, number>();
+            nodes.forEach((n) => {
+                if (!n.spaceId) return;
+                if (!weight.has(n.spaceId)) {
+                    order.push(n.spaceId);
+                    weight.set(n.spaceId, 0);
+                }
+                weight.set(n.spaceId, (weight.get(n.spaceId) || 0) + 1);
+            });
+            return order.map((id) => ({ id, weight: weight.get(id) || 0 }));
+        })();
+
+        const applyTuning = (w: number, h: number, count: number) => {
+            const { linkDistance, charge, collidePad, chargeMaxDist, clusterStrength } =
+                forceTuning(w, h, count);
             linkForce.distance(linkDistance);
-            chargeForce.strength(charge);
+            chargeForce.strength(charge).distanceMax(chargeMaxDist);
             collideForce.radius((d) => radiusOf(d) + collidePad);
+            // Per-space anchors; nodes without a space fall back to the centre.
+            const anchors = layoutSpaceAnchors(spaceMeta, w, h);
+            setClusterAnchors(anchors);
+            const cx = w / 2;
+            const cy = h / 2;
+            xForce.x((d) => anchors.get(d.spaceId)?.x ?? cx).strength(clusterStrength);
+            yForce.y((d) => anchors.get(d.spaceId)?.y ?? cy).strength(clusterStrength);
         };
 
         const start = () => {
             const w = el.clientWidth || 800;
             const h = el.clientHeight || 600;
             sizeRef.current = { w, h };
-            applyTuning(w, h);
+            applyTuning(w, h, nodes.length);
 
             simRef.current?.stop();
             shouldFitRef.current = true;
@@ -261,6 +346,8 @@ export const SpaceGraph: React.FC<SpaceGraphProps> = ({
                 .force("charge", chargeForce)
                 .force("center", forceCenter(w / 2, h / 2))
                 .force("collide", collideForce)
+                .force("x", xForce)
+                .force("y", yForce)
                 .alpha(1)
                 .alphaDecay(0.045);
 
@@ -307,7 +394,7 @@ export const SpaceGraph: React.FC<SpaceGraphProps> = ({
             // size would scatter the layout for a panel nobody is looking at.
             if (w === 0 || h === 0) return;
             sizeRef.current = { w, h };
-            applyTuning(w, h);
+            applyTuning(w, h, nodes.length);
             sim.force("center", forceCenter(w / 2, h / 2));
             // Resizing the host (dragging the dock edge, collapsing the sidebar)
             // changes what fits, so allow one more auto-fit.
@@ -697,6 +784,27 @@ export const SpaceGraph: React.FC<SpaceGraphProps> = ({
                     </defs>
                     <rect width="100%" height="100%" fill="url(#graph-dot-grid)" />
                     <g transform={`translate(${view.x},${view.y}) scale(${view.k})`}>
+                        {/* Space cluster watermarks, behind the edges/nodes. */}
+                        {legend.map((s) => {
+                            const a = clusterAnchors.get(s.id);
+                            if (!a) return null;
+                            return (
+                                <text
+                                    key={`cluster-${s.id}`}
+                                    x={a.x}
+                                    y={a.y}
+                                    textAnchor="middle"
+                                    fontSize={15}
+                                    fontWeight={600}
+                                    fill={s.color}
+                                    fillOpacity={0.16}
+                                    className="pointer-events-none select-none"
+                                >
+                                    {s.name}
+                                </text>
+                            );
+                        })}
+
                         {/* Edges — directed page → page, so each one carries an arrowhead. */}
                         {links.map((l, i) => {
                             const s = l.source as SimNode;
@@ -802,7 +910,10 @@ export const SpaceGraph: React.FC<SpaceGraphProps> = ({
                                         strokeWidth={1.5}
                                         style={smooth}
                                     />
-                                    {(view.k > 0.6 || isHovered || isFocused) && (
+                                    {(isHovered ||
+                                        isFocused ||
+                                        (view.k > 0.5 && labeledNodes.has(n.id)) ||
+                                        view.k > 1.3) && (
                                         <>
                                             <text
                                                 y={rr + 13}

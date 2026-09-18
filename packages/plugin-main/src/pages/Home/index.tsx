@@ -11,14 +11,26 @@ import { useTranslation } from "@kn/common";
 import { format, parseISO, formatDistanceToNow } from "@kn/ui";
 
 
-// Chip tint used by the hero quick actions — a soft translucent fill plus a
-// matching foreground so the icon carries the only color on the page.
-const hueStyles = (hue: number) => ({
-    chip: {
-        backgroundColor: `hsl(${hue} 70% 55% / 0.14)`,
-        color: `hsl(${hue} 60% 48%)`,
-    } as React.CSSProperties,
+// Accent helpers. Icons carry the color directly — no chip backgrounds, so
+// the surfaces stay neutral and the color reads as an accent, not a block.
+const chipStyle = (hue: number): React.CSSProperties => ({
+    color: "hsl(" + hue + " 72% 70%)",
 })
+
+// Curated space palette (mirrors the relation graph) for stable per-space color.
+const SPACE_PALETTE = [
+    "#337EA9", "#448361", "#D9730D", "#9065B0", "#C14C8A",
+    "#CB912F", "#D44C47", "#548164", "#5B97BD", "#787774",
+]
+const hashIndex = (value: string, modulo: number): number => {
+    let h = 0
+    for (let i = 0; i < value.length; i += 1) h = (h * 31 + value.charCodeAt(i)) >>> 0
+    return h % modulo
+}
+const spaceAccent = (id?: string): string =>
+    id ? SPACE_PALETTE[hashIndex(id, SPACE_PALETTE.length)] : "#5B97BD"
+const tagHue = (tag: string): number => hashIndex(tag, 360)
+const colorChipStyle = (color: string): React.CSSProperties => ({ color })
 
 const relativeTime = (value?: DateTimeValue): string => {
     if (value == null) return ""
@@ -325,311 +337,151 @@ export const Home: React.FC = () => {
         }
     }
 
-    // Reusable quick-action button used in the hero. Notion-style: borderless,
-    // subtle hover, chip icon carries the only color.
-    const QuickAction: React.FC<{
-        icon: React.ReactNode
-        label: string
-        hue: number
-        onClick?: () => void
-        loading?: boolean
-        dataTour?: string
-    }> = ({ icon, label, hue, onClick, loading: btnLoading, dataTour }) => {
-        const styles = hueStyles(hue)
-        return (
-            <button
-                type="button"
-                onClick={onClick}
-                disabled={btnLoading}
-                data-tour={dataTour}
-                className={cn(
-                    "group inline-flex items-center gap-2 rounded-md px-2.5 py-1.5",
-                    "text-left transition-colors duration-150",
-                    "hover:bg-muted/60 active:bg-muted",
-                    "disabled:opacity-60 disabled:cursor-not-allowed",
-                    isMobile && "flex-1 justify-center"
-                )}
-            >
-                <span
-                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
-                    style={styles.chip}
-                >
+    // Compact metric tile with a colored icon chip.
+    const StatCard: React.FC<{ label: string; value: React.ReactNode; hint?: string; icon: React.ReactNode; hue: number }> = ({ label, value, hint, icon, hue }) => (
+        <Card className="group relative overflow-hidden border-border/60 shadow-none transition-all duration-200 hover:-translate-y-0.5 hover:border-border">
+            <span
+                className="pointer-events-none absolute inset-x-0 top-0 h-px"
+                style={{ background: "hsl(" + hue + " 70% 62% / 0.7)" }}
+            />
+            <CardContent className="flex items-center gap-3 p-4">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center" style={chipStyle(hue)}>
                     {icon}
                 </span>
-                {!isMobile && <span className="text-[13px] font-medium text-foreground/80 group-hover:text-foreground truncate">{label}</span>}
-            </button>
-        )
-    }
-
-    // Small uppercase section header used above every content block. Kept as
-    // a local helper so the whole page shares identical spacing/typography.
-    const SectionHeader: React.FC<{
-        title: string
-        action?: React.ReactNode
-    }> = ({ title, action }) => (
-        <div className="flex items-center justify-between px-1">
-            <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
-                {title}
-            </h2>
-            {action}
-        </div>
+                <div className="min-w-0">
+                    <div className="text-xs font-medium text-muted-foreground">{label}</div>
+                    <div className="mt-1 flex items-baseline gap-1.5">
+                        <span className="text-xl font-semibold tracking-tight">{value}</span>
+                        {hint && <span className="text-[11px] text-muted-foreground/70">{hint}</span>}
+                    </div>
+                </div>
+            </CardContent>
+        </Card>
     )
 
-    return (
-        <div className={cn(
-            "flex justify-center pb-16 pt-2 overflow-auto h-full",
-            isMobile && "px-4"
-        )}>
-            <style>{`
-                @keyframes home-fade-up {
-                    from { opacity: 0; transform: translateY(6px); }
-                    to { opacity: 1; transform: translateY(0); }
-                }
-                .home-fade-up { animation: home-fade-up 0.35s ease both; }
-                /* Hide horizontal scrollbar on the recent-visited row while keeping it scrollable. */
-                .home-hscroll::-webkit-scrollbar { display: none; }
-                .home-hscroll { scrollbar-width: none; -ms-overflow-style: none; }
-            `}</style>
-            <div className={cn(
-                "flex flex-col w-full",
-                isMobile ? "gap-8" : "gap-10",
-                !isMobile && "max-w-[860px]"
-            )}>
-                {/* Greeting — echoes the Notion page header: emoji-like icon,
-                    large soft title, muted meta line beneath. */}
-                <div className={cn(
-                    "home-fade-up shrink-0",
-                    isMobile ? "mt-6" : "mt-14"
-                )}>
-                    <div className="flex items-center gap-4">
-                        <div className="shrink-0">
-                            {getGreetingIcon()}
-                        </div>
-                        <div className="flex flex-col">
-                            <h1 className={cn(
-                                "font-semibold tracking-tight leading-tight",
-                                isMobile ? "text-2xl" : "text-[34px]"
-                            )}>
-                                {getGreeting()}{userInfo?.name ? `, ${userInfo.name}` : ""}
-                            </h1>
-                            <p className="mt-1 text-[13px] text-muted-foreground">
-                                {format(new Date(), "EEEE, MMMM d")}
-                                {weekEditedCount > 0 && (
-                                    <>
-                                        <span className="mx-2 text-muted-foreground/40">·</span>
-                                        <span className="text-foreground/70">
-                                            {t("home.week-stat", { n: weekEditedCount })}
-                                        </span>
-                                    </>
-                                )}
-                            </p>
-                        </div>
-                    </div>
+    // Right-rail section card with a compact header.
+    const RailCard: React.FC<{
+        title: string
+        count?: number
+        icon?: React.ReactNode
+        hue?: number
+        action?: React.ReactNode
+        children: React.ReactNode
+    }> = ({ title, count, icon, hue, action, children }) => (
+        <Card className="border-border/60 shadow-none transition-colors hover:border-border">
+            <div className="flex items-center justify-between px-4 pb-1.5 pt-3.5">
+                <div className="flex items-center gap-2">
+                    {icon && hue != null && (
+                        <span className="flex h-5 w-5 items-center justify-center" style={chipStyle(hue)}>{icon}</span>
+                    )}
+                    <span className="text-sm font-semibold">{title}</span>
+                    {count != null && count > 0 && (
+                        <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{count}</span>
+                    )}
+                </div>
+                {action}
+            </div>
+            <div className="px-1.5 pb-2">{children}</div>
+        </Card>
+    )
 
-                    {/* Quick actions — flat, borderless pills. */}
-                    <div className={cn(
-                        "mt-5 flex gap-1",
-                        isMobile ? "flex-row" : "flex-wrap",
-                        !isMobile && "-ml-2.5"
-                    )}>
+    const rowClass = "group/row flex cursor-pointer items-center gap-3 rounded-md px-2.5 py-2 transition-colors hover:bg-muted/60"
+    const iconChipClass = "flex h-7 w-7 shrink-0 items-center justify-center text-muted-foreground"
+
+    return (
+        <div className="h-full overflow-auto bg-background">
+            <style>{".home-hscroll::-webkit-scrollbar{display:none}.home-hscroll{scrollbar-width:none;-ms-overflow-style:none}@keyframes knHomeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}.kn-home-in{animation:knHomeIn .45s cubic-bezier(.22,1,.36,1) both}.kn-home-in-2{animation-delay:.07s}.kn-home-in-3{animation-delay:.14s}@media (prefers-reduced-motion: reduce){.kn-home-in{animation:none}}"}</style>
+            <div className="mx-auto flex w-full max-w-[1120px] flex-col px-5 pb-16 pt-10 md:px-8">
+                {/* Greeting + primary actions */}
+                <header className="kn-home-in flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+                    <div>
+                        <h1 className="text-[26px] font-semibold leading-tight tracking-tight md:text-[30px]">
+                            {getGreeting()}{userInfo?.name ? "，" + userInfo.name : ""}
+                        </h1>
+                        <p className="mt-2 text-sm text-muted-foreground">
+                            {format(new Date(), "EEEE, MMMM d")}
+                            <span className="mx-2 text-muted-foreground/40">·</span>
+                            {t("home.week-stat", { count: weekEditedCount })}
+                        </p>
+                        <span
+                            className="mt-3 block h-[3px] w-12 rounded-full"
+                            style={{ background: "hsl(212 90% 62%)" }}
+                        />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
                         <CreatePageTypeMenu onCreate={handleNewPage} disabled={creatingPage}>
-                            <span className={cn(isMobile && "flex flex-1")} data-tour="home-new-page">
-                                <QuickAction
-                                    icon={creatingPage
-                                        ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                                        : <FilePlus className="h-4 w-4" />}
-                                    label={t("home.new-page") || "New Page"}
-                                    hue={245}
-                                    loading={creatingPage}
-                                />
+                            <span data-tour="home-new-page">
+                                <Button size="sm" variant="outline" disabled={creatingPage}>
+                                    {creatingPage
+                                        ? <span className="mr-1.5 h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                                        : <span className="mr-1.5 flex h-5 w-5 items-center justify-center" style={chipStyle(212)}><FilePlus className="h-4 w-4" /></span>}
+                                    {t("home.new-page") || "New Page"}
+                                </Button>
                             </span>
                         </CreatePageTypeMenu>
                         <CreateSpaceDlg
                             trigger={
-                                // Wrapper must mirror the other direct flex children so all
-                                // four actions share width equally on mobile (flex-1 + flex
-                                // lets the inner button stretch to fill this item).
-                                <div className={cn(isMobile && "flex flex-1")} data-tour="home-new-space">
-                                    <QuickAction
-                                        icon={<FolderPlus className="h-4 w-4" />}
-                                        label={t("home.create-space") || "New Space"}
-                                        hue={168}
-                                    />
-                                </div>
+                                <Button size="sm" variant="outline" data-tour="home-new-space">
+                                    <span className="mr-1.5 flex h-5 w-5 items-center justify-center" style={chipStyle(168)}><FolderPlus className="h-4 w-4" /></span>
+                                    {t("home.create-space") || "New Space"}
+                                </Button>
                             }
                             callBack={() => setFlag(f => f + 1)}
                         />
-                        <QuickAction
-                            icon={<LayoutGrid className="h-4 w-4" />}
-                            label={t("home.all-spaces") || "All Spaces"}
-                            hue={25}
-                            onClick={() => navigator.go({ to: "/all-spaces" })}
-                            dataTour="home-all-spaces"
-                        />
-                        <QuickAction
-                            icon={<Sparkles className="h-4 w-4" />}
-                            label={t("home.ai-assistant") || "AI Assistant"}
-                            hue={290}
-                            onClick={() => event.emit(TOGGLE_AI_ASSISTANT)}
-                            dataTour="home-ai"
-                        />
-                        <QuickAction
-                            icon={<Network className="h-4 w-4" />}
-                            label={t("home.relation-graph") || "Relation Graph"}
-                            hue={190}
-                            onClick={() => setGraphOpen(true)}
-                        />
+                        <Button size="sm" variant="outline" onClick={() => navigator.go({ to: "/all-spaces" })} data-tour="home-all-spaces">
+                            <span className="mr-1.5 flex h-5 w-5 items-center justify-center" style={chipStyle(28)}><LayoutGrid className="h-4 w-4" /></span>
+                            {t("home.all-spaces") || "All Spaces"}
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => event.emit(TOGGLE_AI_ASSISTANT)} data-tour="home-ai">
+                            <span className="mr-1.5 flex h-5 w-5 items-center justify-center" style={chipStyle(276)}><Sparkles className="h-4 w-4" /></span>
+                            {t("home.ai-assistant") || "AI Assistant"}
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => setGraphOpen(true)}>
+                            <span className="mr-1.5 flex h-5 w-5 items-center justify-center" style={chipStyle(200)}><Network className="h-4 w-4" /></span>
+                            {t("home.relation-graph") || "Relation Graph"}
+                        </Button>
                     </div>
+                </header>
+
+                {/* Overview strip */}
+                <div className="kn-home-in kn-home-in-2 mt-7 grid grid-cols-2 gap-3 md:grid-cols-4">
+                    <StatCard label={t("home.recent-pages")} value={recentPages.length} icon={<FileText className="h-5 w-5" />} hue={212} />
+                    <StatCard label={t("home.rs")} value={spaceRows.length} hint={teamSpaces.length > 0 ? teamSpaces.length + " " + t("home.team-badge") : undefined} icon={<LayoutGrid className="h-5 w-5" />} hue={28} />
+                    <StatCard label={t("home.favorites")} value={favoritePages.length} icon={<Star className="h-5 w-5" />} hue={42} />
+                    <StatCard label={t("home.stat-week")} value={weekEditedCount} icon={<Sparkles className="h-5 w-5" />} hue={276} />
                 </div>
 
-                {/* Recent / Spaces / Favorites — merged into a single tabbed
-                    block of flat list rows so the home stays dense and
-                    scannable. */}
-                <section className="flex flex-col shrink-0">
-                    <Tabs value={activeTab} onValueChange={setActiveTab}>
-                        <div className="flex items-center justify-between px-1">
-                            <TabsList className="h-8 gap-1 bg-transparent p-0">
-                                <TabsTrigger
-                                    value="recent"
-                                    className="h-7 gap-1.5 rounded-md px-2.5 text-[12px] font-medium data-[state=active]:bg-muted data-[state=active]:shadow-none"
-                                >
-                                    {t("home.recent-pages") || "Recent Pages"}
-                                    {displayedPages.length > 0 && (
-                                        <span className="text-[11px] text-muted-foreground/70">{displayedPages.length}</span>
-                                    )}
-                                </TabsTrigger>
-                                <TabsTrigger
-                                    value="spaces"
-                                    className="h-7 gap-1.5 rounded-md px-2.5 text-[12px] font-medium data-[state=active]:bg-muted data-[state=active]:shadow-none"
-                                >
-                                    {t("home.rs") || "Spaces"}
-                                    {spaceRows.length > 0 && (
-                                        <span className="text-[11px] text-muted-foreground/70">{spaceRows.length}</span>
-                                    )}
-                                </TabsTrigger>
-                                <TabsTrigger
-                                    value="favorites"
-                                    className="h-7 gap-1.5 rounded-md px-2.5 text-[12px] font-medium data-[state=active]:bg-muted data-[state=active]:shadow-none"
-                                >
-                                    {t("home.favorites") || "Favorites"}
-                                    {filteredFavorites.length > 0 && (
-                                        <span className="text-[11px] text-muted-foreground/70">{filteredFavorites.length}</span>
-                                    )}
-                                </TabsTrigger>
-                                <TabsTrigger
-                                    value="content"
-                                    className="h-7 gap-1.5 rounded-md px-2.5 text-[12px] font-medium data-[state=active]:bg-muted data-[state=active]:shadow-none"
-                                >
-                                    {t("home.content-search") || "Content"}
-                                    {blockResults.length > 0 && (
-                                        <span className="text-[11px] text-muted-foreground/70">{blockResults.length}</span>
-                                    )}
-                                </TabsTrigger>
-                            </TabsList>
-                            {activeTab === "spaces" && (
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-6 gap-1 px-2 text-[11px] font-medium text-muted-foreground hover:text-foreground"
-                                    onClick={() => navigator.go({ to: "/all-spaces" })}
-                                >
-                                    {t("home.all") || "View all"}
-                                    <ArrowRight className="h-3 w-3" />
-                                </Button>
-                            )}
-                        </div>
-
-                        {/* Spaces — recent + team merged into flat list rows; a
-                        tiny "Team" pill marks collaboration spaces. */}
-                        <TabsContent value="spaces" className="mt-3 flex flex-col gap-2">
-                            <div className="px-1">
-                                <Input
-                                    className="h-8 max-w-xs text-[13px]"
-                                    icon={<SearchIcon className="h-3.5 w-3.5" />}
-                                    placeholder={t("home.search-spaces", "Search spaces...")}
-                                    value={spaceQuery}
-                                    onChange={(e) => setSpaceQuery(e.target.value)}
-                                    aria-label={t("home.search-spaces", "Search spaces...")}
-                                />
+                {/* Content: main feed + right rail */}
+                <div className="kn-home-in kn-home-in-3 mt-5 grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_280px]">
+                    <Card className="border-border/60 shadow-none transition-colors hover:border-border">
+                        <Tabs value={activeTab} onValueChange={setActiveTab}>
+                            <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-3">
+                                <TabsList className="h-8 gap-1 bg-transparent p-0">
+                                    <TabsTrigger
+                                        value="recent"
+                                        className="h-7 gap-1.5 rounded-md px-2.5 text-xs font-medium data-[state=active]:bg-muted data-[state=active]:shadow-none"
+                                    >
+                                        {t("home.recent-pages")}
+                                        {displayedPages.length > 0 && (
+                                            <span className="text-[11px] text-muted-foreground/70">{displayedPages.length}</span>
+                                        )}
+                                    </TabsTrigger>
+                                    <TabsTrigger
+                                        value="content"
+                                        className="h-7 gap-1.5 rounded-md px-2.5 text-xs font-medium data-[state=active]:bg-muted data-[state=active]:shadow-none"
+                                    >
+                                        {t("home.content-search")}
+                                        {blockResults.length > 0 && (
+                                            <span className="text-[11px] text-muted-foreground/70">{blockResults.length}</span>
+                                        )}
+                                    </TabsTrigger>
+                                </TabsList>
                             </div>
-                            {(spacesLoading || loading) ? (
-                                <div className="flex flex-col">
-                                    {[...Array(isMobile ? 4 : 5)].map((_, index) => (
-                                        <div key={index} className="flex items-center gap-3 px-2 py-2">
-                                            <Skeleton className="h-6 w-6 rounded-md" />
-                                            <Skeleton className="h-4 flex-1 max-w-[50%]" />
-                                            <Skeleton className="h-3 w-16" />
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : spaceRows.length === 0 ? (
-                                spaceSearching ? (
-                                    <EmptyBlock
-                                        icon={<SearchIcon className="h-5 w-5" />}
-                                        title={t("home.no-space-match", "No matching spaces")}
-                                    />
-                                ) : (
-                                    <EmptyBlock
-                                        icon={<Box className="h-5 w-5" />}
-                                        title={t("home.no-spaces") || "No spaces yet"}
-                                        desc={t("home.no-spaces-hint") || "Create a space to get started"}
-                                        action={
-                                            <CreateSpaceDlg
-                                                trigger={
-                                                    <Button size="sm" variant="outline" className="mt-2 gap-1.5 h-8 text-xs">
-                                                        <Plus className="w-3.5 h-3.5" />{t("home.create-space") || "New Space"}
-                                                    </Button>
-                                                }
-                                                callBack={() => setFlag(f => f + 1)}
-                                            />
-                                        }
-                                    />
-                                )
-                            ) : (
-                                <ul className="flex flex-col">
-                                    {spaceRows.map(({ space, isTeam }) => {
-                                        const icon = asPageIcon(space.icon)
-                                        return (
-                                            <li
-                                                key={space.id}
-                                                onClick={() => navigator.go({ to: isTeam ? `/space-detail/${space.id}/home` : `/space-detail/${space.id}` })}
-                                                className={cn(
-                                                    "group flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5",
-                                                    "transition-colors duration-100 hover:bg-muted/60"
-                                                )}
-                                            >
-                                                <span className="flex h-6 w-6 shrink-0 items-center justify-center leading-none text-muted-foreground">
-                                                    {icon
-                                                        ? <PageItemIcon icon={icon} size={16} />
-                                                        : isTeam
-                                                            ? <Users className="h-4 w-4" />
-                                                            : <Box className="h-4 w-4" />}
-                                                </span>
-                                                <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium text-foreground/90 group-hover:text-foreground">
-                                                    {space.name}
-                                                </span>
-                                                {isTeam && (
-                                                    <span className="shrink-0 rounded bg-muted/70 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                                                        {t("home.team-badge") || "Team"}
-                                                    </span>
-                                                )}
-                                                <span className="hidden shrink-0 text-[11px] text-muted-foreground sm:flex">
-                                                    {isTeam && space.memberCount ? `${space.memberCount} members` : relativeTime(space.updateTime)}
-                                                </span>
-                                            </li>
-                                        )
-                                    })}
-                                </ul>
-                            )}
-                        </TabsContent>
 
-                        {/* Recent Pages — Notion-style flat list rows: no card, no
-                        border, just a hover surface, an emoji-style icon and a
-                        right-aligned timestamp. */}
-                        <TabsContent value="recent" className="mt-3 flex flex-col gap-2">
-                            <div className="flex flex-col gap-2 px-1">
+                            {/* Recent pages */}
+                            <TabsContent value="recent" className="m-0 flex flex-col gap-2 px-4 pb-4 pt-1">
                                 <Input
-                                    className="h-8 max-w-xs text-[13px]"
+                                    className="h-8 text-[13px]"
                                     icon={<SearchIcon className="h-3.5 w-3.5" />}
                                     placeholder={t("home.search-pages", "Search pages...")}
                                     value={pageQuery}
@@ -637,7 +489,7 @@ export const Home: React.FC = () => {
                                     aria-label={t("home.search-pages", "Search pages...")}
                                 />
                                 {availableTags.length > 0 && (
-                                    <div className="home-hscroll -mx-1 flex items-center gap-1.5 overflow-x-auto px-1 pb-0.5">
+                                    <div className="home-hscroll -mx-1 flex items-center gap-1.5 overflow-x-auto px-1">
                                         <Tag className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
                                         {availableTags.map((tag) => {
                                             const active = selectedTags.includes(tag)
@@ -647,11 +499,12 @@ export const Home: React.FC = () => {
                                                     type="button"
                                                     onClick={() => toggleTag(tag)}
                                                     className={cn(
-                                                        "shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors",
-                                                        active
-                                                            ? "bg-primary text-primary-foreground"
-                                                            : "bg-muted/60 text-muted-foreground hover:bg-muted"
+                                                        "shrink-0 rounded-full border border-transparent px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+                                                        active ? "" : "hover:brightness-125"
                                                     )}
+                                                    style={active
+                                                        ? { backgroundColor: "hsl(" + tagHue(tag) + " 70% 58% / 0.32)", color: "hsl(" + tagHue(tag) + " 80% 84%)" }
+                                                        : { backgroundColor: "hsl(" + tagHue(tag) + " 70% 58% / 0.13)", color: "hsl(" + tagHue(tag) + " 62% 72%)" }}
                                                 >
                                                     {tag}
                                                 </button>
@@ -669,37 +522,26 @@ export const Home: React.FC = () => {
                                         )}
                                     </div>
                                 )}
-                            </div>
-                            {pagesLoading ? (
-                                <div className="flex flex-col">
-                                    {[...Array(isMobile ? 4 : 5)].map((_, index) => (
-                                        <div key={index} className="flex items-center gap-3 px-2 py-2">
-                                            <Skeleton className="h-6 w-6 rounded-md" />
-                                            <Skeleton className="h-4 flex-1 max-w-[50%]" />
-                                            <Skeleton className="h-3 w-16" />
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : displayedPages.length === 0 ? (
-                                (pageSearching || selectedTags.length > 0) ? (
-                                    <EmptyBlock
-                                        icon={<SearchIcon className="h-5 w-5" />}
-                                        title={t("home.no-page-match", "No matching pages")}
-                                    />
+                                {pagesLoading ? (
+                                    <div className="flex flex-col">
+                                        {[...Array(isMobile ? 4 : 6)].map((_, index) => (
+                                            <div key={index} className="flex items-center gap-3 px-2.5 py-2">
+                                                <Skeleton className="h-7 w-7 rounded-md" />
+                                                <Skeleton className="h-4 w-1/2" />
+                                                <Skeleton className="ml-auto h-3 w-16" />
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : displayedPages.length === 0 ? (
+                                    pageSearching || selectedTags.length > 0 ? (
+                                        <EmptyBlock icon={<SearchIcon className="h-5 w-5" />} title={t("home.no-page-match", "No matching pages")} />
+                                    ) : (
+                                        <EmptyBlock icon={<Book className="h-5 w-5" />} title={t("home.no-recent-pages")} desc={t("home.no-recent-pages-hint")} />
+                                    )
                                 ) : (
-                                    <EmptyBlock
-                                        icon={<Book className="h-5 w-5" />}
-                                        title={t("home.no-recent-pages") || "No recent pages"}
-                                        desc={t("home.no-recent-pages-hint") || "Pages you visit will appear here"}
-                                    />
-                                )
-                            ) : (
-                                <PagePreviewProvider>
-                                    <ul className="flex flex-col">
-                                        {displayedPages.map((page: any) => {
-                                            return (
-                                                // Hover shows an editor-rendered preview card (desktop only —
-                                                // hover cards don't fit touch interaction).
+                                    <PagePreviewProvider>
+                                        <ul className="flex flex-col">
+                                            {displayedPages.map((page: any) => (
                                                 <PagePreviewCard
                                                     key={page.id}
                                                     pageId={page.id}
@@ -708,233 +550,206 @@ export const Home: React.FC = () => {
                                                     icon={page.icon}
                                                     pageType={page.pageType}
                                                     disabled={isMobile}
-                                                    onOpenPage={() => navigator.go({ to: `/space-detail/${page.spaceId}/page/edit/${page.id}` })}
+                                                    onOpenPage={() => navigator.go({ to: "/space-detail/" + page.spaceId + "/page/edit/" + page.id })}
                                                 >
                                                     <li
-                                                        onClick={() => navigator.go({ to: `/space-detail/${page.spaceId}/page/edit/${page.id}` })}
-                                                        className={cn(
-                                                            "group flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5",
-                                                            "transition-colors duration-100 hover:bg-muted/60"
-                                                        )}
+                                                        onClick={() => navigator.go({ to: "/space-detail/" + page.spaceId + "/page/edit/" + page.id })}
+                                                        className={rowClass}
                                                     >
-                                                        <span className="flex h-6 w-6 shrink-0 items-center justify-center leading-none text-muted-foreground">
+                                                        <span className={iconChipClass}>
                                                             {page.icon?.icon ? <PageItemIcon icon={page.icon} size={16} /> : <FileText className="h-4 w-4" />}
                                                         </span>
-                                                        <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium text-foreground/90 group-hover:text-foreground">
-                                                            {page.title || "Untitled"}
+                                                        <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground/90 group-hover/row:text-foreground">
+                                                            {page.title || t("home.untitled")}
                                                         </span>
                                                         {Array.isArray(page.tags) && page.tags.length > 0 && (
                                                             <span className="hidden shrink-0 items-center gap-1 md:flex">
                                                                 {page.tags.slice(0, 2).map((tg: string) => (
-                                                                    <span
-                                                                        key={tg}
-                                                                        className="rounded bg-muted/70 px-1.5 py-0.5 text-[10px] text-muted-foreground"
-                                                                    >
-                                                                        {tg}
-                                                                    </span>
+                                                                    <span key={tg} className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{tg}</span>
                                                                 ))}
                                                             </span>
                                                         )}
-                                                        <span className="hidden shrink-0 items-center gap-1 text-[11px] text-muted-foreground sm:flex">
-                                                            {page.updateBy && (
-                                                                <span className="max-w-[120px] truncate text-foreground/50">
-                                                                    {page.updateBy}
-                                                                </span>
-                                                            )}
-                                                            {page.updateBy && page.updateTime && (
-                                                                <span className="text-muted-foreground/40">·</span>
-                                                            )}
-                                                            <span>
-                                                                {relativeTime(page.updateTime) || (t("home.last-update") || "Last update")}
-                                                            </span>
+                                                        <span className="hidden shrink-0 text-xs text-muted-foreground sm:block">
+                                                            {relativeTime(page.updateTime) || t("home.last-update")}
                                                         </span>
                                                     </li>
                                                 </PagePreviewCard>
-                                            )
-                                        })}
-                                    </ul>
-                                </PagePreviewProvider>
-                            )}
-                        </TabsContent>
+                                            ))}
+                                        </ul>
+                                    </PagePreviewProvider>
+                                )}
+                            </TabsContent>
 
-                        {/* Favorite Pages — mirrors the recent-pages list layout so
-                        every tab reads with the same rhythm. */}
-                        <TabsContent value="favorites" className="mt-3 flex flex-col gap-2">
-                            <div className="px-1">
+                            {/* Content search */}
+                            <TabsContent value="content" className="m-0 flex flex-col gap-2 px-4 pb-4 pt-1">
                                 <Input
-                                    className="h-8 max-w-xs text-[13px]"
-                                    icon={<SearchIcon className="h-3.5 w-3.5" />}
-                                    placeholder={t("home.search-pages", "Search pages...")}
-                                    value={favQuery}
-                                    onChange={(e) => setFavQuery(e.target.value)}
-                                    aria-label={t("home.search-pages", "Search pages...")}
-                                />
-                            </div>
-                            {loading ? (
-                                <div className="flex flex-col">
-                                    {[...Array(3)].map((_, index) => (
-                                        <div key={index} className="flex items-center gap-3 px-2 py-2">
-                                            <Skeleton className="h-6 w-6 rounded-md" />
-                                            <Skeleton className="h-4 flex-1 max-w-[40%]" />
-                                            <Skeleton className="h-3 w-20" />
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : filteredFavorites.length === 0 ? (
-                                favSearching ? (
-                                    <EmptyBlock
-                                        icon={<SearchIcon className="h-5 w-5" />}
-                                        title={t("home.no-page-match", "No matching pages")}
-                                    />
-                                ) : (
-                                    <EmptyBlock
-                                        icon={<Star className="h-5 w-5" />}
-                                        title={t("home.no-favorites") || "No favorite pages yet"}
-                                        desc={t("home.no-favorites-hint") || "Star pages to add them here"}
-                                    />
-                                )
-                            ) : (
-                                <PagePreviewProvider>
-                                    <ul className="flex flex-col">
-                                        {filteredFavorites.map((data: any) => {
-                                            return (
-                                                // Same hover preview as the recent list (desktop only).
-                                                <PagePreviewCard
-                                                    key={data.id}
-                                                    pageId={data.id}
-                                                    title={data.title}
-                                                    spaceName={data.spaceName}
-                                                    icon={data.icon}
-                                                    pageType={data.pageType}
-                                                    disabled={isMobile}
-                                                    onOpenPage={() => navigator.go({ to: `/space-detail/${data.spaceId}/page/edit/${data.id}` })}
-                                                >
-                                                    <li
-                                                        className="group flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors duration-100 hover:bg-muted/60"
-                                                        onClick={() => navigator.go({ to: `/space-detail/${data.spaceId}/page/edit/${data.id}` })}
-                                                    >
-                                                        <span className="flex h-6 w-6 shrink-0 items-center justify-center leading-none text-muted-foreground">
-                                                            {data.icon?.icon ? <PageItemIcon icon={data.icon} size={16} /> : <FileText className="h-4 w-4" />}
-                                                        </span>
-                                                        <span className="flex-1 truncate text-[13.5px] font-medium text-foreground/90 group-hover:text-foreground">
-                                                            {data.title}
-                                                        </span>
-                                                        {data.updateTime && (
-                                                            <span className="hidden shrink-0 items-center gap-1 text-[11px] text-muted-foreground sm:flex">
-                                                                <Star className="h-3 w-3 text-amber-400/80" />
-                                                                {relativeTime(data.updateTime)}
-                                                            </span>
-                                                        )}
-                                                    </li>
-                                                </PagePreviewCard>
-                                            )
-                                        })}
-                                    </ul>
-                                </PagePreviewProvider>
-                            )}
-                        </TabsContent>
-
-                        {/* Content Search — block-level full-text search across all
-                        spaces. Each hit shows a highlighted snippet with the
-                        containing page title and space name. */}
-                        <TabsContent value="content" className="mt-3 flex flex-col gap-2">
-                            <div className="px-1">
-                                <Input
-                                    className="h-8 max-w-xs text-[13px]"
+                                    className="h-8 text-[13px]"
                                     icon={<SearchIcon className="h-3.5 w-3.5" />}
                                     placeholder={t("home.search-content", "Search content...")}
                                     value={contentQuery}
                                     onChange={(e) => setContentQuery(e.target.value)}
                                     aria-label={t("home.search-content", "Search content...")}
                                 />
-                            </div>
-                            {contentLoading ? (
-                                <div className="flex flex-col">
-                                    {[...Array(isMobile ? 4 : 5)].map((_, index) => (
-                                        <div key={index} className="flex items-center gap-3 px-2 py-2">
-                                            <Skeleton className="h-6 w-6 rounded-md" />
-                                            <div className="flex-1">
-                                                <Skeleton className="h-4 max-w-[60%]" />
-                                                <Skeleton className="mt-1 h-3 w-[30%]" />
+                                {contentLoading ? (
+                                    <div className="flex flex-col">
+                                        {[...Array(isMobile ? 4 : 6)].map((_, index) => (
+                                            <div key={index} className="flex items-center gap-3 px-2.5 py-2">
+                                                <Skeleton className="h-7 w-7 rounded-md" />
+                                                <div className="flex-1">
+                                                    <Skeleton className="h-4 w-3/5" />
+                                                    <Skeleton className="mt-1.5 h-3 w-1/4" />
+                                                </div>
                                             </div>
+                                        ))}
+                                    </div>
+                                ) : blockResults.length === 0 ? (
+                                    contentSearching ? (
+                                        <EmptyBlock icon={<SearchIcon className="h-5 w-5" />} title={t("home.no-content-match", "No matching content")} />
+                                    ) : (
+                                        <EmptyBlock icon={<AlignLeft className="h-5 w-5" />} title={t("home.content-search")} desc={t("home.content-empty", "Type to search across all page content")} />
+                                    )
+                                ) : (
+                                    <ul className="flex flex-col">
+                                        {blockResults.map((block: any) => (
+                                            <li
+                                                key={block.id}
+                                                onClick={() => navigator.go({ to: "/space-detail/" + block.spaceId + "/page/edit/" + block.pageId })}
+                                                className={cn(rowClass, "items-start")}
+                                            >
+                                                <span className={iconChipClass}><AlignLeft className="h-4 w-4" /></span>
+                                                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                                                    <span className="truncate text-sm text-foreground/90 group-hover/row:text-foreground">
+                                                        <Highlighted text={makeSnippet(block.text, debouncedContentQuery.trim())} keyword={debouncedContentQuery.trim()} />
+                                                    </span>
+                                                    {(block.pageTitle || block.spaceName) && (
+                                                        <span className="truncate text-xs text-muted-foreground">
+                                                            {block.pageTitle}
+                                                            {block.pageTitle && block.spaceName && <span className="text-muted-foreground/40"> · </span>}
+                                                            {block.spaceName}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </TabsContent>
+                        </Tabs>
+                    </Card>
+
+                    {/* Right rail */}
+                    <div className="flex flex-col gap-4">
+                        <RailCard
+                            title={t("home.rs")}
+                            count={spaceRows.length}
+                            icon={<LayoutGrid className="h-3.5 w-3.5" />}
+                            hue={28}
+                            action={
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 gap-1 px-2 text-xs text-muted-foreground"
+                                    onClick={() => navigator.go({ to: "/all-spaces" })}
+                                >
+                                    {t("home.all")}
+                                    <ArrowRight className="h-3.5 w-3.5" />
+                                </Button>
+                            }
+                        >
+                            {(spacesLoading || loading) ? (
+                                <div className="flex flex-col">
+                                    {[...Array(4)].map((_, index) => (
+                                        <div key={index} className="flex items-center gap-3 px-2.5 py-2">
+                                            <Skeleton className="h-7 w-7 rounded-md" />
+                                            <Skeleton className="h-4 w-1/2" />
                                         </div>
                                     ))}
                                 </div>
-                            ) : blockResults.length === 0 ? (
-                                contentSearching ? (
-                                    <EmptyBlock
-                                        icon={<SearchIcon className="h-5 w-5" />}
-                                        title={t("home.no-content-match", "No matching content")}
-                                    />
-                                ) : (
-                                    <EmptyBlock
-                                        icon={<AlignLeft className="h-5 w-5" />}
-                                        title={t("home.content-search") || "Content Search"}
-                                        desc={t("home.content-empty", "Type to search across all page content")}
-                                    />
-                                )
+                            ) : spaceRows.length === 0 ? (
+                                <EmptyBlock icon={<Box className="h-5 w-5" />} title={t("home.no-spaces")} desc={t("home.no-spaces-hint")} />
                             ) : (
                                 <ul className="flex flex-col">
-                                    {blockResults.map((block: any) => (
-                                        <li
-                                            key={block.id}
-                                            onClick={() => navigator.go({ to: `/space-detail/${block.spaceId}/page/edit/${block.pageId}` })}
-                                            className={cn(
-                                                "group flex cursor-pointer items-start gap-2.5 rounded-md px-2 py-1.5",
-                                                "transition-colors duration-100 hover:bg-muted/60"
-                                            )}
-                                        >
-                                            <span className="flex h-6 w-6 shrink-0 items-center justify-center leading-none text-muted-foreground">
-                                                <AlignLeft className="h-4 w-4" />
-                                            </span>
-                                            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                                                <span className="truncate text-[13.5px] text-foreground/90 group-hover:text-foreground">
-                                                    <Highlighted text={makeSnippet(block.text, debouncedContentQuery.trim())} keyword={debouncedContentQuery.trim()} />
+                                    {spaceRows.slice(0, 5).map(({ space, isTeam }) => {
+                                        const icon = asPageIcon(space.icon)
+                                        return (
+                                            <li
+                                                key={space.id}
+                                                onClick={() => navigator.go({ to: isTeam ? "/space-detail/" + space.id + "/home" : "/space-detail/" + space.id })}
+                                                className={rowClass}
+                                            >
+                                                <span className="flex h-7 w-7 shrink-0 items-center justify-center" style={colorChipStyle(spaceAccent(space.id))}>
+                                                    {icon ? <PageItemIcon icon={icon} size={16} /> : isTeam ? <Users className="h-4 w-4" /> : <Box className="h-4 w-4" />}
                                                 </span>
-                                                {(block.pageTitle || block.spaceName) && (
-                                                    <span className="truncate text-[11px] text-muted-foreground">
-                                                        {block.pageTitle}
-                                                        {block.pageTitle && block.spaceName && <span className="text-muted-foreground/40"> · </span>}
-                                                        {block.spaceName}
+                                                <span className="min-w-0 flex-1">
+                                                    <span className="block truncate text-sm font-medium text-foreground/90">{space.name}</span>
+                                                    <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                                                        {isTeam && space.memberCount ? space.memberCount + " members" : relativeTime(space.updateTime)}
+                                                    </span>
+                                                </span>
+                                                {isTeam && (
+                                                    <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                                                        {t("home.team-badge")}
                                                     </span>
                                                 )}
-                                            </div>
-                                        </li>
+                                            </li>
+                                        )
+                                    })}
+                                </ul>
+                            )}
+                        </RailCard>
+
+                        <RailCard title={t("home.favorites")} count={filteredFavorites.length} icon={<Star className="h-3.5 w-3.5" />} hue={42}>
+                            {loading ? (
+                                <div className="flex flex-col">
+                                    {[...Array(3)].map((_, index) => (
+                                        <div key={index} className="flex items-center gap-3 px-2.5 py-2">
+                                            <Skeleton className="h-7 w-7 rounded-md" />
+                                            <Skeleton className="h-4 w-1/2" />
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : filteredFavorites.length === 0 ? (
+                                <EmptyBlock icon={<Star className="h-5 w-5" />} title={t("home.no-favorites")} desc={t("home.no-favorites-hint")} />
+                            ) : (
+                                <ul className="flex flex-col">
+                                    {filteredFavorites.slice(0, 5).map((data: any) => (
+                                        <PagePreviewCard
+                                            key={data.id}
+                                            pageId={data.id}
+                                            title={data.title}
+                                            spaceName={data.spaceName}
+                                            icon={data.icon}
+                                            pageType={data.pageType}
+                                            disabled={isMobile}
+                                            onOpenPage={() => navigator.go({ to: "/space-detail/" + data.spaceId + "/page/edit/" + data.id })}
+                                        >
+                                            <li
+                                                className={rowClass}
+                                                onClick={() => navigator.go({ to: "/space-detail/" + data.spaceId + "/page/edit/" + data.id })}
+                                            >
+                                                <span className={iconChipClass}>
+                                                    {data.icon?.icon ? <PageItemIcon icon={data.icon} size={16} /> : <FileText className="h-4 w-4" />}
+                                                </span>
+                                                <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground/90">{data.title}</span>
+                                                <Star className="h-3.5 w-3.5 shrink-0 text-amber-400/80" />
+                                            </li>
+                                        </PagePreviewCard>
                                     ))}
                                 </ul>
                             )}
-                        </TabsContent>
-                    </Tabs>
-                </section>
-
-                {/* Learn Knowledge — muted callout in a dashed frame, kept
-                    intentionally quiet so it never competes with the content. */}
-                <section className="flex flex-col gap-2 shrink-0">
-                    <SectionHeader title={t("home.learning") || "Learn"} />
-                    <Card className="border-dashed border-border/60 bg-transparent shadow-none">
-                        <CardContent className="flex items-center gap-3 py-4">
-                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted/60">
-                                <BanIcon className="h-4 w-4 text-muted-foreground" />
-                            </div>
-                            <p className="text-[13px] text-muted-foreground">
-                                {t("home.coming-soon-desc") || "This feature is coming soon, stay tuned!"}
-                            </p>
-                        </CardContent>
-                    </Card>
-                </section>
+                        </RailCard>
+                    </div>
+                </div>
             </div>
 
-            {/* Relation graph — rendered lazily inside a large dialog so the
-                d3 simulation only spins up when the user actually opens it. */}
+            {/* Relation graph — lazily created inside a dialog. */}
             <Dialog open={graphOpen} onOpenChange={setGraphOpen}>
                 <DialogContent className="flex h-[80vh] max-w-[min(1100px,92vw)] flex-col gap-0 p-0">
                     <DialogHeader className="border-b px-4 py-3 text-left">
-                        <DialogTitle>{t("home.relation-graph") || "Relation Graph"}</DialogTitle>
+                        <DialogTitle>{t("home.relation-graph")}</DialogTitle>
                     </DialogHeader>
                     <div className="min-h-0 flex-1">
-                        {graphOpen && (
-                            <SpaceGraph onNavigate={() => setGraphOpen(false)} />
-                        )}
+                        {graphOpen && <SpaceGraph onNavigate={() => setGraphOpen(false)} />}
                     </div>
                 </DialogContent>
             </Dialog>
@@ -942,21 +757,21 @@ export const Home: React.FC = () => {
     )
 }
 
-
-// Compact, centered empty state used across sections. Kept borderless and
-// airy so it inherits the Notion aesthetic of the surrounding sections.
+// Compact, centered empty state used across sections.
 const EmptyBlock: React.FC<{
     icon: React.ReactNode
     title: string
     desc?: string
     action?: React.ReactNode
 }> = ({ icon, title, desc, action }) => (
-    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/50 bg-muted/10 py-8 text-center">
-        <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-muted/60 text-muted-foreground">
+    <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border/60 py-8 text-center">
+        <div className="flex h-9 w-9 items-center justify-center rounded-md bg-muted/60 text-muted-foreground">
             {icon}
         </div>
-        <p className="text-[13px] font-medium">{title}</p>
-        {desc && <p className="mt-1 text-[11px] text-muted-foreground">{desc}</p>}
+        <div className="flex flex-col items-center gap-1">
+            <p className="text-sm font-medium text-muted-foreground">{title}</p>
+            {desc && <p className="text-xs text-muted-foreground/70">{desc}</p>}
+        </div>
         {action}
     </div>
 )
