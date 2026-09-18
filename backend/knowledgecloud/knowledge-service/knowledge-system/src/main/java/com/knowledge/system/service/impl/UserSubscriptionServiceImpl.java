@@ -21,7 +21,9 @@ import com.knowledge.system.mapper.UserSubscriptionMapper;
 import com.knowledge.system.service.IEntitlementService;
 import com.knowledge.system.service.ISubscriptionPlanService;
 import com.knowledge.system.service.IUserSubscriptionService;
+import com.knowledge.core.entitlement.EntitlementGate;
 import lombok.AllArgsConstructor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -50,6 +52,7 @@ public class UserSubscriptionServiceImpl extends ServiceImpl<UserSubscriptionMap
 	private final SubscriptionGrantLogMapper grantLogMapper;
 	private final UserMapper userMapper;
 	private final IEntitlementService entitlementService;
+	private final ObjectProvider<EntitlementGate> entitlementGateProvider;
 
 	@Override
 	public UserSubscriptionVO getEffective(Long userId) {
@@ -107,6 +110,7 @@ public class UserSubscriptionServiceImpl extends ServiceImpl<UserSubscriptionMap
 
 		writeLog(dto.getUserId(), from, code, SubscriptionSource.ADMIN, operatorId, now, end, dto.getRemark());
 		entitlementService.evict(dto.getUserId());
+		evictGate(dto.getUserId());
 	}
 
 	@Override
@@ -132,6 +136,7 @@ public class UserSubscriptionServiceImpl extends ServiceImpl<UserSubscriptionMap
 
 		writeLog(userId, from, PlanCode.FREE, SubscriptionSource.ADMIN, operatorId, now, null, remark);
 		entitlementService.evict(userId);
+		evictGate(userId);
 	}
 
 	@Override
@@ -210,6 +215,13 @@ public class UserSubscriptionServiceImpl extends ServiceImpl<UserSubscriptionMap
 		log.setEndTime(end);
 		log.setRemark(remark);
 		grantLogMapper.insert(log);
+	}
+
+	private void evictGate(Long userId) {
+		EntitlementGate gate = entitlementGateProvider.getIfAvailable();
+		if (gate != null) {
+			gate.evict(userId);
+		}
 	}
 
 	private UserSubscription findRow(Long userId) {

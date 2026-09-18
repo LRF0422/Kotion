@@ -84,6 +84,7 @@
         <module>knowledge-core-feign</module>
         <module>knowledge-core-message</module>
         <module>knowledge-core-permission</module>
+        <module>knowledge-core-entitlement</module>
         <module>knowledge-core-common</module>
         <module>knowledge-core-base</module>
         <module>knowledge-core-version</module>

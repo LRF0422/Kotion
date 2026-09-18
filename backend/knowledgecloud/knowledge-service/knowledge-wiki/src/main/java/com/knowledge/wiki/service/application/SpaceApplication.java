@@ -115,6 +115,8 @@ public class SpaceApplication {
     @Autowired
     private ISpaceService spaceService;
     @Autowired
+    private com.knowledge.core.entitlement.EntitlementGate entitlementGate;
+    @Autowired
     private IPageService pageService;
 
     @Autowired
@@ -178,6 +180,7 @@ public class SpaceApplication {
         }
         Space space = SpaceConverter.INSTANCE.convertDO(dto);
         if (space.getId() == null) {
+            assertSpaceQuota(currentUserId);
             space.setUserId(currentUserId);
             space.setTenantId(currentContextId);
         } else {
@@ -204,6 +207,22 @@ public class SpaceApplication {
         }
 
         log.info("Space created successfully: {}", dto.getName());
+    }
+
+    /** 空间数量配额：只统计用户自建的普通/协作空间，不含个人空间与模板。 */
+    private void assertSpaceQuota(Long userId) {
+        long limit = entitlementGate.getQuota(userId,
+                com.knowledge.core.entitlement.constant.EntitlementCodes.SPACE_COUNT);
+        if (limit <= 0) {
+            return;
+        }
+        long used = spaceService.lambdaQuery()
+                .eq(Space::getUserId, userId)
+                .in(Space::getType, java.util.Arrays.asList(SpaceType.SPACE, SpaceType.COLLABORATION))
+                .count();
+        if (used >= limit) {
+            throw WikiException.SPACE_QUOTA_EXCEEDED.newException();
+        }
     }
 
     public List<PageVO> queryFavoritePage(QueryFavoriteDTO dto) {

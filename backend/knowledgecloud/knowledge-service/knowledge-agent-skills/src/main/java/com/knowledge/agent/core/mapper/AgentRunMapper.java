@@ -46,6 +46,16 @@ public interface AgentRunMapper extends BaseMapper<AgentRunEntity> {
             "AND status IN ('QUEUED','RUNNING','SUSPENDED','WAITING_TOOLS')")
     long countActiveByTenant(@Param("tenantId") Long tenantId);
 
+    /** 某用户当日 token 累计（输入 + 输出）——权益日额度信号。 */
+    @Select("SELECT COALESCE(SUM(prompt_tokens + completion_tokens), 0) FROM agent_run " +
+            "WHERE user_id = #{userId} AND create_time >= #{startMs}")
+    long sumDailyTokensByUser(@Param("userId") Long userId, @Param("startMs") long startMs);
+
+    /** 某用户当前活跃 run 数——权益并发信号。 */
+    @Select("SELECT COUNT(*) FROM agent_run WHERE user_id = #{userId} " +
+            "AND status IN ('RUNNING','QUEUED','WAITING_TOOLS','SUSPENDED')")
+    long countActiveByUser(@Param("userId") Long userId);
+
     /** Active runs in one conversation, oldest first (single-active auto-cancel). */
     @Select("SELECT * FROM agent_run WHERE conversation_id = #{conversationId} " +
             "AND user_id = #{userId} AND tenant_id = #{tenantId} " +

@@ -138,7 +138,7 @@ public class DefaultRunSupervisor {
         if (cmd.getConversationId() == null || cmd.getConversationId().trim().isEmpty()) {
             throw new IllegalArgumentException("conversationId is required");
         }
-        quota.checkCreateAllowed(cmd.getTenantId());
+        quota.checkCreateAllowed(cmd.getUserId(), cmd.getTenantId());
         cancelActiveByConversation(cmd.getConversationId(), cmd.getUserId(), cmd.getTenantId());
         // Inject long-term memory and relevant owner-scoped skills before the
         // loop freezes the initial checkpoint. Retrieval failures fail open.
@@ -185,7 +185,7 @@ public class DefaultRunSupervisor {
     public RunView createChild(CreateRunCommand cmd, String parentRunId, int delegateDepth) {
         // Children are real runs: they must obey the same tenant quota as roots,
         // otherwise one parent can fan out without bound.
-        quota.checkCreateAllowed(cmd.getTenantId());
+        quota.checkCreateAllowed(cmd.getUserId(), cmd.getTenantId());
         AgentRun run = AgentRun.create(UUID.randomUUID().toString(), cmd.getConversationId(),
                 cmd.getUserId(), cmd.getTenantId(), cmd.getModel(), cmd.getMode(), System.currentTimeMillis());
         run.setParentRunId(parentRunId);

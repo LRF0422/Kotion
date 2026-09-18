@@ -1,10 +1,10 @@
-package com.knowledge.system.domain;
+package com.knowledge.core.entitlement.constant;
 
 /**
  * 权益编码的唯一定义处。
  *
- * <p>业务代码只允许引用这里的常量，禁止散落字符串字面量；否则拼写错误会静默地
- * 让某个权益永远取默认值。新增权益必须同时在 subscriptions 迁移里登记定义。</p>
+ * <p>业务代码只允许引用这里的常量，禁止散落字符串字面量；新增权益必须同时在
+ * `subscription_entitlement` 里登记定义。</p>
  *
  * @author Kotion
  */

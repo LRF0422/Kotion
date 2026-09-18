@@ -25,6 +25,11 @@
         </dependency>
         <dependency>
             <groupId>com.knowledge</groupId>
+            <artifactId>knowledge-core-entitlement</artifactId>
+            <version>${knowledge.tool.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.knowledge</groupId>
             <artifactId>knowledge-core-version</artifactId>
             <version>${knowledge.tool.version}</version>
         </dependency>

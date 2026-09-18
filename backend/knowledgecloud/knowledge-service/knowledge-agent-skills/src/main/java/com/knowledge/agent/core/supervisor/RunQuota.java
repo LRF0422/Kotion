@@ -2,15 +2,25 @@ package com.knowledge.agent.core.supervisor;
 
 import com.knowledge.agent.core.config.AgentCoreProperties;
 import com.knowledge.agent.core.mapper.AgentRunMapper;
+import com.knowledge.core.entitlement.EntitlementGate;
+import com.knowledge.core.entitlement.constant.EntitlementCodes;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Tenant quotas: create rate (sliding minute window) and concurrent active
- * runs (DB count — cross-restart safe).
+ * Quotas that gate run creation, in two layers:
+ *
+ * <ul>
+ *   <li><b>tenant/platform</b> — create rate (sliding minute window) and
+ *       concurrent active runs (DB count, cross-restart safe);</li>
+ *   <li><b>subscription entitlement</b> — per-user daily token budget and
+ *       concurrent runs, resolved through {@link EntitlementGate}.</li>
+ * </ul>
  */
 @Slf4j
 @Component
@@ -21,16 +31,23 @@ public class RunQuota {
     private final StringRedisTemplate redis;
     private final AgentRunMapper runMapper;
     private final AgentCoreProperties properties;
+    private final EntitlementGate entitlementGate;
 
     public RunQuota(StringRedisTemplate redis, AgentRunMapper runMapper,
-                    AgentCoreProperties properties) {
+                    AgentCoreProperties properties, EntitlementGate entitlementGate) {
         this.redis = redis;
         this.runMapper = runMapper;
         this.properties = properties;
+        this.entitlementGate = entitlementGate;
     }
 
     /** Throws {@link QuotaExceededException} when a quota blocks the create. */
-    public void checkCreateAllowed(Long tenantId) {
+    public void checkCreateAllowed(Long userId, Long tenantId) {
+        checkTenantQuota(tenantId);
+        checkEntitlementQuota(userId);
+    }
+
+    private void checkTenantQuota(Long tenantId) {
         if (!properties.getQuota().isEnabled() || tenantId == null) {
             return;
         }
@@ -64,6 +81,37 @@ public class RunQuota {
                 log.warn("Quota concurrency check failed for tenant {}: {}", tenantId, e.getMessage());
             }
         }
+    }
+
+    /** 套餐权益：当日 token 总量与并发 run 数（按用户）。 */
+    private void checkEntitlementQuota(Long userId) {
+        if (userId == null || entitlementGate == null) {
+            return;
+        }
+        try {
+            long dailyLimit = entitlementGate.getQuota(userId, EntitlementCodes.AI_TOKENS_DAILY);
+            if (dailyLimit > 0) {
+                long used = runMapper.sumDailyTokensByUser(userId, startOfDayMillis());
+                if (used >= dailyLimit) {
+                    throw new QuotaExceededException("今日 AI 用量已达套餐上限，请升级套餐或明天再试");
+                }
+            }
+            long concurrentLimit = entitlementGate.getQuota(userId, EntitlementCodes.AI_RUNS_CONCURRENT);
+            if (concurrentLimit > 0) {
+                long active = runMapper.countActiveByUser(userId);
+                if (active >= concurrentLimit) {
+                    throw new QuotaExceededException("并发任务数已达套餐上限，请等待当前任务结束");
+                }
+            }
+        } catch (QuotaExceededException e) {
+            throw e;
+        } catch (Exception e) {
+            log.warn("Entitlement quota check failed for user {}: {}", userId, e.getMessage());
+        }
+    }
+
+    private long startOfDayMillis() {
+        return LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
     }
 
     public static class QuotaExceededException extends IllegalArgumentException {

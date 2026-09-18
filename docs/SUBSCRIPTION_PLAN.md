@@ -110,9 +110,43 @@
 | GET | `/subscription/admin/grants` | 授予日志 |
 | GET | `/subscription/admin/catalog` | 方案目录 |
 
-### 4.3 门禁现状与后续
+### 4.3 权益能力已抽象到 `knowledge-tool`
 
-`@RequireEntitlement` 目前只在 `knowledge-system` 内生效（已挂一个示例接口 `/subscription/features/advanced-ai`）。跨服务（AI / wiki / file-center）的强制校验属于 **P1**：在 `knowledge-service-api` 增加 `IEntitlementClient`，各服务实现本地 resolver + 短缓存，再在关键执行点接配额（AI token、空间数、成员数、存储/单文件）。
+共享模块 **`knowledge-tool/knowledge-core-entitlement`**（包 `com.knowledge.core.entitlement`）承载全部跨服务权益能力，业务服务**只加依赖即可**：
+
+- `constant/EntitlementCodes`：权益编码唯一来源。
+- `annotation/RequireEntitlement`：声明式门禁注解。
+- `model/EntitlementSnapshot`：features/quotas 快照（跨服务传输对象，含 `free()` 兜底）。
+- `EntitlementResolver`：解析 SPI。权益权威源用本地实现，避免自调用；其他服务用默认实现。
+- `EntitlementGate`：统一入口（解析 + 进程内 TTL 缓存 + `hasFeature` / `getQuota` / `evict`）。
+- `interceptor/EntitlementInterceptor` + `config/EntitlementWebMvcConfiguration`：拦截 `@RequireEntitlement`。
+- `client/IEntitlementClient`：Feign 客户端（`/entitlement/internal/*`）。
+- `client/FeignEntitlementResolver`：默认解析器，解析失败回退 FREE（fail-closed）。
+- `EntitlementAutoConfiguration` + `META-INF/spring.factories` / `AutoConfiguration.imports`：自动装配上述 Bean。
+
+接入方式：
+
+1. `pom.xml` 加 `knowledge-core-entitlement` 依赖（AI / wiki / file-center 已加）。
+2. 在需要门禁的接口标 `@RequireEntitlement(EntitlementCodes.xxx)`；或在业务代码注入 `EntitlementGate` 判断能力与配额。
+3. 权益权威源 `knowledge-system` 提供本地 `SystemEntitlementResolver`，并实现 `IEntitlementClient`（`/entitlement/internal/*`，`service` 角色鉴权）作为内部数据源。
+
+可配置项：`knowledge.entitlement.enabled`（默认 true）、`knowledge.entitlement.cache-ttl-seconds`（默认 60）。
+
+### 4.4 配额拦截（已落地）
+
+各执行点调用 `EntitlementGate` 做强制校验，超限抛明确错误：
+
+| 配额 | 服务 | 执行点 | 计数来源 |
+| --- | --- | --- | --- |
+| `space.count` | knowledge-wiki | `SpaceApplication.createSpace`（仅新建） | `wiki_space` 按 userId 统计 SPACE/COLLABORATION |
+| `file.maxSize` | knowledge-file-center | `UploadSessionApplication.create` | 请求 `expectedSize` |
+| `storage.bytes` | knowledge-file-center | `UploadSessionApplication.create` | `FileMapper.sumActiveSize(tenantId, userId)` |
+| `ai.tokens.daily` | knowledge-agent-skills | `RunQuota.checkCreateAllowed` | `AgentRunMapper.sumDailyTokensByUser`（当日） |
+| `ai.runs.concurrent` | knowledge-agent-skills | `RunQuota.checkCreateAllowed` | `AgentRunMapper.countActiveByUser` |
+
+- 配额 `-1` 不限、`<= 0`（未配置）跳过；免费版兜底数值写进 `EntitlementSnapshot.free()`，权益服务不可用时不会把额度降成 0 而全量拦截。
+- 内部调用鉴权：`EntitlementFeignConfiguration` 用 `Knowledge-Internal-Token` 携带服务令牌，knowledge-system 的 `EntitlementClient` 校验该头（与 wiki 的 `OrganizationMembership` 内部接口同构），不依赖被透传的用户 Authorization。
+- 管理员授予/撤销会同时失效 `IEntitlementService` 与 `EntitlementGate` 两级缓存，改动即时生效。
 
 ---
 
@@ -140,7 +174,8 @@
 
 ## 7. 验证
 
-- 后端：`mvn -o -pl knowledge-service/knowledge-system -am compile -DskipTests` → **BUILD SUCCESS**。
+- 后端共享模块 + 权威源：`mvn -o -pl knowledge-service/knowledge-system -am compile -DskipTests` → **BUILD SUCCESS**（含 `knowledge-core-entitlement`）。
+- 后端消费者：`mvn -o -pl knowledge-service/knowledge-system,knowledge-service/knowledge-agent-skills,knowledge-service/knowledge-wiki,knowledge-service/knowledge-file-center -am compile -DskipTests` → **BUILD SUCCESS**（file-center / agent-skills 另经 `clean compile` 验证）。
 - 前端：`tsc --noEmit` 检查 `packages/common` / `packages/core` / `apps/admin`。
 - 数据库：部署时经 `mvn -N -Pdb-migrate flyway:migrate` 应用 V36（需先 `flyway:info/validate`）。
 
@@ -148,6 +183,6 @@
 
 ## 8. 后续
 
-- **P1 权益落地**：跨服务 `IEntitlementClient` + 各服务门禁；AI token / 空间 / 成员 / 存储配额接入；前端 `PaywallGate` 铺到具体功能与配额进度条。
+- **P1 权益落地（进行中）**：跨服务客户端与 `space.count` / `file.maxSize` / `storage.bytes` / `ai.tokens.daily` / `ai.runs.concurrent` 已落地；**待办**：`space.members`、`plugin.installed.count`、`plugin.publish`、`export.pdf`、`collaboration.*` 等其余权益接入，以及前端 `PaywallGate` 铺到具体功能与配额进度条。
 - **P2 运营化**：兑换码、试用、到期提醒任务、admin 可视化权益配置。
 - **支付**：保留 `subscription_plan` 的价格字段与 `subscription_grant_log` 来源枚举（`REDEEM`/`TRIAL`/`PAYMENT` 预留），将来接入时不需要改模型。

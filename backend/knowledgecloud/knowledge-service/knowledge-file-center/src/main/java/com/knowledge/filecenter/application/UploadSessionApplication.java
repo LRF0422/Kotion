@@ -74,6 +74,8 @@ public class UploadSessionApplication {
     private final UploadOwnerProvider ownerProvider;
     private final UploadDestinationValidator destinationValidator;
     private final UploadSessionProperties properties;
+    private final com.knowledge.core.entitlement.EntitlementGate entitlementGate;
+    private final com.knowledge.filecenter.mapper.FileMapper fileMapper;
 
     public UploadCapabilitiesVO capabilities() {
         MultipartUploadCapabilities capabilities = validatedCapabilities();
@@ -93,6 +95,7 @@ public class UploadSessionApplication {
     public UploadSessionVO create(CreateUploadSessionRequest request) {
         UploadOwner owner = ownerProvider.currentOwner();
         validateCreateRequest(request);
+        enforceEntitlementQuota(owner, request.getExpectedSize());
         MultipartUploadCapabilities capabilities = validatedCapabilities();
         UploadDestination destination = destinationValidator.validate(owner, request.getRepositoryKey(), request.getParentId());
         String originalName = safeOriginalName(request.getOriginalName());
@@ -560,6 +563,23 @@ public class UploadSessionApplication {
         String activeProvider = validatedCapabilities().getProvider();
         if (!Objects.equals(activeProvider, session.getProvider())) {
             throw new IllegalStateException("Upload session storage provider is not active");
+        }
+    }
+
+    /** 套餐限制：单文件上限 + 拥有者存储总量。 */
+    private void enforceEntitlementQuota(UploadOwner owner, long expectedSize) {
+        long maxFile = entitlementGate.getQuota(owner.getUserId(),
+                com.knowledge.core.entitlement.constant.EntitlementCodes.FILE_MAX_SIZE);
+        if (maxFile > 0 && expectedSize > maxFile) {
+            throw new IllegalStateException("单文件大小超出当前套餐上限");
+        }
+        long storage = entitlementGate.getQuota(owner.getUserId(),
+                com.knowledge.core.entitlement.constant.EntitlementCodes.STORAGE_BYTES);
+        if (storage > 0) {
+            long used = fileMapper.sumActiveSize(owner.getTenantId(), owner.getUserId());
+            if (used + expectedSize > storage) {
+                throw new IllegalStateException("存储空间不足，请升级套餐后重试");
+            }
         }
     }
 

@@ -26,6 +26,7 @@ public enum WikiException implements BusinessExceptionAssert {
     SPACE_NOT_FOUND(2001, "空间不存在"),
     SPACE_ALREADY_EXISTS(2002, "空间已存在"),
     PERSONAL_SPACE_CREATION_FAILED(2003, "个人空间创建失败"),
+    SPACE_QUOTA_EXCEEDED(2004, "空间数量已达套餐上限，请升级套餐后重试"),
 
     // Page related (3000-3999)
     PAGE_NOT_FOUND(3001, "页面不存在"),

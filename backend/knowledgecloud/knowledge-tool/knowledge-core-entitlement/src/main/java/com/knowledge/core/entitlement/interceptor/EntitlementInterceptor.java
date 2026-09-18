@@ -1,12 +1,11 @@
-package com.knowledge.system.interceptor;
+package com.knowledge.core.entitlement.interceptor;
 
+import com.knowledge.core.entitlement.EntitlementGate;
+import com.knowledge.core.entitlement.annotation.RequireEntitlement;
 import com.knowledge.core.secure.utils.SecurityContextUtil;
 import com.knowledge.core.tool.api.ResultCode;
 import com.knowledge.core.tool.exception.BusinessException;
-import com.knowledge.system.annotation.RequireEntitlement;
-import com.knowledge.system.service.IEntitlementService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Component;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.HandlerInterceptor;
 
@@ -18,11 +17,10 @@ import javax.servlet.http.HttpServletResponse;
  *
  * @author Kotion
  */
-@Component
 @RequiredArgsConstructor
 public class EntitlementInterceptor implements HandlerInterceptor {
 
-	private final IEntitlementService entitlementService;
+	private final EntitlementGate entitlementGate;
 
 	@Override
 	public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
@@ -41,7 +39,7 @@ public class EntitlementInterceptor implements HandlerInterceptor {
 		if (userId == null) {
 			throw new BusinessException(ResultCode.UN_AUTHORIZED.getCode(), "用户未登录");
 		}
-		if (!entitlementService.hasFeature(userId, annotation.value())) {
+		if (!entitlementGate.hasFeature(userId, annotation.value())) {
 			throw new BusinessException(ResultCode.FAILURE.getCode(), annotation.message());
 		}
 		return true;

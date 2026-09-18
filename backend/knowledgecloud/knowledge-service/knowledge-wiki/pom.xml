@@ -20,6 +20,11 @@
             <version>${knowledge.tool.version}</version>
         </dependency>
         <dependency>
+            <groupId>com.knowledge</groupId>
+            <artifactId>knowledge-core-entitlement</artifactId>
+            <version>${knowledge.tool.version}</version>
+        </dependency>
+        <dependency>
             <groupId>cn.hutool</groupId>
             <artifactId>hutool-all</artifactId>
             <version>5.8.20</version>

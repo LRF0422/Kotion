@@ -2,8 +2,8 @@ package com.knowledge.system.controller;
 
 import com.knowledge.core.secure.utils.SecurityContextUtil;
 import com.knowledge.core.tool.api.R;
-import com.knowledge.system.annotation.RequireEntitlement;
-import com.knowledge.system.domain.EntitlementCodes;
+import com.knowledge.core.entitlement.annotation.RequireEntitlement;
+import com.knowledge.core.entitlement.constant.EntitlementCodes;
 import com.knowledge.system.domain.vo.PlanEntitlementsVO;
 import com.knowledge.system.domain.vo.SubscriptionCatalogVO;
 import com.knowledge.system.domain.vo.UserSubscriptionVO;
