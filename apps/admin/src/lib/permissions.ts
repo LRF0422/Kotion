@@ -20,6 +20,8 @@ export const can = (user: AuthUser | null | undefined, ...codes: string[]): bool
 export const OPS_READ_CODES = ['platform.landing.read', 'platform.dashboard.read']
 /** 运营写权限：新码优先，过渡期兼容旧码。 */
 export const OPS_MANAGE_CODES = ['platform.landing.manage', 'platform.settings.manage']
+/** 订阅运维权限：新码优先；过渡期兼容平台仪表盘读权限，保证运营账号可见。 */
+export const SUBSCRIPTION_CODES = ['platform.subscription.manage', 'platform.dashboard.read']
 
 export interface OpsPermission {
   canRead: boolean

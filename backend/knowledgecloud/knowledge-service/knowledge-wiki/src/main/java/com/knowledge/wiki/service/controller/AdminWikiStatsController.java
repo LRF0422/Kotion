@@ -59,6 +59,15 @@ public class AdminWikiStatsController {
     }
 
     /**
+     * 某用户空间数（订阅运维用量）
+     * GET /knowledge-wiki/admin/stats/user-space-count?userId=
+     */
+    @GetMapping("/user-space-count")
+    public R<Long> userSpaceCount(@RequestParam("userId") Long userId) {
+        return R.data(adminWikiStatsMapper.selectSpaceCountByUser(userId));
+    }
+
+    /**
      * TOP 空间（按有效页面数排序）
      * GET /knowledge-wiki/admin/stats/top-spaces?limit=10
      */

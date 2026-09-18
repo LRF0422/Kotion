@@ -24,6 +24,9 @@ import { formatDateTime } from '@/lib/use-paged-data'
 import {
   getAdminUserSubscriptions,
   getSubscriptionGrantLogs,
+  getUserAiTokenUsage,
+  getUserSpaceUsage,
+  getUserStorageUsage,
   grantUserSubscription,
   revokeUserSubscription,
   type AdminUserSubscription,
@@ -53,6 +56,10 @@ export const SubscriptionUsers = () => {
   const [target, setTarget] = useState<AdminUserSubscription | null>(null)
   const [grantsOpen, setGrantsOpen] = useState(false)
   const [grants, setGrants] = useState<SubscriptionGrantLog[]>([])
+  const [usageOpen, setUsageOpen] = useState(false)
+  const [usageLoading, setUsageLoading] = useState(false)
+  const [usageTarget, setUsageTarget] = useState<AdminUserSubscription | null>(null)
+  const [usage, setUsage] = useState<{ space?: number; tokens?: number; storage?: number }>({})
   const [formPlan, setFormPlan] = useState('PRO')
   const [formDays, setFormDays] = useState('30')
   const [formRemark, setFormRemark] = useState('')
@@ -126,6 +133,22 @@ export const SubscriptionUsers = () => {
     setGrantsOpen(true)
   }
 
+  const openUsage = (row: AdminUserSubscription) => {
+    setUsageTarget(row)
+    setUsage({})
+    setUsageLoading(true)
+    setUsageOpen(true)
+    Promise.all([
+      getUserSpaceUsage(row.userId).catch(() => 0),
+      getUserAiTokenUsage(row.userId).catch(() => 0),
+      getUserStorageUsage(row.userId).catch(() => 0),
+    ])
+      .then(([space, tokens, storage]) => {
+        setUsage({ space: Number(space) || 0, tokens: Number(tokens) || 0, storage: Number(storage) || 0 })
+      })
+      .finally(() => setUsageLoading(false))
+  }
+
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / size)), [total, size])
 
   return (
@@ -183,6 +206,9 @@ export const SubscriptionUsers = () => {
                 </TableCell>
                 <TableCell className="text-xs text-muted-foreground">{row.source || '-'}</TableCell>
                 <TableCell className="text-right">
+                  <Button size="sm" variant="ghost" onClick={() => openUsage(row)}>
+                    用量
+                  </Button>
                   <Button size="sm" variant="ghost" onClick={() => openGrants(row)}>
                     日志
                   </Button>
@@ -300,6 +326,55 @@ export const SubscriptionUsers = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={usageOpen} onOpenChange={setUsageOpen}>
+        <DialogContent className="md:max-w-md">
+          <DialogHeader>
+            <DialogTitle>用户用量</DialogTitle>
+            <DialogDescription>{usageTarget?.userName || usageTarget?.account || ''}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            {usageLoading ? (
+              <div className="py-6 text-center text-sm text-muted-foreground">加载中…</div>
+            ) : (
+              <div className="divide-y rounded-lg border">
+                <div className="flex items-center justify-between px-4 py-3 text-sm">
+                  <span className="text-muted-foreground">空间数量</span>
+                  <span className="font-medium">{usage.space ?? '-'}</span>
+                </div>
+                <div className="flex items-center justify-between px-4 py-3 text-sm">
+                  <span className="text-muted-foreground">今日 AI Token</span>
+                  <span className="font-medium">{formatTokens(usage.tokens)}</span>
+                </div>
+                <div className="flex items-center justify-between px-4 py-3 text-sm">
+                  <span className="text-muted-foreground">存储占用</span>
+                  <span className="font-medium">{formatBytes(usage.storage)}</span>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUsageOpen(false)}>
+              关闭
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
+}
+
+const formatBytes = (bytes?: number) => {
+  if (bytes === undefined || bytes === null) return '-'
+  if (bytes >= 1024 * 1024 * 1024) return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
+  if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+  if (bytes >= 1024) return Math.round(bytes / 1024) + ' KB'
+  return bytes + ' B'
+}
+
+const formatTokens = (value?: number) => {
+  if (value === undefined || value === null) return '-'
+  if (value >= 1000000) return (value / 1000000).toFixed(2) + 'M'
+  if (value >= 1000) return Math.round(value / 1000) + 'k'
+  return String(value)
 }

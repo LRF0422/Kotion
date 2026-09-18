@@ -70,7 +70,7 @@ import {
   Store,
 } from '@kn/icon'
 import { clearTokens, getAuthUser, type AuthUser } from '@/lib/auth'
-import { can, OPS_READ_CODES } from '@/lib/permissions'
+import { can, OPS_READ_CODES, SUBSCRIPTION_CODES } from '@/lib/permissions'
 import { logout } from '@/api'
 import { Button } from '@kn/ui'
 
@@ -111,8 +111,9 @@ const NAV_GROUPS: NavGroup[] = [
       { title: '插件举报', url: '/plugin-reports', icon: Flag, permissions: ['platform.plugins.read'] },
       { title: 'AI 配置', url: '/ai', icon: Sparkles, permissions: ['platform.ai.config.manage'] },
       { title: 'AI 用量', url: '/ai-usage', icon: Gauge, permissions: ['platform.ai.usage.read'] },
-      { title: '订阅管理', url: '/subscription', icon: Gauge, permissions: ['platform.subscription.manage'] },
-      { title: '方案与兑换码', url: '/subscription/levels', icon: Gauge, permissions: ['platform.subscription.manage'] },
+      { title: '订阅管理', url: '/subscription', icon: Gauge, permissions: SUBSCRIPTION_CODES },
+      { title: '订阅运维', url: '/subscription/ops', icon: Gauge, permissions: SUBSCRIPTION_CODES },
+      { title: '方案与兑换码', url: '/subscription/levels', icon: Gauge, permissions: SUBSCRIPTION_CODES },
     ],
   },
   {

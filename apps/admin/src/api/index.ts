@@ -698,6 +698,45 @@ export const savePlanEntitlements = (
   body: { features: Record<string, boolean>; quotas: Record<string, number> },
 ) => post<unknown>(`/knowledge-system/subscription/admin/plan/${planCode}/entitlements`, body)
 
+export interface SubscriptionOverview {
+  totalSubscriptions: number
+  paidSubscriptions: number
+  planCounts: Record<string, number>
+  expiring7: number
+  expiring30: number
+  expired: number
+  redeemCodes: number
+  redeemUsed: number
+}
+
+export const getSubscriptionOverview = () =>
+  get<SubscriptionOverview>('/knowledge-system/subscription/admin/overview')
+
+export const getExpiringSubscriptions = (days = 7, limit = 100) =>
+  get<AdminUserSubscription[]>('/knowledge-system/subscription/admin/expiring', { days, limit })
+
+export const batchGrantSubscriptions = (body: {
+  userIds: string[]
+  planCode: string
+  days?: number
+  remark?: string
+}) => post<unknown>('/knowledge-system/subscription/admin/batch-grant', body)
+
+export const batchRevokeSubscriptions = (body: { userIds: string[]; remark?: string }) =>
+  post<unknown>('/knowledge-system/subscription/admin/batch-revoke', body)
+
+export const getSubscriptionAudit = (params?: { operatorId?: string; userId?: string; limit?: number }) =>
+  get<SubscriptionGrantLog[]>('/knowledge-system/subscription/admin/audit', params)
+
+export const getUserSpaceUsage = (userId: string) =>
+  get<number>('/knowledge-wiki/admin/stats/user-space-count', { userId })
+
+export const getUserAiTokenUsage = (userId: string) =>
+  get<number>('/knowledge-agent/admin/ai/usage/user', { userId })
+
+export const getUserStorageUsage = (userId: string) =>
+  get<number>('/knowledge-file-center/file/admin/usage/storage', { userId })
+
 export const getRedeemCodes = () =>
   get<RedeemCode[]>('/knowledge-system/subscription/admin/redeem/list')
 

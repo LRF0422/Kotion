@@ -8,6 +8,9 @@ import com.knowledge.system.domain.vo.AdminUserSubscriptionVO;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
+import java.util.List;
+import java.util.Map;
+
 /**
  * 用户订阅 Mapper。
  *
@@ -36,4 +39,10 @@ public interface UserSubscriptionMapper extends BaseMapper<UserSubscription> {
 		"</script>")
 	IPage<AdminUserSubscriptionVO> selectAdminUserSubscriptions(IPage<AdminUserSubscriptionVO> page,
 		@Param("keyword") String keyword, @Param("planCode") String planCode);
+
+	/** 各方案人数（看板用）。 */
+	@InterceptorIgnore(tenantLine = "true")
+	@Select("SELECT plan_code AS planCode, COUNT(*) AS total FROM user_subscription "
+			+ "WHERE is_deleted = 0 GROUP BY plan_code")
+	List<Map<String, Object>> selectPlanCounts();
 }

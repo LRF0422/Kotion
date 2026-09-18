@@ -6,13 +6,17 @@ import com.knowledge.core.tool.api.R;
 import com.knowledge.core.tool.constant.RoleConstant;
 import com.knowledge.core.entitlement.EntitlementCacheKeys;
 import com.knowledge.system.domain.SubscriptionRedeemCode;
+import com.knowledge.system.domain.dto.SubscriptionBatchGrantDTO;
+import com.knowledge.system.domain.dto.SubscriptionBatchRevokeDTO;
 import com.knowledge.system.domain.dto.SubscriptionGrantDTO;
 import com.knowledge.system.domain.dto.SubscriptionPlanEntitlementsDTO;
 import com.knowledge.system.domain.dto.SubscriptionRevokeDTO;
 import com.knowledge.system.domain.vo.AdminUserSubscriptionVO;
 import com.knowledge.system.domain.vo.SubscriptionCatalogVO;
 import com.knowledge.system.domain.vo.SubscriptionGrantVO;
+import com.knowledge.system.domain.vo.SubscriptionOverviewVO;
 import com.knowledge.system.domain.vo.SubscriptionPlanVO;
+import com.knowledge.system.service.ISubscriptionOpsService;
 import com.knowledge.system.service.ISubscriptionPlanService;
 import com.knowledge.system.service.ISubscriptionRedeemService;
 import com.knowledge.system.service.IUserSubscriptionService;
@@ -47,6 +51,7 @@ public class AdminSubscriptionController {
 	private final IUserSubscriptionService userSubscriptionService;
 	private final ISubscriptionPlanService planService;
 	private final ISubscriptionRedeemService subscriptionRedeemService;
+	private final ISubscriptionOpsService subscriptionOpsService;
 	private final ObjectProvider<StringRedisTemplate> redisProvider;
 
 	@ApiOperation("用户订阅列表")
@@ -127,6 +132,50 @@ public class AdminSubscriptionController {
 		} catch (IllegalArgumentException e) {
 			return R.fail(e.getMessage());
 		}
+	}
+
+	@ApiOperation("订阅运营看板")
+	@GetMapping("/overview")
+	public R<SubscriptionOverviewVO> overview() {
+		return R.data(subscriptionOpsService.overview());
+	}
+
+	@ApiOperation("临期订阅列表")
+	@GetMapping("/expiring")
+	public R<List<AdminUserSubscriptionVO>> expiring(@RequestParam(value = "days", defaultValue = "7") int days,
+			@RequestParam(value = "limit", defaultValue = "100") int limit) {
+		return R.data(subscriptionOpsService.expiring(days, limit));
+	}
+
+	@ApiOperation("批量授予")
+	@PostMapping("/batch-grant")
+	public R<Void> batchGrant(@RequestBody SubscriptionBatchGrantDTO dto) {
+		try {
+			subscriptionOpsService.batchGrant(dto.getUserIds(), dto.getPlanCode(), dto.getDays(),
+					SecurityContextUtil.getUserId(), dto.getRemark());
+			return R.success("已批量授予");
+		} catch (IllegalArgumentException e) {
+			return R.fail(e.getMessage());
+		}
+	}
+
+	@ApiOperation("批量撤销")
+	@PostMapping("/batch-revoke")
+	public R<Void> batchRevoke(@RequestBody SubscriptionBatchRevokeDTO dto) {
+		try {
+			subscriptionOpsService.batchRevoke(dto.getUserIds(), dto.getRemark(), SecurityContextUtil.getUserId());
+			return R.success("已批量撤销");
+		} catch (IllegalArgumentException e) {
+			return R.fail(e.getMessage());
+		}
+	}
+
+	@ApiOperation("操作审计")
+	@GetMapping("/audit")
+	public R<List<SubscriptionGrantVO>> audit(@RequestParam(value = "operatorId", required = false) Long operatorId,
+			@RequestParam(value = "userId", required = false) Long userId,
+			@RequestParam(value = "limit", defaultValue = "100") int limit) {
+		return R.data(subscriptionOpsService.audit(operatorId, userId, limit));
 	}
 
 	/** 递增全局版本号，让所有实例的权益缓存失效。 */

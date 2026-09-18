@@ -51,6 +51,14 @@ public class FileServiceImpl extends BaseService<FileMapper, KnowledgeFile> impl
     }
 
     @Override
+    public long activeStorageBytesByUser(Long userId) {
+        if (userId == null) {
+            return 0L;
+        }
+        return baseMapper.sumActiveSizeByUser(userId);
+    }
+
+    @Override
     public KnowledgeFile createOrSaveFile(KnowledgeFile file) {
 
         if (file.getParentId() != null && !file.getParentId().equals(TOP_FOLDER_PARENT_ID)) {

@@ -117,6 +117,12 @@ public class AdminAiUsageController {
         return R.data(summary);
     }
 
+    @ApiOperation("Token usage for one user today")
+    @GetMapping("/usage/user")
+    public R<Long> usageByUserToday(@RequestParam("userId") Long userId) {
+        return R.data(runMapper.sumDailyTokensByUser(userId, startOfDayMillis(0)));
+    }
+
     // ---- model price CRUD ----
 
     @ApiOperation("List model prices")

@@ -19,6 +19,9 @@ public interface IFileService extends IBaseService<KnowledgeFile> {
     /** 当前拥有者未删除、未入回收站的文件总占用（用量展示）。 */
     long activeStorageBytes(String tenantId, Long userId);
 
+    /** 某用户全上下文存储占用（运营用量）。 */
+    long activeStorageBytesByUser(Long userId);
+
     void moveFile(Long sourceId, Long targetId);
 
     List<Tree<Long>> folderTree(String repoKey, boolean includeFile);
