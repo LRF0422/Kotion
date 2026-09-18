@@ -29,13 +29,25 @@ agent:
       user-agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     web-download:
       enabled: true
-      # HTTP request timeout in seconds
+      # HTTP read timeout in seconds
       timeout-seconds: 30
-      # Maximum file size to download (100MB)
+      # HTTP connect timeout in seconds
+      connect-timeout-seconds: 10
+      # Maximum file size to download (100MB); enforced while streaming too
       max-download-size: 104857600
       # Whether to HEAD-check URL before downloading
       head-check-enabled: true
-      # Maximum retries for transient HTTP errors (429, 5xx)
+      # Maximum retries for transient HTTP errors (429, 5xx) and network failures
       retry-count: 3
-      # Default User-Agent (rotation pool is built-in)
+      # Maximum HTTP redirects to follow (every hop is SSRF-checked)
+      max-redirects: 5
+      # Reject loopback/private/CGNAT/link-local/ULA targets (SSRF protection)
+      block-private-addresses: true
+      # Hosts that bypass the private-address block (exact, .suffix or *.suffix)
+      allowed-hosts: []
+      # Maximum stored filename length
+      max-file-name-length: 200
+      # Rotate realistic browser User-Agents between requests/attempts
+      user-agent-rotation: true
+      # Default User-Agent (used when rotation is disabled)
       user-agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"

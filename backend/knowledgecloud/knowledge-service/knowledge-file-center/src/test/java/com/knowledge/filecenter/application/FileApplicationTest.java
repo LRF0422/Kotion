@@ -15,10 +15,12 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.io.ByteArrayInputStream;
+import java.io.File;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.time.Instant;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -44,6 +46,7 @@ import com.knowledge.filecenter.entity.vo.FileContentVO;
 import com.knowledge.filecenter.entity.vo.KnowledgeFileVO;
 import com.knowledge.filecenter.service.IFileRepositoryService;
 import com.knowledge.filecenter.service.IFileService;
+import com.knowledge.filecenter.service.RemoteFileDownloadService;
 import com.knowledge.filecenter.storage.LegacyOssObjectKeyResolver;
 import com.knowledge.filecenter.upload.UploadOwner;
 import com.knowledge.filecenter.upload.UploadOwnerProvider;
@@ -69,6 +72,8 @@ class FileApplicationTest {
     private LegacyOssObjectKeyResolver ossObjectKeyResolver;
     @Mock
     private UploadOwnerProvider ownerProvider;
+    @Mock
+    private RemoteFileDownloadService remoteFileDownloadService;
     @InjectMocks
     private FileApplication application;
 
@@ -122,6 +127,26 @@ class FileApplicationTest {
 
         assertEquals("downloaded/object.pdf", result.getPath());
         assertEquals("application-record-key", result.getFileKey());
+    }
+
+    @Test
+    void downloadFromUrlStreamsThroughRemoteDownloader() throws Exception {
+        File temp = File.createTempFile("app-download-", ".pdf");
+        Files.write(temp.toPath(), new byte[] { 1, 2, 3 });
+        RemoteFileDownloadService.DownloadedFile downloaded = new RemoteFileDownloadService.DownloadedFile(
+                temp, 3L, "object.pdf", "application/pdf", "https://example.com/object.pdf");
+        when(remoteFileDownloadService.download(anyString(), any(), any())).thenReturn(downloaded);
+        when(ossProperties.getBucketName()).thenReturn("knowledge");
+        com.knowledge.core.oss.model.KnowledgeFile ossFile = ossFile("downloaded/object.pdf", null);
+        when(ossClient.putFile(anyString(), anyString(), any(MultipartFile.class))).thenReturn(ossFile);
+
+        KnowledgeFileVO result = application.downloadFromUrl("https://example.com/object.pdf", null, 0L, "repo");
+
+        assertEquals("object.pdf", result.getName());
+        assertEquals(Long.valueOf(3L), result.getSize());
+        assertEquals("downloaded/object.pdf", result.getPath());
+        assertFalse(temp.exists(), "temporary download file should be removed");
+        verify(ossClient).putFile(anyString(), anyString(), any(MultipartFile.class));
     }
 
     @Test

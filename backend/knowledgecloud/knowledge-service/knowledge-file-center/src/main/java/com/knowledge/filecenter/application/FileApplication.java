@@ -1,10 +1,14 @@
 package com.knowledge.filecenter.application;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.ByteArrayInputStream;
 import java.net.URLEncoder;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -42,6 +46,8 @@ import com.knowledge.filecenter.entity.vo.FileContentVO;
 import com.knowledge.filecenter.entity.vo.KnowledgeFileVO;
 import com.knowledge.filecenter.service.IFileRepositoryService;
 import com.knowledge.filecenter.service.IFileService;
+import com.knowledge.filecenter.service.RemoteFileDownloadService;
+import com.knowledge.filecenter.service.RemoteFileDownloadService.DownloadedFile;
 import com.knowledge.filecenter.storage.LegacyOssObjectKeyResolver;
 import com.knowledge.filecenter.upload.UploadOwner;
 import com.knowledge.filecenter.upload.UploadOwnerProvider;
@@ -94,6 +100,8 @@ public class FileApplication {
     private LegacyOssObjectKeyResolver ossObjectKeyResolver;
     @Autowired
     private UploadOwnerProvider ownerProvider;
+    @Autowired
+    private RemoteFileDownloadService remoteFileDownloadService;
 
     public void createFileRepository(KnowledgeFileRepositoryDTO dto) {
         KnowledgeFileRepository repository = KnowledgeFileRepositoryConverter.INSTANCE.convertDO(dto);
@@ -535,64 +543,41 @@ public class FileApplication {
 
     /**
      * Download file from a URL and save to a specified folder.
-     * The file is uploaded to OSS and a file record is created in the database.
+     * The payload is streamed to a temporary file (never buffered as one big
+     * byte[]), validated against the SSRF rules and the size limit, uploaded to
+     * OSS and then recorded in the file center.
      *
      * @param fileUrl       the URL of the file to download
-     * @param fileName      the name for the saved file (if null, derived from URL)
+     * @param fileName      the name for the saved file (if null, derived from
+     *                      Content-Disposition / the URL / the content type)
      * @param parentId      the parent folder ID (null for root)
      * @param repositoryKey the repository key (null for default)
      * @return the created file VO
      */
-    @SneakyThrows
     @Transactional(rollbackFor = Exception.class)
     public KnowledgeFileVO downloadFromUrl(String fileUrl, String fileName, Long parentId, String repositoryKey) {
-        if (StrUtil.isBlank(fileUrl)) {
-            throw new IllegalArgumentException("File URL cannot be empty");
+        return downloadFromUrl(fileUrl, fileName, parentId, repositoryKey, null);
+    }
+
+    /**
+     * Download file from a URL with an explicit HEAD pre-check override.
+     *
+     * @param checkFirst whether to send a HEAD request first; null uses the
+     *                   configured default
+     */
+    @SneakyThrows
+    @Transactional(rollbackFor = Exception.class)
+    public KnowledgeFileVO downloadFromUrl(String fileUrl, String fileName, Long parentId, String repositoryKey,
+            Boolean checkFirst) {
+        if (remoteFileDownloadService == null) {
+            throw new IllegalStateException("Remote file downloader is not configured");
         }
         if (ossClient == null) {
             throw new IllegalStateException("OSS client is not configured");
         }
-
-        // Derive file name from URL if not provided
-        if (StrUtil.isBlank(fileName)) {
-            String path = new URL(fileUrl).getPath();
-            fileName = path.substring(path.lastIndexOf('/') + 1);
-            if (StrUtil.isBlank(fileName)) {
-                fileName = "downloaded_file";
-            }
+        try (DownloadedFile downloaded = remoteFileDownloadService.download(fileUrl, fileName, checkFirst)) {
+            return saveDownloadedFile(downloaded, parentId, repositoryKey);
         }
-
-        // Download file from URL using Hutool HttpRequest for proper User-Agent,
-        // redirect handling, and better error messages.
-        // Plain URL.openStream() sends no User-Agent and gets blocked by many servers.
-        // Also adds Referer and Accept headers to satisfy anti-hotlink and bot detection.
-        String referer = "";
-        try {
-            URL urlObj = new URL(fileUrl);
-            referer = urlObj.getProtocol() + "://" + urlObj.getHost() + "/";
-        } catch (Exception ignored) {
-        }
-
-        byte[] fileBytes;
-        try (HttpResponse response = HttpRequest.get(fileUrl)
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                        + "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                .header("Referer", referer)
-                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
-                .header("Accept-Language", "en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7")
-                .timeout(30_000)
-                .setFollowRedirects(true)
-                .execute()) {
-
-            if (!response.isOk()) {
-                throw new RuntimeException("Failed to download file from URL: " + fileUrl
-                        + ", HTTP status: " + response.getStatus());
-            }
-
-            fileBytes = response.bodyBytes();
-        }
-
-        return saveDownloadedFile(fileBytes, fileName, parentId, repositoryKey);
     }
 
     /**
@@ -642,6 +627,45 @@ public class FileApplication {
     }
 
     /**
+     * Persist an already-downloaded temporary file to OSS and create a file
+     * record. The caller keeps ownership of {@code downloaded} and must close it.
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public KnowledgeFileVO saveDownloadedFile(DownloadedFile downloaded, Long parentId, String repositoryKey) {
+        if (downloaded == null || downloaded.getSize() <= 0) {
+            throw new IllegalArgumentException("File bytes cannot be empty");
+        }
+        if (ossClient == null) {
+            throw new IllegalStateException("OSS client is not configured");
+        }
+
+        String fileName = downloaded.getFileName();
+        String ossFileName = cn.hutool.core.lang.UUID.fastUUID().toString() + "_" + fileName;
+        MultipartFile part = new FileBackedMultipartFile("file", fileName, downloaded.getContentType(),
+                downloaded.getFile());
+        String bucketName = ossProperties != null ? ossProperties.getBucketName() : "knowledgex";
+        com.knowledge.core.oss.model.KnowledgeFile ossFile = ossClient.putFile(bucketName, ossFileName, part);
+
+        KnowledgeFile knowledgeFile = new KnowledgeFile();
+        knowledgeFile.setType(FileType.FILE);
+        knowledgeFile.setName(fileName);
+        knowledgeFile.setParentId(parentId != null ? parentId : 0L);
+        knowledgeFile.setSize(downloaded.getSize());
+        knowledgeFile.setPath(ossFile.getName());
+
+        if (StrUtil.isBlank(repositoryKey)) {
+            KnowledgeFileRepository repository = repositoryService.getDefaultFileRepo();
+            knowledgeFile.setRepositoryKey(repository.getRepoKey());
+        } else {
+            knowledgeFile.setRepositoryKey(repositoryKey);
+        }
+
+        fileService.createOrSaveFile(knowledgeFile);
+
+        return KnowledgeFileConverter.INSTANCE.convertVO(knowledgeFile);
+    }
+
+    /**
      * Search files by keyword
      */
     public List<KnowledgeFileVO> searchFiles(String keyword, String repositoryKey) {
@@ -660,4 +684,64 @@ public class FileApplication {
                 .collect(Collectors.toList());
     }
 
+
+    /**
+     * Read-only {@link MultipartFile} view over the temporary file produced by
+     * {@link RemoteFileDownloadService}. Passing the known size and content type
+     * through lets the OSS client store the object without buffering all of it
+     * in memory a second time.
+     */
+    private static final class FileBackedMultipartFile implements MultipartFile {
+        private final String name;
+        private final String originalFilename;
+        private final String contentType;
+        private final File file;
+
+        private FileBackedMultipartFile(String name, String originalFilename, String contentType, File file) {
+            this.name = name;
+            this.originalFilename = originalFilename;
+            this.contentType = contentType;
+            this.file = file;
+        }
+
+        @Override
+        public String getName() {
+            return name;
+        }
+
+        @Override
+        public String getOriginalFilename() {
+            return originalFilename;
+        }
+
+        @Override
+        public String getContentType() {
+            return contentType;
+        }
+
+        @Override
+        public boolean isEmpty() {
+            return file == null || file.length() == 0L;
+        }
+
+        @Override
+        public long getSize() {
+            return file == null ? 0L : file.length();
+        }
+
+        @Override
+        public byte[] getBytes() throws IOException {
+            return Files.readAllBytes(file.toPath());
+        }
+
+        @Override
+        public InputStream getInputStream() throws IOException {
+            return new FileInputStream(file);
+        }
+
+        @Override
+        public void transferTo(File dest) throws IOException, IllegalStateException {
+            Files.copy(file.toPath(), dest.toPath());
+        }
+    }
 }
