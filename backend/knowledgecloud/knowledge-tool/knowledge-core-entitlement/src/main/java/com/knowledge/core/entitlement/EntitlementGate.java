@@ -36,7 +36,7 @@ public class EntitlementGate {
 			return EntitlementSnapshot.free();
 		}
 		long now = System.currentTimeMillis();
-		Long version = readVersion(userId);
+		String version = readVersion(userId);
 		Cached cached = cache.get(userId);
 		if (cached != null && now - cached.at < ttlMillis
 				&& (version == null || Objects.equals(version, cached.version))) {
@@ -94,14 +94,20 @@ public class EntitlementGate {
 		cache.clear();
 	}
 
-	private Long readVersion(Long userId) {
+	/**
+	 * 组合版本号 = 全局版本 + 用户版本。任一变化都会让本地缓存失效：
+	 * 授予/撤销递增用户版本，方案权益变更递增全局版本。
+	 * Redis 不可用时返回 null，退回 TTL 过期。
+	 */
+	private String readVersion(Long userId) {
 		StringRedisTemplate redis = redisProvider == null ? null : redisProvider.getIfAvailable();
 		if (redis == null) {
 			return null;
 		}
 		try {
-			String value = redis.opsForValue().get(EntitlementCacheKeys.VERSION_PREFIX + userId);
-			return value == null ? null : Long.parseLong(value);
+			String global = redis.opsForValue().get(EntitlementCacheKeys.GLOBAL_VERSION);
+			String user = redis.opsForValue().get(EntitlementCacheKeys.VERSION_PREFIX + userId);
+			return (global == null ? "0" : global) + ":" + (user == null ? "0" : user);
 		} catch (Exception e) {
 			return null;
 		}
@@ -110,9 +116,9 @@ public class EntitlementGate {
 	private static final class Cached {
 		private final EntitlementSnapshot snapshot;
 		private final long at;
-		private final Long version;
+		private final String version;
 
-		private Cached(EntitlementSnapshot snapshot, long at, Long version) {
+		private Cached(EntitlementSnapshot snapshot, long at, String version) {
 			this.snapshot = snapshot;
 			this.at = at;
 			this.version = version;

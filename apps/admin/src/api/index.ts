@@ -645,3 +645,61 @@ export const revokeUserSubscription = (userId: string, remark?: string) =>
 
 export const getSubscriptionGrantLogs = (userId?: string, limit = 50) =>
   get<SubscriptionGrantLog[]>('/knowledge-system/subscription/admin/grants', { userId, limit })
+
+export interface EntitlementDefinition {
+  code: string
+  name: string
+  category: 'FEATURE' | 'QUOTA'
+  valueType: 'BOOLEAN' | 'NUMBER'
+  unit?: string
+  description?: string
+  sort?: number
+}
+
+export interface SubscriptionPlanVO {
+  planCode: string
+  planName: string
+  description?: string
+  tier?: number
+  monthlyPrice?: number
+  yearlyPrice?: number
+  highlight?: string
+  sort?: number
+  features: Record<string, boolean>
+  quotas: Record<string, number>
+}
+
+export interface SubscriptionCatalog {
+  entitlements: EntitlementDefinition[]
+  plans: SubscriptionPlanVO[]
+}
+
+export interface RedeemCode {
+  id?: string
+  code: string
+  planCode: string
+  days?: number
+  maxUses?: number
+  usedCount?: number
+  expiresAt?: string
+  status?: number
+  remark?: string
+  createTime?: string
+}
+
+export const getSubscriptionCatalog = () =>
+  get<SubscriptionCatalog>('/knowledge-system/subscription/admin/catalog')
+
+export const getSubscriptionPlanDetail = (planCode: string) =>
+  get<SubscriptionPlanVO>(`/knowledge-system/subscription/admin/plan/${planCode}`)
+
+export const savePlanEntitlements = (
+  planCode: string,
+  body: { features: Record<string, boolean>; quotas: Record<string, number> },
+) => post<unknown>(`/knowledge-system/subscription/admin/plan/${planCode}/entitlements`, body)
+
+export const getRedeemCodes = () =>
+  get<RedeemCode[]>('/knowledge-system/subscription/admin/redeem/list')
+
+export const createRedeemCode = (body: Partial<RedeemCode>) =>
+  post<RedeemCode>('/knowledge-system/subscription/admin/redeem/create', body)

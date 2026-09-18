@@ -14,6 +14,7 @@ import com.knowledge.system.mapper.SubscriptionPlanMapper;
 import com.knowledge.system.service.ISubscriptionPlanService;
 import lombok.AllArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
@@ -96,6 +97,56 @@ public class SubscriptionPlanServiceImpl extends ServiceImpl<SubscriptionPlanMap
 			return null;
 		}
 		return toPlanVO(plan, valuesOf(planCode));
+	}
+
+	@Override
+	@Transactional(rollbackFor = Exception.class)
+	public void saveEntitlements(String planCode, Map<String, Boolean> features, Map<String, Long> quotas) {
+		if (!StringUtils.hasText(planCode)) {
+			throw new IllegalArgumentException("planCode 不能为空");
+		}
+		if (getByCode(planCode) == null) {
+			throw new IllegalArgumentException("方案不存在：" + planCode);
+		}
+		java.util.Map<String, SubscriptionPlanEntitlement> existing = new java.util.HashMap<>();
+		for (SubscriptionPlanEntitlement value : valuesOf(planCode)) {
+			existing.put(value.getEntCode(), value);
+		}
+		if (features != null) {
+			for (Map.Entry<String, Boolean> entry : features.entrySet()) {
+				upsertEntitlement(existing, planCode, entry.getKey(), entry.getValue(), null);
+			}
+		}
+		if (quotas != null) {
+			for (Map.Entry<String, Long> entry : quotas.entrySet()) {
+				upsertEntitlement(existing, planCode, entry.getKey(), null, entry.getValue());
+			}
+		}
+	}
+
+	private void upsertEntitlement(java.util.Map<String, SubscriptionPlanEntitlement> existing,
+			String planCode, String entCode, Boolean boolValue, Long numValue) {
+		if (!StringUtils.hasText(entCode)) {
+			return;
+		}
+		SubscriptionPlanEntitlement row = existing.get(entCode);
+		if (row == null) {
+			row = new SubscriptionPlanEntitlement();
+			row.setPlanCode(planCode);
+			row.setEntCode(entCode);
+			row.setBoolValue(boolValue);
+			row.setNumValue(numValue);
+			planEntitlementMapper.insert(row);
+			existing.put(entCode, row);
+			return;
+		}
+		if (boolValue != null) {
+			row.setBoolValue(boolValue);
+		}
+		if (numValue != null) {
+			row.setNumValue(numValue);
+		}
+		planEntitlementMapper.updateById(row);
 	}
 
 	private List<SubscriptionPlanEntitlement> valuesOf(String planCode) {

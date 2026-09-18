@@ -112,6 +112,7 @@ const NAV_GROUPS: NavGroup[] = [
       { title: 'AI 配置', url: '/ai', icon: Sparkles, permissions: ['platform.ai.config.manage'] },
       { title: 'AI 用量', url: '/ai-usage', icon: Gauge, permissions: ['platform.ai.usage.read'] },
       { title: '订阅管理', url: '/subscription', icon: Gauge, permissions: ['platform.subscription.manage'] },
+      { title: '方案与兑换码', url: '/subscription/levels', icon: Gauge, permissions: ['platform.subscription.manage'] },
     ],
   },
   {

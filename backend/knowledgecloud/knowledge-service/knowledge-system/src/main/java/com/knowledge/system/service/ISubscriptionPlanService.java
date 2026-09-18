@@ -28,4 +28,7 @@ public interface ISubscriptionPlanService extends IService<SubscriptionPlan> {
 
 	/** 某方案的详情视图（含权益）。 */
 	SubscriptionPlanVO getPlanDetail(String planCode);
+
+	/** 管理端保存方案的权益取值（features / quotas）。 */
+	void saveEntitlements(String planCode, Map<String, Boolean> features, Map<String, Long> quotas);
 }

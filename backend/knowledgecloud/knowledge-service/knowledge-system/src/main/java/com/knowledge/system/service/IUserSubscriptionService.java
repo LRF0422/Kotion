@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.knowledge.system.domain.UserSubscription;
 import com.knowledge.system.domain.dto.SubscriptionGrantDTO;
+import com.knowledge.system.domain.enums.SubscriptionSource;
 import com.knowledge.system.domain.vo.AdminUserSubscriptionVO;
 import com.knowledge.system.domain.vo.SubscriptionGrantVO;
 import com.knowledge.system.domain.vo.UserSubscriptionVO;
@@ -22,6 +23,12 @@ public interface IUserSubscriptionService extends IService<UserSubscription> {
 
 	/** 管理端授予/调整方案。 */
 	void grant(SubscriptionGrantDTO dto, Long operatorId);
+
+	/** 按来源授予/调整（管理员、兑换码、试用共用）。 */
+	void grant(Long userId, String planCode, Integer days, SubscriptionSource source, Long operatorId, String remark);
+
+	/** 开通试用（每用户仅一次）；返回是否成功。 */
+	boolean startTrial(Long userId, int days);
 
 	/** 管理端撤销，降回免费版。 */
 	void revoke(Long userId, String remark, Long operatorId);

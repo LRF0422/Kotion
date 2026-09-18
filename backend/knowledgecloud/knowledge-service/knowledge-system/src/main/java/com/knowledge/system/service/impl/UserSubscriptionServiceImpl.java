@@ -89,33 +89,62 @@ public class UserSubscriptionServiceImpl extends ServiceImpl<UserSubscriptionMap
 		if (dto == null || dto.getUserId() == null) {
 			throw new IllegalArgumentException("userId 不能为空");
 		}
-		SubscriptionPlan plan = planService.getByCode(dto.getPlanCode());
+		grant(dto.getUserId(), dto.getPlanCode(), dto.getDays(), SubscriptionSource.ADMIN, operatorId, dto.getRemark());
+	}
+
+	@Override
+	@Transactional(rollbackFor = Exception.class)
+	public void grant(Long userId, String planCode, Integer days, SubscriptionSource source, Long operatorId, String remark) {
+		if (userId == null) {
+			throw new IllegalArgumentException("userId 不能为空");
+		}
+		SubscriptionPlan plan = planService.getByCode(planCode);
 		if (plan == null) {
-			throw new IllegalArgumentException("方案不存在：" + dto.getPlanCode());
+			throw new IllegalArgumentException("方案不存在：" + planCode);
 		}
 		PlanCode code = PlanCode.fromCode(plan.getPlanCode());
 		LocalDateTime now = LocalDateTime.now();
-		LocalDateTime end = dto.getDays() != null && dto.getDays() > 0 ? now.plusDays(dto.getDays()) : null;
+		LocalDateTime end = days != null && days > 0 ? now.plusDays(days) : null;
 
-		UserSubscription subscription = findRow(dto.getUserId());
+		UserSubscription subscription = findRow(userId);
 		PlanCode from = effectiveCode(subscription);
 		if (subscription == null) {
 			subscription = new UserSubscription();
-			subscription.setUserId(dto.getUserId());
+			subscription.setUserId(userId);
 		}
 		subscription.setPlanCode(code.getCode());
 		subscription.setStatus(SubscriptionStatus.ACTIVE.getCode());
 		subscription.setStartTime(now);
 		subscription.setEndTime(end);
-		subscription.setSource(SubscriptionSource.ADMIN.getCode());
+		subscription.setSource(source.getCode());
 		subscription.setOperatorId(operatorId);
-		subscription.setRemark(dto.getRemark());
+		subscription.setRemark(remark);
 		saveOrUpdate(subscription);
 
-		writeLog(dto.getUserId(), from, code, SubscriptionSource.ADMIN, operatorId, now, end, dto.getRemark());
-		entitlementService.evict(dto.getUserId());
-		evictGate(dto.getUserId());
-		bumpVersion(dto.getUserId());
+		writeLog(userId, from, code, source, operatorId, now, end, remark);
+		entitlementService.evict(userId);
+		evictGate(userId);
+		bumpVersion(userId);
+	}
+
+	@Override
+	@Transactional(rollbackFor = Exception.class)
+	public boolean startTrial(Long userId, int days) {
+		if (userId == null || days <= 0) {
+			return false;
+		}
+		Long existingTrials = grantLogMapper.selectCount(new LambdaQueryWrapper<SubscriptionGrantLog>()
+				.eq(SubscriptionGrantLog::getUserId, userId)
+				.eq(SubscriptionGrantLog::getSource, SubscriptionSource.TRIAL.getCode()));
+		if (existingTrials != null && existingTrials > 0) {
+			return false;
+		}
+		SubscriptionPlan pro = planService.getByCode(PlanCode.PRO.getCode());
+		if (pro == null) {
+			throw new IllegalArgumentException("专业版方案未配置");
+		}
+		grant(userId, PlanCode.PRO.getCode(), days, SubscriptionSource.TRIAL, null, "试用 " + days + " 天");
+		return true;
 	}
 
 	@Override

@@ -35,6 +35,28 @@ export function setRequestToast(toastError: ToastFn) {
     _toastError = toastError
 }
 
+// ---------------------------------------------------------------------------
+// Entitlement-required handler (injected by the app to open the upgrade prompt)
+// ---------------------------------------------------------------------------
+
+/** 与后端 EntitlementErrorCodes 保持一致。 */
+export const ENTITLEMENT_ERROR_CODES = [40301, 40302] as const
+
+type EntitlementHandler = (payload: { code: number; message: string }) => void
+
+let _entitlementRequiredHandler: EntitlementHandler | null = null
+
+/** Call once at app startup to wire up the upgrade prompt. */
+export function setEntitlementRequiredHandler(handler: EntitlementHandler | null) {
+    _entitlementRequiredHandler = handler
+}
+
+/** 判断一个请求错误是否由权益/额度触发。 */
+export function isEntitlementError(error: unknown): boolean {
+    const code = (error as { code?: number } | undefined)?.code
+    return typeof code === 'number' && (ENTITLEMENT_ERROR_CODES as readonly number[]).includes(code)
+}
+
 const isSensitiveResponse = (url?: string): boolean =>
     !!url && (
         /\/file\/upload-sessions\/[^/]+\/parts\/sign(?:\?|$)/.test(url)
@@ -119,7 +141,16 @@ axiosInstance.interceptors.response.use(
             if (!res.config.silent) {
                 _toastError(msg, { position: 'top-center' })
             }
-            return Promise.reject(new Error(msg))
+            if ((ENTITLEMENT_ERROR_CODES as readonly number[]).includes(code)) {
+                try {
+                    _entitlementRequiredHandler?.({ code, message: msg })
+                } catch {
+                    // an upgrade prompt must never mask the original rejection
+                }
+            }
+            const error = new Error(msg) as Error & { code?: number }
+            error.code = code
+            return Promise.reject(error)
         }
 
         return res.data

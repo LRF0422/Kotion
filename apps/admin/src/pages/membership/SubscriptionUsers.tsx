@@ -23,9 +23,11 @@ import { TablePagination } from '@/components/TablePagination'
 import { formatDateTime } from '@/lib/use-paged-data'
 import {
   getAdminUserSubscriptions,
+  getSubscriptionGrantLogs,
   grantUserSubscription,
   revokeUserSubscription,
   type AdminUserSubscription,
+  type SubscriptionGrantLog,
 } from '@/api'
 
 const PLAN_OPTIONS = [
@@ -49,6 +51,8 @@ export const SubscriptionUsers = () => {
   const [planFilter, setPlanFilter] = useState('')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [target, setTarget] = useState<AdminUserSubscription | null>(null)
+  const [grantsOpen, setGrantsOpen] = useState(false)
+  const [grants, setGrants] = useState<SubscriptionGrantLog[]>([])
   const [formPlan, setFormPlan] = useState('PRO')
   const [formDays, setFormDays] = useState('30')
   const [formRemark, setFormRemark] = useState('')
@@ -114,6 +118,14 @@ export const SubscriptionUsers = () => {
     }
   }
 
+  const openGrants = (row: AdminUserSubscription) => {
+    setTarget(row)
+    getSubscriptionGrantLogs(row.userId)
+      .then((logs) => setGrants(logs))
+      .catch(() => setGrants([]))
+    setGrantsOpen(true)
+  }
+
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / size)), [total, size])
 
   return (
@@ -171,7 +183,10 @@ export const SubscriptionUsers = () => {
                 </TableCell>
                 <TableCell className="text-xs text-muted-foreground">{row.source || '-'}</TableCell>
                 <TableCell className="text-right">
-                  <Button size="sm" variant="outline" onClick={() => openGrant(row)}>
+                  <Button size="sm" variant="ghost" onClick={() => openGrants(row)}>
+                    日志
+                  </Button>
+                  <Button size="sm" variant="outline" className="ml-2" onClick={() => openGrant(row)}>
                     调整
                   </Button>
                   <Button
@@ -230,6 +245,57 @@ export const SubscriptionUsers = () => {
             </Button>
             <Button onClick={submitGrant} disabled={saving}>
               保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={grantsOpen} onOpenChange={setGrantsOpen}>
+        <DialogContent className="md:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>授予日志</DialogTitle>
+            <DialogDescription>{target?.userName || target?.account || ''}</DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[420px] overflow-auto rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>时间</TableHead>
+                  <TableHead>变更</TableHead>
+                  <TableHead>来源</TableHead>
+                  <TableHead>到期</TableHead>
+                  <TableHead>备注</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {grants.map((log) => (
+                  <TableRow key={log.id}>
+                    <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                      {log.createTime ? formatDateTime(log.createTime) : '-'}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {log.fromPlan || '-'} → {log.toPlan || '-'}
+                    </TableCell>
+                    <TableCell className="text-xs">{log.source || '-'}</TableCell>
+                    <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                      {log.endTime ? formatDateTime(log.endTime) : '永久'}
+                    </TableCell>
+                    <TableCell className="max-w-[220px] truncate text-xs text-muted-foreground">{log.remark || '-'}</TableCell>
+                  </TableRow>
+                ))}
+                {grants.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
+                      暂无日志
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+              </TableBody>
+            </Table>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setGrantsOpen(false)}>
+              关闭
             </Button>
           </DialogFooter>
         </DialogContent>

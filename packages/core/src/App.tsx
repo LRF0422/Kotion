@@ -17,7 +17,7 @@ import { Marketplace } from "./components/Shop/Marketplace";
 
 import { resources } from "./locales/resources"
 import { merge } from "lodash";
-import { clearContextSensitiveClientState, normalizeTokenResponse, notifyContextChanged, setRequestToast, setSessionExpiredHandler, resetSessionExpiredGuard, subscribeToContextChanges, useAsyncEffect, useSafeState, useTranslation, useApi, useUploadFile, APIS, saveTokens } from "@kn/common"
+import { clearContextSensitiveClientState, normalizeTokenResponse, notifyContextChanged, setRequestToast, setSessionExpiredHandler, resetSessionExpiredGuard, setEntitlementRequiredHandler, subscribeToContextChanges, useAsyncEffect, useSafeState, useTranslation, useApi, useUploadFile, APIS, saveTokens } from "@kn/common"
 import { registerCoreToolFactories } from "./ai/tools/register"
 import { registerOffscreenEditorBridge, setMaxOffscreenSessions } from "./ai/offscreen"
 import { registerAgentDocumentBridge } from "./ai/agentdoc"
@@ -208,6 +208,31 @@ const SessionExpiredDialog: React.FC<{ onSuccess: () => void; onStay: () => void
     )
 }
 
+function showEntitlementRequiredDialog(message: string) {
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    const close = () => {
+        setTimeout(() => {
+            root.unmount()
+            container.remove()
+        }, 200)
+    }
+    root.render(
+        <AlertDialog open onOpenChange={(v) => { if (!v) close() }}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>需要升级方案</AlertDialogTitle>
+                    <AlertDialogDescription>{message}</AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogAction onClick={close}>知道了</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+    )
+}
+
 function showSessionExpiredDialog() {
     const container = document.createElement('div')
     document.body.appendChild(container)
@@ -312,6 +337,7 @@ export const App: React.FC<AppProps> = (props) => {
     // Wire up session-expired dialog — shows a prompt instead of silently
     // redirecting to /login when the token expires
     setSessionExpiredHandler(showSessionExpiredDialog)
+    setEntitlementRequiredHandler(({ message }) => showEntitlementRequiredDialog(message))
 
     // Listen for plugin events to update routes
     useEffect(() => {

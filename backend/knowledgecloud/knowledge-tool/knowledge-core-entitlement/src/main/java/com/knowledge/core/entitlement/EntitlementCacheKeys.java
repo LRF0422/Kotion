@@ -14,4 +14,7 @@ public final class EntitlementCacheKeys {
 	}
 
 	public static final String VERSION_PREFIX = "knowledge:entitlement:version:";
+
+	/** 全局版本号：方案权益配置变更时递增，使所有用户的缓存失效。 */
+	public static final String GLOBAL_VERSION = "knowledge:entitlement:version:global";
 }

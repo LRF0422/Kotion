@@ -4,18 +4,26 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.knowledge.core.secure.utils.SecurityContextUtil;
 import com.knowledge.core.tool.api.R;
 import com.knowledge.core.tool.constant.RoleConstant;
+import com.knowledge.core.entitlement.EntitlementCacheKeys;
+import com.knowledge.system.domain.SubscriptionRedeemCode;
 import com.knowledge.system.domain.dto.SubscriptionGrantDTO;
+import com.knowledge.system.domain.dto.SubscriptionPlanEntitlementsDTO;
 import com.knowledge.system.domain.dto.SubscriptionRevokeDTO;
 import com.knowledge.system.domain.vo.AdminUserSubscriptionVO;
 import com.knowledge.system.domain.vo.SubscriptionCatalogVO;
 import com.knowledge.system.domain.vo.SubscriptionGrantVO;
+import com.knowledge.system.domain.vo.SubscriptionPlanVO;
 import com.knowledge.system.service.ISubscriptionPlanService;
+import com.knowledge.system.service.ISubscriptionRedeemService;
 import com.knowledge.system.service.IUserSubscriptionService;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import lombok.AllArgsConstructor;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -38,6 +46,8 @@ public class AdminSubscriptionController {
 
 	private final IUserSubscriptionService userSubscriptionService;
 	private final ISubscriptionPlanService planService;
+	private final ISubscriptionRedeemService subscriptionRedeemService;
+	private final ObjectProvider<StringRedisTemplate> redisProvider;
 
 	@ApiOperation("用户订阅列表")
 	@GetMapping("/users")
@@ -81,5 +91,54 @@ public class AdminSubscriptionController {
 	@GetMapping("/catalog")
 	public R<SubscriptionCatalogVO> catalog() {
 		return R.data(planService.getCatalog());
+	}
+
+	@ApiOperation("方案详情（含权益）")
+	@GetMapping("/plan/{planCode}")
+	public R<SubscriptionPlanVO> planDetail(@PathVariable("planCode") String planCode) {
+		SubscriptionPlanVO detail = planService.getPlanDetail(planCode);
+		return detail == null ? R.fail("方案不存在：" + planCode) : R.data(detail);
+	}
+
+	@ApiOperation("保存方案权益")
+	@PostMapping("/plan/{planCode}/entitlements")
+	public R<Void> savePlanEntitlements(@PathVariable("planCode") String planCode,
+			@RequestBody SubscriptionPlanEntitlementsDTO dto) {
+		try {
+			planService.saveEntitlements(planCode, dto.getFeatures(), dto.getQuotas());
+			bumpGlobalVersion();
+			return R.success("已保存方案权益");
+		} catch (IllegalArgumentException e) {
+			return R.fail(e.getMessage());
+		}
+	}
+
+	@ApiOperation("兑换码列表")
+	@GetMapping("/redeem/list")
+	public R<List<SubscriptionRedeemCode>> redeemList() {
+		return R.data(subscriptionRedeemService.list());
+	}
+
+	@ApiOperation("创建兑换码")
+	@PostMapping("/redeem/create")
+	public R<SubscriptionRedeemCode> createRedeem(@RequestBody SubscriptionRedeemCode input) {
+		try {
+			return R.data(subscriptionRedeemService.create(input, SecurityContextUtil.getUserId()));
+		} catch (IllegalArgumentException e) {
+			return R.fail(e.getMessage());
+		}
+	}
+
+	/** 递增全局版本号，让所有实例的权益缓存失效。 */
+	private void bumpGlobalVersion() {
+		StringRedisTemplate redis = redisProvider == null ? null : redisProvider.getIfAvailable();
+		if (redis == null) {
+			return;
+		}
+		try {
+			redis.opsForValue().increment(EntitlementCacheKeys.GLOBAL_VERSION);
+		} catch (Exception ignored) {
+			// best-effort invalidation; TTL still bounds staleness
+		}
 	}
 }

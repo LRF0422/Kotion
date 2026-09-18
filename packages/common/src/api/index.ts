@@ -74,6 +74,16 @@ export const APIS = {
         url: '/knowledge-system/subscription/me/check',
         method: 'GET'
     } as API<boolean, { code: string }>,
+    /** 使用兑换码 */
+    POST_SUBSCRIPTION_REDEEM: {
+        url: '/knowledge-system/subscription/redeem',
+        method: 'POST'
+    } as API<UserSubscriptionInfo, undefined, { code: string }>,
+    /** 开通试用 */
+    POST_SUBSCRIPTION_TRIAL: {
+        url: '/knowledge-system/subscription/trial',
+        method: 'POST'
+    } as API<boolean, { days?: number }>,
     GET_CONTEXTS: {
         url: '/knowledge-system/api/v1/me/contexts',
         method: 'GET'
