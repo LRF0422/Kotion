@@ -77,6 +77,11 @@ export const ai = new AiPlugin({
                     "imageGenerationFailed": "Image generation failed",
                     "imageGenerationError": "Image generation error",
                     "selectTextFirst": "Select text first",
+                    "agentSelector": {
+                        "label": "Select agent",
+                        "default": "Default agent",
+                        "emptyHint": "Create one in Settings → Custom Agents"
+                    },
                     "chat": {
                         "trackingHint": "Track document changes; review and merge them in the editor",
                         "trackingOn": "Tracking",
@@ -184,6 +189,11 @@ export const ai = new AiPlugin({
                     "imageGenerationFailed": "图片生成失败",
                     "imageGenerationError": "图片生成错误",
                     "selectTextFirst": "请先选择文本",
+                    "agentSelector": {
+                        "label": "选择 Agent",
+                        "default": "默认 Agent",
+                        "emptyHint": "在「设置 → 自定义 Agent」中创建"
+                    },
                     "chat": {
                         "trackingHint": "跟踪文档变动，可在编辑器中审阅并合并",
                         "trackingOn": "跟踪中",

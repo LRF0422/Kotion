@@ -321,8 +321,10 @@ agent/
 5. **present_plan 仅在 mode=plan 时拦截**；execute 模式下它作为普通后端工具返回。
 6. **run 增加 space_id/page_id 列**（编辑器作用域，记忆分级用）；JWT token 只存 Redis 热状态，
    checkpoint 以 `@JsonIgnore` 排除，不落 MySQL。
-7. 管理端用量聚合改读 agent_run（agent_usage_record 表废弃）；custom agent 定义（agent_definition）整体移除，
-   自定义 agent 能力由 skills 系统承接。
+7. 管理端用量聚合改读 agent_run（agent_usage_record 表废弃）。后端 custom agent 定义（agent_definition）整体移除，
+   带工具的自定义能力由 skills 系统承接；**前端新增轻量自定义 Agent**：用户可以起名并写自定义指引（不含工具），
+   定义与当前选择存放在 plugin-config（key `ai-custom-agents`，服务端优先 + localStorage 回退），
+   run 创建时通过 `systemPrompt` 追加在编辑器规则之后（`packages/common/src/ai/agent/custom-agents.ts`）。
 8. 上下文压缩三层全部启用（ContextManager）：L1 淘汰旧工具结果、L2 用 `context.compaction-model`
    （缺省跟随 run 模型）对中段做有界摘要、L3 对齐 tool 分组后截断。
 

@@ -13,6 +13,7 @@ import {
     UserCog,
     Puzzle,
     Zap,
+    Bot,
     Compass,
     ChevronLeft,
 } from "@kn/icon";
@@ -31,6 +32,7 @@ import { MyAccount } from "./components/MyAccount";
 import { MySetting } from "./components/MySetting";
 import { Member } from "./components/Member";
 import { SkillManager } from "../Skills";
+import { AgentManager } from "../Agents";
 
 interface PluginSettingsWithMeta extends PluginSettingsConfig {
     pluginName: string;
@@ -103,6 +105,7 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                     { id: "MyAccount", label: t("settings.nav.myAccount"), icon: <UserCircle />, contentKey: "MyAccount" },
                     { id: "MySetting", label: t("settings.nav.preferences"), icon: <Settings />, contentKey: "MySetting" },
                     { id: "MySkills", label: t("settings.nav.skills"), icon: <Zap />, contentKey: "MySkills" },
+                    { id: "MyAgents", label: t("settings.nav.agents"), icon: <Bot />, contentKey: "MyAgents" },
                 ],
             },
             {
@@ -146,6 +149,8 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                 return { title: t("settings.members.title"), description: t("settings.members.desc") };
             case "MySkills":
                 return { title: t("settings.skills.title"), description: t("settings.skills.desc") };
+            case "MyAgents":
+                return { title: t("settings.agents.title"), description: t("settings.agents.desc") };
             default:
                 return { title: t("settings.title"), description: "" };
         }
@@ -170,6 +175,8 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                 return <Member />;
             case "MySkills":
                 return <SkillManager />;
+            case "MyAgents":
+                return <AgentManager />;
             case "MyAccount":
             default:
                 return <MyAccount />;

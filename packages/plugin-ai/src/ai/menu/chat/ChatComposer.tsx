@@ -18,6 +18,7 @@ import type { ChatMode, ChatModelParams } from '@kn/common'
 import { useTranslation } from '@kn/common'
 
 import { ModelSelector } from '../../components/ModelSelector'
+import { AgentSelector } from '../../components/AgentSelector'
 import type { ChatTargetPage } from '../chat-sessions'
 import { PageMentionPicker, TargetPageStatus } from './PageMentionPicker'
 
@@ -289,6 +290,7 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
                 on. */}
             <div className="flex flex-wrap items-center gap-1 px-2 pb-1.5 pt-0.5">
                 <ModeToggle mode={mode} onModeChange={onModeChange} disabled={isLoading} />
+                <AgentSelector disabled={isLoading} triggerClassName="hover:bg-muted/60" />
                 <button
                     type="button"
                     disabled={isLoading || visionBlocked}

@@ -43,9 +43,12 @@ import {
     cacheHitRate,
     useTranslation,
     EDITOR_AGENT_PROMPT,
+    composeAgentSystemPrompt,
+    useCustomAgents,
 } from '@kn/common'
 import { SubAgentTree, buildSubAgentTreeLabels } from './SubAgentTree'
 import { PlanApprovalCard } from './PlanApprovalCard'
+import { AgentPicker } from '../../components/Agents/AgentPicker'
 
 // ============ Types ============
 
@@ -180,12 +183,17 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
     const { tools: toolSpecs, skills } = useMemo(() => buildAgentRunInputs(catalog), [catalog])
     const currentPage = getPageNavigationBridge()?.getCurrentPage()
 
+    // Custom agent selected for this panel. Its guidance is appended to the
+    // editor rules for every run it starts.
+    const { selectedAgent } = useCustomAgents()
+
     const agent = useEditorAgent({
         conversationId,
         tools: toolSpecs,
         skills,
-        // Editor rules the backend cannot import; appended to its base prompt.
-        systemPrompt: EDITOR_AGENT_PROMPT,
+        // Editor rules the backend cannot import; appended to its base prompt,
+        // followed by the selected custom agent's guidance when there is one.
+        systemPrompt: composeAgentSystemPrompt(EDITOR_AGENT_PROMPT, selectedAgent),
         resolveTools,
         // Mutating calls take the document's write lease (no per-agent editor
         // target in this panel, so all agents share the conversation document).
@@ -305,6 +313,7 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
                         </div>
                     </div>
                     <div className="flex items-center gap-1">
+                        <AgentPicker disabled={agent.state.phase !== 'idle'} />
                         <Button
                             variant="ghost"
                             size="icon"

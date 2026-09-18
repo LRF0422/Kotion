@@ -56,6 +56,25 @@ export type {
     ToolCallRecord,
     UseEditorAgentOptions,
 } from './use-editor-agent'
+export {
+    CUSTOM_AGENTS_PLUGIN_KEY,
+    MAX_CUSTOM_AGENTS,
+    MAX_AGENT_NAME_LENGTH,
+    MAX_AGENT_DESCRIPTION_LENGTH,
+    MAX_AGENT_INSTRUCTIONS_LENGTH,
+    createCustomAgentId,
+    normalizeCustomAgents,
+    normalizeSelectedAgentId,
+    findCustomAgent,
+    composeAgentSystemPrompt,
+    useSelectedCustomAgentId,
+    useCustomAgents,
+} from './custom-agents'
+export type {
+    CustomAgent,
+    CustomAgentsConfig,
+    UseCustomAgentsResult,
+} from './custom-agents'
 export { TERMINAL_EVENT_TYPES, parseToolArgs, cacheHitRate } from './types'
 export type {
     AgentChatMessage,

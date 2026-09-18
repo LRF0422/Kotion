@@ -23,6 +23,8 @@ import {
     useTranslation,
     DOCK_PANEL_RUNNING,
     EDITOR_AGENT_PROMPT,
+    composeAgentSystemPrompt,
+    useCustomAgents,
     fileToAgentImage,
     buildImageContentParts,
     toImageDataUrl,
@@ -534,12 +536,20 @@ export const ExpandableChatDemo: React.FC<{
         }
     }, [liveCurrentPageId, acquireOwnerTarget])
 
+    // Custom agent selected for this chat. Its guidance is appended to the
+    // editor rules for every run it starts.
+    const { selectedAgent } = useCustomAgents()
+
     const agent = useEditorAgent({
         conversationId: activeSessionId,
         tools: isAskMode ? [] : toolSpecs,
         skills: isAskMode ? [] : skills,
         // Editor rules the backend cannot import; appended to its base prompt.
-        systemPrompt: isAskMode ? undefined : EDITOR_AGENT_PROMPT,
+        // A selected custom agent's guidance rides behind them.
+        systemPrompt: composeAgentSystemPrompt(
+            isAskMode ? undefined : EDITOR_AGENT_PROMPT,
+            selectedAgent,
+        ),
         resolveTools,
         // Mutating calls are serialized per document (write lease), and a
         // delegated child resolves its tools against its own editor.
