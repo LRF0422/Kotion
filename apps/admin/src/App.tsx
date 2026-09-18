@@ -14,6 +14,7 @@ import { LogList } from './pages/audit/LogList'
 import { SystemSettings } from './pages/settings/SystemSettings'
 import { SubscriptionUsers } from './pages/membership/SubscriptionUsers'
 import { MembershipLevels } from './pages/membership/MembershipLevels'
+import { SubscriptionOps } from './pages/membership/SubscriptionOps'
 // 运营模块
 import { OpsHome } from './pages/ops/OpsHome'
 import { OpsDashboard } from './pages/ops/OpsDashboard'
@@ -88,6 +89,7 @@ export const App = () => {
             <Route path="logs" element={<LogList />} />
             <Route path="settings" element={<SystemSettings />} />
             <Route path="subscription" element={<SubscriptionUsers />} />
+            <Route path="subscription/ops" element={<SubscriptionOps />} />
             <Route path="subscription/levels" element={<MembershipLevels />} />
 
             {/* 运营 · 洞察 */}

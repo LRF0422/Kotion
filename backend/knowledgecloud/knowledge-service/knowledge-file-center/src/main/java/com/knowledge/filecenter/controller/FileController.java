@@ -5,6 +5,7 @@ import java.util.List;
 import javax.validation.Valid;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -66,6 +67,15 @@ public class FileController {
         return R.data(fileService.activeStorageBytes(
                 com.knowledge.core.secure.utils.SecurityContextUtil.getTenantId(),
                 com.knowledge.core.secure.utils.SecurityContextUtil.getUserId()));
+    }
+
+    @GetMapping("/file/admin/usage/storage")
+    @PreAuthorize("(hasRole('platform.dashboard.read') or "
+            + com.knowledge.core.tool.constant.RoleConstant.HAS_ROLE_ADMIN
+            + ") and principal.clientId == 'kotion-platform-admin'")
+    @ApiOperation("Storage usage for one user in bytes")
+    public R<Long> adminStorageUsage(@RequestParam("userId") Long userId) {
+        return R.data(fileService.activeStorageBytesByUser(userId));
     }
 
     @PostMapping("/file/upload-sessions")

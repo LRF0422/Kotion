@@ -48,6 +48,13 @@ public interface AdminWikiStatsMapper {
     List<TopSpaceVO> selectTopSpaces(@Param("limit") Integer limit);
 
     /**
+     * 某用户自建团队/协作空间数（订阅运维用量）
+     */
+    @Select("SELECT COUNT(*) FROM wiki_space WHERE user_id = #{userId} AND is_deleted = 0 "
+        + "AND type IN ('SPACE','COLLABORATION')")
+    long selectSpaceCountByUser(@Param("userId") Long userId);
+
+    /**
      * 空间总数
      */
     @Select("SELECT COUNT(*) FROM wiki_space WHERE is_deleted = 0")
