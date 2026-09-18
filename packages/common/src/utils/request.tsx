@@ -1,5 +1,13 @@
 import axios from 'axios'
 import { getAccessToken } from './auth'
+
+// Allow callers to opt out of the global error toast for expected failures
+// (e.g. probing a plugin config that has never been saved yet).
+declare module 'axios' {
+    interface AxiosRequestConfig {
+        silent?: boolean
+    }
+}
 import { applyBearerAuthorization, shouldHandleUnauthorized } from './request-auth'
 import {
     API_BASE_URL,
@@ -108,7 +116,9 @@ axiosInstance.interceptors.response.use(
         }
 
         if (code !== 200) {
-            _toastError(msg, { position: 'top-center' })
+            if (!res.config.silent) {
+                _toastError(msg, { position: 'top-center' })
+            }
             return Promise.reject(new Error(msg))
         }
 
@@ -147,10 +157,12 @@ axiosInstance.interceptors.response.use(
         const rawMessage: string = error.message ?? ''
         const friendlyMessage = normalizeErrorMessage(rawMessage)
 
-        if (response?.data?.msg) {
-            _toastError(response.data.msg, { position: 'top-right', duration: 2000 })
-        } else if (friendlyMessage !== rawMessage) {
-            _toastError(friendlyMessage, { position: 'top-right', duration: 2000 })
+        if (!config?.silent) {
+            if (response?.data?.msg) {
+                _toastError(response.data.msg, { position: 'top-right', duration: 2000 })
+            } else if (friendlyMessage !== rawMessage) {
+                _toastError(friendlyMessage, { position: 'top-right', duration: 2000 })
+            }
         }
 
         return Promise.reject(error)

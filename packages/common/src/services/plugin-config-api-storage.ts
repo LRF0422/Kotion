@@ -32,7 +32,9 @@ export function safeLocalCopy(config: PluginConfigData): PluginConfigData {
 export class ApiPluginConfigStorage implements PluginConfigStorageAdapter {
     async load(pluginKey: string): Promise<PluginConfigData | null> {
         try {
-            const res = await useApi(APIS.GET_PLUGIN_CONFIG, { pluginKey })
+            // A missing config is the normal first-use state, not an error:
+            // keep the 404 out of the global toast.
+            const res = await useApi(APIS.GET_PLUGIN_CONFIG, { pluginKey }, undefined, undefined, true)
             return (res as any)?.data?.config ?? null
         } catch (error) {
             logger.warn('ApiPluginConfigStorage.load failed:', error)
@@ -42,7 +44,8 @@ export class ApiPluginConfigStorage implements PluginConfigStorageAdapter {
 
     async loadAll(): Promise<Record<string, PluginConfigData>> {
         try {
-            const res = await useApi(APIS.GET_ALL_PLUGIN_CONFIGS)
+            // An empty config set is the normal first-use state: never toast it.
+            const res = await useApi(APIS.GET_ALL_PLUGIN_CONFIGS, undefined, undefined, undefined, true)
             const list: PluginConfigEntry[] = (res as any)?.data ?? []
             const result: Record<string, PluginConfigData> = {}
             for (const entry of list) {

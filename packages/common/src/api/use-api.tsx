@@ -32,7 +32,13 @@ const queryParamsOnly = (url: string, param: any): Record<string, unknown> | und
 }
 
 // Handle HTTP request — desktop and web both talk to the cloud API directly.
-const handleHttpRequest = (api: API, param?: any, body?: any, header?: Record<string, string>) => {
+const handleHttpRequest = (
+    api: API,
+    param?: any,
+    body?: any,
+    header?: Record<string, string>,
+    silent?: boolean,
+) => {
     switch (api.method) {
         case "POST": {
             if (api.encoding === 'form') {
@@ -49,6 +55,7 @@ const handleHttpRequest = (api: API, param?: any, body?: any, header?: Record<st
                     url: fillPathParam(api.url, param),
                     method: 'POST',
                     data: form,
+                    silent,
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
                         ...(header || {})
@@ -60,6 +67,7 @@ const handleHttpRequest = (api: API, param?: any, body?: any, header?: Record<st
                 method: 'POST',
                 data: body,
                 params: queryParamsOnly(api.url, param),
+                silent,
                 headers: {
                     ...(header || {})
                 }
@@ -69,19 +77,22 @@ const handleHttpRequest = (api: API, param?: any, body?: any, header?: Record<st
             return request({
                 url: fillPathParam(api.url, param),
                 method: 'GET',
-                params: param
+                params: param,
+                silent
             })
         case "DELETE":
             return request.delete(fillPathParam(api.url, param), {
-                params: queryParamsOnly(api.url, param)
+                params: queryParamsOnly(api.url, param),
+                silent
             })
         case "PUT":
-            return request.put(fillPathParam(api.url, param), body)
+            return request.put(fillPathParam(api.url, param), body, { silent })
         case "PATCH":
             return request({
                 url: fillPathParam(api.url, param),
                 method: 'PATCH',
                 data: body,
+                silent,
                 headers: {
                     ...(header || {})
                 }
@@ -93,16 +104,20 @@ export const handleRequest = <TData = any, TParam = any, TBody = any>(
     api: API<TData, TParam, TBody>,
     param?: TParam,
     body?: TBody,
-    header?: Record<string, string>
+    header?: Record<string, string>,
+    /** Suppress the global error toast for expected failures. */
+    silent?: boolean
 ): Promise<ApiResponse<TData>> => {
-    return handleHttpRequest(api, param, body, header) as unknown as Promise<ApiResponse<TData>>
+    return handleHttpRequest(api, param, body, header, silent) as unknown as Promise<ApiResponse<TData>>
 }
 
 export const useApi = <TData = any, TParam = any, TBody = any>(
     api: API<TData, TParam, TBody>,
     param?: TParam,
     body?: TBody,
-    header?: Record<string, string>
+    header?: Record<string, string>,
+    /** Suppress the global error toast for expected failures. */
+    silent?: boolean
 ): Promise<ApiResponse<TData>> => {
-    return handleRequest(api, param, body, header)
+    return handleRequest(api, param, body, header, silent)
 }
