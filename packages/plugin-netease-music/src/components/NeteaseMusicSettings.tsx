@@ -53,6 +53,7 @@ export const NeteaseMusicSettings: React.FC<{ pluginKey?: string }> = () => {
                         <Label className="text-xs">API 服务地址</Label>
                         <div className="flex gap-2">
                             <Input
+                                autoComplete="off"
                                 placeholder="http://localhost:3000"
                                 value={config.apiBaseUrl}
                                 onChange={(e) => updateConfig({ apiBaseUrl: e.target.value })}
@@ -90,6 +91,7 @@ export const NeteaseMusicSettings: React.FC<{ pluginKey?: string }> = () => {
                         <div className="relative">
                             <Input
                                 type={showCookie ? 'text' : 'password'}
+                                autoComplete="new-password"
                                 placeholder={cookieConfigured ? '已配置（留空保持不变）' : 'MUSIC_U=xxxxxxxx; __csrf=xxxxxxxx'}
                                 value={cookieConfigured ? '' : config.cookie}
                                 onChange={(e) => updateConfig({ cookie: e.target.value })}

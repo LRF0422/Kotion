@@ -134,6 +134,7 @@ export const ZhihuSettings: React.FC<{ pluginKey?: string }> = () => {
                             <Input
                                 id="zhihu-access-secret"
                                 type={showSecret ? "text" : "password"}
+                                autoComplete="new-password"
                                 placeholder={
                                     secretConfigured
                                         ? t("zhihu.auth.secretConfiguredPlaceholder")
@@ -211,6 +212,7 @@ export const ZhihuSettings: React.FC<{ pluginKey?: string }> = () => {
                     </Label>
                     <Input
                         id="zhihu-base-url"
+                        autoComplete="off"
                         value={config.baseUrl}
                         onChange={(e) =>
                             updateConfig({ baseUrl: e.target.value })
@@ -307,6 +309,7 @@ export const ZhihuSettings: React.FC<{ pluginKey?: string }> = () => {
                         <Input
                             id="zhihu-search-count"
                             type="number"
+                            autoComplete="off"
                             min={1}
                             max={10}
                             value={config.defaultSearchCount}
@@ -374,6 +377,7 @@ export const ZhihuSettings: React.FC<{ pluginKey?: string }> = () => {
                     <Input
                         id="zhihu-cache-ttl"
                         type="number"
+                        autoComplete="off"
                         min={1}
                         value={config.cacheTTLMinutes}
                         disabled={config.enableCache === false}

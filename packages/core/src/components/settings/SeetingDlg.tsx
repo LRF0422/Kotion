@@ -12,7 +12,6 @@ import {
     Settings,
     UserCog,
     Puzzle,
-    Zap,
     Bot,
     Compass,
     ChevronLeft,
@@ -31,7 +30,6 @@ import { useUploadFile, useTranslation } from "@kn/common";
 import { MyAccount } from "./components/MyAccount";
 import { MySetting } from "./components/MySetting";
 import { Member } from "./components/Member";
-import { SkillManager } from "../Skills";
 import { AgentManager } from "../Agents";
 
 interface PluginSettingsWithMeta extends PluginSettingsConfig {
@@ -104,7 +102,6 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                 items: [
                     { id: "MyAccount", label: t("settings.nav.myAccount"), icon: <UserCircle />, contentKey: "MyAccount" },
                     { id: "MySetting", label: t("settings.nav.preferences"), icon: <Settings />, contentKey: "MySetting" },
-                    { id: "MySkills", label: t("settings.nav.skills"), icon: <Zap />, contentKey: "MySkills" },
                     { id: "MyAgents", label: t("settings.nav.agents"), icon: <Bot />, contentKey: "MyAgents" },
                 ],
             },
@@ -147,16 +144,12 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                 return { title: t("settings.preferences.title"), description: t("settings.preferences.desc") };
             case "Member":
                 return { title: t("settings.members.title"), description: t("settings.members.desc") };
-            case "MySkills":
-                return { title: t("settings.skills.title"), description: t("settings.skills.desc") };
             case "MyAgents":
                 return { title: t("settings.agents.title"), description: t("settings.agents.desc") };
             default:
                 return { title: t("settings.title"), description: "" };
         }
     }, [currentKey, pluginSettings, t]);
-
-    const isSkills = currentKey === "MySkills";
 
     const renderContentBody = () => {
         const plugin = pluginSettings.find((p) => p.key === currentKey);
@@ -173,8 +166,6 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                 return <MySetting />;
             case "Member":
                 return <Member />;
-            case "MySkills":
-                return <SkillManager />;
             case "MyAgents":
                 return <AgentManager />;
             case "MyAccount":
@@ -254,10 +245,6 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
 
     // —— 内容区 ——（函数返回 JSX，避免内部组件每次 render 重挂）
     const renderContent = (showHeader = true) => {
-        if (isSkills) {
-            // 技能管理自带完整布局，铺满内容区。
-            return <div className="min-h-0 flex-1">{renderContentBody()}</div>;
-        }
         return (
             <ScrollArea className="min-h-0 flex-1">
                 <div className="px-5 py-6 md:px-8">

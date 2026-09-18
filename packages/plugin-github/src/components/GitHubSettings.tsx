@@ -89,6 +89,7 @@ export const GitHubSettings: React.FC<{ pluginKey?: string }> = () => {
                             <Input
                                 id="github-pat"
                                 type={showToken ? 'text' : 'password'}
+                                autoComplete="new-password"
                                 placeholder={tokenConfigured ? 'Configured — leave blank to keep' : 'ghp_xxxxxxxxxxxx'}
                                 value={config.personalAccessToken === SECRET_MASK ? '' : config.personalAccessToken}
                                 onChange={(e) => updateConfig({ personalAccessToken: e.target.value })}
@@ -183,6 +184,7 @@ export const GitHubSettings: React.FC<{ pluginKey?: string }> = () => {
                     <div className="space-y-1.5">
                         <Label className="text-xs">Owner / Organization</Label>
                         <Input
+                            autoComplete="off"
                             placeholder="octocat"
                             value={config.defaultOwner}
                             onChange={(e) => updateConfig({ defaultOwner: e.target.value })}
@@ -191,6 +193,7 @@ export const GitHubSettings: React.FC<{ pluginKey?: string }> = () => {
                     <div className="space-y-1.5">
                         <Label className="text-xs">Repository</Label>
                         <Input
+                            autoComplete="off"
                             placeholder="hello-world"
                             value={config.defaultRepo}
                             onChange={(e) => updateConfig({ defaultRepo: e.target.value })}
@@ -210,6 +213,7 @@ export const GitHubSettings: React.FC<{ pluginKey?: string }> = () => {
                         <Tag className="mr-1 inline h-3 w-3" /> Tag prefix
                     </Label>
                     <Input
+                        autoComplete="off"
                         placeholder="v"
                         value={config.releaseTagPrefix}
                         onChange={(e) => updateConfig({ releaseTagPrefix: e.target.value })}
@@ -261,6 +265,7 @@ export const GitHubSettings: React.FC<{ pluginKey?: string }> = () => {
                     <Label className="text-xs">Cache TTL (minutes)</Label>
                     <Input
                         type="number"
+                        autoComplete="off"
                         min={1}
                         max={60}
                         value={config.cacheTTLMinutes}
@@ -283,6 +288,7 @@ export const GitHubSettings: React.FC<{ pluginKey?: string }> = () => {
                         <Label className="text-xs">Refresh Interval (minutes)</Label>
                         <Input
                             type="number"
+                            autoComplete="off"
                             min={1}
                             max={120}
                             value={config.autoRefreshIntervalMinutes}

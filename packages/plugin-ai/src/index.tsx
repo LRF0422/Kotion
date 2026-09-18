@@ -1,10 +1,7 @@
 
 import { KPlugin, PluginConfig } from "@kn/common"
 import { AIExtension } from "./ai"
-import { AISettings } from "./ai/AISettings"
 import { chatDockPanel } from "./dock/ChatDockPanel"
-import { Sparkles } from "@kn/icon"
-import React from "react"
 
 interface AiPluginConfig extends PluginConfig {
     /**
@@ -29,13 +26,6 @@ export const ai = new AiPlugin({
     name: 'AI Assistant',
     editorExtension: [AIExtension],
     dockPanels: [chatDockPanel],
-    settings: {
-        key: 'ai-settings',
-        label: 'AI 助手',
-        description: '配置 AI 文本生成、图像生成和智能功能',
-        icon: React.createElement(Sparkles, { className: "h-4 w-4" }),
-        component: AISettings
-    },
     // 插件自定义引导:无需改核心,通过 START_TOUR 事件触发(id: 'ai-intro')
     tours: [
         {
