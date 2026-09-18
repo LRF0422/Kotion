@@ -84,6 +84,21 @@ export const APIS = {
         url: '/knowledge-system/subscription/trial',
         method: 'POST'
     } as API<boolean, { days?: number }>,
+    /** 自服务用量：空间数量 */
+    GET_SPACE_USAGE: {
+        url: '/knowledge-wiki/space/usage/space-count',
+        method: 'GET'
+    } as API<number>,
+    /** 自服务用量：存储占用（bytes） */
+    GET_STORAGE_USAGE: {
+        url: '/knowledge-file-center/file/usage/storage',
+        method: 'GET'
+    } as API<number>,
+    /** 自服务用量：今日 AI token */
+    GET_AI_TOKEN_USAGE: {
+        url: '/knowledge-agent/api/agent/v1/usage/ai-tokens',
+        method: 'GET'
+    } as API<number>,
     GET_CONTEXTS: {
         url: '/knowledge-system/api/v1/me/contexts',
         method: 'GET'

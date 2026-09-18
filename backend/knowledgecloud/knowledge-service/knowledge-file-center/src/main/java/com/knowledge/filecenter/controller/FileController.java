@@ -51,11 +51,21 @@ public class FileController {
     private FileApplication fileApplication;
     @Autowired
     private UploadSessionApplication uploadSessionApplication;
+    @Autowired
+    private com.knowledge.filecenter.service.IFileService fileService;
 
     @GetMapping("/file/upload-capabilities")
     @ApiOperation("Get resumable upload capabilities")
     public R<UploadCapabilitiesVO> uploadCapabilities() {
         return R.data(uploadSessionApplication.capabilities());
+    }
+
+    @GetMapping("/file/usage/storage")
+    @ApiOperation("Current owner storage usage in bytes")
+    public R<Long> storageUsage() {
+        return R.data(fileService.activeStorageBytes(
+                com.knowledge.core.secure.utils.SecurityContextUtil.getTenantId(),
+                com.knowledge.core.secure.utils.SecurityContextUtil.getUserId()));
     }
 
     @PostMapping("/file/upload-sessions")

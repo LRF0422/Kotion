@@ -70,6 +70,12 @@ public class SpaceController {
         return R.data(spaceApplication.getPersonalSpace());
     }
 
+    @GetMapping("/usage/space-count")
+    public R<Long> spaceCountUsage() {
+        return R.data(spaceApplication.countMyTeamSpaces(
+                com.knowledge.core.secure.utils.SecurityContextUtil.getUserId()));
+    }
+
     @GetMapping("/list")
     public R<IPage<SpaceVO>> page(QuerySpaceDTO dto) {
         return R.data(spaceApplication.page(dto));

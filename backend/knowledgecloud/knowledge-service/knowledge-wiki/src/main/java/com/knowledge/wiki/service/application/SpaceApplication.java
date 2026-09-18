@@ -322,6 +322,17 @@ public class SpaceApplication {
      *
      * @return personal space details
      */
+    /** 当前用户自建团队/协作空间数量（用量展示）。 */
+    public long countMyTeamSpaces(Long userId) {
+        if (userId == null) {
+            return 0L;
+        }
+        return spaceService.lambdaQuery()
+                .eq(Space::getUserId, userId)
+                .in(Space::getType, java.util.Arrays.asList(SpaceType.SPACE, SpaceType.COLLABORATION))
+                .count();
+    }
+
     public SpaceVO getPersonalSpace() {
         return SpaceConverter.INSTANCE.convertVO(
                 spaceService.getPersonalSpace(SecurityContextUtil.getUserId()));
