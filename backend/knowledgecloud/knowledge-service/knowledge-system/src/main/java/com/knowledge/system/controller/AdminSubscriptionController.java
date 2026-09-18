@@ -10,6 +10,7 @@ import com.knowledge.system.domain.dto.SubscriptionBatchGrantDTO;
 import com.knowledge.system.domain.dto.SubscriptionBatchRevokeDTO;
 import com.knowledge.system.domain.dto.SubscriptionGrantDTO;
 import com.knowledge.system.domain.dto.SubscriptionPlanEntitlementsDTO;
+import com.knowledge.system.domain.dto.SubscriptionRedeemCreateDTO;
 import com.knowledge.system.domain.dto.SubscriptionPlanSaveDTO;
 import com.knowledge.system.domain.dto.SubscriptionRevokeDTO;
 import com.knowledge.system.domain.vo.AdminUserSubscriptionVO;
@@ -17,6 +18,7 @@ import com.knowledge.system.domain.vo.SubscriptionCatalogVO;
 import com.knowledge.system.domain.vo.SubscriptionGrantVO;
 import com.knowledge.system.domain.vo.SubscriptionOverviewVO;
 import com.knowledge.system.domain.vo.SubscriptionPlanVO;
+import com.knowledge.system.service.IEntitlementService;
 import com.knowledge.system.service.ISubscriptionOpsService;
 import com.knowledge.system.service.ISubscriptionPlanService;
 import com.knowledge.system.service.ISubscriptionRedeemService;
@@ -45,7 +47,8 @@ import java.util.List;
 @Api(tags = "订阅管理（平台）")
 @RestController
 @RequestMapping("/subscription/admin")
-@PreAuthorize(RoleConstant.HAS_ROLE_ADMIN)
+@PreAuthorize("(hasRole('platform.subscription.manage') or hasRole('platform.dashboard.read') or "
+		+ RoleConstant.HAS_ROLE_ADMIN + ") and principal.clientId == 'kotion-platform-admin'")
 @AllArgsConstructor
 public class AdminSubscriptionController {
 
@@ -53,6 +56,7 @@ public class AdminSubscriptionController {
 	private final ISubscriptionPlanService planService;
 	private final ISubscriptionRedeemService subscriptionRedeemService;
 	private final ISubscriptionOpsService subscriptionOpsService;
+	private final IEntitlementService entitlementService;
 	private final ObjectProvider<StringRedisTemplate> redisProvider;
 
 	@ApiOperation("用户订阅列表")
@@ -93,10 +97,10 @@ public class AdminSubscriptionController {
 		return R.data(userSubscriptionService.listGrants(userId, limit));
 	}
 
-	@ApiOperation("方案目录")
+	@ApiOperation("方案目录（含停用方案）")
 	@GetMapping("/catalog")
 	public R<SubscriptionCatalogVO> catalog() {
-		return R.data(planService.getCatalog());
+		return R.data(planService.getAdminCatalog());
 	}
 
 	@ApiOperation("方案详情（含权益）")
@@ -139,7 +143,7 @@ public class AdminSubscriptionController {
 
 	@ApiOperation("创建兑换码")
 	@PostMapping("/redeem/create")
-	public R<SubscriptionRedeemCode> createRedeem(@RequestBody SubscriptionRedeemCode input) {
+	public R<SubscriptionRedeemCode> createRedeem(@RequestBody SubscriptionRedeemCreateDTO input) {
 		try {
 			return R.data(subscriptionRedeemService.create(input, SecurityContextUtil.getUserId()));
 		} catch (IllegalArgumentException e) {
@@ -193,6 +197,9 @@ public class AdminSubscriptionController {
 
 	/** 递增全局版本号，让所有实例的权益缓存失效。 */
 	private void bumpGlobalVersion() {
+		if (entitlementService != null) {
+			entitlementService.evictAll();
+		}
 		StringRedisTemplate redis = redisProvider == null ? null : redisProvider.getIfAvailable();
 		if (redis == null) {
 			return;

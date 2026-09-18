@@ -7,6 +7,12 @@ import { UpgradeDialog } from './UpgradeDialog'
 import { PlanComparison } from './PlanComparison'
 import { formatQuotaValue } from './quota-format'
 
+const formatDate = (value?: string) => {
+    if (!value) return ''
+    const date = new Date(value)
+    return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString()
+}
+
 const USAGE_ROWS = [
     { code: 'space.count', label: '空间数量', unit: '个' },
     { code: 'storage.bytes', label: '存储空间', unit: 'bytes' },
@@ -59,7 +65,7 @@ export const SubscriptionPanel: React.FC = () => {
                                 {subscription?.permanent
                                     ? '永久有效'
                                     : subscription?.endTime
-                                        ? '到期时间：' + subscription.endTime + (subscription.remainingDays !== undefined ? '（剩余 ' + subscription.remainingDays + ' 天）' : '')
+                                        ? '到期时间：' + formatDate(subscription.endTime) + (subscription.remainingDays !== undefined ? '（剩余 ' + subscription.remainingDays + ' 天）' : '')
                                         : '—'}
                             </p>
                         </div>

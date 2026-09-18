@@ -139,6 +139,9 @@ public class UserSubscriptionServiceImpl extends ServiceImpl<UserSubscriptionMap
 		if (existingTrials != null && existingTrials > 0) {
 			return false;
 		}
+		if (effectiveCode(findRow(userId)) != PlanCode.FREE) {
+			return false;
+		}
 		SubscriptionPlan pro = planService.getByCode(PlanCode.PRO.getCode());
 		if (pro == null) {
 			throw new IllegalArgumentException("专业版方案未配置");

@@ -16,7 +16,7 @@ public interface ISubscriptionRedeemService {
 	UserSubscriptionVO redeem(Long userId, String code);
 
 	/** 管理端创建兑换码。 */
-	SubscriptionRedeemCode create(SubscriptionRedeemCode input, Long operatorId);
+	SubscriptionRedeemCode create(com.knowledge.system.domain.dto.SubscriptionRedeemCreateDTO input, Long operatorId);
 
 	/** 管理端列表。 */
 	List<SubscriptionRedeemCode> list();

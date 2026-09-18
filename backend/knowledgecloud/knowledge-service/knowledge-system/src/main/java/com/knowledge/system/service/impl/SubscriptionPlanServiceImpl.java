@@ -92,11 +92,37 @@ public class SubscriptionPlanServiceImpl extends ServiceImpl<SubscriptionPlanMap
 
 	@Override
 	public SubscriptionPlanVO getPlanDetail(String planCode) {
-		SubscriptionPlan plan = getByCode(planCode);
+		if (!StringUtils.hasText(planCode)) {
+			return null;
+		}
+		SubscriptionPlan plan = getOne(new LambdaQueryWrapper<SubscriptionPlan>()
+			.eq(SubscriptionPlan::getPlanCode, planCode)
+			.last("limit 1"));
 		if (plan == null) {
 			return null;
 		}
 		return toPlanVO(plan, valuesOf(planCode));
+	}
+
+	@Override
+	public SubscriptionCatalogVO getAdminCatalog() {
+		List<SubscriptionPlan> plans = list(new LambdaQueryWrapper<SubscriptionPlan>()
+			.orderByAsc(SubscriptionPlan::getSort));
+		List<SubscriptionEntitlement> definitions = entitlementMapper.selectList(
+			new LambdaQueryWrapper<SubscriptionEntitlement>()
+				.eq(SubscriptionEntitlement::getStatus, 1)
+				.orderByAsc(SubscriptionEntitlement::getSort));
+		Map<String, List<SubscriptionPlanEntitlement>> valuesByPlan = planEntitlementMapper.selectList(null)
+			.stream()
+			.collect(Collectors.groupingBy(SubscriptionPlanEntitlement::getPlanCode));
+		SubscriptionCatalogVO catalog = new SubscriptionCatalogVO();
+		catalog.setEntitlements(definitions.stream().map(this::toDefinitionVO).collect(Collectors.toList()));
+		List<SubscriptionPlanVO> planVOs = new ArrayList<>();
+		for (SubscriptionPlan plan : plans) {
+			planVOs.add(toPlanVO(plan, valuesByPlan.getOrDefault(plan.getPlanCode(), new ArrayList<>())));
+		}
+		catalog.setPlans(planVOs);
+		return catalog;
 	}
 
 	@Override
@@ -105,8 +131,28 @@ public class SubscriptionPlanServiceImpl extends ServiceImpl<SubscriptionPlanMap
 		if (!StringUtils.hasText(planCode)) {
 			throw new IllegalArgumentException("planCode 不能为空");
 		}
-		if (getByCode(planCode) == null) {
+		if (getOne(new LambdaQueryWrapper<SubscriptionPlan>()
+				.eq(SubscriptionPlan::getPlanCode, planCode).last("limit 1")) == null) {
 			throw new IllegalArgumentException("方案不存在：" + planCode);
+		}
+		java.util.Set<String> codes = new java.util.HashSet<>();
+		if (features != null) {
+			codes.addAll(features.keySet());
+		}
+		if (quotas != null) {
+			codes.addAll(quotas.keySet());
+		}
+		codes.removeIf(code -> !StringUtils.hasText(code));
+		if (!codes.isEmpty()) {
+			java.util.Set<String> known = entitlementMapper.selectList(
+					new LambdaQueryWrapper<SubscriptionEntitlement>()
+						.in(SubscriptionEntitlement::getEntCode, codes))
+				.stream().map(SubscriptionEntitlement::getEntCode).collect(Collectors.toSet());
+			for (String code : codes) {
+				if (!known.contains(code)) {
+					throw new IllegalArgumentException("未知权益编码：" + code);
+				}
+			}
 		}
 		java.util.Map<String, SubscriptionPlanEntitlement> existing = new java.util.HashMap<>();
 		for (SubscriptionPlanEntitlement value : valuesOf(planCode)) {

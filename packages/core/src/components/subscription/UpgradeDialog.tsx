@@ -40,7 +40,7 @@ export const UpgradeDialog: React.FC<{ trigger?: React.ReactNode; initialPlanNam
     const startTrial = async () => {
         setBusy(true)
         try {
-            await useApi(APIS.POST_SUBSCRIPTION_TRIAL, { days: 7 })
+            await useApi(APIS.POST_SUBSCRIPTION_TRIAL)
             toast.success('试用已开通')
             await refresh()
             setOpen(false)

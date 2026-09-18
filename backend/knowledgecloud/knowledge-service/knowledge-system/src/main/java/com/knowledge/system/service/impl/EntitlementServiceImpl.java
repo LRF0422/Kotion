@@ -95,6 +95,11 @@ public class EntitlementServiceImpl implements IEntitlementService {
 		}
 	}
 
+	@Override
+	public void evictAll() {
+		cache.clear();
+	}
+
 	private static final class Cached {
 		private final PlanEntitlementsVO value;
 		private final long at;

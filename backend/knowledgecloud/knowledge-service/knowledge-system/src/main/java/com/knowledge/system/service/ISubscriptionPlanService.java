@@ -17,6 +17,9 @@ public interface ISubscriptionPlanService extends IService<SubscriptionPlan> {
 	/** 权益定义 + 启用方案的完整目录（前端对比表的数据源）。 */
 	SubscriptionCatalogVO getCatalog();
 
+	/** 管理端目录：包含停用方案，便于重新启用。 */
+	SubscriptionCatalogVO getAdminCatalog();
+
 	/** 按编码取启用中的方案；不存在返回 null。 */
 	SubscriptionPlan getByCode(String planCode);
 

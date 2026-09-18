@@ -26,6 +26,7 @@ public class SubscriptionRedeemServiceImpl implements ISubscriptionRedeemService
 
 	private final SubscriptionRedeemCodeMapper redeemCodeMapper;
 	private final IUserSubscriptionService userSubscriptionService;
+	private final com.knowledge.system.service.ISubscriptionPlanService planService;
 
 	@Override
 	@Transactional(rollbackFor = Exception.class)
@@ -63,12 +64,15 @@ public class SubscriptionRedeemServiceImpl implements ISubscriptionRedeemService
 
 	@Override
 	@Transactional(rollbackFor = Exception.class)
-	public SubscriptionRedeemCode create(SubscriptionRedeemCode input, Long operatorId) {
+	public SubscriptionRedeemCode create(com.knowledge.system.domain.dto.SubscriptionRedeemCreateDTO input, Long operatorId) {
 		if (input == null || !StringUtils.hasText(input.getCode())) {
 			throw new IllegalArgumentException("兑换码不能为空");
 		}
 		if (!StringUtils.hasText(input.getPlanCode())) {
 			throw new IllegalArgumentException("planCode 不能为空");
+		}
+		if (planService.getByCode(input.getPlanCode()) == null) {
+			throw new IllegalArgumentException("方案不存在或已停用：" + input.getPlanCode());
 		}
 		String code = input.getCode().trim();
 		Long existing = redeemCodeMapper.selectCount(new LambdaQueryWrapper<SubscriptionRedeemCode>()

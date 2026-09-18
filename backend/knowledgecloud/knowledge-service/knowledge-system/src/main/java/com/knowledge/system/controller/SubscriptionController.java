@@ -38,6 +38,9 @@ public class SubscriptionController {
 	private final IEntitlementService entitlementService;
 	private final ISubscriptionRedeemService subscriptionRedeemService;
 
+	@org.springframework.beans.factory.annotation.Value("${knowledge.subscription.trial-days:7}")
+	private int trialDays;
+
 	@ApiOperation("方案目录（含权益定义与三档取值）")
 	@GetMapping("/catalog")
 	public R<SubscriptionCatalogVO> catalog() {
@@ -81,9 +84,9 @@ public class SubscriptionController {
 
 	@ApiOperation("开通试用")
 	@PostMapping("/trial")
-	public R<Boolean> trial(@RequestParam(value = "days", defaultValue = "7") int days) {
+	public R<Boolean> trial() {
 		try {
-			return R.data(userSubscriptionService.startTrial(SecurityContextUtil.getUserId(), days));
+			return R.data(userSubscriptionService.startTrial(SecurityContextUtil.getUserId(), trialDays));
 		} catch (IllegalArgumentException e) {
 			return R.fail(e.getMessage());
 		}

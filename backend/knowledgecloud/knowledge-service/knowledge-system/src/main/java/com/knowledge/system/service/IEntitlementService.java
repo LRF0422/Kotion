@@ -20,4 +20,7 @@ public interface IEntitlementService {
 
 	/** 订阅变更后主动失效缓存。 */
 	void evict(Long userId);
+
+	/** 方案权益配置变更后清空全部缓存。 */
+	void evictAll();
 }
