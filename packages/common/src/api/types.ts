@@ -101,3 +101,63 @@ export interface TokenContextState {
     contextId?: string
     contextType?: ContextType
 }
+
+// ---------------------------------------------------------------------------
+// Subscription / entitlements (Free / Pro / Pro+). Payment is out of scope.
+// ---------------------------------------------------------------------------
+
+export type PlanCode = 'FREE' | 'PRO' | 'PRO_PLUS'
+
+export type EntitlementCategory = 'FEATURE' | 'QUOTA'
+export type EntitlementValueType = 'BOOLEAN' | 'NUMBER'
+
+export interface SubscriptionEntitlementDefinition {
+    code: string
+    name: string
+    category: EntitlementCategory
+    valueType: EntitlementValueType
+    unit?: string
+    description?: string
+    sort?: number
+}
+
+export interface SubscriptionPlan {
+    planCode: PlanCode
+    planName: string
+    description?: string
+    tier: number
+    monthlyPrice?: number
+    yearlyPrice?: number
+    highlight?: string
+    sort?: number
+    features: Record<string, boolean>
+    quotas: Record<string, number>
+}
+
+export interface SubscriptionCatalog {
+    entitlements: SubscriptionEntitlementDefinition[]
+    plans: SubscriptionPlan[]
+}
+
+export interface UserSubscriptionInfo {
+    userId?: string
+    planCode: PlanCode
+    planName: string
+    tier: number
+    status: 'ACTIVE' | 'EXPIRED'
+    startTime?: string
+    endTime?: string
+    remainingDays?: number
+    permanent?: boolean
+    source?: string
+}
+
+export interface PlanEntitlements {
+    userId?: string
+    planCode: PlanCode
+    planName: string
+    tier: number
+    features: Record<string, boolean>
+    quotas: Record<string, number>
+    resolvedAt?: number
+}

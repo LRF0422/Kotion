@@ -2,7 +2,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "@kn/ui";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@kn/ui";
 import { DialogTrigger } from "@kn/ui";
 import { ScrollArea } from "@kn/ui";
-import { Badge } from "@kn/ui";
 import { cn } from "@kn/ui";
 import { useResponsive } from "@kn/ui";
 import { GlobalState } from "@kn/common";
@@ -14,6 +13,7 @@ import {
     Puzzle,
     Bot,
     Compass,
+    Sparkles,
     ChevronLeft,
 } from "@kn/icon";
 import React, { PropsWithChildren, useContext, useMemo, Suspense, useEffect } from "react";
@@ -31,6 +31,8 @@ import { MyAccount } from "./components/MyAccount";
 import { MySetting } from "./components/MySetting";
 import { Member } from "./components/Member";
 import { AgentManager } from "../Agents";
+import { PlanBadge } from "../subscription/PlanBadge";
+import { SubscriptionPanel } from "../subscription/SubscriptionPanel";
 
 interface PluginSettingsWithMeta extends PluginSettingsConfig {
     pluginName: string;
@@ -101,6 +103,7 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                 label: t("settings.nav.account"),
                 items: [
                     { id: "MyAccount", label: t("settings.nav.myAccount"), icon: <UserCircle />, contentKey: "MyAccount" },
+                    { id: "Subscription", label: t("settings.nav.subscription"), icon: <Sparkles />, contentKey: "Subscription" },
                     { id: "MySetting", label: t("settings.nav.preferences"), icon: <Settings />, contentKey: "MySetting" },
                     { id: "MyAgents", label: t("settings.nav.agents"), icon: <Bot />, contentKey: "MyAgents" },
                 ],
@@ -140,6 +143,8 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
         switch (currentKey) {
             case "MyAccount":
                 return { title: t("settings.account.title"), description: t("settings.account.desc") };
+            case "Subscription":
+                return { title: t("settings.subscription.title"), description: t("settings.subscription.desc") };
             case "MySetting":
                 return { title: t("settings.preferences.title"), description: t("settings.preferences.desc") };
             case "Member":
@@ -162,6 +167,8 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
             );
         }
         switch (currentKey) {
+            case "Subscription":
+                return <SubscriptionPanel />;
             case "MySetting":
                 return <MySetting />;
             case "Member":
@@ -206,9 +213,7 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                     <div className="truncate text-sm font-medium text-foreground">{userInfo?.name}</div>
                     <div className="truncate text-xs text-muted-foreground">{userInfo?.account}</div>
                 </div>
-                <Badge variant="secondary" className="shrink-0 px-1.5 text-[10px] font-normal">
-                    {t("settings.planFree")}
-                </Badge>
+                <PlanBadge className="shrink-0 px-1.5 text-[10px] font-normal" />
             </button>
 
             {navGroups.map((group) => (

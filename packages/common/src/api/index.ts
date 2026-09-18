@@ -7,10 +7,13 @@ import type {
     InviteOrganizationMemberBody,
     OrganizationInvitation,
     OrganizationMember,
+    PlanEntitlements,
+    SubscriptionCatalog,
     SwitchContextBody,
     UpdateOrganizationMemberRoleBody,
     UpdatePasswordBody,
     UpdateProfileBody,
+    UserSubscriptionInfo,
 } from "./types";
 
 export * from "./types";
@@ -49,6 +52,28 @@ export const APIS = {
         url: '/knowledge-system/api/v1/me/password',
         method: 'POST'
     } as API<unknown, undefined, UpdatePasswordBody>,
+
+    // ==================== Subscription APIs ====================
+    /** 方案目录（权益定义 + 三档取值） */
+    GET_SUBSCRIPTION_CATALOG: {
+        url: '/knowledge-system/subscription/catalog',
+        method: 'GET'
+    } as API<SubscriptionCatalog>,
+    /** 当前用户订阅信息 */
+    GET_MY_SUBSCRIPTION: {
+        url: '/knowledge-system/subscription/me',
+        method: 'GET'
+    } as API<UserSubscriptionInfo>,
+    /** 当前用户生效权益 */
+    GET_MY_ENTITLEMENTS: {
+        url: '/knowledge-system/subscription/me/entitlements',
+        method: 'GET'
+    } as API<PlanEntitlements>,
+    /** 校验单个权益 */
+    CHECK_MY_ENTITLEMENT: {
+        url: '/knowledge-system/subscription/me/check',
+        method: 'GET'
+    } as API<boolean, { code: string }>,
     GET_CONTEXTS: {
         url: '/knowledge-system/api/v1/me/contexts',
         method: 'GET'

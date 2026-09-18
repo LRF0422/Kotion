@@ -12,6 +12,7 @@ import { AISettings } from './pages/ai/AISettings'
 import { AiUsage } from './pages/ai/AiUsage'
 import { LogList } from './pages/audit/LogList'
 import { SystemSettings } from './pages/settings/SystemSettings'
+import { SubscriptionUsers } from './pages/membership/SubscriptionUsers'
 // 运营模块
 import { OpsHome } from './pages/ops/OpsHome'
 import { OpsDashboard } from './pages/ops/OpsDashboard'
@@ -85,6 +86,7 @@ export const App = () => {
             <Route path="ai-usage" element={<AiUsage />} />
             <Route path="logs" element={<LogList />} />
             <Route path="settings" element={<SystemSettings />} />
+            <Route path="subscription" element={<SubscriptionUsers />} />
 
             {/* 运营 · 洞察 */}
             <Route path="ops/home" element={ops(<OpsHome />)} />

@@ -36,7 +36,7 @@ import { createSpacePageService } from "./domain/space-page";
 import { uploadTaskService } from "./services/upload/upload-task-service";
 
 const { createBrowserRouter,
-    createRoutesFromElements, Route, RouterProvider, Provider,
+    createRoutesFromElements, Route, RouterProvider, Provider, EntitlementsProvider,
     AppContext, i18n, initReactI18next, LanguageDetector, event, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS, createRoot } = common;
 
 const spacePageService = createSpacePageService()
@@ -372,7 +372,7 @@ export const App: React.FC<AppProps> = (props) => {
             console.log('Creating router with', routes.length, 'plugin routes')
             const updatedRouter = createBrowserRouter(createRoutesFromElements(
                 [
-                    <Route path='/' element={<Layout onPluginsReady={setPluginsReady} />} errorElement={<ErrorPage />}>
+                    <Route path='/' element={<EntitlementsProvider><Layout onPluginsReady={setPluginsReady} /></EntitlementsProvider>} errorElement={<ErrorPage />}>
                         {routes}
                         {/* Standalone agent page: the fallback for entry points
                             outside a space, where no side dock is mounted. */}
@@ -395,7 +395,7 @@ export const App: React.FC<AppProps> = (props) => {
             console.log('Creating minimal router (plugins not ready yet)')
             const minimalRouter = createBrowserRouter(createRoutesFromElements(
                 [
-                    <Route path='/' element={<Layout onPluginsReady={setPluginsReady} />} errorElement={<ErrorPage />}>
+                    <Route path='/' element={<EntitlementsProvider><Layout onPluginsReady={setPluginsReady} /></EntitlementsProvider>} errorElement={<ErrorPage />}>
                         <Route path="*" element={<div className="flex items-center justify-center h-screen">Loading...</div>} />
                     </Route>,
                     <Route path='/login' element={<Login />} />,

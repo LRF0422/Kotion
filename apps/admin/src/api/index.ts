@@ -592,3 +592,56 @@ export const saveParamValues = async (entries: Record<string, string>, names: Re
 
 /** 重建 Redis RediSearch 全文索引，返回已索引的块数量 */
 export const reindexSearch = () => post<number>('/knowledge-wiki/space/page/block/search/reindex')
+
+// ---------- 订阅管理（knowledge-system /subscription/admin） ----------
+
+export interface AdminUserSubscription {
+  userId: string
+  account?: string
+  userName?: string
+  avatar?: string
+  planCode: string
+  planName?: string
+  tier?: number
+  status?: string
+  endTime?: string
+  source?: string
+}
+
+export interface SubscriptionGrantPayload {
+  userId: string
+  planCode: string
+  days?: number
+  remark?: string
+}
+
+export interface SubscriptionGrantLog {
+  id: string
+  userId: string
+  account?: string
+  userName?: string
+  fromPlan?: string
+  toPlan?: string
+  source?: string
+  operatorId?: string
+  startTime?: string
+  endTime?: string
+  remark?: string
+  createTime?: string
+}
+
+export const getAdminUserSubscriptions = (params: {
+  current: number
+  size: number
+  keyword?: string
+  planCode?: string
+}) => get<PageResult<AdminUserSubscription>>('/knowledge-system/subscription/admin/users', params)
+
+export const grantUserSubscription = (payload: SubscriptionGrantPayload) =>
+  post<unknown>('/knowledge-system/subscription/admin/grant', payload)
+
+export const revokeUserSubscription = (userId: string, remark?: string) =>
+  post<unknown>('/knowledge-system/subscription/admin/revoke', { userId, remark })
+
+export const getSubscriptionGrantLogs = (userId?: string, limit = 50) =>
+  get<SubscriptionGrantLog[]>('/knowledge-system/subscription/admin/grants', { userId, limit })

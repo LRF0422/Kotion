@@ -1056,8 +1056,13 @@ export const resources = {
         title: "设置",
         back: "返回",
         planFree: "Free",
+        subscription: {
+          title: "订阅方案",
+          desc: "查看当前方案与权益",
+        },
         nav: {
           account: "账号",
+          subscription: "订阅方案",
           workspace: "工作空间",
           plugins: "插件",
           myAccount: "我的账号",
@@ -2394,8 +2399,13 @@ export const resources = {
         title: "Settings",
         back: "Back",
         planFree: "Free",
+        subscription: {
+          title: "Subscription",
+          desc: "View your plan and entitlements",
+        },
         nav: {
           account: "Account",
+          subscription: "Subscription",
           workspace: "Workspace",
           plugins: "Plugins",
           myAccount: "My Account",
