@@ -29,8 +29,10 @@ public class EntitlementAutoConfiguration {
 
 	@Bean
 	@ConditionalOnMissingBean(EntitlementResolver.class)
-	public EntitlementResolver entitlementResolver(IEntitlementClient entitlementClient) {
-		return new FeignEntitlementResolver(entitlementClient);
+	public EntitlementResolver entitlementResolver(ObjectProvider<IEntitlementClient> entitlementClientProvider) {
+		// Lazy: creating the Feign proxy pulls in Web MVC infrastructure, which would
+		// close a cycle through the WebMvcConfigurer -> Interceptor -> Gate chain.
+		return new FeignEntitlementResolver(entitlementClientProvider);
 	}
 
 	@Bean
