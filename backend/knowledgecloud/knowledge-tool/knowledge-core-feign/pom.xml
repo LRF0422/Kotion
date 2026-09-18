@@ -22,10 +22,13 @@
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-openfeign</artifactId>
         </dependency>
+        <!-- Servlet API for compile-time use by consumers. It MUST match the runtime
+             container: Tomcat 9 ships Servlet 4. The legacy javax.servlet:servlet-api:2.5
+             was transitively leaking onto service classpaths and collided with
+             org.apache.catalina.authenticator.AuthenticatorBase at startup. -->
         <dependency>
             <groupId>javax.servlet</groupId>
-            <artifactId>servlet-api</artifactId>
-            <version>2.5</version>
+            <artifactId>javax.servlet-api</artifactId>
         </dependency>
     </dependencies>
 

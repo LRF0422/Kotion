@@ -30,11 +30,9 @@
             <artifactId>knowledge-core-secure</artifactId>
             <version>${knowledge.tool.version}</version>
         </dependency>
-        <dependency>
-            <groupId>com.knowledge</groupId>
-            <artifactId>knowledge-core-feign</artifactId>
-            <version>${knowledge.tool.version}</version>
-        </dependency>
+        <!-- openfeign comes transitively via knowledge-core-cloud; do NOT depend on
+             knowledge-core-feign here: it pulls javax.servlet:servlet-api:2.5, which
+             collides with Tomcat 9 / Servlet 4 on the consumer classpath. -->
         <dependency>
             <groupId>com.knowledge</groupId>
             <artifactId>knowledge-core-cloud</artifactId>
@@ -47,6 +45,12 @@
         <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-webmvc</artifactId>
+        </dependency>
+        <!-- Compile-time only; the host provides Servlet 4 at runtime. -->
+        <dependency>
+            <groupId>javax.servlet</groupId>
+            <artifactId>javax.servlet-api</artifactId>
+            <scope>provided</scope>
         </dependency>
     </dependencies>
 </project>
