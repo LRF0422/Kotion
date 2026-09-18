@@ -14,8 +14,8 @@ import {
 } from '@kn/ui'
 import { APIS, useApi, useEntitlements } from '@kn/common'
 
-/** 升级入口：本期不做支付，提供兑换码与试用。 */
-export const UpgradeDialog: React.FC<{ trigger?: React.ReactNode }> = ({ trigger }) => {
+/** 升级入口：本期不做支付，开通走兑换码或平台管理员，并提供试用。 */
+export const UpgradeDialog: React.FC<{ trigger?: React.ReactNode; initialPlanName?: string }> = ({ trigger, initialPlanName }) => {
     const [open, setOpen] = useState(false)
     const [code, setCode] = useState('')
     const [busy, setBusy] = useState(false)
@@ -56,8 +56,10 @@ export const UpgradeDialog: React.FC<{ trigger?: React.ReactNode }> = ({ trigger
             <DialogTrigger asChild>{trigger ?? <Button>升级方案</Button>}</DialogTrigger>
             <DialogContent className="md:max-w-md">
                 <DialogHeader>
-                    <DialogTitle>升级方案</DialogTitle>
-                    <DialogDescription>支付功能即将开放；当前可用兑换码或试用开通。</DialogDescription>
+                    <DialogTitle>开通方案</DialogTitle>
+                    <DialogDescription>
+                        {initialPlanName ? '目标方案：' + initialPlanName + '。' : ''}支付功能尚未开放，开通走兑换码或平台管理员。
+                    </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-2">
                     <div className="space-y-2">

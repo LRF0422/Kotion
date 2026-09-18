@@ -36,6 +36,9 @@ public class SubscriptionPlanVO implements Serializable {
 
 	private Integer sort;
 
+	@ApiModelProperty("1启用 0停用")
+	private Integer status;
+
 	/** 能力开关：code -> 是否可用。 */
 	private Map<String, Boolean> features = new LinkedHashMap<>();
 

@@ -10,6 +10,7 @@ import com.knowledge.system.domain.dto.SubscriptionBatchGrantDTO;
 import com.knowledge.system.domain.dto.SubscriptionBatchRevokeDTO;
 import com.knowledge.system.domain.dto.SubscriptionGrantDTO;
 import com.knowledge.system.domain.dto.SubscriptionPlanEntitlementsDTO;
+import com.knowledge.system.domain.dto.SubscriptionPlanSaveDTO;
 import com.knowledge.system.domain.dto.SubscriptionRevokeDTO;
 import com.knowledge.system.domain.vo.AdminUserSubscriptionVO;
 import com.knowledge.system.domain.vo.SubscriptionCatalogVO;
@@ -103,6 +104,18 @@ public class AdminSubscriptionController {
 	public R<SubscriptionPlanVO> planDetail(@PathVariable("planCode") String planCode) {
 		SubscriptionPlanVO detail = planService.getPlanDetail(planCode);
 		return detail == null ? R.fail("方案不存在：" + planCode) : R.data(detail);
+	}
+
+	@ApiOperation("保存方案信息")
+	@PostMapping("/plan/save")
+	public R<Void> savePlan(@RequestBody SubscriptionPlanSaveDTO dto) {
+		try {
+			planService.savePlan(dto);
+			bumpGlobalVersion();
+			return R.success("已保存方案信息");
+		} catch (IllegalArgumentException e) {
+			return R.fail(e.getMessage());
+		}
 	}
 
 	@ApiOperation("保存方案权益")

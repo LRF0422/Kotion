@@ -16,10 +16,12 @@ export interface PlanComparisonProps {
     catalog?: SubscriptionCatalog
     currentPlanCode: PlanCode
     className?: string
+    /** 每档底部的操作区（如「选择」打开开通说明）。 */
+    renderPlanAction?: (plan: SubscriptionPlan) => React.ReactNode
 }
 
 /** 由 /subscription/catalog 渲染，权益与额度都不硬编码。 */
-export const PlanComparison: React.FC<PlanComparisonProps> = ({ catalog, currentPlanCode, className }) => {
+export const PlanComparison: React.FC<PlanComparisonProps> = ({ catalog, currentPlanCode, className, renderPlanAction }) => {
     if (!catalog || catalog.plans.length === 0) {
         return <div className="rounded-xl border border-border/60 bg-card p-4 text-xs text-muted-foreground">方案加载中…</div>
     }
@@ -65,6 +67,24 @@ export const PlanComparison: React.FC<PlanComparisonProps> = ({ catalog, current
                         </tr>
                     ))}
                 </tbody>
+                {renderPlanAction ? (
+                    <tfoot>
+                        <tr>
+                            <td className="px-4 py-3" />
+                            {catalog.plans.map((plan) => (
+                                <td
+                                    key={plan.planCode}
+                                    className={cn(
+                                        'px-4 py-3 text-center',
+                                        plan.planCode === currentPlanCode ? 'bg-accent/30' : '',
+                                    )}
+                                >
+                                    {renderPlanAction(plan)}
+                                </td>
+                            ))}
+                        </tr>
+                    </tfoot>
+                ) : null}
             </table>
         </div>
     )

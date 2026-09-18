@@ -124,6 +124,42 @@ public class SubscriptionPlanServiceImpl extends ServiceImpl<SubscriptionPlanMap
 		}
 	}
 
+	@Override
+	@Transactional(rollbackFor = Exception.class)
+	public void savePlan(com.knowledge.system.domain.dto.SubscriptionPlanSaveDTO dto) {
+		if (dto == null || !StringUtils.hasText(dto.getPlanCode())) {
+			throw new IllegalArgumentException("planCode 不能为空");
+		}
+		SubscriptionPlan plan = getOne(new LambdaQueryWrapper<SubscriptionPlan>()
+				.eq(SubscriptionPlan::getPlanCode, dto.getPlanCode())
+				.last("limit 1"));
+		if (plan == null) {
+			throw new IllegalArgumentException("方案不存在：" + dto.getPlanCode());
+		}
+		if (StringUtils.hasText(dto.getPlanName())) {
+			plan.setPlanName(dto.getPlanName().trim());
+		}
+		if (dto.getDescription() != null) {
+			plan.setDescription(dto.getDescription());
+		}
+		if (dto.getMonthlyPrice() != null) {
+			plan.setMonthlyPrice(dto.getMonthlyPrice());
+		}
+		if (dto.getYearlyPrice() != null) {
+			plan.setYearlyPrice(dto.getYearlyPrice());
+		}
+		if (dto.getHighlight() != null) {
+			plan.setHighlight(dto.getHighlight());
+		}
+		if (dto.getSort() != null) {
+			plan.setSort(dto.getSort());
+		}
+		if (dto.getStatus() != null) {
+			plan.setStatus(dto.getStatus() == 1 ? 1 : 0);
+		}
+		updateById(plan);
+	}
+
 	private void upsertEntitlement(java.util.Map<String, SubscriptionPlanEntitlement> existing,
 			String planCode, String entCode, Boolean boolValue, Long numValue) {
 		if (!StringUtils.hasText(entCode)) {
@@ -173,6 +209,7 @@ public class SubscriptionPlanServiceImpl extends ServiceImpl<SubscriptionPlanMap
 		vo.setYearlyPrice(plan.getYearlyPrice());
 		vo.setHighlight(plan.getHighlight());
 		vo.setSort(plan.getSort());
+		vo.setStatus(plan.getStatus());
 		for (SubscriptionPlanEntitlement value : values) {
 			if (value.getBoolValue() != null) {
 				vo.getFeatures().put(value.getEntCode(), value.getBoolValue());

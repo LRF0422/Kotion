@@ -665,6 +665,7 @@ export interface SubscriptionPlanVO {
   yearlyPrice?: number
   highlight?: string
   sort?: number
+  status?: number
   features: Record<string, boolean>
   quotas: Record<string, number>
 }
@@ -692,6 +693,17 @@ export const getSubscriptionCatalog = () =>
 
 export const getSubscriptionPlanDetail = (planCode: string) =>
   get<SubscriptionPlanVO>(`/knowledge-system/subscription/admin/plan/${planCode}`)
+
+export const saveSubscriptionPlan = (body: {
+  planCode: string
+  planName?: string
+  description?: string
+  monthlyPrice?: number
+  yearlyPrice?: number
+  highlight?: string
+  sort?: number
+  status?: number
+}) => post<unknown>('/knowledge-system/subscription/admin/plan/save', body)
 
 export const savePlanEntitlements = (
   planCode: string,

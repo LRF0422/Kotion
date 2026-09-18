@@ -31,4 +31,7 @@ public interface ISubscriptionPlanService extends IService<SubscriptionPlan> {
 
 	/** 管理端保存方案的权益取值（features / quotas）。 */
 	void saveEntitlements(String planCode, Map<String, Boolean> features, Map<String, Long> quotas);
+
+	/** 管理端保存方案信息（名称/描述/价格/卖点/排序/状态）。 */
+	void savePlan(com.knowledge.system.domain.dto.SubscriptionPlanSaveDTO dto);
 }

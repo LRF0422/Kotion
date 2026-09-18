@@ -25,6 +25,7 @@ import {
   getSubscriptionCatalog,
   getSubscriptionPlanDetail,
   savePlanEntitlements,
+  saveSubscriptionPlan,
   type EntitlementDefinition,
   type RedeemCode,
   type SubscriptionPlanVO,
@@ -38,6 +39,16 @@ export const MembershipLevels = () => {
   const [features, setFeatures] = useState<Record<string, boolean>>({})
   const [quotas, setQuotas] = useState<Record<string, number>>({})
   const [saving, setSaving] = useState(false)
+  const [savingMeta, setSavingMeta] = useState(false)
+  const [meta, setMeta] = useState({
+    planName: '',
+    description: '',
+    monthlyPrice: '',
+    yearlyPrice: '',
+    highlight: '',
+    sort: '0',
+    status: '1',
+  })
   const [codes, setCodes] = useState<RedeemCode[]>([])
   const [dialogOpen, setDialogOpen] = useState(false)
   const [form, setForm] = useState({ code: '', planCode: 'PRO', days: '30', maxUses: '1', remark: '' })
@@ -72,6 +83,15 @@ export const MembershipLevels = () => {
       .then((plan) => {
         setFeatures({ ...(plan.features || {}) })
         setQuotas({ ...(plan.quotas || {}) })
+        setMeta({
+          planName: plan.planName || '',
+          description: plan.description || '',
+          monthlyPrice: plan.monthlyPrice === undefined || plan.monthlyPrice === null ? '' : String(plan.monthlyPrice),
+          yearlyPrice: plan.yearlyPrice === undefined || plan.yearlyPrice === null ? '' : String(plan.yearlyPrice),
+          highlight: plan.highlight || '',
+          sort: plan.sort === undefined || plan.sort === null ? '0' : String(plan.sort),
+          status: plan.status === undefined || plan.status === null ? '1' : String(plan.status),
+        })
       })
       .catch(() => undefined)
   }, [active])
@@ -85,6 +105,29 @@ export const MembershipLevels = () => {
       toast.error(error instanceof Error ? error.message : String(error))
     } finally {
       setSaving(false)
+    }
+  }
+
+  const saveMeta = async () => {
+    if (!active) return
+    setSavingMeta(true)
+    try {
+      await saveSubscriptionPlan({
+        planCode: active,
+        planName: meta.planName,
+        description: meta.description,
+        monthlyPrice: meta.monthlyPrice === '' ? undefined : Number(meta.monthlyPrice),
+        yearlyPrice: meta.yearlyPrice === '' ? undefined : Number(meta.yearlyPrice),
+        highlight: meta.highlight,
+        sort: Number(meta.sort) || 0,
+        status: Number(meta.status),
+      })
+      toast.success('已保存方案信息')
+      loadCatalog()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    } finally {
+      setSavingMeta(false)
     }
   }
 
@@ -125,6 +168,49 @@ export const MembershipLevels = () => {
         <Button size="sm" className="ml-auto" onClick={save} disabled={saving || !active}>
           保存权益
         </Button>
+      </div>
+
+      <div className="mb-8 grid gap-4 rounded-xl border p-4 md:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label>方案名称</Label>
+          <Input value={meta.planName} onChange={(event) => setMeta((prev) => ({ ...prev, planName: event.target.value }))} />
+        </div>
+        <div className="space-y-1.5">
+          <Label>营销卖点</Label>
+          <Input value={meta.highlight} onChange={(event) => setMeta((prev) => ({ ...prev, highlight: event.target.value }))} />
+        </div>
+        <div className="space-y-1.5">
+          <Label>月付价格（仅展示）</Label>
+          <Input value={meta.monthlyPrice} onChange={(event) => setMeta((prev) => ({ ...prev, monthlyPrice: event.target.value }))} />
+        </div>
+        <div className="space-y-1.5">
+          <Label>年付价格（仅展示）</Label>
+          <Input value={meta.yearlyPrice} onChange={(event) => setMeta((prev) => ({ ...prev, yearlyPrice: event.target.value }))} />
+        </div>
+        <div className="space-y-1.5 md:col-span-2">
+          <Label>方案描述</Label>
+          <Input value={meta.description} onChange={(event) => setMeta((prev) => ({ ...prev, description: event.target.value }))} />
+        </div>
+        <div className="space-y-1.5">
+          <Label>排序</Label>
+          <Input value={meta.sort} onChange={(event) => setMeta((prev) => ({ ...prev, sort: event.target.value }))} />
+        </div>
+        <div className="space-y-1.5">
+          <Label>状态</Label>
+          <select
+            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+            value={meta.status}
+            onChange={(event) => setMeta((prev) => ({ ...prev, status: event.target.value }))}
+          >
+            <option value="1">启用</option>
+            <option value="0">停用</option>
+          </select>
+        </div>
+        <div className="md:col-span-2">
+          <Button size="sm" onClick={saveMeta} disabled={savingMeta || !active}>
+            保存方案信息
+          </Button>
+        </div>
       </div>
 
       <div className="mb-8 divide-y rounded-xl border">

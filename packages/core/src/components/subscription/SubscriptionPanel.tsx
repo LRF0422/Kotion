@@ -111,7 +111,16 @@ export const SubscriptionPanel: React.FC = () => {
             </SettingsSection>
 
             <SettingsSection title="方案对比" description="支付功能尚未开放，升级请联系平台管理员或使用兑换码">
-                <PlanComparison catalog={catalog} currentPlanCode={planCode} />
+                <PlanComparison
+                    catalog={catalog}
+                    currentPlanCode={planCode}
+                    renderPlanAction={(plan) => (
+                        <UpgradeDialog
+                            initialPlanName={plan.planName}
+                            trigger={<Button size="sm" variant="outline" className="h-9">选择</Button>}
+                        />
+                    )}
+                />
             </SettingsSection>
         </div>
     )
