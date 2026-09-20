@@ -15,7 +15,8 @@ const formatDate = (value?: string) => {
 const USAGE_ROWS = [
     { code: 'space.count', key: 'spaceCount', unit: '个' },
     { code: 'storage.bytes', key: 'storage', unit: 'bytes' },
-    { code: 'ai.tokens.daily', key: 'aiTokens', unit: 'tokens' },
+    { code: 'ai.runs.daily', key: 'aiRuns', unit: '次' },
+    { code: 'ai.credits.monthly', key: 'aiCredits', unit: '积分' },
 ]
 
 export const SubscriptionPanel: React.FC = () => {
@@ -38,7 +39,8 @@ export const SubscriptionPanel: React.FC = () => {
         Promise.all([
             fetchOne(APIS.GET_SPACE_USAGE, 'space.count'),
             fetchOne(APIS.GET_STORAGE_USAGE, 'storage.bytes'),
-            fetchOne(APIS.GET_AI_TOKEN_USAGE, 'ai.tokens.daily'),
+            fetchOne(APIS.GET_AI_RUN_USAGE, 'ai.runs.daily'),
+            fetchOne(APIS.GET_AI_CREDIT_USAGE, 'ai.credits.monthly'),
         ]).then((rows) => {
             const next: Record<string, number> = {}
             rows.forEach((row) => {

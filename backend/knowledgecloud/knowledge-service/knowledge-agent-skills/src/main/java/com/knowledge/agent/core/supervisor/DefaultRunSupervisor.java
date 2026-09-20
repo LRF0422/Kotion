@@ -548,7 +548,7 @@ public class DefaultRunSupervisor {
                 runStore, checkpointStore, eventLog,
                 llmGateway, toolGateway, contextManager,
                 delegator, objectMapper, properties, toolExecutor,
-                this::onLoopExit, gate, cancelFlag, quota::checkUserDailyTokenBudget);
+                this::onLoopExit, gate, cancelFlag, quota::checkUserCreditBudget);
         // Children run on a SEPARATE pool. A parent blocks its own thread while
         // waiting for children; if children shared the parent pool they would
         // queue behind blocked parents and starve (a deadlock with core=4).

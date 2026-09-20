@@ -1,6 +1,6 @@
 package com.knowledge.agent.core.web;
 
-import com.knowledge.agent.core.mapper.AgentRunMapper;
+import com.knowledge.agent.core.usage.CreditUsageService;
 import com.knowledge.core.secure.utils.SecurityContextUtil;
 import com.knowledge.core.tool.api.R;
 import io.swagger.annotations.Api;
@@ -10,11 +10,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.LocalDate;
-import java.time.ZoneId;
-
 /**
- * 当前用户的 AI 用量（自服务展示，非管理端）。
+ * 当前用户的 AI 用量（自服务展示）：每日次数 + 本月积分。
  *
  * @author Kotion
  */
@@ -24,16 +21,17 @@ import java.time.ZoneId;
 @RequiredArgsConstructor
 public class AgentUsageController {
 
-    private final AgentRunMapper runMapper;
+    private final CreditUsageService creditUsageService;
 
-    @ApiOperation("Current user's token usage today")
-    @GetMapping("/ai-tokens")
-    public R<Long> aiTokensToday() {
-        Long userId = SecurityContextUtil.getUserId();
-        if (userId == null) {
-            return R.data(0L);
-        }
-        long startMs = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
-        return R.data(runMapper.sumDailyTokensByUser(userId, startMs));
+    @ApiOperation("Current user's AI runs today")
+    @GetMapping("/ai-runs")
+    public R<Long> aiRunsToday() {
+        return R.data(creditUsageService.todayRootRuns(SecurityContextUtil.getUserId()));
+    }
+
+    @ApiOperation("Current user's AI credits used this month")
+    @GetMapping("/ai-credits")
+    public R<Long> aiCreditsThisMonth() {
+        return R.data(creditUsageService.monthlyCreditsUsed(SecurityContextUtil.getUserId()));
     }
 }

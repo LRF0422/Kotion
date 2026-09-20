@@ -32,13 +32,16 @@ public class RunQuota {
     private final AgentRunMapper runMapper;
     private final AgentCoreProperties properties;
     private final EntitlementGate entitlementGate;
+    private final com.knowledge.agent.core.usage.CreditUsageService creditUsageService;
 
     public RunQuota(StringRedisTemplate redis, AgentRunMapper runMapper,
-                    AgentCoreProperties properties, EntitlementGate entitlementGate) {
+                    AgentCoreProperties properties, EntitlementGate entitlementGate,
+                    com.knowledge.agent.core.usage.CreditUsageService creditUsageService) {
         this.redis = redis;
         this.runMapper = runMapper;
         this.properties = properties;
         this.entitlementGate = entitlementGate;
+        this.creditUsageService = creditUsageService;
     }
 
     /** Throws {@link QuotaExceededException} when a quota blocks the create. */
@@ -89,10 +92,13 @@ public class RunQuota {
             return;
         }
         try {
-            checkUserDailyTokenBudget(userId);
+            long runs = creditUsageService.todayRootRuns(userId);
+            entitlementGate.requireQuota(userId, EntitlementCodes.AI_RUNS_DAILY, runs, 1,
+                    "今日 AI 次数已达套餐上限，请升级套餐或明天再试");
             long active = runMapper.countActiveByUser(userId);
             entitlementGate.requireQuota(userId, EntitlementCodes.AI_RUNS_CONCURRENT, active, 1,
                     "并发任务数已达套餐上限，请等待当前任务结束");
+            checkUserCreditBudget(userId);
         } catch (com.knowledge.core.entitlement.error.EntitlementException e) {
             throw e;
         } catch (Exception e) {
@@ -100,14 +106,14 @@ public class RunQuota {
         }
     }
 
-    /** 当日 token 额度校验；run 执行途中也会调用（熔断）。 */
-    public void checkUserDailyTokenBudget(Long userId) {
+    /** 月度积分校验；run 执行途中也会调用（熔断）。 */
+    public void checkUserCreditBudget(Long userId) {
         if (userId == null || entitlementGate == null) {
             return;
         }
-        long used = runMapper.sumDailyTokensByUser(userId, startOfDayMillis());
-        entitlementGate.requireQuota(userId, EntitlementCodes.AI_TOKENS_DAILY, used, 0,
-                "今日 AI 用量已达套餐上限，请升级套餐或明天再试");
+        long used = creditUsageService.monthlyCreditsUsed(userId);
+        entitlementGate.requireQuota(userId, EntitlementCodes.AI_CREDITS_MONTHLY, used, 0,
+                "本月 AI 积分已用完，请升级套餐或等待下月重置");
     }
 
     private long startOfDayMillis() {

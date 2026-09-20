@@ -14,7 +14,7 @@
 | 后端 | 方案目录、权益解析（60s 缓存）、客户端与平台端接口、授予/撤销与审计 |
 | 共享模块 | `knowledge-tool/knowledge-core-entitlement`：注解/SPI/Gate/拦截器/Feign 客户端/自动装配 |
 | 内部鉴权 | `Knowledge-Internal-Token` 服务令牌；knowledge-system 实现 `/entitlement/internal/*` |
-| 配额拦截 | `space.count` + `space.members` + 插件/协作门禁（wiki）、`storage.bytes` + `file.maxSize`（file-center）、`ai.tokens.daily` + `ai.runs.concurrent`（agent）、`export.pdf`（前端） |
+| 配额拦截 | `space.count` + `space.members` + 插件/协作门禁（wiki）、`storage.bytes` + `file.maxSize`（file-center）、`ai.runs.daily` + `ai.credits.monthly` + `ai.runs.concurrent`（agent）、`export.pdf`（前端） |
 | 前端 | `useEntitlements`、设置页「订阅方案」、方案对比、升级占位、`PaywallGate`（组件已有，**未铺开**） |
 | Admin | 用户订阅列表、授予/撤销；方案目录接口 |
 

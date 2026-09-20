@@ -743,8 +743,11 @@ export const getSubscriptionAudit = (params?: { operatorId?: string; userId?: st
 export const getUserSpaceUsage = (userId: string) =>
   get<number>('/knowledge-wiki/admin/stats/user-space-count', { userId })
 
-export const getUserAiTokenUsage = (userId: string) =>
-  get<number>('/knowledge-agent/admin/ai/usage/user', { userId })
+export const getUserAiRunUsage = (userId: string) =>
+  get<number>('/knowledge-agent/admin/ai/usage/user-runs', { userId })
+
+export const getUserAiCreditUsage = (userId: string) =>
+  get<number>('/knowledge-agent/admin/ai/usage/user-credits', { userId })
 
 export const getUserStorageUsage = (userId: string) =>
   get<number>('/knowledge-file-center/file/admin/usage/storage', { userId })

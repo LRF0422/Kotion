@@ -46,10 +46,24 @@ public interface AgentRunMapper extends BaseMapper<AgentRunEntity> {
             "AND status IN ('QUEUED','RUNNING','SUSPENDED','WAITING_TOOLS')")
     long countActiveByTenant(@Param("tenantId") Long tenantId);
 
-    /** 某用户当日 token 累计（输入 + 输出）——权益日额度信号。 */
+    /** 某用户当日 token 累计（输入 + 输出）——管理端用量。 */
     @Select("SELECT COALESCE(SUM(prompt_tokens + completion_tokens), 0) FROM agent_run " +
             "WHERE user_id = #{userId} AND create_time >= #{startMs}")
     long sumDailyTokensByUser(@Param("userId") Long userId, @Param("startMs") long startMs);
+
+    /** 某用户当日根 run 数（子 agent 不重复计）——每日次数额度。 */
+    @Select("SELECT COUNT(*) FROM agent_run WHERE user_id = #{userId} " +
+            "AND parent_run_id IS NULL AND create_time >= #{startMs}")
+    long countDailyRootRunsByUser(@Param("userId") Long userId, @Param("startMs") long startMs);
+
+    /** 某用户区间内按模型的 token 汇总——积分折算用。 */
+    @Select("SELECT model AS model, COALESCE(SUM(prompt_tokens), 0) AS promptTokens, " +
+            "COALESCE(SUM(cached_prompt_tokens), 0) AS cachedPromptTokens, " +
+            "COALESCE(SUM(completion_tokens), 0) AS completionTokens FROM agent_run " +
+            "WHERE user_id = #{userId} AND parent_run_id IS NULL AND create_time >= #{startMs} " +
+            "GROUP BY model")
+    java.util.List<java.util.Map<String, Object>> selectTokenRowsByUser(
+            @Param("userId") Long userId, @Param("startMs") long startMs);
 
     /** 某用户当前活跃 run 数——权益并发信号。 */
     @Select("SELECT COUNT(*) FROM agent_run WHERE user_id = #{userId} " +

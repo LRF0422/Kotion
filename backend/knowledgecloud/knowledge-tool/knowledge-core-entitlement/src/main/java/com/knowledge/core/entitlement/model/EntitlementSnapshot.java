@@ -59,7 +59,8 @@ public class EntitlementSnapshot implements Serializable {
 		quotas.put(EntitlementCodes.SPACE_MEMBERS, 1L);
 		quotas.put(EntitlementCodes.STORAGE_BYTES, 1073741824L);
 		quotas.put(EntitlementCodes.FILE_MAX_SIZE, 67108864L);
-		quotas.put(EntitlementCodes.AI_TOKENS_DAILY, 50000L);
+		quotas.put(EntitlementCodes.AI_RUNS_DAILY, 30L);
+		quotas.put(EntitlementCodes.AI_CREDITS_MONTHLY, 1000L);
 		quotas.put(EntitlementCodes.AI_RUNS_CONCURRENT, 1L);
 		quotas.put(EntitlementCodes.PLUGIN_INSTALLED_COUNT, 3L);
 		return snapshot;

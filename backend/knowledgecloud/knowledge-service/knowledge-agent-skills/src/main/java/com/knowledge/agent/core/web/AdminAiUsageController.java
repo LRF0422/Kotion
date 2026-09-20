@@ -51,6 +51,7 @@ public class AdminAiUsageController {
 
     private final AgentRunMapper runMapper;
     private final AgentModelPriceMapper modelPriceMapper;
+    private final com.knowledge.agent.core.usage.CreditUsageService creditUsageService;
 
     @ApiOperation("Daily token usage trend")
     @GetMapping("/usage/trend")
@@ -121,6 +122,18 @@ public class AdminAiUsageController {
     @GetMapping("/usage/user")
     public R<Long> usageByUserToday(@RequestParam("userId") Long userId) {
         return R.data(runMapper.sumDailyTokensByUser(userId, startOfDayMillis(0)));
+    }
+
+    @ApiOperation("Root run count for one user today")
+    @GetMapping("/usage/user-runs")
+    public R<Long> usageUserRunsToday(@RequestParam("userId") Long userId) {
+        return R.data(runMapper.countDailyRootRunsByUser(userId, startOfDayMillis(0)));
+    }
+
+    @ApiOperation("AI credits used by one user this month")
+    @GetMapping("/usage/user-credits")
+    public R<Long> usageUserCredits(@RequestParam("userId") Long userId) {
+        return R.data(creditUsageService.monthlyCreditsUsed(userId));
     }
 
     // ---- model price CRUD ----

@@ -45,7 +45,7 @@
 ### 2.2 权益两类
 
 - **FEATURE**：布尔能力开关，如 `ai.advancedModels`、`export.pdf`。
-- **QUOTA**：数值额度，如 `space.count`、`ai.tokens.daily`、`storage.bytes`；`-1` 表示不限。
+- **QUOTA**：数值额度，如 `space.count`、`ai.runs.daily`、`ai.credits.monthly`、`storage.bytes`；`-1` 表示不限。
 
 编码唯一定义在 `com.knowledge.system.domain.EntitlementCodes`（前端对应 `packages/common/src/entitlements/index.tsx` 的 `ENTITLEMENT_CODES`）。
 
@@ -59,7 +59,8 @@
 | `storage.bytes` | 1 GB | 50 GB | 200 GB |
 | `file.maxSize` | 64 MB | 512 MB | 2 GB |
 | `ai.agent` | ✓ | ✓ | ✓ |
-| `ai.tokens.daily` | 50k | 1M | 5M |
+| `ai.runs.daily`（每日次数） | 30 | 300 | 1000 |
+| `ai.credits.monthly`（月度积分） | 1k | 20k | 100k |
 | `ai.runs.concurrent` | 1 | 3 | 10 |
 | `ai.advancedModels` | — | ✓ | ✓ |
 | `plugin.install` | ✓ | ✓ | ✓ |
@@ -141,7 +142,7 @@
 | `space.count` | knowledge-wiki | `SpaceApplication.createSpace`（仅新建） | `wiki_space` 按 userId 统计 SPACE/COLLABORATION |
 | `file.maxSize` | knowledge-file-center | `UploadSessionApplication.create` | 请求 `expectedSize` |
 | `storage.bytes` | knowledge-file-center | `UploadSessionApplication.create` | `FileMapper.sumActiveSize(tenantId, userId)` |
-| `ai.tokens.daily` | knowledge-agent-skills | `RunQuota.checkCreateAllowed` | `AgentRunMapper.sumDailyTokensByUser`（当日） |
+| `ai.runs.daily` + `ai.credits.monthly` | knowledge-agent-skills | `RunQuota.checkCreateAllowed`（创建）+ `AgentLoop` 每轮熔断 | `CreditUsageService`（今日根 run 数 / 本月积分，按模型单价折算） |
 | `ai.runs.concurrent` | knowledge-agent-skills | `RunQuota.checkCreateAllowed` | `AgentRunMapper.countActiveByUser` |
 
 - 配额 `-1` 不限、`<= 0`（未配置）跳过；免费版兜底数值写进 `EntitlementSnapshot.free()`，权益服务不可用时不会把额度降成 0 而全量拦截。
@@ -183,6 +184,6 @@
 
 ## 8. 后续
 
-- **P1 权益落地（进行中）**：跨服务客户端与 `space.count` / `file.maxSize` / `storage.bytes` / `ai.tokens.daily` / `ai.runs.concurrent` 已落地；**待办**：`space.members`、`plugin.installed.count`、`plugin.publish`、`export.pdf`、`collaboration.*` 等其余权益接入，以及前端 `PaywallGate` 铺到具体功能与配额进度条。
+- **P1 权益落地（进行中）**：跨服务客户端与 `space.count` / `file.maxSize` / `storage.bytes` / `ai.runs.daily` / `ai.credits.monthly` / `ai.runs.concurrent` 已落地；**待办**：`space.members`、`plugin.installed.count`、`plugin.publish`、`export.pdf`、`collaboration.*` 等其余权益接入，以及前端 `PaywallGate` 铺到具体功能与配额进度条。
 - **P2 运营化**：兑换码、试用、到期提醒任务、admin 可视化权益配置。
 - **支付**：保留 `subscription_plan` 的价格字段与 `subscription_grant_log` 来源枚举（`REDEEM`/`TRIAL`/`PAYMENT` 预留），将来接入时不需要改模型。

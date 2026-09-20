@@ -155,7 +155,7 @@ public class AgentLoop implements Runnable {
 
     /** Cross-instance cancel marker (cancel may arrive on a non-owning node). */
     private final RunCancelFlag cancelFlag;
-    private final java.util.function.LongConsumer dailyTokenGuard;
+    private final java.util.function.LongConsumer creditGuard;
 
     /** Throttle for the external-cancel Redis lookup. */
     private static final long EXTERNAL_CANCEL_POLL_MS = 2000L;
@@ -190,7 +190,7 @@ public class AgentLoop implements Runnable {
                      LlmGateway llmGateway, ToolGateway toolGateway, ContextManager contextManager,
                      Delegator delegator, ObjectMapper objectMapper, AgentCoreProperties properties,
                      ExecutorService toolExecutor, ExitCallback exitCallback, ResumeGate gate,
-                     RunCancelFlag cancelFlag, java.util.function.LongConsumer dailyTokenGuard) {
+                     RunCancelFlag cancelFlag, java.util.function.LongConsumer creditGuard) {
         this.run = run;
         this.checkpoint = checkpoint;
         this.runInput = runInput;
@@ -207,7 +207,7 @@ public class AgentLoop implements Runnable {
         this.exitCallback = exitCallback;
         this.gate = gate;
         this.cancelFlag = cancelFlag;
-        this.dailyTokenGuard = dailyTokenGuard;
+        this.creditGuard = creditGuard;
         if (runInput != null && runInput.clientTools() != null) {
             for (ToolSpec spec : runInput.clientTools()) {
                 if (spec != null && spec.getName() != null) {
@@ -385,10 +385,10 @@ public class AgentLoop implements Runnable {
                 run.setCachedPromptTokens(checkpoint.getCachedPromptTokens());
 
                 // Mid-run cutoff: a single run can otherwise blow far past the
-                // daily budget. Throwing here lets run() fail the run with a
-                // quota_exceeded terminal state.
-                if (dailyTokenGuard != null && run.getUserId() != null) {
-                    dailyTokenGuard.accept(run.getUserId());
+                // monthly credit budget. Throwing here lets run() fail the run
+                // with a quota_exceeded terminal state.
+                if (creditGuard != null && run.getUserId() != null) {
+                    creditGuard.accept(run.getUserId());
                 }
 
                 if (isCancelled()) {

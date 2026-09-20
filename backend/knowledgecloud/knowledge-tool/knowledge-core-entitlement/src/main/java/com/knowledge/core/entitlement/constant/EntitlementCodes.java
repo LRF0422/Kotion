@@ -19,7 +19,10 @@ public final class EntitlementCodes {
 	public static final String STORAGE_BYTES = "storage.bytes";
 	public static final String FILE_MAX_SIZE = "file.maxSize";
 	public static final String AI_AGENT = "ai.agent";
-	public static final String AI_TOKENS_DAILY = "ai.tokens.daily";
+	/** 每日 AI 次数（用户可见口径；一次用户消息触发的完整 run 算一次）。 */
+	public static final String AI_RUNS_DAILY = "ai.runs.daily";
+	/** 月度 AI 积分（按模型单价 × token 折算，反映真实成本）。 */
+	public static final String AI_CREDITS_MONTHLY = "ai.credits.monthly";
 	public static final String AI_RUNS_CONCURRENT = "ai.runs.concurrent";
 	public static final String AI_ADVANCED_MODELS = "ai.advancedModels";
 	public static final String PLUGIN_INSTALL = "plugin.install";

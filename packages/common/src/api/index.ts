@@ -94,9 +94,14 @@ export const APIS = {
         url: '/knowledge-file-center/file/usage/storage',
         method: 'GET'
     } as API<number>,
-    /** 自服务用量：今日 AI token */
-    GET_AI_TOKEN_USAGE: {
-        url: '/knowledge-agent/api/agent/v1/usage/ai-tokens',
+    /** 自服务用量：今日 AI 次数 */
+    GET_AI_RUN_USAGE: {
+        url: '/knowledge-agent/api/agent/v1/usage/ai-runs',
+        method: 'GET'
+    } as API<number>,
+    /** 自服务用量：本月 AI 积分 */
+    GET_AI_CREDIT_USAGE: {
+        url: '/knowledge-agent/api/agent/v1/usage/ai-credits',
         method: 'GET'
     } as API<number>,
     GET_CONTEXTS: {

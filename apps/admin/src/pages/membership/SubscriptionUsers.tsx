@@ -24,7 +24,8 @@ import { formatDateTime } from '@/lib/use-paged-data'
 import {
   getAdminUserSubscriptions,
   getSubscriptionGrantLogs,
-  getUserAiTokenUsage,
+  getUserAiCreditUsage,
+  getUserAiRunUsage,
   getUserSpaceUsage,
   getUserStorageUsage,
   grantUserSubscription,
@@ -59,7 +60,7 @@ export const SubscriptionUsers = () => {
   const [usageOpen, setUsageOpen] = useState(false)
   const [usageLoading, setUsageLoading] = useState(false)
   const [usageTarget, setUsageTarget] = useState<AdminUserSubscription | null>(null)
-  const [usage, setUsage] = useState<{ space?: number; tokens?: number; storage?: number }>({})
+  const [usage, setUsage] = useState<{ space?: number; runs?: number; credits?: number; storage?: number }>({})
   const [formPlan, setFormPlan] = useState('PRO')
   const [formDays, setFormDays] = useState('30')
   const [formRemark, setFormRemark] = useState('')
@@ -140,11 +141,17 @@ export const SubscriptionUsers = () => {
     setUsageOpen(true)
     Promise.all([
       getUserSpaceUsage(row.userId).catch(() => 0),
-      getUserAiTokenUsage(row.userId).catch(() => 0),
+      getUserAiRunUsage(row.userId).catch(() => 0),
+      getUserAiCreditUsage(row.userId).catch(() => 0),
       getUserStorageUsage(row.userId).catch(() => 0),
     ])
-      .then(([space, tokens, storage]) => {
-        setUsage({ space: Number(space) || 0, tokens: Number(tokens) || 0, storage: Number(storage) || 0 })
+      .then(([space, runs, credits, storage]) => {
+        setUsage({
+          space: Number(space) || 0,
+          runs: Number(runs) || 0,
+          credits: Number(credits) || 0,
+          storage: Number(storage) || 0,
+        })
       })
       .finally(() => setUsageLoading(false))
   }
@@ -343,8 +350,12 @@ export const SubscriptionUsers = () => {
                   <span className="font-medium">{usage.space ?? '-'}</span>
                 </div>
                 <div className="flex items-center justify-between px-4 py-3 text-sm">
-                  <span className="text-muted-foreground">今日 AI Token</span>
-                  <span className="font-medium">{formatTokens(usage.tokens)}</span>
+                  <span className="text-muted-foreground">今日 AI 次数</span>
+                  <span className="font-medium">{usage.runs ?? '-'}</span>
+                </div>
+                <div className="flex items-center justify-between px-4 py-3 text-sm">
+                  <span className="text-muted-foreground">本月 AI 积分</span>
+                  <span className="font-medium">{usage.credits ?? '-'}</span>
                 </div>
                 <div className="flex items-center justify-between px-4 py-3 text-sm">
                   <span className="text-muted-foreground">存储占用</span>
@@ -372,9 +383,4 @@ const formatBytes = (bytes?: number) => {
   return bytes + ' B'
 }
 
-const formatTokens = (value?: number) => {
-  if (value === undefined || value === null) return '-'
-  if (value >= 1000000) return (value / 1000000).toFixed(2) + 'M'
-  if (value >= 1000) return Math.round(value / 1000) + 'k'
-  return String(value)
-}
+// AI 次数/积分直接展示整数，无需缩写

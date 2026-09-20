@@ -1075,7 +1075,8 @@ export const resources = {
           usageLabel: {
             spaceCount: "空间数量",
             storage: "存储空间",
-            aiTokens: "今日 AI Token",
+            aiRuns: "今日 AI 次数",
+            aiCredits: "本月 AI 积分",
           },
         },
         nav: {
@@ -2436,7 +2437,8 @@ export const resources = {
           usageLabel: {
             spaceCount: "Spaces",
             storage: "Storage",
-            aiTokens: "AI tokens today",
+            aiRuns: "AI runs today",
+            aiCredits: "AI credits this month",
           },
         },
         nav: {
