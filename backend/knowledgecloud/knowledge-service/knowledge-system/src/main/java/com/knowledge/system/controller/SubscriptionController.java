@@ -37,7 +37,6 @@ public class SubscriptionController {
 	private final IUserSubscriptionService userSubscriptionService;
 	private final IEntitlementService entitlementService;
 	private final ISubscriptionRedeemService subscriptionRedeemService;
-	private final org.springframework.core.env.Environment environment;
 
 	@ApiOperation("方案目录（含权益定义与三档取值）")
 	@GetMapping("/catalog")
@@ -84,7 +83,7 @@ public class SubscriptionController {
 	@PostMapping("/trial")
 	public R<Boolean> trial() {
 		try {
-			int trialDays = environment.getProperty("knowledge.subscription.trial-days", Integer.class, 7);
+			int trialDays = 7;
 			return R.data(userSubscriptionService.startTrial(SecurityContextUtil.getUserId(), trialDays));
 		} catch (IllegalArgumentException e) {
 			return R.fail(e.getMessage());
