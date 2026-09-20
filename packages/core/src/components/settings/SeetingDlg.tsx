@@ -254,7 +254,13 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
             <ScrollArea className="min-h-0 flex-1">
                 <div className="px-5 py-6 md:px-8">
                     {showHeader && (
-                        <div className="mx-auto mb-6 w-full max-w-2xl space-y-0.5">
+                        <div
+                            className={cn(
+                                "mb-6 w-full space-y-0.5 text-left",
+                                // 订阅页是满宽内容，标题跟随满宽左对齐；其余页保持居中窄栏。
+                                currentKey === "Subscription" ? "" : "mx-auto max-w-2xl",
+                            )}
+                        >
                             <h2 className="text-lg font-semibold text-foreground">{meta.title}</h2>
                             {meta.description && (
                                 <p className="text-sm text-muted-foreground">{meta.description}</p>
@@ -322,8 +328,10 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                     // 覆盖 DialogContent 默认的 grid/gap/padding，改为 flex 列布局，
                     // 让内部 body 拿到确定高度（否则 grid auto 行会按内容撑高，ScrollArea 失效）。
                     "flex flex-col gap-0 overflow-hidden p-0",
-                    "h-[100dvh] max-w-full rounded-none border-0 pt-safe pb-safe",
-                    "md:h-[660px] md:max-w-[920px] md:rounded-xl md:border",
+                    // 移动端全屏；桌面端是「居中大弹窗」——按视口留白（92vw / 86vh），
+                    // 四周可见背景与圆角，不铺满整屏（参考 Notion Explore plans）。
+                    "h-[100dvh] w-full max-w-full rounded-none border-0 pt-safe pb-safe",
+                    "md:h-[86vh] md:max-h-[760px] md:w-[92vw] md:max-w-[1120px] md:rounded-xl md:border",
                 )}
             >
                 {isMobile ? MobileBody : DesktopBody}
