@@ -175,9 +175,16 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
         [resolveFileItem, view, searchKeyword]
     );
 
-    /** Create a single folder record and return its id (no toast / refresh). */
+    /**
+     * Create a single folder record (no toast / refresh).
+     *
+     * Resolves once the request succeeds (the interceptor already rejects real
+     * failures). The new id is returned when the backend provides one, but its
+     * absence must not be reported as a creation failure — older backends only
+     * return a bare success envelope.
+     */
     const createFolderNode = useCallback(
-        async (name: string, parentId: string, repoKey: string): Promise<string> => {
+        async (name: string, parentId: string, repoKey: string): Promise<string | undefined> => {
             const res = await useApi(APIS.CREATE_FILE, null, {
                 name,
                 parentId: parentId || '0',
@@ -185,10 +192,9 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
                 repositoryKey: repoKey,
             });
             const createdId = res?.data?.id ?? res?.data?.fileId ?? res?.data?.folderId;
-            if (createdId === undefined || createdId === null || createdId === '') {
-                throw new Error('Failed to create folder');
-            }
-            return String(createdId);
+            return createdId === undefined || createdId === null || createdId === ''
+                ? undefined
+                : String(createdId);
         },
         []
     );
@@ -336,9 +342,11 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
                 childrenByParent.set(currentFolderId || '0', currentFolderItems);
                 const folderIdByPath = new Map<string, string>();
 
-                const listChildren = async (parentId: string): Promise<FileItem[]> => {
-                    const cached = childrenByParent.get(parentId);
-                    if (cached) return cached;
+                const listChildren = async (parentId: string, force = false): Promise<FileItem[]> => {
+                    if (!force) {
+                        const cached = childrenByParent.get(parentId);
+                        if (cached) return cached;
+                    }
                     const res = await useApi(APIS.GET_CHILDREN, { folderId: parentId || '0' });
                     const items = (res?.data || []).map((item: any) => resolveFileItem(item));
                     childrenByParent.set(parentId, items);
@@ -351,16 +359,26 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
                         ? folderIdByPath.get(directory.parentPath)
                         : (currentFolderId || '0');
                     if (!parentId) continue;
-                    const siblings = await listChildren(parentId);
+                    let siblings = await listChildren(parentId);
                     const existing = siblings.find((item) =>
                         item.isFolder && normalizeFileName(item.name, item.id) === directory.name);
-                    let folderId: string;
+                    let folderId: string | undefined;
                     if (existing) {
                         folderId = existing.id;
                     } else {
                         folderId = await createFolderNode(directory.name, parentId, repoKey);
-                        siblings.push({ id: folderId, name: directory.name, isFolder: true, type: { value: 'FOLDER' } });
+                        if (folderId) {
+                            siblings.push({ id: folderId, name: directory.name, isFolder: true, type: { value: 'FOLDER' } });
+                        } else {
+                            // Backend did not return the new id; recover it from a fresh listing.
+                            siblings = await listChildren(parentId, true);
+                            folderId = siblings.find((item) =>
+                                item.isFolder && normalizeFileName(item.name, item.id) === directory.name)?.id;
+                        }
                         foldersCreated += 1;
+                    }
+                    if (!folderId) {
+                        throw new Error('Failed to create folder');
                     }
                     folderIdByPath.set(directory.path, folderId);
                 }
