@@ -16,7 +16,6 @@ import { event } from "@kn/common";
 import { useUploadFile } from "@kn/common";
 import { LanguageToggle } from "../locales/LanguageToggle";
 import { MessageBox } from "./MessageBox";
-import { Sparkles } from "@kn/icon";
 import { APIS, clearContextSensitiveClientState, clearTokens, getRefreshToken, notifyContextChanged, useApi } from "@kn/common";
 
 const GITHUB_URL = "https://github.com/LRF0422/knowledge-repo";
@@ -132,13 +131,6 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
 
         return [
             ...pluginMenus as SiderMenuItemProps[],
-            {
-                name: 'AI Assistant',
-                icon: <Sparkles className="h-5 w-5" />,
-                key: '/ai-assistant',
-                attachTabs: true,
-                id: '/ai-assistant'
-            },
             {
                 name: 'Shop',
                 icon: <Blocks className="h-5 w-5" id="welcome-title" />,

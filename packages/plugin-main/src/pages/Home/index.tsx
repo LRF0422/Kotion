@@ -1,5 +1,5 @@
 import { Button, Card, CardContent, Dialog, DialogContent, DialogHeader, DialogTitle, Input, Skeleton, Tabs, TabsContent, TabsList, TabsTrigger, cn, useIsMobile } from "@kn/ui";
-import { type BlockSummary, type DateTimeValue, type PageSummary, type ResolvedPageType, type Space, useSpacePageService, useNavigator, useSelector, GlobalState, event, TOGGLE_AI_ASSISTANT, useDebounce } from "@kn/common";
+import { type BlockSummary, type DateTimeValue, type PageSummary, type ResolvedPageType, type Space, useSpacePageService, useNavigator, useSelector, GlobalState, event, useDebounce } from "@kn/common";
 import { ArrowRight, BanIcon, Book, Box, FileText, FilePlus, FolderPlus, LayoutGrid, Moon, Network, Plus, SearchIcon, Sparkles, Star, Sun, Sunset, Tag, Users, X, AlignLeft } from "@kn/icon";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { CreateSpaceDlg } from "../components/SpaceForm";
@@ -431,10 +431,6 @@ export const Home: React.FC = () => {
                         <Button size="sm" variant="outline" onClick={() => navigator.go({ to: "/all-spaces" })} data-tour="home-all-spaces">
                             <span className="mr-1.5 flex h-5 w-5 items-center justify-center" style={chipStyle(28)}><LayoutGrid className="h-4 w-4" /></span>
                             {t("home.all-spaces") || "All Spaces"}
-                        </Button>
-                        <Button size="sm" variant="outline" onClick={() => event.emit(TOGGLE_AI_ASSISTANT)} data-tour="home-ai">
-                            <span className="mr-1.5 flex h-5 w-5 items-center justify-center" style={chipStyle(276)}><Sparkles className="h-4 w-4" /></span>
-                            {t("home.ai-assistant") || "AI Assistant"}
                         </Button>
                         <Button size="sm" variant="outline" onClick={() => setGraphOpen(true)}>
                             <span className="mr-1.5 flex h-5 w-5 items-center justify-center" style={chipStyle(200)}><Network className="h-4 w-4" /></span>
