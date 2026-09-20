@@ -315,10 +315,14 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
                 else if (type === 'error') toast.error(message, id === undefined ? undefined : { id });
                 else toast.info(message, id === undefined ? undefined : { id });
             };
-            /** Reuse the active loading toast to report folder-tree progress. */
-            const showFolderProgress = (done: number, total: number) => {
-                if (progressToastId === undefined || total <= 0) return;
-                toast.loading(`Creating folders… ${done}/${total}`, { id: progressToastId });
+            /** Mirror folder-tree progress on the toast and in the upload panel. */
+            const showFolderProgress = (current: number, total: number, name?: string) => {
+                if (total <= 0) return;
+                const label = name ? `Creating folder “${name}”` : 'Creating folders';
+                uploadTaskService?.setPreparation({ label, done: current, total });
+                if (progressToastId !== undefined) {
+                    toast.loading(`${label}… ${current}/${total}`, { id: progressToastId });
+                }
             };
 
             if (!resolved) {
@@ -361,7 +365,7 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
                 let foldersCreated = 0;
                 const totalFolders = plan.directories.length;
                 for (const [index, directory] of plan.directories.entries()) {
-                    showFolderProgress(index, totalFolders);
+                    showFolderProgress(index + 1, totalFolders, directory.name);
                     const parentId = directory.parentPath
                         ? folderIdByPath.get(directory.parentPath)
                         : (currentFolderId || '0');
@@ -390,8 +394,15 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
                     folderIdByPath.set(directory.path, folderId);
                 }
                 showFolderProgress(totalFolders, totalFolders);
-                if (progressToastId !== undefined && plan.files.length > 0) {
-                    toast.loading('Queueing files for upload…', { id: progressToastId });
+                if (plan.files.length > 0) {
+                    uploadTaskService?.setPreparation({
+                        label: 'Queueing files for upload',
+                        done: 0,
+                        total: plan.files.length,
+                    });
+                    if (progressToastId !== undefined) {
+                        toast.loading('Queueing files for upload…', { id: progressToastId });
+                    }
                 }
 
                 let filesQueued = 0;
@@ -438,9 +449,11 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
                 const message = error instanceof Error ? error.message : 'Failed to upload folder';
                 settle(message, 'error');
                 return null;
+            } finally {
+                uploadTaskService?.setPreparation(null);
             }
         },
-        [createFolderNode, currentFolderId, currentFolderItems, enqueueUploadSources, refresh, resolveFileItem]
+        [createFolderNode, currentFolderId, currentFolderItems, enqueueUploadSources, refresh, resolveFileItem, uploadTaskService]
     );
 
     /** 删除 → 移入回收站(批量) */

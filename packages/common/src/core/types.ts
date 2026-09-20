@@ -98,6 +98,14 @@ export interface UploadTask {
     updatedAt: number;
 }
 
+/** Transient progress for work that precedes enqueuing uploads (e.g. a folder tree). */
+export interface UploadPreparation {
+    /** Current step, e.g. `Creating folder “Design”`. */
+    label: string;
+    done: number;
+    total: number;
+}
+
 export interface UploadTaskSnapshot {
     tasks: readonly UploadTask[];
     totalBytes: number;
@@ -107,6 +115,8 @@ export interface UploadTaskSnapshot {
     completedCount: number;
     failedCount: number;
     initialized: boolean;
+    /** Present while a folder tree is being prepared before uploads are queued. */
+    preparation?: UploadPreparation | null;
 }
 
 export interface UploadTaskService {
@@ -114,6 +124,8 @@ export interface UploadTaskService {
     enqueue(sources: UploadSource[], destination: UploadDestination): Promise<string[]>;
     getSnapshot(): UploadTaskSnapshot;
     subscribe(listener: () => void): () => void;
+    /** Show or clear the transient preparation row in the upload panel. */
+    setPreparation(preparation: UploadPreparation | null): void;
     pause(taskId: string): void;
     resume(taskId: string): Promise<void>;
     cancel(taskId: string): Promise<void>;

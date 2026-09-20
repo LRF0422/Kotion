@@ -3,6 +3,7 @@ import {
     getTokenContextState,
     logger,
     type UploadDestination,
+    type UploadPreparation,
     type UploadSource,
     type UploadTask,
     type UploadTaskService,
@@ -94,9 +95,11 @@ export class UploadTaskServiceImpl implements UploadTaskService {
     private readonly verifyUploadedParts = new Set<string>();
     private readonly completionWaiters = new Map<string, Array<{ resolve: (value: unknown) => void; reject: (reason: unknown) => void }>>();
     private capabilities: UploadCapabilities | null = null;
+    private preparation: UploadPreparation | null = null;
     private snapshot: UploadTaskSnapshot = {
         tasks: [], totalBytes: 0, uploadedBytes: 0, progress: 0,
         activeCount: 0, completedCount: 0, failedCount: 0, initialized: false,
+        preparation: null,
     };
     private initialized = false;
     private pumpScheduled = false;
@@ -189,6 +192,12 @@ export class UploadTaskServiceImpl implements UploadTaskService {
     subscribe(listener: () => void): () => void {
         this.listeners.add(listener);
         return () => this.listeners.delete(listener);
+    }
+
+    setPreparation(preparation: UploadPreparation | null): void {
+        if (this.preparation === preparation) return;
+        this.preparation = preparation;
+        this.rebuildSnapshot();
     }
 
     pause(taskId: string): void {
@@ -788,6 +797,7 @@ export class UploadTaskServiceImpl implements UploadTaskService {
             completedCount: tasks.filter((task) => task.status === 'COMPLETED').length,
             failedCount: tasks.filter((task) => task.status === 'FAILED').length,
             initialized,
+            preparation: this.preparation,
         };
         this.listeners.forEach((listener) => listener());
     }

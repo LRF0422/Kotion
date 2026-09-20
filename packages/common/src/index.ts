@@ -19,7 +19,7 @@ export * from "./locales"
 export type {
     KeysWithTypeOf, ValuesOf,
     UploadedFile, UploadOptions, UploadTaskStatus, UploadDestination, UploadFileHandle,
-    UploadSource, UploadTask, UploadTaskSnapshot, UploadTaskService,
+    UploadSource, UploadTask, UploadTaskSnapshot, UploadTaskService, UploadPreparation,
     FileSelectorOptions, SelectedFile, FileAccessUrls, FileDownloadOptions, FileDownloadOutcome,
     FileDownloadProgress, FileService, AIFoundation, Services
 } from "./core/types"

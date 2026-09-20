@@ -18,6 +18,7 @@ import {
     ChevronDown,
     ChevronUp,
     FileUp,
+    FolderPlus,
     Loader2,
     Pause,
     Play,
@@ -31,6 +32,7 @@ import {
     useTranslation,
     useUploadTaskService,
     type UploadFileHandle,
+    type UploadPreparation,
     type UploadTask,
     type UploadTaskService,
     type UploadTaskSnapshot,
@@ -133,6 +135,33 @@ const TaskRow: React.FC<{ task: UploadTask; service: UploadTaskService; t: Trans
     );
 };
 
+const PreparationRow: React.FC<{ preparation: UploadPreparation }> = ({ preparation }) => {
+    const percent = preparation.total > 0
+        ? Math.round((preparation.done / preparation.total) * 100)
+        : 0;
+
+    return (
+        <div className="w-full min-w-0 space-y-1.5 overflow-hidden border-b px-3 py-2 last:border-b-0">
+            <div className="flex min-w-0 items-start gap-2 overflow-hidden">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <FolderPlus className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium" title={preparation.label}>{preparation.label}</p>
+                    <div className="mt-0.5 flex min-w-0 items-center gap-x-2 overflow-hidden whitespace-nowrap text-[11px] text-muted-foreground">
+                        <span>{preparation.done}/{preparation.total}</span>
+                    </div>
+                </div>
+            </div>
+            <Progress
+                className="h-1"
+                value={percent}
+                aria-label={`${preparation.label} ${percent}%`}
+            />
+        </div>
+    );
+};
+
 const TaskPanelContent: React.FC<{
     service: UploadTaskService;
     snapshot: UploadTaskSnapshot;
@@ -163,6 +192,7 @@ const TaskPanelContent: React.FC<{
                 <Progress className="h-1" value={snapshot.progress} aria-label={t('uploadTasks.overallProgress')} />
             </div>
             <div className="min-h-0 max-h-[300px] flex-1 overflow-x-hidden overflow-y-auto">
+                {snapshot.preparation && <PreparationRow preparation={snapshot.preparation} />}
                 {snapshot.tasks.map((task) => <TaskRow key={task.id} task={task} service={service} t={t} />)}
             </div>
             {(snapshot.completedCount > 0 || snapshot.tasks.some((task) =>
@@ -205,8 +235,15 @@ export const UploadTaskPanel: React.FC = () => {
 
     const allCompleted = snapshot.tasks.length > 0
         && snapshot.tasks.every((task) => task.status === 'COMPLETED');
+    const preparation = snapshot.preparation;
+    const preparationPercent = preparation && preparation.total > 0
+        ? Math.round((preparation.done / preparation.total) * 100)
+        : 0;
+    // While only preparing (no queued tasks yet), surface that progress instead of "0%".
+    const preparingOnly = snapshot.tasks.length === 0 && !!preparation;
+    const overallPercent = preparingOnly ? preparationPercent : Math.round(snapshot.progress);
 
-    if (!snapshot.initialized || snapshot.tasks.length === 0) return null;
+    if (!snapshot.initialized || (snapshot.tasks.length === 0 && !preparation)) return null;
 
     if (isMobile || isTablet) {
         return (
@@ -223,7 +260,8 @@ export const UploadTaskPanel: React.FC = () => {
                     {allCompleted ? <CheckCircle2 className="h-4 w-4" /> : <UploadCloud className="h-4 w-4" />}
                     <span>{allCompleted
                         ? translate('uploadTasks.uploadComplete')
-                        : snapshot.activeCount > 0 ? `${Math.round(snapshot.progress)}%` : translate('uploadTasks.title')}</span>
+                        : preparingOnly ? `${overallPercent}%`
+                            : snapshot.activeCount > 0 ? `${Math.round(snapshot.progress)}%` : translate('uploadTasks.title')}</span>
                     <ChevronUp className="h-4 w-4" />
                 </Button>
                 <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
@@ -255,10 +293,10 @@ export const UploadTaskPanel: React.FC = () => {
                         <span className="min-w-0 flex-1 truncate text-left">
                             {allCompleted
                                 ? translate('uploadTasks.uploadComplete')
-                                : translate('uploadTasks.upload')}
+                                : preparingOnly && preparation ? preparation.label : translate('uploadTasks.upload')}
                         </span>
                         {!allCompleted && (
-                            <span className="shrink-0 tabular-nums">· {Math.round(snapshot.progress)}%</span>
+                            <span className="shrink-0 tabular-nums">· {overallPercent}%</span>
                         )}
                         <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-150", desktopOpen && "rotate-180")} />
                     </Button>
