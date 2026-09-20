@@ -254,7 +254,13 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
             <ScrollArea className="min-h-0 flex-1">
                 <div className="px-5 py-6 md:px-8">
                     {showHeader && (
-                        <div className="mx-auto mb-6 w-full max-w-2xl space-y-0.5">
+                        <div
+                            className={cn(
+                                "mb-6 w-full space-y-0.5 text-left",
+                                // 订阅页是满宽内容，标题跟随满宽左对齐；其余页保持居中窄栏。
+                                currentKey === "Subscription" ? "" : "mx-auto max-w-2xl",
+                            )}
+                        >
                             <h2 className="text-lg font-semibold text-foreground">{meta.title}</h2>
                             {meta.description && (
                                 <p className="text-sm text-muted-foreground">{meta.description}</p>
