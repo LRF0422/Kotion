@@ -323,7 +323,8 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                     // 让内部 body 拿到确定高度（否则 grid auto 行会按内容撑高，ScrollArea 失效）。
                     "flex flex-col gap-0 overflow-hidden p-0",
                     "h-[100dvh] max-w-full rounded-none border-0 pt-safe pb-safe",
-                    "md:h-[660px] md:max-w-[920px] md:rounded-xl md:border",
+                    "md:h-[720px] md:max-w-[1080px] md:rounded-xl md:border",
+                    "lg:h-[760px] lg:max-w-[1240px]",
                 )}
             >
                 {isMobile ? MobileBody : DesktopBody}
