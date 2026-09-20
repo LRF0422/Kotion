@@ -46,6 +46,8 @@ type NavItem = {
     contentKey?: string;
     /** 直接执行的动作（如重新引导）。 */
     onClick?: () => void;
+    /** 强调色项：图标与文字使用品牌浅蓝。 */
+    tone?: "brand";
 };
 
 type NavGroup = {
@@ -103,7 +105,7 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                 label: t("settings.nav.account"),
                 items: [
                     { id: "MyAccount", label: t("settings.nav.myAccount"), icon: <UserCircle />, contentKey: "MyAccount" },
-                    { id: "Subscription", label: t("settings.nav.subscription"), icon: <Gem />, contentKey: "Subscription" },
+                    { id: "Subscription", label: t("settings.nav.subscription"), icon: <Gem />, contentKey: "Subscription", tone: "brand" },
                     { id: "MySetting", label: t("settings.nav.preferences"), icon: <Settings />, contentKey: "MySetting" },
                     { id: "MyAgents", label: t("settings.nav.agents"), icon: <Bot />, contentKey: "MyAgents" },
                 ],
@@ -231,9 +233,13 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                                 onClick={() => selectItem(item)}
                                 className={cn(
                                     "group flex min-h-11 w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm transition-colors lg:min-h-0",
-                                    active
-                                        ? "bg-accent font-medium text-foreground"
-                                        : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+                                    item.tone === "brand"
+                                        ? active
+                                            ? "bg-accent font-medium text-[hsl(212_90%_62%)]"
+                                            : "text-[hsl(212_90%_62%)] hover:bg-accent/60"
+                                        : active
+                                            ? "bg-accent font-medium text-foreground"
+                                            : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
                                 )}
                             >
                                 <span className="flex h-4 w-4 shrink-0 items-center justify-center [&_svg]:h-4 [&_svg]:w-4">
