@@ -137,9 +137,8 @@ public class FileController {
 
     @PostMapping("/file")
     @ApiOperation("Create file or folder")
-    public R<?> createFile(@RequestBody KnowledgeFileDTO dto) {
-        fileApplication.createFile(dto);
-        return R.success();
+    public R<KnowledgeFileVO> createFile(@RequestBody KnowledgeFileDTO dto) {
+        return R.data(fileApplication.createFile(dto));
     }
 
     @PostMapping("/file/upload")

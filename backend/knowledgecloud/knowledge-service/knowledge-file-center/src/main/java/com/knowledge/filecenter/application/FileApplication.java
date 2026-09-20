@@ -108,13 +108,13 @@ public class FileApplication {
         repositoryService.createOrSave(repository);
     }
 
-    public void createFile(KnowledgeFileDTO dto) {
+    public KnowledgeFileVO createFile(KnowledgeFileDTO dto) {
         KnowledgeFile file = KnowledgeFileConverter.INSTANCE.convertDO(dto);
         if (StrUtil.isBlank(file.getRepositoryKey())) {
             KnowledgeFileRepository repository = repositoryService.getDefaultFileRepo();
             file.setRepositoryKey(repository.getRepoKey());
         }
-        this.fileService.createOrSaveFile(file);
+        return KnowledgeFileConverter.INSTANCE.convertVO(this.fileService.createOrSaveFile(file));
     }
 
     public List<Tree<Long>> getRootFolder() {

@@ -210,11 +210,19 @@ a.click();
 
 **Response:**
 
+Returns the created record, including its generated `id`:
+
 ```json
 {
   "code": 200,
   "success": true,
-  "data": null,
+  "data": {
+    "id": 1002,
+    "type": "FOLDER",
+    "name": "My Documents",
+    "parentId": 100,
+    "ancestors": "0,100"
+  },
   "msg": "Operation successful"
 }
 ```
