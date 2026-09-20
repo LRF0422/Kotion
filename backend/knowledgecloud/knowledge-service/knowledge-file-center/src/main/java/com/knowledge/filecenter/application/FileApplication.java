@@ -49,6 +49,7 @@ import com.knowledge.filecenter.service.IFileService;
 import com.knowledge.filecenter.service.RemoteFileDownloadService;
 import com.knowledge.filecenter.service.RemoteFileDownloadService.DownloadedFile;
 import com.knowledge.filecenter.storage.LegacyOssObjectKeyResolver;
+import com.knowledge.filecenter.thumbnail.PdfThumbnailService;
 import com.knowledge.filecenter.upload.UploadOwner;
 import com.knowledge.filecenter.upload.UploadOwnerProvider;
 import cn.hutool.core.io.IoUtil;
@@ -102,6 +103,8 @@ public class FileApplication {
     private UploadOwnerProvider ownerProvider;
     @Autowired
     private RemoteFileDownloadService remoteFileDownloadService;
+    @Autowired
+    private PdfThumbnailService pdfThumbnailService;
 
     public void createFileRepository(KnowledgeFileRepositoryDTO dto) {
         KnowledgeFileRepository repository = KnowledgeFileRepositoryConverter.INSTANCE.convertDO(dto);
@@ -265,6 +268,38 @@ public class FileApplication {
 
         // 记录最近访问
         fileService.touchAccess(fileId);
+    }
+
+    /**
+     * Render (and cache) the first page of a PDF as a JPEG thumbnail.
+     *
+     * @throws IllegalArgumentException when the record is not an accessible PDF
+     */
+    @SneakyThrows
+    public byte[] getThumbnail(Long fileId) {
+        KnowledgeFile file = requireAccessibleFile(fileId);
+        if (ossClient == null) {
+            throw new IllegalStateException("OSS client is not configured");
+        }
+
+        String suffix = file.getSuffix();
+        boolean isPdf = "pdf".equalsIgnoreCase(suffix)
+                || (StrUtil.isBlank(suffix) && StrUtil.endWithIgnoreCase(file.getName(), ".pdf"));
+        if (!isPdf) {
+            throw new IllegalArgumentException("Thumbnail is only available for PDF files");
+        }
+
+        String objectKey = ossObjectKeyResolver.resolve(file.getPath());
+        if (StrUtil.isBlank(objectKey)) {
+            throw new IllegalStateException("File object key is not available");
+        }
+
+        String version = file.getUpdateTime() != null
+                ? String.valueOf(file.getUpdateTime())
+                : String.valueOf(file.getSize());
+        return pdfThumbnailService.getOrRender(
+                fileId + ":" + version,
+                () -> ossClient.downloadFile(objectKey));
     }
 
     /**

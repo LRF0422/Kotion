@@ -15,6 +15,7 @@ import {
 } from "@kn/icon";
 import type { FileItem } from "./FileContext";
 import { getPreviewKind, getFileExtension, type MediaTypeHint } from "../../utils/fileUtils";
+import { usePdfThumbnail } from "../../hooks/usePdfThumbnail";
 
 type ThumbIcon = React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
 
@@ -77,6 +78,7 @@ export interface FileThumbProps {
  * 文件/文件夹的视觉呈现:
  * - 文件夹 → 彩色文件夹图标
  * - 图片文件 → 真实缩略图(失败回退类型磁贴)
+ * - PDF 文件 → 第一页缩略图(懒加载,未就绪/失败回退类型磁贴)
  * - 其余文件 → 按类型着色的圆角磁贴 + 类型图标
  */
 export const FileThumb: React.FC<FileThumbProps> = ({ file, size = 56, className, fill = false }) => {
@@ -84,7 +86,10 @@ export const FileThumb: React.FC<FileThumbProps> = ({ file, size = 56, className
     const [errored, setErrored] = useState(false);
 
     const isImage = !file.isFolder && getPreviewKind(file.name, file.mediaType) === "image";
+    const isPdf = !file.isFolder && getPreviewKind(file.name, file.mediaType) === "pdf";
     const url = isImage && file.path && !errored ? fileService.getDownloadUrl(file.path) : "";
+    // PDFs render their first page lazily; until it arrives the type tile is shown.
+    const { containerRef, url: pdfThumbnailUrl } = usePdfThumbnail(file.id, isPdf);
 
     if (file.isFolder) {
         const folder = <FcOpenedFolder style={{ width: size, height: size }} />;
@@ -111,12 +116,24 @@ export const FileThumb: React.FC<FileThumbProps> = ({ file, size = 56, className
         );
     }
 
+    if (isPdf && pdfThumbnailUrl) {
+        return (
+            <img
+                src={pdfThumbnailUrl}
+                alt={file.name}
+                style={fill ? undefined : { width: size, height: size }}
+                className={cn("object-cover object-top", fill ? "h-full w-full" : "rounded-md", className)}
+            />
+        );
+    }
+
     const visual = getFileVisual(file.name, file.mediaType);
     const Icon = visual.icon;
     const iconSize = Math.max(12, Math.round(size * 0.55));
 
     return (
         <div
+            ref={isPdf ? containerRef : undefined}
             style={fill ? undefined : { width: size, height: size }}
             className={cn(
                 "flex items-center justify-center",

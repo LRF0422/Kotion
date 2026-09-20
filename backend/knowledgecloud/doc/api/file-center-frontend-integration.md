@@ -476,6 +476,24 @@ const response = await fetch(`http://192.168.3.43:1889/file-center/file/search?$
 
 ---
 
+### 6. PDF Thumbnail
+
+**Endpoint:** `GET /file/{fileId}/thumbnail`
+
+Renders (and caches) the first page of a PDF as a JPEG. Only PDF records are supported; other types return an error. The frontend uses this to show a first-page preview in file cards, like image thumbnails.
+
+**Response:** `image/jpeg` bytes.
+
+```javascript
+const response = await fetch(`http://192.168.3.43:1889/file-center/file/${fileId}/thumbnail`, {
+  method: 'GET',
+  headers: { 'Authorization': `Bearer ${token}` }
+});
+const objectUrl = URL.createObjectURL(await response.blob());
+```
+
+---
+
 ## Data Models
 
 ### FileType Enum

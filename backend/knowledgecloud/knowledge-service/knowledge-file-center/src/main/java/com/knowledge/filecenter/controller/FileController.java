@@ -1,5 +1,6 @@
 package com.knowledge.filecenter.controller;
 
+import java.io.IOException;
 import java.util.List;
 
 import javax.validation.Valid;
@@ -182,6 +183,18 @@ public class FileController {
     public R<FileAccessUrlsVO> createAccessUrls(
             @ApiParam("File ID") @PathVariable("fileId") Long fileId) {
         return R.data(fileApplication.createAccessUrls(fileId));
+    }
+
+    @GetMapping("/file/{fileId}/thumbnail")
+    @ApiOperation("Get a PDF's first-page thumbnail")
+    public void getThumbnail(
+            @ApiParam("File ID") @PathVariable("fileId") Long fileId,
+            HttpServletResponse response) throws IOException {
+        byte[] thumbnail = fileApplication.getThumbnail(fileId);
+        response.setContentType("image/jpeg");
+        response.setHeader("Cache-Control", "private, max-age=86400");
+        response.setContentLength(thumbnail.length);
+        response.getOutputStream().write(thumbnail);
     }
 
     @PutMapping("/file/{fileId}")

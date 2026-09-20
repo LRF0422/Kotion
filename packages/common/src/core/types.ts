@@ -193,6 +193,8 @@ export interface FileService {
     getFileAccessUrls?: (fileId: string) => Promise<FileAccessUrls>;
     /** Download a file-center record through the authenticated API. */
     getFileBlob?: (fileId: string) => Promise<Blob>;
+    /** Fetch a PDF's first-page thumbnail through the authenticated API. */
+    getFileThumbnail?: (fileId: string) => Promise<Blob>;
     /**
      * Download a file (`fileName` is an OSS object key or absolute URL).
      * `options.fileId` prefers the authenticated file-center download; the

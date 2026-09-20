@@ -113,6 +113,20 @@ export class FileServiceImpl implements FileService {
     }
 
     /**
+     * Fetch the first-page thumbnail of a PDF record as a Blob.
+     */
+    async getFileThumbnail(fileId: string): Promise<Blob> {
+        const blob = await request({
+            url: `/knowledge-file-center/file/${encodeURIComponent(fileId)}/thumbnail`,
+            method: 'GET',
+            responseType: 'blob',
+            // A missing/failed thumbnail is non-fatal: the caller keeps the type icon.
+            silent: true,
+        }) as unknown as Blob;
+        return blob;
+    }
+
+    /**
      * Download a file to the local disk.
      *
      * Asks for the destination first (the save dialog needs the click's user
