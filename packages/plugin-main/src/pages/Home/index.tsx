@@ -439,16 +439,29 @@ export const Home: React.FC = () => {
                     </div>
                 </header>
 
-                {/* Overview strip */}
-                <div className="kn-home-in kn-home-in-2 mt-7 grid grid-cols-2 gap-3 md:grid-cols-4">
+                {/* Overview strip. Pinned to four columns for every non-mobile
+                    viewport via an inline style so a later stylesheet (e.g. a
+                    plugin bundle re-emitting Tailwind utilities) can't collapse
+                    it; mobile keeps the CSS two-column fallback. */}
+                <div
+                    className="kn-home-in kn-home-in-2 mt-7 grid grid-cols-2 gap-3 md:grid-cols-4"
+                    style={!isMobile ? { gridTemplateColumns: "repeat(4, minmax(0, 1fr))" } : undefined}
+                >
                     <StatCard label={t("home.recent-pages")} value={recentPages.length} icon={<FileText className="h-5 w-5" />} hue={212} />
                     <StatCard label={t("home.rs")} value={spaceRows.length} hint={teamSpaces.length > 0 ? teamSpaces.length + " " + t("home.team-badge") : undefined} icon={<LayoutGrid className="h-5 w-5" />} hue={28} />
                     <StatCard label={t("home.favorites")} value={favoritePages.length} icon={<Star className="h-5 w-5" />} hue={42} />
                     <StatCard label={t("home.stat-week")} value={weekEditedCount} icon={<Sparkles className="h-5 w-5" />} hue={276} />
                 </div>
 
-                {/* Content: main feed + right rail */}
-                <div className="kn-home-in kn-home-in-3 mt-5 grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_280px]">
+                {/* Content: main feed + right rail. The two-column split is
+                    pinned with an inline style for every non-mobile viewport so
+                    it survives stylesheet-order conflicts (a plugin CSS loaded
+                    after the host can otherwise override the `md:` media rule);
+                    mobile falls back to the CSS single-column layout. */}
+                <div
+                    className="kn-home-in kn-home-in-3 mt-5 grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_280px]"
+                    style={!isMobile ? { gridTemplateColumns: "minmax(0, 1fr) 280px" } : undefined}
+                >
                     <Card className="border-border/60 shadow-none transition-colors hover:border-border">
                         <Tabs value={activeTab} onValueChange={setActiveTab}>
                             <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-3">

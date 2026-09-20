@@ -2,6 +2,8 @@ export const drawnixLocales = {
   en: {
     translation: {
       drawnix: {
+        previewTitle: "Mind map",
+        previewHint: "Open the page to view or edit",
         toolbar: {
           addChild: "Add child (Tab)",
           addSibling: "Add sibling (Enter)",
@@ -49,6 +51,8 @@ export const drawnixLocales = {
   zh: {
     translation: {
       drawnix: {
+        previewTitle: "思维导图",
+        previewHint: "打开页面查看或编辑",
         toolbar: {
           addChild: "添加子节点 (Tab)",
           addSibling: "添加同级节点 (Enter)",

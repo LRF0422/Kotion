@@ -1,8 +1,9 @@
 import type { NodeViewProps } from "@kn/editor";
 import { NodeViewWrapper } from "@kn/editor";
+import { useTranslation } from "@kn/common";
 import { useResolvedTheme } from "@kn/ui";
 import { ReactFlowProvider } from "@xyflow/react";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import "@xyflow/react/dist/style.css";
 import { MindmapFlow, type MindmapFlowActions } from "./flow/MindmapFlow";
@@ -10,6 +11,7 @@ import {
   type DrawnixController,
   useDrawnixController,
 } from "./hooks/useDrawnixController";
+import { normalizeDrawnixData } from "./model/normalize";
 import { MindmapToolbar } from "./MindmapToolbar";
 import "./style/index.css";
 
@@ -30,7 +32,10 @@ function DetachedMindmapFlow({
     rootRef.current = root;
     return () => {
       rootRef.current = null;
-      root.unmount();
+      // Unmounting another React root synchronously during a commit trips
+      // React's "synchronously unmount a root" guard and can race the host
+      // editor's teardown; let the current task finish first.
+      queueMicrotask(() => root.unmount());
     };
   }, []);
 
@@ -45,7 +50,47 @@ function DetachedMindmapFlow({
   return <div ref={hostRef} className="h-full w-full" />;
 }
 
-function DrawnixViewComponent(props: NodeViewProps) {
+/**
+ * True while the node view is mounted inside a throwaway read-only preview
+ * (Home hover card, template preview, [[ page picker). The preview editor marks
+ * its DOM with `data-kn-preview`. Mounting the interactive ReactFlow root inside
+ * those previews repeatedly broke the host editor (`domFromPos` on a null view)
+ * and tripped React's nested-root guards, so previews get a static card instead.
+ */
+function isPreviewEditor(editor: NodeViewProps["editor"]): boolean {
+  try {
+    return editor?.view?.dom?.getAttribute("data-kn-preview") === "true";
+  } catch {
+    return false;
+  }
+}
+
+function DrawnixPreviewPlaceholder({ node }: { node: NodeViewProps["node"] }) {
+  const { t } = useTranslation();
+  const rootText = useMemo(() => {
+    try {
+      const text = normalizeDrawnixData(node.attrs.data).document.root.text?.trim();
+      return text || t("drawnix.previewTitle");
+    } catch {
+      return t("drawnix.previewTitle");
+    }
+  }, [node.attrs.data, t]);
+
+  return (
+    <NodeViewWrapper className="w-full" contentEditable={false}>
+      <div className="flex items-center gap-2 rounded-md border border-dashed border-border/60 bg-muted/20 px-3 py-4">
+        <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground/80">
+          {rootText}
+        </span>
+        <span className="shrink-0 text-[11px] text-muted-foreground/70">
+          {t("drawnix.previewHint")}
+        </span>
+      </div>
+    </NodeViewWrapper>
+  );
+}
+
+function DrawnixInteractiveView(props: NodeViewProps) {
   const resolvedTheme = useResolvedTheme();
   const controller = useDrawnixController(props);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -152,6 +197,13 @@ function DrawnixViewComponent(props: NodeViewProps) {
       </div>
     </NodeViewWrapper>
   );
+}
+
+function DrawnixViewComponent(props: NodeViewProps) {
+  if (isPreviewEditor(props.editor)) {
+    return <DrawnixPreviewPlaceholder node={props.node} />;
+  }
+  return <DrawnixInteractiveView {...props} />;
 }
 
 export const DrawnixView: React.FC<NodeViewProps> = React.memo(

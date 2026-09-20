@@ -80,13 +80,32 @@ interface CoverConfig {
  * the title, and the read-only editor here uses the plain Document top node
  * (no title schema) — but its attrs carry the page cover, so it's read first.
  */
-const parsePage = (doc?: Content | null): { body: Content | null; cover: CoverConfig | null } => {
-    if (!doc || typeof doc !== "object" || Array.isArray(doc)) return { body: null, cover: null };
-    const nodes: any[] = Array.isArray((doc as any)?.content) ? (doc as any).content : [];
-    const title = nodes.find((n) => n?.type === "title");
-    const cover = title?.attrs?.cover?.url ? (title.attrs.cover as CoverConfig) : null;
-    const body = nodes.filter((n) => n?.type !== "title");
-    return { body: body.length > 0 ? { type: "doc", content: body } : null, cover };
+const parsePage = (raw?: unknown): { body: Content | null; cover: CoverConfig | null } => {
+    if (!raw) return { body: null, cover: null };
+    try {
+        // The block store may hand back either the parsed doc or the legacy
+        // HTML-escaped JSON string (same normalisation as PagePreviewPane), so
+        // parse defensively instead of bailing out.
+        const doc = typeof raw === "string"
+            ? JSON.parse(raw.replaceAll("&lt;", "<").replaceAll("&gt;", ">"))
+            : raw;
+        if (!doc || typeof doc !== "object") return { body: null, cover: null };
+        // Accept both the canonical `{ type: 'doc', content: [...] }` and the
+        // legacy bare block array the store can return for older pages.
+        const nodes: any[] = Array.isArray(doc)
+            ? doc
+            : Array.isArray((doc as any)?.content) ? (doc as any).content : [];
+        const title = nodes.find((n) => n?.type === "title");
+        // Guard the url type: a malformed cover attr must not throw during render.
+        const cover = typeof title?.attrs?.cover?.url === "string"
+            ? (title.attrs.cover as CoverConfig)
+            : null;
+        const body = nodes.filter((n) => n?.type !== "title");
+        return { body: body.length > 0 ? { type: "doc", content: body } : null, cover };
+    } catch (error) {
+        console.warn("[PagePreviewCard] failed to parse page document", error);
+        return { body: null, cover: null };
+    }
 };
 
 /** Read-only Tiptap instance rendering the page body at preview scale. */
@@ -101,6 +120,10 @@ const PreviewEditor: React.FC<{ content: Content }> = ({ content }) => {
                 attributes: {
                     class: "magic-editor",
                     spellcheck: "false",
+                    // Marks the throwaway preview editor so plugin node views
+                    // (e.g. Drawnix) render a static placeholder instead of
+                    // mounting interactive roots inside the hover card.
+                    "data-kn-preview": "true",
                 },
             },
         },
@@ -128,6 +151,25 @@ const PreviewSkeleton: React.FC = () => (
     </div>
 );
 
+/**
+ * Catches render errors coming out of the read-only preview editor (unknown
+ * node types, malformed cover attrs, …) so one bad page can't blank the whole
+ * floating card — the card stays up and shows a message instead.
+ */
+class PreviewErrorBoundary extends React.Component<
+    { children: React.ReactNode; fallback: React.ReactNode },
+    { failed: boolean }
+> {
+    state = { failed: false };
+    static getDerivedStateFromError() { return { failed: true }; }
+    componentDidCatch(error: unknown) {
+        console.error("[PagePreviewCard] preview render failed", error);
+    }
+    render() {
+        return this.state.failed ? this.props.fallback : this.props.children;
+    }
+}
+
 /** Card body — mounted only while the hover card is open, so the fetch and
  *  the read-only editor spin up lazily on first hover. */
 const PreviewBody: React.FC<{
@@ -142,6 +184,7 @@ const PreviewBody: React.FC<{
     const fileService = useOptionalService("fileService") as FileService | undefined;
     const [page, setPage] = useState<PreviewPage | null>(() => readCache(pageId));
     const [error, setError] = useState(false);
+    const [coverBroken, setCoverBroken] = useState(false);
 
     useEffect(() => {
         if (pageType || readCache(pageId)) return;
@@ -175,24 +218,35 @@ const PreviewBody: React.FC<{
     // stored file names go through fileService's download endpoint.
     const coverUrl = useMemo(() => {
         const url = cover?.url;
-        if (!url) return null;
+        if (!url || typeof url !== "string") return null;
         if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:")) {
             return url;
         }
-        if (fileService) return fileService.getDownloadUrl(url);
+        try {
+            if (fileService) return fileService.getDownloadUrl(url);
+        } catch (error) {
+            console.warn("[PagePreviewCard] failed to resolve cover url", error);
+        }
         return `https://kotion.top:888/api/knowledge-resource/oss/endpoint/download?fileName=${url}`;
     }, [cover?.url, fileService]);
 
+    // A new cover url (row switch) gets a fresh chance to load.
+    useEffect(() => {
+        setCoverBroken(false);
+    }, [coverUrl]);
+
     return (
         <div className="flex flex-col">
-            {/* Cover banner — mirrors the page's own cover crop position */}
-            {coverUrl && (
+            {/* Cover banner — mirrors the page's own cover crop position. A broken
+                cover must not take the whole preview down, so hide it on error. */}
+            {coverUrl && !coverBroken && (
                 <div className="h-[96px] w-full shrink-0 overflow-hidden bg-muted/30">
                     <img
                         src={coverUrl}
                         alt=""
                         className="h-full w-full object-cover"
                         style={{ objectPosition: `center ${cover?.position ?? 50}%` }}
+                        onError={() => setCoverBroken(true)}
                         draggable={false}
                     />
                 </div>
@@ -291,6 +345,7 @@ const EXIT_MS = 200;
  * scopes which triggers share it.
  */
 export const PagePreviewProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const { t } = useTranslation();
     const [target, setTarget] = useState<PreviewTarget | null>(null);
     const [visible, setVisible] = useState(false);
     // "Open" means the card is mounted (target set) — NOT the post-rAF visible
@@ -419,13 +474,21 @@ export const PagePreviewProvider: React.FC<{ children: React.ReactNode }> = ({ c
                     {/* Keyed by page id: switching rows remounts the body, so the
                         new page's content fades in while the card slides over. */}
                     <div key={target.pageId} className="animate-in fade-in-0 duration-200">
-                        <PreviewBody
-                            pageId={target.pageId}
-                            title={target.title}
-                            spaceName={target.spaceName}
-                            icon={target.icon}
-                            pageType={target.pageType}
-                        />
+                        <PreviewErrorBoundary
+                            fallback={
+                                <p className="px-3 py-4 text-center text-xs text-muted-foreground">
+                                    {t("home.preview-error", "Failed to load preview")}
+                                </p>
+                            }
+                        >
+                            <PreviewBody
+                                pageId={target.pageId}
+                                title={target.title}
+                                spaceName={target.spaceName}
+                                icon={target.icon}
+                                pageType={target.pageType}
+                            />
+                        </PreviewErrorBoundary>
                     </div>
                 </div>,
                 document.body

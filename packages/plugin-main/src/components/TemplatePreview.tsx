@@ -53,6 +53,7 @@ const PreviewEditor: React.FC<{ content: Content }> = ({ content }) => {
                 attributes: {
                     class: "magic-editor",
                     spellcheck: "false",
+                    "data-kn-preview": "true",
                 },
             },
         },
