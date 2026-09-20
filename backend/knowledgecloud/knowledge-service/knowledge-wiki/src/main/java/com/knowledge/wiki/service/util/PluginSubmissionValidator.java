@@ -124,7 +124,10 @@ public final class PluginSubmissionValidator {
             }
             String upper = value.toUpperCase(Locale.ROOT);
             if (!PERMISSION_CATALOG.contains(upper)) {
-                throw WikiException.INVALID_PARAMETER.newException("未知的能力声明: " + value);
+                // The (Object) cast is required: a bare String would bind to
+                // Assert#newException(String, Object...) and be taken as a
+                // runtime message override instead of the {} template variable.
+                throw WikiException.PLUGIN_UNKNOWN_CAPABILITY.newException((Object) value);
             }
             normalized.add(upper);
         }
@@ -146,7 +149,7 @@ public final class PluginSubmissionValidator {
             try {
                 JSON.readTree(description.getContent());
             } catch (Exception ex) {
-                throw WikiException.INVALID_PARAMETER.newException("版本说明内容必须是合法JSON");
+                throw WikiException.PLUGIN_VERSION_DESCRIPTION_INVALID_JSON.newException();
             }
         }
     }

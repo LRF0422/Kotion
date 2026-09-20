@@ -39,7 +39,7 @@ public class PluginRatingApplication {
             throw WikiException.PLUGIN_NOT_FOUND.newException();
         }
         if (Objects.equals(plugin.getDeveloperId(), userId)) {
-            throw WikiException.PLUGIN_FORBIDDEN.newException("不能给自己的插件评分");
+            throw WikiException.PLUGIN_SELF_RATING_FORBIDDEN.newException();
         }
         PluginRating existing = pluginRatingService.lambdaQuery()
                 .eq(PluginRating::getPluginId, pluginId)

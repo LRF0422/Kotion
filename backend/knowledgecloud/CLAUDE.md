@@ -124,6 +124,13 @@ make clean
   `POST /runs/{id}/resume` 携带 {action: approve_plan, planDecision}。
 - **Session Persistence**: 事件溯源（Redis ZSET 热 + MySQL 冷）+ `agent_run_checkpoint` 快照；
   不再使用旧 `agent_message`/`agent_task_event`（旧表保留备查）。
+- **业务报错国际化 + 业务码（knowledge-wiki）**: `WikiException(code, i18n key, 中文兜底)`，`getMessage()`
+  按请求语言解析（`WikiMessages` + `i18n/messages*.properties`；前端 request 层注入 `Accept-Language`）。
+  新增业务异常必须给 key + 中文兜底，不要再把文案直接写进 `newException("…")`（现有硬编码文案会缺少翻译）。
+  平台侧：`BusinessException`（core-tool，`Assert#newException()` 的产物）由 `KnowledgeRestExceptionTranslator`
+  的 `@ExceptionHandler(BusinessException.class)` 统一返回 **HTTP 400 + 原始业务码 + 已本地化 msg**
+  —— 此前它会落到 `Throwable` 分支变成 500 且业务码丢失。前端按 `msg` 展示、按 `code` 分支
+  （权益码 40301/40302 在 400 分支也会弹升级提示，见 `packages/common/src/utils/request.tsx`）。
 
 ### Technology Stack
 

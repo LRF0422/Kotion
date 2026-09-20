@@ -21,7 +21,7 @@ public class PluginVersionServiceImpl extends AbstractVersionService<Plugin, Plu
 
     @Override
     public void publish(Long versionId) {
-        throw WikiException.PLUGIN_INVALID_STATE.newException("插件版本只能通过审核流程发布");
+        throw WikiException.PLUGIN_VERSION_REVIEW_ONLY.newException();
     }
 
     @Override

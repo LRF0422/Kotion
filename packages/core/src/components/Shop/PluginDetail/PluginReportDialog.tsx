@@ -1,4 +1,4 @@
-import { APIS, useApi, useTranslation } from "@kn/common";
+import { APIS, getApiErrorMessage, useApi, useTranslation } from "@kn/common";
 import {
   Button,
   Dialog,
@@ -48,18 +48,19 @@ export const PluginReportDialog: React.FC<PluginReportDialogProps> = ({
     if (!reason || submitting) return;
     setSubmitting(true);
     try {
+      // silent: the dialog shows the failure itself, with the backend's reason.
       await useApi(APIS.SUBMIT_PLUGIN_REPORT, null, {
         pluginId,
         versionId: versionId ?? null,
         reasonType: reason,
         reasonText: detail.trim() || null,
-      });
+      }, undefined, true);
       toast.success(t("pluginHub.report.success"));
       setOpen(false);
       setReason("");
       setDetail("");
-    } catch {
-      toast.error(t("pluginHub.report.failed"));
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, t("pluginHub.report.failed")));
     } finally {
       setSubmitting(false);
     }

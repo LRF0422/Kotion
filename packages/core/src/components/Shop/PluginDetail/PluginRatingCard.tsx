@@ -1,4 +1,4 @@
-import { APIS, useApi, useTranslation } from "@kn/common";
+import { APIS, getApiErrorMessage, useApi, useTranslation } from "@kn/common";
 import { Star } from "@kn/icon";
 import { Card, cn, toast } from "@kn/ui";
 import React from "react";
@@ -35,12 +35,16 @@ export const PluginRatingCard: React.FC<PluginRatingCardProps> = ({
     if (score === mine) return;
     setSubmitting(true);
     try {
-      await useApi(APIS.SUBMIT_PLUGIN_RATING, { id: plugin.id }, { score });
+      // silent: this card shows the failure itself, with the backend's own
+      // reason (see the catch) — no duplicate global toast.
+      await useApi(APIS.SUBMIT_PLUGIN_RATING, { id: plugin.id }, { score }, undefined, true);
       setMine(score);
       toast.success(t("pluginHub.rating.success"));
       onRated?.();
-    } catch (error: any) {
-      toast.error(error?.message || t("pluginHub.rating.failed"));
+    } catch (error) {
+      // The backend's own (localized) reason beats both a generic "评分失败"
+      // and axios' "Request failed with status code 500".
+      toast.error(getApiErrorMessage(error, t("pluginHub.rating.failed")));
     } finally {
       setSubmitting(false);
     }

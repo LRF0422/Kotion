@@ -1,6 +1,20 @@
 export const resources = {
   zh: {
     translation: {
+      // 请求层兜底文案（见 packages/common/src/utils/request.tsx）。
+      // 后端返回的 msg 优先展示；只有后端没给消息（网络错误/5xx 无 body）时才用这里。
+      apiError: {
+        network: "后端接口连接异常",
+        timeout: "系统接口请求超时",
+        status: "系统接口 {{status}} 异常",
+        server: "服务器内部错误，请稍后重试",
+        unauthorized: "登录状态已失效，请重新登录",
+        forbidden: "没有权限执行该操作",
+        notFound: "请求的资源不存在",
+        unknown: "请求失败，请稍后重试",
+        sessionExpired: "无效的会话，或者会话已过期，请重新登录。",
+        loginExpired: "登录已过期，请重新登录。",
+      },
       dock: {
         agent: "AI 助手",
       },
@@ -1336,6 +1350,21 @@ export const resources = {
   },
   en: {
     translation: {
+      // Fallbacks for the request layer (see packages/common/src/utils/request.tsx).
+      // The backend's own `msg` wins; these are only used when it sent none
+      // (network failures, bodiless 5xx).
+      apiError: {
+        network: "Cannot reach the backend service",
+        timeout: "The request timed out",
+        status: "Request failed (HTTP {{status}})",
+        server: "Internal server error. Please try again later.",
+        unauthorized: "Your session has expired. Please sign in again.",
+        forbidden: "You do not have permission to do that",
+        notFound: "The requested resource was not found",
+        unknown: "Request failed. Please try again later.",
+        sessionExpired: "Your session is invalid or has expired. Please sign in again.",
+        loginExpired: "Your session has expired. Please sign in again.",
+      },
       dock: {
         agent: "AI Assistant",
       },

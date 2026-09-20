@@ -2,6 +2,7 @@ import {
   AppContext,
   APIS,
   event,
+  getApiErrorMessage,
   PLUGIN_CHANGED,
   useApi,
   useNavigator,
@@ -171,7 +172,8 @@ export const PluginDetail: React.FC = () => {
     let backendInstalled = false;
     setInstalling(true);
     try {
-      await useApi(APIS.INSTALL_PLUGIN, { versionId: runtimePayload.versionId });
+      // silent: this page shows the failure itself, with the backend's reason.
+      await useApi(APIS.INSTALL_PLUGIN, { versionId: runtimePayload.versionId }, undefined, undefined, true);
       backendInstalled = true;
       const activated = pluginManager
         ? await pluginManager.installPlugin(runtimePayload)
@@ -182,8 +184,9 @@ export const PluginDetail: React.FC = () => {
       } else {
         toast.warning(t("pluginHub.detail.activationFailed"));
       }
-    } catch {
-      toast.error(t("pluginHub.detail.installFailed"));
+    } catch (error) {
+      // 例如「已安装插件数量已达套餐上限」/「插件已下架」——后端已按界面语言本地化
+      toast.error(getApiErrorMessage(error, t("pluginHub.detail.installFailed")));
     } finally {
       if (backendInstalled) event.emit(PLUGIN_CHANGED, { source: "install" });
       setInstalling(false);

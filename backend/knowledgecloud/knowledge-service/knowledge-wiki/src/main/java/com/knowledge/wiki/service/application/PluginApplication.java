@@ -256,7 +256,7 @@ public class PluginApplication {
         requirePermission("platform.plugins.review");
         Plugin plugin = requirePlugin(pluginId);
         if (plugin.getStatus() != PluginStatus.DONE) {
-            throw WikiException.PLUGIN_INVALID_STATE.newException("仅已上架插件可下架");
+            throw WikiException.PLUGIN_UNPUBLISH_REQUIRES_PUBLISHED.newException();
         }
         String reason = StrUtil.trim(dto.getReason());
         pluginService.lambdaUpdate()
@@ -278,7 +278,7 @@ public class PluginApplication {
         requirePermission("platform.plugins.review");
         Plugin plugin = requirePlugin(pluginId);
         if (!Boolean.TRUE.equals(plugin.getSuspended())) {
-            throw WikiException.PLUGIN_INVALID_STATE.newException("插件未处于下架状态");
+            throw WikiException.PLUGIN_NOT_SUSPENDED.newException();
         }
         pluginService.lambdaUpdate()
                 .eq(Plugin::getId, pluginId)
@@ -480,7 +480,7 @@ public class PluginApplication {
             throw WikiException.PLUGIN_INVALID_STATE.newException();
         }
         if (Boolean.TRUE.equals(plugin.getSuspended())) {
-            throw WikiException.PLUGIN_INVALID_STATE.newException("插件已下架");
+            throw WikiException.PLUGIN_SUSPENDED.newException();
         }
         requireInstallEntitlement(plugin);
         this.pluginService.installPlugin(pluginVersionId);
@@ -594,7 +594,7 @@ public class PluginApplication {
         }
         prepareSubmission(dto, requireIntegrity);
         if (!Objects.equals(plugin.getPluginKey(), dto.getPluginKey())) {
-            throw WikiException.INVALID_PARAMETER.newException("pluginKey不可修改");
+            throw WikiException.PLUGIN_KEY_IMMUTABLE.newException();
         }
         PluginVersion candidate = pluginVersionService.getRejectedCandidate(plugin.getId());
         if (candidate == null) {
@@ -864,7 +864,7 @@ public class PluginApplication {
     private void assertNewerThanActive(Long pluginId, String version) {
         PluginVersion active = pluginVersionService.getCurrentActiveVersion(pluginId);
         if (active != null && PluginSubmissionValidator.compareSemanticVersions(version, active.getVersion()) <= 0) {
-            throw WikiException.PLUGIN_INVALID_VERSION.newException("新版本必须高于当前激活版本");
+            throw WikiException.PLUGIN_VERSION_NOT_NEWER.newException();
         }
     }
 

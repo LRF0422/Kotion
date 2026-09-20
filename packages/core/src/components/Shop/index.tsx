@@ -2,6 +2,7 @@ import {
   AppContext,
   APIS,
   event,
+  getApiErrorMessage,
   PLUGIN_CHANGED,
   Outlet,
   useApi,
@@ -158,14 +159,15 @@ export const Shop: React.FC = () => {
       const key = pluginVersionKey(plugin);
       setPendingUpdateId(key);
       try {
-        await useApi(APIS.UPDATE_PLUGIN, { versionId: plugin.id });
+        // silent: the failure toast below already carries the backend's reason.
+        await useApi(APIS.UPDATE_PLUGIN, { versionId: plugin.id }, undefined, undefined, true);
         pluginManager?.clearPluginCache();
         await loadInstalled(true);
         suppressNextPluginEventRef.current = true;
         event.emit(PLUGIN_CHANGED, { source: "update" });
         toast.success(t("pluginHub.update.success"));
-      } catch {
-        toast.error(t("pluginHub.update.failed"));
+      } catch (error) {
+        toast.error(getApiErrorMessage(error, t("pluginHub.update.failed")));
       } finally {
         setPendingUpdateId(undefined);
       }
@@ -178,7 +180,8 @@ export const Shop: React.FC = () => {
     const key = pluginVersionKey(pluginToUninstall);
     setPendingUninstallId(key);
     try {
-      await useApi(APIS.UNINSTALL_PLUGIN, { versionId: pluginToUninstall.id });
+      // silent: the failure toast below already carries the backend's reason.
+      await useApi(APIS.UNINSTALL_PLUGIN, { versionId: pluginToUninstall.id }, undefined, undefined, true);
       if (pluginToUninstall.name)
         pluginManager?.uninstallPlugin(pluginToUninstall.name);
       await loadInstalled(true);
@@ -186,8 +189,8 @@ export const Shop: React.FC = () => {
       event.emit(PLUGIN_CHANGED, { source: "uninstall" });
       toast.success(t("pluginHub.uninstall.success"));
       setPluginToUninstall(undefined);
-    } catch {
-      toast.error(t("pluginHub.uninstall.failed"));
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, t("pluginHub.uninstall.failed")));
     } finally {
       setPendingUninstallId(undefined);
     }

@@ -51,6 +51,25 @@ public class BusinessException extends RuntimeException {
 
 
 	/**
+	 * 业务码（{@code IExpection#getCode()}，例如 WikiException 的 1000-1021）。
+	 *
+	 * <p>平台全局异常处理器据此把业务失败以 400 + 业务码返回，
+	 * 前端因此可以按码分支（例如权益类 40301/40302 弹升级提示）。
+	 */
+	public int getCode() {
+		return code;
+	}
+
+	/**
+	 * 原始消息模板（未填充 {@code {}} 变量的版本）；对外展示请用
+	 * {@link #getMessage()}（已按变量填充、且抛出时已本地化）。
+	 */
+	public String getMsg() {
+		return msg;
+	}
+
+
+	/**
 	 * 解析可变消息表达式
 	 *
 	 * @param msgTemplate

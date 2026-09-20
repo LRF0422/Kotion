@@ -76,7 +76,7 @@ public class PluginReportApplication {
         requirePermission("platform.plugins.review");
         PluginReport report = pluginReportService.getById(id);
         if (report == null || report.getStatus() != PluginReportStatus.PENDING) {
-            throw WikiException.INVALID_PARAMETER.newException("举报不存在或已处理");
+            throw WikiException.PLUGIN_REPORT_HANDLED.newException();
         }
         report.setStatus(Boolean.TRUE.equals(dto.getApproved())
                 ? PluginReportStatus.RESOLVED : PluginReportStatus.REJECTED);

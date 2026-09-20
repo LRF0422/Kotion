@@ -22,6 +22,7 @@ import com.knowledge.core.log.publisher.ErrorLogPublisher;
 import com.knowledge.core.secure.exception.SecureException;
 import com.knowledge.core.tool.api.R;
 import com.knowledge.core.tool.api.ResultCode;
+import com.knowledge.core.tool.exception.BusinessException;
 import com.knowledge.core.tool.utils.Func;
 import com.knowledge.core.tool.utils.UrlUtil;
 import com.knowledge.core.tool.utils.WebUtil;
@@ -143,6 +144,23 @@ public class KnowledgeRestExceptionTranslator {
 	public R handleError(ServiceException e) {
 		log.error("业务异常", e);
 		return R.fail(e.getResultCode(), e.getMessage());
+	}
+
+	/**
+	 * 业务异常（{@code Assert#newException()} 的产物，例如各类 {@code *Exception} 枚举）。
+	 *
+	 * <p>在此之前它只会命中下面的 {@link Throwable} 分支，被当成服务器故障返回
+	 * 500：既污染服务端错误指标/告警，客户端也拿不到业务码（{@code code} 变成 500）。
+	 * 业务失败是可预期结果，按 400 + 原始业务码返回；文案由抛出方按请求语言本地化。
+	 */
+	@ExceptionHandler(BusinessException.class)
+	@ResponseStatus(HttpStatus.BAD_REQUEST)
+	public R handleError(BusinessException e) {
+		// 可预期结果（校验/权限/状态/配额…），不当作服务器故障：不打印堆栈，
+		// 也不触发下面的 ErrorLogPublisher 服务异常事件。
+		log.warn("业务异常: code={}, type={}, msg={}",
+				e.getCode(), e.getClass().getSimpleName(), e.getMessage());
+		return R.fail(e.getCode(), e.getMessage());
 	}
 
 	@ExceptionHandler(SecureException.class)
