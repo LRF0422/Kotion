@@ -84,7 +84,7 @@ export const PlanComparison: React.FC<PlanComparisonProps> = ({ catalog, current
                                 <div className="flex flex-wrap items-center gap-2">
                                     <span className="text-base font-semibold text-foreground">{plan.planName}</span>
                                     {plan.highlight ? (
-                                        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                                        <span className="rounded bg-[hsl(212_90%_62%)]/10 px-1.5 py-0.5 text-[10px] font-medium text-[hsl(212_90%_62%)]">
                                             {plan.highlight}
                                         </span>
                                     ) : null}

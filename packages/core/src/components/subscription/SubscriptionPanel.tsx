@@ -75,7 +75,16 @@ export const SubscriptionPanel: React.FC = () => {
                             {expiryText ? <p className="text-xs text-muted-foreground">{expiryText}</p> : null}
                         </div>
                     </div>
-                    <UpgradeDialog trigger={<Button className="h-11 lg:h-9">{t('settings.subscription.upgrade')}</Button>} />
+                    <UpgradeDialog
+                        trigger={
+                            <Button
+                                variant="ghost"
+                                className="h-11 px-0 text-[hsl(212_90%_62%)] hover:bg-transparent hover:underline lg:h-9"
+                            >
+                                {t('settings.subscription.upgrade')}
+                            </Button>
+                        }
+                    />
                 </div>
             </div>
 
@@ -84,20 +93,24 @@ export const SubscriptionPanel: React.FC = () => {
                 <PlanComparison
                     catalog={catalog}
                     currentPlanCode={planCode}
-                    renderPlanAction={(plan) => (
-                        <UpgradeDialog
-                            initialPlanName={plan.planName}
-                            trigger={
-                                <Button
-                                    size="sm"
-                                    variant={plan.planCode === planCode ? 'secondary' : 'outline'}
-                                    className="h-9"
-                                >
-                                    {plan.planCode === planCode ? t('settings.subscription.current') : t('settings.subscription.select')}
-                                </Button>
-                            }
-                        />
-                    )}
+                    renderPlanAction={(plan) =>
+                        plan.planCode === planCode ? (
+                            <span className="text-xs text-muted-foreground">{t('settings.subscription.current')}</span>
+                        ) : (
+                            <UpgradeDialog
+                                initialPlanName={plan.planName}
+                                trigger={
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-9 px-0 text-[hsl(212_90%_62%)] hover:bg-transparent hover:underline"
+                                    >
+                                        {t('settings.subscription.select')}
+                                    </Button>
+                                }
+                            />
+                        )
+                    }
                 />
             </div>
 
