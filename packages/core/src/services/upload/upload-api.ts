@@ -91,7 +91,9 @@ export interface PartUploadTarget {
 }
 
 const data = async <T>({ url, method, data: body }: ControlRequest): Promise<T> => {
-    const envelope = await request({ url, method, data: body }) as unknown as ApiEnvelope<T>;
+    // The upload task service surfaces failures on the task itself; these control
+    // calls must not additionally raise the global error toast.
+    const envelope = await request({ url, method, data: body, silent: true }) as unknown as ApiEnvelope<T>;
     return envelope.data;
 };
 

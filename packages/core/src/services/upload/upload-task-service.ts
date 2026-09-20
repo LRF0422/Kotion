@@ -9,7 +9,7 @@ import {
     type UploadTaskSnapshot,
 } from '@kn/common';
 import { UploadTaskStore, type PersistedUploadTask } from './upload-task-store';
-import { uploadApi, type PartUploadTarget, type UploadCapabilities, type UploadPartRecord } from './upload-api';
+import { uploadApi, type PartUploadTarget, type UploadCapabilities, type UploadPartRecord, type UploadSessionRecord } from './upload-api';
 import { uploadPart } from './part-transport';
 
 const DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024 * 1024;
@@ -17,6 +17,10 @@ const MAX_ACTIVE_FILES = 2;
 const PARTS_PER_FILE = 2;
 const MAX_RETRIES = 5;
 const RETRY_BASE_MS = 750;
+const COMPLETE_MAX_ATTEMPTS = 4;
+const COMPLETE_RETRY_BASE_MS = 1500;
+const COMPLETING_POLL_ATTEMPTS = 20;
+const COMPLETING_POLL_INTERVAL_MS = 1500;
 
 const terminalStatuses = new Set<UploadTask['status']>(['COMPLETED', 'CANCELLED']);
 const resumableStatuses = new Set<UploadTask['status']>([
@@ -214,21 +218,145 @@ export class UploadTaskServiceImpl implements UploadTaskService {
         if (!task || terminalStatuses.has(task.status) || task.status === 'FINALIZING') return;
         this.updateTask(taskId, { status: 'CANCELLING' });
         this.abortActiveParts(taskId);
+
+        let abortError: unknown;
         try {
             if (task.sessionId) await uploadApi.abort(task.sessionId);
-            this.updateTask(taskId, { status: 'CANCELLED', retryable: false });
+            this.updateTask(taskId, {
+                status: 'CANCELLED', retryable: false, errorCode: undefined, errorMessage: undefined,
+            });
             this.sources.delete(taskId);
             this.rejectWaiters(taskId, new Error('UPLOAD_CANCELLED'));
+            return;
         } catch (error) {
-            this.updateTask(taskId, {
-                status: 'CANCELLING',
-                errorCode: errorCode(error),
-                errorMessage: error instanceof Error ? error.message : String(error),
-                retryable: true,
-            });
-            this.rejectWaiters(taskId, error);
-            if (navigator.onLine) window.setTimeout(() => { void this.cancel(taskId); }, 5000);
+            abortError = error;
         }
+
+        // The session may have finished on the server, which makes it un-abortable.
+        // Reconcile instead of looping on an abort that can never succeed.
+        const session = task.sessionId ? await this.safeGetSession(task.sessionId) : null;
+        if (session?.status === 'COMPLETED' || session?.completedFile) {
+            this.completeTask(taskId, session);
+            return;
+        }
+        if (session?.status === 'COMPLETING') {
+            this.updateTask(taskId, {
+                status: 'FINALIZING', retryable: false, errorCode: undefined, errorMessage: undefined,
+            });
+            await this.settleCompletingSession(taskId, task.sessionId!);
+            return;
+        }
+
+        this.updateTask(taskId, {
+            status: 'CANCELLING',
+            errorCode: errorCode(abortError),
+            errorMessage: abortError instanceof Error ? abortError.message : String(abortError),
+            retryable: true,
+        });
+        this.rejectWaiters(taskId, abortError);
+        if (navigator.onLine) window.setTimeout(() => { void this.cancel(taskId); }, 5000);
+    }
+
+    /**
+     * Complete the multipart upload, tolerating a lost or slow response: the
+     * server-side completion is idempotent, so retry and re-check the session
+     * before surfacing a failure. Returns null when a cancel/pause took over.
+     */
+    private async finalizeUpload(taskId: string, sessionId: string): Promise<UploadSessionRecord | null> {
+        let lastError: unknown;
+        for (let attempt = 1; attempt <= COMPLETE_MAX_ATTEMPTS; attempt += 1) {
+            try {
+                const result = await uploadApi.complete(sessionId);
+                if (result.status === 'COMPLETED' || result.completedFile) return result;
+            } catch (error) {
+                lastError = error;
+            }
+
+            const current = this.tasks.get(taskId);
+            if (!current || current.status === 'CANCELLED' || current.status === 'CANCELLING' || current.status === 'PAUSED') {
+                return null;
+            }
+
+            const settled = await this.pollSessionCompletion(sessionId);
+            if (settled) return settled;
+            if (attempt < COMPLETE_MAX_ATTEMPTS) {
+                await this.sleep(COMPLETE_RETRY_BASE_MS * attempt);
+            }
+        }
+        throw lastError instanceof Error ? lastError : new Error('UPLOAD_COMPLETION_FAILED');
+    }
+
+    /** Poll the session once; returns it only when the server reports completion. */
+    private async pollSessionCompletion(sessionId: string): Promise<UploadSessionRecord | null> {
+        const session = await this.safeGetSession(sessionId);
+        return session && (session.status === 'COMPLETED' || session.completedFile) ? session : null;
+    }
+
+    /** Wait for an un-abortable COMPLETING session to finish, then settle the task. */
+    private async settleCompletingSession(taskId: string, sessionId: string): Promise<void> {
+        for (let attempt = 0; attempt < COMPLETING_POLL_ATTEMPTS; attempt += 1) {
+            await this.sleep(COMPLETING_POLL_INTERVAL_MS);
+            const session = await this.safeGetSession(sessionId);
+            if (session) {
+                if (session.status === 'COMPLETED' || session.completedFile) {
+                    this.completeTask(taskId, session);
+                    return;
+                }
+                if (session.status === 'FAILED' && !session.retryable) {
+                    this.updateTask(taskId, {
+                        status: 'FAILED',
+                        retryable: false,
+                        errorCode: session.failureCode || 'UPLOAD_FAILED',
+                        errorMessage: session.failureMessage,
+                    });
+                    return;
+                }
+                if (session.status === 'ABORTED') {
+                    this.updateTask(taskId, { status: 'CANCELLED', retryable: false });
+                    this.sources.delete(taskId);
+                    return;
+                }
+            }
+            const current = this.tasks.get(taskId);
+            if (!current || current.status !== 'FINALIZING') return;
+        }
+        this.updateTask(taskId, {
+            status: 'FAILED',
+            retryable: true,
+            errorCode: 'UPLOAD_COMPLETION_PENDING',
+            errorMessage: 'The upload is still finishing on the server. Retry to reconcile.',
+        });
+    }
+
+    private completeTask(taskId: string, session: UploadSessionRecord): void {
+        const task = this.tasks.get(taskId);
+        if (!task) return;
+        const result = session.completedFile ?? session;
+        this.updateTask(taskId, {
+            status: 'COMPLETED',
+            confirmedBytes: task.size,
+            uploadedBytes: task.size,
+            completedParts: session.partCount,
+            progress: 100,
+            retryable: false,
+            errorCode: undefined,
+            errorMessage: undefined,
+            result,
+        });
+        this.sources.delete(taskId);
+        this.resolveWaiters(taskId, result);
+    }
+
+    private async safeGetSession(sessionId: string): Promise<UploadSessionRecord | null> {
+        try {
+            return await uploadApi.getSession(sessionId);
+        } catch {
+            return null;
+        }
+    }
+
+    private sleep(ms: number): Promise<void> {
+        return new Promise((resolve) => window.setTimeout(resolve, ms));
     }
 
     async retry(taskId: string): Promise<void> {
@@ -476,18 +604,9 @@ export class UploadTaskServiceImpl implements UploadTaskService {
 
             if (this.tasks.get(taskId)?.status !== 'UPLOADING') return;
             this.updateTask(taskId, { status: 'FINALIZING', uploadedBytes: task.size, progress: 100 });
-            const result = await uploadApi.complete(session.sessionId);
-            this.updateTask(taskId, {
-                status: 'COMPLETED',
-                confirmedBytes: task.size,
-                uploadedBytes: task.size,
-                completedParts: session.partCount,
-                progress: 100,
-                retryable: false,
-                result: result.completedFile ?? result,
-            });
-            this.sources.delete(taskId);
-            this.resolveWaiters(taskId, result.completedFile ?? result);
+            const result = await this.finalizeUpload(taskId, session.sessionId);
+            if (!result) return;
+            this.completeTask(taskId, result);
         } catch (error) {
             const current = this.tasks.get(taskId);
             if (!current || current.status === 'PAUSED' || current.status === 'CANCELLING' || current.status === 'CANCELLED') return;
