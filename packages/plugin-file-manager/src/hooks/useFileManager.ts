@@ -242,20 +242,20 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
     const enqueueUploadSources = useCallback(async (
         sources: UploadSource[],
         destination: UploadDestination,
-    ): Promise<{ queued: number; uploaded: number; failed: number }> => {
-        if (!sources.length) return { queued: 0, uploaded: 0, failed: 0 };
+    ): Promise<{ queued: number; uploaded: number; failed: number; taskIds: string[] }> => {
+        if (!sources.length) return { queued: 0, uploaded: 0, failed: 0, taskIds: [] };
 
         if (uploadTaskService) {
             const taskIds = await uploadTaskService.enqueue(sources, destination);
             const enqueuedTasks = uploadTaskService.getSnapshot().tasks
                 .filter((task) => taskIds.includes(task.id));
             const queued = enqueuedTasks.filter((task) => task.status !== 'FAILED').length;
-            if (queued > 0) return { queued, uploaded: 0, failed: sources.length - queued };
+            if (queued > 0) return { queued, uploaded: 0, failed: sources.length - queued, taskIds };
 
             const resumableUnavailable = enqueuedTasks.every((task) =>
                 task.errorCode === 'RESUMABLE_UPLOAD_UNAVAILABLE');
             if (!resumableUnavailable || sources.some(({ file }) => file.size > 64 * 1024 * 1024)) {
-                return { queued: 0, uploaded: 0, failed: sources.length };
+                return { queued: 0, uploaded: 0, failed: sources.length, taskIds: [] };
             }
             await Promise.all(taskIds.map((taskId) => uploadTaskService.cancel(taskId)));
             taskIds.forEach((taskId) => uploadTaskService.clear(taskId));
@@ -263,14 +263,14 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
             const legacy = await Promise.allSettled(sources.map(({ file }) =>
                 fileService.uploadToFileCenter?.(file, destination.parentId, destination.repositoryKey, { forceLegacy: true })));
             const uploaded = legacy.filter((result) => result.status === 'fulfilled').length;
-            return { queued: 0, uploaded, failed: sources.length - uploaded };
+            return { queued: 0, uploaded, failed: sources.length - uploaded, taskIds: [] };
         }
 
         if (!fileService.uploadToFileCenter) throw new Error('uploadToFileCenter not available');
         const results = await Promise.allSettled(sources.map(({ file }) =>
             fileService.uploadToFileCenter?.(file, destination.parentId, destination.repositoryKey)));
         const uploaded = results.filter((result) => result.status === 'fulfilled').length;
-        return { queued: 0, uploaded, failed: sources.length - uploaded };
+        return { queued: 0, uploaded, failed: sources.length - uploaded, taskIds: [] };
     }, [fileService, uploadTaskService]);
 
     /** Queue files for direct, resumable multipart upload. */
@@ -315,14 +315,56 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
                 else if (type === 'error') toast.error(message, id === undefined ? undefined : { id });
                 else toast.info(message, id === undefined ? undefined : { id });
             };
-            /** Mirror folder-tree progress on the toast and in the upload panel. */
-            const showFolderProgress = (current: number, total: number, name?: string) => {
-                if (total <= 0) return;
-                const label = name ? `Creating folder “${name}”` : 'Creating folders';
-                uploadTaskService?.setPreparation({ label, done: current, total });
-                if (progressToastId !== undefined) {
-                    toast.loading(`${label}… ${current}/${total}`, { id: progressToastId });
+            let preparationPaused = false;
+            let preparationCancelled = false;
+            let preparationWaiters: Array<() => void> = [];
+            const wakePreparation = () => {
+                const waiters = preparationWaiters;
+                preparationWaiters = [];
+                waiters.forEach((resolve) => resolve());
+            };
+            /** Block the preparation loop while paused; returns immediately once cancelled. */
+            const waitWhilePaused = async () => {
+                while (preparationPaused && !preparationCancelled) {
+                    await new Promise<void>((resolve) => preparationWaiters.push(resolve));
                 }
+            };
+
+            /** Mirror preparation progress on the toast and in the upload panel. */
+            const publishPreparation = (label: string, current: number, total: number) => {
+                if (total <= 0) return;
+                uploadTaskService?.setPreparation({
+                    label,
+                    done: current,
+                    total,
+                    paused: preparationPaused,
+                    onPause: () => { preparationPaused = true; publishPreparation(label, current, total); },
+                    onResume: () => {
+                        preparationPaused = false;
+                        publishPreparation(label, current, total);
+                        wakePreparation();
+                    },
+                    onCancel: () => {
+                        preparationCancelled = true;
+                        publishPreparation(label, current, total);
+                        wakePreparation();
+                    },
+                });
+                if (progressToastId !== undefined) {
+                    toast.loading(
+                        `${label}… ${current}/${total}${preparationPaused ? ' (paused)' : ''}`,
+                        { id: progressToastId },
+                    );
+                }
+            };
+            const showFolderProgress = (current: number, total: number, name?: string) => {
+                publishPreparation(name ? `Creating folder “${name}”` : 'Creating folders', current, total);
+            };
+            /** Tasks queued by this folder upload, so cancelling can stop them too. */
+            const folderTaskIds: string[] = [];
+            const cancelFolderTasks = async () => {
+                if (!uploadTaskService || !folderTaskIds.length) return;
+                await Promise.all(folderTaskIds.map((taskId) => uploadTaskService.cancel(taskId)));
             };
 
             if (!resolved) {
@@ -365,6 +407,13 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
                 let foldersCreated = 0;
                 const totalFolders = plan.directories.length;
                 for (const [index, directory] of plan.directories.entries()) {
+                    await waitWhilePaused();
+                    if (preparationCancelled) {
+                        await cancelFolderTasks();
+                        refresh({ silent: true });
+                        settle('Folder upload cancelled', 'info');
+                        return null;
+                    }
                     showFolderProgress(index + 1, totalFolders, directory.name);
                     const parentId = directory.parentPath
                         ? folderIdByPath.get(directory.parentPath)
@@ -395,20 +444,19 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
                 }
                 showFolderProgress(totalFolders, totalFolders);
                 if (plan.files.length > 0) {
-                    uploadTaskService?.setPreparation({
-                        label: 'Queueing files for upload',
-                        done: 0,
-                        total: plan.files.length,
-                    });
-                    if (progressToastId !== undefined) {
-                        toast.loading('Queueing files for upload…', { id: progressToastId });
-                    }
+                    publishPreparation('Queueing files for upload', 0, plan.files.length);
                 }
 
                 let filesQueued = 0;
                 let filesUploaded = 0;
                 let filesFailed = 0;
                 for (const group of groupFilesByDirectory(plan.files)) {
+                    await waitWhilePaused();
+                    if (preparationCancelled) {
+                        await cancelFolderTasks();
+                        settle('Folder upload cancelled', 'info');
+                        return null;
+                    }
                     const parentId = group.directoryPath
                         ? folderIdByPath.get(group.directoryPath)
                         : (currentFolderId || '0');
@@ -420,9 +468,16 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
                         group.files.map((file) => ({ file })),
                         { parentId, repositoryKey: repoKey },
                     );
+                    folderTaskIds.push(...outcome.taskIds);
                     filesQueued += outcome.queued;
                     filesUploaded += outcome.uploaded;
                     filesFailed += outcome.failed;
+                }
+
+                if (preparationCancelled) {
+                    await cancelFolderTasks();
+                    settle('Folder upload cancelled', 'info');
+                    return null;
                 }
 
                 refresh({ silent: true });

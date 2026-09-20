@@ -104,6 +104,14 @@ export interface UploadPreparation {
     label: string;
     done: number;
     total: number;
+    /** True while the caller has paused the preparation loop. */
+    paused?: boolean;
+    /** Pause the preparation. Omitted when pausing is not supported. */
+    onPause?: () => void;
+    /** Resume a paused preparation. */
+    onResume?: () => void;
+    /** Abandon the remaining preparation work. */
+    onCancel?: () => void;
 }
 
 export interface UploadTaskSnapshot {

@@ -135,10 +135,11 @@ const TaskRow: React.FC<{ task: UploadTask; service: UploadTaskService; t: Trans
     );
 };
 
-const PreparationRow: React.FC<{ preparation: UploadPreparation }> = ({ preparation }) => {
+const PreparationRow: React.FC<{ preparation: UploadPreparation; t: Translate }> = ({ preparation, t }) => {
     const percent = preparation.total > 0
         ? Math.round((preparation.done / preparation.total) * 100)
         : 0;
+    const paused = !!preparation.paused;
 
     return (
         <div className="w-full min-w-0 space-y-1.5 overflow-hidden border-b px-3 py-2 last:border-b-0">
@@ -149,9 +150,30 @@ const PreparationRow: React.FC<{ preparation: UploadPreparation }> = ({ preparat
                 <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium" title={preparation.label}>{preparation.label}</p>
                     <div className="mt-0.5 flex min-w-0 items-center gap-x-2 overflow-hidden whitespace-nowrap text-[11px] text-muted-foreground">
+                        {paused && <span>{t('uploadTasks.status.PAUSED')}</span>}
                         <span>{preparation.done}/{preparation.total}</span>
                     </div>
                 </div>
+                {(preparation.onPause || preparation.onResume || preparation.onCancel) && (
+                    <div className="flex shrink-0 items-center">
+                        {paused
+                            ? preparation.onResume && (
+                                <Button variant="ghost" size="icon" className="h-11 w-11 lg:h-8 lg:w-8" onClick={preparation.onResume} aria-label={t('uploadTasks.resume')}>
+                                    <Play className="h-4 w-4" />
+                                </Button>
+                            )
+                            : preparation.onPause && (
+                                <Button variant="ghost" size="icon" className="h-11 w-11 lg:h-8 lg:w-8" onClick={preparation.onPause} aria-label={t('uploadTasks.pause')}>
+                                    <Pause className="h-4 w-4" />
+                                </Button>
+                            )}
+                        {preparation.onCancel && (
+                            <Button variant="ghost" size="icon" className="h-11 w-11 text-muted-foreground hover:text-destructive lg:h-8 lg:w-8" onClick={preparation.onCancel} aria-label={t('uploadTasks.cancel')}>
+                                <X className="h-4 w-4" />
+                            </Button>
+                        )}
+                    </div>
+                )}
             </div>
             <Progress
                 className="h-1"
@@ -192,7 +214,7 @@ const TaskPanelContent: React.FC<{
                 <Progress className="h-1" value={snapshot.progress} aria-label={t('uploadTasks.overallProgress')} />
             </div>
             <div className="min-h-0 max-h-[300px] flex-1 overflow-x-hidden overflow-y-auto">
-                {snapshot.preparation && <PreparationRow preparation={snapshot.preparation} />}
+                {snapshot.preparation && <PreparationRow preparation={snapshot.preparation} t={t} />}
                 {snapshot.tasks.map((task) => <TaskRow key={task.id} task={task} service={service} t={t} />)}
             </div>
             {(snapshot.completedCount > 0 || snapshot.tasks.some((task) =>
