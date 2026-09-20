@@ -1,5 +1,6 @@
 import React from 'react'
 import { cn } from '@kn/ui'
+import { useTranslation } from '@kn/common'
 import type { PlanCode, SubscriptionCatalog, SubscriptionEntitlementDefinition, SubscriptionPlan } from '@kn/common'
 import { formatQuotaValue } from './quota-format'
 
@@ -60,6 +61,7 @@ export interface PlanComparisonProps {
 
 /** Notion「Explore plans」风格：方案列为表头（名称/价格/操作），特性按分组逐行对比。 */
 export const PlanComparison: React.FC<PlanComparisonProps> = ({ catalog, currentPlanCode, className, renderPlanAction }) => {
+    const { t } = useTranslation()
     if (!catalog || catalog.plans.length === 0) {
         return <div className="rounded-xl border border-border/60 bg-card p-4 text-xs text-muted-foreground">方案加载中…</div>
     }
@@ -73,7 +75,7 @@ export const PlanComparison: React.FC<PlanComparisonProps> = ({ catalog, current
             <table className="w-full min-w-[560px] border-collapse text-sm">
                 <thead>
                     <tr>
-                        <th className="w-[150px] px-4 pt-4 text-left align-top text-xs font-normal text-muted-foreground">方案</th>
+                        <th className="w-[150px] px-4 pt-4 text-left align-top text-xs font-normal text-muted-foreground">{t('settings.subscription.plan')}</th>
                         {plans.map((plan) => (
                             <th
                                 key={plan.planCode}
@@ -94,11 +96,11 @@ export const PlanComparison: React.FC<PlanComparisonProps> = ({ catalog, current
                     </tr>
                 </thead>
                 <tbody>
-                    <GroupRow label="能力" span={span} />
+                    <GroupRow label={t('settings.subscription.capabilities')} span={span} />
                     {features.map((definition) => (
                         <ValueRow key={definition.code} definition={definition} plans={plans} currentPlanCode={currentPlanCode} />
                     ))}
-                    <GroupRow label="额度" span={span} />
+                    <GroupRow label={t('settings.subscription.quotas')} span={span} />
                     {quotas.map((definition) => (
                         <ValueRow key={definition.code} definition={definition} plans={plans} currentPlanCode={currentPlanCode} />
                     ))}
