@@ -315,6 +315,11 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
                 else if (type === 'error') toast.error(message, id === undefined ? undefined : { id });
                 else toast.info(message, id === undefined ? undefined : { id });
             };
+            /** Reuse the active loading toast to report folder-tree progress. */
+            const showFolderProgress = (done: number, total: number) => {
+                if (progressToastId === undefined || total <= 0) return;
+                toast.loading(`Creating folders… ${done}/${total}`, { id: progressToastId });
+            };
 
             if (!resolved) {
                 try {
@@ -354,7 +359,9 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
                 };
 
                 let foldersCreated = 0;
-                for (const directory of plan.directories) {
+                const totalFolders = plan.directories.length;
+                for (const [index, directory] of plan.directories.entries()) {
+                    showFolderProgress(index, totalFolders);
                     const parentId = directory.parentPath
                         ? folderIdByPath.get(directory.parentPath)
                         : (currentFolderId || '0');
@@ -381,6 +388,10 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
                         throw new Error('Failed to create folder');
                     }
                     folderIdByPath.set(directory.path, folderId);
+                }
+                showFolderProgress(totalFolders, totalFolders);
+                if (progressToastId !== undefined && plan.files.length > 0) {
+                    toast.loading('Queueing files for upload…', { id: progressToastId });
                 }
 
                 let filesQueued = 0;
