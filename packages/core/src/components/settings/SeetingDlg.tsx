@@ -13,7 +13,7 @@ import {
     Puzzle,
     Bot,
     Compass,
-    Sparkles,
+    Gem,
     ChevronLeft,
 } from "@kn/icon";
 import React, { PropsWithChildren, useContext, useMemo, Suspense, useEffect } from "react";
@@ -103,7 +103,7 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                 label: t("settings.nav.account"),
                 items: [
                     { id: "MyAccount", label: t("settings.nav.myAccount"), icon: <UserCircle />, contentKey: "MyAccount" },
-                    { id: "Subscription", label: t("settings.nav.subscription"), icon: <Sparkles />, contentKey: "Subscription" },
+                    { id: "Subscription", label: t("settings.nav.subscription"), icon: <Gem />, contentKey: "Subscription" },
                     { id: "MySetting", label: t("settings.nav.preferences"), icon: <Settings />, contentKey: "MySetting" },
                     { id: "MyAgents", label: t("settings.nav.agents"), icon: <Bot />, contentKey: "MyAgents" },
                 ],

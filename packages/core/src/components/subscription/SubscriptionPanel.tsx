@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { APIS, useApi, useEntitlements, useTranslation, type SubscriptionCatalog } from '@kn/common'
 import { Button } from '@kn/ui'
-import { Sparkles } from '@kn/icon'
+import { Crown } from '@kn/icon'
 import { UpgradeDialog } from './UpgradeDialog'
 import { PlanComparison } from './PlanComparison'
 import { formatQuotaValue } from './quota-format'
@@ -67,7 +67,7 @@ export const SubscriptionPanel: React.FC = () => {
                 <div className="flex flex-col gap-4 rounded-xl border border-border/60 bg-card p-5 md:flex-row md:items-center md:justify-between">
                     <div className="flex items-start gap-3">
                         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                            <Sparkles className="h-4 w-4" />
+                            <Crown className="h-4 w-4" />
                         </div>
                         <div className="space-y-0.5">
                             <div className="text-base font-semibold text-foreground">{planName}</div>
