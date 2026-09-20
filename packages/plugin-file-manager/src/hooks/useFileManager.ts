@@ -145,7 +145,9 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
                             }
                             return [];
                         }
-                        res = await useApi(APIS.SEARCH_FILES, { keyword: searchKeyword });
+                        // Scope the search to the folder currently being browsed;
+                        // the file-center service filters by folder subtree server-side.
+                        res = await useApi(APIS.SEARCH_FILES, { keyword: searchKeyword, folderId: folderId || '0' });
                         break;
                     case 'home':
                     default:

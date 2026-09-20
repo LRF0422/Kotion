@@ -446,13 +446,15 @@ const response = await fetch(`http://192.168.3.43:1889/file-center/folder/childr
 |-----------|------|----------|-------------|
 | keyword | String | Yes | Search keyword |
 | repositoryKey | String | No | Limit search to specific repository |
+| folderId | Long | No | Limit search to this folder's subtree. Omit or pass `0` to search the whole repository. |
 
 **Request Example:**
 
 ```javascript
 const params = new URLSearchParams({
   keyword: 'report',
-  repositoryKey: 'my-repo'
+  repositoryKey: 'my-repo',
+  folderId: '123'
 });
 
 const response = await fetch(`http://192.168.3.43:1889/file-center/file/search?${params}`, {

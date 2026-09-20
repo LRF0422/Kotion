@@ -669,14 +669,31 @@ public class FileApplication {
      * Search files by keyword
      */
     public List<KnowledgeFileVO> searchFiles(String keyword, String repositoryKey) {
+        return searchFiles(keyword, repositoryKey, null);
+    }
+
+    /**
+     * Search files by keyword, optionally scoped to a folder subtree.
+     *
+     * @param folderId when non-null/non-zero, only files inside this folder
+     *                 (its direct children and all descendants) are returned
+     */
+    public List<KnowledgeFileVO> searchFiles(String keyword, String repositoryKey, Long folderId) {
         if (StrUtil.isBlank(keyword)) {
             return new ArrayList<>();
         }
 
+        boolean scopedToFolder = folderId != null && folderId != 0L;
         List<KnowledgeFile> files = fileService.lambdaQuery()
                 .like(KnowledgeFile::getName, keyword)
                 .eq(KnowledgeFile::getTrashed, 0)
                 .eq(StrUtil.isNotBlank(repositoryKey), KnowledgeFile::getRepositoryKey, repositoryKey)
+                // ancestors stores the folder chain as "0,12,34"; FIND_IN_SET matches an
+                // exact token, so folder 1 never matches folder 12.
+                .and(scopedToFolder, wrapper -> wrapper
+                        .eq(KnowledgeFile::getParentId, folderId)
+                        .or()
+                        .apply("FIND_IN_SET({0}, ancestors)", folderId))
                 .list();
 
         return files.stream()

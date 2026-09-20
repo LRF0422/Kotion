@@ -327,8 +327,10 @@ public class FileController {
     @ApiOperation("Search files")
     public R<List<KnowledgeFileVO>> searchFiles(
             @ApiParam("Search keyword") @RequestParam("keyword") String keyword,
-            @ApiParam("Repository key") @RequestParam(value = "repositoryKey", required = false) String repositoryKey) {
-        return R.data(fileApplication.searchFiles(keyword, repositoryKey));
+            @ApiParam("Repository key") @RequestParam(value = "repositoryKey", required = false) String repositoryKey,
+            @ApiParam("Folder scope; only returns files inside this folder subtree")
+            @RequestParam(value = "folderId", required = false) Long folderId) {
+        return R.data(fileApplication.searchFiles(keyword, repositoryKey, folderId));
     }
 
 }
