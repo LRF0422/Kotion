@@ -92,6 +92,11 @@ make clean
 - **子 agent**：`delegate` 工具 → 子 run（parent_run_id 关联、独立预算/事件日志；继承父系统提示/技能片段/记忆/采样参数，
   受租户配额与 `run.max-children-per-run` 上限）；子 run 在独立执行器上自驱，前端 `SubRunWorker` 直接流式并执行其前端工具
   （支持嵌套孙 run）；父日志只有 sub.spawned/sub.completed/sub.failed；取消递归级联。
+  **委派异步化（不阻塞主 agent）**：`delegate` 立即回执 `{status:"running", subRunId}`，父 loop 继续自己的步骤；
+  子 run 终态后结果以「后台通知」（user 消息，仅入模型上下文、不投影进规范会话日志）注入，或由
+  `wait_for_children{subRunIds?, timeoutSec?}` 显式等待并作为工具结果返回。父 loop 仅在真正需要等待时挂起
+  （status=SUSPENDED、suspendReason=`children`）：显式等待，或本轮回答写完但子 agent 结果未交付（挂起→注入→再推理）。
+  子 run 超时在每步边界检查；checkpoint 的 `delegations`/`pendingChildWaits` 支持崩溃后补偿等待。
 - **Plan 模式**：read-only 工具门禁 + `present_plan` 拦截 → plan.proposed + suspend(plan_approval)。
 - **API**：`/api/agent/v1/**`（EditorAgentController，SSE 事件协议 {seq,type,...}）；管理端
   `/admin/ai/**` 用量聚合改读 `agent_run`；模型列表 `/api/v1/models` 不变；远程技能注册
@@ -113,7 +118,8 @@ make clean
   `knowledge-service/knowledge-agent-skills/REMOTE_SKILLS.md`。
 - **LLM Abstraction**: `LlmClient`/`LlmClientFactory`（OpenAI 兼容 provider，`agent.providers.*` 配置）；
   AgentCore 的 `LlmGateway` 是唯一调用入口（同步驱动 + 流式工具调用累积）。
-- **Multi-agent**: `delegate` 工具创建子 run，父 loop 阻塞等待子终态并聚合结果。
+- **Multi-agent**: `delegate` 工具创建子 run 并立即回执（异步后台执行，父 loop 继续自己的步骤）；
+  子 run 结果以后台通知注入，或由 `wait_for_children` 显式等待后聚合返回。
 - **Plan Mode**: mode=plan 时工具门禁只读；`present_plan` 由 loop 拦截为计划审批挂起；
   `POST /runs/{id}/resume` 携带 {action: approve_plan, planDecision}。
 - **Session Persistence**: 事件溯源（Redis ZSET 热 + MySQL 冷）+ `agent_run_checkpoint` 快照；

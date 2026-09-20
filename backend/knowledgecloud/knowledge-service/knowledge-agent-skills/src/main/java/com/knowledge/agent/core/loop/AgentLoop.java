@@ -34,6 +34,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -49,8 +50,15 @@ import java.util.concurrent.TimeoutException;
  *   3. stream inference → text.delta / reasoning.delta + tool calls
  *   4. no tool calls → complete
  *   5. route tool calls: backend tools execute in-process (bounded parallel),
- *      frontend (editor) tools pause the run in WAITING_TOOLS until resume
+ *      frontend (editor) tools pause the run in WAITING_TOOLS until resume,
+ *      delegate spawns background children and is acknowledged immediately
  *   6. observe results → next step (budget → SUSPENDED, wait for continue)
+ *
+ * <p>Sub-agents never block the parent: a delegated child runs on its own
+ * executor, its result is folded into the parent conversation at the next step
+ * boundary, and the parent only parks (SUSPENDED/children) when it actually
+ * needs to wait — an explicit {@code wait_for_children} call, or a turn that
+ * ended while children were still running.
  * </pre>
  *
  * <p>The loop is deliberately blocking: one loop = one executor thread. Crash
@@ -159,6 +167,12 @@ public class AgentLoop implements Runnable {
 
     /** Throttle for the external-cancel Redis lookup. */
     private static final long EXTERNAL_CANCEL_POLL_MS = 2000L;
+
+    /** Gate poll interval while parked on sub-agents (cancel/timeout latency). */
+    private static final long CHILD_PARK_POLL_MS = 500L;
+
+    /** Parent-side suspend reason while parked on delegated children. */
+    private static final String SUSPEND_REASON_CHILDREN = "children";
 
     private volatile long lastExternalCancelCheckMs;
 
@@ -310,13 +324,14 @@ public class AgentLoop implements Runnable {
             if (!checkpoint.getDelegations().isEmpty()) {
                 rebuildDelegations();
             }
-            if (status == RunStatus.WAITING_TOOLS && !checkpoint.getPendingToolCalls().isEmpty()) {
-                // Crashed while waiting for its OWN frontend tool results.
+            // Answer everything this run still owes BEFORE the next inference: a
+            // crash can land anywhere inside a tool batch, and an unanswered tool
+            // call would make the conversation invalid for the provider.
+            // Client-owned calls come first, so a queued tool_results resume is
+            // applied before any child park could swallow it.
+            if (!checkpoint.getPendingToolCalls().isEmpty()) {
                 run.setPendingToolCalls(new ArrayList<>(checkpoint.getPendingToolCalls()));
                 if (!dispatchWaitForPending()) {
-                    return;
-                }
-                if (!activeDelegations.isEmpty() && !delegationWait()) {
                     return;
                 }
             } else if (status == RunStatus.WAITING_TOOLS) {
@@ -332,10 +347,32 @@ public class AgentLoop implements Runnable {
                     return;
                 }
             }
+            boolean crashedInChildWait = !checkpoint.getPendingChildWaits().isEmpty();
+            if (crashedInChildWait) {
+                // The wait record is written BEFORE the park, so a crash mid-wait
+                // leaves the call unanswered — answer it now.
+                if (!serveChildWaits(new ArrayList<>(checkpoint.getPendingChildWaits()))) {
+                    return;
+                }
+            }
+            if (!crashedInChildWait && status == RunStatus.SUSPENDED
+                    && SUSPEND_REASON_CHILDREN.equals(run.getSuspendReason())) {
+                // Crashed while parked at the end of a turn, holding the answer
+                // until the children report back: finish that park and hand the
+                // results over before the rebuilt loop answers.
+                if (!parkForChildren(null, 0L)) {
+                    return;
+                }
+                deliverChildNotifications();
+            }
 
             // Bounded auto-continue counter for turns truncated by the token limit.
             int truncationContinues = 0;
             while (!isCancelled() && !run.statusEnum().isTerminal()) {
+                // Background children: settle and hand over whatever finished
+                // while we were busy, before this step's inference sees it. The
+                // parent never blocks on a spawn — only on an explicit wait.
+                deliverChildResults();
                 run.setStatus(RunStatus.RUNNING.name());
                 run.touch();
                 persist();
@@ -422,6 +459,19 @@ public class AgentLoop implements Runnable {
                                 truncationContinues, MAX_TRUNCATION_CONTINUES);
                         continue;
                     }
+                    // The turn ended, but delegated children are still in flight
+                    // (or their results not handed over yet): the main agent now
+                    // genuinely has nothing to do but wait. Park until they
+                    // report back, then let it answer WITH their results instead
+                    // of completing an answer that cannot include them. This
+                    // turn's text is deliberately dropped: the client renders the
+                    // last step's text, so re-answering replaces it.
+                    if (!activeDelegations.isEmpty()) {
+                        if (!parkForChildren(null, 0L)) {
+                            return; // cancelled while parked
+                        }
+                        continue;
+                    }
                     if (result.getText() != null && !result.getText().isEmpty()) {
                         checkpoint.getMessages().add(ChatMessage.builder()
                                 .role("assistant")
@@ -431,7 +481,6 @@ public class AgentLoop implements Runnable {
                     complete(finishReason);
                     return;
                 }
-
                 // Append the assistant message carrying tool_calls BEFORE any
                 // tool messages, so the conversation stays well-formed for the
                 // next inference (and for crash recovery).
@@ -441,6 +490,7 @@ public class AgentLoop implements Runnable {
                 List<ToolCallRequest> frontendCalls = new ArrayList<>();
                 List<ToolCallRequest> planCalls = new ArrayList<>();
                 List<ToolCallRequest> delegateCalls = new ArrayList<>();
+                List<ToolCallRequest> waitCalls = new ArrayList<>();
                 for (ToolCallRequest call : result.getToolCalls()) {
                     if ("present_plan".equals(call.getName())
                             && "plan".equalsIgnoreCase(run.getMode())) {
@@ -453,6 +503,13 @@ public class AgentLoop implements Runnable {
                         } else {
                             delegateCalls.add(call);
                         }
+                        continue;
+                    }
+                    if ("wait_for_children".equals(call.getName())) {
+                        // Loop intercepts: parks the run until the children it
+                        // names (or all of them) settle. Read-only, so plan mode
+                        // allows it.
+                        waitCalls.add(call);
                         continue;
                     }
                     BackendTool backendTool = toolGateway.backendTool(call.getName());
@@ -491,13 +548,29 @@ public class AgentLoop implements Runnable {
                     }
                 }
                 if (!delegateCalls.isEmpty()) {
+                    // Fire-and-forget: children run in the background and the
+                    // parent continues with this step's remaining work.
                     spawnDelegations(delegateCalls);
-                    if (!delegationWait()) {
+                }
+                // Register every pause this batch needs, then persist ONCE before
+                // blocking: a crash between two blocking steps must never leave
+                // the conversation with an unanswered tool call.
+                List<PendingToolCall> childWaits = prepareChildWaits(waitCalls);
+                List<String> pendingToolIds = prepareFrontendCalls(frontendCalls);
+                if (!delegateCalls.isEmpty() || !childWaits.isEmpty() || !pendingToolIds.isEmpty()) {
+                    saveCheckpoint();
+                    persist();
+                }
+                // Client-owned calls go first: their resume must never land while
+                // the loop is parked on children (that park would swallow it).
+                if (!pendingToolIds.isEmpty()) {
+                    pauseForPendingTools(pendingToolIds);
+                    if (!dispatchWaitForPending()) {
                         return;
                     }
                 }
-                if (!frontendCalls.isEmpty()) {
-                    if (!dispatchFrontendAndWait(frontendCalls)) {
+                if (!childWaits.isEmpty()) {
+                    if (!serveChildWaits(childWaits)) {
                         return;
                     }
                 }
@@ -725,25 +798,27 @@ public class AgentLoop implements Runnable {
         }
     }
 
-    /** Pause the run for frontend (editor) tool execution; returns false on cancel/timeout. */
-    private boolean dispatchFrontendAndWait(List<ToolCallRequest> frontendCalls) throws InterruptedException {
-        if (isCancelled()) {
-            return false;
+    /**
+     * Register this step's frontend (editor) calls on the checkpoint, emitting
+     * {@code tool.requested} — without persisting or pausing yet. The caller
+     * persists the whole batch before any blocking step, so the conversation's
+     * outstanding calls are durable before the pause.
+     */
+    private List<String> prepareFrontendCalls(List<ToolCallRequest> frontendCalls) {
+        List<String> pendingIds = new ArrayList<>();
+        if (frontendCalls.isEmpty()) {
+            return pendingIds;
         }
         long now = System.currentTimeMillis();
-        List<PendingToolCall> pending = new ArrayList<>();
-        List<String> pendingIds = new ArrayList<>();
         for (ToolCallRequest call : frontendCalls) {
-            PendingToolCall pendingCall = PendingToolCall.of(call.getId(), call.getName(), call.getArguments(), now);
-            pending.add(pendingCall);
+            checkpoint.getPendingToolCalls().add(
+                    PendingToolCall.of(call.getId(), call.getName(), call.getArguments(), now));
             pendingIds.add(call.getId());
-            checkpoint.getPendingToolCalls().add(pendingCall);
             emit(RunEvents.TOOL_REQUESTED,
                     RunEvents.toolRequested(call.getId(), call.getName(), call.getArguments()));
         }
-        run.setPendingToolCalls(pending);
-        pauseForPendingTools(pendingIds);
-        return dispatchWaitForPending();
+        run.setPendingToolCalls(new ArrayList<>(checkpoint.getPendingToolCalls()));
+        return pendingIds;
     }
 
     /** Mark the run WAITING_TOOLS and durably checkpoint the pause point. */
@@ -870,9 +945,13 @@ public class AgentLoop implements Runnable {
 
     // ==================== sub-agent delegation ====================
 
-    /** Spawn child runs for delegate tool calls (failures become tool messages). */
+    /**
+     * Spawn child runs for delegate tool calls. Delegation is asynchronous: the
+     * child starts on its own executor, the parent acknowledges the spawn
+     * immediately and keeps working — nothing here waits for the child.
+     * Failures become tool messages.
+     */
     private void spawnDelegations(List<ToolCallRequest> delegateCalls) {
-        boolean spawnedAny = false;
         for (ToolCallRequest call : delegateCalls) {
             emit(RunEvents.TOOL_REQUESTED,
                     RunEvents.toolRequested(call.getId(), call.getName(), call.getArguments()));
@@ -880,8 +959,8 @@ public class AgentLoop implements Runnable {
                 Delegation delegation = delegator.spawn(buildToolContext(), call);
                 // A child can finish before we subscribe to its log (subscribe
                 // happens after createChild starts the loop). Synthesize its
-                // terminal now so the parent never waits the full timeout for a
-                // run that is already done.
+                // terminal now so its result is delivered from the first poll
+                // instead of sitting unnoticed until the delegation timeout.
                 AgentRun spawnedChild = runStore.load(delegation.getSubRunId());
                 if (spawnedChild != null && spawnedChild.statusEnum().isTerminal()) {
                     delegation.setTerminal(synthesizeTerminal(spawnedChild));
@@ -890,20 +969,34 @@ public class AgentLoop implements Runnable {
                 checkpoint.getDelegations().add(new DelegationRecord(
                         delegation.getCallId(), delegation.getSubRunId(), delegation.getTask(),
                         delegation.getSpawnedAt()));
-                spawnedAny = true;
+                // Every tool call of the batch needs a well-formed result before
+                // the next inference. Answer the SPAWN (not the child's work) so
+                // the parent can continue; the child's result arrives later as a
+                // notification or as the result of wait_for_children.
+                checkpoint.getMessages().add(ChatMessage.builder()
+                        .role("tool")
+                        .toolCallId(call.getId())
+                        .name("delegate")
+                        .content(render(renderResult(delegationAck(delegation))))
+                        .build());
             } catch (Exception e) {
                 checkpoint.getMessages().add(blockedMessage(call, "DELEGATE_FAILED: " + e.getMessage()));
                 emit(RunEvents.TOOL_COMPLETED,
                         RunEvents.toolCompleted(call.getId(), "delegate", false, null, e.getMessage(), 0));
             }
         }
-        if (spawnedAny) {
-            // Persist the child handles before waiting: children are driven by the
-            // client now, so this record (not a pending tool entry) is what a
-            // rebuilt parent re-attaches to.
-            saveCheckpoint();
-            persist();
-        }
+        // No save here: the caller persists the whole batch (child handles,
+        // acknowledgements and every other outstanding call) in ONE write, so a
+        // crash can never leave the conversation with an unanswered tool call.
+    }
+
+    /** Model-facing acknowledgement returned by a successful {@code delegate}. */
+    private Map<String, Object> delegationAck(Delegation delegation) {
+        return RunEvents.payload(
+                "status", "running",
+                "subRunId", delegation.getSubRunId(),
+                "note", "子 agent 已在后台并行执行，完成后会自动通知你。"
+                        + "请继续完成你自己的部分；确实需要它的结果才能继续时，调用 wait_for_children。");
     }
 
     /** Drop a finished delegation's recovery record. */
@@ -997,69 +1090,92 @@ public class AgentLoop implements Runnable {
     }
 
     /**
-     * Drive all live delegations to completion: watch each child's log for its
-     * terminal event and collect the result as the delegate tool result.
+     * Non-blocking sub-agent maintenance: drain each live child's event tail for
+     * its terminal event and enforce the delegation timeout. Never delivers
+     * results — delivery is explicit ({@link #deliverChildNotifications()} and
+     * {@link #serveChildWaits}).
      *
-     * <p>Children are otherwise autonomous: they pause on their own gate for
-     * their frontend tools, the client drives them directly (stream + resume by
-     * child run id), and the parent never parks on a child's tool call. That is
-     * what lets several children work at the same time.
+     * <p>Children are autonomous: they pause on their own gate for their
+     * frontend tools, the client drives them directly (stream + resume by child
+     * run id), and the parent never parks on a child's tool call. That is what
+     * lets several children work at the same time as the parent.
      */
-    private boolean delegationWait() throws InterruptedException {
-        while (!isCancelled() && !activeDelegations.isEmpty()) {
-            long now = System.currentTimeMillis();
-            List<String> finished = new ArrayList<>();
-            for (Delegation delegation : activeDelegations.values()) {
-                RunEvent event;
-                while ((event = delegation.getSubscription().poll(0)) != null) {
-                    // Child tool calls are NOT relayed into the parent's pending
-                    // list any more: the child pauses on its own gate, the client
-                    // streams the child's log directly and resumes the child. The
-                    // parent therefore never blocks on a child's frontend tool and
-                    // children progress in parallel.
-                    if (event.isTerminal()) {
-                        delegation.setTerminal(event);
-                    }
-                }
-                if (delegation.getTerminal() != null) {
-                    finishDelegation(delegation);
-                    finished.add(delegation.getCallId());
-                } else if (delegation.isExpired(now)) {
-                    delegator.cancelChild(delegation.getSubRunId());
-                    // Legacy checkpoints can still hold this child's pending
-                    // calls (from before children drove their own tools) — settle
-                    // them so a rebuilt run never waits for a dead child.
-                    dropChildPendingTools(delegation.getSubRunId(), "委派超时");
-                    checkpoint.getMessages().add(delegateMessage(delegation, false,
-                            "委派超时（" + (delegation.getTimeoutMs() / 1000) + "s）"));
-                    emit(RunEvents.SUB_FAILED,
-                            RunEvents.subFailed(delegation.getCallId(), delegation.getSubRunId(), "timeout"));
-                    emit(RunEvents.TOOL_COMPLETED, RunEvents.toolCompleted(delegation.getCallId(),
-                            "delegate", false, null, "委派超时", 0));
-                    delegation.getSubscription().close();
-                    finished.add(delegation.getCallId());
-                }
-            }
-            for (String callId : finished) {
-                activeDelegations.remove(callId);
-            }
-            if (activeDelegations.isEmpty()) {
-                break;
-            }
-            // Every child is working on its own: wait for its next event, a
-            // cancel, or the delegation timeout.
-            ResumePayload payload = gate.await(500);
-            if (payload != null && "cancel".equals(payload.getAction())) {
-                return false;
-            }
+    private void tickDelegations() throws InterruptedException {
+        if (activeDelegations.isEmpty()) {
+            return;
         }
-        return true;
+        long now = System.currentTimeMillis();
+        for (Delegation delegation : new ArrayList<>(activeDelegations.values())) {
+            if (delegation.isSettled()) {
+                continue;
+            }
+            RunEvent event;
+            while ((event = delegation.getSubscription().poll(0)) != null) {
+                if (event.isTerminal()) {
+                    delegation.setTerminal(event);
+                }
+            }
+            if (delegation.isSettled() || !delegation.isExpired(now)) {
+                continue;
+            }
+            // Timeout: cancel the child and synthesize its terminal event so the
+            // delivery path reports it like any other failure. Legacy checkpoints
+            // can still hold this child's pending calls (from before children
+            // drove their own tools) — settle them so a rebuilt run never waits
+            // for a dead child.
+            long timeoutSec = delegation.getTimeoutMs() / 1000;
+            log.warn("Run {}: delegation {} (child {}) timed out after {}s",
+                    run.getRunId(), delegation.getCallId(), delegation.getSubRunId(), timeoutSec);
+            delegator.cancelChild(delegation.getSubRunId());
+            dropChildPendingTools(delegation.getSubRunId(), "委派超时");
+            RunEvent terminal = new RunEvent();
+            terminal.setSeq(0);
+            terminal.setCreateTime(now);
+            terminal.setType(RunEvents.RUN_CANCELLED);
+            terminal.setPayload(RunEvents.payload("error", "委派超时（" + timeoutSec + "s）"));
+            delegation.setTerminal(terminal);
+        }
     }
 
-    /** Collect a finished child into the parent conversation + event log. */
-    private void finishDelegation(Delegation delegation) {
+    /** Settle background children, then hand their results to the model. */
+    private void deliverChildResults() throws InterruptedException {
+        tickDelegations();
+        deliverChildNotifications();
+    }
+
+    /**
+     * Fold every settled-but-undelivered child into the parent conversation as a
+     * context-only notification (a user turn: {@code SessionTranscriptProjector}
+     * never projects those, so the canonical session log stays clean) plus the
+     * {@code sub.*} events the UI's sub-agent tree needs. No-op when nothing
+     * settled; safe at any step boundary.
+     *
+     * <p>The notification and the dropped recovery record are written by ONE
+     * checkpoint save, so a crash can neither lose a child's result nor deliver
+     * it twice.
+     */
+    private void deliverChildNotifications() {
+        List<Delegation> ready = new ArrayList<>();
+        for (Delegation delegation : activeDelegations.values()) {
+            if (delegation.isSettled() && !delegation.isDelivered()) {
+                ready.add(delegation);
+            }
+        }
+        if (ready.isEmpty()) {
+            return;
+        }
+        for (Delegation delegation : ready) {
+            Map<String, Object> result = delegationResult(delegation);
+            checkpoint.getMessages().add(childNotification(delegation, result));
+            retireDelegation(delegation, result);
+        }
+        saveCheckpoint();
+    }
+
+    /** One settled child's result payload (shared by notifications and waits). */
+    private Map<String, Object> delegationResult(Delegation delegation) {
         RunEvent terminal = delegation.getTerminal();
-        boolean ok = RunEvents.RUN_COMPLETED.equals(terminal.getType());
+        boolean ok = terminal != null && RunEvents.RUN_COMPLETED.equals(terminal.getType());
         AgentRun child = runStore.load(delegation.getSubRunId());
         String childText = child != null ? child.getAssistantText() : null;
         if (childText == null || childText.isEmpty()) {
@@ -1067,40 +1183,344 @@ public class AgentLoop implements Runnable {
             // but the child's durable event log can rebuild it.
             childText = replayChildText(delegation.getSubRunId());
         }
-        Map<String, Object> result = RunEvents.payload("subRunId", delegation.getSubRunId(),
-                "text", childText);
+        Map<String, Object> result = RunEvents.payload(
+                "subRunId", delegation.getSubRunId(),
+                "task", delegation.getTask(),
+                "ok", ok,
+                "text", ok ? childText : null);
+        if (!ok) {
+            String error = "";
+            if (terminal != null && terminal.getPayload() != null) {
+                error = str(terminal.getPayload().get("error"));
+                if (error.isEmpty()) {
+                    error = str(terminal.getPayload().get("code"));
+                }
+            }
+            result.put("error", error.isEmpty() ? "子 agent 未正常完成" : error);
+        }
         if (child != null) {
             result.put("usage", RunEvents.payload(
                     "promptTokens", child.getPromptTokens(),
                     "completionTokens", child.getCompletionTokens(),
                     "cachedPromptTokens", child.getCachedPromptTokens()));
         }
+        return result;
+    }
+
+    /**
+     * Close out one delivered child: emit {@code sub.completed}/{@code sub.failed}
+     * and the delegate call's {@code tool.completed} (the parent-side step tape
+     * keeps showing the delegation as running until here), drop the recovery
+     * record and the live subscription. Idempotent per delegation.
+     */
+    private void retireDelegation(Delegation delegation, Map<String, Object> result) {
+        if (delegation.isDelivered()) {
+            return;
+        }
+        delegation.setDelivered(true);
+        boolean ok = Boolean.TRUE.equals(result.get("ok"));
+        Object bounded = boundResult(result);
         if (ok) {
-            Object boundedResult = boundResult(result);
             emit(RunEvents.SUB_COMPLETED,
-                    RunEvents.subCompleted(delegation.getCallId(), delegation.getSubRunId(), true, boundedResult));
-            checkpoint.getMessages().add(delegateMessage(delegation, true, renderResult(boundedResult)));
+                    RunEvents.subCompleted(delegation.getCallId(), delegation.getSubRunId(), true, bounded));
             emit(RunEvents.TOOL_COMPLETED,
-                    RunEvents.toolCompleted(delegation.getCallId(), "delegate", true, boundedResult, null, 0));
+                    RunEvents.toolCompleted(delegation.getCallId(), "delegate", true, bounded, null, 0));
         } else {
-            String error = str(terminal.getPayload().get("error"));
-            if (error.isEmpty()) {
-                error = str(terminal.getPayload().get("code"));
-            }
+            String error = str(result.get("error"));
             emit(RunEvents.SUB_FAILED,
                     RunEvents.subFailed(delegation.getCallId(), delegation.getSubRunId(), error));
-            checkpoint.getMessages().add(delegateMessage(delegation, false, error));
             emit(RunEvents.TOOL_COMPLETED,
                     RunEvents.toolCompleted(delegation.getCallId(), "delegate", false, null, error, 0));
         }
-        // A child can reach a terminal state while one of its frontend tool
-        // calls is still outstanding (cancel / failure mid-wait) — but those
-        // calls never live on the parent any more, so this only cleans up
-        // legacy checkpoints written before children drove their own tools.
+        // A child can reach a terminal state while one of its frontend tool calls
+        // is still outstanding (cancel / failure mid-wait) — those calls never
+        // live on the parent any more, so this only cleans up legacy checkpoints.
         dropChildPendingTools(delegation.getSubRunId(), "子 agent 已结束，工具调用未返回结果");
         forgetDelegation(delegation.getSubRunId());
+        activeDelegations.remove(delegation.getCallId());
+        try {
+            delegation.getSubscription().close();
+        } catch (Exception ignored) {
+            // Closing an already-dead subscription must never mask the result.
+        }
+    }
+
+    /** Context-only notification for a settled child. */
+    private ChatMessage childNotification(Delegation delegation, Map<String, Object> result) {
+        boolean ok = Boolean.TRUE.equals(result.get("ok"));
+        StringBuilder content = new StringBuilder();
+        content.append(ok ? "【子 agent 完成】" : "【子 agent 失败】")
+                .append("subRunId=").append(delegation.getSubRunId());
+        if (delegation.getTask() != null && !delegation.getTask().trim().isEmpty()) {
+            content.append("\n任务：").append(delegation.getTask().trim());
+        }
+        if (ok) {
+            // Bound like any other tool result: a child can legitimately produce
+            // more text than the parent's context can afford.
+            content.append("\n结果：\n").append(render(str(result.get("text"))));
+        } else {
+            content.append("\n原因：").append(str(result.get("error")));
+        }
+        content.append("\n（这是子 agent 的后台通知，不是新的用户指令；"
+                + "请把它纳入你自己的工作，如已无其它待办就基于它给出完整答复。）");
+        return ChatMessage.builder()
+                .role("user")
+                .content(content.toString())
+                .build();
+    }
+
+    /**
+     * Park the run until the watched children settle or the wait budget expires.
+     * This is the ONLY place the parent stops for sub-agents — deliberately, with
+     * a durable SUSPENDED/children state, rather than blocking every spawn.
+     * Returns false when the run was cancelled while parked.
+     *
+     * @param subRunIds children to watch (child run id or delegate call id), or
+     *                  {@code null} for every live child
+     * @param timeoutMs explicit wait budget in millis; {@code <= 0} waits until
+     *                  each child hits its own delegation timeout
+     */
+    private boolean parkForChildren(Set<String> subRunIds, long timeoutMs) throws InterruptedException {
+        if (isCancelled()) {
+            return false;
+        }
+        List<Delegation> watched = watchedDelegations(subRunIds);
+        boolean outstanding = false;
+        for (Delegation delegation : watched) {
+            if (!delegation.isSettled()) {
+                outstanding = true;
+                break;
+            }
+        }
+        if (!outstanding) {
+            return true; // nothing to wait for: never emit a fake park
+        }
+        long deadline = timeoutMs > 0 ? System.currentTimeMillis() + timeoutMs : Long.MAX_VALUE;
+        run.setStatus(RunStatus.SUSPENDED.name());
+        run.setSuspendReason(SUSPEND_REASON_CHILDREN);
+        run.touch();
+        emit(RunEvents.RUN_SUSPENDED, RunEvents.runSuspended(SUSPEND_REASON_CHILDREN,
+                subRunIds == null ? null : new ArrayList<>(subRunIds)));
         saveCheckpoint();
-        delegation.getSubscription().close();
+        persist();
+        saveHot(true);
+        try {
+            while (!isCancelled()) {
+                tickDelegations();
+                boolean allSettled = true;
+                for (Delegation delegation : watched) {
+                    if (!delegation.isSettled()) {
+                        allSettled = false;
+                        break;
+                    }
+                }
+                if (allSettled || System.currentTimeMillis() >= deadline) {
+                    break;
+                }
+                // Nothing else can resume a parent that is only waiting for its
+                // children: poll with a short interval for the next child event,
+                // a cancel, or the wait budget.
+                ResumePayload payload = gate.await(CHILD_PARK_POLL_MS);
+                if (payload != null && "cancel".equals(payload.getAction())) {
+                    return false;
+                }
+            }
+        } finally {
+            if (!isCancelled()) {
+                run.setStatus(RunStatus.RUNNING.name());
+                run.setSuspendReason(null);
+                run.touch();
+                persist();
+            }
+        }
+        return !isCancelled();
+    }
+
+    /** The delegations a wait covers: the named ones, or every live child. */
+    private List<Delegation> watchedDelegations(Set<String> subRunIds) {
+        List<Delegation> watched = new ArrayList<>();
+        for (Delegation delegation : activeDelegations.values()) {
+            if (subRunIds == null || subRunIds.isEmpty()
+                    || subRunIds.contains(delegation.getSubRunId())
+                    || subRunIds.contains(delegation.getCallId())) {
+                watched.add(delegation);
+            }
+        }
+        return watched;
+    }
+
+    /**
+     * Register this step's {@code wait_for_children} calls on the checkpoint
+     * (emitting {@code tool.requested}) without persisting or parking yet — the
+     * caller persists the whole batch first, so a crash resumes the same wait
+     * instead of leaving an unanswered tool call in the conversation.
+     */
+    private List<PendingToolCall> prepareChildWaits(List<ToolCallRequest> waitCalls) {
+        List<PendingToolCall> waits = new ArrayList<>();
+        if (waitCalls.isEmpty()) {
+            return waits;
+        }
+        long now = System.currentTimeMillis();
+        for (ToolCallRequest call : waitCalls) {
+            emit(RunEvents.TOOL_REQUESTED,
+                    RunEvents.toolRequested(call.getId(), call.getName(), call.getArguments()));
+            PendingToolCall pending = PendingToolCall.of(call.getId(), call.getName(),
+                    call.getArguments(), now);
+            waits.add(pending);
+            checkpoint.getPendingChildWaits().add(pending);
+        }
+        return waits;
+    }
+
+    /**
+     * Wait for the children each pending call asked for, then answer every call
+     * with their results and drop it from the checkpoint (fresh wait or crash
+     * recovery). One checkpoint write covers the tool messages and the cleared
+     * waits.
+     */
+    private boolean serveChildWaits(List<PendingToolCall> waits) throws InterruptedException {
+        List<ChildWait> parsed = new ArrayList<>();
+        // Union of the requested children (an unfiltered call means "all live
+        // children") plus the tightest explicit timeout across the calls.
+        Set<String> requested = new java.util.LinkedHashSet<>();
+        boolean anyUnfiltered = false;
+        long timeoutMs = 0L;
+        for (PendingToolCall wait : waits) {
+            ChildWait childWait = new ChildWait(wait,
+                    stringList(parseWaitArgs(wait.getArgsJson()).get("subRunIds")),
+                    longArg(parseWaitArgs(wait.getArgsJson()).get("timeoutSec")));
+            parsed.add(childWait);
+            if (childWait.ids.isEmpty()) {
+                anyUnfiltered = true;
+            } else {
+                requested.addAll(childWait.ids);
+            }
+            if (childWait.timeoutSec > 0
+                    && (timeoutMs == 0L || childWait.timeoutSec * 1000L < timeoutMs)) {
+                timeoutMs = childWait.timeoutSec * 1000L;
+            }
+        }
+        if (!parkForChildren(anyUnfiltered ? null : requested, timeoutMs)) {
+            return false; // cancelled while parked
+        }
+
+        for (ChildWait wait : parsed) {
+            List<Map<String, Object>> results = new ArrayList<>();
+            List<String> unmatched = new ArrayList<>();
+            if (wait.ids.isEmpty()) {
+                for (Delegation delegation : watchedDelegations(null)) {
+                    results.add(waitResultFor(delegation));
+                }
+            } else {
+                for (String id : wait.ids) {
+                    Delegation delegation = findDelegation(id);
+                    if (delegation == null) {
+                        unmatched.add(id);
+                    } else {
+                        results.add(waitResultFor(delegation));
+                    }
+                }
+            }
+            Map<String, Object> payload = RunEvents.payload("results", results);
+            if (!unmatched.isEmpty()) {
+                payload.put("unmatched", unmatched);
+                payload.put("note", "这些 subRunId 未匹配到正在运行或刚结束的子 agent");
+            }
+            Object bounded = boundResult(payload);
+            checkpoint.getMessages().add(ChatMessage.builder()
+                    .role("tool")
+                    .toolCallId(wait.call.getCallId())
+                    .name("wait_for_children")
+                    .content(render(renderResult(bounded)))
+                    .build());
+            emit(RunEvents.TOOL_COMPLETED,
+                    RunEvents.toolCompleted(wait.call.getCallId(), "wait_for_children",
+                            true, bounded, null, 0));
+            checkpoint.getPendingChildWaits().remove(wait.call);
+        }
+        // Children that settled outside every wait are still owed their
+        // notification (this also emits their sub.* events).
+        deliverChildNotifications();
+        saveCheckpoint();
+        return !isCancelled();
+    }
+
+    /** One parsed {@code wait_for_children} call: its durable record + arguments. */
+    private static final class ChildWait {
+        private final PendingToolCall call;
+        private final List<String> ids;
+        private final long timeoutSec;
+
+        private ChildWait(PendingToolCall call, List<String> ids, long timeoutSec) {
+            this.call = call;
+            this.ids = ids;
+            this.timeoutSec = timeoutSec;
+        }
+    }
+
+    /**
+     * One child's contribution to a wait result: its settled result (retiring the
+     * delegation), or a marker when the wait budget ran out before it finished.
+     */
+    private Map<String, Object> waitResultFor(Delegation delegation) {
+        if (!delegation.isSettled()) {
+            return RunEvents.payload("subRunId", delegation.getSubRunId(),
+                    "task", delegation.getTask(), "status", "running");
+        }
+        if (delegation.isDelivered()) {
+            return RunEvents.payload("subRunId", delegation.getSubRunId(),
+                    "status", "delivered",
+                    "note", "该子 agent 的结果已在上文的后台通知中给出");
+        }
+        Map<String, Object> result = delegationResult(delegation);
+        retireDelegation(delegation, result);
+        return result;
+    }
+
+    /** Live delegation by child run id or parent-side delegate call id. */
+    private Delegation findDelegation(String id) {
+        for (Delegation delegation : activeDelegations.values()) {
+            if (id.equals(delegation.getSubRunId()) || id.equals(delegation.getCallId())) {
+                return delegation;
+            }
+        }
+        return null;
+    }
+
+    private Map<String, Object> parseWaitArgs(String argsJson) {
+        try {
+            return toolGateway.parseArgs(argsJson);
+        } catch (Exception e) {
+            return new java.util.LinkedHashMap<>();
+        }
+    }
+
+    private List<String> stringList(Object value) {
+        List<String> out = new ArrayList<>();
+        if (value instanceof List) {
+            for (Object item : (List<?>) value) {
+                if (item != null && !String.valueOf(item).trim().isEmpty()) {
+                    out.add(String.valueOf(item).trim());
+                }
+            }
+        } else if (value != null && !String.valueOf(value).trim().isEmpty()) {
+            out.add(String.valueOf(value).trim());
+        }
+        return out;
+    }
+
+    private long longArg(Object value) {
+        if (value instanceof Number) {
+            return ((Number) value).longValue();
+        }
+        if (value instanceof String) {
+            try {
+                return Long.parseLong(((String) value).trim());
+            } catch (NumberFormatException ignored) {
+                // fall through: treated as "no explicit budget"
+            }
+        }
+        return 0L;
     }
 
     /**
@@ -1122,17 +1542,6 @@ public class AgentLoop implements Runnable {
                             false, null, reason, 0, subRunId));
         }
         checkpoint.getPendingToolCalls().removeAll(orphaned);
-    }
-
-    private ChatMessage delegateMessage(Delegation delegation, boolean ok, String content) {
-        String rendered = ok ? render(content)
-                : "{\"error\":\"" + escapeJson(content) + "\"}";
-        return ChatMessage.builder()
-                .role("tool")
-                .toolCallId(delegation.getCallId())
-                .name("delegate")
-                .content(rendered)
-                .build();
     }
 
     // ==================== plan approval ====================

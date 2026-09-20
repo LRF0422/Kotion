@@ -108,6 +108,14 @@ public class Checkpoint {
     /** Live child runs this run has delegated to (re-attach after a crash). */
     private List<DelegationRecord> delegations = new ArrayList<>();
 
+    /**
+     * {@code wait_for_children} calls the loop has parked on. The loop — not the
+     * client — owns their completion (it answers them with the children's
+     * results), so a rebuilt run finishes the wait it was in the middle of
+     * instead of leaving an unanswered tool call in the conversation.
+     */
+    private List<PendingToolCall> pendingChildWaits = new ArrayList<>();
+
     /** plan_approval | budget (why the run is SUSPENDED). */
     private String suspendReason;
 

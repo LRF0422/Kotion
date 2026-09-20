@@ -207,6 +207,9 @@ export function extractBlockReferences(steps?: ExecutionStep[]): BlockReference[
 // Helper function to format tool names for display
 export function formatToolName(toolName: string) {
     return toolName
+        // snake_case builtins (wait_for_children, get_run_state, …) read as one
+        // run-on word otherwise.
+        .replace(/_/g, ' ')
         .replace(/([A-Z])/g, ' $1')
         .replace(/^./, str => str.toUpperCase())
         .trim()

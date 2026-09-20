@@ -28,8 +28,9 @@ public class DelegateTool implements BackendTool {
         props.put("maxSteps", Schemas.integer("子 agent 的最大步数（可选，默认继承配置）。"));
         props.put("timeoutSec", Schemas.integer("子 agent 超时秒数（可选，默认 600）。"));
         return ToolSpec.of("delegate",
-                "把独立、可并行的子任务委派给一个子 agent 执行，完成后返回子 agent 的结果文本。"
-                        + "适合并行调研、分块起草、事实核查等。",
+                "把独立、可并行的子任务委派给一个子 agent 在后台并行执行，立即返回受理回执（含 subRunId）。"
+                        + "派发后请继续完成你自己的部分，不要空等；子 agent 完成后会自动通知你，"
+                        + "确实需要它的结果才能继续时再调用 wait_for_children。",
                 Schemas.object(props, "task"), ToolKind.BACKEND, false, "builtin");
     }
 

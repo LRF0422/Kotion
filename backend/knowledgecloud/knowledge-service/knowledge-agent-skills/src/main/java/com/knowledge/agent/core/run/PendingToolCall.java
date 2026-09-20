@@ -5,10 +5,10 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * A frontend-dispatched tool call that paused the run: the loop emitted
- * {@code tool.requested} and is now waiting for the client to execute the
- * tool and resume with a result. Part of the checkpoint so a crashed run
- * restarts knowing exactly what it is waiting for.
+ * A tool call that paused the run: either a frontend call the client must
+ * execute and resume with a result, or a loop-owned {@code wait_for_children}
+ * the loop answers itself once the delegated children settle. Part of the
+ * checkpoint so a crashed run restarts knowing exactly what it is waiting for.
  */
 @Data
 @NoArgsConstructor

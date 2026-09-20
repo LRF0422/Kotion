@@ -549,9 +549,10 @@ public class DefaultRunSupervisor {
                 llmGateway, toolGateway, contextManager,
                 delegator, objectMapper, properties, toolExecutor,
                 this::onLoopExit, gate, cancelFlag, quota::checkUserCreditBudget);
-        // Children run on a SEPARATE pool. A parent blocks its own thread while
-        // waiting for children; if children shared the parent pool they would
-        // queue behind blocked parents and starve (a deadlock with core=4).
+        // Children run on a SEPARATE pool. A parent parks its own thread only
+        // when it actually waits for children (wait_for_children / a finished
+        // turn); if children shared the parent pool they would queue behind
+        // parked parents and starve (a deadlock with core=4).
         ExecutorService executor = run.getParentRunId() != null ? childLoopExecutor : loopExecutor;
         Future<?> future;
         try {

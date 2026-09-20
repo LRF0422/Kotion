@@ -53,6 +53,10 @@ class CheckpointCodecTest {
         checkpoint.getPendingToolCalls().add(PendingToolCall.of("c1", "editor.insert", "{\"a\":1}", 1000L));
         checkpoint.getPendingToolCalls().add(PendingToolCall.ofSub("c2", "editor.read", "{}", 1000L, "sub-1", "dcall-1"));
         checkpoint.getPendingPlanCalls().add(PendingToolCall.of("c3", "present_plan", "{\"plan\":\"x\"}", 2000L));
+        // An in-flight wait_for_children call must survive a crash, otherwise a
+        // rebuilt parent would re-infer with an unanswered tool call.
+        checkpoint.getPendingChildWaits().add(PendingToolCall.of("c4", "wait_for_children",
+                "{\"subRunIds\":[\"sub-1\"]}", 3000L));
         SavedSkillProvenance provenance = new SavedSkillProvenance();
         provenance.setSkillId("skill-1");
         provenance.setName("Meeting notes");
@@ -88,6 +92,9 @@ class CheckpointCodecTest {
         assertEquals("sub-1", restored.getPendingToolCalls().get(1).getSubRunId());
         assertEquals("dcall-1", restored.getPendingToolCalls().get(1).getDelegateCallId());
         assertEquals(1, restored.getPendingPlanCalls().size());
+        assertEquals(1, restored.getPendingChildWaits().size());
+        assertEquals("wait_for_children", restored.getPendingChildWaits().get(0).getTool());
+        assertEquals("{\"subRunIds\":[\"sub-1\"]}", restored.getPendingChildWaits().get(0).getArgsJson());
         assertEquals(1, restored.getSavedSkillProvenance().size());
         assertEquals("skill-1", restored.getSavedSkillProvenance().get(0).getSkillId());
         assertEquals(0.82, restored.getSavedSkillProvenance().get(0).getScore(), 0.0001);

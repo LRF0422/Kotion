@@ -80,7 +80,12 @@ export interface RunView {
     mode: 'execute' | 'plan'
     status: RunStatus
     finishReason?: string
-    suspendReason?: 'plan_approval' | 'budget'
+    /**
+     * Why a SUSPENDED run is parked: plan approval, budget grant, or waiting on
+     * delegated children (`children` — the main agent keeps working first and
+     * only parks when it actually needs their results).
+     */
+    suspendReason?: 'plan_approval' | 'budget' | 'children'
     errorCode?: string
     errorMessage?: string
     lastSeq: number
@@ -236,7 +241,7 @@ export type AgentEvent =
     | { seq: number; type: 'sub.completed'; callId: string; subRunId: string; ok: boolean; result?: unknown }
     | { seq: number; type: 'sub.failed'; callId: string; subRunId: string; ok: false; error?: string }
     | { seq: number; type: 'plan.proposed'; callId: string; plan: string }
-    | { seq: number; type: 'run.suspended'; reason: 'waiting_tools' | 'plan_approval' | 'budget'; pendingCallIds?: string[] }
+    | { seq: number; type: 'run.suspended'; reason: 'waiting_tools' | 'plan_approval' | 'budget' | 'children'; pendingCallIds?: string[] }
     | { seq: number; type: 'run.completed'; finishReason?: string; usage?: RunUsage }
     | { seq: number; type: 'run.failed'; code?: string; error?: string }
     | { seq: number; type: 'run.cancelled' }

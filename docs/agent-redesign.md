@@ -65,13 +65,14 @@ loop(run):
   2. ContextManager 组装消息：
      system 提示 + skills 片段 + 用户偏好 + 召回长期记忆 + thread 摘要 + 历史 + 工作记忆
   3. LlmGateway 流式推理 → text.delta / reasoning.delta 事件；累积工具调用
-  4. 无工具调用 → 完成（或迭代预算耗尽 → suspend:budget）
+  4. 无工具调用 → 完成（或迭代预算耗尽 → suspend:budget）；若仍有子 agent 未交付结果 → suspend:children（等结果再答）
   5. 有工具调用 → ToolGateway 路由：
      - 后端工具：并行执行（上限 maxParallel）→ tool.completed 事件 → 结果写回 observe
      - 前端工具：checkpoint 记录 pendingToolCalls → status=WAITING_TOOLS，等待 resume
-     - delegate 工具：Delegator 创建子 run（阻塞等待终态，超时控制）→ sub.* 事件 → 结果作为工具结果
+     - delegate 工具：Delegator 创建子 run 后立即回执（异步并行，不阻塞）→ sub.* 事件 → 结果以通知/等待结果交付
+     - wait_for_children 工具：loop 主动挂起（suspend:children）直到目标子 run 终态 → 结果作为工具结果
   6. present_plan（plan 模式）→ suspend:plan_approval
-  7. 观察结果 → 回到 2（写 checkpoint 于每轮推理前）
+  7. 每步边界先收敛已完成的子 run（后台通知），再观察结果 → 回到 2（写 checkpoint 于每轮推理前）
 ```
 
 ### 3.2 断点恢复的四项保证
@@ -123,11 +124,20 @@ loop(run):
 
 ## 5. 子 agent（Delegator）
 
-- 工具：`delegate`，参数 `{ task, tools?(客户端工具子集), maxSteps?, timeoutSec? }`。
-- 实现：子 run = 普通 Run（parentRunId 关联、继承用户/租户/会话、独立预算与事件日志）。
-  父 loop 阻塞轮询子 run 的事件订阅直到终态（超时默认 600s）。
+- 工具：`delegate`，参数 `{ task, tools?(客户端工具子集), maxSteps?, timeoutSec? }`；
+  等待工具 `wait_for_children`，参数 `{ subRunIds?(子 run id 列表，缺省=全部在跑的子 agent), timeoutSec? }`。
+- 实现：子 run = 普通 Run（parentRunId 关联、继承用户/租户/会话、独立预算与事件日志），在自己的执行器上启动。
+  **委派是异步的**：`delegate` 立即返回受理回执（`{status:"running", subRunId}`），父 loop 继续自己的步骤；
+  子 run 终态后结果以「后台通知」（user 消息，只进模型上下文、不投影进规范会话日志）注入，或作为
+  `wait_for_children` 的工具结果返回。父 loop 只在真正需要等待时挂起（status=SUSPENDED、suspendReason=`children`）：
+  显式调用 `wait_for_children`，或本轮回答写完但仍有未交付结果的子 agent（此时挂起 → 注入结果 → 再推理，
+  最终答复取最后一步文本，因此不会重复输出）。子 run 超时（默认 600s）在每个步骤边界检查并取消，其结果按失败交付。
+- 崩溃恢复：checkpoint 记录 `delegations`（未交付的子 run）与 `pendingChildWaits`（已发出未回答的等待调用）；
+  重建时重新挂载子 run 并补偿等待调用，SUSPENDED/children 的 run 会先把结果交齐再继续推理。
+  通知/工具消息与对应 `delegations` 记录的清除在**同一次 checkpoint 写入**中完成：既不丢结果也不重复交付。
 - 事件：父日志只追加 `sub.spawned` / `sub.completed(result)` / `sub.failed(error)`；子 run 的文本/工具事件只在自己
   的日志里，前端 `SubRunWorker` 直接流式并驱动子 run（含嵌套孙 run），父日志不再转发子工具调用。
+  父侧 `delegate` 的 `tool.completed` 在结果交付时补发，因此步骤时间线在子 agent 运行期间一直显示 running。
 - 并发：同一父 run 的子 run 数量受 `run.max-children-per-run`（默认 16）限制；后端工具并行受 `tool.max-parallel` 限制。
 - 深度：maxDelegateDepth（默认 2），超出拒绝。取消级联：父 cancel → 子递归 cancel（父已终态时仍级联子 run）。
 

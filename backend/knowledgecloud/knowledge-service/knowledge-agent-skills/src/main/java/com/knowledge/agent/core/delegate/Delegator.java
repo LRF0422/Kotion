@@ -36,7 +36,10 @@ import java.util.Set;
  * sub.failed) and routes frontend tool results back to the right child.
  *
  * <p>Children are ordinary runs (parent linkage, own checkpoint/budget/event
- * log); the parent loop drives them to completion inside its step.
+ * log) that start on their own executor. Delegation is asynchronous: the parent
+ * acknowledges the spawn immediately, keeps working, and receives each child's
+ * result later — as a notification or as the result of an explicit
+ * {@code wait_for_children} call.
  */
 @Slf4j
 @Component
