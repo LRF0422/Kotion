@@ -32,15 +32,16 @@ export const spreadsheetExpertSkill = {
 ## Best Practices
 1. When users describe tabular data, convert it into a 2D array and use insertSpreadsheet with the data parameter.
 2. Use getSpreadsheetInfo first to discover existing spreadsheets before reading or updating.
-3. For updates, read the current data first to understand the layout, then write precisely to the correct range.
-4. Use "A1" notation for cell references (e.g. "A1:C10").
-5. Keep data compact — avoid inserting thousands of empty rows.
-6. When building comparison tables, budget trackers, or schedules, organize data with headers in the first row.
+3. Reads return live data while the spreadsheet is open in the editor; they fall back to the last saved snapshot otherwise.
+4. For updates, read the current data first to understand the layout, then write precisely to the correct range.
+5. Use "A1" notation for cell references (e.g. "A1:C10").
+6. Keep data compact — avoid inserting thousands of empty rows.
+7. When building comparison tables, budget trackers, or schedules, organize data with headers in the first row.
 
 ## Data Format
 - Insert/Update data is a 2D array: [[row1col1, row1col2], [row2col1, row2col2]]
-- Read returns the same 2D array format with null for empty cells.
-- Cell values can be strings, numbers, or booleans.
+- Read returns the same 2D array format with null for empty cells and formula text for formula cells.
+- Cell values can be strings, numbers, or booleans. null in updateSpreadsheetData skips that cell.
 
 ## Examples
 - "Create a table with student grades" → insertSpreadsheet with headers + data rows

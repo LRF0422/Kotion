@@ -47,7 +47,11 @@ export const SpreadsheetNode = Node.create({
     },
 
     renderHTML({ HTMLAttributes }) {
-        return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'spreadsheet', class: 'node-spreadsheet' })]
+        // The workbook snapshot lives in the document JSON (and collaboration
+        // state) only. Serialising it to an HTML attribute would bloat the
+        // clipboard payload and lose fidelity, so it is stripped here.
+        const { workbookData: _workbookData, ...rest } = HTMLAttributes
+        return ['div', mergeAttributes({ class: 'node-spreadsheet' }, { 'data-type': 'spreadsheet', ...rest })]
     },
 
     addCommands() {
@@ -66,7 +70,7 @@ export const SpreadsheetNode = Node.create({
     },
 
     addNodeView() {
-        return ReactNodeViewRenderer(withNodeViewErrorBoundary(SpreadsheetNodeView), {
+        return ReactNodeViewRenderer(withNodeViewErrorBoundary(SpreadsheetNodeView, 'Excel'), {
             stopEvent: () => true,
         })
     },

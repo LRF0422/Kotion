@@ -1,20 +1,32 @@
-import { ExtensionWrapper } from "@kn/common"
+import { ExtensionWrapper, logger } from "@kn/common"
 import { SpreadsheetNode } from "./spreadsheet-node"
 import { Sheet } from "@kn/icon"
 import React from "react"
-import { triggerExcelFileImport } from "./excel-file-picker"
+import { pickExcelFile } from "./excel-file-picker"
 import { spreadsheetTools } from "./tools"
 import { spreadsheetExpertSkill } from "./skills"
 import { createT } from "../i18n"
 
 const t = createT();
 
+/**
+ * Slash-command import: parse the chosen Excel/CSV file and insert a new
+ * spreadsheet block pre-filled with its contents.
+ */
 const importExcelAction = async (editor: any) => {
-    const file = await triggerExcelFileImport()
+    const { file, error } = await pickExcelFile()
+    if (error) {
+        logger.warn('[office/spreadsheet] import rejected:', error)
+        return
+    }
     if (!file) return
-    const { parseExcelToUniverData } = await import("./excel-to-univer")
-    const workbookData = await parseExcelToUniverData(file)
-    editor.commands.insertSpreadsheet(workbookData)
+    try {
+        const { parseExcelToWorkbook } = await import("./excel-to-workbook")
+        const workbookData = await parseExcelToWorkbook(file)
+        editor.commands.insertSpreadsheet(workbookData)
+    } catch (err) {
+        logger.error('[office/spreadsheet] failed to import Excel file', err)
+    }
 }
 
 export const SpreadsheetExtension: ExtensionWrapper = {

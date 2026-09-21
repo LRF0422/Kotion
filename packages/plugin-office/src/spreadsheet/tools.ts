@@ -1,54 +1,41 @@
 /**
  * Spreadsheet Plugin Tools for AI Agent Interaction
  *
- * These tools allow the AI agent to create, read, update, and manage
- * spreadsheet blocks powered by Univer.
+ * These tools let the AI create, read, update and manage spreadsheet blocks.
+ *
+ * Read/write ordering: when a block currently has a mounted node view, tools go
+ * through the live grid (see ./workbook-registry) so they see and produce exactly
+ * what the user sees. Otherwise they work on the snapshot persisted on the node.
  */
 
 import { Editor } from '@kn/editor'
 import { z } from '@kn/ui'
+import { DEFAULT_SPREADSHEET_HEIGHT } from './constants'
+import { getLiveHandle } from './workbook-registry'
+import {
+    createEmptyWorkbookData,
+    createWorkbookFromRows,
+    ensureValidWorkbookData,
+    formatCellRef,
+    parseCellRef,
+    parseRangeSpec,
+    type CellValue,
+    type SheetData,
+    type WorkbookData,
+} from './workbook-data'
 
-// ─── Helpers ────────────────────────────────────────────────
-
-/** Column index (0-based) → letter label, e.g. 0→A, 25→Z, 26→AA */
-function colToLabel(col: number): string {
-    let label = ''
-    let c = col
-    while (c >= 0) {
-        label = String.fromCharCode((c % 26) + 65) + label
-        c = Math.floor(c / 26) - 1
-    }
-    return label
-}
-
-/** Letter label → column index (0-based), e.g. A→0, Z→25, AA→26 */
-function labelToCol(label: string): number {
-    let col = 0
-    for (let i = 0; i < label.length; i++) {
-        col = col * 26 + (label.charCodeAt(i) - 64)
-    }
-    return col - 1
-}
-
-/** Parse a cell reference like "A1" into { row, col } (0-based) */
-function parseCellRef(ref: string): { row: number; col: number } | null {
-    const match = ref.match(/^([A-Z]+)(\d+)$/i)
-    if (!match) return null
-    return { row: parseInt(match[2], 10) - 1, col: labelToCol(match[1].toUpperCase()) }
-}
-
-/** Format { row, col } (0-based) into "A1"-style reference */
-function formatCellRef(row: number, col: number): string {
-    return `${colToLabel(col)}${row + 1}`
-}
+/** Guard rails so a tool call cannot build an unbounded grid. */
+const MAX_TOOL_ROWS = 5000
+const MAX_TOOL_COLUMNS = 256
+const MAX_READ_ROWS = 5000
 
 interface SpreadsheetNodeInfo {
     pos: number
-    workbookData: Record<string, any> | null
+    workbookData: WorkbookData | null
     height: number
 }
 
-/** Find all spreadsheet nodes in the document */
+/** Find all spreadsheet nodes in the document. */
 function findSpreadsheetNodes(editor: Editor): SpreadsheetNodeInfo[] {
     const nodes: SpreadsheetNodeInfo[] = []
     editor.state.doc.descendants((node, pos) => {
@@ -63,20 +50,46 @@ function findSpreadsheetNodes(editor: Editor): SpreadsheetNodeInfo[] {
     return nodes
 }
 
-/** Find a spreadsheet node by its 0-based index (order of appearance) */
+/** Find a spreadsheet node by its 0-based index (order of appearance). */
 function findSpreadsheetByIndex(editor: Editor, index: number): SpreadsheetNodeInfo | null {
-    const nodes = findSpreadsheetNodes(editor)
-    return nodes[index] ?? null
+    return findSpreadsheetNodes(editor)[index] ?? null
 }
 
-// Univer cell value types
-const CellValueType = { STRING: 1, NUMBER: 2, BOOLEAN: 3 } as const
+/**
+ * Prefer the live grid when the block is mounted (always current), else the
+ * payload persisted on the node.
+ */
+function resolveWorkbook(editor: Editor, node: SpreadsheetNodeInfo): WorkbookData | null {
+    const live = getLiveHandle(editor, node.pos)
+    if (live) {
+        const snapshot = live.getSnapshot()
+        if (snapshot) return snapshot
+    }
+    return node.workbookData ? ensureValidWorkbookData(node.workbookData) : null
+}
 
-/** Build a Univer cell object */
-function buildCell(value: string | number | boolean): Record<string, any> {
-    if (typeof value === 'number') return { v: value, t: CellValueType.NUMBER }
-    if (typeof value === 'boolean') return { v: value, t: CellValueType.BOOLEAN }
-    return { v: String(value), t: CellValueType.STRING }
+/** Pick a sheet by name (or index), defaulting to the first one. */
+function pickSheet(workbook: WorkbookData | null, sheetName?: string): SheetData | null {
+    if (!workbook || workbook.sheets.length === 0) return null
+    if (!sheetName) return workbook.sheets[0]
+    return workbook.sheets.find((sheet) => sheet.name === sheetName) ?? null
+}
+
+/** Sheet names in order, for tool output. */
+function sheetNames(workbook: WorkbookData | null): string[] {
+    return workbook?.sheets.map((sheet) => sheet.name) ?? []
+}
+
+/** Normalise a value into what the grid stores. */
+function toCellValue(value: unknown): CellValue {
+    if (value === null || value === undefined) return null
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value
+    return String(value)
+}
+
+/** Read the minimal error message from an unknown throw. */
+function errorMessage(error: unknown, fallback: string): string {
+    return error instanceof Error ? error.message : fallback
 }
 
 // ─── Tools ──────────────────────────────────────────────────
@@ -86,13 +99,13 @@ function buildCell(value: string | number | boolean): Record<string, any> {
  */
 export const insertSpreadsheetTool = {
     name: 'insertSpreadsheet',
-    description: '在文档中插入一个电子表格。可以插入空表格，也可以预填充数据（支持二维数组或带表头的对象数组）。',
+    description: '在文档中插入一个电子表格。可以插入空表格，也可以预填充数据（二维数组，第一行通常作为表头）。',
     inputSchema: z.object({
         data: z
             .array(z.array(z.union([z.string(), z.number(), z.boolean()])))
             .optional()
             .describe('二维数组数据。第一行可作为表头，例如 [["Name","Score"],["Alice",95]]'),
-        height: z.number().optional().describe('表格块高度（像素），默认 560'),
+        height: z.number().optional().describe(`表格块高度（像素），默认 ${DEFAULT_SPREADSHEET_HEIGHT}`),
         pos: z.number().optional().describe('插入位置，不填则在光标处插入'),
     }),
     execute: (editor: Editor) => async (params: {
@@ -101,66 +114,44 @@ export const insertSpreadsheetTool = {
         pos?: number
     }) => {
         try {
-            let workbookData: Record<string, any> | null = null
-
-            if (params.data && params.data.length > 0) {
-                const cellData: Record<number, Record<number, any>> = {}
-                let maxCol = 0
-                params.data.forEach((row, r) => {
-                    cellData[r] = {}
-                    row.forEach((val, c) => {
-                        cellData[r][c] = buildCell(val)
-                        if (c > maxCol) maxCol = c
-                    })
-                })
-
-                const sheetId = 'sheet-0'
-                workbookData = {
-                    id: `workbook-${Date.now()}`,
-                    sheetOrder: [sheetId],
-                    sheets: {
-                        [sheetId]: {
-                            id: sheetId,
-                            name: 'Sheet1',
-                            rowCount: Math.max(params.data.length, 100),
-                            columnCount: Math.max(maxCol + 1, 26),
-                            cellData,
-                            defaultColumnWidth: 88,
-                            defaultRowHeight: 24,
-                        },
-                    },
-                    appVersion: '1.0.0',
-                }
-            }
+            const rows = Array.isArray(params.data) ? params.data.slice(0, MAX_TOOL_ROWS) : []
+            const workbookData = rows.length > 0
+                ? createWorkbookFromRows(rows.map((row) => row.map(toCellValue)))
+                : createEmptyWorkbookData()
 
             const nodeContent: any = {
                 type: 'spreadsheet',
                 attrs: {
                     workbookData,
-                    height: params.height ?? undefined,
+                    height: params.height ?? DEFAULT_SPREADSHEET_HEIGHT,
                 },
             }
 
+            let inserted = false
             if (params.pos !== undefined) {
                 const docSize = editor.state.doc.nodeSize
                 if (params.pos < 0 || params.pos >= docSize) {
                     return { success: false, error: `Position ${params.pos} out of range (0-${docSize - 1})` }
                 }
-                editor.chain().focus().insertContentAt(params.pos, nodeContent).run()
+                inserted = editor.chain().focus().insertContentAt(params.pos, nodeContent).run()
             } else {
-                editor.chain().focus().insertContent(nodeContent).run()
+                inserted = editor.chain().focus().insertContent(nodeContent).run()
+            }
+
+            if (!inserted) {
+                return { success: false, error: '电子表格插入被编辑器拒绝（当前选区可能不允许在此处插入块）' }
             }
 
             return {
                 success: true,
-                hasData: !!params.data,
-                rows: params.data?.length ?? 0,
-                message: params.data
-                    ? `已插入包含 ${params.data.length} 行数据的电子表格`
+                hasData: rows.length > 0,
+                rows: rows.length,
+                message: rows.length > 0
+                    ? `已插入包含 ${rows.length} 行数据的电子表格`
                     : '已插入空白电子表格',
             }
         } catch (error) {
-            return { success: false, error: error instanceof Error ? error.message : '插入电子表格失败' }
+            return { success: false, error: errorMessage(error, '插入电子表格失败') }
         }
     },
 }
@@ -170,26 +161,29 @@ export const insertSpreadsheetTool = {
  */
 export const getSpreadsheetInfoTool = {
     name: 'getSpreadsheetInfo',
-    description: '获取文档中所有电子表格块的概览信息，包括位置、工作表名、行列数量。',
+    description: '获取文档中所有电子表格块的概览信息，包括位置、工作表名、行列数量。数据取实时值（编辑器打开时）。',
     inputSchema: z.object({}),
     execute: (editor: Editor) => async () => {
         try {
             const nodes = findSpreadsheetNodes(editor)
-            const info = nodes.map((n, index) => {
-                const wb = n.workbookData
-                const sheets =
-                    wb?.sheets
-                        ? Object.values(wb.sheets as Record<string, any>).map((s: any) => ({
-                            name: s.name,
-                            rowCount: s.rowCount,
-                            columnCount: s.columnCount,
-                        }))
-                        : []
-                return { index, pos: n.pos, height: n.height, sheetCount: sheets.length, sheets }
+            const info = nodes.map((node, index) => {
+                const workbook = resolveWorkbook(editor, node)
+                return {
+                    index,
+                    pos: node.pos,
+                    height: node.height,
+                    live: getLiveHandle(editor, node.pos) !== null,
+                    sheetCount: workbook?.sheets.length ?? 0,
+                    sheets: (workbook?.sheets ?? []).map((sheet) => ({
+                        name: sheet.name,
+                        rowCount: sheet.rowCount,
+                        columnCount: sheet.columnCount,
+                    })),
+                }
             })
             return { success: true, count: info.length, spreadsheets: info }
         } catch (error) {
-            return { success: false, error: error instanceof Error ? error.message : '获取电子表格信息失败' }
+            return { success: false, error: errorMessage(error, '获取电子表格信息失败') }
         }
     },
 }
@@ -199,14 +193,11 @@ export const getSpreadsheetInfoTool = {
  */
 export const readSpreadsheetDataTool = {
     name: 'readSpreadsheetData',
-    description: '读取文档中某个电子表格的单元格数据。可读取指定范围或整个工作表。返回二维数组。',
+    description: '读取文档中某个电子表格的单元格数据。可读取指定范围或整个工作表，返回二维数组（公式单元格返回公式文本）。',
     inputSchema: z.object({
         index: z.number().describe('电子表格在文档中的序号（从 0 开始，可通过 getSpreadsheetInfo 获取）'),
         sheetName: z.string().optional().describe('工作表名称，默认第一个工作表'),
-        range: z
-            .string()
-            .optional()
-            .describe('读取范围，如 "A1:C10"。不填则读取所有已填充单元格'),
+        range: z.string().optional().describe('读取范围，如 "A1:C10"。不填则读取所有已填充单元格'),
         maxRows: z.number().optional().describe('最大返回行数，默认 200，防止数据过大'),
     }),
     execute: (editor: Editor) => async (params: {
@@ -218,69 +209,67 @@ export const readSpreadsheetDataTool = {
         try {
             const node = findSpreadsheetByIndex(editor, params.index)
             if (!node) return { success: false, error: `未找到序号 ${params.index} 的电子表格` }
-            const wb = node.workbookData
-            if (!wb?.sheets) return { success: false, error: '该电子表格暂无数据' }
 
-            // Find sheet
-            const sheetEntries = Object.values(wb.sheets as Record<string, any>)
-            const sheet = params.sheetName
-                ? sheetEntries.find((s: any) => s.name === params.sheetName)
-                : sheetEntries[0]
-            if (!sheet) return { success: false, error: `未找到工作表 "${params.sheetName}"` }
-
-            const cellData: Record<number, Record<number, any>> = sheet.cellData || {}
-            const maxRows = params.maxRows ?? 200
-
-            let startRow = 0,
-                endRow = (sheet.rowCount ?? 100) - 1,
-                startCol = 0,
-                endCol = (sheet.columnCount ?? 26) - 1
-
-            if (params.range) {
-                const parts = params.range.split(':')
-                const from = parseCellRef(parts[0])
-                const to = parts[1] ? parseCellRef(parts[1]) : from
-                if (!from || !to) return { success: false, error: `无效的范围格式 "${params.range}"` }
-                startRow = from.row
-                endRow = to.row
-                startCol = from.col
-                endCol = to.col
-            } else {
-                // Auto-detect used range
-                const usedRows = Object.keys(cellData).map(Number)
-                if (usedRows.length === 0) return { success: true, data: [], sheetName: sheet.name, message: '工作表为空' }
-                endRow = Math.min(Math.max(...usedRows), startRow + maxRows - 1)
-                const usedCols = usedRows.flatMap((r) =>
-                    cellData[r] ? Object.keys(cellData[r]).map(Number) : []
-                )
-                if (usedCols.length > 0) endCol = Math.max(...usedCols)
+            const maxRows = Math.max(1, Math.min(params.maxRows ?? 200, MAX_READ_ROWS))
+            const requested = params.range ? parseRangeSpec(params.range) : null
+            if (params.range && !requested) {
+                return { success: false, error: `无效的范围格式 "${params.range}"` }
             }
 
-            // Clamp rows
-            if (endRow - startRow + 1 > maxRows) endRow = startRow + maxRows - 1
+            const workbook = resolveWorkbook(editor, node)
+            const sheet = pickSheet(workbook, params.sheetName)
+            if (!sheet) return { success: false, error: `未找到工作表 "${params.sheetName}"` }
 
-            const result: (string | number | boolean | null)[][] = []
-            for (let r = startRow; r <= endRow; r++) {
-                const row: (string | number | boolean | null)[] = []
-                for (let c = startCol; c <= endCol; c++) {
-                    const cell = cellData[r]?.[c]
-                    row.push(cell?.v ?? null)
+            const used = usedBounds(sheet)
+            if (!requested && !used) {
+                return { success: true, sheetName: sheet.name, data: [], message: '工作表为空' }
+            }
+
+            const startRow = requested?.startRow ?? 0
+            const startColumn = requested?.startColumn ?? 0
+            const rawEndRow = requested ? requested.endRow : (used?.endRow ?? 0)
+            const rawEndColumn = requested ? requested.endColumn : (used?.endColumn ?? 0)
+            const endRow = Math.min(rawEndRow, startRow + maxRows - 1)
+            const endColumn = Math.min(Math.max(rawEndColumn, startColumn), startColumn + MAX_TOOL_COLUMNS - 1)
+
+            const data: CellValue[][] = []
+            for (let row = startRow; row <= endRow; row++) {
+                const line: CellValue[] = []
+                for (let column = startColumn; column <= endColumn; column++) {
+                    line.push(sheet.rows[row]?.[column] ?? null)
                 }
-                result.push(row)
+                data.push(line)
             }
 
             return {
                 success: true,
                 sheetName: sheet.name,
-                range: `${formatCellRef(startRow, startCol)}:${formatCellRef(endRow, endCol)}`,
-                rows: result.length,
-                columns: endCol - startCol + 1,
-                data: result,
+                sheetNames: sheetNames(workbook),
+                range: `${formatCellRef(startRow, startColumn)}:${formatCellRef(endRow, endColumn)}`,
+                rows: data.length,
+                columns: endColumn - startColumn + 1,
+                truncated: endRow < rawEndRow,
+                data,
             }
         } catch (error) {
-            return { success: false, error: error instanceof Error ? error.message : '读取电子表格数据失败' }
+            return { success: false, error: errorMessage(error, '读取电子表格数据失败') }
         }
     },
+}
+
+/** Bounding box of populated cells, or null when the sheet is empty. */
+function usedBounds(sheet: SheetData): { endRow: number; endColumn: number } | null {
+    let endRow = -1
+    let endColumn = -1
+    sheet.rows.forEach((row, rowIndex) => {
+        row.forEach((value, columnIndex) => {
+            if (value !== null && value !== undefined && value !== '') {
+                endRow = Math.max(endRow, rowIndex)
+                endColumn = Math.max(endColumn, columnIndex)
+            }
+        })
+    })
+    return endRow < 0 ? null : { endRow, endColumn }
 }
 
 /**
@@ -288,7 +277,7 @@ export const readSpreadsheetDataTool = {
  */
 export const updateSpreadsheetDataTool = {
     name: 'updateSpreadsheetData',
-    description: '向文档中的电子表格写入数据。支持从指定起始单元格写入二维数组数据。',
+    description: '向文档中的电子表格写入数据。支持从指定起始单元格写入二维数组数据，null 表示跳过该单元格。',
     inputSchema: z.object({
         index: z.number().describe('电子表格序号（从 0 开始）'),
         sheetName: z.string().optional().describe('目标工作表名称，默认第一个工作表'),
@@ -304,78 +293,93 @@ export const updateSpreadsheetDataTool = {
         data: (string | number | boolean | null)[][]
     }) => {
         try {
-            const nodes = findSpreadsheetNodes(editor)
-            const node = nodes[params.index]
+            const node = findSpreadsheetByIndex(editor, params.index)
             if (!node) return { success: false, error: `未找到序号 ${params.index} 的电子表格` }
 
-            // Deep clone workbook data
-            const wb: Record<string, any> = node.workbookData
-                ? JSON.parse(JSON.stringify(node.workbookData))
-                : {
-                    id: `workbook-${Date.now()}`,
-                    sheetOrder: ['sheet-0'],
-                    sheets: {
-                        'sheet-0': {
-                            id: 'sheet-0',
-                            name: 'Sheet1',
-                            rowCount: 100,
-                            columnCount: 26,
-                            cellData: {},
-                            defaultColumnWidth: 88,
-                            defaultRowHeight: 24,
-                        },
-                    },
-                    appVersion: '1.0.0',
-                }
+            const data = Array.isArray(params.data) ? params.data.slice(0, MAX_TOOL_ROWS) : []
+            if (data.length === 0) return { success: false, error: '写入数据为空' }
 
-            const sheetEntries = Object.values(wb.sheets as Record<string, any>)
-            const sheet: any = params.sheetName
-                ? sheetEntries.find((s: any) => s.name === params.sheetName)
-                : sheetEntries[0]
-            if (!sheet) return { success: false, error: `未找到工作表 "${params.sheetName}"` }
-
-            const start = parseCellRef(params.startCell ?? 'A1')
+            const startCell = params.startCell ?? 'A1'
+            const start = parseCellRef(startCell)
             if (!start) return { success: false, error: `无效的起始单元格 "${params.startCell}"` }
 
-            if (!sheet.cellData) sheet.cellData = {}
+            const matrix = data.map((row) =>
+                (Array.isArray(row) ? row : []).slice(0, MAX_TOOL_COLUMNS).map(toCellValue),
+            )
+            const width = matrix.reduce((max, row) => Math.max(max, row.length), 0)
+            if (width === 0) return { success: false, error: '写入数据为空' }
 
-            let cellsWritten = 0
-            params.data.forEach((row, ri) => {
-                const r = start.row + ri
-                row.forEach((val, ci) => {
-                    if (val === null) return // skip
-                    const c = start.col + ci
-                    if (!sheet.cellData[r]) sheet.cellData[r] = {}
-                    sheet.cellData[r][c] = buildCell(val)
-                    cellsWritten++
-                })
-            })
+            const range = `${startCell}:${formatCellRef(start.row + matrix.length - 1, start.column + width - 1)}`
 
-            // Expand rowCount / columnCount if needed
-            const maxRow = start.row + params.data.length
-            const maxCol = start.col + Math.max(...params.data.map((r) => r.length), 0)
-            if (maxRow > sheet.rowCount) sheet.rowCount = Math.max(maxRow, 100)
-            if (maxCol > sheet.columnCount) sheet.columnCount = Math.max(maxCol, 26)
+            // ── Live grid first: keeps the instance, undo history and autosave
+            //    pipeline intact.
+            const live = getLiveHandle(editor, node.pos)
+            const workbook = resolveWorkbook(editor, node)
+            const sheetIndex = Math.max(
+                workbook ? workbook.sheets.findIndex((sheet) => sheet.name === params.sheetName) : 0,
+                0,
+            )
+            if (live && live.isEditable()) {
+                const written = live.setRangeValues(sheetIndex, start.row, start.column, matrix)
+                if (written !== null) {
+                    return {
+                        success: true,
+                        cellsWritten: written,
+                        range,
+                        message: `已写入 ${written} 个单元格（${range}）`,
+                    }
+                }
+            }
 
-            // Update node attrs
+            // ── Fallback: update the persisted payload (no live grid mounted).
+            const base = workbook ?? createEmptyWorkbookData()
+            const next: WorkbookData = {
+                ...base,
+                sheets: base.sheets.map((sheet, index) => {
+                    if (index !== sheetIndex) return sheet
+                    const rows = sheet.rows.map((row) => row.slice())
+                    let cellsWritten = 0
+                    matrix.forEach((row, rowOffset) => {
+                        row.forEach((value, columnOffset) => {
+                            if (value === null) return
+                            const rowIndex = start.row + rowOffset
+                            const columnIndex = start.column + columnOffset
+                            rows[rowIndex] = rows[rowIndex] ?? []
+                            while (rows[rowIndex].length <= columnIndex) rows[rowIndex].push(null)
+                            rows[rowIndex][columnIndex] = value
+                            cellsWritten += 1
+                        })
+                    })
+                    return {
+                        ...sheet,
+                        rows,
+                        rowCount: Math.max(sheet.rowCount, rows.length),
+                        columnCount: Math.max(sheet.columnCount, width + start.column),
+                    }
+                }),
+            }
+
+            const docNode = editor.state.doc.nodeAt(node.pos)
+            if (!docNode) return { success: false, error: '无法定位电子表格节点' }
             editor.view.dispatch(
                 editor.view.state.tr.setNodeMarkup(node.pos, undefined, {
-                    ...editor.state.doc.nodeAt(node.pos)!.attrs,
-                    workbookData: wb,
-                })
+                    ...docNode.attrs,
+                    workbookData: next,
+                }),
             )
 
+            const cellsWritten = matrix.reduce(
+                (total, row) => total + row.filter((value) => value !== null).length,
+                0,
+            )
             return {
                 success: true,
                 cellsWritten,
-                range: `${params.startCell ?? 'A1'}:${formatCellRef(
-                    start.row + params.data.length - 1,
-                    start.col + Math.max(...params.data.map((r) => r.length)) - 1
-                )}`,
-                message: `已写入 ${cellsWritten} 个单元格`,
+                range,
+                message: `已写入 ${cellsWritten} 个单元格（${range}）`,
             }
         } catch (error) {
-            return { success: false, error: error instanceof Error ? error.message : '更新电子表格数据失败' }
+            return { success: false, error: errorMessage(error, '更新电子表格数据失败') }
         }
     },
 }
@@ -391,20 +395,16 @@ export const deleteSpreadsheetTool = {
     }),
     execute: (editor: Editor) => async (params: { index: number }) => {
         try {
-            const nodes = findSpreadsheetNodes(editor)
-            const node = nodes[params.index]
+            const node = findSpreadsheetByIndex(editor, params.index)
             if (!node) return { success: false, error: `未找到序号 ${params.index} 的电子表格` }
 
             const docNode = editor.state.doc.nodeAt(node.pos)
             if (!docNode) return { success: false, error: '无法定位电子表格节点' }
 
-            editor.view.dispatch(
-                editor.view.state.tr.delete(node.pos, node.pos + docNode.nodeSize)
-            )
-
+            editor.view.dispatch(editor.view.state.tr.delete(node.pos, node.pos + docNode.nodeSize))
             return { success: true, message: `已删除第 ${params.index} 个电子表格` }
         } catch (error) {
-            return { success: false, error: error instanceof Error ? error.message : '删除电子表格失败' }
+            return { success: false, error: errorMessage(error, '删除电子表格失败') }
         }
     },
 }
@@ -421,20 +421,20 @@ export const resizeSpreadsheetTool = {
     }),
     execute: (editor: Editor) => async (params: { index: number; height: number }) => {
         try {
-            const nodes = findSpreadsheetNodes(editor)
-            const node = nodes[params.index]
+            const node = findSpreadsheetByIndex(editor, params.index)
             if (!node) return { success: false, error: `未找到序号 ${params.index} 的电子表格` }
 
+            const docNode = editor.state.doc.nodeAt(node.pos)
+            if (!docNode) return { success: false, error: '无法定位电子表格节点' }
             editor.view.dispatch(
                 editor.view.state.tr.setNodeMarkup(node.pos, undefined, {
-                    ...editor.state.doc.nodeAt(node.pos)!.attrs,
+                    ...docNode.attrs,
                     height: params.height,
-                })
+                }),
             )
-
             return { success: true, message: `已将电子表格高度调整为 ${params.height}px` }
         } catch (error) {
-            return { success: false, error: error instanceof Error ? error.message : '调整电子表格大小失败' }
+            return { success: false, error: errorMessage(error, '调整电子表格大小失败') }
         }
     },
 }
@@ -444,7 +444,7 @@ export const resizeSpreadsheetTool = {
  */
 export const exportSpreadsheetTool = {
     name: 'exportSpreadsheet',
-    description: '将文档中指定序号的电子表格导出为 .xlsx 文件并触发浏览器下载。保留值、公式、合并单元格与行列宽高。',
+    description: '将文档中指定序号的电子表格导出为 .xlsx 文件并触发浏览器下载。保留值与公式。',
     inputSchema: z.object({
         index: z.number().describe('电子表格序号（从 0 开始）'),
         filename: z.string().optional().describe('下载文件名，默认 "spreadsheet.xlsx"'),
@@ -453,15 +453,20 @@ export const exportSpreadsheetTool = {
         try {
             const node = findSpreadsheetByIndex(editor, params.index)
             if (!node) return { success: false, error: `未找到序号 ${params.index} 的电子表格` }
-            if (!node.workbookData) return { success: false, error: '该电子表格暂无数据可导出' }
+
+            const workbook = resolveWorkbook(editor, node)
+            if (!workbook) return { success: false, error: '该电子表格暂无数据可导出' }
 
             const filename = params.filename?.trim() || 'spreadsheet.xlsx'
-            const { downloadWorkbookAsExcel } = await import('./univer-to-excel')
-            downloadWorkbookAsExcel(node.workbookData, filename)
+            const { downloadWorkbookAsExcel } = await import('./workbook-to-excel')
+            downloadWorkbookAsExcel(workbook, filename)
 
-            return { success: true, message: `已导出电子表格为 ${filename.endsWith('.xlsx') ? filename : filename + '.xlsx'}` }
+            return {
+                success: true,
+                message: `已导出电子表格为 ${filename.endsWith('.xlsx') ? filename : filename + '.xlsx'}`,
+            }
         } catch (error) {
-            return { success: false, error: error instanceof Error ? error.message : '导出电子表格失败' }
+            return { success: false, error: errorMessage(error, '导出电子表格失败') }
         }
     },
 }

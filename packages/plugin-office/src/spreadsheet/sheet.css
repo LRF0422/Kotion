@@ -1,0 +1,345 @@
+/**
+ * Spreadsheet grid presentation.
+ *
+ * Design rules follow the host app's tokens (see `packages/ui/globals.css`): a
+ * Notion-like warm neutral palette, restrained 1px borders, small radii. The
+ * structural overrides are deliberately minimal — jspreadsheet owns the table
+ * markup; we only pin the height chain (or the body gets clipped away) and set
+ * density and colour.
+ */
+
+/* ── Block shell ─────────────────────────────────────────────────────────── */
+
+.kn-sheet {
+    --kn-sheet-border: hsl(var(--border, 40 6% 92%));
+    --kn-sheet-grid: hsl(var(--border, 40 6% 92%) / 0.7);
+    --kn-sheet-head-bg: hsl(var(--secondary, 40 6% 95%));
+    --kn-sheet-head-fg: hsl(var(--muted-foreground, 40 3% 47%));
+    --kn-sheet-cell-bg: hsl(var(--background, 0 0% 100%));
+    --kn-sheet-cell-fg: hsl(var(--foreground, 40 8% 20%));
+    --kn-sheet-hover: hsl(var(--accent, 40 7% 94%));
+    --kn-sheet-selected: hsl(var(--ring, 211 76% 51%) / 0.1);
+    --kn-sheet-accent: hsl(var(--ring, 211 76% 51%));
+
+    height: 100%;
+    width: 100%;
+}
+
+.kn-sheet.jss-dark {
+    --kn-sheet-border: hsl(var(--border, 0 0% 17%));
+    --kn-sheet-grid: hsl(var(--border, 0 0% 17%) / 0.85);
+    --kn-sheet-head-bg: hsl(var(--secondary, 0 0% 16%));
+    --kn-sheet-head-fg: hsl(var(--muted-foreground, 0 0% 56%));
+    --kn-sheet-cell-bg: hsl(var(--background, 0 0% 10%));
+    --kn-sheet-cell-fg: hsl(var(--foreground, 40 6% 82%));
+    --kn-sheet-hover: hsl(var(--accent, 0 0% 18%));
+    --kn-sheet-selected: hsl(var(--ring, 211 70% 55%) / 0.18);
+    --kn-sheet-accent: hsl(var(--ring, 211 70% 55%));
+}
+
+.kn-sheet__canvas {
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    /* The app's Notion-like system stack (see packages/ui/tailwind.config.js).
+     * Declared explicitly because the grid sits inside editor content, which can
+     * inherit a serif face. */
+    font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue",
+        Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+}
+
+/* ── Height chain ────────────────────────────────────────────────────────── */
+/*
+ * jspreadsheet renders: .jss_spreadsheet → .jtabs-content → .jss_container →
+ * .jss_content → table. Every level must be pinned, otherwise the middle levels
+ * grow to the table's natural height (~40 rows) and the block clips the body.
+ */
+
+.kn-sheet__canvas--inline .jss_spreadsheet,
+.kn-sheet__canvas--fullscreen .jss_spreadsheet {
+    display: flex !important;
+    flex-direction: column;
+    height: 100% !important;
+    max-height: 100% !important;
+    overflow: hidden;
+}
+
+.kn-sheet__canvas--inline .jtabs-content,
+.kn-sheet__canvas--fullscreen .jtabs-content {
+    display: flex !important;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0 !important;
+    height: auto !important;
+    max-height: 100% !important;
+    overflow: hidden;
+}
+
+.kn-sheet__canvas--inline .jss_container,
+.kn-sheet__canvas--fullscreen .jss_container {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: 100% !important;
+    padding-right: 0;
+    overflow: hidden;
+}
+
+.kn-sheet__canvas--inline .jss_content,
+.kn-sheet__canvas--fullscreen .jss_content {
+    display: block;
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100% !important;
+    height: auto !important;
+    max-height: 100% !important;
+    overflow: auto !important;
+    padding: 0;
+    background: var(--kn-sheet-cell-bg);
+}
+
+/* ── Table ───────────────────────────────────────────────────────────────── */
+/*
+ * Only the table is a table. Forcing display:table on tbody/thead would turn
+ * them into independent shrink-to-fit tables and collapse the data columns.
+ */
+
+.kn-sheet .jss_worksheet {
+    display: table;
+    table-layout: fixed;
+    border-collapse: collapse;
+    border-spacing: 0;
+    background: var(--kn-sheet-cell-bg);
+    color: var(--kn-sheet-cell-fg);
+    font-variant-numeric: tabular-nums;
+}
+
+.kn-sheet .jss_worksheet colgroup > col:first-child {
+    width: 46px;
+}
+
+/* Column headers (A, B, C …) */
+.kn-sheet .jss_worksheet > thead > tr > td {
+    height: 26px;
+    padding: 0 8px;
+    box-sizing: border-box;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    text-align: center;
+    border: 0;
+    border-right: 1px solid var(--kn-sheet-grid);
+    border-bottom: 1px solid var(--kn-sheet-border);
+    background: var(--kn-sheet-head-bg);
+    color: var(--kn-sheet-head-fg);
+    user-select: none;
+}
+
+.kn-sheet .jss_worksheet > thead > tr > td.selected {
+    background: var(--kn-sheet-selected);
+    color: var(--kn-sheet-cell-fg);
+}
+
+/* Row-number gutter */
+.kn-sheet .jss_worksheet > tbody > tr > td:first-child {
+    width: 46px;
+    min-width: 46px;
+    padding: 0 6px;
+    text-align: right;
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--kn-sheet-head-fg);
+    background: var(--kn-sheet-head-bg);
+    border-right: 1px solid var(--kn-sheet-border);
+    user-select: none;
+}
+
+.kn-sheet .jss_worksheet > tbody > tr.selected > td:first-child,
+.kn-sheet .jss_worksheet > tbody > tr > td:first-child.selected {
+    background: var(--kn-sheet-selected);
+    color: var(--kn-sheet-cell-fg);
+}
+
+/* Data cells */
+.kn-sheet .jss_worksheet > tbody > tr > td {
+    height: 24px;
+    min-height: 24px;
+    max-height: 24px;
+    padding: 0 8px;
+    box-sizing: border-box;
+    vertical-align: middle;
+    font-size: 13px;
+    line-height: 20px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border: 0;
+    border-right: 1px solid var(--kn-sheet-grid);
+    border-bottom: 1px solid var(--kn-sheet-grid);
+    background: var(--kn-sheet-cell-bg);
+    color: var(--kn-sheet-cell-fg);
+}
+
+.kn-sheet .jss_worksheet > tbody > tr > td.highlighted,
+.kn-sheet .jss_worksheet > tbody > tr > td.selected {
+    background: var(--kn-sheet-selected);
+}
+
+.kn-sheet .jss_worksheet > tbody > tr:hover > td:not(:first-child) {
+    background: var(--kn-sheet-hover);
+}
+
+/* Editing: keep the editor inside its row instead of enlarging the cell. */
+.kn-sheet .jss_worksheet > tbody > tr > td.editor,
+.kn-sheet .jss_worksheet > tbody > tr > td[contenteditable='true'] {
+    height: 24px !important;
+    min-height: 24px !important;
+    padding: 0 4px !important;
+    box-shadow: inset 0 0 0 2px var(--kn-sheet-accent);
+    background: var(--kn-sheet-cell-bg);
+    z-index: 2;
+}
+
+.kn-sheet .jss_worksheet > tbody > tr > td.editor > div,
+.kn-sheet .jss_worksheet > tbody > tr > td[contenteditable='true'] > div {
+    height: 100%;
+    padding: 2px 4px;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+/* Corner + scroll affordances */
+.kn-sheet .jss_corner {
+    background: var(--kn-sheet-head-bg);
+    border-right: 1px solid var(--kn-sheet-border);
+    border-bottom: 1px solid var(--kn-sheet-border);
+}
+
+.kn-sheet .jss_content::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+.kn-sheet .jss_content::-webkit-scrollbar-thumb {
+    background: hsl(var(--border, 40 6% 92%));
+    border: 3px solid var(--kn-sheet-cell-bg);
+    border-radius: 999px;
+}
+
+.kn-sheet .jss_content::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground, 40 3% 47%) / 0.5);
+}
+
+.kn-sheet .jss_content::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+/* ── Toolbar ─────────────────────────────────────────────────────────────── */
+
+.kn-sheet__toolbar {
+    font-family: inherit;
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 1px;
+    height: 34px;
+    padding: 0 6px;
+    box-sizing: border-box;
+    overflow-x: auto;
+    border-bottom: 1px solid hsl(var(--border, 40 6% 92%));
+    background: hsl(var(--muted, 40 6% 96%) / 0.5);
+    scrollbar-width: none;
+}
+
+.kn-sheet__toolbar::-webkit-scrollbar {
+    display: none;
+}
+
+.kn-sheet__btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    min-width: 26px;
+    height: 26px;
+    padding: 0 5px;
+    border: 0;
+    border-radius: calc(var(--radius, 0.375rem) - 2px);
+    background: transparent;
+    color: hsl(var(--muted-foreground, 40 3% 47%));
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+    transition: background-color 120ms ease, color 120ms ease;
+}
+
+.kn-sheet__btn:hover:not(:disabled) {
+    background: hsl(var(--accent, 40 7% 94%));
+    color: hsl(var(--accent-foreground, 40 8% 20%));
+}
+
+.kn-sheet__btn[data-active='true'] {
+    background: hsl(var(--secondary, 40 6% 95%));
+    color: hsl(var(--foreground, 40 8% 20%));
+    box-shadow: inset 0 0 0 1px hsl(var(--border, 40 6% 92%));
+}
+
+.kn-sheet__btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.kn-sheet__swatch {
+    position: relative;
+    overflow: hidden;
+}
+
+.kn-sheet__swatch > span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+}
+
+.kn-sheet__swatch input[type='color'] {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.kn-sheet__sep {
+    flex: 0 0 auto;
+    width: 1px;
+    height: 16px;
+    margin: 0 4px;
+    background: hsl(var(--border, 40 6% 92%));
+}
+
+.kn-sheet__select {
+    flex: 0 0 auto;
+    height: 26px;
+    max-width: 92px;
+    padding: 0 4px;
+    border: 1px solid transparent;
+    border-radius: calc(var(--radius, 0.375rem) - 2px);
+    background: transparent;
+    color: hsl(var(--muted-foreground, 40 3% 47%));
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.kn-sheet__select:hover {
+    background: hsl(var(--accent, 40 7% 94%));
+    color: hsl(var(--accent-foreground, 40 8% 20%));
+}

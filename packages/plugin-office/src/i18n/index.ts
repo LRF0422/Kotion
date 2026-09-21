@@ -1,5 +1,5 @@
 /**
- * Internationalization support for Office Plugin
+ * Internationalization support for the Office plugin (Excel only).
  * @module @kn/plugin-office/i18n
  */
 
@@ -10,16 +10,30 @@ export const translations = {
         slashCommands: {
             spreadsheet: 'Spreadsheet',
             importExcel: 'Import Excel',
-            document: 'Document',
-            slide: 'Presentation',
+        },
+        spreadsheet: {
+            title: 'Spreadsheet',
+            export: 'Export',
+            exportTooltip: 'Export as .xlsx',
+            fullscreen: 'Fullscreen',
+            exitFullscreen: 'Exit fullscreen',
+            close: 'Close',
+            importFailed: 'Excel failed',
         },
     },
     zh: {
         slashCommands: {
             spreadsheet: '电子表格',
             importExcel: '导入Excel',
-            document: '文档',
-            slide: '幻灯片',
+        },
+        spreadsheet: {
+            title: '电子表格',
+            export: '导出',
+            exportTooltip: '导出为 .xlsx',
+            fullscreen: '全屏',
+            exitFullscreen: '退出全屏',
+            close: '关闭',
+            importFailed: 'Excel 处理失败',
         },
     },
 };
@@ -30,7 +44,7 @@ export type SupportedLanguage = keyof Translations;
 /**
  * Get translation for a key with optional interpolation params.
  * @param lang - Language code ('en' or 'zh')
- * @param key - Dot-separated key path (e.g., 'slashCommands.slide')
+ * @param key - Dot-separated key path (e.g., 'spreadsheet.export')
  * @param params - Optional interpolation values (e.g., { count: 3 })
  * @returns Translated string
  */
@@ -70,11 +84,21 @@ export function t(
     return result;
 }
 
+function currentLang(): SupportedLanguage {
+    return i18nInstance?.language?.startsWith('zh') ? 'zh' : 'en';
+}
+
 /**
  * Create a translator function for use outside React components.
  * Reads the current language from the i18next instance at call time.
  */
 export function createT() {
-    const lang: SupportedLanguage = i18nInstance?.language?.startsWith('zh') ? 'zh' : 'en';
-    return (key: string, params?: Record<string, string | number>) => t(lang, key, params);
+    return (key: string, params?: Record<string, string | number>) => t(currentLang(), key, params);
 }
+
+/**
+ * Translator that resolves the language on every call. Prefer this over
+ * {@link createT} for UI strings, which should follow live language switches.
+ */
+export const translate = (key: string, params?: Record<string, string | number>) =>
+    t(currentLang(), key, params);
