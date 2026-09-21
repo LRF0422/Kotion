@@ -26,6 +26,11 @@ const DEFAULT_PIVOT_ROWS = 20
 const DEFAULT_PIVOT_COLUMNS = 6
 const KEY_SEP = '\u0001'
 
+export interface PivotLimits {
+    maxRows: number
+    maxColumns: number
+}
+
 export interface PivotLabels {
     /** Label for the grand-total row/column, e.g. "总计". */
     total: string
@@ -317,6 +322,7 @@ export function computePivot(
     sheets: SheetData[],
     config: PivotConfig,
     labels: PivotLabels = defaultPivotLabels,
+    limits?: PivotLimits,
 ): PivotResult {
     const empty: PivotResult = {
         rows: [[null]], rowCount: 0, columnCount: 0, totalRowIndex: -1,
@@ -369,6 +375,12 @@ export function computePivot(
     const hasColumnGroups = columnFields.length > 0
     const multipleValues = valueFields.length > 1
     const rowFieldCount = Math.max(rowFields.length, 1)
+    const outputRows = 1 + rowKeys.length + (config.showColumnTotals ? 1 : 0)
+    const outputColumns = rowFieldCount
+        + (columnKeys.length + (hasColumnGroups && config.showRowTotals ? 1 : 0)) * valueFields.length
+    if (limits && (outputRows > limits.maxRows || outputColumns > limits.maxColumns)) {
+        throw new Error(`Pivot output exceeds ${limits.maxRows} rows or ${limits.maxColumns} columns. Reduce the source range, column groups, or measures.`)
+    }
     const columns: PivotColumnMeta[] = []
     const columnLabels: string[] = []
     columnKeys.forEach((columnTuple, columnIndex) => {
@@ -522,8 +534,9 @@ export function buildPivotSheet(
     config: PivotConfig,
     name: string,
     labels: PivotLabels = defaultPivotLabels,
+    limits?: PivotLimits,
 ): SheetData {
-    const result = computePivot(workbook.sheets, config, labels)
+    const result = computePivot(workbook.sheets, config, labels, limits)
     const columnCount = Math.max(result.columnCount, DEFAULT_PIVOT_COLUMNS)
     const rowCount = Math.max(result.rows.length, DEFAULT_PIVOT_ROWS)
     return makeSheetData(name, rowCount, columnCount, result.rows, pivotStyles(result), config)
@@ -538,8 +551,9 @@ export function upsertPivotSheet(
     config: PivotConfig,
     name: string,
     labels: PivotLabels = defaultPivotLabels,
+    limits?: PivotLimits,
 ): WorkbookData {
-    const sheet = buildPivotSheet(workbook, config, name, labels)
+    const sheet = buildPivotSheet(workbook, config, name, labels, limits)
     const sheets = workbook.sheets.slice()
     const existing = sheets.findIndex((entry) => entry.name === name && entry.pivot)
     let activeSheet: number

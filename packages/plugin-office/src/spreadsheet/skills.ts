@@ -8,18 +8,18 @@
 export const spreadsheetExpertSkill = {
     name: 'Spreadsheet Expert',
     description:
-        '电子表格专家技能：在文档中创建、编辑和管理电子表格。支持插入预填数据、批量读写单元格、调整尺寸。适合制作数据表、计划表、对比表等场景。',
+        'Create and edit Excel-style spreadsheets and pivot tables. Analyze data with cross-tabs, grouped summaries, cross-sheet unions, date grouping, sum/count/average/min/max, and row/column totals.',
     requiredTools: [
         'insertSpreadsheet',
         'getSpreadsheetInfo',
         'readSpreadsheetData',
         'updateSpreadsheetData',
+        'createPivotTable',
     ],
     optionalTools: [
         'deleteSpreadsheet',
         'resizeSpreadsheet',
         'exportSpreadsheet',
-        'createPivotTable',
     ],
     systemPromptFragment: `You are a Spreadsheet Expert assistant. You help users create and manage spreadsheets within documents.
 
@@ -41,6 +41,17 @@ export const spreadsheetExpertSkill = {
 7. When building comparison tables, budget trackers, or schedules, organize data with headers in the first row.
 8. For analysis (totals, cross-tabs, group summaries), prefer createPivotTable over writing computed values by hand: it creates a generated sheet that stays in sync when the source data changes. Field names must match the source header row exactly.
 
+## Pivot Table Workflow
+1. Use getSpreadsheetInfo to locate the source block, worksheet names, usedRange, and any existing pivot configurations. Never guess the block index or use a generated pivot sheet as a source.
+2. Read the source range with readSpreadsheetData before choosing fields. Use the complete source range, not just the returned preview when truncated is true. If the user supplied data but no spreadsheet exists, insertSpreadsheet first, then discover its index. Ask for missing data rather than inventing records.
+3. Call createPivotTable with index, sourceSheet, range, rows, columns, and at least one values entry. A group can be a string or { field: "Date", dateGroup: "quarter" }. The default aggregate is sum; count counts non-empty values.
+4. For cross-sheet analysis, supply sources: [{ sheet: "Q1", range: "A1:C20" }, { sheet: "Q2", range: "A1:C30" }]. No top-level range is needed. Sources are unioned by column position, so their headers and widths must match in order. Do not include overlapping regions unless duplicate counting is intended.
+5. hasHeader defaults to true and each range must include its header. Field labels are trimmed headers; blank headers use column letters and duplicate headers use suffixes such as "Amount (2)". Without headers, set hasHeader: false and use column letters from the first source range. Use availableFields from validation errors to correct field names.
+6. For reconfiguration or refresh, reuse the existing pivot's outputName and supply its complete configuration with the requested changes. A different outputName creates another pivot. Never write directly into generated pivot cells or overwrite a regular worksheet.
+7. Source cell changes within the configured ranges refresh the result. To include appended rows outside those ranges, call createPivotTable again with expanded ranges. showRowTotals and showColumnTotals default to true.
+8. After success, use readSpreadsheetData with the returned sheetName to verify the result. Report the grouping and aggregates used. If creation fails, correct the arguments and retry; do not claim that a pivot was created.
+9. The engine aggregates literal values, not formula text. Do not claim formula-derived measures are supported. Agent calls accept at most 5,000 total source rows, 256 source/output columns, and 32 measures; narrow an oversized request.
+
 ## Data Format
 - Insert/Update data is a 2D array: [[row1col1, row1col2], [row2col1, row2col2]]
 - Read returns the same 2D array format with null for empty cells and formula text for formula cells.
@@ -51,5 +62,6 @@ export const spreadsheetExpertSkill = {
 - "What's in the spreadsheet?" → getSpreadsheetInfo then readSpreadsheetData
 - "Add a new row" → readSpreadsheetData to find last row, then updateSpreadsheetData at next row
 - "按大区和季度汇总销售额" → createPivotTable with range "A1:D100", rows: ["大区"], columns: ["季度"], values: [{ field: "销售额", aggregate: "sum" }]`,
-    tags: ['spreadsheet', 'excel', 'table', 'data', 'office'],
+    tags: ['spreadsheet', 'excel', 'table', 'data', 'office', 'pivot', 'cross-tab', 'aggregation'],
+    domain: 'data',
 }

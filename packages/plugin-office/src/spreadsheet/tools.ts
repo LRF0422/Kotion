@@ -8,11 +8,11 @@
  * what the user sees. Otherwise they work on the snapshot persisted on the node.
  */
 
-import { Editor } from '@kn/editor'
+import type { Editor } from '@kn/editor'
 import { z } from '@kn/ui'
 import { DEFAULT_SPREADSHEET_HEIGHT } from './constants'
 import { getLiveHandle } from './workbook-registry'
-import { upsertPivotSheet, type PivotLabels } from './pivot'
+import { buildPivotSheet, pivotFieldLabels, upsertPivotSheet, type PivotLabels } from './pivot'
 import { translate } from '../i18n'
 import {
     createEmptyWorkbookData,
@@ -167,7 +167,8 @@ export const insertSpreadsheetTool = {
  */
 export const getSpreadsheetInfoTool = {
     name: 'getSpreadsheetInfo',
-    description: '获取文档中所有电子表格块的概览信息，包括位置、工作表名、行列数量。数据取实时值（编辑器打开时）。',
+    description: 'List spreadsheet blocks, worksheet names, used ranges, and existing pivot configurations. Read this before creating or updating a pivot table.',
+    readOnly: true,
     inputSchema: z.object({}),
     execute: (editor: Editor) => async () => {
         try {
@@ -180,11 +181,24 @@ export const getSpreadsheetInfoTool = {
                     height: node.height,
                     live: getLiveHandle(editor, node.pos) !== null,
                     sheetCount: workbook?.sheets.length ?? 0,
-                    sheets: (workbook?.sheets ?? []).map((sheet) => ({
-                        name: sheet.name,
-                        rowCount: sheet.rowCount,
-                        columnCount: sheet.columnCount,
-                    })),
+                    sheets: (workbook?.sheets ?? []).map((sheet, sheetIndex) => {
+                        const used = usedBounds(sheet)
+                        return {
+                            index: sheetIndex,
+                            name: sheet.name,
+                            rowCount: sheet.rowCount,
+                            columnCount: sheet.columnCount,
+                            usedRange: used ? `A1:${formatCellRef(used.endRow, used.endColumn)}` : null,
+                            isPivot: !!sheet.pivot,
+                            pivot: sheet.pivot ? {
+                                ...sheet.pivot,
+                                sources: sheet.pivot.sources.map((source) => ({
+                                    sheet: workbook?.sheets[source.sheet]?.name,
+                                    range: `${formatCellRef(source.range.startRow, source.range.startColumn)}:${formatCellRef(source.range.endRow, source.range.endColumn)}`,
+                                })),
+                            } : null,
+                        }
+                    }),
                 }
             })
             return { success: true, count: info.length, spreadsheets: info }
@@ -199,6 +213,7 @@ export const getSpreadsheetInfoTool = {
  */
 export const readSpreadsheetDataTool = {
     name: 'readSpreadsheetData',
+    readOnly: true,
     description: '读取文档中某个电子表格的单元格数据。可读取指定范围或整个工作表，返回二维数组（公式单元格返回公式文本）。',
     inputSchema: z.object({
         index: z.number().describe('电子表格在文档中的序号（从 0 开始，可通过 getSpreadsheetInfo 获取）'),
@@ -302,6 +317,9 @@ export const updateSpreadsheetDataTool = {
             const node = findSpreadsheetByIndex(editor, params.index)
             if (!node) return { success: false, error: `未找到序号 ${params.index} 的电子表格` }
 
+            if (!editor.isEditable || getLiveHandle(editor, node.pos)?.isEditable() === false) {
+                return { success: false, error: 'The spreadsheet is read-only.' }
+            }
             const data = Array.isArray(params.data) ? params.data.slice(0, MAX_TOOL_ROWS) : []
             if (data.length === 0) return { success: false, error: '写入数据为空' }
 
@@ -327,6 +345,9 @@ export const updateSpreadsheetDataTool = {
                 const found = sheets.findIndex((sheet) => sheet.name === params.sheetName)
                 if (found < 0) return { success: false, error: `未找到工作表 "${params.sheetName}"` }
                 sheetIndex = found
+            }
+            if (sheets[sheetIndex]?.pivot) {
+                return { success: false, error: 'Pivot cells are generated. Update the source data or use createPivotTable with the same outputName to change its configuration.' }
             }
 
             // ── Live grid first: keeps the instance, undo history and autosave
@@ -371,6 +392,10 @@ export const updateSpreadsheetDataTool = {
                     }
                 }),
             }
+
+            next.sheets = next.sheets.map((sheet) => sheet.pivot
+                ? buildPivotSheet(next, sheet.pivot, sheet.name, pivotLabels())
+                : sheet)
 
             const docNode = editor.state.doc.nodeAt(node.pos)
             if (!docNode) return { success: false, error: '无法定位电子表格节点' }
@@ -485,7 +510,40 @@ export const exportSpreadsheetTool = {
 }
 
 const PIVOT_AGGREGATES = ['sum', 'count', 'average', 'max', 'min'] as const
-const PIVOT_DATE_GROUPS = ['year', 'quarter', 'month', 'day'] as const
+const PIVOT_DATE_GROUPS = ['none', 'year', 'quarter', 'month', 'day'] as const
+
+function pivotLabels(): PivotLabels {
+    return {
+        total: translate('spreadsheet.pivot.total'),
+        source: translate('spreadsheet.pivot.source'),
+        aggregate: (kind) => translate('spreadsheet.pivot.aggregate.' + kind),
+    }
+}
+
+const pivotFieldSchema = z.string().trim().min(1)
+const pivotGroupSchema = z.union([
+    pivotFieldSchema,
+    z.object({ field: pivotFieldSchema, dateGroup: z.enum(PIVOT_DATE_GROUPS).optional() }),
+])
+const createPivotTableSchema = z.object({
+    index: z.number().int().min(0).describe('Spreadsheet block index from getSpreadsheetInfo (0-based).'),
+    range: z.string().optional().describe('Source range, e.g. A1:D100. Required unless sources is provided; include the header row when hasHeader is true.'),
+    sourceSheet: z.string().optional().describe('Source worksheet name; defaults to the first worksheet.'),
+    sources: z.array(z.object({
+        sheet: z.string().optional().describe('Worksheet name; defaults to the first worksheet.'),
+        range: z.string().describe('Source range in A1 notation.'),
+    })).min(1).max(32).optional().describe('Cross-sheet union. Overrides range/sourceSheet. All regions must have the same fields in the same column order.'),
+    hasHeader: z.boolean().optional().describe('Whether each region starts with field names; defaults to true. Without headers use column letters from the first range.'),
+    rows: z.array(pivotGroupSchema).max(MAX_TOOL_COLUMNS).optional().describe('Row grouping fields. Use a field name or { field, dateGroup: year/quarter/month/day/none }.'),
+    columns: z.array(pivotGroupSchema).max(MAX_TOOL_COLUMNS).optional().describe('Column grouping fields, optionally bucketed by date.'),
+    values: z.array(z.object({
+        field: pivotFieldSchema.describe('Exact source field label. Duplicate headers use labels such as Amount (2).'),
+        aggregate: z.enum(PIVOT_AGGREGATES).optional().describe('Aggregation; defaults to sum. count counts non-empty values.'),
+    })).min(1).max(32).describe('One or more measures: sum, count, average, max, or min.'),
+    outputName: z.string().trim().min(1).optional().describe('Output worksheet name. Reuses an existing pivot of this name; never overwrites a regular worksheet.'),
+    showRowTotals: z.boolean().optional().describe('Include row totals; defaults to true.'),
+    showColumnTotals: z.boolean().optional().describe('Include column totals; defaults to true.'),
+})
 
 /** Accept plain field names or { field, dateGroup } objects. */
 function toGroupFields(value: unknown): PivotGroupField[] {
@@ -513,46 +571,11 @@ function toGroupFields(value: unknown): PivotGroupField[] {
  */
 export const createPivotTableTool = {
     name: 'createPivotTable',
-    description: '创建或刷新透视表：按行/列字段分组，对值字段做 求和/计数/平均/最大/最小，生成到新工作表并随源数据自动刷新。',
-    inputSchema: z.object({
-        index: z.number().describe('电子表格序号（从 0 开始）'),
-        range: z.string().describe('源数据区域，如 "A1:D100"（未提供 sources 时使用）'),
-        sourceSheet: z.string().optional().describe('源工作表名称，默认第一个工作表'),
-        sources: z
-            .array(z.object({
-                sheet: z.string().optional().describe('工作表名称，默认第一个'),
-                range: z.string().describe('区域，如 "A1:D100"'),
-            }))
-            .optional()
-            .describe('多源区域（跨表汇总），提供后忽略 range/sourceSheet'),
-        hasHeader: z.boolean().optional().describe('区域首行是否为字段名，默认 true'),
-        rows: z
-            .array(z.union([
-                z.string(),
-                z.object({ field: z.string(), dateGroup: z.enum(PIVOT_DATE_GROUPS).optional() }),
-            ]))
-            .optional()
-            .describe('行字段；日期字段可带 dateGroup: year/quarter/month/day'),
-        columns: z
-            .array(z.union([
-                z.string(),
-                z.object({ field: z.string(), dateGroup: z.enum(PIVOT_DATE_GROUPS).optional() }),
-            ]))
-            .optional()
-            .describe('列字段；日期字段可带 dateGroup'),
-        values: z
-            .array(z.object({
-                field: z.string().describe('值字段名'),
-                aggregate: z.enum(PIVOT_AGGREGATES).optional().describe('聚合方式，默认 sum'),
-            }))
-            .describe('值字段及聚合方式'),
-        outputName: z.string().optional().describe('输出工作表名，默认「透视表」'),
-        showRowTotals: z.boolean().optional(),
-        showColumnTotals: z.boolean().optional(),
-    }),
+    description: 'Create or reconfigure a pivot table (cross-tab/group summary) in a spreadsheet. Supports multiple source sheets, row/column groups, date buckets, sum/count/average/max/min, and totals. Read source data first; output is a generated worksheet that refreshes when source cells change.',
+    inputSchema: createPivotTableSchema,
     execute: (editor: Editor) => async (params: {
         index: number
-        range: string
+        range?: string
         sourceSheet?: string
         sources?: { sheet?: string; range: string }[]
         hasHeader?: boolean
@@ -566,6 +589,12 @@ export const createPivotTableTool = {
         try {
             const node = findSpreadsheetByIndex(editor, params.index)
             if (!node) return { success: false, error: `未找到序号 ${params.index} 的电子表格` }
+            if (!editor.isEditable || getLiveHandle(editor, node.pos)?.isEditable() === false) {
+                return { success: false, error: 'The spreadsheet is read-only.' }
+            }
+            const parsed = createPivotTableSchema.safeParse(params)
+            if (!parsed.success) return { success: false, error: parsed.error.message }
+            params = parsed.data
             const workbook = resolveWorkbook(editor, node)
             if (!workbook) return { success: false, error: '该电子表格暂无数据' }
 
@@ -585,12 +614,38 @@ export const createPivotTableTool = {
             } else {
                 const sheetIndex = resolveSheet(params.sourceSheet)
                 if (sheetIndex < 0) return { success: false, error: `未找到工作表 "${params.sourceSheet}"` }
+                if (!params.range) return { success: false, error: 'Provide range or a non-empty sources array.' }
                 const range = parseRangeSpec(params.range)
                 if (!range) return { success: false, error: `无效的区域格式 "${params.range}"` }
                 sources.push({ sheet: sheetIndex, range })
             }
             if (sources.some((source) => workbook.sheets[source.sheet]?.pivot)) {
                 return { success: false, error: '源工作表不能是生成的透视表' }
+            }
+
+            let sourceRows = 0
+            const width = sources[0].range.endColumn - sources[0].range.startColumn + 1
+            for (const source of sources) {
+                const { range } = source
+                const sheet = workbook.sheets[source.sheet]
+                const height = range.endRow - range.startRow + 1
+                sourceRows += height
+                if (!Number.isSafeInteger(height) || sourceRows > MAX_TOOL_ROWS
+                    || !Number.isSafeInteger(width) || width > MAX_TOOL_COLUMNS
+                    || range.endRow >= sheet.rowCount || range.endColumn >= sheet.columnCount) {
+                    return { success: false, error: `Source ranges must fit their worksheets and contain at most ${MAX_TOOL_ROWS} rows in total and ${MAX_TOOL_COLUMNS} columns.` }
+                }
+                if (range.endColumn - range.startColumn + 1 !== width) {
+                    return { success: false, error: 'All source ranges must have the same number of columns.' }
+                }
+                if (params.hasHeader !== false && height < 2) {
+                    return { success: false, error: 'A source range must include data rows below its header.' }
+                }
+            }
+            const availableFields = pivotFieldLabels(workbook.sheets, sources, params.hasHeader !== false)
+            if (params.hasHeader !== false && sources.slice(1).some((source) =>
+                JSON.stringify(pivotFieldLabels(workbook.sheets, [source], true)) !== JSON.stringify(availableFields))) {
+                return { success: false, error: 'Source headers must match in the same column order.', availableFields }
             }
 
             const values = (params.values ?? [])
@@ -612,13 +667,22 @@ export const createPivotTableTool = {
                 showRowTotals: params.showRowTotals !== false,
                 showColumnTotals: params.showColumnTotals !== false,
             }
-            const labels: PivotLabels = {
-                total: translate('spreadsheet.pivot.total'),
-                source: translate('spreadsheet.pivot.source'),
-                aggregate: (kind) => translate('spreadsheet.pivot.aggregate.' + kind),
+            const unknownFields = [...config.rows, ...config.columns, ...config.values]
+                .map((entry) => entry.field).filter((field) => !availableFields.includes(field))
+            if (unknownFields.length > 0) {
+                return { success: false, error: `Unknown pivot fields: ${[...new Set(unknownFields)].join(', ')}`, availableFields }
             }
             const name = params.outputName?.trim() || translate('spreadsheet.pivot.outputNamePlaceholder')
-            const next = upsertPivotSheet(workbook, config, name, labels)
+            if (workbook.sheets.some((sheet) => sheet.name === name && !sheet.pivot)) {
+                return { success: false, error: `A regular worksheet named "${name}" already exists. Choose a different outputName.` }
+            }
+            const updated = workbook.sheets.some((sheet) => sheet.name === name && !!sheet.pivot)
+            const next = upsertPivotSheet(workbook, config, name, pivotLabels(), {
+                maxRows: MAX_TOOL_ROWS,
+                maxColumns: MAX_TOOL_COLUMNS,
+            })
+            const output = next.sheets[next.activeSheet]
+            const bounds = usedBounds(output)
 
             const docNode = editor.state.doc.nodeAt(node.pos)
             if (!docNode) return { success: false, error: '无法定位电子表格节点' }
@@ -632,11 +696,16 @@ export const createPivotTableTool = {
             return {
                 success: true,
                 sheetName: name,
+                sheetIndex: next.activeSheet,
+                updated,
+                range: bounds ? `A1:${formatCellRef(bounds.endRow, bounds.endColumn)}` : null,
+                preview: output.rows.slice(0, Math.min((bounds?.endRow ?? 0) + 1, 10))
+                    .map((row) => row.slice(0, Math.min((bounds?.endColumn ?? 0) + 1, 20))),
                 sources: sources.length,
                 rows: config.rows.map((entry) => entry.field),
                 columns: config.columns.map((entry) => entry.field),
                 values: config.values,
-                message: `已生成透视表「${name}」到新工作表（随源数据自动刷新）`,
+                message: `${updated ? 'Updated' : 'Created'} pivot table "${name}". Source cell changes refresh the result; use readSpreadsheetData to inspect it.`,
             }
         } catch (error) {
             return { success: false, error: errorMessage(error, '创建透视表失败') }
