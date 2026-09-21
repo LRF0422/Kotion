@@ -6,7 +6,7 @@ import {
     type WorkbookData,
 } from './workbook-data'
 
-export { triggerExcelFileImport, pickExcelFile } from './excel-file-picker'
+export { triggerExcelFileImport, pickExcelFile, pickExcelFileFromCenter } from './excel-file-picker'
 
 /** Dimensions we are willing to materialise from a file. */
 const MAX_ROWS = 10_000

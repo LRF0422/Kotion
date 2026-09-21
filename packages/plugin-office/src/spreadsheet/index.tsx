@@ -2,7 +2,7 @@ import { ExtensionWrapper, logger } from "@kn/common"
 import { SpreadsheetNode } from "./spreadsheet-node"
 import { Sheet } from "@kn/icon"
 import React from "react"
-import { pickExcelFile } from "./excel-file-picker"
+import { pickExcelFileFromCenter } from "./excel-file-picker"
 import { spreadsheetTools } from "./tools"
 import { spreadsheetExpertSkill } from "./skills"
 import { createT } from "../i18n"
@@ -14,7 +14,7 @@ const t = createT();
  * spreadsheet block pre-filled with its contents.
  */
 const importExcelAction = async (editor: any) => {
-    const { file, error } = await pickExcelFile()
+    const { file, error } = await pickExcelFileFromCenter(editor)
     if (error) {
         logger.warn('[office/spreadsheet] import rejected:', error)
         return

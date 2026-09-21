@@ -8,7 +8,7 @@ import { SheetToolbar } from "./SheetToolbar"
 import { SheetFormulaBar } from "./SheetFormulaBar"
 import { PivotDialog } from "./PivotDialog"
 import { PivotDetailsDialog, type PivotDrillTarget } from "./PivotDetailsDialog"
-import { pickExcelFile } from "./excel-file-picker"
+import { pickExcelFileFromCenter } from "./excel-file-picker"
 import { registerSpreadsheetLive, unregisterSpreadsheetLive, type SpreadsheetLiveHandle } from "./workbook-registry"
 import { DEFAULT_SPREADSHEET_HEIGHT } from "./constants"
 import { ensureValidWorkbookData, workbookHasContent, type WorkbookData } from "./workbook-data"
@@ -107,7 +107,7 @@ export const SpreadsheetView: React.FC<NodeViewProps> = React.memo((props) => {
     const replaceRef = useRef<((data: WorkbookData) => void) | null>(null)
 
     const handleImportExcel = useCallback(async () => {
-        const { file, error } = await pickExcelFile()
+        const { file, error } = await pickExcelFileFromCenter(editor)
         if (error) {
             setImportError(error)
             return
