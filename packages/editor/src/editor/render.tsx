@@ -12,10 +12,8 @@ import { ExtensionWrapper } from "@kn/common";
 import { useEditorExtension } from "./use-extension";
 import { resolveBlockMenuItems } from "./kit";
 import { HocuspocusProvider } from "@hocuspocus/provider";
-import { ThemeProvider } from "styled-components";
-import light, { dark } from "../styles/theme";
-import { StyledEditor } from "../styles/editor";
-import { cn, useIsMobile, useTheme } from "@kn/ui";
+import { StyledEditor } from "../styles/StyledEditor";
+import { cn, useIsMobile } from "@kn/ui";
 import { NotionToC } from "./NotionToC";
 import { EditorStatusBar } from "./EditorStatusBar";
 import { ChangeTrackerBar } from "./ChangeTrackerBar";
@@ -190,15 +188,11 @@ export const EditorRender = forwardRef<
     return () => { cancelled = true; clearTimeout(timer); };
   }, [editor, content, allExtensions]);
 
-  // Get current theme from context
-  const { theme: currentTheme } = useTheme();
-  const selectedTheme = currentTheme === 'dark' ? dark : light;
   const isMobile = useIsMobile();
 
   return (editor &&
     <PageContext.Provider value={pageInfo ?? {}}>
-      <ThemeProvider theme={selectedTheme}>
-        <div className={cn("flex flex-col relative", width, props.className)}>
+      <div className={cn("flex flex-col relative", width, props.className)}>
           <div className="flex-1 min-h-0 w-full overflow-y-auto" id="editor-container">
             {/* Cover/header spans the full pane width; rendered outside the
                 centred StyledEditor column. */}
@@ -261,8 +255,7 @@ export const EditorRender = forwardRef<
           {mobileToolbar && isMobile && contentReady && (
             <MobileEditorToolbar editor={editor} extensionWrappers={extensionWrappers} />
           )}
-        </div>
-      </ThemeProvider >
+      </div>
     </PageContext.Provider>
   );
 });

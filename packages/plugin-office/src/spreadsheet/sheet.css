@@ -1,40 +1,78 @@
 /**
- * Spreadsheet grid presentation.
+ * Spreadsheet grid presentation — traditional Excel styling.
  *
- * Design rules follow the host app's tokens (see `packages/ui/globals.css`): a
- * Notion-like warm neutral palette, restrained 1px borders, small radii. The
- * structural overrides are deliberately minimal — jspreadsheet owns the table
- * markup; we only pin the height chain (or the body gets clipped away) and set
- * density and colour.
+ * Two jobs:
+ *
+ * 1. Defence. The grid sits inside editor content, and the editor injects its
+ *    own table styles (see `packages/editor/src/styles/editor.css`) with
+ *    `!important` padding/borders and `width: 100%`. Those rules are meant for
+ *    *document* tables; leaking into the spreadsheet inflates every row, drops
+ *    the light palette into dark mode and squeezes the columns. Every property
+ *    the grid depends on is therefore pinned here with `!important`.
+ *
+ * 2. Excel fidelity. Grey header band, hairline grid, range outline with
+ *    highlighted row/column headers, readable active cell — for both themes.
  */
 
 /* ── Block shell ─────────────────────────────────────────────────────────── */
 
 .kn-sheet {
-    --kn-sheet-border: hsl(var(--border, 40 6% 92%));
-    --kn-sheet-grid: hsl(var(--border, 40 6% 92%) / 0.7);
+    /* Host palette (see packages/ui/globals.css). */
+    --kn-sheet-line: hsl(var(--border, 40 6% 92%));
     --kn-sheet-head-bg: hsl(var(--secondary, 40 6% 95%));
     --kn-sheet-head-fg: hsl(var(--muted-foreground, 40 3% 47%));
+    --kn-sheet-head-active-bg: hsl(var(--ring, 211 76% 51%) / 0.16);
+    --kn-sheet-head-active-fg: hsl(var(--foreground, 40 8% 20%));
     --kn-sheet-cell-bg: hsl(var(--background, 0 0% 100%));
     --kn-sheet-cell-fg: hsl(var(--foreground, 40 8% 20%));
-    --kn-sheet-hover: hsl(var(--accent, 40 7% 94%));
-    --kn-sheet-selected: hsl(var(--ring, 211 76% 51%) / 0.1);
+    /* Hover/selection surfaces stay neutral: they must not follow --accent,
+     * which is a *surface* colour that a warm theme renders brown (e.g. the
+     * "暖橙" preset's dark accent). The range outline already carries the accent. */
+    --kn-sheet-hover: hsl(var(--muted, 40 6% 96%));
+    --kn-sheet-range: hsl(var(--ring, 211 76% 51%) / 0.07);
+    --kn-sheet-cursor: hsl(var(--ring, 211 76% 51%) / 0.12);
     --kn-sheet-accent: hsl(var(--ring, 211 76% 51%));
+    --kn-sheet-strong-line: hsl(var(--muted-foreground, 40 3% 47%) / 0.35);
+
+    /* jspreadsheet theme variables. The library ships light-only fallbacks
+     * (#ccc / #f3f3f3 / #000), so every variable it reads is bound here. */
+    --border_color: var(--kn-sheet-line);
+    --border_color_highlighted: var(--kn-sheet-accent);
+    --header_background: var(--kn-sheet-head-bg);
+    --header_color: var(--kn-sheet-head-fg);
+    --header_background_highlighted: var(--kn-sheet-head-active-bg);
+    --header_color_highlighted: var(--kn-sheet-head-active-fg);
+    --content_background: var(--kn-sheet-cell-bg);
+    --content_color: var(--kn-sheet-cell-fg);
+    --content_background_highlighted: var(--kn-sheet-hover);
+    --content_color_highlighted: var(--kn-sheet-cell-fg);
+    --selection: var(--kn-sheet-range);
+    --cursor: var(--kn-sheet-cursor);
+    --menu_background: hsl(var(--popover, 0 0% 100%));
+    --menu_color: hsl(var(--popover-foreground, 40 8% 20%));
+    --menu_background_highlighted: hsl(var(--accent, 40 7% 94%));
+    --menu_color_highlighted: hsl(var(--accent-foreground, 40 8% 20%));
 
     height: 100%;
     width: 100%;
 }
 
+/* Explicit dark values, in case the host tokens are not themed (the grid can
+ * also render inside a portal, outside the editor tree). */
+.dark .kn-sheet,
 .kn-sheet.jss-dark {
-    --kn-sheet-border: hsl(var(--border, 0 0% 17%));
-    --kn-sheet-grid: hsl(var(--border, 0 0% 17%) / 0.85);
+    --kn-sheet-line: hsl(var(--border, 0 0% 17%));
     --kn-sheet-head-bg: hsl(var(--secondary, 0 0% 16%));
     --kn-sheet-head-fg: hsl(var(--muted-foreground, 0 0% 56%));
+    --kn-sheet-head-active-bg: hsl(var(--ring, 211 70% 55%) / 0.22);
+    --kn-sheet-head-active-fg: hsl(var(--foreground, 40 6% 82%));
     --kn-sheet-cell-bg: hsl(var(--background, 0 0% 10%));
     --kn-sheet-cell-fg: hsl(var(--foreground, 40 6% 82%));
-    --kn-sheet-hover: hsl(var(--accent, 0 0% 18%));
-    --kn-sheet-selected: hsl(var(--ring, 211 70% 55%) / 0.18);
+    --kn-sheet-hover: hsl(var(--muted, 0 0% 16%));
+    --kn-sheet-range: hsl(var(--ring, 211 70% 55%) / 0.12);
+    --kn-sheet-cursor: hsl(var(--ring, 211 70% 55%) / 0.2);
     --kn-sheet-accent: hsl(var(--ring, 211 70% 55%));
+    --kn-sheet-strong-line: hsl(0 0% 100% / 0.22);
 }
 
 .kn-sheet__canvas {
@@ -85,7 +123,7 @@
     height: auto !important;
     min-height: 0 !important;
     max-height: 100% !important;
-    padding-right: 0;
+    padding: 0 !important;
     overflow: hidden;
 }
 
@@ -98,125 +136,399 @@
     height: auto !important;
     max-height: 100% !important;
     overflow: auto !important;
-    padding: 0;
+    padding: 0 !important;
     background: var(--kn-sheet-cell-bg);
+}
+
+/* ── Sheet tabs ──────────────────────────────────────────────────────────── */
+
+/* Only the selected worksheet panel may render. jtabs hides the others with a
+ * plain `display:none`, which an inline style (or a host rule) can override and
+ * leave every sheet stacked in the block; pin it here. */
+.kn-sheet .jtabs-content > div:not(.jtabs-selected) {
+    display: none !important;
+}
+
+.kn-sheet .jtabs-headers-container {
+    display: flex !important;
+    flex: 0 0 auto;
+    align-items: stretch;
+    height: 30px;
+    padding: 0 6px;
+    box-sizing: border-box;
+    border-bottom: 1px solid var(--border_color);
+    background: hsl(var(--muted, 40 6% 96%) / 0.4);
+    overflow: hidden;
+}
+
+.kn-sheet .jtabs-headers {
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.kn-sheet .jtabs-headers::-webkit-scrollbar {
+    display: none;
+}
+
+.kn-sheet .jtabs-headers > div {
+    display: inline-flex;
+    align-items: center;
+    max-width: 160px;
+    height: 24px;
+    margin-bottom: -1px;
+    padding: 0 10px;
+    box-sizing: border-box;
+    border: 1px solid transparent;
+    border-bottom: 0;
+    border-radius: 4px 4px 0 0;
+    color: var(--header_color);
+    font-size: 12px;
+    line-height: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    user-select: none;
+}
+
+.kn-sheet .jtabs-headers > div:hover {
+    background: var(--content_background_highlighted);
+}
+
+.kn-sheet .jtabs-headers > div.jtabs-selected {
+    border-color: var(--border_color);
+    background: var(--content_background);
+    color: var(--content_color);
+    font-weight: 600;
+}
+
+/* jspreadsheet's tab strip ships an absolutely positioned decorative element
+ * whose geometry comes from the (unbundled) jsuites stylesheet. Painted as-is
+ * it covers the tab label, so the active tab is styled directly instead. */
+.kn-sheet .jtabs-border {
+    display: none !important;
+}
+
+.kn-sheet .jtabs-controls {
+    display: flex !important;
+    align-items: center;
+    gap: 2px;
+    padding-left: 4px;
+}
+
+.kn-sheet .jtabs-controls > div {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    color: var(--header_color);
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.kn-sheet .jtabs-controls > div:hover {
+    background: var(--content_background_highlighted);
+    color: var(--content_color);
+}
+
+.kn-sheet .jtabs-controls > div.disabled,
+.kn-sheet .jtabs-controls > div[disabled] {
+    opacity: 0.35;
+    pointer-events: none;
+}
+
+/* The add-sheet control ships as an empty div; give it a "+" glyph. */
+.kn-sheet .jtabs-controls > .jtabs-add::before {
+    content: '+';
+    font-size: 15px;
+    font-weight: 500;
+    line-height: 1;
 }
 
 /* ── Table ───────────────────────────────────────────────────────────────── */
 /*
  * Only the table is a table. Forcing display:table on tbody/thead would turn
  * them into independent shrink-to-fit tables and collapse the data columns.
+ *
+ * `width: 0` is the library's own trick: with fixed layout the used width
+ * becomes the sum of the column widths, so the grid keeps its real column
+ * sizes and scrolls horizontally instead of being squeezed into the block.
  */
 
 .kn-sheet .jss_worksheet {
-    display: table;
-    table-layout: fixed;
-    border-collapse: collapse;
-    border-spacing: 0;
-    background: var(--kn-sheet-cell-bg);
-    color: var(--kn-sheet-cell-fg);
+    display: table !important;
+    table-layout: fixed !important;
+    width: 0 !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    /* Editor content sets `overflow: hidden` on tables; that would become the
+     * sticky header's scroll container and pin the header to the table, so the
+     * header would scroll away with the rows. */
+    overflow: visible !important;
+    margin: 0 !important;
+    border: 0 !important;
+    /* `separate` (the library's own value) is what keeps the sticky column
+     * header working: Chromium drops sticky positioning on thead cells of a
+     * collapsed-border table. Lines are drawn per cell instead. */
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+    background: var(--kn-sheet-cell-bg) !important;
+    color: var(--kn-sheet-cell-fg) !important;
+    font-size: 13px !important;
+    line-height: 20px !important;
     font-variant-numeric: tabular-nums;
 }
 
-.kn-sheet .jss_worksheet colgroup > col:first-child {
-    width: 46px;
+/* ── Host isolation ──────────────────────────────────────────────────────── *
+ * The inline grid is mounted inside .kn-editor, and jspreadsheet tags its
+ * <col>, <thead> and <tbody> with a "resizable" class. That collides with the
+ * editor's own `.kn-editor .resizable { display: inline-block }` (meant for
+ * the editor's Resizable component): inline-block drops those elements out of
+ * the table layout, so the <col> widths are ignored and the header stops
+ * sharing columns with the body. Put the table display values back so the
+ * grid owns its own layout regardless of the host. */
+.kn-sheet .jss_worksheet > colgroup > col,
+.kn-sheet .jss_worksheet > thead,
+.kn-sheet .jss_worksheet > tbody,
+.kn-sheet .jss_worksheet > tfoot {
+    position: static !important;
+    max-width: none !important;
+    vertical-align: baseline !important;
 }
 
-/* Column headers (A, B, C …) */
+.kn-sheet .jss_worksheet > colgroup > col {
+    display: table-column !important;
+}
+
+.kn-sheet .jss_worksheet > thead {
+    display: table-header-group !important;
+}
+
+.kn-sheet .jss_worksheet > tbody {
+    display: table-row-group !important;
+}
+
+.kn-sheet .jss_worksheet > tfoot {
+    display: table-footer-group !important;
+}
+
+.kn-sheet .jss_worksheet colgroup > col:first-child {
+    width: 46px !important;
+}
+
+/* Row header (A, B, C …) */
 .kn-sheet .jss_worksheet > thead > tr > td {
-    height: 26px;
-    padding: 0 8px;
-    box-sizing: border-box;
-    font-size: 11px;
-    font-weight: 500;
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 2;
+    height: 26px !important;
+    min-height: 26px !important;
+    padding: 0 6px !important;
+    box-sizing: border-box !important;
+    border: 0 !important;
+    border-right: 1px solid var(--kn-sheet-line) !important;
+    border-bottom: 1px solid var(--kn-sheet-strong-line) !important;
+    background: var(--kn-sheet-head-bg) !important;
+    color: var(--kn-sheet-head-fg) !important;
+    font-size: 11px !important;
+    font-weight: 500 !important;
+    line-height: 24px !important;
     letter-spacing: 0.02em;
-    text-align: center;
-    border: 0;
-    border-right: 1px solid var(--kn-sheet-grid);
-    border-bottom: 1px solid var(--kn-sheet-border);
-    background: var(--kn-sheet-head-bg);
-    color: var(--kn-sheet-head-fg);
+    text-align: center !important;
+    vertical-align: middle !important;
+    white-space: nowrap;
+    overflow: hidden;
     user-select: none;
 }
 
 .kn-sheet .jss_worksheet > thead > tr > td.selected {
-    background: var(--kn-sheet-selected);
-    color: var(--kn-sheet-cell-fg);
+    background: var(--kn-sheet-head-active-bg) !important;
+    color: var(--kn-sheet-head-active-fg) !important;
+}
+
+/* The row-number gutter is one column shared by the corner "select all" cell
+ * (thead) and the gutter cells (tbody). The host editor's document-table rules
+ * also match these cells — the inline grid lives inside .kn-editor — and set
+ * `min-width: 80px`, which widens the whole gutter. Pin the corner too. */
+.kn-sheet .jss_worksheet > thead > tr > td:first-child {
+    width: 46px !important;
+    min-width: 46px !important;
+    max-width: 46px !important;
 }
 
 /* Row-number gutter */
 .kn-sheet .jss_worksheet > tbody > tr > td:first-child {
-    width: 46px;
-    min-width: 46px;
-    padding: 0 6px;
-    text-align: right;
-    font-size: 11px;
+    position: relative;
+    width: 46px !important;
+    min-width: 46px !important;
+    max-width: 46px !important;
+    padding: 0 6px !important;
+    text-align: center !important;
+    font-size: 11px !important;
     font-weight: 400;
-    color: var(--kn-sheet-head-fg);
-    background: var(--kn-sheet-head-bg);
-    border-right: 1px solid var(--kn-sheet-border);
+    color: var(--kn-sheet-head-fg) !important;
+    background: var(--kn-sheet-head-bg) !important;
+    border-right: 1px solid var(--kn-sheet-line) !important;
     user-select: none;
 }
 
 .kn-sheet .jss_worksheet > tbody > tr.selected > td:first-child,
 .kn-sheet .jss_worksheet > tbody > tr > td:first-child.selected {
-    background: var(--kn-sheet-selected);
-    color: var(--kn-sheet-cell-fg);
+    background: var(--kn-sheet-head-active-bg) !important;
+    color: var(--kn-sheet-head-active-fg) !important;
 }
 
-/* Data cells */
+/* Data cells. `min-width` is a floor for the (unlikely) case of the table
+ * ending up in auto layout — in fixed layout it is ignored, so it never fights
+ * the column widths the library stores on its `<col>` elements. */
+.kn-sheet .jss_worksheet > tbody > tr > td:not(:first-child),
+.kn-sheet .jss_worksheet > thead > tr > td:not(:first-child) {
+    min-width: 96px;
+}
+
+/*
+ * User formatting (toolbar fill/colour/font-size) is applied as ordinary inline
+ * declarations by applyStyle, so it must not be pinned with `!important` here:
+ * a stylesheet `!important` declaration beats a non-important inline one, which
+ * would make the toolbar buttons look dead. Padding and borders stay
+ * `!important` to keep the editor's document-table rules out. The --kn-cell-*
+ * fallbacks keep formatting saved by the previous custom-property mapping
+ * rendering; the border custom property is the one value still written by
+ * applyStyle (see useJspreadsheet.ts).
+ */
 .kn-sheet .jss_worksheet > tbody > tr > td {
-    height: 24px;
-    min-height: 24px;
-    max-height: 24px;
-    padding: 0 8px;
-    box-sizing: border-box;
-    vertical-align: middle;
-    font-size: 13px;
-    line-height: 20px;
+    position: static;
+    height: 24px !important;
+    padding: 0 8px !important;
+    box-sizing: border-box !important;
+    border-top: var(--kn-cell-border, 0) !important;
+    border-right: var(--kn-cell-border, 1px solid var(--kn-sheet-line)) !important;
+    border-bottom: var(--kn-cell-border, 1px solid var(--kn-sheet-line)) !important;
+    border-left: var(--kn-cell-border, 0) !important;
+    background: var(--kn-cell-bg, var(--kn-sheet-cell-bg));
+    color: var(--kn-cell-fg, var(--kn-sheet-cell-fg));
+    font-size: var(--kn-cell-font-size, 13px);
+    line-height: var(--kn-cell-line-height, 20px);
+    text-align: left;
+    vertical-align: middle !important;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    border: 0;
-    border-right: 1px solid var(--kn-sheet-grid);
-    border-bottom: 1px solid var(--kn-sheet-grid);
-    background: var(--kn-sheet-cell-bg);
-    color: var(--kn-sheet-cell-fg);
-}
-
-.kn-sheet .jss_worksheet > tbody > tr > td.highlighted,
-.kn-sheet .jss_worksheet > tbody > tr > td.selected {
-    background: var(--kn-sheet-selected);
 }
 
 .kn-sheet .jss_worksheet > tbody > tr:hover > td:not(:first-child) {
-    background: var(--kn-sheet-hover);
+    background: var(--kn-cell-bg, var(--kn-sheet-hover));
+}
+
+/* ── Selection (range outline + active cell + header highlight) ───────────── */
+
+/*
+ * Selection: a dashed "marching ants" outline around the range plus a shaded
+ * active cell. The outline lives on the edge cells (highlight-top/left/right/
+ * bottom), and the foreground colour is used so it reads in both themes. No
+ * range tint, so a user fill is not obscured.
+ */
+.kn-sheet .jss_worksheet > tbody > tr > td.highlight {
+    background-image: none !important;
+}
+
+.kn-sheet .jss_worksheet > tbody > tr > td.highlight-selected {
+    background: var(--kn-cell-bg, var(--kn-sheet-hover));
+}
+
+.kn-sheet .jss_worksheet > tbody > tr > td.highlight-top {
+    border-top: 1px dashed var(--kn-sheet-cell-fg) !important;
+}
+
+.kn-sheet .jss_worksheet > tbody > tr > td.highlight-bottom {
+    border-bottom: 1px dashed var(--kn-sheet-cell-fg) !important;
+}
+
+.kn-sheet .jss_worksheet > tbody > tr > td.highlight-left {
+    border-left: 1px dashed var(--kn-sheet-cell-fg) !important;
+}
+
+.kn-sheet .jss_worksheet > tbody > tr > td.highlight-right {
+    border-right: 1px dashed var(--kn-sheet-cell-fg) !important;
+}
+
+/*
+ * Drag-fill preview. While the fill handle is dragged, jspreadsheet marks the
+ * range it will fill with the .selection* classes (its own grey tint + black
+ * dotted border). The themed cell rules above override those declarations with
+ * !important, which left the preview invisible - the handle moved but the
+ * target cells gave no feedback. Restate the outline with the accent colour so
+ * it is clear in both themes. Only the border is repainted, so the preview
+ * cells keep their own fill (and its contents) visible.
+ */
+.kn-sheet .jss_worksheet > tbody > tr > td.selection-top {
+    border-top: 1px dashed var(--kn-sheet-accent) !important;
+}
+
+.kn-sheet .jss_worksheet > tbody > tr > td.selection-bottom {
+    border-bottom: 1px dashed var(--kn-sheet-accent) !important;
+}
+
+.kn-sheet .jss_worksheet > tbody > tr > td.selection-left {
+    border-left: 1px dashed var(--kn-sheet-accent) !important;
+}
+
+.kn-sheet .jss_worksheet > tbody > tr > td.selection-right {
+    border-right: 1px dashed var(--kn-sheet-accent) !important;
 }
 
 /* Editing: keep the editor inside its row instead of enlarging the cell. */
 .kn-sheet .jss_worksheet > tbody > tr > td.editor,
 .kn-sheet .jss_worksheet > tbody > tr > td[contenteditable='true'] {
-    height: 24px !important;
-    min-height: 24px !important;
-    padding: 0 4px !important;
+    padding: 0 !important;
     box-shadow: inset 0 0 0 2px var(--kn-sheet-accent);
-    background: var(--kn-sheet-cell-bg);
+    background: var(--kn-cell-bg, var(--kn-sheet-cell-bg));
     z-index: 2;
 }
 
 .kn-sheet .jss_worksheet > tbody > tr > td.editor > div,
 .kn-sheet .jss_worksheet > tbody > tr > td[contenteditable='true'] > div {
-    height: 100%;
-    padding: 2px 4px;
-    box-sizing: border-box;
+    height: 100% !important;
+    padding: 0 7px !important;
+    box-sizing: border-box !important;
+    line-height: 22px !important;
     overflow: hidden;
 }
 
+/* Corner cell gets the Excel "select all" wedge. */
+.kn-sheet .jss_worksheet > thead > tr > td.jss_selectall {
+    position: relative;
+}
+
+.kn-sheet .jss_worksheet > thead > tr > td.jss_selectall::before {
+    content: '';
+    position: absolute;
+    right: 1px;
+    bottom: 1px;
+    border-style: solid;
+    border-width: 0 0 8px 8px;
+    border-color: transparent transparent var(--kn-sheet-strong-line) transparent;
+}
+
 /* Corner + scroll affordances */
+/*
+ * Fill handle (bottom-right of the selection). The library ships it as a 1×1
+ * black dot; size it up into the conventional solid square.
+ */
 .kn-sheet .jss_corner {
-    background: var(--kn-sheet-head-bg);
-    border-right: 1px solid var(--kn-sheet-border);
-    border-bottom: 1px solid var(--kn-sheet-border);
+    width: 7px;
+    height: 7px;
+    box-sizing: border-box;
+    background: var(--kn-sheet-cell-fg);
+    border: 1px solid var(--kn-sheet-cell-bg);
 }
 
 .kn-sheet .jss_content::-webkit-scrollbar {
@@ -238,108 +550,167 @@
     background: transparent;
 }
 
+/* ── Formula bar ─────────────────────────────────────────────────────────── */
+
+.kn-sheet__formula {
+    display: flex;
+    align-items: stretch;
+    flex: 0 0 auto;
+    height: 30px;
+    box-sizing: border-box;
+    border-bottom: 1px solid hsl(var(--border, 40 6% 92%));
+    background: hsl(var(--background, 0 0% 100%));
+    font-size: 12px;
+}
+
+.kn-sheet__namebox {
+    width: 92px;
+    flex: 0 0 auto;
+    padding: 0 8px;
+    box-sizing: border-box;
+    border: 0;
+    border-right: 1px solid hsl(var(--border, 40 6% 92%));
+    background: transparent;
+    color: hsl(var(--foreground, 40 8% 20%));
+    font-size: 12px;
+    text-align: center;
+    outline: none;
+}
+
+.kn-sheet__namebox:focus {
+    box-shadow: inset 0 0 0 2px hsl(var(--ring, 211 76% 51%) / 0.45);
+}
+
+.kn-sheet__fx {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    color: hsl(var(--muted-foreground, 40 3% 47%));
+    font-size: 12px;
+    font-style: italic;
+    font-weight: 600;
+    border-right: 1px solid hsl(var(--border, 40 6% 92%));
+    user-select: none;
+}
+
+.kn-sheet__formula-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0 8px;
+    border: 0;
+    background: transparent;
+    color: hsl(var(--foreground, 40 8% 20%));
+    font-size: 12px;
+    font-family: inherit;
+    outline: none;
+}
+
+.kn-sheet__formula-input:focus {
+    box-shadow: inset 0 0 0 2px hsl(var(--ring, 211 76% 51%) / 0.35);
+}
+
 /* ── Toolbar ─────────────────────────────────────────────────────────────── */
 
+/*
+ * Wrap instead of scrolling: the toolbar used to be one fixed row with a hidden
+ * horizontal scrollbar, so the controls on the right were clipped and could not
+ * be reached with a mouse wheel. Wrapping keeps every control visible.
+ */
 .kn-sheet__toolbar {
     font-family: inherit;
     display: flex;
     align-items: center;
-    flex-wrap: nowrap;
-    gap: 1px;
-    height: 34px;
-    padding: 0 6px;
+    flex-wrap: wrap;
+    gap: 2px;
+    min-height: 34px;
+    padding: 3px 6px;
     box-sizing: border-box;
-    overflow-x: auto;
+    overflow: visible;
     border-bottom: 1px solid hsl(var(--border, 40 6% 92%));
     background: hsl(var(--muted, 40 6% 96%) / 0.5);
-    scrollbar-width: none;
 }
 
-.kn-sheet__toolbar::-webkit-scrollbar {
+/* ── Context menu (jsuites) ──────────────────────────────────────────────── *
+ * The jsuites context menu is styled by jsuites.css, which this plugin does
+ * not import (the grid carries its own stylesheet). Without that file the menu
+ * has no `position: fixed` / `display: none`, so it leaks into the block as a
+ * plain-text list. Replicate the box here, themed with the app's tokens. */
+.jcontextmenu {
+    position: fixed !important;
+    z-index: 10000;
     display: none;
-}
-
-.kn-sheet__btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: 0 0 auto;
-    min-width: 26px;
-    height: 26px;
-    padding: 0 5px;
-    border: 0;
-    border-radius: calc(var(--radius, 0.375rem) - 2px);
-    background: transparent;
-    color: hsl(var(--muted-foreground, 40 3% 47%));
+    min-width: 180px;
+    padding: 4px 0;
+    background: hsl(var(--popover, 0 0% 100%));
+    color: hsl(var(--popover-foreground, 40 8% 20%));
+    border: 1px solid hsl(var(--border, 40 6% 92%));
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
     font-size: 12px;
-    line-height: 1;
-    cursor: pointer;
-    transition: background-color 120ms ease, color 120ms ease;
+    user-select: none;
 }
 
-.kn-sheet__btn:hover:not(:disabled) {
-    background: hsl(var(--accent, 40 7% 94%));
-    color: hsl(var(--accent-foreground, 40 8% 20%));
+.jcontextmenu.jcontextmenu-focus {
+    display: inline-block;
 }
 
-.kn-sheet__btn[data-active='true'] {
-    background: hsl(var(--secondary, 40 6% 95%));
-    color: hsl(var(--foreground, 40 8% 20%));
-    box-shadow: inset 0 0 0 1px hsl(var(--border, 40 6% 92%));
-}
-
-.kn-sheet__btn:disabled {
-    opacity: 0.35;
+.jcontextmenu > div {
+    display: flex;
+    align-items: center;
+    min-width: 180px;
+    padding: 6px 12px;
     cursor: default;
 }
 
-.kn-sheet__swatch {
-    position: relative;
-    overflow: hidden;
+/* The mobile header (title + close) is hidden on desktop. */
+.jcontextmenu > div.header {
+    display: none;
 }
 
-.kn-sheet__swatch > span {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 12px;
-    font-weight: 600;
-    line-height: 1;
-}
-
-.kn-sheet__swatch input[type='color'] {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    padding: 0;
-    border: 0;
-    opacity: 0;
+.jcontextmenu > div a {
+    flex: 1;
+    color: inherit;
+    text-decoration: none;
     cursor: pointer;
 }
 
-.kn-sheet__sep {
-    flex: 0 0 auto;
-    width: 1px;
-    height: 16px;
-    margin: 0 4px;
-    background: hsl(var(--border, 40 6% 92%));
+.jcontextmenu > div span {
+    margin-left: auto;
+    font-size: 0.85em;
+    opacity: 0.6;
 }
 
-.kn-sheet__select {
-    flex: 0 0 auto;
-    height: 26px;
-    max-width: 92px;
-    padding: 0 4px;
-    border: 1px solid transparent;
-    border-radius: calc(var(--radius, 0.375rem) - 2px);
-    background: transparent;
-    color: hsl(var(--muted-foreground, 40 3% 47%));
-    font-size: 12px;
-    cursor: pointer;
-}
-
-.kn-sheet__select:hover {
+.jcontextmenu > div:hover {
     background: hsl(var(--accent, 40 7% 94%));
-    color: hsl(var(--accent-foreground, 40 8% 20%));
+}
+
+.jcontextmenu .jcontextmenu-disabled a,
+.jcontextmenu .jcontextmenu-disabled::before {
+    color: hsl(var(--muted-foreground, 40 3% 47%));
+    opacity: 0.5;
+}
+
+.jcontextmenu hr {
+    margin: 4px 0;
+    border: 0;
+    border-top: 1px solid hsl(var(--border, 40 6% 92%));
+}
+
+.jcontextmenu .jcontextmenu {
+    top: 4px;
+    left: 99%;
+}
+
+/* ── Read-only ──────────────────────────────────────────────────────────── *
+ * The widget option is what actually blocks editing (see useJspreadsheet); the
+ * class only keeps the cursor from promising an edit that will not happen. */
+
+.kn-sheet--readonly .jss_worksheet > tbody > tr > td {
+    cursor: default;
+}
+
+.kn-sheet--readonly .jss_corner {
+    display: none;
 }

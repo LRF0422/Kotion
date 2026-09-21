@@ -12,6 +12,8 @@ import { Editor } from '@kn/editor'
 import { z } from '@kn/ui'
 import { DEFAULT_SPREADSHEET_HEIGHT } from './constants'
 import { getLiveHandle } from './workbook-registry'
+import { upsertPivotSheet, type PivotLabels } from './pivot'
+import { translate } from '../i18n'
 import {
     createEmptyWorkbookData,
     createWorkbookFromRows,
@@ -20,6 +22,10 @@ import {
     parseCellRef,
     parseRangeSpec,
     type CellValue,
+    type PivotAggregate,
+    type PivotConfig,
+    type PivotGroupField,
+    type PivotSource,
     type SheetData,
     type WorkbookData,
 } from './workbook-data'
@@ -311,17 +317,24 @@ export const updateSpreadsheetDataTool = {
 
             const range = `${startCell}:${formatCellRef(start.row + matrix.length - 1, start.column + width - 1)}`
 
-            // ── Live grid first: keeps the instance, undo history and autosave
-            //    pipeline intact.
+            // ── Resolve the target sheet. A name that does not exist is an error;
+            //    silently defaulting to the first sheet would write to the wrong one.
             const live = getLiveHandle(editor, node.pos)
             const workbook = resolveWorkbook(editor, node)
-            const sheetIndex = Math.max(
-                workbook ? workbook.sheets.findIndex((sheet) => sheet.name === params.sheetName) : 0,
-                0,
-            )
+            const sheets = workbook?.sheets ?? []
+            let sheetIndex = 0
+            if (params.sheetName) {
+                const found = sheets.findIndex((sheet) => sheet.name === params.sheetName)
+                if (found < 0) return { success: false, error: `未找到工作表 "${params.sheetName}"` }
+                sheetIndex = found
+            }
+
+            // ── Live grid first: keeps the instance, undo history and autosave
+            //    pipeline intact. 0 written means the grid refused the coordinates,
+            //    so fall through to the persisted-payload path.
             if (live && live.isEditable()) {
                 const written = live.setRangeValues(sheetIndex, start.row, start.column, matrix)
-                if (written !== null) {
+                if (written !== null && written > 0) {
                     return {
                         success: true,
                         cellsWritten: written,
@@ -471,6 +484,166 @@ export const exportSpreadsheetTool = {
     },
 }
 
+const PIVOT_AGGREGATES = ['sum', 'count', 'average', 'max', 'min'] as const
+const PIVOT_DATE_GROUPS = ['year', 'quarter', 'month', 'day'] as const
+
+/** Accept plain field names or { field, dateGroup } objects. */
+function toGroupFields(value: unknown): PivotGroupField[] {
+    if (!Array.isArray(value)) return []
+    const out: PivotGroupField[] = []
+    for (const entry of value) {
+        if (typeof entry === 'string') {
+            const field = entry.trim()
+            if (field) out.push({ field })
+            continue
+        }
+        const record = entry as { field?: unknown; dateGroup?: unknown }
+        const field = typeof record?.field === 'string' ? record.field.trim() : ''
+        if (!field) continue
+        const dateGroup = (PIVOT_DATE_GROUPS as readonly string[]).includes(String(record.dateGroup))
+            ? (record.dateGroup as PivotGroupField['dateGroup'])
+            : undefined
+        out.push(dateGroup ? { field, dateGroup } : { field })
+    }
+    return out
+}
+
+/**
+ * Tool: Create (or refresh) a pivot table
+ */
+export const createPivotTableTool = {
+    name: 'createPivotTable',
+    description: '创建或刷新透视表：按行/列字段分组，对值字段做 求和/计数/平均/最大/最小，生成到新工作表并随源数据自动刷新。',
+    inputSchema: z.object({
+        index: z.number().describe('电子表格序号（从 0 开始）'),
+        range: z.string().describe('源数据区域，如 "A1:D100"（未提供 sources 时使用）'),
+        sourceSheet: z.string().optional().describe('源工作表名称，默认第一个工作表'),
+        sources: z
+            .array(z.object({
+                sheet: z.string().optional().describe('工作表名称，默认第一个'),
+                range: z.string().describe('区域，如 "A1:D100"'),
+            }))
+            .optional()
+            .describe('多源区域（跨表汇总），提供后忽略 range/sourceSheet'),
+        hasHeader: z.boolean().optional().describe('区域首行是否为字段名，默认 true'),
+        rows: z
+            .array(z.union([
+                z.string(),
+                z.object({ field: z.string(), dateGroup: z.enum(PIVOT_DATE_GROUPS).optional() }),
+            ]))
+            .optional()
+            .describe('行字段；日期字段可带 dateGroup: year/quarter/month/day'),
+        columns: z
+            .array(z.union([
+                z.string(),
+                z.object({ field: z.string(), dateGroup: z.enum(PIVOT_DATE_GROUPS).optional() }),
+            ]))
+            .optional()
+            .describe('列字段；日期字段可带 dateGroup'),
+        values: z
+            .array(z.object({
+                field: z.string().describe('值字段名'),
+                aggregate: z.enum(PIVOT_AGGREGATES).optional().describe('聚合方式，默认 sum'),
+            }))
+            .describe('值字段及聚合方式'),
+        outputName: z.string().optional().describe('输出工作表名，默认「透视表」'),
+        showRowTotals: z.boolean().optional(),
+        showColumnTotals: z.boolean().optional(),
+    }),
+    execute: (editor: Editor) => async (params: {
+        index: number
+        range: string
+        sourceSheet?: string
+        sources?: { sheet?: string; range: string }[]
+        hasHeader?: boolean
+        rows?: (string | { field: string; dateGroup?: string })[]
+        columns?: (string | { field: string; dateGroup?: string })[]
+        values: { field: string; aggregate?: PivotAggregate }[]
+        outputName?: string
+        showRowTotals?: boolean
+        showColumnTotals?: boolean
+    }) => {
+        try {
+            const node = findSpreadsheetByIndex(editor, params.index)
+            if (!node) return { success: false, error: `未找到序号 ${params.index} 的电子表格` }
+            const workbook = resolveWorkbook(editor, node)
+            if (!workbook) return { success: false, error: '该电子表格暂无数据' }
+
+            const resolveSheet = (name?: string) => name
+                ? workbook.sheets.findIndex((sheet) => sheet.name === name)
+                : 0
+
+            const sources: PivotSource[] = []
+            if (Array.isArray(params.sources) && params.sources.length > 0) {
+                for (const spec of params.sources) {
+                    const sheetIndex = resolveSheet(spec?.sheet)
+                    if (sheetIndex < 0) return { success: false, error: `未找到工作表 "${spec?.sheet}"` }
+                    const range = parseRangeSpec(spec?.range ?? '')
+                    if (!range) return { success: false, error: `无效的区域格式 "${spec?.range ?? ''}"` }
+                    sources.push({ sheet: sheetIndex, range })
+                }
+            } else {
+                const sheetIndex = resolveSheet(params.sourceSheet)
+                if (sheetIndex < 0) return { success: false, error: `未找到工作表 "${params.sourceSheet}"` }
+                const range = parseRangeSpec(params.range)
+                if (!range) return { success: false, error: `无效的区域格式 "${params.range}"` }
+                sources.push({ sheet: sheetIndex, range })
+            }
+            if (sources.some((source) => workbook.sheets[source.sheet]?.pivot)) {
+                return { success: false, error: '源工作表不能是生成的透视表' }
+            }
+
+            const values = (params.values ?? [])
+                .filter((entry) => entry && typeof entry.field === 'string' && entry.field.trim() !== '')
+                .map((entry) => ({
+                    field: entry.field.trim(),
+                    aggregate: (PIVOT_AGGREGATES as readonly string[]).includes(entry.aggregate ?? '')
+                        ? (entry.aggregate as PivotAggregate)
+                        : ('sum' as PivotAggregate),
+                }))
+            if (values.length === 0) return { success: false, error: '至少需要一个值字段（values）' }
+
+            const config: PivotConfig = {
+                sources,
+                hasHeader: params.hasHeader !== false,
+                rows: toGroupFields(params.rows),
+                columns: toGroupFields(params.columns),
+                values,
+                showRowTotals: params.showRowTotals !== false,
+                showColumnTotals: params.showColumnTotals !== false,
+            }
+            const labels: PivotLabels = {
+                total: translate('spreadsheet.pivot.total'),
+                source: translate('spreadsheet.pivot.source'),
+                aggregate: (kind) => translate('spreadsheet.pivot.aggregate.' + kind),
+            }
+            const name = params.outputName?.trim() || translate('spreadsheet.pivot.outputNamePlaceholder')
+            const next = upsertPivotSheet(workbook, config, name, labels)
+
+            const docNode = editor.state.doc.nodeAt(node.pos)
+            if (!docNode) return { success: false, error: '无法定位电子表格节点' }
+            editor.view.dispatch(
+                editor.view.state.tr.setNodeMarkup(node.pos, undefined, {
+                    ...docNode.attrs,
+                    workbookData: next,
+                }),
+            )
+
+            return {
+                success: true,
+                sheetName: name,
+                sources: sources.length,
+                rows: config.rows.map((entry) => entry.field),
+                columns: config.columns.map((entry) => entry.field),
+                values: config.values,
+                message: `已生成透视表「${name}」到新工作表（随源数据自动刷新）`,
+            }
+        } catch (error) {
+            return { success: false, error: errorMessage(error, '创建透视表失败') }
+        }
+    },
+}
+
 /**
  * All spreadsheet plugin tools
  */
@@ -482,4 +655,5 @@ export const spreadsheetTools = [
     deleteSpreadsheetTool,
     resizeSpreadsheetTool,
     exportSpreadsheetTool,
+    createPivotTableTool,
 ]

@@ -19,6 +19,7 @@ export const spreadsheetExpertSkill = {
         'deleteSpreadsheet',
         'resizeSpreadsheet',
         'exportSpreadsheet',
+        'createPivotTable',
     ],
     systemPromptFragment: `You are a Spreadsheet Expert assistant. You help users create and manage spreadsheets within documents.
 
@@ -28,6 +29,7 @@ export const spreadsheetExpertSkill = {
 - Write / update cell data (batch updates via 2D arrays)
 - Delete or resize spreadsheet blocks
 - Export a spreadsheet to a downloadable .xlsx file (exportSpreadsheet)
+- Build a pivot table (createPivotTable): union one or more source ranges (cross-sheet), group by row/column fields (dates can bucket by year/quarter/month/day), and aggregate values (sum / count / average / max / min) into a new worksheet that refreshes with the source data. Users can right-click a pivot value cell to drill into the matching source rows.
 
 ## Best Practices
 1. When users describe tabular data, convert it into a 2D array and use insertSpreadsheet with the data parameter.
@@ -37,6 +39,7 @@ export const spreadsheetExpertSkill = {
 5. Use "A1" notation for cell references (e.g. "A1:C10").
 6. Keep data compact — avoid inserting thousands of empty rows.
 7. When building comparison tables, budget trackers, or schedules, organize data with headers in the first row.
+8. For analysis (totals, cross-tabs, group summaries), prefer createPivotTable over writing computed values by hand: it creates a generated sheet that stays in sync when the source data changes. Field names must match the source header row exactly.
 
 ## Data Format
 - Insert/Update data is a 2D array: [[row1col1, row1col2], [row2col1, row2col2]]
@@ -46,6 +49,7 @@ export const spreadsheetExpertSkill = {
 ## Examples
 - "Create a table with student grades" → insertSpreadsheet with headers + data rows
 - "What's in the spreadsheet?" → getSpreadsheetInfo then readSpreadsheetData
-- "Add a new row" → readSpreadsheetData to find last row, then updateSpreadsheetData at next row`,
+- "Add a new row" → readSpreadsheetData to find last row, then updateSpreadsheetData at next row
+- "按大区和季度汇总销售额" → createPivotTable with range "A1:D100", rows: ["大区"], columns: ["季度"], values: [{ field: "销售额", aggregate: "sum" }]`,
     tags: ['spreadsheet', 'excel', 'table', 'data', 'office'],
 }

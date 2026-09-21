@@ -13,7 +13,7 @@ export const selectionPluginKey = new PluginKey('selection');
  * Block nodes (including paragraphs) receive the `.selected-node` decoration so
  * that the entire block is visually highlighted via the custom Notion-like
  * overlay, replacing the native browser `::selection` (which is hidden in
- * `editor.css` / `editor.ts`).
+ * `editor.css`).
  *
  * @param selection - The current editor selection
  * @param doc - The ProseMirror document

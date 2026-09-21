@@ -70,7 +70,7 @@ export const SpreadsheetNode = Node.create({
     },
 
     addNodeView() {
-        return ReactNodeViewRenderer(withNodeViewErrorBoundary(SpreadsheetNodeView, 'Excel'), {
+        return ReactNodeViewRenderer(withNodeViewErrorBoundary(SpreadsheetNodeView, 'Spreadsheet'), {
             stopEvent: () => true,
         })
     },

@@ -7,14 +7,12 @@ import { TiptapCollabProvider } from "@hocuspocus/provider";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { useEditorExtension } from "./use-extension";
 import { resolveBlockMenuItems } from "./kit";
-import { ThemeProvider } from "styled-components";
-import light, { dark } from "../styles/theme";
-import { StyledEditor } from "../styles/editor";
+import { StyledEditor } from "../styles/StyledEditor";
 import { ExtensionWrapper, logger, resolveService } from "@kn/common";
 import type { PageDocumentOperations } from "@kn/common";
 import { useSafeState } from "ahooks";
 import { NotionToC } from "./NotionToC";
-import { cn, useIsMobile, useTheme } from "@kn/ui";
+import { cn, useIsMobile } from "@kn/ui";
 import { EditorMenu } from "./EditorMenu";
 import { MobileEditorToolbar } from "./MobileEditorToolbar";
 import { EditorStatusBar } from "./EditorStatusBar";
@@ -382,15 +380,11 @@ const CollaborationEditorInner = forwardRef<
   }, [editor, content, provider, extensions]);
 
 
-  // Get current theme from context
-  const { theme: currentTheme } = useTheme();
-  const selectedTheme = currentTheme === 'dark' ? dark : light;
   const isMobile = useIsMobile();
 
   return (editor &&
     <PageContext.Provider value={pageInfo ?? {}}>
-      <ThemeProvider theme={selectedTheme}>
-        <div className={cn("flex flex-col relative", width, props.className)}>
+      <div className={cn("flex flex-col relative", width, props.className)}>
           {toolbar && !isMobile && (
             <EditorMenu editor={editor} extensionWrappers={extensionWrappers as ExtensionWrapper[]} />
           )}
@@ -456,8 +450,7 @@ const CollaborationEditorInner = forwardRef<
           {mobileToolbar && isMobile && contentReady && (
             <MobileEditorToolbar editor={editor} extensionWrappers={extensionWrappers as ExtensionWrapper[]} />
           )}
-        </div>
-      </ThemeProvider >
+      </div>
     </PageContext.Provider>
   );
 });

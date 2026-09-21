@@ -5,10 +5,14 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import { createPortal } from "react-dom"
 import { useJspreadsheet } from "./useJspreadsheet"
 import { SheetToolbar } from "./SheetToolbar"
+import { SheetFormulaBar } from "./SheetFormulaBar"
+import { PivotDialog } from "./PivotDialog"
+import { PivotDetailsDialog, type PivotDrillTarget } from "./PivotDetailsDialog"
 import { pickExcelFile } from "./excel-file-picker"
 import { registerSpreadsheetLive, unregisterSpreadsheetLive, type SpreadsheetLiveHandle } from "./workbook-registry"
 import { DEFAULT_SPREADSHEET_HEIGHT } from "./constants"
 import { ensureValidWorkbookData, workbookHasContent, type WorkbookData } from "./workbook-data"
+import { translate } from "../i18n"
 import "./sheet.css"
 
 /**
@@ -20,7 +24,7 @@ import "./sheet.css"
  * element rather than rebuilding it.
  */
 export const SpreadsheetView: React.FC<NodeViewProps> = React.memo((props) => {
-    const { node, updateAttributes, editor } = props
+    const { node, editor, getPos } = props
     const height = typeof node.attrs.height === 'number' ? node.attrs.height : DEFAULT_SPREADSHEET_HEIGHT
     // Resolves "system" to the active mode, so a dark UI does not get a light grid.
     const darkMode = useResolvedTheme() === 'dark'
@@ -30,6 +34,8 @@ export const SpreadsheetView: React.FC<NodeViewProps> = React.memo((props) => {
     const containerRef = useRef<HTMLDivElement | null>(null)
 
     const [showFullscreen, setShowFullscreen] = useState(false)
+    const [pivotOpen, setPivotOpen] = useState(false)
+    const [pivotTarget, setPivotTarget] = useState<PivotDrillTarget | null>(null)
     const [importError, setImportError] = useState<string | null>(null)
     const [containerReady, setContainerReady] = useState(false)
     // Bumped on selection change so the toolbar re-reads its own state.
@@ -57,15 +63,28 @@ export const SpreadsheetView: React.FC<NodeViewProps> = React.memo((props) => {
                 console.warn('[office/spreadsheet] refused to persist an empty snapshot over existing data')
                 return
             }
+            lastSavedRef.current = data
             try {
-                lastSavedRef.current = data
-                updateAttributes({ workbookData: data })
+                const pos = getPos()
+                if (typeof pos !== 'number') return
+                const docNode = editor.state.doc.nodeAt(pos)
+                if (!docNode || docNode.type.name !== 'spreadsheet') return
+                // Dispatch by hand so the auto-save is kept out of the document
+                // undo history: otherwise Ctrl+Z outside the grid would step back
+                // through dozens of autosave snapshots. Cell edits remain undoable
+                // through the grid's own history.
+                const transaction = editor.state.tr.setNodeMarkup(pos, undefined, {
+                    ...docNode.attrs,
+                    workbookData: data,
+                })
+                transaction.setMeta('addToHistory', false)
+                editor.view.dispatch(transaction)
             } catch {
                 // The node view was torn down between edit and save; dropping the
                 // snapshot is correct — the editor no longer owns this node.
             }
         },
-        [editor, updateAttributes],
+        [editor, getPos],
     )
 
     const handleSelectionChange = useCallback(() => {
@@ -110,7 +129,7 @@ export const SpreadsheetView: React.FC<NodeViewProps> = React.memo((props) => {
         try {
             const snapshot = getSnapshotRef.current?.()
             if (!snapshot) {
-                setImportError('当前表格没有可导出的数据')
+                setImportError(translate('spreadsheet.exportEmpty'))
                 return
             }
             const { downloadWorkbookAsExcel } = await import("./workbook-to-excel")
@@ -130,6 +149,7 @@ export const SpreadsheetView: React.FC<NodeViewProps> = React.memo((props) => {
         onImportExcel: handleImportExcel,
         onExportExcel: handleExportExcel,
         onSelectionChange: handleSelectionChange,
+        onPivotDrillDown: setPivotTarget,
     })
 
     const { getSnapshot, replaceAll, applyExternalData, writeRange, isReady } = grid
@@ -147,7 +167,7 @@ export const SpreadsheetView: React.FC<NodeViewProps> = React.memo((props) => {
     }, [containerReady, showFullscreen])
 
     // Reflect payload that changed outside this view (AI tool, undo, sync).
-    // Echoes of our own save keep the same workbook id and are ignored.
+    // Exact echoes of our own save are ignored inside the hook.
     useEffect(() => {
         const data = node.attrs.workbookData
         if (data) applyExternalData(ensureValidWorkbookData(data))
@@ -175,13 +195,23 @@ export const SpreadsheetView: React.FC<NodeViewProps> = React.memo((props) => {
             onImport={handleImportExcel}
             onExport={handleExportExcel}
             onFullscreen={() => setShowFullscreen((prev) => (fullscreen ? false : !prev))}
+            onCreatePivot={() => setPivotOpen(true)}
             isFullscreen={fullscreen}
+        />
+    )
+
+    const renderFormulaBar = () => (
+        <SheetFormulaBar
+            grid={grid}
+            refreshKey={selectionVersion}
+            disabled={!isReady}
+            readOnly={!editor.isEditable}
         />
     )
 
     return (
         <>
-            <NodeViewWrapper className="kn-sheet relative my-2 rounded-md border shadow-sm">
+            <NodeViewWrapper className="kn-sheet not-prose relative my-2 rounded-md border shadow-sm">
                 {importError && (
                     <div className="flex items-center gap-2 border-b bg-destructive/10 px-2 py-1 text-xs text-destructive">
                         <span className="truncate" title={importError}>{importError}</span>
@@ -189,13 +219,14 @@ export const SpreadsheetView: React.FC<NodeViewProps> = React.memo((props) => {
                             type="button"
                             className="ml-auto rounded p-0.5 hover:bg-destructive/20"
                             onClick={() => setImportError(null)}
-                            aria-label="关闭"
+                            aria-label={translate('spreadsheet.close')}
                         >
                             <X className="h-3.5 w-3.5" />
                         </button>
                     </div>
                 )}
                 {renderToolbar(false)}
+                {renderFormulaBar()}
                 <div
                     ref={nodeHostRef}
                     className="kn-sheet__canvas kn-sheet__canvas--inline"
@@ -205,11 +236,18 @@ export const SpreadsheetView: React.FC<NodeViewProps> = React.memo((props) => {
                     <div ref={attachContainer} className="h-full w-full" data-spreadsheet-container />
                 </div>
             </NodeViewWrapper>
+            <PivotDialog open={pivotOpen} onOpenChange={setPivotOpen} grid={grid} />
+            <PivotDetailsDialog
+                target={pivotTarget}
+                onOpenChange={(open) => { if (!open) setPivotTarget(null) }}
+                grid={grid}
+            />
             <FullscreenSheet
                 open={showFullscreen}
                 hostRef={fullscreenHostRef}
                 onClose={closeFullscreen}
                 toolbar={renderToolbar(true)}
+                formulaBar={renderFormulaBar()}
             />
         </>
     )
@@ -228,24 +266,27 @@ const FullscreenSheet: React.FC<{
     hostRef: { current: HTMLDivElement | null }
     onClose: () => void
     toolbar: React.ReactNode
-}> = React.memo(({ open, hostRef, onClose, toolbar }) => createPortal(
+    formulaBar: React.ReactNode
+}> = React.memo(({ open, hostRef, onClose, toolbar, formulaBar }) => createPortal(
     <div
         className="kn-sheet fixed inset-0 z-[9998] flex-col bg-background"
         style={{ display: open ? 'flex' : 'none' }}
     >
         <div className="flex items-center gap-1 border-b px-2 py-1">
-            <span className="text-xs font-medium text-muted-foreground">电子表格</span>
+            <span className="text-xs font-medium text-muted-foreground">{translate('spreadsheet.title')}</span>
             <div className="flex-1" />
             <button
                 type="button"
                 className="inline-flex items-center justify-center rounded p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                 onClick={onClose}
-                title="退出全屏"
+                title={translate('spreadsheet.exitFullscreen')}
+                aria-label={translate('spreadsheet.exitFullscreen')}
             >
                 <X className="h-4 w-4" />
             </button>
         </div>
         {toolbar}
+        {formulaBar}
         <div
             ref={(element) => { hostRef.current = element }}
             className="kn-sheet__canvas kn-sheet__canvas--fullscreen min-h-0 flex-1"

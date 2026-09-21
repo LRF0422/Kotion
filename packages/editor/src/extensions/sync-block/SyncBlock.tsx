@@ -20,7 +20,7 @@ import { EditorContent, NodeViewWrapper, useEditor } from "@tiptap/react";
 import { useHover, useSafeState } from "ahooks";
 import React, { useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import { Doc } from 'yjs';
-import { StyledEditor } from "../../styles/editor";
+import { StyledEditor } from "../../styles/StyledEditor";
 import { cn, IconButton, Skeleton, Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@kn/ui";
 import { RefreshCcw, Trash2, Link2, CheckCircle, AlertCircle, Loader2 } from "@kn/icon";
 
