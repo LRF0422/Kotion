@@ -238,6 +238,19 @@ function sameMatrix(a: CellValue[][], b: CellValue[][]): boolean {
     return JSON.stringify(trimMatrix(a)) === JSON.stringify(trimMatrix(b))
 }
 
+/**
+ * Sheets that feed a pivot. Their values must be read *computed* (a formula
+ * cell contributes its result, not "=SUM(...)" text) — the persisted payload
+ * still keeps the formula so the document round-trips.
+ */
+function pivotSourceIndices(workbook: WorkbookData): Set<number> {
+    const indices = new Set<number>()
+    workbook.sheets.forEach((sheet) => {
+        sheet.pivot?.sources.forEach((source) => indices.add(source.sheet))
+    })
+    return indices
+}
+
 /** Re-apply a stored style map to a sheet without touching its undo history. */
 function applySheetStyles(sheet: JssWorksheet, styles?: CellStyles): void {
     if (!styles) return
@@ -505,7 +518,16 @@ export function useJspreadsheet({
             const rawRows = sheets.map((sheet) =>
                 clampMatrix((sheet.getData?.(false, false) ?? []) as CellValue[][]),
             )
-            const sourceSheets = base.sheets.map((sheet, index) => ({ ...sheet, rows: rawRows[index] ?? [] }))
+            // Pivot aggregation needs computed values so a source formula contributes
+            // its result; source sheets are still persisted raw, so the formula text
+            // round-trips in the document.
+            const sourceIndices = pivotSourceIndices(base)
+            const sourceSheets = base.sheets.map((sheet, index) => ({
+                ...sheet,
+                rows: sourceIndices.has(index)
+                    ? clampMatrix((sheets[index]?.getData?.(false, true) ?? []) as CellValue[][])
+                    : rawRows[index] ?? [],
+            }))
             const labels: PivotLabels = {
                 total: translate('spreadsheet.pivot.total'),
                 source: translate('spreadsheet.pivot.source'),
@@ -620,15 +642,16 @@ export function useJspreadsheet({
     // the change pipeline (a generated refresh must not schedule its own save).
     const applyingPivotRef = useRef(false)
 
-    const readLiveRows = useCallback((): CellValue[][][] =>
-        sheetsRef.current.map((sheet) => clampMatrix((sheet.getData?.(false, false) ?? []) as CellValue[][])), [])
+    const readLiveRows = useCallback((computedSheets: Set<number> = new Set()): CellValue[][][] =>
+        sheetsRef.current.map((sheet, index) =>
+            clampMatrix((sheet.getData?.(false, computedSheets.has(index)) ?? []) as CellValue[][])), [])
 
     const refreshPivots = useCallback(() => {
         if (applyingPivotRef.current) return
         const sheets = sheetsRef.current
         const base = dataRef.current
         if (!sheets.length || !base) return
-        const rawRows = readLiveRows()
+        const rawRows = readLiveRows(pivotSourceIndices(base))
         const sourceSheets = base.sheets.map((sheet, index) => ({ ...sheet, rows: rawRows[index] ?? [] }))
         const labels: PivotLabels = {
             total: translate('spreadsheet.pivot.total'),
