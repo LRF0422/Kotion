@@ -21,10 +21,18 @@ export interface SpreadsheetLiveHandle {
     getSnapshot: () => WorkbookData | null
     /**
      * Write a rectangular block of values into a live sheet.
+     * @param options.show - Follow the written range by switching to its page
+     *        (default true). A bulk write passes false to stay where the user is.
      * @returns the number of cells written, or null when it could not be applied
      *          (so the caller can fall back to updating the node attributes).
      */
-    setRangeValues: (sheetIndex: number, startRow: number, startColumn: number, data: CellValue[][]) => number | null
+    setRangeValues: (
+        sheetIndex: number,
+        startRow: number,
+        startColumn: number,
+        data: CellValue[][],
+        options?: { show?: boolean },
+    ) => number | null
     /** Whether the live grid accepts edits (mirrors the node view read-only flag). */
     isEditable: () => boolean
 }

@@ -354,7 +354,8 @@ export const updateSpreadsheetDataTool = {
             //    pipeline intact. 0 written means the grid refused the coordinates,
             //    so fall through to the persisted-payload path.
             if (live && live.isEditable()) {
-                const written = live.setRangeValues(sheetIndex, start.row, start.column, matrix)
+                // `show: false`: an AI write must not move the page the user is on.
+                const written = live.setRangeValues(sheetIndex, start.row, start.column, matrix, { show: false })
                 if (written !== null && written > 0) {
                     return {
                         success: true,

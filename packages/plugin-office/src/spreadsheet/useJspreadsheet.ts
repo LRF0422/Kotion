@@ -20,6 +20,31 @@ import {
     type WorkbookData,
 } from './workbook-data'
 import { computePivot, type PivotLabels } from './pivot'
+import {
+    clampMatrix,
+    formatNumeric,
+    numericValue,
+    payloadHasContent,
+    pivotSourceIndices,
+    sameMatrix,
+    sheetNumberMeta,
+    styleToText,
+    textToStyle,
+    MAX_COLUMNS,
+    MAX_ROWS,
+    type NumberMeta,
+} from './grid-utils'
+import { captureNumberFormats } from './number-format'
+import type { GridApi, GridSelection } from './grid-api'
+
+// The engine-agnostic contract and helpers live in their own modules so the
+// engine can be replaced without touching consumers. Re-exported here because
+// the toolbar, formula bar and pivot dialogs historically imported `GridApi`
+// from this hook module.
+export type { GridApi, GridSelection, NumberMeta }
+// Number-format semantics moved to their own module; re-exported so existing
+// importers keep working.
+export { captureNumberFormats }
 
 /**
  * Owns one jspreadsheet grid for a spreadsheet block.
@@ -27,17 +52,46 @@ import { computePivot, type PivotLabels } from './pivot'
  * jspreadsheet is a plain DOM library (no React tree of its own), so this hook is
  * deliberately simple: create on mount, destroy on unmount. Nothing is pooled
  * across mounts, because rebuilding here is cheap and leaves no state behind.
+ *
+ * This module is the *jspreadsheet adapter*: it implements the engine-agnostic
+ * {@link GridApi} and is the only file that talks to the widget. See
+ * docs/VTABLE_MIGRATION.md for the replacement path.
  */
-
-/** Row/column ceiling for a single grid, so a stray paste cannot hang the tab. */
-const MAX_ROWS = 10_000
-const MAX_COLUMNS = 256
 
 /** Compact spreadsheet density: rows must not stretch to fill the block. */
 const ROW_HEIGHT = 23
 const COLUMN_WIDTH = 96
 /** Styles of at most this many cells are persisted, bounding the payload size. */
 const MAX_STYLED_CELLS = 2_000
+
+/**
+ * Rows per page — a *worksheet* option (see buildOptions; putting it in the
+ * spreadsheet config is silently ignored).
+ *
+ * jspreadsheet builds one `<tr>` (and one `<td>` per column) for every row of the
+ * data, then attaches only the current page to the `<tbody>`. Measured on a
+ * 9,000-row × 12-column sheet: without this the tbody holds 9,000 rows and every
+ * scroll, selection and style recalculation pays for all of them; with it the
+ * tbody holds {@link ROWS_PER_PAGE}.
+ *
+ * Two limits worth knowing, both measured against the library's own code:
+ *
+ * 1. It does **not** reduce element *creation*. `updateResult` runs
+ *    `createRow` for `options.data.length` rows regardless and only skips the
+ *    append, so heap and mount time stay flat (~127 MB and ~155 ms at 9,000 × 12)
+ *    while the live DOM drops from ~117k cell elements to the page's worth.
+ *    Cutting that further means windowing the *data*, which this library cannot
+ *    do — see the note in `updateResult`, which rebuilds `records` wholesale.
+ * 2. Nothing else changes: `getData`, `getStyle`, `getHeight` and the record
+ *    matrix still cover every row, so reads, saves, ranges, formulas, undo and
+ *    off-page formatting keep working. Only *attachment* is paged.
+ */
+const ROWS_PER_PAGE = 200
+
+/** Page index that contains 0-based `row`. */
+function pageOfRow(row: number): number {
+    return Math.max(0, Math.floor(row / ROWS_PER_PAGE))
+}
 
 /**
  * Border formatting is the one case that has to travel through an inline custom
@@ -60,55 +114,6 @@ const STYLE_VAR_TO_PROP: Record<string, string> = {
     '--kn-cell-font-size': 'font-size',
     '--kn-cell-line-height': 'line-height',
     '--kn-cell-border': 'border',
-}
-
-/** Per-sheet number-format bookkeeping, kept live so repeated applies stay idempotent. */
-interface NumberMeta {
-    numberFormats: Record<string, NumberFormatKind>
-    rawValues: Record<string, CellValue>
-}
-
-export interface GridSelection {
-    startRow: number
-    startColumn: number
-    endRow: number
-    endColumn: number
-}
-
-export interface GridApi {
-    /** Full workbook snapshot, always current (values + styles + layout). */
-    getSnapshot(): WorkbookData | null
-    /** Current selection in 0-based coordinates, or null before the grid exists. */
-    getSelection(): GridSelection | null
-    /** 0-based index of the worksheet the user is looking at. */
-    getActiveSheetIndex(): number
-    /** Apply CSS declarations (e.g. `{ 'font-weight': 'bold' }`) to the selection. */
-    applyStyle(style: Record<string, string | null>): void
-    /** Merge / unmerge the current selection. */
-    toggleMerge(): void
-    /** Apply a number format to the selection (reversible; `general` resets it). */
-    applyNumberFormat(kind: NumberFormatKind): void
-    /** Move the selection (formula-bar name box, AI navigation). */
-    selectRange(startRow: number, startColumn: number, endRow: number, endColumn: number): void
-    /** Styles of the selection's anchor cell, for toolbar state. */
-    getSelectionStyle(): Record<string, string>
-    /** History. */
-    undo(): void
-    redo(): void
-    /** Read a rectangular block of values. */
-    readRange(sheetIndex: number, startRow: number, startColumn: number, endRow: number, endColumn: number): CellValue[][]
-    /** Write a block, growing the grid when needed. Returns cells written, or null when the sheet is gone. */
-    writeRange(sheetIndex: number, startRow: number, startColumn: number, matrix: CellValue[][]): number | null
-    /** Read a single cell. */
-    readCell(sheetIndex: number, row: number, column: number): CellValue
-    /** Persist the live grid into node attributes, right now. */
-    flush(): void
-    /** Replace everything (Excel import, external/AI data). */
-    replaceAll(next: WorkbookData): void
-    /** Apply payload that changed outside this view; ignores exact echoes. */
-    applyExternalData(incoming: WorkbookData): void
-    /** False until the grid exists. */
-    isReady: boolean
 }
 
 interface UseJspreadsheetOptions {
@@ -150,6 +155,10 @@ interface JssWorksheet {
     insertRow?(mixed?: number | CellValue[], rowNumber?: number, insertBefore?: number): void
     insertColumn?(mixed?: number | CellValue[], columnNumber?: number, insertBefore?: boolean): void
     openWorksheet?(index: number): void
+    /** Go to a page (0-based). Requires `pagination`. */
+    page?(pageNumber: number): void
+    /** Current page (0-based) — only meaningful with `pagination`. */
+    pageNumber?: number
     undo(): void
     redo(): void
     updateSelectionFromCoords?(x1: number, y1: number, x2: number, y2: number): void
@@ -193,62 +202,6 @@ async function loadJssFactory(): Promise<JssFactory> {
         })()
     }
     return factoryPromise
-}
-
-function clampMatrix(matrix: CellValue[][]): CellValue[][] {
-    return matrix.slice(0, MAX_ROWS).map((row) => row.slice(0, MAX_COLUMNS))
-}
-
-/** CSS declaration object → `"a: b; c: d"` text. */
-function styleToText(style: Record<string, string>): string {
-    return Object.entries(style)
-        .filter(([, value]) => value !== undefined && value !== null && value !== '')
-        .map(([key, value]) => `${key}: ${value}`)
-        .join('; ')
-}
-
-/** `"a: b; c: d"` text → CSS declaration object. */
-function textToStyle(text: string): Record<string, string> {
-    const out: Record<string, string> = {}
-    String(text).split(';').forEach((part) => {
-        const index = part.indexOf(':')
-        if (index <= 0) return
-        const key = part.slice(0, index).trim()
-        const value = part.slice(index + 1).trim()
-        if (key && value) out[key] = value
-    })
-    return out
-}
-
-/** Drop trailing empty rows/columns so two matrices compare structurally. */
-function trimMatrix(matrix: CellValue[][]): CellValue[][] {
-    const out = matrix.map((row) => {
-        const copy = (row ?? []).slice()
-        while (copy.length > 0 && (copy[copy.length - 1] === null || copy[copy.length - 1] === undefined || copy[copy.length - 1] === '')) {
-            copy.pop()
-        }
-        return copy
-    })
-    while (out.length > 0 && out[out.length - 1].length === 0) out.pop()
-    return out
-}
-
-/** True when two value matrices hold the same used cells. */
-function sameMatrix(a: CellValue[][], b: CellValue[][]): boolean {
-    return JSON.stringify(trimMatrix(a)) === JSON.stringify(trimMatrix(b))
-}
-
-/**
- * Sheets that feed a pivot. Their values must be read *computed* (a formula
- * cell contributes its result, not "=SUM(...)" text) — the persisted payload
- * still keeps the formula so the document round-trips.
- */
-function pivotSourceIndices(workbook: WorkbookData): Set<number> {
-    const indices = new Set<number>()
-    workbook.sheets.forEach((sheet) => {
-        sheet.pivot?.sources.forEach((source) => indices.add(source.sheet))
-    })
-    return indices
 }
 
 /** Re-apply a stored style map to a sheet without touching its undo history. */
@@ -360,61 +313,6 @@ function captureMerges(sheet: JssWorksheet): SheetMerges | undefined {
     return merges.length > 0 ? merges : undefined
 }
 
-function numericValue(value: CellValue | undefined): number | null {
-    if (value === null || value === undefined || value === '') return null
-    if (typeof value === 'number') return Number.isFinite(value) ? value : null
-    if (typeof value === 'boolean') return value ? 1 : 0
-    const parsed = Number(String(value).replace(/[^0-9eE.+-]/g, ''))
-    return Number.isFinite(parsed) ? parsed : null
-}
-
-function currencySymbol(): string {
-    return typeof navigator !== 'undefined' && navigator.language?.startsWith('zh') ? '¥' : '$'
-}
-
-/** Render a formatted display string from a number + format kind. */
-function formatNumeric(value: number, kind: NumberFormatKind): string {
-    switch (kind) {
-        case 'decimal':
-            return value.toFixed(2)
-        case 'percent':
-            return `${(value * 100).toFixed(2)}%`
-        case 'currency':
-            return `${currencySymbol()}${value.toFixed(2)}`
-        default:
-            return String(value)
-    }
-}
-
-function sheetNumberMeta(sheet: SheetData): NumberMeta {
-    return {
-        numberFormats: { ...(sheet.numberFormats ?? {}) },
-        rawValues: { ...(sheet.rawValues ?? {}) },
-    }
-}
-
-/**
- * Keep the number-format bookkeeping and drop entries whose display no longer
- * matches (i.e. the user typed over the formatted cell), so a later re-format
- * never double-converts.
- */
-function captureNumberFormats(rows: CellValue[][], meta: NumberMeta | undefined): NumberMeta {
-    if (!meta) return { numberFormats: {}, rawValues: {} }
-    const numberFormats: Record<string, NumberFormatKind> = {}
-    const rawValues: Record<string, CellValue> = {}
-    for (const [ref, kind] of Object.entries(meta.numberFormats)) {
-        const position = parseCellRef(ref)
-        if (!position) continue
-        const raw = meta.rawValues[ref]
-        const numeric = numericValue(raw)
-        if (numeric === null) continue
-        if (String(rows[position.row]?.[position.column] ?? '') !== formatNumeric(numeric, kind)) continue
-        numberFormats[ref] = kind
-        rawValues[ref] = raw
-    }
-    return { numberFormats, rawValues }
-}
-
 function readWorksheetName(sheet: JssWorksheet): string {
     try {
         const name = sheet.getConfig?.()?.worksheetName
@@ -422,17 +320,6 @@ function readWorksheetName(sheet: JssWorksheet): string {
     } catch {
         return ''
     }
-}
-
-/** True when a payload already carries values, styles or structure worth keeping. */
-function payloadHasContent(workbook: WorkbookData | null): boolean {
-    if (!workbook) return false
-    return workbook.sheets.some((sheet) => {
-        if (sheet.styles && Object.keys(sheet.styles).length > 0) return true
-        if (sheet.numberFormats && Object.keys(sheet.numberFormats).length > 0) return true
-        if (sheet.merges && sheet.merges.length > 0) return true
-        return sheet.rows.some((row) => row.some((value) => value !== null && value !== undefined && value !== ''))
-    })
 }
 
 /** Make sure the grid has at least `rows` × `columns` cells before a write. */
@@ -468,7 +355,9 @@ export function useJspreadsheet({
     const factoryRef = useRef<JssFactory | null>(null)
     const sheetsRef = useRef<JssWorksheet[]>([])
     const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-    const lastSaveRef = useRef(0)
+    // The grid changed since the last successful save. A throttled save is a
+    // no-op while this is false, so an idle grid never pays for a snapshot.
+    const dirtyRef = useRef(false)
     const dataRef = useRef<WorkbookData | null>(null)
     const appliedRef = useRef<WorkbookData | null>(null)
     // Fingerprint of the last payload this view applied/persisted. A new object
@@ -585,7 +474,13 @@ export function useJspreadsheet({
             clearTimeout(saveTimerRef.current)
             saveTimerRef.current = null
         }
-        lastSaveRef.current = Date.now()
+        // Nothing changed since the last save: skip the snapshot, the style sweep
+        // and the content fingerprint entirely. A large sheet makes those three
+        // steps cost real time, and an idle grid must not pay them.
+        if (!dirtyRef.current) return
+        // Keep the flag set across the work: an edit that lands while we read (a
+        // formula recompute, a pivot refresh) then still schedules its own save
+        // instead of being swallowed by this one.
         const data = snapshot()
         if (!data) return
         // Never persist a grid that has not rendered yet. A freshly mounted widget
@@ -603,6 +498,7 @@ export function useJspreadsheet({
         dataRef.current = persisted
         appliedRef.current = persisted
         appliedKeyRef.current = workbookContentKey(persisted)
+        dirtyRef.current = false
         try {
             saveRef.current(persisted)
         } catch (error) {
@@ -651,6 +547,10 @@ export function useJspreadsheet({
         const sheets = sheetsRef.current
         const base = dataRef.current
         if (!sheets.length || !base) return
+        // No generated sheet in this workbook: nothing to recompute. This runs on
+        // every grid change, and `readLiveRows` reads every sheet in full, so the
+        // common (pivot-free) workbook must not pay for it.
+        if (!base.sheets.some((sheet) => sheet.pivot)) return
         const rawRows = readLiveRows(pivotSourceIndices(base))
         const sourceSheets = base.sheets.map((sheet, index) => ({ ...sheet, rows: rawRows[index] ?? [] }))
         const labels: PivotLabels = {
@@ -687,29 +587,39 @@ export function useJspreadsheet({
     callbacksRef.current.onGridChange = refreshPivots
 
     /**
-     * Leading + trailing throttled save — the grid fires a change per keystroke.
-     * A trailing-only throttle made the editor wait a whole window before it saw
-     * the first edit, so persist the leading change right away and keep one
-     * trailing save per window to catch the rest of the burst.
+     * Schedule a save after `delay` ms, keeping the grid marked dirty until it
+     * runs. Existing pending work is left alone: whatever the earlier caller asked
+     * for still happens, and `flush()` snapshots the grid as it is then.
      */
-    const scheduleSave = useCallback(() => {
+    const scheduleSaveAfter = useCallback((delay: number) => {
         if (optionsRef.current.readOnly) return
-        const elapsed = Date.now() - lastSaveRef.current
-        if (elapsed >= SAVE_THROTTLE_MS) {
-            if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-            saveTimerRef.current = setTimeout(() => {
-                saveTimerRef.current = null
-                flush()
-            }, 0)
-            return
-        }
-        if (!saveTimerRef.current) {
-            saveTimerRef.current = setTimeout(() => {
-                saveTimerRef.current = null
-                flush()
-            }, SAVE_THROTTLE_MS - elapsed)
-        }
+        dirtyRef.current = true
+        if (saveTimerRef.current) return
+        saveTimerRef.current = setTimeout(() => {
+            saveTimerRef.current = null
+            flush()
+        }, delay)
     }, [flush])
+
+    /**
+     * Trailing-throttled save — the grid fires a change per keystroke, and every
+     * save reads and fingerprints the whole workbook.
+     *
+     * Trailing-only is deliberate: each save costs O(rows × columns) no matter
+     * how little changed, so persisting the *leading* edit of a burst bought the
+     * editor a 2000 ms-earlier look at a payload it re-reads from the node anyway,
+     * at the price of one extra full snapshot per window. Batching the burst
+     * halves that work with no visible difference. Callers that genuinely need
+     * the payload right now (an explicit action, a teardown) call `flush()`.
+     */
+    const scheduleSave = useCallback(() => scheduleSaveAfter(SAVE_THROTTLE_MS), [scheduleSaveAfter])
+
+    /**
+     * Persist on the next tick instead of at the end of the throttle window.
+     * For actions the grid reports no change event for (a number-format rewrite,
+     * an explicit write) but whose result should be durable right away.
+     */
+    const push = useCallback(() => scheduleSaveAfter(0), [scheduleSaveAfter])
 
     // ── Create / destroy the grid ─────────────────────────────────────────
     useEffect(() => {
@@ -740,7 +650,6 @@ export function useJspreadsheet({
                 callbacksRef,
                 lastSelectionRef,
                 scheduleSave,
-                flush,
                 () => {
                     restoreActiveSheet()
                     setLoadedRevision((revision) => revision + 1)
@@ -943,10 +852,14 @@ export function useJspreadsheet({
                 }
             }
             numberMetaRef.current[sheetIndex] = { numberFormats, rawValues }
-            if (changed > 0) flush()
+            // The value rewrite above is a silent write, so the grid never fired a
+            // change event: mark it pending and save on the next tick. Calling
+            // `flush()` directly would be a no-op, because nothing has marked the
+            // grid dirty yet.
+            if (changed > 0) push()
             callbacksRef.current.onSelectionChange?.()
         }, undefined)
-    }, [withActiveSheet, activeSheetIndex, selectedBounds, flush])
+    }, [withActiveSheet, activeSheetIndex, selectedBounds, push])
 
     const selectRange = useCallback((
         startRow: number,
@@ -955,6 +868,10 @@ export function useJspreadsheet({
         endColumn: number,
     ) => {
         withActiveSheet((sheet) => {
+            // The target row may live on another page: switch first, or the
+            // selection would be painted on a row that is not attached.
+            const page = pageOfRow(startRow)
+            if (sheet.pageNumber !== page) sheet.page?.(page)
             sheet.updateSelectionFromCoords?.(startColumn, startRow, endColumn, endRow)
             callbacksRef.current.onSelectionChange?.()
         }, undefined)
@@ -998,6 +915,7 @@ export function useJspreadsheet({
         startRow: number,
         startColumn: number,
         matrix: CellValue[][],
+        options?: { show?: boolean },
     ): number | null => {
         const sheet = sheetsRef.current[sheetIndex]
         if (!sheet) return null
@@ -1016,13 +934,23 @@ export function useJspreadsheet({
                     written += 1
                 })
             })
-            if (written > 0) scheduleSave()
+            if (written > 0) {
+                // The values are written either way — this only decides whether the
+                // view follows them. Paging is skipped when the range starts on the
+                // page already shown, so a same-page edit never re-renders the tbody
+                // mid-write. A bulk write (AI, paste) passes `show: false` and leaves
+                // the user where they were looking.
+                const show = options?.show !== false
+                const targetPage = pageOfRow(startRow)
+                if (show && sheet.pageNumber !== targetPage) sheet.page?.(targetPage)
+                push()
+            }
             return written
         } catch (error) {
             logger.warn('[office/spreadsheet] failed to write cells', error)
             return null
         }
-    }, [scheduleSave])
+    }, [push])
 
     const readCell = useCallback((sheetIndex: number, row: number, column: number): CellValue =>
         withSheet(sheetIndex, (sheet) => {
@@ -1070,7 +998,6 @@ export function useJspreadsheet({
                 callbacksRef,
                 lastSelectionRef,
                 scheduleSave,
-                flush,
                 () => {
                     restoreActiveSheet()
                     setLoadedRevision((revision) => revision + 1)
@@ -1153,7 +1080,6 @@ function mountGrid(
     callbacksRef: CallbacksRef,
     lastSelectionRef: { current: GridSelection | null },
     scheduleSave: () => void,
-    saveNow: () => void,
     onLoaded: () => void,
 ): JssWorksheet[] {
     container.replaceChildren()
@@ -1164,22 +1090,18 @@ function mountGrid(
     // is the host we hand to the factory — remember it so teardown targets the
     // right node instead of the React-owned wrapper.
     ;(container as any).__knHost = host
-    const sheets = factory(host, buildOptions(workbook, optionsRef, callbacksRef, lastSelectionRef, scheduleSave, saveNow, onLoaded))
+    const sheets = factory(host, buildOptions(workbook, optionsRef, callbacksRef, lastSelectionRef, scheduleSave, onLoaded))
     // jspreadsheet sizes itself from its content (40 rows ≈ 950px) and ignores the
     // host height, which leaves the widget taller than the block so its body is
     // clipped away. Pin the widget to the host box; the content area then scrolls.
+    // sheet.css owns the flex chain that keeps the pagination bar from being
+    // squeezed by `.jss_content`; this only pins the widget to the host box.
     try {
         const widget = host.querySelector<HTMLElement>('.jss_container')
         if (widget) {
             widget.style.height = '100%'
             widget.style.maxHeight = '100%'
             widget.style.overflow = 'hidden'
-            const content = host.querySelector<HTMLElement>('.jss_content')
-            if (content) {
-                content.style.height = '100%'
-                content.style.maxHeight = '100%'
-                content.style.overflow = 'auto'
-            }
         }
     } catch {
         // Presentation only: the grid still works without it.
@@ -1213,7 +1135,6 @@ function buildOptions(
     callbacksRef: CallbacksRef,
     lastSelectionRef: { current: GridSelection | null },
     scheduleSave: () => void,
-    saveNow: () => void,
     onLoaded: () => void,
 ): Record<string, any> {
     const sheets = workbook.sheets.length ? workbook.sheets : ensureValidWorkbookData(null).sheets
@@ -1291,6 +1212,14 @@ function buildOptions(
                 data: cloneRows(sheet.rows),
                 minDimensions: [columnCount, rowCount],
                 worksheetName: sheet.name || `Sheet${index + 1}`,
+                // `pagination` is a *worksheet* option, not a spreadsheet-config
+                // one: the library reads `worksheet.options.pagination`, so setting
+                // it next to `tabs`/`toolbar` is silently ignored and every row is
+                // attached to the tbody (see ROWS_PER_PAGE).
+                pagination: ROWS_PER_PAGE,
+                // The page swap re-parents rows, so the painted selection has
+                // moved: let the toolbar and formula bar re-read their state.
+                onchangepage: () => notifySelection(),
                 columns: Array.from({ length: columnCount }, (_, column) => ({
                     width: sheet.columnWidths?.[String(column)] ?? COLUMN_WIDTH,
                     // A generated pivot sheet is not editable by hand: it is
@@ -1330,10 +1259,9 @@ function buildOptions(
             notifySelection()
         },
         oneditionend: () => {
-            // Editing finished: refresh dependents and persist now instead of
-            // waiting for the throttle window.
+            // Editing finished: refresh dependents. The grid fires `onchange`
+            // before this, so the throttled save is already scheduled.
             callbacksRef.current.onGridChange?.()
-            saveNow()
             notifySelection()
         },
     }

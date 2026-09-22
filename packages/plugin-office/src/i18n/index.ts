@@ -99,6 +99,7 @@ export const translations = {
                 needValues: 'Choose at least one value field.',
                 invalidRange: 'Enter a valid range such as A1:D20.',
                 sourceIsPivot: 'The source cannot be a generated pivot sheet.',
+                generatedReadOnly: 'Generated from the pivot config — cells are read-only. Change the source data or the pivot config.',
                 created: 'Pivot table created',
                 aggregate: {
                     sum: 'Sum',
@@ -203,6 +204,7 @@ export const translations = {
                 needValues: '请至少选择一个值字段。',
                 invalidRange: '请输入有效区域，例如 A1:D20。',
                 sourceIsPivot: '源工作表不能是生成的透视表。',
+                generatedReadOnly: '本表由透视配置生成，单元格只读；请修改源数据或透视配置。',
                 created: '透视表已创建',
                 aggregate: {
                     sum: '求和',

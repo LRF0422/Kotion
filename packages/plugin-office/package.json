@@ -16,6 +16,9 @@
     "@kn/editor": "workspace:*",
     "@kn/icon": "workspace:*",
     "@kn/ui": "workspace:*",
+    "@visactor/vtable": "1.26.8",
+    "@visactor/vtable-gantt": "1.26.8",
+    "@visactor/vtable-sheet": "1.26.8",
     "jspreadsheet-ce": "^5.0.4",
     "xlsx": "^0.18.5"
   },

@@ -1,0 +1,13 @@
+{
+    "//": "Typecheck configuration for the test suite. Kept separate from tsconfig.json because `rollup-plugin-typescript2` (the package build) emits, and `allowImportingTsExtensions` requires `noEmit` — mixing them fails with TS5096 at build time. Node's ESM test runner resolves relative imports literally, so runtime imports in src/ and tests/ carry their `.ts` extension.",
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "noEmit": true,
+        "allowImportingTsExtensions": true,
+        // The base config leaves `module` unset (rollup supplies it). Without it
+        // every dynamic import and `import.meta` reports TS1323, drowning the
+        // real errors.
+        "module": "esnext"
+    },
+    "include": ["src", "tests"]
+}

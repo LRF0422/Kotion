@@ -140,6 +140,56 @@
     background: var(--kn-sheet-cell-bg);
 }
 
+/* ── Pagination bar ──────────────────────────────────────────────────────── */
+/*
+ * Rows are paged (see ROWS_PER_PAGE in useJspreadsheet.ts) so a large sheet does
+ * not keep every row attached to the DOM. The bar is a sibling of `.jss_content`
+ * inside `.jss_container`'s flex column, so it must be pinned to its natural
+ * height — otherwise `.jss_content`'s `flex: 1 1 auto` squeezes it out of the
+ * clipped container and the page controls become unreachable.
+ */
+.kn-sheet .jss_pagination {
+    flex: 0 0 auto;
+    min-height: 0;
+    padding: 0 4px;
+    border-top: 1px solid var(--kn-sheet-line);
+    background: var(--kn-sheet-cell-bg);
+    font-size: 12px;
+    color: var(--content_color);
+}
+
+.kn-sheet .jss_pagination > div {
+    padding: 4px !important;
+    align-items: center;
+}
+
+.kn-sheet .jss_pagination > div > div {
+    width: 26px;
+    height: 26px;
+    line-height: 24px;
+    border-color: var(--border_color);
+    border-radius: 4px;
+    color: var(--content_color);
+}
+
+.kn-sheet .jss_pagination > div > div:hover {
+    background: var(--content_background_highlighted);
+}
+
+/* The library highlights the current page with a hard-coded light grey. */
+.kn-sheet .jss_page_selected {
+    background: var(--kn-sheet-head-active-bg);
+    color: var(--kn-sheet-head-active-fg);
+}
+
+.kn-sheet .jss_pagination_dropdown {
+    height: 26px;
+    border-color: var(--border_color);
+    border-radius: 4px;
+    background: var(--content_background);
+    color: var(--content_color);
+}
+
 /* ── Sheet tabs ──────────────────────────────────────────────────────────── */
 
 /* Only the selected worksheet panel may render. jtabs hides the others with a

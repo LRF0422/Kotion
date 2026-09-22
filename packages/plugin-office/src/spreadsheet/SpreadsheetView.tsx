@@ -4,6 +4,8 @@ import { X } from "@kn/icon"
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { useJspreadsheet } from "./useJspreadsheet"
+import { useVTableSheet } from "./useVTableSheet"
+import { engineFromHost, resolveEngine, type EngineHost } from "./engine"
 import { SheetToolbar } from "./SheetToolbar"
 import { SheetFormulaBar } from "./SheetFormulaBar"
 import { PivotDialog } from "./PivotDialog"
@@ -140,7 +142,7 @@ export const SpreadsheetView: React.FC<NodeViewProps> = React.memo((props) => {
         }
     }, [])
 
-    const grid = useJspreadsheet({
+    const gridOptions = {
         container: containerReady ? containerRef.current : null,
         workbookData: initialDataRef.current,
         readOnly: !editor.isEditable,
@@ -150,7 +152,17 @@ export const SpreadsheetView: React.FC<NodeViewProps> = React.memo((props) => {
         onExportExcel: handleExportExcel,
         onSelectionChange: handleSelectionChange,
         onPivotDrillDown: setPivotTarget,
-    })
+    }
+
+    // Both hooks are called unconditionally so the hook order is stable across
+    // renders; only the selected one is asked to mount. The option objects are
+    // identical by construction — that is what the `GridApi` seam buys, and it is
+    // what keeps this the only line that differs between the two engines.
+    const host = (globalThis as EngineHost & typeof globalThis)
+    const engine = resolveEngine(engineFromHost(host))
+    const jspreadsheetGrid = useJspreadsheet(engine === 'jspreadsheet' ? gridOptions : { ...gridOptions, container: null })
+    const vtableGrid = useVTableSheet(engine === 'vtable' ? gridOptions : { ...gridOptions, container: null })
+    const grid = engine === 'vtable' ? vtableGrid : jspreadsheetGrid
 
     const { getSnapshot, replaceAll, applyExternalData, writeRange, isReady } = grid
     replaceRef.current = replaceAll
@@ -179,8 +191,8 @@ export const SpreadsheetView: React.FC<NodeViewProps> = React.memo((props) => {
         if (!isReady) return
         const handle: SpreadsheetLiveHandle = {
             getSnapshot: () => getSnapshot(),
-            setRangeValues: (sheetIndex, startRow, startColumn, data) =>
-                writeRange(sheetIndex, startRow, startColumn, data),
+            setRangeValues: (sheetIndex, startRow, startColumn, data, options) =>
+                writeRange(sheetIndex, startRow, startColumn, data, options),
             isEditable: () => editor.isEditable,
         }
         registerSpreadsheetLive(node, handle)

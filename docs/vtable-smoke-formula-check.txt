@@ -1,0 +1,44 @@
+✓ import @visactor/vtable-sheet
+111ms
+✓ VTableSheet export
+function
+• mount 9000×12
+102ms | heap 14→29MB
+• DOM nodes under container
+0 (canvas rendering should keep this near-constant vs rows)
+✓ getActiveSheet()
+key=stock title=库存
+✓ getRowCount()/getColumnCount()
+9000 / 12
+✓ getData() shape
+9000 rows, first=[1,"物料-1","SKU000001",1,0,"在库",7,8,9,10,11,12]
+✓ getCellValue(1,1) — expect row1/col1 = '物料-2'
+"物料-2"
+✓ getCellValue(9,0) — expect row9/col0 = 10
+10
+• formula G1 =SUM(E1:E10)
+computed="=SUM(E1:E10)" (expected 55 if 1..10)
+✓ setCellValue → getCellValue round-trip
+"SKU000001" → "POC-WRITE"
+• change event fired on programmatic write
+handlers fired 0× (programmatic writes may be silent — user edits must not be)
+• getSelection()
+null
+✗ undo() reverts the write
+value now "POC-WRITE"
+✓ redo() re-applies
+"POC-WRITE"
+✓ sheet count
+2
+✓ activateSheet('summary')
+summary
+✓ (a) engine computes the formula
+engine result = 18 (E1..E10 sum)
+✗ (b) cell shows the computed value
+stored/displayed = "=SUM(E1:E10)" — a string means the cell still shows the formula text
+✗ (c) dependents recalculate (E1=100)
+engine now = 18 (expected ~118); engine sheetData E1 = 0 vs table E1 = 100
+✗ formula engine ↔ table data in sync
+the engine keeps its own sheetData copy; a mismatch is why recalculation cannot see edits
+✓ engine chrome suppressed
+no formula bar / sheet tab inside container (host owns the UI)
