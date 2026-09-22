@@ -17,6 +17,8 @@ import com.knowledge.agent.core.loop.ResumePayload;
 import com.knowledge.agent.core.mapper.AgentRunMapper;
 import com.knowledge.agent.core.memory.MemoryInjector;
 import com.knowledge.agent.core.memory.ThreadSummarizer;
+import com.knowledge.agent.core.profile.ProfileExtractionService;
+import com.knowledge.agent.core.profile.ProfileInjector;
 import com.knowledge.agent.core.session.SessionTranscriptProjector;
 import com.knowledge.agent.core.entity.AgentRunEntity;
 import com.knowledge.agent.core.entity.AgentThreadEntity;
@@ -70,6 +72,8 @@ public class DefaultRunSupervisor {
     private final Delegator delegator;
     private final ThreadSummarizer threadSummarizer;
     private final SessionTranscriptProjector transcriptProjector;
+    private final ProfileInjector profileInjector;
+    private final ProfileExtractionService profileExtractionService;
     private final ObjectMapper objectMapper;
     private final AgentCoreProperties properties;
     private final ExecutorService loopExecutor;
@@ -95,6 +99,8 @@ public class DefaultRunSupervisor {
                                 Delegator delegator,
                                 ThreadSummarizer threadSummarizer,
                                 SessionTranscriptProjector transcriptProjector,
+                                ProfileInjector profileInjector,
+                                ProfileExtractionService profileExtractionService,
                                 ObjectMapper objectMapper,
                                 AgentCoreProperties properties,
                                 @Qualifier("agentLoopExecutor") ExecutorService loopExecutor,
@@ -116,6 +122,8 @@ public class DefaultRunSupervisor {
         this.delegator = delegator;
         this.threadSummarizer = threadSummarizer;
         this.transcriptProjector = transcriptProjector;
+        this.profileInjector = profileInjector;
+        this.profileExtractionService = profileExtractionService;
         this.objectMapper = objectMapper;
         this.properties = properties;
         this.loopExecutor = loopExecutor;
@@ -143,6 +151,9 @@ public class DefaultRunSupervisor {
         // Inject long-term memory and relevant owner-scoped skills before the
         // loop freezes the initial checkpoint. Retrieval failures fail open.
         cmd.setMemoryLines(memoryInjector.buildLines(cmd.getUserId(), cmd.getSpaceId(), cmd.getPageId()));
+        // Derived profile lines are never required: the injector returns empty
+        // when the feature is off or the user has not consented.
+        cmd.setProfileLines(profileInjector.buildLines(cmd.getTenantId(), cmd.getUserId()));
         savedSkillInjector.inject(cmd);
 
         AgentRun run = AgentRun.create(UUID.randomUUID().toString(), cmd.getConversationId(),
@@ -236,7 +247,7 @@ public class DefaultRunSupervisor {
         // the (frozen) system prefix so they cannot break the provider cache.
         contextManager.attachVolatileContext(checkpoint.getMessages(),
                 contextManager.buildVolatileContext(cmd.getMemoryLines(),
-                        cmd.getSkillFragments(), cmd.getSkillTools(), null));
+                        cmd.getProfileLines(), cmd.getSkillFragments(), cmd.getSkillTools(), null));
         if (cmd.getTools() != null) {
             checkpoint.setClientTools(new ArrayList<>(cmd.getTools()));
         }
@@ -472,6 +483,8 @@ public class DefaultRunSupervisor {
             // Session memory: summarize the completed conversation async.
             if (RunStatus.COMPLETED.name().equals(run.getStatus()) && run.getParentRunId() == null) {
                 threadSummarizer.summarizeAsync(runId, run.getConversationId(), run.getModel());
+                // Derived user profile: opt-in, throttled, and fully async.
+                profileExtractionService.extractAsync(run);
             }
             // Engine-owned transcript projection for every terminal state (root
             // runs only). Synchronous: a reload right after the run settles must
@@ -627,6 +640,11 @@ public class DefaultRunSupervisor {
         @Override
         public List<String> memoryLines() {
             return cmd.getMemoryLines();
+        }
+
+        @Override
+        public List<String> profileLines() {
+            return cmd.getProfileLines();
         }
 
         @Override

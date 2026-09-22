@@ -67,6 +67,24 @@ agent:
     enabled: true
     top-k: 5
     hot-ttl-days: 7
+  # Derived low-sensitivity user profile (occupation / interests / preferences).
+  # Ships OFF behind an opt-in: users must consent before anything is derived.
+  # Sensitive attributes (gender, mental state, personality, ...) are never
+  # inferred — see core/profile/ProfileSensitivity.
+  profile:
+    enabled: false
+    model:            # empty = follow the triggering run's model
+    max-transcript-chars: 24000
+    max-output-tokens: 1024
+    min-new-messages: 8
+    inject-min-confidence: 55
+    inject-top-k: 6
+    inject-max-chars: 600
+    evidence-retention-days: 90
+    decay-cron: "0 30 3 * * ?"
+    max-traits-per-user: 200
+    max-evidence-per-trait: 20
+    backfill-batch-size: 50
   saved-skills:
     enabled: true
     top-k: 3

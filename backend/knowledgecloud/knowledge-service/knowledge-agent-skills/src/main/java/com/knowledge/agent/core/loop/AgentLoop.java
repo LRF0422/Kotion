@@ -97,6 +97,11 @@ public class AgentLoop implements Runnable {
 
         List<String> memoryLines();
 
+        /** Derived low-sensitivity profile lines (optional; may be null). */
+        default List<String> profileLines() {
+            return null;
+        }
+
         /** Rolling session-memory summary of the conversation (may be null). */
         default String threadSummary() {
             return null;
@@ -709,7 +714,9 @@ public class AgentLoop implements Runnable {
         // was cached on a previous turn still matches byte-for-byte and only
         // the tail is billed in full.
         contextManager.attachVolatileContext(cp.getMessages(),
-                contextManager.buildVolatileContext(memoryLines, skillFragments,
+                contextManager.buildVolatileContext(memoryLines,
+                        runInput != null ? runInput.profileLines() : null,
+                        skillFragments,
                         new ArrayList<>(deferredToolSpecs.values()),
                         runInput != null ? runInput.threadSummary() : null));
         // Boundary between supplied history and messages this run produces.

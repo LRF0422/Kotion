@@ -198,6 +198,40 @@ export interface MemoryItem {
     lastAccessTime: number
 }
 
+/**
+ * One derived low-sensitivity user-profile trait. Read/edit/delete from
+ * /api/agent/v1/profile; never carries raw evidence (that is a separate call).
+ */
+export interface AgentProfileTrait {
+    traitId: string
+    dimension: string
+    dimensionLabel?: string
+    value: string
+    confidence: number
+    source: 'inferred' | 'user'
+    status: 'active' | 'suppressed'
+    locked: boolean
+    evidenceCount: number
+    firstSeen: number
+    lastSeen: number
+    updateTime: number
+}
+
+/** The caller's own profile plus the opt-in state. */
+export interface AgentProfile {
+    consent: boolean
+    count: number
+    traits: AgentProfileTrait[]
+    dimensions: string[]
+}
+
+/** Redacted supporting text behind one trait (owner only). */
+export interface AgentProfileEvidence {
+    excerpt?: string
+    sessionId?: string
+    observedAt?: number
+}
+
 // ============ Events ============
 
 export interface RunUsage {

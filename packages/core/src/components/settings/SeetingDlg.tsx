@@ -14,6 +14,7 @@ import {
     Bot,
     Compass,
     Gem,
+    Sparkles,
     ChevronLeft,
 } from "@kn/icon";
 import React, { PropsWithChildren, useContext, useMemo, Suspense, useEffect } from "react";
@@ -29,6 +30,7 @@ import {
 import { useUploadFile, useTranslation } from "@kn/common";
 import { MyAccount } from "./components/MyAccount";
 import { MySetting } from "./components/MySetting";
+import { MyProfile } from "./components/MyProfile";
 import { Member } from "./components/Member";
 import { AgentManager } from "../Agents";
 import { PlanBadge } from "../subscription/PlanBadge";
@@ -107,6 +109,7 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                     { id: "MyAccount", label: t("settings.nav.myAccount"), icon: <UserCircle />, contentKey: "MyAccount" },
                     { id: "Subscription", label: t("settings.nav.subscription"), icon: <Gem />, contentKey: "Subscription", tone: "brand" },
                     { id: "MySetting", label: t("settings.nav.preferences"), icon: <Settings />, contentKey: "MySetting" },
+                    { id: "MyProfile", label: t("settings.nav.profile"), icon: <Sparkles />, contentKey: "MyProfile" },
                     { id: "MyAgents", label: t("settings.nav.agents"), icon: <Bot />, contentKey: "MyAgents" },
                 ],
             },
@@ -153,6 +156,8 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                 return { title: t("settings.members.title"), description: t("settings.members.desc") };
             case "MyAgents":
                 return { title: t("settings.agents.title"), description: t("settings.agents.desc") };
+            case "MyProfile":
+                return { title: t("settings.profile.title"), description: t("settings.profile.desc") };
             default:
                 return { title: t("settings.title"), description: "" };
         }
@@ -177,6 +182,8 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                 return <Member />;
             case "MyAgents":
                 return <AgentManager />;
+            case "MyProfile":
+                return <MyProfile />;
             case "MyAccount":
             default:
                 return <MyAccount />;

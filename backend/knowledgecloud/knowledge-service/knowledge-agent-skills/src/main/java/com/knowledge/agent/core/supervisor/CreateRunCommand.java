@@ -42,6 +42,12 @@ public class CreateRunCommand {
     private List<String> memoryLines = new ArrayList<>();
 
     /**
+     * Derived low-sensitivity user-profile lines injected at run start
+     * (optional; empty when the feature is off or the user has not opted in).
+     */
+    private List<String> profileLines = new ArrayList<>();
+
+    /**
      * Rolling session-memory summary of this conversation (thread summary,
      * continuously updated on each completed run) — injected into the system
      * prompt of fresh runs so continuity survives client-side history loss.

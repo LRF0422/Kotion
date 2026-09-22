@@ -22,6 +22,9 @@ import type {
     AgentChatMessage,
     AgentChatSession,
     AgentEvent,
+    AgentProfile,
+    AgentProfileEvidence,
+    AgentProfileTrait,
     CreateRunInput,
     ImportAgentChatSessionInput,
     MemoryItem,
@@ -365,6 +368,63 @@ export class AgentClient {
 
     async deleteMemory(memoryId: string): Promise<void> {
         await this.request('/memory/' + encodeURIComponent(memoryId), { method: 'DELETE' })
+    }
+
+    // ==================== derived user profile ====================
+
+    /** Read the caller's own profile (active traits + consent). */
+    async getProfile(): Promise<AgentProfile> {
+        return await this.request<AgentProfile>('/profile')
+    }
+
+    /** Redacted evidence behind one trait (owner only). */
+    async listProfileEvidence(traitId: string): Promise<AgentProfileEvidence[]> {
+        const data = await this.request<{ evidence?: AgentProfileEvidence[] }>(
+            '/profile/traits/' + encodeURIComponent(traitId) + '/evidence',
+        )
+        return data?.evidence ?? []
+    }
+
+    /** Add a user-declared trait; it is locked against extraction. */
+    async addProfileTrait(dimension: string, value: string): Promise<AgentProfileTrait> {
+        return await this.request<AgentProfileTrait>('/profile/traits', {
+            method: 'POST',
+            body: JSON.stringify({ dimension, value }),
+        })
+    }
+
+    async updateProfileTrait(
+        traitId: string,
+        dimension: string,
+        value: string,
+    ): Promise<AgentProfileTrait> {
+        return await this.request<AgentProfileTrait>(
+            '/profile/traits/' + encodeURIComponent(traitId),
+            { method: 'PUT', body: JSON.stringify({ dimension, value }) },
+        )
+    }
+
+    /** Delete one trait (backend keeps a tombstone so it can never return). */
+    async deleteProfileTrait(traitId: string): Promise<void> {
+        await this.request('/profile/traits/' + encodeURIComponent(traitId), { method: 'DELETE' })
+    }
+
+    /** Purge every derived trait and evidence row for the caller. */
+    async resetProfile(): Promise<void> {
+        await this.request('/profile', { method: 'DELETE' })
+    }
+
+    async getProfileConsent(): Promise<boolean> {
+        const data = await this.request<{ enabled?: boolean }>('/profile/consent')
+        return Boolean(data?.enabled)
+    }
+
+    /** Opt in/out; opting out purges all derived data server-side. */
+    async setProfileConsent(enabled: boolean): Promise<void> {
+        await this.request('/profile/consent', {
+            method: 'PUT',
+            body: JSON.stringify({ enabled }),
+        })
     }
 
     // ==================== internals ====================

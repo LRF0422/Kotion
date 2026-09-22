@@ -74,6 +74,7 @@ public class AgentCoreProperties {
     private Quota quota = new Quota();
     private Lease lease = new Lease();
     private Skill skill = new Skill();
+    private Profile profile = new Profile();
 
     /** Run loop / task lifecycle settings. */
     @Data
@@ -267,5 +268,40 @@ public class AgentCoreProperties {
             private int timeoutSeconds = 15;
             private int maxContentLength = 50000;
         }
+    }
+
+    /**
+     * Derived low-sensitivity user profile settings. Disabled by default so the
+     * feature ships behind an opt-in; when off, no extraction or injection
+     * happens and existing behaviour is unchanged.
+     */
+    @Data
+    public static class Profile {
+        /** Master switch. False = no derivation and no injection at all. */
+        private boolean enabled = false;
+        /** Extraction model; empty = follow the triggering run's model. */
+        private String model = "";
+        /** Max characters of redacted transcript sent to the model. */
+        private int maxTranscriptChars = 24000;
+        /** Max output tokens for one extraction call. */
+        private int maxOutputTokens = 1024;
+        /** Do not re-extract a session until this many new messages arrived. */
+        private int minNewMessages = 8;
+        /** Minimum confidence for a trait to be injected into agent context. */
+        private int injectMinConfidence = 55;
+        /** Maximum traits injected into one run. */
+        private int injectTopK = 6;
+        /** Maximum characters of the injected profile block. */
+        private int injectMaxChars = 600;
+        /** Age after which redacted evidence rows are purged. */
+        private int evidenceRetentionDays = 90;
+        /** Cron for the (P1) daily decay/reap task. */
+        private String decayCron = "0 30 3 * * ?";
+        /** Hard cap on active traits per user. */
+        private int maxTraitsPerUser = 200;
+        /** Evidence rows kept per trait. */
+        private int maxEvidencePerTrait = 20;
+        /** Sessions processed per backfill batch (P1). */
+        private int backfillBatchSize = 50;
     }
 }

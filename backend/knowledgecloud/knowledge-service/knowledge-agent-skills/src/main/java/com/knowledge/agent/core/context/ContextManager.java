@@ -232,6 +232,20 @@ public class ContextManager {
      */
     public String buildVolatileContext(List<String> memoryLines, List<String> skillFragments,
                                        List<ToolSpec> deferredTools, String sessionSummary) {
+        return buildVolatileContext(memoryLines, null, skillFragments, deferredTools, sessionSummary);
+    }
+
+    /**
+     * As {@link #buildVolatileContext(List, List, List, String)} plus the
+     * optional derived 【用户画像】 block. The profile is re-read and re-scored
+     * per turn, so it belongs in this cache-hostile tail exactly like memory —
+     * never in the immutable system prefix.
+     *
+     * @param profileLines low-sensitivity profile lines, may be null
+     */
+    public String buildVolatileContext(List<String> memoryLines, List<String> profileLines,
+                                       List<String> skillFragments, List<ToolSpec> deferredTools,
+                                       String sessionSummary) {
         StringBuilder content = new StringBuilder();
         if (memoryLines != null && !memoryLines.isEmpty()) {
             StringBuilder block = new StringBuilder();
@@ -244,6 +258,7 @@ public class ContextManager {
                 content.append("【关于用户的长期记忆】").append(block);
             }
         }
+        appendProfileBlock(content, profileLines);
         if (skillFragments != null) {
             for (String fragment : skillFragments) {
                 if (fragment == null || fragment.trim().isEmpty()) {
@@ -277,6 +292,25 @@ public class ContextManager {
      */
     public String buildVolatileContext(List<String> memoryLines, String sessionSummary) {
         return buildVolatileContext(memoryLines, null, null, sessionSummary);
+    }
+
+    /** Render the optional derived-profile block (low-sensitivity traits only). */
+    private void appendProfileBlock(StringBuilder content, List<String> profileLines) {
+        if (profileLines == null || profileLines.isEmpty()) {
+            return;
+        }
+        StringBuilder block = new StringBuilder();
+        for (String line : profileLines) {
+            if (line != null && !line.trim().isEmpty()) {
+                block.append("\n- ").append(line.trim());
+            }
+        }
+        if (block.length() > 0) {
+            if (content.length() > 0) {
+                content.append("\n\n");
+            }
+            content.append("【用户画像（低敏感，仅供参考）】").append(block);
+        }
     }
 
     /**
