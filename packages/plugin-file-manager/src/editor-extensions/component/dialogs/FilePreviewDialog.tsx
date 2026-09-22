@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Button, cn } from "@kn/ui";
 import { useFileService, type FileAccessUrls } from "@kn/common";
-import { Download, ExternalLink, FileQuestion, Loader2, RefreshCw } from "@kn/icon";
+import { Check, Copy, Download, ExternalLink, FileQuestion, Loader2, RefreshCw } from "@kn/icon";
 import { FileItem } from "../FileContext";
 import { FileManagerDialogShell } from "../FileManagerDialogShell";
 import { MediaPlayer } from "../media/MediaPlayer";
 import { useResolvedMediaKind } from "../media/useResolvedMediaKind";
 import { getPreviewKind, formatFileSize, type PreviewKind } from "../../../utils/fileUtils";
+import { decodeTextBytes, looksBinary, readPreviewBytes } from "../../../utils/text-preview";
 import { useI18n } from "../../../i18n/use-i18n";
 
 export interface FilePreviewDialogProps {
@@ -35,12 +36,25 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
     const [fileAccess, setFileAccess] = useState<FileAccessUrls | null>(null);
     const [accessLoading, setAccessLoading] = useState(false);
     const [accessErrored, setAccessErrored] = useState(false);
+    const [textContent, setTextContent] = useState("");
+    const [textTruncated, setTextTruncated] = useState(false);
+    const [textBinary, setTextBinary] = useState(false);
+    const [textLoading, setTextLoading] = useState(false);
+    const [textErrored, setTextErrored] = useState(false);
+    const [copied, setCopied] = useState(false);
     const { t } = useI18n();
 
     const kind: PreviewKind = file && !file.isFolder
         ? getPreviewKind(file.name, file.mediaType)
         : "none";
     const shouldLoadPdfBlob = kind === "pdf"
+        && !urlOverride
+        && !!file?.id
+        && !!fileService.getFileBlob;
+    // Fetch text records as a blob instead of pointing an iframe at the raw
+    // download URL: the storage endpoint sends no Content-Type/Disposition, so
+    // browsers treat it as a download rather than an inline document.
+    const shouldLoadTextBlob = kind === "text"
         && !urlOverride
         && !!file?.id
         && !!fileService.getFileBlob;
@@ -126,14 +140,56 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
         };
     }, [file?.id, fileService, open, shouldLoadFileAccess, urlVersion]);
 
+    useEffect(() => {
+        if (!open || !shouldLoadTextBlob || !file?.id || !fileService.getFileBlob) {
+            setTextContent("");
+            setTextTruncated(false);
+            setTextBinary(false);
+            setTextLoading(false);
+            setTextErrored(false);
+            return;
+        }
+
+        let disposed = false;
+        setTextContent("");
+        setTextTruncated(false);
+        setTextBinary(false);
+        setTextLoading(true);
+        setTextErrored(false);
+
+        const loadText = async () => {
+            try {
+                const blob = await fileService.getFileBlob!(String(file.id));
+                const { bytes, truncated } = await readPreviewBytes(blob);
+                if (disposed) return;
+                if (looksBinary(bytes)) {
+                    setTextBinary(true);
+                    return;
+                }
+                setTextContent(decodeTextBytes(bytes));
+                setTextTruncated(truncated);
+            } catch {
+                if (!disposed) setTextErrored(true);
+            } finally {
+                if (!disposed) setTextLoading(false);
+            }
+        };
+
+        void loadText();
+        return () => {
+            disposed = true;
+        };
+    }, [file?.id, fileService, open, shouldLoadTextBlob, urlVersion]);
+
     const mediaResolution = useResolvedMediaKind(kind, url, open && !!file);
 
     useEffect(() => {
         if (open) {
-            setLoading(kind === "image" || kind === "pdf" || kind === "text");
+            setCopied(false);
+            setLoading(kind === "image" || kind === "pdf" || (kind === "text" && !shouldLoadTextBlob));
             setErrored(false);
         }
-    }, [open, url, kind]);
+    }, [open, url, kind, shouldLoadTextBlob]);
 
     if (!file) return null;
 
@@ -166,6 +222,72 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
         mediaResolution.retry();
     };
 
+    const copyText = async () => {
+        if (!textContent) return;
+        try {
+            await navigator.clipboard.writeText(textContent);
+            setCopied(true);
+            window.setTimeout(() => setCopied(false), 2000);
+        } catch {
+            // Clipboard access can be denied (permissions / insecure context).
+        }
+    };
+
+    const renderTextBody = () => {
+        // Records without a file-center id fall back to the inline frame.
+        if (!shouldLoadTextBlob) {
+            return (
+                <div className="relative h-full min-h-[200px] w-full p-2 md:p-4">
+                    {loading && <LoadingSpinner message={t('preview.loadingMedia')} overlay />}
+                    <iframe
+                        src={url}
+                        title={file.name}
+                        className="h-full w-full rounded-md border bg-white"
+                        onLoad={() => setLoading(false)}
+                        onError={() => {
+                            setLoading(false);
+                            setErrored(true);
+                        }}
+                    />
+                </div>
+            );
+        }
+
+        if (textErrored) {
+            return (
+                <FallbackBody
+                    message={t('preview.textLoadFailed')}
+                    onDownload={handleDownload}
+                    onRetry={retryMedia}
+                />
+            );
+        }
+        if (textBinary) {
+            return <FallbackBody message={t('preview.binaryFile')} onDownload={handleDownload} />;
+        }
+        if (textLoading) {
+            return <LoadingSpinner message={t('preview.loadingText')} />;
+        }
+
+        return (
+            <div className="flex h-full min-h-[200px] w-full flex-col overflow-hidden p-2 md:p-4">
+                <div className="relative flex-1 overflow-hidden rounded-md border bg-muted/30">
+                    <pre
+                        className="h-full w-full overflow-auto whitespace-pre p-3 text-left font-mono text-xs leading-relaxed text-foreground md:text-sm"
+                        data-testid="text-preview"
+                    >
+                        {textContent}
+                    </pre>
+                </div>
+                {textTruncated && (
+                    <p className="shrink-0 pt-2 text-center text-xs text-muted-foreground">
+                        {t('preview.textTruncated')}
+                    </p>
+                )}
+            </div>
+        );
+    };
+
     const renderBody = () => {
         if (kind === "pdf" && shouldLoadPdfBlob) {
             if (errored) {
@@ -180,6 +302,11 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
             if (!url) {
                 return <LoadingSpinner message={t('preview.loadingMedia')} />;
             }
+        }
+
+        // Text records are fetched as a blob, so they do not need a remote URL.
+        if (kind === "text" && shouldLoadTextBlob) {
+            return renderTextBody();
         }
 
         if (shouldLoadFileAccess) {
@@ -254,7 +381,6 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
                     </div>
                 );
             case "pdf":
-            case "text":
                 return (
                     <div className="relative h-full min-h-[200px] w-full p-2 md:p-4">
                         {loading && <LoadingSpinner message={t('preview.loadingMedia')} overlay />}
@@ -270,6 +396,8 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
                         />
                     </div>
                 );
+            case "text":
+                return renderTextBody();
             default:
                 return <FallbackBody message={t('preview.cannotPreview')} onDownload={handleDownload} />;
         }
@@ -293,6 +421,12 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
                 {renderBody()}
             </div>
             <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t bg-background px-4 py-3">
+                {kind === "text" && !!textContent && (
+                    <Button variant="outline" onClick={copyText} className="h-11 lg:h-8">
+                        {copied ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
+                        {copied ? t('preview.copied') : t('preview.copy')}
+                    </Button>
+                )}
                 <Button
                     variant="outline"
                     onClick={openInNewTab}

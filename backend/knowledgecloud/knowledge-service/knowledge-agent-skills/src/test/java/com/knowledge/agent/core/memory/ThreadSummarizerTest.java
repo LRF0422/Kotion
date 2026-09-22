@@ -30,7 +30,7 @@ class ThreadSummarizerTest {
         fixture.summarizer.summarizeAsync("run-1", "conv-1", "deepseek-chat");
 
         await(() -> verify(fixture.threadStore)
-                .updateMeta(eq("conv-1"), isNull(), eq("整理了一份会议纪要")));
+                .updateSummaryIfUnchanged(eq("conv-1"), isNull(), eq("整理了一份会议纪要")));
         LlmInferRequest request = fixture.capturedRequest();
         assertTrue(request.getMessages().get(0).getContent().contains("1-2 句话"));
         assertFalse(request.getMessages().get(1).getContent().contains("已有摘要"));
@@ -47,7 +47,8 @@ class ThreadSummarizerTest {
         fixture.summarizer.summarizeAsync("run-1", "conv-1", "deepseek-chat");
 
         await(() -> verify(fixture.threadStore)
-                .updateMeta(eq("conv-1"), isNull(), eq("周报模板初稿已完成并发布")));
+                .updateSummaryIfUnchanged(
+                        eq("conv-1"), eq("上次：已完成周报模板初稿"), eq("周报模板初稿已完成并发布")));
         LlmInferRequest request = fixture.capturedRequest();
         assertTrue(request.getMessages().get(0).getContent().contains("持续维护"));
         String user = request.getMessages().get(1).getContent();

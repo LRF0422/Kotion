@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.knowledge.agent.core.entity.AgentChatSessionEntity;
 import com.knowledge.agent.core.session.ChatSessionStore;
+import com.knowledge.agent.core.supervisor.ThreadStore;
 import com.knowledge.agent.core.web.dto.ChatSessionView;
 import com.knowledge.agent.core.web.dto.SaveChatSessionRequest;
 import com.knowledge.core.secure.utils.SecurityContextUtil;
@@ -55,10 +56,12 @@ public class ChatSessionController {
     private static final int MAX_IMPORT_JSON_CHARS = 16 * 1024 * 1024;
 
     private final ChatSessionStore store;
+    private final ThreadStore threadStore;
     private final ObjectMapper objectMapper;
 
-    public ChatSessionController(ChatSessionStore store, ObjectMapper objectMapper) {
+    public ChatSessionController(ChatSessionStore store, ThreadStore threadStore, ObjectMapper objectMapper) {
         this.store = store;
+        this.threadStore = threadStore;
         this.objectMapper = objectMapper;
     }
 
@@ -207,6 +210,10 @@ public class ChatSessionController {
         try {
             Identity identity = identity();
             boolean cleared = store.clearTranscript(identity.tenantId, identity.userId, sessionId);
+            // The rolling session-memory summary lives on agent_thread, not on the
+            // projected session: reset it too, otherwise the next run is still
+            // primed with the cleared conversation's context.
+            threadStore.clearMemory(sessionId.trim(), identity.tenantId, identity.userId);
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("sessionId", sessionId);
             result.put("cleared", cleared);
@@ -223,6 +230,8 @@ public class ChatSessionController {
             Identity identity = identity();
             // Idempotent: deleting a session the backend never saw is a success.
             boolean removed = store.delete(identity.tenantId, identity.userId, sessionId);
+            // Do not leave the deleted conversation's session memory behind.
+            threadStore.clearMemory(sessionId.trim(), identity.tenantId, identity.userId);
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("sessionId", sessionId);
             result.put("removed", removed);

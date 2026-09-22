@@ -86,18 +86,45 @@ export const isPdfFile = (filename: string): boolean => {
     return getFileExtension(filename) === 'pdf';
 };
 
+/** Extensions whose contents are safe to show as plain text. */
+const TEXT_EXTENSIONS = new Set([
+    // plain text & prose
+    'txt', 'text', 'md', 'markdown', 'mdx', 'rst', 'adoc', 'asciidoc', 'log', 'srt', 'vtt',
+    // data & config
+    'json', 'jsonc', 'json5', 'xml', 'yaml', 'yml', 'toml', 'ini', 'conf', 'cfg',
+    'properties', 'env', 'csv', 'tsv', 'lock', 'graphql', 'gql', 'proto',
+    // markup & styles
+    'html', 'htm', 'xhtml', 'css', 'scss', 'sass', 'less', 'vue', 'svelte', 'astro',
+    // code
+    'js', 'jsx', 'mjs', 'cjs', 'ts', 'tsx', 'mts', 'cts', 'java', 'py', 'rb', 'php',
+    'go', 'rs', 'c', 'h', 'cpp', 'cc', 'cxx', 'hpp', 'hh', 'cs', 'kt', 'kts', 'swift',
+    'scala', 'dart', 'lua', 'pl', 'pm', 'r', 'jl', 'groovy', 'gradle', 'ex', 'exs',
+    'erl', 'hrl', 'clj', 'cljs', 'hs', 'lhs', 'fs', 'fsx', 'vb', 'sql', 'tf', 'hcl',
+    // shells & scripts
+    'sh', 'bash', 'zsh', 'fish', 'bat', 'cmd', 'ps1', 'psm1',
+    // templating & misc
+    'diff', 'patch', 'tex', 'latex', 'bib', 'njk', 'ejs', 'hbs', 'handlebars',
+    'pug', 'jade', 'mustache', 'gitignore', 'gitattributes', 'editorconfig',
+]);
+
+/** Extension-less text files commonly found in repositories. */
+const TEXT_FILENAMES = new Set([
+    'dockerfile', 'makefile', 'license', 'licence', 'readme', 'changelog',
+    'notice', 'authors', 'contributors', 'procfile', 'jenkinsfile', 'vagrantfile',
+    'gemfile', 'rakefile', 'brewfile', 'caddyfile',
+]);
+
 /**
- * Check if file is a plain-text / code file by extension
+ * Check if file is a plain-text / code file by extension or well-known name
  * @param filename File name
  * @returns True if file can be shown as text
  */
 export const isTextFile = (filename: string): boolean => {
-    const textExtensions = [
-        'txt', 'md', 'markdown', 'json', 'xml', 'yaml', 'yml', 'csv', 'log',
-        'js', 'jsx', 'ts', 'tsx', 'css', 'scss', 'less', 'html', 'htm',
-        'java', 'py', 'go', 'rs', 'c', 'cpp', 'h', 'sh', 'sql', 'ini', 'conf',
-    ];
-    return textExtensions.includes(getFileExtension(filename));
+    if (typeof filename !== 'string' || !filename) return false;
+    const lower = filename.toLowerCase();
+    const basename = lower.slice(lower.lastIndexOf('/') + 1);
+    if (TEXT_FILENAMES.has(basename)) return true;
+    return TEXT_EXTENSIONS.has(getFileExtension(basename));
 };
 
 /**
@@ -124,7 +151,8 @@ export const getPreviewKind = (filename: string, mediaType?: MediaTypeHint): Pre
     if (hint.startsWith('video/') || hint === 'video') return 'video';
     if (hint.startsWith('image/') || hint === 'image') return 'image';
     if (hint === 'application/pdf' || hint === 'pdf') return 'pdf';
-    if (hint.startsWith('text/')) return 'text';
+    // text/* plus semantic hints such as 'TEXT' from coarse backend categories
+    if (hint.startsWith('text/') || hint === 'text' || hint === 'txt' || hint === 'plain') return 'text';
 
     if (getFileExtension(filename) === 'webm') return 'media';
     if (isImageFile(filename)) return 'image';

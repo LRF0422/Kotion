@@ -36,8 +36,23 @@ const VISUAL_GROUPS: Array<{ exts: string[] } & FileVisual> = [
     { exts: ['mp4', 'avi', 'mov', 'wmv', 'flv', 'mkv', 'm4v', 'ogv', 'mpg', 'mpeg', '3gp'], icon: FileVideo, tile: 'bg-purple-500/10', fg: 'text-purple-600 dark:text-purple-400' },
     { exts: ['mp3', 'wav', 'ogg', 'aac', 'flac', 'm4a'], icon: FileMusic, tile: 'bg-pink-500/10', fg: 'text-pink-600 dark:text-pink-400' },
     { exts: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg', 'webp'], icon: FileImage, tile: 'bg-teal-500/10', fg: 'text-teal-600 dark:text-teal-400' },
-    { exts: ['js', 'jsx', 'ts', 'tsx', 'css', 'scss', 'less', 'html', 'htm', 'json', 'xml', 'yaml', 'yml', 'java', 'py', 'go', 'rs', 'c', 'cpp', 'h', 'sh', 'sql', 'vue'], icon: FileCode, tile: 'bg-indigo-500/10', fg: 'text-indigo-600 dark:text-indigo-400' },
-    { exts: ['txt', 'md', 'markdown', 'log', 'ini', 'conf'], icon: FileText, tile: 'bg-slate-500/10', fg: 'text-slate-600 dark:text-slate-400' },
+    {
+        exts: [
+            'js', 'jsx', 'mjs', 'cjs', 'ts', 'tsx', 'vue', 'svelte', 'css', 'scss', 'less',
+            'html', 'htm', 'json', 'xml', 'yaml', 'yml', 'toml', 'graphql', 'proto',
+            'java', 'py', 'rb', 'php', 'go', 'rs', 'c', 'cpp', 'h', 'cs', 'kt', 'swift',
+            'scala', 'dart', 'lua', 'r', 'sh', 'bat', 'ps1', 'sql', 'tf',
+        ],
+        icon: FileCode,
+        tile: 'bg-indigo-500/10',
+        fg: 'text-indigo-600 dark:text-indigo-400',
+    },
+    {
+        exts: ['txt', 'text', 'md', 'markdown', 'log', 'ini', 'conf', 'cfg', 'properties', 'env', 'srt', 'vtt'],
+        icon: FileText,
+        tile: 'bg-slate-500/10',
+        fg: 'text-slate-600 dark:text-slate-400',
+    },
 ];
 
 const DEFAULT_VISUAL: FileVisual = {

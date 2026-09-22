@@ -81,7 +81,10 @@ public class ThreadSummarizer {
                 LlmResult result = generateSummary(checkpoint, model, previous);
                 String summary = result != null ? result.getText() : null;
                 if (summary != null && !summary.trim().isEmpty()) {
-                    threadStore.updateMeta(conversationId, null, summary.trim());
+                    // Compare-and-set on the summary we summarized from: a
+                    // concurrent "clear chat" must not be undone by this
+                    // in-flight task writing the old conversation back.
+                    threadStore.updateSummaryIfUnchanged(conversationId, previous, summary.trim());
                 }
                 // Side-channel LLM calls must be visible to cost accounting.
                 accountUsage(runId, result);
