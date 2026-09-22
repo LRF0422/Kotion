@@ -79,6 +79,9 @@ room-server 已接入 `@hocuspocus/extension-database` + MySQL：
 
 ## 保存与加载
 
+- **ref 分配**：`insertSpreadsheet` 创建块时就写入 `workbookRef`；更早的块由
+  `SpreadsheetView` 的 ensure-ref effect 补上。这样**第一次导入**也直接写 store，
+  不会先写超大节点属性再迁移（那正是"首次导入存不住、刷新后第二次才行"的原因）。
 - **保存**：`SpreadsheetView.handleSave` 先 `persistStoredWorkbook` —— 有 ref 时
   `storeWorkbook(doc, ref, previous, next)` 只写变更 key；否则走旧的 `setNodeMarkup`。
 - **加载**：`initialDataRef` 惰性从 store 读取（无则回退属性）；迁移后属性里的

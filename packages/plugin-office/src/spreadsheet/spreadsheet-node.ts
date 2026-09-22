@@ -1,6 +1,7 @@
 import React from "react"
 import { PMNode as Node, mergeAttributes, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer, withNodeViewErrorBoundary } from "@kn/editor"
 import { DEFAULT_SPREADSHEET_HEIGHT } from "./constants"
+import { newWorkbookId } from "./workbook-data"
 
 const LazySpreadsheetView = React.lazy(async () => {
     const module = await import("./SpreadsheetView")
@@ -70,10 +71,17 @@ export const SpreadsheetNode = Node.create({
             insertSpreadsheet:
                 (workbookData?: Record<string, any> | null) =>
                 ({ commands }) => {
+                    const data = workbookData ?? null
                     return commands.insertContent({
                         type: this.name,
                         attrs: {
-                            workbookData: workbookData ?? null,
+                            workbookData: data,
+                            // Give every new block a store ref up front (reusing the
+                            // payload id when there is one). Without it the first
+                            // save round-trips through the large node attribute and
+                            // only migrates afterwards, which is both slow and
+                            // fragile for a first-time import.
+                            workbookRef: data && typeof data.id === 'string' ? data.id : newWorkbookId(),
                         },
                     })
                 },

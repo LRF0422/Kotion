@@ -113,20 +113,22 @@ export const SpreadsheetView: React.FC<NodeViewProps> = React.memo((props) => {
         setSelectionVersion((version) => version + 1)
     }, [])
 
-    // Seed the store from a legacy attribute payload, then drop the bulk data so
-    // the document stops carrying the table. Concurrent clients derive the same
-    // ref from the workbook id, so the seed converges.
+    // Ensure the block has a store ref and move any legacy attribute payload into
+    // the store. Every block gets a ref up front, so even its very first save
+    // writes straight to the store instead of round-tripping through the large
+    // node attribute and only migrating afterwards (which lost a first import).
     useEffect(() => {
         const doc = workbookStoreFor(editor)
         if (!doc) return
         const legacy = node.attrs.workbookData
-        if (!legacy) return
         const currentRef = typeof node.attrs.workbookRef === 'string' && node.attrs.workbookRef
             ? node.attrs.workbookRef
             : null
-        const workbook = ensureValidWorkbookData(legacy)
+        const workbook = ensureValidWorkbookData(legacy ?? initialData)
         const ref = currentRef ?? workbook.id
         if (!hasWorkbook(doc, ref)) seedWorkbook(doc, ref, workbook)
+        // Ref already in place and the attribute empty: nothing to migrate.
+        if (currentRef === ref && legacy === null) return
         try {
             const pos = getPos()
             if (typeof pos !== 'number') return
@@ -144,7 +146,7 @@ export const SpreadsheetView: React.FC<NodeViewProps> = React.memo((props) => {
         } catch {
             // The node view was torn down mid-migration; the store seed already ran.
         }
-    }, [editor, getPos, node.attrs.workbookRef, node.attrs.workbookData])
+    }, [editor, getPos, initialData, node.attrs.workbookRef, node.attrs.workbookData])
 
     // ESC exits fullscreen (the toolbar also has an explicit close button).
     useEffect(() => {

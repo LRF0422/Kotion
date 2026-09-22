@@ -129,7 +129,8 @@ export const DEFAULT_COLUMN_WIDTH = 96
 
 let workbookSeq = 0
 
-function newWorkbookId(): string {
+/** New opaque id for a workbook (also used as the L3 store ref for new blocks). */
+export function newWorkbookId(): string {
     workbookSeq += 1
     return `wb-${Date.now().toString(36)}-${workbookSeq}`
 }
