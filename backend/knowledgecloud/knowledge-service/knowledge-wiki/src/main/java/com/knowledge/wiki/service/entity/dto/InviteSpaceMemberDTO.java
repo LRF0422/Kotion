@@ -3,8 +3,6 @@ package com.knowledge.wiki.service.entity.dto;
 import java.io.Serializable;
 import java.util.List;
 
-import javax.validation.constraints.NotNull;
-
 import lombok.Data;
 
 /**
@@ -14,9 +12,10 @@ import lombok.Data;
 public class InviteSpaceMemberDTO implements Serializable {
 
     /**
-     * Target space ID
+     * Target space ID. Supplied by the controller from the path variable
+     * ({@code /space/{spaceId}/member/invite}) and set before the service runs, so
+     * it must not be required in the request body.
      */
-    @NotNull(message = "Space ID is required")
     private Long spaceId;
 
     /**
