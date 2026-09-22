@@ -562,7 +562,11 @@ export function useVTableSheet(options: UseVTableSheetOptions): GridApi {
             }
             if (cancelled) return
 
-            const initial = ensureValidWorkbookData(workbookData)
+            // Prefer the latest desired payload over the prop captured at render:
+            // an L3 store read (or an external apply) can land while the engine is
+            // still loading, and it only reaches dataRef.current. Using the stale
+            // prop here mounted an empty grid and dropped that data.
+            const initial = ensureValidWorkbookData(dataRef.current ?? workbookData)
             dataRef.current = initial
             appliedRef.current = initial
             appliedKeyRef.current = workbookContentKey(initial)

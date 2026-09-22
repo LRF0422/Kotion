@@ -97,6 +97,28 @@ room-server 已接入 `@hocuspocus/extension-database` + MySQL：
   不上报、远端上报、结构变更整体重写、清理。
 - 全量：205/205 通过；本包 typecheck 0 新增错误；rollup 构建通过。
 
+## 排障（保存不了时按顺序查）
+
+1. **room-server 是否真的启用了持久化**：启动日志应为
+   `Room server started ... persistence: mysql`；若是 `IN-MEMORY`，说明
+   `DB_HOST` 没配或连不上（会打印 `[persist] ...`）。
+2. **表里是否有行**：编辑单元格几秒后执行
+   `SELECT name, OCTET_LENGTH(data), updated_at FROM collab_documents`，
+   对应 `page:{id}` 的行应出现/增长。没有行 = Y.Doc 没写进去或没触发 store。
+3. **浏览器控制台**：新增了一行诊断
+   `[office/spreadsheet] storage L3(Y.Doc) ref=...` 或 `legacy(attribute)`。
+   - `legacy(attribute)` 表示没拿到 collaborationRuntime（插件/宿主版本不一致，
+     或该编辑器无 provider），此时数据走节点属性，由后端 REST 保存。
+   - `L3(Y.Doc)` 且编辑后表无行，说明客户端写入了本地 Y.Doc 但没同步/没落库。
+4. **重载后为空**：客户端可能在 provider 初始 sync 之前就读取了 store。已在
+   `SpreadsheetView` 增加 `synced` 后重读并 `applyExternalData` 的兜底。
+
+### 已知不可恢复的情形
+
+若某次迁移已经把节点的 `workbookData` 清成 `null`，而当时 room-server 无持久化，
+工作簿只存在内存 Y.Doc 中，重启即丢失，且 REST 里只剩 `workbookRef`——这部分历史数据
+无法找回，只能重新编辑。
+
 ## 剩余工作
 
 1. **超大工作簿的首次迁移**：目前 `seedWorkbook` 对每个非空单元格做一次 `set`，

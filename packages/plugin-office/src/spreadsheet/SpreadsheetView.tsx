@@ -10,7 +10,7 @@ import { PivotDialog } from "./PivotDialog"
 import { PivotDetailsDialog, type PivotDrillTarget } from "./PivotDetailsDialog"
 import { pickExcelFileFromCenter } from "./excel-file-picker"
 import { registerSpreadsheetLive, unregisterSpreadsheetLive, type SpreadsheetLiveHandle } from "./workbook-registry"
-import { loadStoredWorkbook, persistStoredWorkbook, workbookStoreFor } from "./workbook-bridge"
+import { loadStoredWorkbook, persistStoredWorkbook, workbookProviderFor, workbookStoreFor } from "./workbook-bridge"
 import { hasWorkbook, observeWorkbook, seedWorkbook, type StoreDoc } from "./workbook-store"
 import { DEFAULT_SPREADSHEET_HEIGHT } from "./constants"
 import { ensureValidWorkbookData, workbookHasContent, type WorkbookData } from "./workbook-data"
@@ -247,6 +247,33 @@ export const SpreadsheetView: React.FC<NodeViewProps> = React.memo((props) => {
         return observeWorkbook(doc, workbookRef, (workbook) => {
             applyExternalDataRef.current?.(workbook)
         })
+    }, [editor, workbookRef])
+
+    // The editor renders before the provider's initial sync lands, so the first
+    // store read can miss data that is already persisted on the server. Re-read
+    // on `synced` to close that gap.
+    useEffect(() => {
+        const provider = workbookProviderFor(editor)
+        if (!provider || !workbookRef) return
+        const apply = () => {
+            const stored = loadStoredWorkbook(workbookStoreFor(editor), workbookRef)
+            if (stored) applyExternalDataRef.current?.(stored)
+        }
+        apply()
+        provider.on?.('synced', apply)
+        return () => {
+            provider.off?.('synced', apply)
+        }
+    }, [editor, workbookRef])
+
+    // Diagnostic: makes it obvious from the console whether a block is on the L3
+    // store or the legacy attribute path.
+    useEffect(() => {
+        const doc = workbookStoreFor(editor)
+        console.info(
+            '[office/spreadsheet] storage ' + (doc ? 'L3(Y.Doc)' : 'legacy(attribute)') +
+                ' ref=' + (workbookRef ?? '(none)'),
+        )
     }, [editor, workbookRef])
 
     // Publish the live grid to the AI tool layer so reads are current and writes
