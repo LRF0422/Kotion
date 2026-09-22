@@ -57,6 +57,7 @@ import com.knowledge.wiki.service.entity.dto.ShareLinkRequestDTO;
 import com.knowledge.wiki.service.entity.dto.ShareLinkResponseDTO;
 import com.knowledge.wiki.service.entity.dto.SpaceMemberDTO;
 import com.knowledge.wiki.service.entity.enums.SpaceType;
+import com.knowledge.wiki.service.entity.enums.SpaceVisibility;
 import com.knowledge.wiki.service.entity.enums.InvitationStatus;
 import com.knowledge.wiki.service.entity.enums.PageStatus;
 import com.knowledge.wiki.service.entity.vo.InvitedPageVO;
@@ -1006,6 +1007,21 @@ public class SpaceApplication {
             wrapper.and(w -> w.isNull(Space::getArchived).or().eq(Space::getArchived, false));
         }
 
+        // Only surface spaces the caller can actually open. Private spaces stay out of
+        // the directory until the owner explicitly adds the user as a member.
+        Long currentUserId = SecurityContextUtil.getUserId();
+        if (currentUserId != null && currentUserId > 0) {
+            wrapper.and(w -> w
+                    .eq(Space::getUserId, currentUserId)
+                    .or().eq(Space::getVisibility, SpaceVisibility.PUBLIC)
+                    .or().and(legacy -> legacy
+                            .isNull(Space::getVisibility)
+                            .ne(Space::getType, SpaceType.COLLABORATION))
+                    .or().inSql(Space::getId,
+                            "SELECT space_id FROM wiki_space_member WHERE user_id = " + currentUserId
+                                    + " AND role <> 'GUEST' AND is_deleted = 0"));
+        }
+
         wrapper.orderByDesc(Space::getCreateTime);
 
         if (dto.isFavorite()) {
@@ -1016,9 +1032,13 @@ public class SpaceApplication {
     }
 
     public IPage<PageVO> queryRecentPage(QueryPageDTO dto) {
-        IPage<PageVO> page = PageConverter.INSTANCE.convertVO(
-                spaceService.getPageService().queryRecentPage(dto));
-        return page;
+        IPage<Page> entityPage = spaceService.getPageService().queryRecentPage(dto);
+        // Keep the recent widget consistent with the page-read model: never surface
+        // pages from spaces the caller cannot open.
+        entityPage.setRecords(entityPage.getRecords().stream()
+                .filter(this::canReadPage)
+                .collect(Collectors.toList()));
+        return PageConverter.INSTANCE.convertVO(entityPage);
     }
 
     public void restorePage(Long pageId) {
@@ -1034,16 +1054,22 @@ public class SpaceApplication {
     }
 
     public IPage<PageVO> queryPage(QueryPageDTO dto) {
-        return PageConverter.INSTANCE.convertVO(
-                this.spaceService.getPageService().lambdaQuery()
-                        .eq(dto.getSpaceId() != null, Page::getSpaceId, dto.getSpaceId())
-                        .eq(dto.getStatus() != null, Page::getStatus, dto.getStatus())
-                        // When no explicit status is requested (e.g. cross-space link
-                        // search with spaceId omitted), exclude trashed/deleted pages.
-                        .ne(dto.getStatus() == null, Page::getStatus, PageStatus.DELETED)
-                        .ne(dto.getStatus() == null, Page::getStatus, PageStatus.TRASH)
-                        .like(StrUtil.isNotEmpty(dto.getSearchValue()), Page::getTitle, dto.getSearchValue())
-                        .page(dto.page()));
+        IPage<Page> entityPage = this.spaceService.getPageService().lambdaQuery()
+                .eq(dto.getSpaceId() != null, Page::getSpaceId, dto.getSpaceId())
+                .eq(dto.getStatus() != null, Page::getStatus, dto.getStatus())
+                // When no explicit status is requested (e.g. cross-space link
+                // search with spaceId omitted), exclude trashed/deleted pages.
+                .ne(dto.getStatus() == null, Page::getStatus, PageStatus.DELETED)
+                .ne(dto.getStatus() == null, Page::getStatus, PageStatus.TRASH)
+                .like(StrUtil.isNotEmpty(dto.getSearchValue()), Page::getTitle, dto.getSearchValue())
+                .page(dto.page());
+        // Cross-space search/mention pickers must not reveal titles from spaces the
+        // caller cannot open. Status is deliberately left to the query (the trash
+        // view needs TRASH rows), so only permission is checked here.
+        entityPage.setRecords(entityPage.getRecords().stream()
+                .filter(this::hasReadPermission)
+                .collect(Collectors.toList()));
+        return PageConverter.INSTANCE.convertVO(entityPage);
     }
 
     public IPage<WikiBlockVO> queryPageBlock(QueryPageBlockDTO dto) {
@@ -1212,6 +1238,12 @@ public class SpaceApplication {
         }
         permissionService.checkPagePermission(SecurityContextUtil.getUserId(), page,
                 IPermissionService.PERMISSION_READ);
+    }
+
+    /** Permission-only variant of {@link #canReadPage(Page)} that keeps status handling to the caller. */
+    private boolean hasReadPermission(Page page) {
+        return page != null
+                && permissionService.effectivePagePermission(SecurityContextUtil.getUserId(), page) != null;
     }
 
     private boolean canReadPage(Page page) {

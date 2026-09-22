@@ -9,12 +9,15 @@ import {
 } from "@kn/ui";
 import { Crown, LogOut, Mail, MoreHorizontal, Search, Shield, UserMinus, UserPlus, Users, X } from "@kn/icon";
 import {
+    APIS,
     canManageMembers,
     GlobalState,
     type MemberRole,
+    type OrganizationMember,
     type PendingInvitation,
     type SpaceMember,
     type UserSummary,
+    useApi,
     useDebounce,
     useNavigator,
     useSafeState,
@@ -29,7 +32,8 @@ export const Members: React.FC = () => {
     const { spaceId } = useContext(SettingContext)
     const navigator = useNavigator()
     const service = useSpacePageService()
-    const { userInfo } = useSelector((state: GlobalState) => state)
+    const { userInfo, currentContext } = useSelector((state: GlobalState) => state)
+    const isTeamContext = currentContext?.type === 'TEAM'
 
     const [members, setMembers] = useSafeState<SpaceMember[]>([])
     const [loading, setLoading] = useSafeState(true)
@@ -38,6 +42,12 @@ export const Members: React.FC = () => {
     const [searchResults, setSearchResults] = useState<UserSummary[]>([])
     const [searching, setSearching] = useState(false)
     const [selectedRole, setSelectedRole] = useState<MemberRole>('MEMBER')
+    const [inviteSource, setInviteSource] = useState<'organization' | 'search'>('organization')
+    const [orgMembers, setOrgMembers] = useState<OrganizationMember[]>([])
+    const [loadingOrgMembers, setLoadingOrgMembers] = useState(false)
+    const [orgFilter, setOrgFilter] = useState('')
+    // Personal contexts have no organization directory; always use global search there.
+    const inviteSourceEffective: 'organization' | 'search' = isTeamContext ? inviteSource : 'search'
 
     // Member list filters
     const [memberFilter, setMemberFilter] = useState('')
@@ -117,6 +127,33 @@ export const Members: React.FC = () => {
             .catch(() => setSearchResults([]))
             .finally(() => setSearching(false))
     }, [service, debouncedKeyword])
+
+    // Reset the invite picker each time it opens; default to the organization
+    // when the space lives in a team (organization) context.
+    useEffect(() => {
+        if (!inviteOpen) return
+        setInviteSource(isTeamContext ? 'organization' : 'search')
+        setOrgFilter('')
+    }, [inviteOpen, isTeamContext])
+
+    // Pull the candidate list from the organization rather than the global user
+    // directory, so a space admin can see exactly who is already in the workspace.
+    useEffect(() => {
+        if (!inviteOpen || !isTeamContext || !currentContext?.id) return
+        let cancelled = false
+        setLoadingOrgMembers(true)
+        useApi(APIS.GET_ORGANIZATION_MEMBERS, { contextId: currentContext.id })
+            .then(res => { if (!cancelled) setOrgMembers(res.data ?? []) })
+            .catch(() => {
+                if (cancelled) return
+                // Personal contexts or an org directory the caller may not read:
+                // fall back to the global search picker.
+                setOrgMembers([])
+                setInviteSource('search')
+            })
+            .finally(() => { if (!cancelled) setLoadingOrgMembers(false) })
+        return () => { cancelled = true }
+    }, [inviteOpen, isTeamContext, currentContext?.id])
 
     // Invite a user
     const handleInvite = useCallback(async (userId: string) => {
@@ -208,6 +245,23 @@ export const Members: React.FC = () => {
         })
     }, [members, memberFilter, roleFilter])
 
+    // Active organization members that are not in this space yet. The organization
+    // directory is the primary source; the global user search stays as a fallback
+    // for spaces that do not live in a team context.
+    const orgCandidates = useMemo(() => {
+        const existing = new Set(members.map(member => String(member.id)))
+        const kw = orgFilter.trim().toLowerCase()
+        return orgMembers
+            .filter(member => member.status === 1)
+            .filter(member => String(member.userId) !== String(userInfo?.id))
+            .filter(member => !existing.has(String(member.userId)))
+            .filter(member => {
+                if (!kw) return true
+                return [member.displayName, member.name, member.account]
+                    .some(value => value?.toLowerCase().includes(kw))
+            })
+    }, [orgMembers, members, orgFilter, userInfo?.id])
+
     const getRoleBadgeClass = (role: string) => {
         switch (role) {
             case 'OWNER': return 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
@@ -271,11 +325,39 @@ export const Members: React.FC = () => {
                                     </DialogDescription>
                                 </DialogHeader>
                                 <div className="space-y-4 py-4">
+                                    {isTeamContext && (
+                                        <div className="flex gap-1 rounded-lg border p-1">
+                                            <button
+                                                type="button"
+                                                className={cn(
+                                                    "flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
+                                                    inviteSource === 'organization' ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
+                                                )}
+                                                onClick={() => setInviteSource('organization')}
+                                            >
+                                                {t('members.sourceOrganization', 'From organization')}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className={cn(
+                                                    "flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
+                                                    inviteSource === 'search' ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
+                                                )}
+                                                onClick={() => setInviteSource('search')}
+                                            >
+                                                {t('members.sourceSearch', 'Search all users')}
+                                            </button>
+                                        </div>
+                                    )}
                                     <div className="flex items-center gap-2">
                                         <Input
-                                            placeholder={t('members.searchPlaceholder', 'Search users...')}
-                                            value={searchKeyword}
-                                            onChange={(e) => setSearchKeyword(e.target.value)}
+                                            placeholder={inviteSourceEffective === 'organization'
+                                                ? t('members.orgSearchPlaceholder', 'Filter organization members...')
+                                                : t('members.searchPlaceholder', 'Search users...')}
+                                            value={inviteSourceEffective === 'organization' ? orgFilter : searchKeyword}
+                                            onChange={(e) => inviteSourceEffective === 'organization'
+                                                ? setOrgFilter(e.target.value)
+                                                : setSearchKeyword(e.target.value)}
                                             className="flex-1"
                                             icon={<Search className="h-4 w-4" />}
                                         />
@@ -290,45 +372,89 @@ export const Members: React.FC = () => {
                                             </SelectContent>
                                         </Select>
                                     </div>
-                                    {/* Search results */}
-                                    <div className="max-h-[200px] overflow-auto space-y-1">
-                                        {searching && (
-                                            <div className="space-y-2">
-                                                {Array.from({ length: 3 }).map((_, i) => (
-                                                    <Skeleton key={i} className="h-10 w-full rounded-md" />
-                                                ))}
-                                            </div>
-                                        )}
-                                        {!searching && searchResults.map(user => {
-                                            const alreadyMember = members.some(member => member.id === user.id)
-                                            return (
-                                                <div key={user.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/60">
-                                                    <Avatar className="h-8 w-8">
-                                                        <AvatarImage src={user.avatar || user.avatarUrl} />
-                                                        <AvatarFallback className="text-xs">
-                                                            {(user.name || '?').charAt(0).toUpperCase()}
-                                                        </AvatarFallback>
-                                                    </Avatar>
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="text-sm font-medium truncate">{user.name}</p>
-                                                        <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                                    {/* Candidate list: organization members first, global search second */}
+                                    <div className="max-h-[240px] overflow-auto space-y-1">
+                                        {inviteSourceEffective === 'organization' ? (
+                                            <>
+                                                {loadingOrgMembers && (
+                                                    <div className="space-y-2">
+                                                        {Array.from({ length: 3 }).map((_, i) => (
+                                                            <Skeleton key={i} className="h-10 w-full rounded-md" />
+                                                        ))}
                                                     </div>
-                                                    <Button
-                                                        size="sm"
-                                                        variant={alreadyMember ? "ghost" : "outline"}
-                                                        disabled={alreadyMember}
-                                                        onClick={() => handleInvite(user.id)}
-                                                        className="h-7 text-xs"
-                                                    >
-                                                        {alreadyMember ? t('members.joined', 'Joined') : t('members.add', 'Add')}
-                                                    </Button>
-                                                </div>
-                                            )
-                                        })}
-                                        {!searching && debouncedKeyword.length >= 2 && searchResults.length === 0 && (
-                                            <p className="text-xs text-muted-foreground text-center py-4">
-                                                {t('members.noResults', 'No users found')}
-                                            </p>
+                                                )}
+                                                {!loadingOrgMembers && orgCandidates.map(member => {
+                                                    const name = member.displayName || member.name || member.account
+                                                    return (
+                                                        <div key={member.userId} className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/60">
+                                                            <Avatar className="h-8 w-8">
+                                                                <AvatarImage src={member.avatar} />
+                                                                <AvatarFallback className="text-xs">
+                                                                    {(name || '?').charAt(0).toUpperCase()}
+                                                                </AvatarFallback>
+                                                            </Avatar>
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="text-sm font-medium truncate">{name}</p>
+                                                                <p className="text-xs text-muted-foreground truncate">{member.account}</p>
+                                                            </div>
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline"
+                                                                onClick={() => handleInvite(member.userId)}
+                                                                className="h-7 text-xs"
+                                                            >
+                                                                {t('members.add', 'Add')}
+                                                            </Button>
+                                                        </div>
+                                                    )
+                                                })}
+                                                {!loadingOrgMembers && orgCandidates.length === 0 && (
+                                                    <p className="text-xs text-muted-foreground text-center py-4">
+                                                        {t('members.noOrgCandidates', 'Everyone in the organization is already a member')}
+                                                    </p>
+                                                )}
+                                            </>
+                                        ) : (
+                                            <>
+                                                {searching && (
+                                                    <div className="space-y-2">
+                                                        {Array.from({ length: 3 }).map((_, i) => (
+                                                            <Skeleton key={i} className="h-10 w-full rounded-md" />
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                {!searching && searchResults.map(user => {
+                                                    const alreadyMember = members.some(member => member.id === user.id)
+                                                    return (
+                                                        <div key={user.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/60">
+                                                            <Avatar className="h-8 w-8">
+                                                                <AvatarImage src={user.avatar || user.avatarUrl} />
+                                                                <AvatarFallback className="text-xs">
+                                                                    {(user.name || '?').charAt(0).toUpperCase()}
+                                                                </AvatarFallback>
+                                                            </Avatar>
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="text-sm font-medium truncate">{user.name}</p>
+                                                                <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                                                            </div>
+                                                            <Button
+                                                                size="sm"
+                                                                variant={alreadyMember ? "ghost" : "outline"}
+                                                                disabled={alreadyMember}
+                                                                onClick={() => handleInvite(user.id)}
+                                                                className="h-7 text-xs"
+                                                            >
+                                                                {alreadyMember ? t('members.joined', 'Joined') : t('members.add', 'Add')}
+                                                            </Button>
+                                                        </div>
+                                                    )
+                                                })}
+                                                {!searching && debouncedKeyword.length >= 2 && searchResults.length === 0 && (
+                                                    <p className="text-xs text-muted-foreground text-center py-4">
+                                                        {t('members.noResults', 'No users found')}
+                                                    </p>
+                                                )}
+                                            </>
                                         )}
                                     </div>
                                 </div>

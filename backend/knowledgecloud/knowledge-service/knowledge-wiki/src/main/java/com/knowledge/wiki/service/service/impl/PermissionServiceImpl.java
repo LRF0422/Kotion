@@ -28,19 +28,12 @@ import cn.hutool.core.util.StrUtil;
 /**
  * Unified permission resolution.
  * Space role implied permissions: OWNER/ADMIN -> ADMIN, MEMBER -> WRITE,
- * GUEST -> none (page-level grants only). Members of the space's organization
- * (owner/admin/member, but not the external-collaborator ORG_GUEST) can read
- * every space in that organization. PUBLIC spaces are readable by any
+ * GUEST -> none (page-level grants only). PUBLIC spaces are readable by any
  * signed-in user. Legacy non-collaboration spaces without an explicit
  * visibility remain readable to keep existing browsing behavior.
  */
 @Service
 public class PermissionServiceImpl implements IPermissionService {
-
-    /** Built-in organization role codes projected into the session token. */
-    private static final String ORG_ROLE_OWNER = "ORG_OWNER";
-    private static final String ORG_ROLE_ADMIN = "ORG_ADMIN";
-    private static final String ORG_ROLE_MEMBER = "ORG_MEMBER";
 
     @Autowired
     private ISpaceService spaceService;
@@ -103,13 +96,6 @@ public class PermissionServiceImpl implements IPermissionService {
         if (role == CollaboratorRole.MEMBER) {
             return PERMISSION_WRITE;
         }
-        // Members of the space's organization may read everything that lives in that
-        // organization. The space roles above still decide who may write, and
-        // ORG_GUEST is the external-collaborator projection which must stay
-        // page-grant-only so it never inherits the whole organization's content.
-        if (isOrganizationMember()) {
-            return PERMISSION_READ;
-        }
         // GUEST members and non-members: only public spaces are readable
         if (space.getVisibility() == SpaceVisibility.PUBLIC) {
             return PERMISSION_READ;
@@ -155,28 +141,6 @@ public class PermissionServiceImpl implements IPermissionService {
                 .stream()
                 .map(Page::getId)
                 .collect(Collectors.toSet());
-    }
-
-    /**
-     * Whether the current session belongs to a built-in organization role
-     * (owner/admin/member). The context claim has already been matched against the
-     * space, so this answers "is the caller a regular member of this workspace".
-     *
-     * <p>ORG_GUEST is intentionally excluded: external collaborators are admitted to
-     * the organization only so they can open the specific pages they were granted.
-     */
-    private boolean isOrganizationMember() {
-        String roleName = SecurityContextUtil.getRoleName();
-        if (StrUtil.isBlank(roleName)) {
-            return false;
-        }
-        for (String token : roleName.split(",")) {
-            String role = token.trim();
-            if (ORG_ROLE_OWNER.equals(role) || ORG_ROLE_ADMIN.equals(role) || ORG_ROLE_MEMBER.equals(role)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private String max(String a, String b) {
