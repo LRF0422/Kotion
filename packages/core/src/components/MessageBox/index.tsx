@@ -99,17 +99,26 @@ type MessageTab = 'all' | 'system' | 'collaboration';
  * Convert API message to UI Message format
  */
 const apiMessageToUiMessage = (apiMsg: ApiMessage): Message => {
+    // Organization invitations arrive through the same instant-message channel
+    // as wiki collaboration invites; their accept route is /organization-invite/:token.
+    const organizationInviteMatch = apiMsg.content?.match(/\/organization-invite\/([A-Za-z0-9_-]+)/);
     const isCollaboration = apiMsg.content?.includes('/collaborate/') ||
+        !!organizationInviteMatch ||
         apiMsg.contentType === 'LINK' ||
-        apiMsg.content?.includes('invited you');
+        apiMsg.content?.includes('invited you') ||
+        apiMsg.content?.includes('邀请你');
 
     // Properly distinguish between collaboration and system messages
     const type: Message['type'] = isCollaboration ? 'collaboration' : 'system';
 
     let actionUrl: string | undefined;
-    const collaborateMatch = apiMsg.content?.match(/\/collaborate\/([a-zA-Z0-9-]+)/);
-    if (collaborateMatch) {
-        actionUrl = `/collaborate/${collaborateMatch[1]}`;
+    if (organizationInviteMatch) {
+        actionUrl = `/organization-invite/${organizationInviteMatch[1]}`;
+    } else {
+        const collaborateMatch = apiMsg.content?.match(/\/collaborate\/([a-zA-Z0-9-]+)/);
+        if (collaborateMatch) {
+            actionUrl = `/collaborate/${collaborateMatch[1]}`;
+        }
     }
 
     return {

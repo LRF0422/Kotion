@@ -1,17 +1,29 @@
-import { ZhihuApiError, describeZhihuError, zhihuErrorCodeMessage } from "./zhihu-errors";
+import {
+    ZhihuApiError,
+    ZhihuTimeoutError,
+    describeZhihuError,
+    zhihuErrorCodeMessage,
+} from "./zhihu-errors";
 
 export interface ZhihuClientConfig {
     accessSecret: string;
     baseUrl?: string;
+    /** Default per-call budget; the rate limiter and client share it. */
+    timeoutMs?: number;
 }
 
 export const DEFAULT_ZHIHU_BASE_URL = "https://developer.zhihu.com";
+
+/** Per-call budget covering rate-limit queue wait plus the network request. */
+export const DEFAULT_ZHIHU_TIMEOUT_MS = 20_000;
 
 export interface ZhihuRequestOptions {
     method?: "GET" | "POST";
     query?: Record<string, string | number | boolean | undefined | null>;
     body?: unknown;
     signal?: AbortSignal;
+    /** Overrides the client/default budget for this single request. */
+    timeoutMs?: number;
     /**
      * When false, return the parsed JSON as-is instead of unwrapping the
      * Open Platform {Code, Message, Data} envelope (used by OpenAI-style
@@ -34,6 +46,59 @@ function buildUrl(
         }
     }
     return url.toString();
+}
+
+function linkAbortSignal(
+    external: AbortSignal | undefined,
+    controller: AbortController,
+): () => void {
+    if (!external) return () => undefined;
+    if (external.aborted) {
+        controller.abort();
+        return () => undefined;
+    }
+    const onAbort = () => controller.abort();
+    external.addEventListener("abort", onAbort);
+    return () => external.removeEventListener("abort", onAbort);
+}
+
+/**
+ * Fetch + JSON parse under a hard timeout. On expiry the request is aborted and
+ * a {@link ZhihuTimeoutError} is thrown; the caller must not retry.
+ */
+async function fetchWithTimeout(
+    url: string,
+    init: RequestInit,
+    timeoutMs: number,
+    externalSignal: AbortSignal | undefined,
+): Promise<{ response: Response; payload: unknown }> {
+    const controller = new AbortController();
+    const unlink = linkAbortSignal(externalSignal, controller);
+    let timedOut = false;
+    const timer =
+        timeoutMs > 0
+            ? setTimeout(() => {
+                  timedOut = true;
+                  controller.abort();
+              }, timeoutMs)
+            : null;
+
+    try {
+        const response = await fetch(url, { ...init, signal: controller.signal });
+        let payload: unknown = null;
+        try {
+            payload = await response.json();
+        } catch {
+            payload = null;
+        }
+        return { response, payload };
+    } catch (error) {
+        if (timedOut) throw new ZhihuTimeoutError(timeoutMs);
+        throw error;
+    } finally {
+        if (timer) clearTimeout(timer);
+        unlink();
+    }
 }
 
 /**
@@ -66,19 +131,12 @@ export async function zhihuFetch<T>(
         body = JSON.stringify(options.body);
     }
 
-    const response = await fetch(url, {
-        method: options.method ?? "GET",
-        headers,
-        body,
-        signal: options.signal,
-    });
-
-    let payload: unknown = null;
-    try {
-        payload = await response.json();
-    } catch {
-        payload = null;
-    }
+    const { response, payload } = await fetchWithTimeout(
+        url,
+        { method: options.method ?? "GET", headers, body },
+        options.timeoutMs ?? config.timeoutMs ?? DEFAULT_ZHIHU_TIMEOUT_MS,
+        options.signal,
+    );
 
     if (!payload || typeof payload !== "object") {
         throw new ZhihuApiError(

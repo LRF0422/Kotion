@@ -1,5 +1,5 @@
-import type { ZhihuClientConfig } from "./zhihu-client";
-import { zhihuFetch } from "./zhihu-client";
+import type { ZhihuClientConfig, ZhihuRequestOptions } from "./zhihu-client";
+import { DEFAULT_ZHIHU_TIMEOUT_MS, zhihuFetch } from "./zhihu-client";
 import { zhihuCache } from "./zhihu-cache";
 import { zhihuRateLimit } from "./zhihu-rate-limit";
 import type {
@@ -14,6 +14,34 @@ import type {
 export interface ZhihuServiceOptions extends ZhihuClientConfig {
     enableCache?: boolean;
     cacheTtlMs?: number;
+}
+
+function resolveTimeoutMs(options: ZhihuServiceOptions): number {
+    const configured = options.timeoutMs;
+    if (typeof configured === "number" && configured > 0) return configured;
+    return DEFAULT_ZHIHU_TIMEOUT_MS;
+}
+
+/**
+ * Single entry point for every rate-limited call. The per-call budget covers
+ * both the queue wait and the request; once it is exceeded the call fails
+ * immediately with a ZhihuTimeoutError and is not retried.
+ */
+function rateLimitedRequest<T>(
+    options: ZhihuServiceOptions,
+    path: string,
+    request: Omit<ZhihuRequestOptions, "timeoutMs">,
+): Promise<T> {
+    const timeoutMs = resolveTimeoutMs(options);
+    const deadline = Date.now() + timeoutMs;
+    return zhihuRateLimit.run(
+        () =>
+            zhihuFetch<T>(options, path, {
+                ...request,
+                timeoutMs: Math.max(1, deadline - Date.now()),
+            }),
+        { deadline, timeoutMs },
+    );
 }
 
 type UnknownRecord = Record<string, unknown>;
@@ -122,9 +150,9 @@ export async function searchZhihu(
         if (hit) return hit;
     }
 
-    const raw = await zhihuRateLimit.run(() =>
-        zhihuFetch<unknown>(options, path, { query: { Query: trimmed, Count: capped } }),
-    );
+    const raw = await rateLimitedRequest<unknown>(options, path, {
+        query: { Query: trimmed, Count: capped },
+    });
     const result = normalizeSearchResult(raw);
 
     if (options.enableCache !== false) zhihuCache.set(key, result, options.cacheTtlMs);
@@ -149,9 +177,9 @@ export async function searchZhihuGlobal(
         if (hit) return hit;
     }
 
-    const raw = await zhihuRateLimit.run(() =>
-        zhihuFetch<unknown>(options, path, { query: { Query: trimmed, Count: capped } }),
-    );
+    const raw = await rateLimitedRequest<unknown>(options, path, {
+        query: { Query: trimmed, Count: capped },
+    });
     const result = normalizeSearchResult(raw);
 
     if (options.enableCache !== false) zhihuCache.set(key, result, options.cacheTtlMs);
@@ -172,9 +200,9 @@ export async function getZhihuHotList(
         if (hit) return hit;
     }
 
-    const raw = await zhihuRateLimit.run(() =>
-        zhihuFetch<unknown>(options, path, { query: { Limit: capped } }),
-    );
+    const raw = await rateLimitedRequest<unknown>(options, path, {
+        query: { Limit: capped },
+    });
     const data = asRecord(raw);
     const items = asArray(data.Items ?? data.items).map(normalizeHotItem);
     const result: ZhihuHotListResult = {
@@ -195,17 +223,15 @@ export async function askZhihu(
     const trimmed = query?.trim();
     if (!trimmed) throw new Error("问题不能为空");
 
-    const raw = await zhihuRateLimit.run(() =>
-        zhihuFetch<unknown>(options, "/v1/chat/completions", {
-            method: "POST",
-            body: {
-                model,
-                messages: [{ role: "user", content: trimmed }],
-                stream: false,
-            },
-            unwrapEnvelope: false,
-        }),
-    );
+    const raw = await rateLimitedRequest<unknown>(options, "/v1/chat/completions", {
+        method: "POST",
+        body: {
+            model,
+            messages: [{ role: "user", content: trimmed }],
+            stream: false,
+        },
+        unwrapEnvelope: false,
+    });
 
     const data = asRecord(raw);
     const choice = asRecord(asArray(data.choices)[0]);
@@ -225,11 +251,9 @@ export async function getZhihuQuota(
     options: ZhihuServiceOptions,
     apiIds?: string[],
 ): Promise<ZhihuQuotaItem[]> {
-    const raw = await zhihuRateLimit.run(() =>
-        zhihuFetch<unknown>(options, "/api/v1/quota", {
-            query: apiIds && apiIds.length > 0 ? { APIIDs: apiIds.join(",") } : undefined,
-        }),
-    );
+    const raw = await rateLimitedRequest<unknown>(options, "/api/v1/quota", {
+        query: apiIds && apiIds.length > 0 ? { APIIDs: apiIds.join(",") } : undefined,
+    });
 
     const data = asRecord(raw);
     const list = Array.isArray(raw) ? raw : asArray(data.Items ?? data.items);

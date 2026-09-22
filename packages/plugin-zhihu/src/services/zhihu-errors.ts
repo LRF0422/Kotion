@@ -39,6 +39,27 @@ export class ZhihuApiError extends Error {
     }
 }
 
+/**
+ * Raised when a Zhihu call exceeds its budget (rate-limit queue wait plus the
+ * request). It is terminal by design: the caller reports the failure instead of
+ * retrying, so a stalled or backlogged request never piles more load onto the
+ * rate-limited platform.
+ */
+export class ZhihuTimeoutError extends Error {
+    readonly timeoutMs: number;
+
+    constructor(timeoutMs: number) {
+        const seconds = timeoutMs > 0 ? Math.round(timeoutMs / 1000) : 0;
+        super(
+            seconds > 0
+                ? "知乎接口请求超时（超过 " + seconds + " 秒），已直接失败"
+                : "知乎接口请求超时，已直接失败",
+        );
+        this.name = "ZhihuTimeoutError";
+        this.timeoutMs = timeoutMs;
+    }
+}
+
 export function describeZhihuError(error: unknown): string {
     if (error instanceof ZhihuApiError) return error.message;
     if (error instanceof Error) {

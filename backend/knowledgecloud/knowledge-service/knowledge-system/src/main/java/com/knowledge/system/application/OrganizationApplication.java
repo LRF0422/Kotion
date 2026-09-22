@@ -73,6 +73,7 @@ public class OrganizationApplication {
     private final IRoleService roleService;
     private final IUserRoleService userRoleService;
     private final IRolePermissionService rolePermissionService;
+    private final OrganizationInvitationNotifier invitationNotifier;
 
     public List<ContextVO> listContexts(Long userId) {
         List<OrganizationMember> memberships = memberService.lambdaQuery()
@@ -203,6 +204,18 @@ public class OrganizationApplication {
         invitation.setInvitationToken(hashToken(rawToken));
         invitation.setInvitationExpiresAt(LocalDateTime.now().plusDays(INVITATION_DAYS));
         memberService.saveOrUpdate(invitation);
+
+        User inviter = userService.getById(inviterId);
+        Tenant organization = tenantService.getByTenantId(contextId);
+        invitationNotifier.notifyInvited(
+                inviterId,
+                inviter == null ? null : StrUtil.blankToDefault(inviter.getName(), inviter.getAccount()),
+                invitedUser.getId(),
+                contextId,
+                organization == null ? null : organization.getTenantName(),
+                role,
+                rawToken,
+                invitation.getInvitationExpiresAt());
 
         OrganizationInvitationVO result = new OrganizationInvitationVO();
         result.setToken(rawToken);
