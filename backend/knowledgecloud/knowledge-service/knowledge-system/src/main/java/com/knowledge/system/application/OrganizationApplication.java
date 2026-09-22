@@ -89,8 +89,12 @@ public class OrganizationApplication {
         Tenant personalTenant = StrUtil.isBlank(personalContextId)
                 ? null
                 : tenantService.getByTenantId(personalContextId);
+        // A legacy individual tenant may predate the tenant_type rollout and carry a
+        // NULL type. Treat anything that is not an explicit TEAM as the user's personal
+        // context, otherwise the workspace they registered with vanishes the moment
+        // they join an organization.
         if (personalTenant != null
-                && personalTenant.getTenantType() == TenantType.INDIVIDUAL
+                && personalTenant.getTenantType() != TenantType.TEAM
                 && !byContext.containsKey(personalContextId)) {
             OrganizationMember compatibility = new OrganizationMember();
             compatibility.setTenantId(personalContextId);

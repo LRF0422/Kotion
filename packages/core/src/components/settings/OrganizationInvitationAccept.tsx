@@ -3,6 +3,7 @@ import {
     clearContextSensitiveClientState,
     getAccessToken,
     getRefreshToken,
+    getTokenContextState,
     normalizeTokenResponse,
     notifyContextChanged,
     saveTokens,
@@ -47,12 +48,21 @@ export const OrganizationInvitationAccept: React.FC = () => {
                 sessionStorage.setItem(acceptedContextKey, contextId);
             }
             setStatus("accepted");
-            const switched = await useApi(APIS.SWITCH_CONTEXT, { contextId }, {
-                refreshToken: getRefreshToken() || "",
-            });
-            const tokens = normalizeTokenResponse(switched.data);
-            if (!tokens.accessToken || !tokens.refreshToken) throw new Error("Missing context tokens");
-            saveTokens(tokens.accessToken, tokens.refreshToken);
+
+            // Re-opening a consumed link, or accepting while the session is already
+            // bound to the target context, must not ask the backend to switch into
+            // the context it is already in: `POST /oauth2/context` rejects that
+            // with "目标上下文必须与当前上下文不同". Treat it as already switched
+            // and enter the organization directly.
+            const currentContextId = getTokenContextState().contextId;
+            if (currentContextId !== contextId) {
+                const switched = await useApi(APIS.SWITCH_CONTEXT, { contextId }, {
+                    refreshToken: getRefreshToken() || "",
+                });
+                const tokens = normalizeTokenResponse(switched.data);
+                if (!tokens.accessToken || !tokens.refreshToken) throw new Error("Missing context tokens");
+                saveTokens(tokens.accessToken, tokens.refreshToken);
+            }
             sessionStorage.removeItem(acceptedContextKey);
             clearContextSensitiveClientState();
             notifyContextChanged(contextId);

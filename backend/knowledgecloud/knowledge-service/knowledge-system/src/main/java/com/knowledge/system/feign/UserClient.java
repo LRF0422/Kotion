@@ -72,8 +72,10 @@ public class UserClient implements IUserClient {
             return R.fail("Context disabled or unavailable");
         }
         String personalContextId = StrUtil.blankToDefault(user.getPersonalContextId(), user.getTenantId());
+        // Legacy individual tenants may predate the tenant_type rollout and carry a
+        // NULL type; only an explicit TEAM must go through the membership check.
         boolean personalContext = contextId.equals(personalContextId)
-                && context.getTenantType() == com.knowledge.system.domain.enums.TenantType.INDIVIDUAL;
+                && context.getTenantType() != com.knowledge.system.domain.enums.TenantType.TEAM;
         boolean platformContext = KnowledgeConstant.ADMIN_TENANT_ID.equals(contextId)
                 && CollUtil.isNotEmpty(userRoleService.listRoleIds(userId, "PLATFORM", contextId));
         if (!personalContext
