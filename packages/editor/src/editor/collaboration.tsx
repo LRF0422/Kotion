@@ -533,8 +533,18 @@ export const CollaborationEditor = forwardRef<
 
     (async () => {
       // Reflect the server's state before deciding whether to seed.
-      const didSync = await waitForProviderSync(provider);
+      let didSync = await waitForProviderSync(provider);
       if (cancelled) return;
+
+      if (!didSync) {
+        // A large persisted document (or a cold room-server database read) can
+        // take longer than the first wait. Keep the preparation skeleton up and
+        // wait once more for the real synced event: mounting an empty editor here
+        // is what makes the page flash "Untitled" and then reflow when the
+        // content finally arrives.
+        didSync = await waitForProviderSync(provider, 25000);
+        if (cancelled) return;
+      }
 
       // Only seed from REST content when sync actually completed. On timeout
       // the Y.Doc may simply not have received the server state yet — seeding
