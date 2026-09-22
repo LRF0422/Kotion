@@ -153,6 +153,14 @@ public class AgentCoreProperties {
         private int retentionDays = 30;
         /** Safety cap on events per run (oldest hot events trimmed). */
         private int maxEventsPerRun = 2000;
+        /**
+         * Rows per cold-tier mirror INSERT. A streaming run emits one event per
+         * token, so batching turns one round trip per token into one per batch.
+         * Kept modest because a tool.completed payload can be large.
+         */
+        private int mirrorBatchSize = 100;
+        /** Max time an event may sit in the mirror queue before a flush (ms). */
+        private long mirrorFlushIntervalMs = 200;
     }
 
     /** Long-term memory settings. */

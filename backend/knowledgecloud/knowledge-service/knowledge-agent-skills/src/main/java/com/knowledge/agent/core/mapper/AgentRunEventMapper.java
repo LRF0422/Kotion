@@ -20,6 +20,16 @@ public interface AgentRunEventMapper extends BaseMapper<AgentRunEventEntity> {
             "VALUES (#{runId}, #{seq}, #{eventType}, #{payload}, #{createTime})")
     void insertEvent(AgentRunEventEntity entity);
 
+    /**
+     * Multi-row cold-tier insert used by the async mirror drain. One round trip
+     * per batch instead of one per streamed token.
+     */
+    @Insert("<script>INSERT INTO agent_run_event (run_id, seq, event_type, payload, create_time) VALUES " +
+            "<foreach collection=\"list\" item=\"e\" separator=\",\">" +
+            "(#{e.runId}, #{e.seq}, #{e.eventType}, #{e.payload}, #{e.createTime})" +
+            "</foreach></script>")
+    void insertBatch(@Param("list") List<AgentRunEventEntity> entities);
+
     @Select("SELECT * FROM agent_run_event WHERE run_id = #{runId} AND seq > #{afterSeq} " +
             "ORDER BY seq ASC LIMIT #{limit}")
     List<AgentRunEventEntity> selectAfterSeq(@Param("runId") String runId,

@@ -16,10 +16,12 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -46,12 +48,18 @@ public class DefaultRunEventLog implements RunEventLog {
     private final Map<String, CopyOnWriteArrayList<EventSubscription>> subscribers =
             new ConcurrentHashMap<>();
 
-    /** Single-thread cold-tier mirror (ordered, batched by nature). */
+    /** Single-thread cold-tier mirror: ordered drain + multi-row INSERT. */
     private final ExecutorService mirrorExecutor = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "agentcore-event-mirror");
         t.setDaemon(true);
         return t;
     });
+
+    /** Pending cold-tier rows, drained in seq order by the mirror thread. */
+    private final BlockingQueue<AgentRunEventEntity> mirrorQueue = new LinkedBlockingQueue<>();
+
+    /** Set on shutdown so the drain loop flushes what is queued and exits. */
+    private volatile boolean mirrorStopped;
 
     public DefaultRunEventLog(StringRedisTemplate redis, ObjectMapper objectMapper,
                               AgentRunEventMapper eventMapper, AgentCoreProperties properties) {
@@ -59,6 +67,7 @@ public class DefaultRunEventLog implements RunEventLog {
         this.objectMapper = objectMapper;
         this.eventMapper = eventMapper;
         this.properties = properties;
+        this.mirrorExecutor.submit(this::drainMirrorLoop);
     }
 
     @Override
@@ -95,8 +104,10 @@ public class DefaultRunEventLog implements RunEventLog {
         }
 
         if (hotOk) {
-            // 2. Async cold-tier mirror (best-effort, ordered by seq).
-            mirrorExecutor.submit(() -> mirror(runId, event));
+            // 2. Async cold-tier mirror (best-effort, ordered by seq): the
+            //    single mirror thread drains the queue into multi-row INSERTs,
+            //    so a streaming run pays one round trip per batch, not per token.
+            mirrorQueue.offer(toEntity(runId, event));
         } else if (!mirror(runId, event)) {
             log.error("EventLog append NOT durable for {} seq {} — delivered live only",
                     runId, seq);
@@ -192,9 +203,11 @@ public class DefaultRunEventLog implements RunEventLog {
 
     @PreDestroy
     public void shutdown() {
+        mirrorStopped = true;
         mirrorExecutor.shutdown();
         try {
-            // Do not drop queued cold mirrors on graceful shutdown.
+            // Do not drop queued cold mirrors on graceful shutdown: the drain
+            // loop flushes the remaining queue before it terminates.
             if (!mirrorExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
                 mirrorExecutor.shutdownNow();
             }
@@ -229,17 +242,103 @@ public class DefaultRunEventLog implements RunEventLog {
     }
 
     private boolean mirror(String runId, RunEvent event) {
+        return insertOne(toEntity(runId, event));
+    }
+
+    /** RunEvent → cold-tier row (payload serialized once, on the append path). */
+    private AgentRunEventEntity toEntity(String runId, RunEvent event) {
+        AgentRunEventEntity entity = new AgentRunEventEntity();
+        entity.setRunId(runId);
+        entity.setSeq(event.getSeq());
+        entity.setEventType(event.getType());
         try {
-            AgentRunEventEntity entity = new AgentRunEventEntity();
-            entity.setRunId(runId);
-            entity.setSeq(event.getSeq());
-            entity.setEventType(event.getType());
             entity.setPayload(objectMapper.writeValueAsString(event.getPayload()));
-            entity.setCreateTime(event.getCreateTime());
+        } catch (Exception e) {
+            entity.setPayload("{}");
+        }
+        entity.setCreateTime(event.getCreateTime());
+        return entity;
+    }
+
+    /**
+     * Drain the queued cold rows into multi-row INSERTs. Events stay ordered by
+     * seq (single thread, FIFO queue); a failed batch falls back to per-row
+     * inserts so one bad row cannot drop its neighbours.
+     *
+     * <p>Once woken by the first event, the loop keeps coalescing for up to
+     * {@code mirror-flush-interval-ms} (or until the batch is full) before it
+     * writes. Without that linger a fast producer would be mirrored one row at
+     * a time, which is exactly the per-token INSERT this batching removes.
+     */
+    private void drainMirrorLoop() {
+        int batchSize = Math.max(1, properties.getEvent().getMirrorBatchSize());
+        long flushMs = Math.max(10L, properties.getEvent().getMirrorFlushIntervalMs());
+        while (!mirrorStopped) {
+            // Fresh per iteration: a finished batch is never re-flushed, while a
+            // batch interrupted mid-linger still gets written out.
+            List<AgentRunEventEntity> batch = new ArrayList<>(batchSize);
+            try {
+                AgentRunEventEntity first = mirrorQueue.poll(flushMs, TimeUnit.MILLISECONDS);
+                if (first == null) {
+                    continue;
+                }
+                batch.add(first);
+                long lingerUntil = System.currentTimeMillis() + flushMs;
+                while (batch.size() < batchSize) {
+                    long remaining = lingerUntil - System.currentTimeMillis();
+                    if (remaining <= 0) {
+                        break;
+                    }
+                    AgentRunEventEntity next = mirrorQueue.poll(remaining, TimeUnit.MILLISECONDS);
+                    if (next == null) {
+                        break;
+                    }
+                    batch.add(next);
+                }
+                mirrorBatch(batch);
+            } catch (InterruptedException e) {
+                mirrorBatch(batch);
+                Thread.currentThread().interrupt();
+                break;
+            } catch (Exception e) {
+                log.warn("EventLog mirror loop failed: {}", e.getMessage());
+            }
+        }
+        // Final drain so a graceful shutdown never drops a queued event.
+        List<AgentRunEventEntity> rest = new ArrayList<>(batchSize);
+        while (mirrorQueue.drainTo(rest, batchSize) > 0) {
+            mirrorBatch(rest);
+            rest.clear();
+        }
+    }
+
+    private void mirrorBatch(List<AgentRunEventEntity> batch) {
+        if (batch.isEmpty()) {
+            return;
+        }
+        if (batch.size() == 1) {
+            insertOne(batch.get(0));
+            return;
+        }
+        try {
+            eventMapper.insertBatch(batch);
+            return;
+        } catch (Exception e) {
+            log.warn("EventLog JDBC batch mirror failed for {} rows ({}); retrying individually",
+                    batch.size(), e.getMessage());
+        }
+        for (AgentRunEventEntity entity : batch) {
+            insertOne(entity);
+        }
+    }
+
+    private boolean insertOne(AgentRunEventEntity entity) {
+        try {
             eventMapper.insertEvent(entity);
             return true;
         } catch (Exception e) {
-            log.warn("EventLog JDBC mirror failed for {} seq {}: {}", runId, event.getSeq(), e.getMessage());
+            log.warn("EventLog JDBC mirror failed for {} seq {}: {}",
+                    entity.getRunId(), entity.getSeq(), e.getMessage());
             return false;
         }
     }
