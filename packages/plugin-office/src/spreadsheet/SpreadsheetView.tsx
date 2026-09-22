@@ -10,8 +10,6 @@ import { PivotDialog } from "./PivotDialog"
 import { PivotDetailsDialog, type PivotDrillTarget } from "./PivotDetailsDialog"
 import { pickExcelFileFromCenter } from "./excel-file-picker"
 import { registerSpreadsheetLive, unregisterSpreadsheetLive, type SpreadsheetLiveHandle } from "./workbook-registry"
-import { loadStoredWorkbook, persistStoredWorkbook, workbookProviderFor, workbookStoreFor } from "./workbook-bridge"
-import { hasWorkbook, observeWorkbook, seedWorkbook, type StoreDoc } from "./workbook-store"
 import { DEFAULT_SPREADSHEET_HEIGHT } from "./constants"
 import { ensureValidWorkbookData, workbookHasContent, type WorkbookData } from "./workbook-data"
 import { translate } from "../i18n"
@@ -48,24 +46,11 @@ export const SpreadsheetView: React.FC<NodeViewProps> = React.memo((props) => {
         if (element) setContainerReady(true)
     }, [])
 
-    // L3: the workbook body lives in the shared Y.Doc, addressed by
-    // `node.attrs.workbookRef`. `workbookData` stays as the legacy /
-    // non-collaborative payload and as the migration source.
-    const storeDoc = workbookStoreFor(editor)
-    const workbookRef = typeof node.attrs.workbookRef === 'string' && node.attrs.workbookRef
-        ? node.attrs.workbookRef
-        : null
-    const storeRef = useRef<{ doc?: StoreDoc; ref: string | null }>({ doc: storeDoc, ref: workbookRef })
-    storeRef.current = { doc: storeDoc, ref: workbookRef }
-
     // Capture the initial payload once; after mount the live grid is the source
-    // of truth for editing, and the store (or the node attribute) is the sink.
-    // Lazy so the O(cells) store read does not run on every render.
+    // of truth for editing, and the node attribute is the sink.
     const initialDataRef = useRef<WorkbookData | null>(null)
     if (initialDataRef.current === null) {
-        initialDataRef.current = ensureValidWorkbookData(
-            loadStoredWorkbook(storeDoc, workbookRef) ?? node.attrs.workbookData,
-        )
+        initialDataRef.current = ensureValidWorkbookData(node.attrs.workbookData)
     }
     const initialData = initialDataRef.current
 
@@ -83,9 +68,6 @@ export const SpreadsheetView: React.FC<NodeViewProps> = React.memo((props) => {
                 return
             }
             lastSavedRef.current = data
-            // L3: persist into the shared store, so a cell edit touches one Y.Map
-            // key instead of re-serialising the workbook into the document.
-            if (persistStoredWorkbook(storeRef.current.doc, storeRef.current.ref, data)) return
             try {
                 const pos = getPos()
                 if (typeof pos !== 'number') return
@@ -112,41 +94,6 @@ export const SpreadsheetView: React.FC<NodeViewProps> = React.memo((props) => {
     const handleSelectionChange = useCallback(() => {
         setSelectionVersion((version) => version + 1)
     }, [])
-
-    // Ensure the block has a store ref and move any legacy attribute payload into
-    // the store. Every block gets a ref up front, so even its very first save
-    // writes straight to the store instead of round-tripping through the large
-    // node attribute and only migrating afterwards (which lost a first import).
-    useEffect(() => {
-        const doc = workbookStoreFor(editor)
-        if (!doc) return
-        const legacy = node.attrs.workbookData
-        const currentRef = typeof node.attrs.workbookRef === 'string' && node.attrs.workbookRef
-            ? node.attrs.workbookRef
-            : null
-        const workbook = ensureValidWorkbookData(legacy ?? initialData)
-        const ref = currentRef ?? workbook.id
-        if (!hasWorkbook(doc, ref)) seedWorkbook(doc, ref, workbook)
-        // Ref already in place and the attribute empty: nothing to migrate.
-        if (currentRef === ref && legacy === null) return
-        try {
-            const pos = getPos()
-            if (typeof pos !== 'number') return
-            const docNode = editor.state.doc.nodeAt(pos)
-            if (!docNode || docNode.type.name !== 'spreadsheet') return
-            // Drop the bulk attribute; keep only the ref. addToHistory off keeps the
-            // migration out of the document undo stack.
-            const tr = editor.state.tr.setNodeMarkup(pos, undefined, {
-                ...docNode.attrs,
-                workbookRef: ref,
-                workbookData: null,
-            })
-            tr.setMeta('addToHistory', false)
-            editor.view.dispatch(tr)
-        } catch {
-            // The node view was torn down mid-migration; the store seed already ran.
-        }
-    }, [editor, getPos, initialData, node.attrs.workbookRef, node.attrs.workbookData])
 
     // ESC exits fullscreen (the toolbar also has an explicit close button).
     useEffect(() => {
@@ -234,50 +181,6 @@ export const SpreadsheetView: React.FC<NodeViewProps> = React.memo((props) => {
         if (data) applyExternalData(ensureValidWorkbookData(data))
     }, [node.attrs.workbookData, applyExternalData])
 
-    // Out-of-band writers (AI tools) bump workbookRevision; reload from the store.
-    useEffect(() => {
-        const doc = workbookStoreFor(editor)
-        if (!doc || !workbookRef) return
-        const stored = loadStoredWorkbook(doc, workbookRef)
-        if (stored) applyExternalData(stored)
-    }, [editor, workbookRef, node.attrs.workbookRevision, applyExternalData])
-
-    // Remote collaborators write through the same store; apply their changes.
-    useEffect(() => {
-        const doc = workbookStoreFor(editor)
-        if (!doc || !workbookRef) return
-        return observeWorkbook(doc, workbookRef, (workbook) => {
-            applyExternalDataRef.current?.(workbook)
-        })
-    }, [editor, workbookRef])
-
-    // The editor renders before the provider's initial sync lands, so the first
-    // store read can miss data that is already persisted on the server. Re-read
-    // on `synced` to close that gap.
-    useEffect(() => {
-        const provider = workbookProviderFor(editor)
-        if (!provider || !workbookRef) return
-        const apply = () => {
-            const stored = loadStoredWorkbook(workbookStoreFor(editor), workbookRef)
-            if (stored) applyExternalDataRef.current?.(stored)
-        }
-        apply()
-        provider.on?.('synced', apply)
-        return () => {
-            provider.off?.('synced', apply)
-        }
-    }, [editor, workbookRef])
-
-    // Diagnostic: makes it obvious from the console whether a block is on the L3
-    // store or the legacy attribute path.
-    useEffect(() => {
-        const doc = workbookStoreFor(editor)
-        console.info(
-            '[office/spreadsheet] storage ' + (doc ? 'L3(Y.Doc)' : 'legacy(attribute)') +
-                ' ref=' + (workbookRef ?? '(none)'),
-        )
-    }, [editor, workbookRef])
-
     // Publish the live grid to the AI tool layer so reads are current and writes
     // land as normal edits instead of replacing the workbook.
     useEffect(() => {
@@ -359,8 +262,6 @@ export const SpreadsheetView: React.FC<NodeViewProps> = React.memo((props) => {
 }, (prevProps, nextProps) => {
     return prevProps.node.attrs.height === nextProps.node.attrs.height
         && prevProps.node.attrs.workbookData === nextProps.node.attrs.workbookData
-        && prevProps.node.attrs.workbookRef === nextProps.node.attrs.workbookRef
-        && prevProps.node.attrs.workbookRevision === nextProps.node.attrs.workbookRevision
         && prevProps.editor.isEditable === nextProps.editor.isEditable
 })
 

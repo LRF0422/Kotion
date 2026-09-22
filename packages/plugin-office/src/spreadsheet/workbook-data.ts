@@ -62,7 +62,7 @@ export interface PivotSource {
  *
  * Stored on the *output* sheet: that sheet's `rows` always hold the generated
  * result, so a reader that ignores `pivot` still renders the last computed
- * table. The pivot engine recomputes it whenever the source data changes.
+ * table. `useJspreadsheet` recomputes it whenever the source data changes.
  */
 export interface PivotConfig {
     /** Source regions (cross-sheet union). At least one. */
@@ -129,8 +129,7 @@ export const DEFAULT_COLUMN_WIDTH = 96
 
 let workbookSeq = 0
 
-/** New opaque id for a workbook (also used as the L3 store ref for new blocks). */
-export function newWorkbookId(): string {
+function newWorkbookId(): string {
     workbookSeq += 1
     return `wb-${Date.now().toString(36)}-${workbookSeq}`
 }

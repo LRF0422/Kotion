@@ -1,7 +1,6 @@
 import React from "react"
 import { PMNode as Node, mergeAttributes, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer, withNodeViewErrorBoundary } from "@kn/editor"
 import { DEFAULT_SPREADSHEET_HEIGHT } from "./constants"
-import { newWorkbookId } from "./workbook-data"
 
 const LazySpreadsheetView = React.lazy(async () => {
     const module = await import("./SpreadsheetView")
@@ -34,17 +33,6 @@ export const SpreadsheetNode = Node.create({
 
     addAttributes() {
         return {
-            // L3: the workbook body lives in the shared Y.Doc (workbook-store.ts)
-            // and is addressed by this ref. `workbookData` stays as the legacy /
-            // non-collaborative payload and as the migration source.
-            workbookRef: {
-                default: null,
-            },
-            // Bumped by out-of-band writers (AI tools) so a mounted view reloads
-            // the store without the tool having to know about the node view.
-            workbookRevision: {
-                default: 0,
-            },
             workbookData: {
                 default: null,
             },
@@ -71,17 +59,10 @@ export const SpreadsheetNode = Node.create({
             insertSpreadsheet:
                 (workbookData?: Record<string, any> | null) =>
                 ({ commands }) => {
-                    const data = workbookData ?? null
                     return commands.insertContent({
                         type: this.name,
                         attrs: {
-                            workbookData: data,
-                            // Give every new block a store ref up front (reusing the
-                            // payload id when there is one). Without it the first
-                            // save round-trips through the large node attribute and
-                            // only migrates afterwards, which is both slow and
-                            // fragile for a first-time import.
-                            workbookRef: data && typeof data.id === 'string' ? data.id : newWorkbookId(),
+                            workbookData: workbookData ?? null,
                         },
                     })
                 },
