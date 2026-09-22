@@ -158,6 +158,34 @@ test('clearing removes every entry for the ref', () => {
     assert.equal(loadWorkbook(doc, 'ref-6'), null)
 })
 
+test('reads the pre-snapshot layout so existing rooms do not load empty', () => {
+    const doc = new FakeDoc()
+    const map = doc.getMap('kn-spreadsheets')
+    map.set('ref-legacy|meta', { id: 'legacy', activeSheet: 0, sheets: [{ name: 'Old', rowCount: 3, columnCount: 2 }] })
+    map.set('ref-legacy|v:0:0:0', 5)
+    map.set('ref-legacy|v:0:1:1', 'x')
+    map.set('ref-legacy|s:0:0:0', 'font-weight: bold')
+    map.set('ref-legacy|cw:0:0', 120)
+    map.set('ref-legacy|mg:0:0', [0, 0, 0, 1])
+
+    assert.equal(hasWorkbook(doc, 'ref-legacy'), false, 'legacy is not a snapshot yet')
+    const loaded = loadWorkbook(doc, 'ref-legacy')
+    assert.ok(loaded)
+    assert.equal(loaded!.sheets[0].name, 'Old')
+    assert.equal(loaded!.sheets[0].rows[0][0], 5)
+    assert.equal(loaded!.sheets[0].rows[1][1], 'x')
+    assert.equal(loaded!.sheets[0].styles?.A1, 'font-weight: bold')
+    assert.equal(loaded!.sheets[0].columnWidths?.['0'], 120)
+    assert.deepEqual(loaded!.sheets[0].merges, [[0, 0, 0, 1]])
+
+    // The first save rewrites it as a snapshot and drops the legacy entries.
+    seedWorkbook(doc, 'ref-legacy', loaded!)
+    assert.equal(hasWorkbook(doc, 'ref-legacy'), true)
+    assert.equal(map.has('ref-legacy|meta'), false)
+    assert.equal(map.has('ref-legacy|v:0:0:0'), false)
+    assert.equal(loadWorkbook(doc, 'ref-legacy')!.sheets[0].rows[0][0], 5)
+})
+
 test('applyWorkbookDiff reports zero for an empty diff', () => {
     const doc = new FakeDoc()
     seedWorkbook(doc, 'ref-7', workbook())

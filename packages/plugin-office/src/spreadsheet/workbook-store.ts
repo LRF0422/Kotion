@@ -123,7 +123,10 @@ export function loadWorkbook(doc: StoreDoc, ref: string): WorkbookData | null {
     const map = doc.getMap(WORKBOOK_STORE)
     const base = prefix(ref)
     const snapshot = map.get(base + SNAPSHOT_KEY)
-    if (typeof snapshot !== 'string') return null
+    // Older rooms persisted the pre-snapshot layout (a meta entry plus one entry
+    // per cell). Read it so an existing document is not loaded empty; the first
+    // save then rewrites it as a snapshot.
+    if (typeof snapshot !== 'string') return loadLegacyWorkbook(map, base)
     let decoded: WorkbookData
     try {
         decoded = decodeSnapshot(snapshot)
@@ -137,6 +140,59 @@ export function loadWorkbook(doc: StoreDoc, ref: string): WorkbookData | null {
     })
     decoded.activeSheet = Math.min(Math.max(Number(decoded.activeSheet) || 0, 0), decoded.sheets.length - 1)
     return decoded
+}
+
+/** Read the pre-snapshot layout: one meta entry + one entry per cell. */
+function loadLegacyWorkbook(map: StoreMap, base: string): WorkbookData | null {
+    const meta = map.get(base + 'meta') as
+        | { id?: string; activeSheet?: number; sheets?: EncodedSheet[] }
+        | undefined
+    if (!meta || !Array.isArray(meta.sheets) || meta.sheets.length === 0) return null
+    const workbook: WorkbookData = {
+        id: typeof meta.id === 'string' && meta.id ? meta.id : base,
+        sheets: meta.sheets.map((sheet) => ({
+            name: sheet.name,
+            rows: [],
+            rowCount: Math.max(1, Math.floor(sheet.rowCount) || 1),
+            columnCount: Math.max(1, Math.floor(sheet.columnCount) || 1),
+            ...(sheet.pivot ? { pivot: sheet.pivot } : {}),
+        })),
+        activeSheet: Number(meta.activeSheet) || 0,
+        version: 2,
+    }
+    map.forEach((value, key) => {
+        if (!key.startsWith(base) || key === base + 'meta') return
+        applyLegacyEntry(workbook, key.slice(base.length), value)
+    })
+    return workbook
+}
+
+function applyLegacyEntry(workbook: WorkbookData, rest: string, value: unknown): void {
+    const parts = rest.split(':')
+    const kind = parts[0]
+    const sheet = workbook.sheets[Number(parts[1])]
+    if (!sheet) return
+    if (kind === 'cw' || kind === 'rh') {
+        const index = Number(parts[2])
+        if (!Number.isFinite(index)) return
+        const target = kind === 'cw' ? (sheet.columnWidths ??= {}) : (sheet.rowHeights ??= {})
+        target[String(index)] = Number(value)
+        return
+    }
+    if (kind === 'mg') {
+        const index = Number(parts[2])
+        if (!Number.isFinite(index)) return
+        if (!sheet.merges) sheet.merges = []
+        ;(sheet.merges as unknown[])[index] = value
+        return
+    }
+    const row = Number(parts[2])
+    const column = Number(parts[3])
+    if (!Number.isFinite(row) || !Number.isFinite(column)) return
+    if (kind === 'v') writeCell(sheet, row, column, (value ?? null) as CellValue)
+    else if (kind === 's') (sheet.styles ??= {})[formatA1(row, column)] = String(value)
+    else if (kind === 'nf') (sheet.numberFormats ??= {})[formatA1(row, column)] = value as NumberFormatKind
+    else if (kind === 'rv') (sheet.rawValues ??= {})[formatA1(row, column)] = value as CellValue
 }
 
 function writeCell(sheet: SheetData, row: number, column: number, value: CellValue): void {
