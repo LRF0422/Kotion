@@ -4,7 +4,7 @@ import "@kn/ui/globals.css"
 
 /**
  * Office plugin — currently ships a single, intentionally focused feature set:
- * Excel-compatible spreadsheets (Univer Sheets).
+ * Excel-compatible spreadsheets (VTableSheet).
  *
  * Word documents and slide decks were removed on purpose: only the spreadsheet
  * path is maintained and validated, so everything that ships here is expected

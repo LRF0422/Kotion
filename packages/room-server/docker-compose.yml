@@ -26,6 +26,19 @@ services:
       - PORT=1234
       - NODE_ENV=production
       - SSL_ENABLED=false  # SSL is handled by nginx
+      # Persistence: without DB_HOST the Y.Doc is in-memory only and data stored
+      # beside the document (spreadsheet L3 sheets) is lost on restart.
+      - DB_HOST=${DB_HOST:-}
+      - DB_PORT=${DB_PORT:-3306}
+      - DB_USERNAME=${DB_USERNAME:-root}
+      - DB_PASSWORD=${DB_PASSWORD:-}
+      - DB_DATABASE=${DB_DATABASE:-knowledge_wiki}
+      - DB_TABLE=${DB_TABLE:-collab_documents}
+      - STORE_DEBOUNCE_MS=${STORE_DEBOUNCE_MS:-2000}
+      - STORE_MAX_DEBOUNCE_MS=${STORE_MAX_DEBOUNCE_MS:-10000}
+      - AUTH_API_BASE_URL=${AUTH_API_BASE_URL:-}
+      - REDIS_HOST=${REDIS_HOST:-}
+      - REDIS_PORT=${REDIS_PORT:-6379}
     # Internal port, not exposed to host
     expose:
       - "1234"

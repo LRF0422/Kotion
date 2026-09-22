@@ -14,9 +14,11 @@
         "docker:run": "docker run -d -p 1234:1234 --name room-server room-server:latest"
     },
     "dependencies": {
+        "@hocuspocus/extension-database": "^2.13.7",
         "@hocuspocus/extension-logger": "^2.13.7",
         "@hocuspocus/extension-redis": "^2.13.7",
-        "@hocuspocus/server": "^2.13.7"
+        "@hocuspocus/server": "^2.13.7",
+        "mysql2": "^3.11.0"
     },
     "keywords": [
         "hocuspocus",

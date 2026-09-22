@@ -20,7 +20,7 @@ import {
     cn,
 } from "@kn/ui"
 import { X } from "@kn/icon"
-import type { GridApi } from "./useJspreadsheet"
+import type { GridApi } from "./grid-api"
 import { computePivot, pivotFieldLabels, upsertPivotSheet, type PivotLabels } from "./pivot"
 import {
     formatCellRef,

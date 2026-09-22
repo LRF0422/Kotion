@@ -1,5 +1,8 @@
 import { Server } from "@hocuspocus/server";
 import { Logger } from "@hocuspocus/extension-logger";
+import { Database } from "@hocuspocus/extension-database";
+import { Redis } from "@hocuspocus/extension-redis";
+import mysql from "mysql2/promise";
 import fs from "fs";
 import path from "path";
 
@@ -82,20 +85,20 @@ const parseAuthToken = (raw) => {
 const authorizePage = async (pageId, rawToken) => {
     const { accessToken, invitationToken } = parseAuthToken(rawToken);
     const url = invitationToken
-        ? `${authApiBaseUrl}/knowledge-wiki/collaboration/invitation/${encodeURIComponent(invitationToken)}/collab/authorize?pageId=${encodeURIComponent(pageId)}`
-        : `${authApiBaseUrl}/knowledge-wiki/space/page/${pageId}/collab/authorize`;
+        ? authApiBaseUrl + "/knowledge-wiki/collaboration/invitation/" + encodeURIComponent(invitationToken) + "/collab/authorize?pageId=" + encodeURIComponent(pageId)
+        : authApiBaseUrl + "/knowledge-wiki/space/page/" + pageId + "/collab/authorize";
     const response = await fetch(url, {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: { Authorization: "Bearer " + accessToken },
         signal: AbortSignal.timeout(authTimeoutMs),
     });
     if (!response.ok) {
-        throw new Error(`auth service returned HTTP ${response.status}`);
+        throw new Error("auth service returned HTTP " + response.status);
     }
     // Business failures come back as HTTP 4xx *and* a non-200 body code; check
     // both so a future change to either layer cannot silently grant access.
     const body = await response.json();
     if (body?.code !== 200 || body?.success !== true) {
-        throw new Error(`auth service denied: code=${body?.code} msg=${body?.msg}`);
+        throw new Error("auth service denied: code=" + body?.code + " msg=" + body?.msg);
     }
 };
 
@@ -106,21 +109,125 @@ const onAuthenticate = async ({ documentName, token }) => {
 
     const pageId = parsePageId(documentName);
     if (pageId === null) {
-        throw new Error(`Unauthorized: unrecognised room name "${documentName}"`);
+        throw new Error("Unauthorized: unrecognised room name " + JSON.stringify(documentName));
     }
 
     try {
         await authorizePage(pageId, token);
     } catch (error) {
-        console.warn(`[auth] denied ${documentName}: ${error.message}`);
+        console.warn("[auth] denied " + documentName + ": " + error.message);
         throw new Error("Unauthorized");
     }
 };
 
+// ---------------------------------------------------------------------------
+// Persistence
+// ---------------------------------------------------------------------------
+//
+// The Y.Doc is the live source of truth. Without a persistence extension it
+// only exists in memory: the last client leaving (or a restart) drops it, and
+// the client then re-seeds from the page JSON. Anything kept beside the
+// document rather than inside its node attributes is lost at that point — the
+// spreadsheet L3 workbook map is exactly such data. Persisting the whole Y.Doc
+// makes it survive room close and restart.
+
+const dbHost = process.env.DB_HOST || "";
+const dbTable = (process.env.DB_TABLE || "collab_documents").replace(/[^A-Za-z0-9_]/g, "") || "collab_documents";
+
+let pool = null;
+if (dbHost) {
+    pool = mysql.createPool({
+        host: dbHost,
+        port: parseInt(process.env.DB_PORT || "3306", 10),
+        user: process.env.DB_USERNAME || "root",
+        password: process.env.DB_PASSWORD || "",
+        database: process.env.DB_DATABASE || "knowledge_wiki",
+        waitForConnections: true,
+        connectionLimit: parseInt(process.env.DB_POOL_SIZE || "10", 10),
+        charset: "utf8mb4",
+    });
+}
+
+const ensureSchema = async () => {
+    if (!pool) return;
+    await pool.query(
+        "CREATE TABLE IF NOT EXISTS " + dbTable + " (" +
+            "name VARCHAR(191) NOT NULL PRIMARY KEY, " +
+            "data LONGBLOB NOT NULL, " +
+            "updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP" +
+        ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+    );
+    console.log("[persist] MySQL store ready (table: " + dbTable + ")");
+};
+
+const extensions = [new Logger()];
+
+if (pool) {
+    try {
+        await ensureSchema();
+    } catch (error) {
+        // A misconfigured database must not take collaboration down entirely; fall
+        // back to in-memory rooms, loudly.
+        console.error("[persist] MySQL unavailable, falling back to IN-MEMORY rooms:", error.message);
+        try {
+            await pool.end();
+        } catch {
+            // Pool already unusable.
+        }
+        pool = null;
+    }
+}
+
+if (pool) {
+    extensions.push(
+        new Database({
+            // Batch writes: a fast editor would otherwise persist on every update.
+            debounce: parseInt(process.env.STORE_DEBOUNCE_MS || "2000", 10),
+            maxDebounce: parseInt(process.env.STORE_MAX_DEBOUNCE_MS || "10000", 10),
+            fetch: async ({ documentName }) => {
+                const [rows] = await pool.query(
+                    "SELECT data FROM " + dbTable + " WHERE name = ? LIMIT 1",
+                    [documentName],
+                );
+                if (!rows.length) return null;
+                const data = rows[0].data;
+                if (data instanceof Uint8Array) return data;
+                if (Buffer.isBuffer(data)) return new Uint8Array(data);
+                return null;
+            },
+            store: async ({ documentName, state }) => {
+                await pool.query(
+                    "INSERT INTO " + dbTable + " (name, data) VALUES (?, ?) " +
+                        "ON DUPLICATE KEY UPDATE data = VALUES(data)",
+                    [documentName, Buffer.from(state)],
+                );
+            },
+        }),
+    );
+} else if (!dbHost) {
+    console.warn(
+        "[persist] DB_HOST is not set — collaboration rooms are IN-MEMORY ONLY. " +
+            "Data stored beside the document (e.g. spreadsheet L3 sheets) is lost when " +
+            "the room empties or the server restarts.",
+    );
+}
+
+// Optional: sync rooms across multiple server instances. Redis is a relay, not a
+// durable store, so the Database extension above is still required.
+const redisHost = process.env.REDIS_HOST || "";
+if (redisHost) {
+    extensions.push(
+        new Redis({
+            host: redisHost,
+            port: parseInt(process.env.REDIS_PORT || "6379", 10),
+            ...(process.env.REDIS_PASSWORD ? { password: process.env.REDIS_PASSWORD } : {}),
+        }),
+    );
+    console.log("[persist] Redis relay enabled (" + redisHost + ")");
+}
+
 const serverConfig = {
-    extensions: [
-        new Logger(),
-    ],
+    extensions,
     port: parseInt(process.env.PORT || "1234", 10),
 };
 
@@ -131,7 +238,7 @@ if (authApiBaseUrl) {
     // are not cut off by an upgrade), but once enabled it never fails open.
     console.warn(
         "[auth] AUTH_API_BASE_URL is not set — collaboration rooms are UNAUTHENTICATED. " +
-        "Any client that knows a page id can read and write that page's live document.",
+            "Any client that knows a page id can read and write that page's live document.",
     );
 }
 
@@ -143,4 +250,26 @@ if (sslConfig) {
 const server = Server.configure(serverConfig);
 server.listen();
 
-console.log(`Room server started on port ${serverConfig.port} (SSL: ${sslEnabled && sslConfig ? "enabled" : "disabled"}, auth: ${authApiBaseUrl ? "enabled" : "DISABLED"})`);
+const shutdown = async (signal) => {
+    console.log("Shutting down (" + signal + ") …");
+    try {
+        await server.destroy();
+    } catch (error) {
+        console.error("server.destroy failed:", error);
+    }
+    try {
+        if (pool) await pool.end();
+    } catch (error) {
+        console.error("pool.end failed:", error);
+    }
+    process.exit(0);
+};
+process.on("SIGINT", () => void shutdown("SIGINT"));
+process.on("SIGTERM", () => void shutdown("SIGTERM"));
+
+console.log(
+    "Room server started on port " + serverConfig.port +
+        " (SSL: " + (sslEnabled && sslConfig ? "enabled" : "disabled") +
+        ", auth: " + (authApiBaseUrl ? "enabled" : "DISABLED") +
+        ", persistence: " + (pool ? "mysql" : "IN-MEMORY") + ")",
+);

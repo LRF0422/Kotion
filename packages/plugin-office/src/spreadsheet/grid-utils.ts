@@ -12,7 +12,7 @@ export type { NumberMeta } from "./grid-api"
 // The numeric helpers live in `number-format.ts` (they are its runtime
 // primitives and that module must stay import-free for the Node test runner).
 // Re-exported here because they are conceptually part of this toolbox and are
-// imported from here by the jspreadsheet adapter.
+// consumed by the adapter through this module.
 export { currencySymbol, formatNumeric, numericValue } from "./number-format"
 /**
  * Engine-agnostic helpers shared by any spreadsheet engine adapter.

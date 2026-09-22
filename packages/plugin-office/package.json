@@ -1,7 +1,7 @@
 {
   "name": "@kn/plugin-office",
   "version": "0.0.1",
-  "description": "Office plugin for Knowledge Repo - lightweight Excel-compatible spreadsheets (jspreadsheet)",
+  "description": "Office plugin for Knowledge Repo - Excel-compatible spreadsheets (VTableSheet)",
   "main": "src/index.tsx",
   "publishConfig": {
     "main": "dist/index.js",
@@ -19,7 +19,6 @@
     "@visactor/vtable": "1.26.8",
     "@visactor/vtable-gantt": "1.26.8",
     "@visactor/vtable-sheet": "1.26.8",
-    "jspreadsheet-ce": "^5.0.4",
     "xlsx": "^0.18.5"
   },
   "keywords": [],

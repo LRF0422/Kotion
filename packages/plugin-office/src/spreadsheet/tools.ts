@@ -12,6 +12,7 @@ import type { Editor } from '@kn/editor'
 import { z } from '@kn/ui'
 import { DEFAULT_SPREADSHEET_HEIGHT } from './constants'
 import { getLiveHandle } from './workbook-registry'
+import { loadStoredWorkbook, persistStoredWorkbook, workbookStoreFor } from './workbook-bridge'
 import { buildPivotSheet, pivotFieldLabels, upsertPivotSheet, type PivotLabels } from './pivot'
 import { translate } from '../i18n'
 import {
@@ -38,6 +39,8 @@ const MAX_READ_ROWS = 5000
 interface SpreadsheetNodeInfo {
     pos: number
     workbookData: WorkbookData | null
+    /** L3 store ref; the body lives in the shared Y.Doc, not in the attribute. */
+    workbookRef: string | null
     height: number
 }
 
@@ -49,6 +52,7 @@ function findSpreadsheetNodes(editor: Editor): SpreadsheetNodeInfo[] {
             nodes.push({
                 pos,
                 workbookData: node.attrs.workbookData,
+                workbookRef: typeof node.attrs.workbookRef === 'string' ? node.attrs.workbookRef : null,
                 height: node.attrs.height,
             })
         }
@@ -71,7 +75,41 @@ function resolveWorkbook(editor: Editor, node: SpreadsheetNodeInfo): WorkbookDat
         const snapshot = live.getSnapshot()
         if (snapshot) return snapshot
     }
+    // L3: the body lives in the shared store; the attribute only carries a ref.
+    const stored = loadStoredWorkbook(workbookStoreFor(editor), node.workbookRef)
+    if (stored) return stored
     return node.workbookData ? ensureValidWorkbookData(node.workbookData) : null
+}
+
+/**
+ * Persist a workbook produced outside the live grid.
+ *
+ * With an L3 ref the body goes into the shared store and the node only gets a
+ * revision bump (so a mounted view reloads); otherwise the legacy attribute is
+ * updated directly.
+ */
+function persistWorkbook(
+    editor: Editor,
+    pos: number,
+    docNode: { attrs: Record<string, any> },
+    next: WorkbookData,
+): void {
+    const ref = typeof docNode.attrs.workbookRef === 'string' ? docNode.attrs.workbookRef : null
+    if (ref && persistStoredWorkbook(workbookStoreFor(editor), ref, next)) {
+        editor.view.dispatch(
+            editor.view.state.tr.setNodeMarkup(pos, undefined, {
+                ...docNode.attrs,
+                workbookRevision: (Number(docNode.attrs.workbookRevision) || 0) + 1,
+            }),
+        )
+        return
+    }
+    editor.view.dispatch(
+        editor.view.state.tr.setNodeMarkup(pos, undefined, {
+            ...docNode.attrs,
+            workbookData: next,
+        }),
+    )
 }
 
 /** Pick a sheet by name (or index), defaulting to the first one. */
@@ -400,12 +438,7 @@ export const updateSpreadsheetDataTool = {
 
             const docNode = editor.state.doc.nodeAt(node.pos)
             if (!docNode) return { success: false, error: '无法定位电子表格节点' }
-            editor.view.dispatch(
-                editor.view.state.tr.setNodeMarkup(node.pos, undefined, {
-                    ...docNode.attrs,
-                    workbookData: next,
-                }),
-            )
+            persistWorkbook(editor, node.pos, docNode, next)
 
             const cellsWritten = matrix.reduce(
                 (total, row) => total + row.filter((value) => value !== null).length,
@@ -687,12 +720,7 @@ export const createPivotTableTool = {
 
             const docNode = editor.state.doc.nodeAt(node.pos)
             if (!docNode) return { success: false, error: '无法定位电子表格节点' }
-            editor.view.dispatch(
-                editor.view.state.tr.setNodeMarkup(node.pos, undefined, {
-                    ...docNode.attrs,
-                    workbookData: next,
-                }),
-            )
+            persistWorkbook(editor, node.pos, docNode, next)
 
             return {
                 success: true,

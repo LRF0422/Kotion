@@ -3,11 +3,10 @@ import type { CellStyles, CellValue, NumberFormatKind, WorkbookData } from "./wo
 /**
  * The spreadsheet contract the rest of the feature codes against.
  *
- * This is deliberately engine-agnostic and moved out of `useJspreadsheet.ts` so
- * the engine can be replaced (jspreadsheet-ce -> VTableSheet, see
- * docs/VTABLE_MIGRATION.md) without touching the toolbar, formula bar, pivot
- * dialogs, the AI tools or the node persistence path. Those all consume this
- * interface and nothing else:
+ * This is deliberately engine-agnostic and lives apart from the VTableSheet
+ * adapter (see docs/VTABLE_MIGRATION.md) so the grid engine can change without
+ * touching the toolbar, formula bar, pivot dialogs, the AI tools or the node
+ * persistence path. Those all consume this interface and nothing else:
  *
  *   - `SheetToolbar`, `SheetFormulaBar`, `PivotDialog`, `PivotDetailsDialog`
  *     take a `GridApi`

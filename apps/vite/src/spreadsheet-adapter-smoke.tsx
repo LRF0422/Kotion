@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import "@kn/ui/globals.css";
 import "../../../packages/plugin-office/src/spreadsheet/sheet.css";
 import { useVTableSheet } from "../../../packages/plugin-office/src/spreadsheet/useVTableSheet";
-import { buildTheme, readThemeTokens } from "../../../packages/plugin-office/src/spreadsheet/vtable-theme";
+import { buildSheetTheme, readThemeTokens } from "../../../packages/plugin-office/src/spreadsheet/vtable-theme";
 import { workbookToSheetDefines } from "../../../packages/plugin-office/src/spreadsheet/vtable-config";
 import {
     createSheetData,
@@ -340,17 +340,32 @@ function AdapterSmoke() {
           `light pixels = ${((lightRatio() ?? 0) * 100).toFixed(1)}%`,
         );
         {
-            const lightTheme = (window as any).__adapter.theme(false) as { bodyStyle?: { bgColor?: string } };
-            const darkTheme = (window as any).__adapter.theme(true) as { bodyStyle?: { bgColor?: string } };
+            type Resolved = {
+                tableTheme?: { bodyStyle?: { bgColor?: string } };
+                colSeriesNumberCellStyle?: { bgColor?: string };
+            };
+            const lightTheme = (window as any).__adapter.theme(false) as Resolved;
+            const darkTheme = (window as any).__adapter.theme(true) as Resolved;
+            const lightBody = lightTheme.tableTheme?.bodyStyle?.bgColor;
+            const darkBody = darkTheme.tableTheme?.bodyStyle?.bgColor;
             push(
               "the resolved theme differs between light and dark",
-              lightTheme.bodyStyle?.bgColor !== darkTheme.bodyStyle?.bgColor,
-              `body bg light=${lightTheme.bodyStyle?.bgColor} dark=${darkTheme.bodyStyle?.bgColor}`,
+              lightBody !== darkBody,
+              `body bg light=${lightBody} dark=${darkBody}`,
             );
             push(
               "the dark theme is actually dark",
-              isDark(darkTheme.bodyStyle?.bgColor ?? ""),
-              `dark body bg = ${darkTheme.bodyStyle?.bgColor}`,
+              isDark(darkBody ?? ""),
+              `dark body bg = ${darkBody}`,
+            );
+            // The A/B/C header band is drawn by the TableSeriesNumber plugin, which
+            // reads the top-level series-number styles; if those are missing it
+            // falls back to a packaged light #F9F9F9 even in dark mode.
+            const darkHeader = darkTheme.colSeriesNumberCellStyle?.bgColor;
+            push(
+              "the dark column header band is dark",
+              isDark(darkHeader ?? ""),
+              `dark column header bg = ${darkHeader}`,
             );
         }
 
@@ -383,7 +398,7 @@ function AdapterSmoke() {
             theme: (dark: boolean) => {
                 const host = hostRef.current;
                 const computed = host ? getComputedStyle(host) : null;
-                return buildTheme(readThemeTokens((name) => computed?.getPropertyValue(name) || undefined, dark));
+                return buildSheetTheme(readThemeTokens((name) => computed?.getPropertyValue(name) || undefined, dark));
             },
             defines: () => {
                 const defs = workbookToSheetDefines(workbookRef.current);
@@ -421,7 +436,7 @@ function AdapterSmoke() {
                 <span style={{ marginLeft: "auto", color: "#666" }}>saves: {saveCount}</span>
             </div>
             <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
-                <div ref={attachContainer} data-adapter-host style={{ flex: 1, minWidth: 0, height: "100%" }} />
+                <div ref={attachContainer} className="kn-sheet" data-adapter-host style={{ flex: 1, minWidth: 0, height: "100%" }} />
                 <div style={{ width: 520, borderLeft: "1px solid #ddd", overflow: "auto", padding: 10, font: "12px/1.5 ui-monospace, monospace" }}>
                     {outcomes.length === 0 && <div style={{ color: "#666" }}>click “run probe” (or call window.__adapter.probe())</div>}
                     {outcomes.map((o, i) => (

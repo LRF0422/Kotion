@@ -33,6 +33,17 @@ export const SpreadsheetNode = Node.create({
 
     addAttributes() {
         return {
+            // L3: the workbook body lives in the shared Y.Doc (workbook-store.ts)
+            // and is addressed by this ref. `workbookData` stays as the legacy /
+            // non-collaborative payload and as the migration source.
+            workbookRef: {
+                default: null,
+            },
+            // Bumped by out-of-band writers (AI tools) so a mounted view reloads
+            // the store without the tool having to know about the node view.
+            workbookRevision: {
+                default: 0,
+            },
             workbookData: {
                 default: null,
             },

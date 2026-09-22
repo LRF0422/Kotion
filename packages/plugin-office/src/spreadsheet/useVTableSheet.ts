@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { logger } from '@kn/common'
+import { translate } from '../i18n'
 import { SAVE_THROTTLE_MS } from './constants'
 import {
     ensureValidWorkbookData,
@@ -38,12 +39,23 @@ import {
 import { clampBounds, forEachCell, fromVTableRange } from './vtable-selection'
 import { fromVTableStyle, mergeStyleText, toVTableStyle, toVTableStylePatch } from './vtable-style'
 import { captureTrackedStyles, MAX_STYLED_CELLS, seedTrackedSets, styleIdForRef, trackedSetFor } from './style-capture'
-import { buildTheme, prefersDarkMode, readThemeTokens } from './vtable-theme'
+import {
+    buildSheetTheme,
+    CONTEXT_MENU_ICONS,
+    fallbackTokens,
+    isDarkColor,
+    prefersDarkMode,
+    readThemeTokens,
+    themeContextMenuStyles,
+    type ContextMenuStyles,
+    type SheetTheme,
+    type ThemeTokens,
+} from './vtable-theme'
 import { formatResult, recalculate, restoreFormulas, type RecalcSheet } from './formula'
 import type { GridApi, GridSelection } from './grid-api'
 
 /**
- * The VTableSheet adapter — the replacement for `useJspreadsheet`.
+ * The VTableSheet adapter: the only implementation of the grid contract.
  *
  * It implements the same {@link GridApi} contract, so the toolbar, formula bar,
  * pivot dialogs, AI tools and node persistence need no changes. All translation
@@ -137,6 +149,10 @@ interface EngineSpreadsheet {
     getSheetCount?: () => number
     getAllSheets?: () => VTableSheetDefine[]
     activateSheet?: (key: string) => void
+    getSheetTabElement?: () => HTMLElement | null
+    /** Unified VTableSheet event bus (sheet_activated, ...). */
+    on?: (type: string, callback: (event: unknown) => void) => void
+    off?: (type: string, callback?: (event: unknown) => void) => void
     undo?: () => void
     redo?: () => void
     startHistoryTransaction?: () => void
@@ -154,10 +170,10 @@ interface EngineModule {
 }
 
 /**
- * Option-compatible with `UseJspreadsheetOptions` **on purpose**: the two
- * adapters must be drop-in alternatives for `SpreadsheetView`, so a difference
- * here would mean editing the view to switch engines — which is exactly what the
- * `GridApi` seam exists to avoid.
+ * Options for the VTableSheet adapter.
+ *
+ * The shape mirrors {@link GridApi}'s needs: the view hands over a container,
+ * the payload and the mode, and receives the engine-agnostic grid contract back.
  */
 export interface UseVTableSheetOptions {
     container: HTMLDivElement | null
@@ -168,9 +184,9 @@ export interface UseVTableSheetOptions {
     /** Persist the whole workbook after edits (throttled). */
     onSave: (data: WorkbookData) => void
     /**
-     * Accepted for parity with the jspreadsheet adapter. The engine's own menus
-     * are switched off (the host owns the toolbar), so nothing in the grid calls
-     * these; `SheetToolbar` drives import/export directly.
+     * Accepted for interface parity. The engine's own menus are switched off
+     * (the host owns the toolbar), so nothing in the grid calls these;
+     * `SheetToolbar` drives import/export directly.
      */
     onImportExcel?: () => void
     /** @see onImportExcel */
@@ -311,6 +327,19 @@ export function useVTableSheet(options: UseVTableSheetOptions): GridApi {
      * payload so a reload is consistent.
      */
     const mergedRangesRef = useRef<MergeRange[][]>([])
+    /**
+     * The engine sheet key for each logical sheet index.
+     *
+     * VTableSheet names the sheets it creates itself sheetN, so the initial
+     * String(index) keys stop matching once the user adds a sheet. This map is
+     * what lets a structural change be read back into the persisted order.
+     */
+    const sheetKeysRef = useRef<string[]>([])
+    /** Re-entrancy guard for reconcileFromEngine. */
+    const reconcilingRef = useRef(false)
+    const structureTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    /** Set to the live reconciler; read by the wrappers installed on the engine. */
+    const structureChangeRef = useRef<() => void>(() => {})
     /** Written by the engine's events; read by queued callbacks. */
     const onSaveRef = useRef(onSave)
     onSaveRef.current = onSave
@@ -324,6 +353,7 @@ export function useVTableSheet(options: UseVTableSheetOptions): GridApi {
         numberMetaRef.current = initial.sheets.map(sheetNumberMeta)
         styledCellsRef.current = seedTrackedSets(initial.sheets)
         mergedRangesRef.current = seedMergeRanges(initial.sheets)
+        sheetKeysRef.current = initial.sheets.map((_, index) => String(index))
     }
 
     // ── Engine calls ─────────────────────────────────────────────────────
@@ -539,6 +569,7 @@ export function useVTableSheet(options: UseVTableSheetOptions): GridApi {
             numberMetaRef.current = initial.sheets.map(sheetNumberMeta)
             styledCellsRef.current = seedTrackedSets(initial.sheets)
         mergedRangesRef.current = seedMergeRanges(initial.sheets)
+            sheetKeysRef.current = initial.sheets.map((_, index) => String(index))
 
             try {
                 engine = mountEngine(
@@ -563,7 +594,13 @@ export function useVTableSheet(options: UseVTableSheetOptions): GridApi {
             applyFormulas(engine, initial)
             lockGeneratedSheets(engine, initial)
             applyReadOnly(engine, readOnly, initial)
-            wireEvents(engine, { scheduleSave, onSelectionChange: onSelectionChangeRef, lastSelectionRef })
+            wireEvents(engine, {
+                scheduleSave,
+                onSelectionChange: onSelectionChangeRef,
+                lastSelectionRef,
+                onStructureChange: () => structureChangeRef.current(),
+            })
+            applyContextMenuTheme(engine, initial, resolveThemeTokens(container, darkMode ? true : undefined))
             setIsReady(true)
         })()
 
@@ -622,7 +659,13 @@ export function useVTableSheet(options: UseVTableSheetOptions): GridApi {
         applyPersistedPresentation(rebuilt, incoming, styledCellsRef.current)
         applyFormulas(rebuilt, incoming)
         lockGeneratedSheets(rebuilt, incoming)
-        wireEvents(rebuilt, { scheduleSave, onSelectionChange: onSelectionChangeRef, lastSelectionRef })
+        wireEvents(rebuilt, {
+            scheduleSave,
+            onSelectionChange: onSelectionChangeRef,
+            lastSelectionRef,
+            onStructureChange: () => structureChangeRef.current(),
+        })
+        applyContextMenuTheme(rebuilt, incoming, resolveThemeTokens(container, darkMode))
         rebuilt.resize?.()
     }, [container, darkMode, workbookData, readOnly, scheduleSave])
 
@@ -642,8 +685,9 @@ export function useVTableSheet(options: UseVTableSheetOptions): GridApi {
                 // sheet**. Passing the current definitions keeps the sheets while
                 // the theme changes.
                 ...(workbook ? { sheets: workbookToSheetDefines(workbook) } : {}),
-                theme: { tableTheme: resolveTableTheme(container, dark) },
+                theme: resolveSheetTheme(container, dark),
             })
+            applyContextMenuTheme(engine, workbook, resolveThemeTokens(container, dark))
             engine.resize?.()
         } catch (error) {
             logger.warn('[office/spreadsheet] failed to apply the theme', error)
@@ -890,16 +934,117 @@ export function useVTableSheet(options: UseVTableSheetOptions): GridApi {
         const rebuilt = remountSheets(engine, container, engineModuleRef.current, normalized, readOnly, darkMode)
         if (!rebuilt) return
         engineRef.current = rebuilt
+        sheetKeysRef.current = normalized.sheets.map((_, index) => String(index))
         applyPersistedPresentation(rebuilt, normalized, styledCellsRef.current)
         applyFormulas(rebuilt, normalized)
         lockGeneratedSheets(rebuilt, normalized)
         applyReadOnly(rebuilt, readOnly, normalized)
-        wireEvents(rebuilt, { scheduleSave, onSelectionChange: onSelectionChangeRef, lastSelectionRef })
+        wireEvents(rebuilt, {
+            scheduleSave,
+            onSelectionChange: onSelectionChangeRef,
+            lastSelectionRef,
+            onStructureChange: () => structureChangeRef.current(),
+        })
         // A whole-workbook swap is not an edit, so the engine fires no change
         // event: persist the mounted payload explicitly.
         push()
+        applyContextMenuTheme(rebuilt, normalized, resolveThemeTokens(container, darkMode))
         rebuilt.resize?.()
     }, [container, darkMode, push, readOnly])
+
+    /**
+     * Read the engine tab bar sheet list back into the persisted workbook.
+     *
+     * Called after the engine adds, removes or renames a sheet. It maps each
+     * engine sheet to the previously persisted data by key, reads the live
+     * values, then rebuilds through replaceAll. The rebuild also returns the
+     * engine keys to the index form the rest of the adapter assumes.
+     */
+    const reconcileFromEngine = useCallback(() => {
+        if (reconcilingRef.current) return
+        const engine = engineRef.current
+        const base = dataRef.current
+        if (!engine || !base) return
+        reconcilingRef.current = true
+        try {
+            const all = engine.getAllSheets?.() ?? []
+            if (all.length === 0) return
+            const previousByKey = new Map<string, number>()
+            sheetKeysRef.current.forEach((key, index) => previousByKey.set(key, index))
+            const restoreKey = engine.getActiveSheet?.()?.getKey?.()
+            const nextSheets: SheetData[] = []
+            const nextNumberMeta: NumberMeta[] = []
+            const nextStyled: Array<Set<string>> = []
+            const nextMerged: MergeRange[][] = []
+            all.forEach((define, index) => {
+                const key = define.sheetKey
+                const prevIndex = previousByKey.get(key)
+                const previous = prevIndex === undefined ? undefined : base.sheets[prevIndex]
+                if (restoreKey !== undefined && restoreKey !== key) engine.activateSheet?.(key)
+                const instance = engine.getWorkSheetByKey?.(key) ?? null
+                const rows = clampMatrix((instance?.getData?.() ?? previous?.rows ?? []) as CellValue[][])
+                if (previous) restoreFormulas(rows, previous.rows)
+                const columnCount = Math.max(
+                    rows.reduce((max, row) => Math.max(max, row.length), 0),
+                    previous?.columnCount ?? 0,
+                    1,
+                )
+                const sheet: SheetData = previous
+                    ? {
+                          ...previous,
+                          name: define.sheetTitle || previous.name,
+                          rows,
+                          rowCount: Math.max(rows.length, 1),
+                          columnCount,
+                      }
+                    : {
+                          name: define.sheetTitle || 'Sheet ' + (index + 1),
+                          rows,
+                          rowCount: Math.max(rows.length, 1),
+                          columnCount,
+                      }
+                nextSheets.push(sheet)
+                nextNumberMeta.push(
+                    prevIndex === undefined
+                        ? sheetNumberMeta(sheet)
+                        : numberMetaRef.current[prevIndex] ?? sheetNumberMeta(sheet),
+                )
+                nextStyled.push(
+                    prevIndex === undefined
+                        ? new Set(Object.keys(sheet.styles ?? {}))
+                        : styledCellsRef.current[prevIndex] ?? new Set(),
+                )
+                nextMerged.push(
+                    prevIndex === undefined
+                        ? sheet.merges ?? []
+                        : mergedRangesRef.current[prevIndex] ?? sheet.merges ?? [],
+                )
+            })
+            if (restoreKey !== undefined) engine.activateSheet?.(restoreKey)
+            const activeKey = restoreKey ?? engine.getActiveSheet?.()?.getKey?.()
+            const activeIndex = all.findIndex((define) => define.sheetKey === activeKey)
+            replaceAll({
+                ...base,
+                sheets: nextSheets,
+                activeSheet: activeIndex < 0 ? 0 : activeIndex,
+            })
+        } catch (error) {
+            logger.warn('[office/spreadsheet] failed to reconcile sheets', error)
+        } finally {
+            reconcilingRef.current = false
+        }
+    }, [replaceAll])
+
+    /** Let the engine finish its own sheet operation before reading it back. */
+    const scheduleStructureReconcile = useCallback(() => {
+        if (structureTimerRef.current) clearTimeout(structureTimerRef.current)
+        structureTimerRef.current = setTimeout(() => {
+            structureTimerRef.current = null
+            reconcileFromEngine()
+        }, 0)
+    }, [reconcileFromEngine])
+
+    structureChangeRef.current = scheduleStructureReconcile
 
     const applyExternalData = useCallback((incoming: WorkbookData) => {
         const normalized = ensureValidWorkbookData(incoming)
@@ -996,7 +1141,7 @@ function buildEngineOptions(
         sheets: workbookToSheetDefines(workbook),
         // The host owns the toolbar, formula bar and history buttons.
         showFormulaBar: false,
-        showSheetTab: false,
+        showSheetTab: true,
         mainMenu: { show: false },
         undoRedo: { show: false },
         defaultRowHeight: 23,
@@ -1006,31 +1151,180 @@ function buildEngineOptions(
         readonly: readOnly,
         // The canvas paints its own colours, so the block's CSS palette has to be
         // handed over explicitly — see vtable-theme.ts.
-        theme: { tableTheme: resolveTableTheme(container, darkOverride) },
+        theme: resolveSheetTheme(container, darkOverride),
     }
 }
 
 /**
- * The grid theme for the container's current mode.
+ * The VTableSheet theme for the container's current mode.
  *
  * Reads the computed `--kn-sheet-*` tokens, which `sheet.css` defines separately
- * for light and dark, so the canvas matches the block instead of using the
- * engine's bundled palette.
+ * for light and dark, so the canvas — and the Excel-style row/column headers the
+ * engine renders through `TableSeriesNumber` — match the block instead of using
+ * the engine's bundled palette.
  */
-function resolveTableTheme(
+function resolveSheetTheme(
     container: HTMLElement | null,
     darkOverride?: boolean,
-): Record<string, unknown> {
+): SheetTheme {
+    return buildSheetTheme(resolveThemeTokens(container, darkOverride))
+}
+
+/** The block's resolved palette for the container's current mode. */
+function resolveThemeTokens(
+    container: HTMLElement | null,
+    darkOverride?: boolean,
+): ThemeTokens {
     const dark = darkOverride ?? prefersDarkMode(container)
     if (!container || typeof getComputedStyle !== 'function') {
-        return buildTheme(readThemeTokens(() => undefined, dark))
+        return fallbackTokens(dark)
     }
     const computed = getComputedStyle(container)
     const tokens = readThemeTokens(
         (name) => computed.getPropertyValue(name) || undefined,
         dark,
     )
-    return buildTheme(tokens)
+    // The host applies `.dark` in its own effect, which can land after ours when
+    // the mode is switched at runtime. Reading the tokens then returns the mode
+    // we just left, so a light grid would stay light in a dark app (or the
+    // reverse). Trust the explicit mode whenever the DOM tokens contradict it.
+    if (isDarkColor(tokens.cellBg) !== dark) {
+        return fallbackTokens(dark)
+    }
+    return tokens
+}
+
+/**
+ * Re-theme the engine's right-click menu.
+ *
+ * `ContextMenuPlugin`/`MenuManager` apply their palette as **inline** styles from
+ * a bundled light map and draw their icons as emoji, so neither a stylesheet nor
+ * the VTable theme reaches them. This walks the live plugins, rewrites the menu
+ * style map and gives every item an SVG `customIcon`.
+ */
+function applyContextMenuTheme(
+    engine: EngineSpreadsheet | null,
+    workbook: WorkbookData | null,
+    tokens: ThemeTokens,
+): void {
+    if (!engine || !workbook) return
+    workbook.sheets.forEach((_, index) => {
+        const table = engine.getWorkSheetByKey?.(String(index))?.tableInstance as
+            | (EngineTable & { pluginManager?: { plugins?: unknown } })
+            | null
+        const plugins = table?.pluginManager?.plugins
+        if (!plugins || typeof (plugins as { forEach?: unknown }).forEach !== 'function') return
+        ;(plugins as { forEach: (visit: (plugin: unknown) => void) => void }).forEach((plugin) => {
+            const contextMenu = plugin as {
+                menuManager?: { styles?: ContextMenuStyles }
+                pluginOptions?: Record<string, unknown>
+            }
+            if (!contextMenu?.menuManager?.styles) return
+            themeContextMenuStyles(contextMenu.menuManager.styles, tokens)
+            applyContextMenuIcons(contextMenu.pluginOptions)
+            translateContextMenuOnOpen(
+                contextMenu as { showContextMenu?: (...args: unknown[]) => void; pluginOptions?: Record<string, unknown> },
+            )
+        })
+    })
+}
+
+/** Menu lists the engine's `ContextMenuPlugin` exposes. */
+const CONTEXT_MENU_ITEM_LISTS = [
+    'bodyCellMenuItems',
+    'headerCellMenuItems',
+    'columnSeriesNumberMenuItems',
+    'rowSeriesNumberMenuItems',
+    'cornerSeriesNumberMenuItems',
+] as const
+
+function applyContextMenuIcons(pluginOptions: Record<string, unknown> | undefined): void {
+    if (!pluginOptions) return
+    for (const key of CONTEXT_MENU_ITEM_LISTS) {
+        const items = pluginOptions[key]
+        if (Array.isArray(items)) applyMenuIcons(items)
+    }
+}
+
+/** The engine's `iconName`, its `menuKey`, or a family fallback, as an SVG. */
+function contextMenuIconFor(entry: { iconName?: string; menuKey?: string }): string | undefined {
+    if (entry.iconName && CONTEXT_MENU_ICONS[entry.iconName]) {
+        return CONTEXT_MENU_ICONS[entry.iconName]
+    }
+    const menuKey = entry.menuKey ?? ''
+    if (CONTEXT_MENU_ICONS[menuKey]) return CONTEXT_MENU_ICONS[menuKey]
+    // Submenu items carry only a key; group them onto one icon.
+    if (menuKey.startsWith('delete_')) return CONTEXT_MENU_ICONS.delete
+    if (menuKey === 'unfreeze' || menuKey.startsWith('freeze_')) return CONTEXT_MENU_ICONS.freeze
+    if (menuKey === 'set_filter' || menuKey === 'cancel_filter') return CONTEXT_MENU_ICONS.filter
+    if (menuKey.indexOf('first_row_as_header') >= 0) return CONTEXT_MENU_ICONS.row
+    return undefined
+}
+
+/**
+ * Translate the menu labels to the app language when the menu opens.
+ *
+ * The bundled items ship hardcoded Chinese. `translate` resolves the current
+ * i18next language, so wrapping `showContextMenu` also covers a live language
+ * switch without reloading the page. The wrapper is installed once per plugin.
+ */
+function translateContextMenuOnOpen(plugin: {
+    showContextMenu?: (...args: unknown[]) => void
+    pluginOptions?: Record<string, unknown>
+}): void {
+    const original = plugin.showContextMenu
+    if (!original) return
+    const marker = plugin as { __knTranslatesMenu?: boolean }
+    if (marker.__knTranslatesMenu) return
+    marker.__knTranslatesMenu = true
+    plugin.showContextMenu = function (this: unknown, ...args: unknown[]): void {
+        const items = args[0]
+        if (Array.isArray(items)) translateContextMenuItems(items)
+        return original.apply(this, args)
+    }
+}
+
+/** Apply the current language to every menu item, recursing into submenus. */
+function translateContextMenuItems(items: unknown[]): void {
+    for (const item of items) {
+        if (!item || typeof item !== 'object') continue
+        const entry = item as {
+            menuKey?: string
+            iconName?: string
+            text?: string
+            children?: unknown[]
+        }
+        const key = contextMenuTranslationKey(entry.menuKey, entry.iconName)
+        if (key) {
+            const translated = translate(key)
+            // `translate` echoes the key when it has no entry; keep the engine text then.
+            if (translated !== key) entry.text = translated
+        }
+        if (Array.isArray(entry.children)) translateContextMenuItems(entry.children)
+    }
+}
+
+function contextMenuTranslationKey(menuKey?: string, iconName?: string): string | undefined {
+    const key = menuKey || iconName
+    return key ? `spreadsheet.contextMenu.${key}` : undefined
+}
+
+/** Replace any emoji icon with the matching SVG, recursively through submenus. */
+function applyMenuIcons(items: unknown[]): void {
+    for (const item of items) {
+        if (!item || typeof item !== 'object') continue
+        const entry = item as {
+            iconName?: string
+            menuKey?: string
+            customIcon?: unknown
+            children?: unknown[]
+        }
+        if (!entry.customIcon) {
+            const svg = contextMenuIconFor(entry)
+            if (svg) entry.customIcon = { svg, width: 16, height: 16 }
+        }
+        if (Array.isArray(entry.children)) applyMenuIcons(entry.children)
+    }
 }
 
 /** Apply styles and number formats, which have no place in the sheet definition. */
@@ -1157,9 +1451,10 @@ function wireEvents(
         scheduleSave: () => void
         onSelectionChange: React.MutableRefObject<(() => void) | undefined>
         lastSelectionRef: React.MutableRefObject<GridSelection | null>
+        onStructureChange: () => void
     },
 ): void {
-    const { scheduleSave, onSelectionChange, lastSelectionRef } = deps
+    const { scheduleSave, onSelectionChange, lastSelectionRef, onStructureChange } = deps
     for (const type of [CHANGE_CELL_VALUE, PASTED_DATA, MERGE_CELLS, UNMERGE_CELLS]) {
         engine.onTableEvent?.(type, () => scheduleSave())
     }
@@ -1169,6 +1464,64 @@ function wireEvents(
         if (selection) lastSelectionRef.current = selection
         onSelectionChange.current?.()
     })
+    // Switching the active tab changes which sheet persists as active. The engine
+    // emits this one, but not add/remove/rename/move, so those are wrapped below.
+    engine.on?.('sheet_activated', () => scheduleSave())
+    wrapSheetStructure(engine, onStructureChange)
+    localizeSheetTabs(engine)
+}
+
+/**
+ * Mirror the engine tab bar structural actions back into the document.
+ *
+ * VTableSheet 1.26.8 emits sheet_activated but not sheet_added / removed /
+ * renamed / moved, so the adapter wraps the methods the tab bar calls and lets
+ * the reconciler read the new sheet list back out. undo/redo are wrapped only to
+ * notice a sheet-count change, so an ordinary cell-edit undo does not rebuild.
+ */
+function wrapSheetStructure(engine: EngineSpreadsheet, onStructureChange: () => void): void {
+    const target = engine as EngineSpreadsheet & {
+        _addNewSheet?: () => void
+        removeSheet?: (key: string) => void
+        renameSheet?: (key: string, title: string) => void
+        __knStructureWired?: boolean
+    }
+    if (target.__knStructureWired) return
+    target.__knStructureWired = true
+    for (const name of ['_addNewSheet', 'removeSheet', 'renameSheet'] as const) {
+        const original = target[name]
+        if (typeof original !== 'function') continue
+        target[name] = function (this: unknown, ...args: unknown[]): unknown {
+            const result = (original as (...params: unknown[]) => unknown).apply(this, args)
+            onStructureChange()
+            return result
+        } as never
+    }
+    for (const name of ['undo', 'redo'] as const) {
+        const original = target[name]
+        if (typeof original !== 'function') continue
+        target[name] = function (this: unknown, ...args: unknown[]): unknown {
+            const before = engine.getSheetCount?.() ?? -1
+            const result = (original as (...params: unknown[]) => unknown).apply(this, args)
+            if ((engine.getSheetCount?.() ?? -1) !== before) onStructureChange()
+            return result
+        } as never
+    }
+}
+
+/** The engine hardcodes Chinese tooltips on its tab bar; retitle them. */
+function localizeSheetTabs(engine: EngineSpreadsheet): void {
+    const root = engine.getSheetTabElement?.()
+    if (!root) return
+    const setTitle = (selector: string, key: string) => {
+        const element = root.querySelector(selector)
+        if (element) element.setAttribute('title', translate(key))
+    }
+    setTitle('.vtable-sheet-add-button', 'spreadsheet.sheet.add')
+    setTitle('.vtable-sheet-menu-button', 'spreadsheet.sheet.menu')
+    const scrollButtons = root.querySelectorAll('.vtable-sheet-scroll-button')
+    scrollButtons[0]?.setAttribute('title', translate('spreadsheet.sheet.scrollLeft'))
+    scrollButtons[1]?.setAttribute('title', translate('spreadsheet.sheet.scrollRight'))
 }
 
 /**
@@ -1246,10 +1599,17 @@ function safeRelease(engine: EngineSpreadsheet | null): void {
 function engineHasContent(engine: EngineSpreadsheet | null): boolean {
     if (!engine) return false
     try {
-        const active = engine.getActiveSheet?.()
-        if (!active?.tableInstance) return false
-        const rows = (active.getData?.() ?? []) as CellValue[][]
-        return rows.some((row) => row?.some((value) => value !== null && value !== undefined && value !== ''))
+        // Scan every sheet, not just the active one: a newly added (empty) sheet
+        // becomes active, and an active-only check made the whole grid look empty
+        // and skipped persisting the structural change.
+        for (const define of engine.getAllSheets?.() ?? []) {
+            const sheet = engine.getWorkSheetByKey?.(define.sheetKey)
+            const rows = (sheet?.getData?.() ?? []) as CellValue[][]
+            if (rows.some((row) => row?.some((value) => value !== null && value !== undefined && value !== ''))) {
+                return true
+            }
+        }
+        return false
     } catch {
         return true
     }

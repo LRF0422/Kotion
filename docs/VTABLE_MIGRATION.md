@@ -129,19 +129,19 @@ SpreadsheetView (不变)
 **本轮踩到并修掉的自己的错误**（都在测试/复查中暴露）：
 - `applyReadOnly` 最初只加锁不解锁 → 块从只读切回可编辑会**永久锁死**。改为 `lockTableForEditing` 保存原始 editor 谓词、`unlockTableForEditing` 还原；`applyReadOnly` 双向作用，并在解锁后重新锁定生成表。
 - hook 里曾留了三个占位实现（`captureMerges`/`captureStyles` 直接返回 `undefined`）会**静默丢样式与合并**，已补实。
-- `buildEngineOptions` 收了 `darkMode` 却不用：主题走 `.kn-sheet` 的 `--kn-sheet-*` CSS 变量（含 `.jss-dark`），不通过引擎 theme 对象传（部分 theme 对象会覆盖超出预期的调色板）。
+- `buildEngineOptions` 收了 `darkMode` 却不用：主题走 `.kn-sheet` 的 `--kn-sheet-*` CSS 变量（含 `.dark .kn-sheet`），不通过引擎 theme 对象传（部分 theme 对象会覆盖超出预期的调色板）。
 
 **Phase 1 完成度**：上述全部落地——保存链路（`change_cell_value`/`pasted_data`/`merge_cells`/`unmerge_cells` → 标脏 → 2s 节流）、样式（`registerCustomCellStyle` + `arrangeCustomCellStyle`）、数字格式（渲染进存储值 + `numberFormats`/`rawValues` 记账）、生成表锁定（重写 `getEditor`/`isHasEditorDefine`，可逆）。
 
 **Phase 2 — 接入与兼容（✅ 接线完成，运行时回归待做）**
-1. ✅ `SpreadsheetView` 经 `src/spreadsheet/engine.ts` 选择引擎，默认 VTable；回退开关为全局 `globalThis.__KN_SPREADSHEET_ENGINE__ = 'jspreadsheet'`，另有 `setEngineOverride()` 供控制台临时切换（不持久化）。
-2. ✅ 两个 hook 都无条件调用以保持 hook 顺序稳定，只给选中的传真实 container，另一个传 `null`（effect 不挂载）。选项对象按构造相同。
-3. ✅ **端到端打包已验证**（此前最大未验证风险）：插件 bundle 1.31 → 4.02 MB（gzip 0.97 MB）；应用构建里 VTable 落在懒加载 chunk `es-*.js`，**2.34 MB / gzip 0.58 MB**（宿主构建对 vrender 有 tree-shaking，优于隔离估算的 1.03 MB）。jspreadsheet chunk 仍并存（0.45 MB / gzip 0.12 MB，回退用）。
+1. ✅ `SpreadsheetView` 只经 `src/spreadsheet/useVTableSheet.ts` 挂载；迁移期的引擎选择（`engine.ts`、`__KN_SPREADSHEET_ENGINE__` 全局与 `VITE_KN_SPREADSHEET_ENGINE`）**已在 Phase 3 删除**。
+2. ✅ 选项经 `GridApi` 契约传入，hook 只依赖选项对象。
+3. ✅ **端到端打包已验证**（此前最大未验证风险）：插件 bundle 1.31 → 4.02 MB（gzip 0.97 MB）；应用构建里 VTable 落在懒加载 chunk `es-*.js`，**2.34 MB / gzip 0.58 MB**（宿主构建对 vrender 有 tree-shaking，优于隔离估算的 1.03 MB）。Phase 3 删除回退后不再有并存的 jspreadsheet chunk。
 4. ✅ 多表/UI：用 `ISheetDefine[]` 承载，关掉引擎自带 tab/公式栏/菜单/撤销按钮，沿用宿主 UI；导入导出仍走 `SheetToolbar` 按钮，入口未减少。
 5. ✅ 主题与撤销重做：已接 `VTableSheet.undo()/redo()` 与 `--kn-sheet-*` 主题链；**深色模式已在浏览器验证**（明暗主题不同、暗色确实暗，26/26 中的两项）。「保存不进文档 undo 历史」需人工确认。
 
 **Phase 3 — 验证、清理、收尾**
-1. ⏳ 删除 jspreadsheet 依赖与 `useJspreadsheet.ts`，删除分页相关代码（`ROWS_PER_PAGE` 等，虚拟化后不再需要）。**保留至今是因为它同时是回退开关**，等人工回归通过再删。
+1. ✅ 已删除 jspreadsheet 依赖与 `useJspreadsheet.ts`、`engine.ts`、分页相关代码（`ROWS_PER_PAGE` 等）及 `sheet.css` 中的全部 `.jss_*` / `.jtabs*` / `.jcontextmenu` 规则；回退开关（全局与构建期）一并移除。
 2. ✅ 回归清单见第 7 节（自动化项全过，人工项待办）。
 3. ✅ 性能对比：9000×12 的 mount 时间、堆占用、DOM 元素数已实测（见第 8 节表格）。滚动帧率与每次保存耗时待人工。
 
@@ -355,7 +355,7 @@ SpreadsheetView (不变)
 
 **⚠️ 重要教训（多轮反复踩到）**：Vite dev server 在本仓库下**不可靠地提供陈旧模块**——多次出现「本地文件已改、浏览器加载旧代码」，导致我基于假象排查了大量时间（例如「引擎零张表」一度是旧代码所致）。所有浏览器验证前必须确认服务端返回的模块含最新标记，否则结论无效。本轮上述 26 项结论均在**确认服务模块含最新标记**后取得。
 
-**回退开关（保留）**：`globalThis.__KN_SPREADSHEET_ENGINE__ = 'jspreadsheet'`，或构建期 `VITE_KN_SPREADSHEET_ENGINE=jspreadsheet`。
+**回退开关（已移除）**：迁移期可通过 `globalThis.__KN_SPREADSHEET_ENGINE__ = 'jspreadsheet'` 或构建期 `VITE_KN_SPREADSHEET_ENGINE=jspreadsheet` 回退。Phase 3 删除适配器后此开关不再存在，需要回退请回滚到本迁移 commit 之前的版本。
 
 **仍未验证的部分（需要真人在真实编辑器里过一遍）**：以下只能靠人工，工具链里没有对应自动化：
 
@@ -366,4 +366,32 @@ SpreadsheetView (不变)
 5. **透视表生成 + 源数据变更自动刷新 + 下钻**。
 6. **复制粘贴**（含从 Excel 粘贴大块）。
 
-**清理（Phase 3，剩余项）**：删除 jspreadsheet 依赖与 `useJspreadsheet.ts`、删除分页代码（`ROWS_PER_PAGE` 等）、回收 0.12 MB gzip 的回退 chunk。保留至今的原因是它同时是回退开关 —— 等上面 6 项人工回归通过后再删。
+**清理（Phase 3，已完成）**：已删除 jspreadsheet 依赖与 `useJspreadsheet.ts`、分页代码（`ROWS_PER_PAGE` 等）以及回退 chunk，回收约 0.12 MB gzip。
+
+**深色模式修复（Phase 3 追加）**：VTableSheet 的 Excel 式行/列表头（A/B/C 与行号）由 `TableSeriesNumber` 插件绘制，其样式取自 theme 的**顶层** `rowSeriesNumberCellStyle` / `colSeriesNumberCellStyle`，而非 `tableTheme`。此前只填了 `tableTheme`，于是表头回落到插件打包的浅色 `#F9F9F9`，在深色模式下出现白色表头带。修复：
+
+- `vtable-theme.ts` 新增 `buildSeriesNumberStyle` / `buildSheetTheme`，补齐行/列表头与 `menuStyle`；`useVTableSheet` 改为传完整的 `IThemeDefine`。
+- `isDarkColor` 现在解析 `hsl()/hsla()`：CSS 变量 `hsl(var(--background))` 经 `getComputedStyle` 返回的正是 HSL 形式，旧实现只认 rgb/hex，导致 `prefersDarkMode` 恒为 false。
+- `resolveSheetTheme` 增加「DOM token 与显式模式相矛盾时以模式为准」的兜底，覆盖宿主 `.dark` class 晚于本组件 effect 应用的竞态。
+- `.kn-sheet .vtable-sheet-top-container:empty { display:none }` 去掉引擎空顶栏的 30px 空白带，容器背景改为 `--kn-sheet-cell-bg`；顶左"全选"角的浅色 `cornerCellStyle` 由 `.kn-sheet__canvas::before` 覆盖（`pointer-events:none`，交互仍可穿透）。
+
+**右键菜单（Phase 3 追加）**：单元格右键菜单由 `@visactor/vtable-plugins` 的 `ContextMenuPlugin` 渲染成 DOM，调色板以**内联样式**写死为浅色（`#ffffff` / `#f5f5f5` / `#999`），图标是 emoji（`createIcon` 把 `iconName` 映射成 📋✂️🗑️…），stylesheet 与 VTable theme 都够不到。修复：
+
+- `vtable-theme.ts` 新增 `themeContextMenuStyles(styles, tokens)`：就地改写 `MenuManager` 持有的样式表里的颜色键，保留引擎的布局键（宽度/内边距/圆角）。
+- 新增 `CONTEXT_MENU_ICONS`：16×16、`stroke="currentColor"` 的内联 SVG，覆盖引擎所有 emoji（copy/cut/paste/insert/delete/sort/protect/hide/freeze/四向箭头），并按 `menuKey` 补齐 delete_*/freeze_*/merge_cells/unmerge_cells/filter/first_row_as_header。
+- `useVTableSheet` 在挂载、换 payload、主题切换后调用 `applyContextMenuTheme`：遍历每张表的 `pluginManager`，改写菜单样式并给菜单项（含子菜单）写 `customIcon`（`customIcon` 优先于 `iconName`，因此 emoji 不再出现）。
+- 验证：Electron + 冒烟页在明/暗两态下开菜单，容器背景/文字色随模式变化，顶层 9 个菜单项与子菜单均为 SVG，文本无 emoji。
+
+**多工作表（Phase 3 追加）**：迁移时 `showSheetTab: false` 关掉了引擎自带的 sheet 标签栏，但宿主 UI 并没有补上切换/新增/重命名/删除，于是「多个 sheet」能力整体丢失。修复：
+
+- `buildEngineOptions` 重新打开 `showSheetTab: true`，恢复引擎标签栏的切换、双击重命名、菜单删除、拖拽排序；`sheet.css` 用 `--kn-sheet-*` 令牌覆盖 VTableSheet 注入的浅色标签栏样式（容器/标签/hover/active/新增/滚动/菜单/渐变遮罩）。
+- 标签栏的按钮 tooltip 由引擎硬编码中文，`localizeSheetTabs` 在挂载/重建后按 `translate` 重设为当前语言（`spreadsheet.sheet.*`）。
+- 结构变更持久化：VTableSheet 1.26.8 **只发 `sheet_activated`**，新增/删除/重命名/移动都不发事件。适配器在 `wireEvents` 里包装引擎的 `_addNewSheet` / `removeSheet` / `renameSheet`（`undo`/`redo` 仅在 sheet 数变化时触发），事件后由 `reconcileFromEngine` 按 `sheetKeysRef` 把引擎的 sheet 列表读回 `WorkbookData`，再经 `replaceAll` 重建——既持久化了结构，也让引擎 key 回到适配器其余部分依赖的索引形式。
+- `engineHasContent` 改为扫描所有 sheet：新增的空 sheet 会成为 active，旧实现只看 active，导致新增/重命名后保存被「空快照保护」拦下。
+- 验证：Electron 冒烟页中「新增 → 重命名 → 切换 → 删除」四步，`onSave` 载荷的名称/数量/active 均正确，且结构变更前后其它 sheet 的单元格值不变；深色下标签栏背景 `#292929`、active 文本为强调色。
+
+**右键菜单国际化（Phase 3 追加）**：菜单文案同样是引擎内置的**硬编码中文**（复制/剪切/插入/冻结/合并单元格…）。修复：
+
+- `i18n/translate.ts` 抽出纯字典与 `t(lang, key)`（无运行时依赖，Node 可直接测试），`i18n/index.ts` 保留绑定 i18next 的 `translate`/`createT` 并 re-export，公开 API 不变。`spreadsheet.contextMenu.*` 补齐 en/zh 两套标签。
+- `useVTableSheet` 用 `translateContextMenuOnOpen` 包装插件的 `showContextMenu`：每次打开（含子菜单，递归）都按当前 `i18n.language` 重写 `text`，因此运行时切语言无需重载；`translate` 对缺失键会原样回显键名，代码据此保留引擎原文。
+- 验证：同一页面强制 `i18n.language` 为 zh/en，菜单顶层与子菜单分别为「复制/剪切/…/启用首行表头、删除行」与「Copy/Cut/…/Use first row as header、Delete row」。

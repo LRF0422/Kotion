@@ -13,7 +13,7 @@ import {
     TableHeader,
     TableRow,
 } from "@kn/ui"
-import type { GridApi } from "./useJspreadsheet"
+import type { GridApi } from "./grid-api"
 import { computePivot, pivotDrillDown, type PivotLabels } from "./pivot"
 import { formatCellRef, type CellValue, type WorkbookData } from "./workbook-data"
 import { translate } from "../i18n"

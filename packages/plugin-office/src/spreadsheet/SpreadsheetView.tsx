@@ -3,15 +3,15 @@ import { useResolvedTheme } from "@kn/ui"
 import { X } from "@kn/icon"
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
-import { useJspreadsheet } from "./useJspreadsheet"
 import { useVTableSheet } from "./useVTableSheet"
-import { engineFromHost, resolveEngine, type EngineHost } from "./engine"
 import { SheetToolbar } from "./SheetToolbar"
 import { SheetFormulaBar } from "./SheetFormulaBar"
 import { PivotDialog } from "./PivotDialog"
 import { PivotDetailsDialog, type PivotDrillTarget } from "./PivotDetailsDialog"
 import { pickExcelFileFromCenter } from "./excel-file-picker"
 import { registerSpreadsheetLive, unregisterSpreadsheetLive, type SpreadsheetLiveHandle } from "./workbook-registry"
+import { loadStoredWorkbook, persistStoredWorkbook, workbookStoreFor } from "./workbook-bridge"
+import { hasWorkbook, observeWorkbook, seedWorkbook, type StoreDoc } from "./workbook-store"
 import { DEFAULT_SPREADSHEET_HEIGHT } from "./constants"
 import { ensureValidWorkbookData, workbookHasContent, type WorkbookData } from "./workbook-data"
 import { translate } from "../i18n"
@@ -20,9 +20,9 @@ import "./sheet.css"
 /**
  * Spreadsheet node view.
  *
- * The grid is jspreadsheet: a plain DOM widget with no React tree of its own, so
- * this component gives it a box, renders the toolbar and forwards actions. The
- * widget is created once per mount and destroyed on unmount; fullscreen moves the
+ * The grid is a VTableSheet canvas with no React tree of its own, so this
+ * component gives it a box, renders the toolbar and forwards actions. The widget
+ * is created once per mount and destroyed on unmount; fullscreen moves the
  * element rather than rebuilding it.
  */
 export const SpreadsheetView: React.FC<NodeViewProps> = React.memo((props) => {
@@ -48,13 +48,30 @@ export const SpreadsheetView: React.FC<NodeViewProps> = React.memo((props) => {
         if (element) setContainerReady(true)
     }, [])
 
+    // L3: the workbook body lives in the shared Y.Doc, addressed by
+    // `node.attrs.workbookRef`. `workbookData` stays as the legacy /
+    // non-collaborative payload and as the migration source.
+    const storeDoc = workbookStoreFor(editor)
+    const workbookRef = typeof node.attrs.workbookRef === 'string' && node.attrs.workbookRef
+        ? node.attrs.workbookRef
+        : null
+    const storeRef = useRef<{ doc?: StoreDoc; ref: string | null }>({ doc: storeDoc, ref: workbookRef })
+    storeRef.current = { doc: storeDoc, ref: workbookRef }
+
     // Capture the initial payload once; after mount the live grid is the source
-    // of truth for editing, and the node attributes are the persistence sink.
-    const initialDataRef = useRef<WorkbookData>(ensureValidWorkbookData(node.attrs.workbookData))
+    // of truth for editing, and the store (or the node attribute) is the sink.
+    // Lazy so the O(cells) store read does not run on every render.
+    const initialDataRef = useRef<WorkbookData | null>(null)
+    if (initialDataRef.current === null) {
+        initialDataRef.current = ensureValidWorkbookData(
+            loadStoredWorkbook(storeDoc, workbookRef) ?? node.attrs.workbookData,
+        )
+    }
+    const initialData = initialDataRef.current
 
     // The last payload this view persisted, so an empty snapshot produced during a
     // remount can never replace a populated document payload.
-    const lastSavedRef = useRef<WorkbookData | null>(initialDataRef.current)
+    const lastSavedRef = useRef<WorkbookData | null>(initialData)
 
     const handleSave = useCallback(
         (data: WorkbookData) => {
@@ -66,6 +83,9 @@ export const SpreadsheetView: React.FC<NodeViewProps> = React.memo((props) => {
                 return
             }
             lastSavedRef.current = data
+            // L3: persist into the shared store, so a cell edit touches one Y.Map
+            // key instead of re-serialising the workbook into the document.
+            if (persistStoredWorkbook(storeRef.current.doc, storeRef.current.ref, data)) return
             try {
                 const pos = getPos()
                 if (typeof pos !== 'number') return
@@ -92,6 +112,39 @@ export const SpreadsheetView: React.FC<NodeViewProps> = React.memo((props) => {
     const handleSelectionChange = useCallback(() => {
         setSelectionVersion((version) => version + 1)
     }, [])
+
+    // Seed the store from a legacy attribute payload, then drop the bulk data so
+    // the document stops carrying the table. Concurrent clients derive the same
+    // ref from the workbook id, so the seed converges.
+    useEffect(() => {
+        const doc = workbookStoreFor(editor)
+        if (!doc) return
+        const legacy = node.attrs.workbookData
+        if (!legacy) return
+        const currentRef = typeof node.attrs.workbookRef === 'string' && node.attrs.workbookRef
+            ? node.attrs.workbookRef
+            : null
+        const workbook = ensureValidWorkbookData(legacy)
+        const ref = currentRef ?? workbook.id
+        if (!hasWorkbook(doc, ref)) seedWorkbook(doc, ref, workbook)
+        try {
+            const pos = getPos()
+            if (typeof pos !== 'number') return
+            const docNode = editor.state.doc.nodeAt(pos)
+            if (!docNode || docNode.type.name !== 'spreadsheet') return
+            // Drop the bulk attribute; keep only the ref. addToHistory off keeps the
+            // migration out of the document undo stack.
+            const tr = editor.state.tr.setNodeMarkup(pos, undefined, {
+                ...docNode.attrs,
+                workbookRef: ref,
+                workbookData: null,
+            })
+            tr.setMeta('addToHistory', false)
+            editor.view.dispatch(tr)
+        } catch {
+            // The node view was torn down mid-migration; the store seed already ran.
+        }
+    }, [editor, getPos, node.attrs.workbookRef, node.attrs.workbookData])
 
     // ESC exits fullscreen (the toolbar also has an explicit close button).
     useEffect(() => {
@@ -144,7 +197,7 @@ export const SpreadsheetView: React.FC<NodeViewProps> = React.memo((props) => {
 
     const gridOptions = {
         container: containerReady ? containerRef.current : null,
-        workbookData: initialDataRef.current,
+        workbookData: initialData,
         readOnly: !editor.isEditable,
         darkMode,
         onSave: handleSave,
@@ -154,19 +207,13 @@ export const SpreadsheetView: React.FC<NodeViewProps> = React.memo((props) => {
         onPivotDrillDown: setPivotTarget,
     }
 
-    // Both hooks are called unconditionally so the hook order is stable across
-    // renders; only the selected one is asked to mount. The option objects are
-    // identical by construction — that is what the `GridApi` seam buys, and it is
-    // what keeps this the only line that differs between the two engines.
-    const host = (globalThis as EngineHost & typeof globalThis)
-    const engine = resolveEngine(engineFromHost(host))
-    const jspreadsheetGrid = useJspreadsheet(engine === 'jspreadsheet' ? gridOptions : { ...gridOptions, container: null })
-    const vtableGrid = useVTableSheet(engine === 'vtable' ? gridOptions : { ...gridOptions, container: null })
-    const grid = engine === 'vtable' ? vtableGrid : jspreadsheetGrid
+    const grid = useVTableSheet(gridOptions)
 
     const { getSnapshot, replaceAll, applyExternalData, writeRange, isReady } = grid
     replaceRef.current = replaceAll
     getSnapshotRef.current = getSnapshot
+    const applyExternalDataRef = useRef(applyExternalData)
+    applyExternalDataRef.current = applyExternalData
 
     // Keep the grid element in exactly one host. Moving the element preserves the
     // widget; only its box changes.
@@ -184,6 +231,23 @@ export const SpreadsheetView: React.FC<NodeViewProps> = React.memo((props) => {
         const data = node.attrs.workbookData
         if (data) applyExternalData(ensureValidWorkbookData(data))
     }, [node.attrs.workbookData, applyExternalData])
+
+    // Out-of-band writers (AI tools) bump workbookRevision; reload from the store.
+    useEffect(() => {
+        const doc = workbookStoreFor(editor)
+        if (!doc || !workbookRef) return
+        const stored = loadStoredWorkbook(doc, workbookRef)
+        if (stored) applyExternalData(stored)
+    }, [editor, workbookRef, node.attrs.workbookRevision, applyExternalData])
+
+    // Remote collaborators write through the same store; apply their changes.
+    useEffect(() => {
+        const doc = workbookStoreFor(editor)
+        if (!doc || !workbookRef) return
+        return observeWorkbook(doc, workbookRef, (workbook) => {
+            applyExternalDataRef.current?.(workbook)
+        })
+    }, [editor, workbookRef])
 
     // Publish the live grid to the AI tool layer so reads are current and writes
     // land as normal edits instead of replacing the workbook.
@@ -266,6 +330,8 @@ export const SpreadsheetView: React.FC<NodeViewProps> = React.memo((props) => {
 }, (prevProps, nextProps) => {
     return prevProps.node.attrs.height === nextProps.node.attrs.height
         && prevProps.node.attrs.workbookData === nextProps.node.attrs.workbookData
+        && prevProps.node.attrs.workbookRef === nextProps.node.attrs.workbookRef
+        && prevProps.node.attrs.workbookRevision === nextProps.node.attrs.workbookRevision
         && prevProps.editor.isEditable === nextProps.editor.isEditable
 })
 

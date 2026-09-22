@@ -62,7 +62,7 @@ export interface PivotSource {
  *
  * Stored on the *output* sheet: that sheet's `rows` always hold the generated
  * result, so a reader that ignores `pivot` still renders the last computed
- * table. `useJspreadsheet` recomputes it whenever the source data changes.
+ * table. The pivot engine recomputes it whenever the source data changes.
  */
 export interface PivotConfig {
     /** Source regions (cross-sheet union). At least one. */

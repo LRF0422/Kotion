@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react"
-import type { GridApi } from "./useJspreadsheet"
+import type { GridApi } from "./grid-api"
 import { formatCellRef, parseRangeSpec } from "./workbook-data"
 import { translate } from "../i18n"
 

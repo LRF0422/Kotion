@@ -40,7 +40,7 @@ import {
     TooltipTrigger,
     cn,
 } from "@kn/ui"
-import type { GridApi } from "./useJspreadsheet"
+import type { GridApi } from "./grid-api"
 import type { NumberFormatKind } from "./workbook-data"
 import { translate } from "../i18n"
 

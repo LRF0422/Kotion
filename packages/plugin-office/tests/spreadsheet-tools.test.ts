@@ -18,6 +18,13 @@ const hooks = registerHooks({
             if (specifier === '@kn/common') {
                 return { url: 'data:text/javascript,export const i18n = { language: "en" }', shortCircuit: true }
             }
+            if (specifier === '@kn/editor') {
+                // Only the runtime helper is imported; type-only imports are erased.
+                return {
+                    url: 'data:text/javascript,export const getCollaborationRuntime = () => undefined',
+                    shortCircuit: true,
+                }
+            }
             if (specifier === '../i18n') return nextResolve('../i18n/index.ts', context)
             if (specifier.startsWith('.') && !specifier.endsWith('.ts')) {
                 return nextResolve(specifier + '.ts', context)

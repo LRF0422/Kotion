@@ -10,11 +10,14 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
+    buildSheetTheme,
     buildTheme,
+    CONTEXT_MENU_ICONS,
     fallbackTokens,
     isDarkColor,
     prefersDarkMode,
     readThemeTokens,
+    themeContextMenuStyles,
     TOKEN_VARIABLES,
 } from '../src/spreadsheet/vtable-theme.ts'
 
@@ -27,8 +30,18 @@ test('isDarkColor reads rgb, rgba, hex and shorthand hex', () => {
     assert.equal(isDarkColor('#1a1a1a'), true)
     assert.equal(isDarkColor('#fff'), false)
     assert.equal(isDarkColor('#ffffff'), false)
-    assert.equal(isDarkColor('hsl(0 0% 10%)'), false, 'only rgb/hex are parsed')
     assert.equal(isDarkColor(''), false)
+})
+
+test('isDarkColor reads the hsl() form the block tokens actually resolve to', () => {
+    // `getComputedStyle` hands `hsl(var(--background))` back as `hsl(0 0% 10%)`
+    // rather than rgb, so a reader that skipped HSL classified every dark token
+    // as light — which is what broke `prefersDarkMode`.
+    assert.equal(isDarkColor('hsl(0 0% 10%)'), true, 'the dark cell background must read dark')
+    assert.equal(isDarkColor('hsl(0 0% 100%)'), false)
+    assert.equal(isDarkColor('hsl(40 6% 95%)'), false, 'the light header background is light')
+    // The alpha suffix is ignored: this blue's own luminance is dark.
+    assert.equal(isDarkColor('hsl(211 70% 55% / 0.12)'), true)
 })
 
 test('a mid grey sits on the light side of the cut, so it is not called dark', () => {
@@ -123,6 +136,92 @@ test('a dark theme and a light theme differ on the surfaces that matter', () => 
     // And the dark body must actually read as dark, which is what the user sees.
     assert.equal(isDarkColor(dark.bodyStyle.bgColor), true)
     assert.equal(isDarkColor(light.bodyStyle.bgColor), false)
+})
+
+test('the sheet theme paints the Excel-style row/column headers', () => {
+    // VTableSheet renders the A/B/C letters and row numbers with its
+    // TableSeriesNumber plugin, which reads these from the *top level* of the
+    // theme option. Missing them leaves the packaged light #F9F9F9 band above a
+    // dark grid; this test is the guard against that regression.
+    const tokens = fallbackTokens(true)
+    const theme = buildSheetTheme(tokens) as Record<string, any>
+    assert.ok(theme.tableTheme, 'the canvas palette is still present')
+    for (const key of ['rowSeriesNumberCellStyle', 'colSeriesNumberCellStyle']) {
+        const style = theme[key]
+        assert.ok(style, `${key} must be set`)
+        assert.equal(style.bgColor, tokens.headBg, `${key}.bgColor must follow the header`)
+        assert.equal(style.text.fill, tokens.headFg, `${key}.text.fill must not stay the packaged grey`)
+        assert.equal(style.borderLine.stroke, tokens.line)
+    }
+    assert.equal(theme.menuStyle.bgColor, tokens.menuBg)
+    assert.equal(theme.menuStyle.color, tokens.menuFg)
+})
+
+test('a dark sheet theme and a light sheet theme differ on the header band', () => {
+    const dark = buildSheetTheme(fallbackTokens(true)) as Record<string, any>
+    const light = buildSheetTheme(fallbackTokens(false)) as Record<string, any>
+    assert.equal(isDarkColor(dark.colSeriesNumberCellStyle.bgColor), true)
+    assert.equal(isDarkColor(light.colSeriesNumberCellStyle.bgColor), false)
+})
+
+test('the context-menu palette follows the tokens but keeps the engine layout', () => {
+    // MenuManager applies these as inline styles, so the stylesheet cannot reach
+    // them; themeContextMenuStyles mutates the map it holds. The engine's layout
+    // keys (widths, padding, radius) must survive the colour swap.
+    const styles = {
+        menuContainer: { backgroundColor: '#ffffff', color: '#000000', borderRadius: '4px', minWidth: '180px' },
+        submenuContainer: { backgroundColor: '#ffffff' },
+        menuItem: { color: '#000000', padding: '6px 20px' },
+        menuItemHover: { backgroundColor: '#f5f5f5' },
+        menuItemSeparator: { backgroundColor: '#e0e0e0' },
+        menuItemShortcut: { color: '#999999' },
+        submenuArrow: { color: '#666666' },
+        inputField: { borderColor: '#dddddd' },
+        button: { backgroundColor: '#1890ff' },
+    }
+    const tokens = fallbackTokens(true)
+    themeContextMenuStyles(styles, tokens)
+    assert.equal(styles.menuContainer.backgroundColor, tokens.menuBg)
+    assert.equal(styles.menuContainer.color, tokens.menuFg)
+    assert.equal(styles.menuContainer.borderRadius, '4px', 'layout must survive')
+    assert.equal(styles.menuContainer.minWidth, '180px')
+    assert.equal(styles.submenuContainer.backgroundColor, tokens.menuBg)
+    assert.equal(styles.menuItemHover.backgroundColor, tokens.hover)
+    assert.equal(styles.menuItemSeparator.backgroundColor, tokens.line)
+    assert.equal(styles.menuItemShortcut.color, tokens.headFg)
+    assert.equal(styles.button.backgroundColor, tokens.accent)
+    assert.equal(isDarkColor(styles.menuContainer.backgroundColor), true)
+})
+
+test('the context-menu icons are SVGs and cover every bundled emoji', () => {
+    // The engine maps these icon names to emoji; each must resolve to an SVG that
+    // inherits the themed text colour.
+    const emojiIconNames = [
+        'copy',
+        'paste',
+        'cut',
+        'delete',
+        'insert',
+        'sort',
+        'protect',
+        'hide',
+        'freeze',
+        'up-arrow',
+        'down-arrow',
+        'left-arrow',
+        'right-arrow',
+    ]
+    for (const name of emojiIconNames) {
+        const svg = CONTEXT_MENU_ICONS[name]
+        assert.ok(svg, name + ' must have an icon')
+        assert.match(svg!, /^<svg /)
+        assert.match(svg!, /currentColor/)
+        assert.doesNotMatch(svg!, /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u, 'no emoji allowed')
+    }
+    // Menu-key-only items (merge/delete/freeze families) are mapped too.
+    for (const name of ['merge_cells', 'unmerge_cells', 'filter', 'hide_column', 'row']) {
+        assert.ok(CONTEXT_MENU_ICONS[name], name + ' must have an icon')
+    }
 })
 
 test('prefersDarkMode tolerates a missing container or DOM', () => {
