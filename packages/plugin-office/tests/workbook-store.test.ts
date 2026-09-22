@@ -121,14 +121,14 @@ test('remote writes notify the observer, local writes do not', () => {
 
     // A write from another client: delivered.
     doc.transact(() => {
-        doc.getMap('x').set('ref-4|v:0:0:0', 7)
+        doc.getMap('x').set('ref-4|d:value:0:0:0', 7)
     }, { remote: true })
     stop()
     assert.deepEqual(seen, [7])
 
     // After unsubscribing, no further delivery.
     doc.transact(() => {
-        doc.getMap('x').set('ref-4|v:0:0:0', 8)
+        doc.getMap('x').set('ref-4|d:value:0:0:0', 8)
     }, { remote: true })
     assert.deepEqual(seen, [7])
 })

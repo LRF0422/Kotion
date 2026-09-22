@@ -25,23 +25,34 @@ getCollaborationRuntime(editor) // => { document: Y.Doc, provider, awareness, st
 
 ## 存储布局
 
-一个扁平 Y.Map（`kn-spreadsheets`），key 前缀是 ref，因此无需构造嵌套 Y 类型：
+一个扁平 Y.Map（`kn-spreadsheets`），key 前缀是 ref，因此无需构造嵌套 Y 类型。
+布局是 **快照 + 增量 + 阈值压实**：
 
 | key | 内容 |
 |---|---|
-| `<ref>|meta` | `{ id, activeSheet, sheets: [{ name, rowCount, columnCount, pivot? }] }` |
-| `<ref>|v:<sheet>:<row>:<col>` | 单元格值（只存非空） |
-| `<ref>|s:…` / `nf:…` / `rv:…` | 样式 / 数字格式 / 原始值 |
-| `<ref>|cw:<sheet>:<col>` / `rh:<sheet>:<row>` | 列宽 / 行高 |
-| `<ref>|mg:<sheet>:<index>` | 合并区间 |
+| `<ref>|snap` | **一个**值：工作簿的稀疏 JSON 快照（只写非空单元格） |
+| `<ref>|active` | 当前 sheet（数字，覆盖快照） |
+| `<ref>|d:value:<sheet>:<row>:<col>` | 自快照以来的单元格值增量（null = 清空） |
+| `<ref>|d:style/numberFormat/rawValue:…` | 样式 / 数字格式 / 原始值增量 |
+| `<ref>|d:column:<sheet>:<col>` / `d:row:<sheet>:<row>` | 列宽 / 行高增量 |
+| `<ref>|d:merges:<sheet>` | 该表合并区间（整体替换） |
+| `<ref>|d:name:<sheet>` / `d:dims:<sheet>` | 重命名 / 行列表数增量 |
+
+- **为什么**：早期版本「每格一个 Y.Map 条目」，一张大表就是几百万个 Yjs item，
+  房间持久化后每次打开都要遍历全部 item 编码/应用，首同步极慢。改成
+  **单个快照值**后，编码/加载只处理一个 item；编辑仍只写变化的格子。
+- **压实**：delta 条目超过 `DELTA_COMPACT_THRESHOLD`（2000）或 sheet 结构变更时，
+  把当前工作簿重新写成快照并清空 delta。
+- 实测：10 万非空格 → seed 后 Y.Map **1 个条目**（快照），编码约 1.2MB；一次编辑只多
+  **1 个** delta 条目。
 
 ## 模块
 
 | 文件 | 职责 | Node 单测 |
 |---|---|---|
 | `workbook-diff.ts` | 两个 `WorkbookData` 间的纯增量 diff | ✅ `workbook-diff.test.ts` |
-| `workbook-store.ts` | 扁平 Y.Map 的 load/seed/applyDiff/observe | ✅ `workbook-store.test.ts`（fake map） |
-| `workbook-persistence.ts` | diff + store 的编排（结构变更整体重写） | 浏览器 |
+| `workbook-store.ts` | 快照编码/解码 + delta 读写 + observe | ✅ `workbook-store.test.ts`（fake map） |
+| `workbook-persistence.ts` | 首次/结构变更写快照，普通编辑写 delta，超阈值压实 | 浏览器 |
 | `workbook-bridge.ts` | editor ↔ store（`getCollaborationRuntime`） | 浏览器 |
 
 `workbook-diff.ts` / `workbook-store.ts` 刻意只用 type-only 相对导入，这样 Node

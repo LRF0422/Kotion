@@ -1,26 +1,21 @@
 /**
- * Flat, cell-level workbook store on top of a shared Y.Doc (L3).
+ * Workbook store on top of a shared Y.Doc (L3).
  *
- * Why: embedding the whole workbook in a ProseMirror node attribute meant every
- * autosave re-serialised and CRDT-replicated the entire table. L3 keeps only a
- * workbook ref in the node and stores the data here, so a cell edit touches one
- * Y.Map key instead of the document.
+ * Layout per workbook ref (one flat Y.Map, so no nested Y types are needed):
  *
- * Layout (one flat Y.Map, keys prefixed by ref so no nested Y types are needed):
+ *   <ref>|snap                 the whole workbook as ONE sparse JSON string
+ *   <ref>|active               active sheet override (number)
+ *   <ref>|d:<kind>:<sheet>:..  small per-cell/per-sheet deltas since the snapshot
  *
- *   <ref>|meta                 EncodedMeta (sheet names/dims/pivot, active index)
- *   <ref>|v:<sheet>:<row>:<col>  cell value (only non-empty cells are stored)
- *   <ref>|s:<sheet>:<row>:<col>  style cssText
- *   <ref>|nf:<sheet>:<row>:<col> number format kind
- *   <ref>|rv:<sheet>:<row>:<col> raw value behind a number format
- *   <ref>|cw:<sheet>:<col>       column width override
- *   <ref>|rh:<sheet>:<row>       row height override
- *   <ref>|mg:<sheet>:<index>     merge range
+ * Why snapshot + delta: a per-cell Y.Map entry per cell turned a large workbook
+ * into millions of Yjs items, and every full encode/apply had to walk all of
+ * them — which made the collaboration document slow to open once the room server
+ * persisted it. One snapshot value encodes/loads in one item; edits still write
+ * only the changed cells, and the delta is compacted back into the snapshot once
+ * it grows past a threshold.
  *
- * The module types the Y.Doc structurally instead of importing yjs, and keeps
- * every relative import type-only, so the Node test runner can load it (relative
- * runtime imports are resolved without extension guessing there). The tests
- * drive it with a small fake map.
+ * The module is import-free apart from type-only relative imports so the Node
+ * test runner can load it (see workbook-diff.ts for the note).
  */
 import type { CellValue, NumberFormatKind, SheetData, WorkbookData } from './workbook-data'
 import type { WorkbookDiff } from './workbook-diff'
@@ -30,6 +25,13 @@ export const WORKBOOK_STORE = 'kn-spreadsheets'
 
 /** Origin marker so the store can ignore the observer firing for its own writes. */
 export const LOCAL_ORIGIN = Object.freeze({ kn: 'office-spreadsheet-local' })
+
+/** Compact the delta back into the snapshot once it holds this many entries. */
+export const DELTA_COMPACT_THRESHOLD = 2000
+
+const SNAPSHOT_KEY = 'snap'
+const ACTIVE_KEY = 'active'
+const DELTA_PREFIX = 'd:'
 
 /** The slice of Y.Map this module uses. */
 export interface StoreMap {
@@ -48,32 +50,27 @@ export interface StoreDoc {
     transact?<T>(fn: () => T, origin?: unknown): T
 }
 
-interface EncodedSheetMeta {
+interface EncodedSheet {
     name: string
     rowCount: number
     columnCount: number
     pivot?: SheetData['pivot']
+    cells?: Record<string, CellValue>
+    styles?: Record<string, string>
+    numberFormats?: Record<string, NumberFormatKind>
+    rawValues?: Record<string, CellValue>
+    columnWidths?: Record<string, number>
+    rowHeights?: Record<string, number>
+    merges?: SheetData['merges']
 }
 
-interface EncodedMeta {
+interface EncodedWorkbook {
     id: string
     activeSheet: number
-    sheets: EncodedSheetMeta[]
+    sheets: EncodedSheet[]
 }
 
-/** Inline A1 helpers: see the note at the top about Node's literal resolution. */
-function parseA1(ref: string): { row: number; column: number } | null {
-    const match = String(ref ?? '').trim().match(/^([A-Za-z]+)(\d+)$/)
-    if (!match) return null
-    let column = 0
-    const letters = match[1]!.toUpperCase()
-    for (let i = 0; i < letters.length; i += 1) column = column * 26 + (letters.charCodeAt(i) - 64)
-    column -= 1
-    const row = Number.parseInt(match[2]!, 10) - 1
-    if (row < 0 || column < 0) return null
-    return { row, column }
-}
-
+/** Inline A1 helper: see the note at the top about Node's literal resolution. */
 function formatA1(row: number, column: number): string {
     let label = ''
     let value = column
@@ -93,77 +90,53 @@ function run(doc: StoreDoc, fn: () => void): void {
     else fn()
 }
 
-function hasOperations(diff: WorkbookDiff): boolean {
-    return (
-        diff.grid.length > 0 ||
-        diff.dimensions.length > 0 ||
-        diff.merges.length > 0 ||
-        diff.meta.length > 0 ||
-        diff.activeSheet !== null ||
-        diff.structureChanged
-    )
+function keysWithPrefix(map: StoreMap, base: string): string[] {
+    const keys: string[] = []
+    map.forEach((_value, key) => {
+        if (key.startsWith(base)) keys.push(key)
+    })
+    return keys
 }
 
 /** True when the store already holds a workbook for this ref. */
 export function hasWorkbook(doc: StoreDoc, ref: string): boolean {
-    return doc.getMap(WORKBOOK_STORE).has(prefix(ref) + 'meta')
+    return doc.getMap(WORKBOOK_STORE).has(prefix(ref) + SNAPSHOT_KEY)
 }
 
-/** Read a workbook back into the persisted model, or null when absent. */
+/** Number of delta entries currently held for the ref (drives compaction). */
+export function countDeltaKeys(doc: StoreDoc, ref: string): number {
+    const base = prefix(ref) + DELTA_PREFIX
+    let count = 0
+    doc.getMap(WORKBOOK_STORE).forEach((_value, key) => {
+        if (key.startsWith(base)) count += 1
+    })
+    return count
+}
+
+/**
+ * Read a workbook back into the persisted model.
+ *
+ * Rows stay sparse (only written cells exist); the adapter pads them to the
+ * declared extent when it mounts the engine.
+ */
 export function loadWorkbook(doc: StoreDoc, ref: string): WorkbookData | null {
     const map = doc.getMap(WORKBOOK_STORE)
-    const meta = map.get(prefix(ref) + 'meta') as EncodedMeta | undefined
-    if (!meta || !Array.isArray(meta.sheets) || meta.sheets.length === 0) return null
-
-    // Rows start sparse so loading costs O(non-empty cells); the adapter pads
-    // them to the declared extent when it mounts the engine.
-    const sheets: SheetData[] = meta.sheets.map((sheet) => ({
-        name: sheet.name,
-        rows: [],
-        rowCount: Math.max(1, Math.floor(sheet.rowCount) || 1),
-        columnCount: Math.max(1, Math.floor(sheet.columnCount) || 1),
-        ...(sheet.pivot ? { pivot: sheet.pivot } : {}),
-    }))
-
     const base = prefix(ref)
-    map.forEach((value, key) => {
-        if (!key.startsWith(base)) return
-        const rest = key.slice(base.length)
-        if (rest === 'meta') return
-        const parts = rest.split(':')
-        const kind = parts[0]
-        const sheet = sheets[Number(parts[1])]
-        if (!sheet) return
-        if (kind === 'v' || kind === 's' || kind === 'nf' || kind === 'rv') {
-            const row = Number(parts[2])
-            const column = Number(parts[3])
-            if (!Number.isFinite(row) || !Number.isFinite(column)) return
-            if (kind === 'v') writeCell(sheet, row, column, value as CellValue)
-            else setRefEntry(sheet, kind, row, column, value)
-        } else if (kind === 'cw' || kind === 'rh') {
-            const index = Number(parts[2])
-            if (!Number.isFinite(index)) return
-            const target = kind === 'cw' ? (sheet.columnWidths ??= {}) : (sheet.rowHeights ??= {})
-            target[String(index)] = Number(value)
-        } else if (kind === 'mg') {
-            const index = Number(parts[2])
-            if (!Number.isFinite(index)) return
-            if (!sheet.merges) sheet.merges = []
-            ;(sheet.merges as unknown[])[index] = value
-        }
-    })
-    sheets.forEach((sheet) => {
-        if (sheet.merges) sheet.merges = sheet.merges.filter(Boolean)
-        if (sheet.columnWidths && Object.keys(sheet.columnWidths).length === 0) delete sheet.columnWidths
-        if (sheet.rowHeights && Object.keys(sheet.rowHeights).length === 0) delete sheet.rowHeights
-    })
-
-    return {
-        id: meta.id || ref,
-        sheets,
-        activeSheet: Math.min(Math.max(Number(meta.activeSheet) || 0, 0), sheets.length - 1),
-        version: 2,
+    const snapshot = map.get(base + SNAPSHOT_KEY)
+    if (typeof snapshot !== 'string') return null
+    let decoded: WorkbookData
+    try {
+        decoded = decodeSnapshot(snapshot)
+    } catch {
+        return null
     }
+
+    map.forEach((value, key) => {
+        if (!key.startsWith(base) || key === base + SNAPSHOT_KEY) return
+        applyDelta(decoded, key.slice(base.length), value)
+    })
+    decoded.activeSheet = Math.min(Math.max(Number(decoded.activeSheet) || 0, 0), decoded.sheets.length - 1)
+    return decoded
 }
 
 function writeCell(sheet: SheetData, row: number, column: number, value: CellValue): void {
@@ -171,23 +144,72 @@ function writeCell(sheet: SheetData, row: number, column: number, value: CellVal
     line[column] = value
 }
 
-function setRefEntry(sheet: SheetData, kind: string, row: number, column: number, value: unknown): void {
-    const ref = formatA1(row, column)
-    if (kind === 's') (sheet.styles ??= {})[ref] = String(value)
-    else if (kind === 'nf') (sheet.numberFormats ??= {})[ref] = value as NumberFormatKind
-    else if (kind === 'rv') (sheet.rawValues ??= {})[ref] = value as CellValue
+/** Apply one delta entry (the part after <ref>|) to a decoded workbook. */
+function applyDelta(workbook: WorkbookData, rest: string, value: unknown): void {
+    if (rest === ACTIVE_KEY) {
+        workbook.activeSheet = Number(value) || 0
+        return
+    }
+    if (!rest.startsWith(DELTA_PREFIX)) return
+    const parts = rest.slice(DELTA_PREFIX.length).split(':')
+    const kind = parts[0]
+    const sheet = workbook.sheets[Number(parts[1])]
+    if (kind === 'merges') {
+        if (sheet) sheet.merges = Array.isArray(value) ? (value as SheetData['merges']) : undefined
+        return
+    }
+    if (kind === 'name') {
+        if (sheet) sheet.name = typeof value === 'string' ? value : sheet.name
+        return
+    }
+    if (kind === 'dims') {
+        if (sheet && Array.isArray(value)) {
+            sheet.rowCount = Math.max(1, Number(value[0]) || 1)
+            sheet.columnCount = Math.max(1, Number(value[1]) || 1)
+        }
+        return
+    }
+    if (!sheet) return
+
+    if (kind === 'column' || kind === 'row') {
+        const index = Number(parts[2])
+        if (!Number.isFinite(index)) return
+        const target = kind === 'column' ? (sheet.columnWidths ??= {}) : (sheet.rowHeights ??= {})
+        if (value === null || value === undefined) delete target[String(index)]
+        else target[String(index)] = Number(value)
+        return
+    }
+
+    const row = Number(parts[2])
+    const column = Number(parts[3])
+    if (!Number.isFinite(row) || !Number.isFinite(column)) return
+    if (kind === 'value') {
+        writeCell(sheet, row, column, (value ?? null) as CellValue)
+    } else if (kind === 'style') {
+        const ref = formatA1(row, column)
+        if (value === null || value === undefined) delete sheet.styles?.[ref]
+        else (sheet.styles ??= {})[ref] = String(value)
+    } else if (kind === 'numberFormat') {
+        const ref = formatA1(row, column)
+        if (value === null || value === undefined) delete sheet.numberFormats?.[ref]
+        else (sheet.numberFormats ??= {})[ref] = value as NumberFormatKind
+    } else if (kind === 'rawValue') {
+        const ref = formatA1(row, column)
+        if (value === null || value === undefined) delete sheet.rawValues?.[ref]
+        else (sheet.rawValues ??= {})[ref] = value as CellValue
+    }
 }
 
-/** Seed (or replace) the whole workbook for a ref. */
+/** Seed (or replace) the whole workbook for a ref and drop its delta. */
 export function seedWorkbook(doc: StoreDoc, ref: string, workbook: WorkbookData): void {
     const map = doc.getMap(WORKBOOK_STORE)
     const base = prefix(ref)
+    const snapshot = encodeSnapshot(workbook)
     run(doc, () => {
-        map.set(base + 'meta', encodeMeta(workbook))
-        writeGridSet(map, ref, workbook)
-        writeRefMaps(map, ref, workbook)
-        writeDimensions(map, ref, workbook)
-        writeMerges(map, ref, workbook)
+        map.set(base + SNAPSHOT_KEY, snapshot)
+        for (const key of keysWithPrefix(map, base)) {
+            if (key !== base + SNAPSHOT_KEY) map.delete(key)
+        }
     })
 }
 
@@ -195,77 +217,46 @@ export function seedWorkbook(doc: StoreDoc, ref: string, workbook: WorkbookData)
 export function clearWorkbook(doc: StoreDoc, ref: string): void {
     const map = doc.getMap(WORKBOOK_STORE)
     const base = prefix(ref)
-    const doomed: string[] = []
-    map.forEach((_value, key) => {
-        if (key.startsWith(base)) doomed.push(key)
-    })
     run(doc, () => {
-        for (const key of doomed) map.delete(key)
+        for (const key of keysWithPrefix(map, base)) map.delete(key)
     })
 }
 
 /**
  * Persist the difference between the last snapshot and the live one.
  *
- * Returns the number of Y.Map operations applied. A structure change is reported
- * by the diff, not applied here: the caller rewrites the workbook with
- * {@link clearWorkbook} + {@link seedWorkbook} instead.
+ * Only the changed cells are written, so a normal edit touches a handful of
+ * Y.Map keys. Structural changes are reported by the diff and handled by the
+ * caller (a full rewrite).
  */
 export function applyWorkbookDiff(doc: StoreDoc, ref: string, diff: WorkbookDiff): number {
-    if (!hasOperations(diff)) return 0
     const map = doc.getMap(WORKBOOK_STORE)
     const base = prefix(ref)
     let operations = 0
     run(doc, () => {
         for (const change of diff.grid) {
-            const key = base + gridKey(change.kind, change.sheet, change.row, change.column)
-            if (change.value === null) {
-                if (map.has(key)) map.delete(key)
-            } else {
-                map.set(key, change.value)
-            }
+            map.set(base + DELTA_PREFIX + gridKind(change.kind) + ':' + change.sheet + ':' + change.row + ':' + change.column, change.value)
             operations += 1
         }
         for (const change of diff.dimensions) {
-            const key = base + (change.axis === 'column' ? 'cw:' : 'rh:') + change.sheet + ':' + change.index
-            if (change.size === null) {
-                if (map.has(key)) map.delete(key)
-            } else {
-                map.set(key, change.size)
-            }
+            map.set(
+                base + DELTA_PREFIX + (change.axis === 'column' ? 'column' : 'row') + ':' + change.sheet + ':' + change.index,
+                change.size,
+            )
             operations += 1
         }
         for (const change of diff.merges) {
-            const mergeBase = base + 'mg:' + change.sheet + ':'
-            const doomed: string[] = []
-            map.forEach((_value, key) => {
-                if (key.startsWith(mergeBase)) doomed.push(key)
-            })
-            for (const key of doomed) map.delete(key)
-            ;(change.merges ?? []).forEach((merge, index) => map.set(mergeBase + index, merge))
+            map.set(base + DELTA_PREFIX + 'merges:' + change.sheet, change.merges ?? null)
             operations += 1
         }
-        if (diff.meta.length > 0 || diff.activeSheet !== null) {
-            const meta = map.get(base + 'meta') as EncodedMeta | undefined
-            if (meta) {
-                const next: EncodedMeta = {
-                    id: meta.id,
-                    activeSheet: diff.activeSheet ?? meta.activeSheet,
-                    sheets: meta.sheets.slice(),
-                }
-                for (const change of diff.meta) {
-                    if (next.sheets[change.sheet]) {
-                        next.sheets[change.sheet] = {
-                            ...next.sheets[change.sheet],
-                            name: change.name,
-                            rowCount: change.rowCount,
-                            columnCount: change.columnCount,
-                        }
-                    }
-                }
-                map.set(base + 'meta', next)
-                operations += 1
-            }
+        for (const change of diff.meta) {
+            map.set(base + DELTA_PREFIX + 'name:' + change.sheet, change.name)
+            map.set(base + DELTA_PREFIX + 'dims:' + change.sheet, [change.rowCount, change.columnCount])
+            operations += 2
+        }
+        if (diff.activeSheet !== null) {
+            map.set(base + ACTIVE_KEY, diff.activeSheet)
+            operations += 1
         }
     })
     return operations
@@ -274,8 +265,8 @@ export function applyWorkbookDiff(doc: StoreDoc, ref: string, diff: WorkbookDiff
 /**
  * Observe remote changes to a workbook.
  *
- * Local writes carry {@link LOCAL_ORIGIN} and are skipped so the live grid is not
- * rebuilt from its own save. Returns an unsubscribe function.
+ * Local writes carry {@link LOCAL_ORIGIN} and are skipped. Returns an
+ * unsubscribe function.
  */
 export function observeWorkbook(
     doc: StoreDoc,
@@ -295,73 +286,73 @@ export function observeWorkbook(
     return () => map.unobserve(handler)
 }
 
-// ── encoding helpers ─────────────────────────────────────────────────────
+// ── encoding ─────────────────────────────────────────────────────────────
 
-function gridKey(kind: string, sheet: number, row: number, column: number): string {
-    const head = kind === 'value' ? 'v' : kind === 'style' ? 's' : kind === 'numberFormat' ? 'nf' : 'rv'
-    return head + ':' + sheet + ':' + row + ':' + column
+function gridKind(kind: string): string {
+    return kind === 'value' ? 'value' : kind === 'style' ? 'style' : kind === 'numberFormat' ? 'numberFormat' : 'rawValue'
 }
 
-function encodeMeta(workbook: WorkbookData): EncodedMeta {
-    return {
-        id: workbook.id,
-        activeSheet: workbook.activeSheet,
-        sheets: workbook.sheets.map((sheet) => ({
+/** Sparse JSON: only non-empty cells are written. */
+function encodeSnapshot(workbook: WorkbookData): string {
+    const sheets: EncodedSheet[] = workbook.sheets.map((sheet) => {
+        const cells: Record<string, CellValue> = {}
+        sheet.rows.forEach((row, rowIndex) => {
+            row?.forEach((value, columnIndex) => {
+                if (value === null || value === undefined) return
+                cells[rowIndex + ':' + columnIndex] = value
+            })
+        })
+        return {
             name: sheet.name,
             rowCount: sheet.rowCount,
             columnCount: sheet.columnCount,
             ...(sheet.pivot ? { pivot: sheet.pivot } : {}),
-        })),
+            ...(Object.keys(cells).length > 0 ? { cells } : {}),
+            ...(sheet.styles && Object.keys(sheet.styles).length > 0 ? { styles: sheet.styles } : {}),
+            ...(sheet.numberFormats && Object.keys(sheet.numberFormats).length > 0 ? { numberFormats: sheet.numberFormats } : {}),
+            ...(sheet.rawValues && Object.keys(sheet.rawValues).length > 0 ? { rawValues: sheet.rawValues } : {}),
+            ...(sheet.columnWidths && Object.keys(sheet.columnWidths).length > 0 ? { columnWidths: sheet.columnWidths } : {}),
+            ...(sheet.rowHeights && Object.keys(sheet.rowHeights).length > 0 ? { rowHeights: sheet.rowHeights } : {}),
+            ...(sheet.merges && sheet.merges.length > 0 ? { merges: sheet.merges } : {}),
+        }
+    })
+    const encoded: EncodedWorkbook = { id: workbook.id, activeSheet: workbook.activeSheet, sheets }
+    return JSON.stringify(encoded)
+}
+
+function decodeSnapshot(snapshot: string): WorkbookData {
+    const parsed = JSON.parse(snapshot) as EncodedWorkbook
+    const sheets: SheetData[] = (parsed.sheets ?? []).map((sheet) => {
+        const rows: CellValue[][] = []
+        for (const [key, value] of Object.entries(sheet.cells ?? {})) {
+            const separator = key.indexOf(':')
+            const row = Number(key.slice(0, separator))
+            const column = Number(key.slice(separator + 1))
+            if (!Number.isFinite(row) || !Number.isFinite(column)) continue
+            const line = (rows[row] ??= [])
+            line[column] = value
+        }
+        return {
+            name: sheet.name,
+            rows,
+            rowCount: Math.max(1, Math.floor(sheet.rowCount) || 1),
+            columnCount: Math.max(1, Math.floor(sheet.columnCount) || 1),
+            ...(sheet.pivot ? { pivot: sheet.pivot } : {}),
+            ...(sheet.styles ? { styles: sheet.styles } : {}),
+            ...(sheet.numberFormats ? { numberFormats: sheet.numberFormats } : {}),
+            ...(sheet.rawValues ? { rawValues: sheet.rawValues } : {}),
+            ...(sheet.columnWidths ? { columnWidths: sheet.columnWidths } : {}),
+            ...(sheet.rowHeights ? { rowHeights: sheet.rowHeights } : {}),
+            ...(sheet.merges ? { merges: sheet.merges } : {}),
+        }
+    })
+    if (sheets.length === 0) {
+        sheets.push({ name: 'Sheet1', rows: [], rowCount: 1, columnCount: 1 })
     }
-}
-
-function writeGridSet(map: StoreMap, ref: string, workbook: WorkbookData): void {
-    const base = prefix(ref)
-    workbook.sheets.forEach((sheet, sheetIndex) => {
-        sheet.rows.forEach((row, rowIndex) => {
-            row?.forEach((value, columnIndex) => {
-                if (value === null || value === undefined) return
-                map.set(base + 'v:' + sheetIndex + ':' + rowIndex + ':' + columnIndex, value)
-            })
-        })
-    })
-}
-
-function writeRefMaps(map: StoreMap, ref: string, workbook: WorkbookData): void {
-    const base = prefix(ref)
-    workbook.sheets.forEach((sheet, sheetIndex) => {
-        for (const [cellRef, text] of Object.entries(sheet.styles ?? {})) {
-            const position = parseA1(cellRef)
-            if (position) map.set(base + 's:' + sheetIndex + ':' + position.row + ':' + position.column, text)
-        }
-        for (const [cellRef, kind] of Object.entries(sheet.numberFormats ?? {})) {
-            const position = parseA1(cellRef)
-            if (position) map.set(base + 'nf:' + sheetIndex + ':' + position.row + ':' + position.column, kind)
-        }
-        for (const [cellRef, value] of Object.entries(sheet.rawValues ?? {})) {
-            const position = parseA1(cellRef)
-            if (position) map.set(base + 'rv:' + sheetIndex + ':' + position.row + ':' + position.column, value)
-        }
-    })
-}
-
-function writeDimensions(map: StoreMap, ref: string, workbook: WorkbookData): void {
-    const base = prefix(ref)
-    workbook.sheets.forEach((sheet, sheetIndex) => {
-        for (const [column, width] of Object.entries(sheet.columnWidths ?? {})) {
-            map.set(base + 'cw:' + sheetIndex + ':' + column, width)
-        }
-        for (const [row, height] of Object.entries(sheet.rowHeights ?? {})) {
-            map.set(base + 'rh:' + sheetIndex + ':' + row, height)
-        }
-    })
-}
-
-function writeMerges(map: StoreMap, ref: string, workbook: WorkbookData): void {
-    const base = prefix(ref)
-    workbook.sheets.forEach((sheet, sheetIndex) => {
-        ;(sheet.merges ?? []).forEach((merge, index) => {
-            map.set(base + 'mg:' + sheetIndex + ':' + index, merge)
-        })
-    })
+    return {
+        id: parsed.id || 'workbook',
+        sheets,
+        activeSheet: Number(parsed.activeSheet) || 0,
+        version: 2,
+    }
 }
