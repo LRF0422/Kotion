@@ -253,6 +253,17 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
                 // bound page) travels in contextNote, which the backend
                 // persists as an append-only block behind the history.
                 const runSystemPrompt = (systemPrompt ?? '').trim()
+                // Diagnostic: exactly which capabilities this run ships. Helps
+                // pin down a plugin tool that registered but never reached the
+                // catalog. Cheap (one line per run) and worth keeping until the
+                // plugin-tool registration path is confirmed end to end.
+                console.log('[Agent] run capabilities', {
+                    tools: (tools ?? []).map(t => t.name),
+                    skills: (skills ?? []).map(s => ({
+                        name: s.name,
+                        tools: (s.tools ?? []).map(t => t.name),
+                    })),
+                })
                 const run = await client.createRun({
                     conversationId,
                     messages,
