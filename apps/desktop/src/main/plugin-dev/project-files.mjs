@@ -24,7 +24,8 @@ const clamp = (value, fallback, max) => {
     return Math.min(Math.max(numeric, 1), max)
 }
 
-const walk = async (dir, acc) => {
+const walk = async (dir, acc, state) => {
+    if (state.truncated) return acc
     let entries
     try {
         entries = await readdir(dir, { withFileTypes: true })
@@ -32,10 +33,15 @@ const walk = async (dir, acc) => {
         return acc
     }
     for (const entry of entries) {
-        if (acc.length > MAX_LIST_FILES) return acc
+        if (acc.length >= MAX_LIST_FILES) {
+            // Report the cap: a search that stops walking must not claim it
+            // scanned everything, or the agent silently misses matches.
+            state.truncated = true
+            return acc
+        }
         const full = join(dir, entry.name)
         if (entry.isDirectory()) {
-            if (!SKIP_DIRS.has(entry.name)) await walk(full, acc)
+            if (!SKIP_DIRS.has(entry.name)) await walk(full, acc, state)
         } else if (SOURCE_EXTENSIONS.has(extname(entry.name))) {
             acc.push(full)
         }
@@ -45,11 +51,12 @@ const walk = async (dir, acc) => {
 
 /** List project-relative source files, optionally filtered by a path substring. */
 export const listProjectFiles = async (root, { include, limit } = {}) => {
-    const files = (await walk(root, [])).map((file) => toPosix(relative(root, file))).sort()
+    const state = { truncated: false }
+    const files = (await walk(root, [], state)).map((file) => toPosix(relative(root, file))).sort()
     const needle = typeof include === 'string' && include.trim() ? include.trim().toLowerCase() : undefined
     const filtered = needle ? files.filter((path) => path.toLowerCase().includes(needle)) : files
     const max = clamp(limit, MAX_LIST_FILES, MAX_LIST_FILES)
-    return { root, files: filtered.slice(0, max), truncated: filtered.length > max }
+    return { root, files: filtered.slice(0, max), truncated: state.truncated || filtered.length > max }
 }
 
 /** Search project source for a case-insensitive substring, returning file + line. */
@@ -62,8 +69,9 @@ export const searchProjectFiles = async (root, { query, include, limit } = {}) =
     const max = clamp(limit, DEFAULT_SEARCH_LIMIT, MAX_SEARCH_LIMIT)
     const matches = []
     let truncated = false
+    const state = { truncated: false }
 
-    outer: for (const file of await walk(root, [])) {
+    outer: for (const file of await walk(root, [], state)) {
         const path = toPosix(relative(root, file))
         if (filter && !path.toLowerCase().includes(filter)) continue
         let text
@@ -84,7 +92,7 @@ export const searchProjectFiles = async (root, { query, include, limit } = {}) =
             matches.push({ path, line: index + 1, text: line.trim().slice(0, 240) })
         }
     }
-    return { root, matches, truncated }
+    return { root, matches, truncated: truncated || state.truncated }
 }
 
 /** Dispatch list/search behind the single dev.files capability. */

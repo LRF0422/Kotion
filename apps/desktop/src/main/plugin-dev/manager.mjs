@@ -132,11 +132,15 @@ class DevSession {
         for (const waiter of waiters) waiter.resolve()
     }
 
-    /** Resolve every pending count-based build wait whose target was reached. */
-    settleBuildWaiters() {
+    /**
+     * Resolve pending count-based build waits. A successful build resolves the
+     * waits it satisfies; a failure (`force`) resolves them all, because the
+     * attempt is over even though the count did not move.
+     */
+    settleBuildWaiters(force = false) {
         const remaining = []
         for (const waiter of this.buildWaiters) {
-            if (this.buildCount > waiter.minCount) waiter.resolve()
+            if (force || this.buildCount > waiter.minCount) waiter.resolve()
             else remaining.push(waiter)
         }
         this.buildWaiters = remaining
@@ -146,7 +150,7 @@ class DevSession {
         switch (event.event) {
             case 'ready':
                 this.plugin = event.plugin || this.plugin
-                this.state = this.options.watch === false ? 'starting' : 'starting'
+                this.state = 'starting'
                 break
             case 'watching':
                 this.watching = true
@@ -172,6 +176,10 @@ class DevSession {
                 this.error = (event.errors || []).join('\n')
                 this.state = this.build ? this.state : 'failed'
                 this.settleReadyWaiters()
+                // A failed attempt is still a finished attempt: release any
+                // one-shot build() caller instead of making it wait out the
+                // full initial-build timeout.
+                this.settleBuildWaiters(true)
                 this.emit('build-error', this.status())
                 break
             case 'log':
@@ -313,12 +321,6 @@ export class DevSessionManager {
                 console.error('[plugin-dev] listener failed', error)
             }
         }
-    }
-
-    requireSession(root) {
-        const session = this.sessions.get(root)
-        if (!session) throw new Error(`No dev session for ${root}`)
-        return session
     }
 
     async start(options) {

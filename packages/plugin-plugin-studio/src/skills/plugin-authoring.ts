@@ -45,7 +45,7 @@ export const pluginAuthoringSkill = {
         "1. listPluginProjects：先看有没有现成工程，避免重复创建。",
         "2. createPluginProject({ name })：在内置目录新建工程，返回 root 与 pluginKey。生成 package.json、src/index.tsx、src/DevPanel.tsx、README.md。",
         "3. 看工程用 listPluginProjectFiles / searchPluginProject；读文件用 readPluginProjectFile（带行号）；改文件用 editPluginProjectFile（精确替换）或 writePluginProjectFile（新建/整体重写）。改 src/index.tsx 注册插件；新组件另建文件，如 src/Panel.tsx。",
-        "4. runPluginProject({ root })：开始监听，首个构建完成后热更到当前窗口；之后保存文件会自动重建热更。",
+        "4. runPluginProject({ root })：开始监听，首个构建完成后热更到当前窗口；之后保存文件会自动重建，开发台面板打开时会自动热更（否则用 buildPluginProject 主动热更）。",
         "5. 构建失败时用 pluginProjectLogs({ root }) 看编译错误，修正后 buildPluginProject({ root }) 重试。",
         "6. 需要可分发包时 buildPluginProject({ root, writeToDisk: true })，产出 dist/index.js。",
         "7. 用户说停掉时 stopPluginProject({ root })。",

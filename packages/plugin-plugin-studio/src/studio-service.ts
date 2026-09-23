@@ -11,13 +11,7 @@
  * behind the `dev.*` capabilities, which the web host does not have.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import {
-    useOptionalService,
-    resolveOptionalService,
-    type DevBridge,
-    type DevSessionStatus,
-    type PluginManagementEntry,
-} from '@kn/common'
+import { useOptionalService, type DevBridge, type DevSessionStatus } from '@kn/common'
 
 const STORAGE_KEY = 'kn.plugin-studio.projects.v1'
 
@@ -91,42 +85,8 @@ export const useInstallBundle = () => {
     )
 }
 
-/** Imperative resolver for the full plugin-management service. */
-export const resolvePluginManagement = () => resolveOptionalService('pluginManagement')
-
-/** The full plugin-management service, when this host registers it. */
-export const usePluginManagement = () => useOptionalService('pluginManagement')
-
 /** The plugin-marketplace (catalogue lifecycle) service, when registered. */
 export const useMarketplace = () => useOptionalService('pluginMarketplace')
-
-/**
- * Active plugins (host-owned included) with install metadata. Subscribes to
- * the management service, so install/uninstall re-renders the caller.
- */
-export const useInstalledPlugins = (): PluginManagementEntry[] => {
-    const pluginManagement = useOptionalService('pluginManagement')
-    const [entries, setEntries] = useState<PluginManagementEntry[]>(
-        () => pluginManagement?.list() ?? [],
-    )
-    useEffect(() => {
-        if (!pluginManagement) {
-            setEntries([])
-            return undefined
-        }
-        setEntries(pluginManagement.list())
-        return pluginManagement.subscribe(() => setEntries(pluginManagement.list()))
-    }, [pluginManagement])
-    return entries
-}
-
-/** Imperative resolver for the plugin host service (agent tools, event handlers). */
-export const resolvePluginHost = () => {
-    return {
-        has: (name: string) => resolveOptionalService('pluginHost')?.has(name) ?? false,
-        getActiveNames: () => resolveOptionalService('pluginHost')?.getActiveNames() ?? [],
-    }
-}
 
 /** Subscribe to build events for one project (or all of them). */
 export const useBuildEvents = (
@@ -215,9 +175,6 @@ export const useProjects = () => {
 
     return { projects, addProject, removeProject, touchProject, persist }
 }
-
-/** Non-React accessor for the project list. */
-export const readStudioProjects = readProjects
 
 /** Human-readable size for build output. */
 export const formatBytes = (bytes: number): string => {

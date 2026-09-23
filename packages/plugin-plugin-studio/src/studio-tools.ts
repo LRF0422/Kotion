@@ -295,7 +295,9 @@ const waitForFreshBuild = async (
     while (Date.now() < deadline) {
         const [status] = await dev.status({ root })
         // A failed rebuild never bumps buildCount; surface it immediately.
-        if (status && (status.buildCount > previous || status.state === 'failed')) return status
+        if (status && (status.buildCount > previous || status.state === 'failed' || status.error)) {
+            return status
+        }
         await sleep(120)
     }
     const [status] = await dev.status({ root })
@@ -305,7 +307,10 @@ const waitForFreshBuild = async (
 const summarize = (status: StudioSessionStatus | undefined) => {
     if (!status) return { ok: false, error: '没有找到该工程的会话' }
     return {
-        ok: status.state !== 'failed',
+        // A failed rebuild keeps state 'watching' (the session survives), so the
+        // error is also part of the success signal — otherwise a stale, still-
+        // present build would be reported as success and re-installed.
+        ok: status.state !== 'failed' && !status.error,
         root: status.root,
         state: status.state,
         pluginKey: status.plugin?.pluginKey ?? null,
@@ -767,7 +772,8 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
 
     runPluginProject: {
         description:
-            '开始（或重启）监听一个插件工程，等首个构建完成后把它热更到当前应用窗口，之后保存文件会自动重新构建并热更。' +
+            '开始（或重启）监听一个插件工程，等首个构建完成后把它热更到当前应用窗口；之后保存文件会自动重新构建，' +
+            '插件开发台面板打开时会把成功的重建自动热更到窗口（未打开时用 buildPluginProject 主动热更）。' +
             '这是"实时预览"的入口。返回构建结果或编译错误。',
         inputSchema: {
             type: 'object',
@@ -823,7 +829,7 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
             const previous = existing?.buildCount ?? 0
             const requested = await dev.build({ root: args.root, writeToDisk: args.writeToDisk === true })
             const status =
-                requested.buildCount > previous || requested.state === 'failed'
+                requested.buildCount > previous || requested.state === 'failed' || requested.error
                     ? requested
                     : await waitForFreshBuild(deps, args.root, previous)
             const summary = summarize(status)

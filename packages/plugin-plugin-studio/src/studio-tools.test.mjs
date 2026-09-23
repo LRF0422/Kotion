@@ -440,6 +440,31 @@ const failingTools = createStudioTools({
 const failed = await failingTools.buildPluginProject.execute({ root: ROOT })
 check('errors: reported, not thrown', failed.ok === false && /Expected/.test(String(failed.error)), String(failed.error))
 
+/*
+ * Real failed rebuilds keep state 'watching' (the session survives) and only set
+ * `error`. The tool must treat that as failure too — otherwise it reports
+ * success and re-installs the previous, stale build.
+ */
+const staleBuild = { code: '/* stale v1 */', bytes: 14, durationMs: 5, modules: ['src/index.tsx'] }
+const watchingFailStatus = {
+    ...status(ROOT, 1, 'v1'),
+    state: 'watching',
+    build: staleBuild,
+    error: 'src/index.tsx:1: boom',
+}
+const installsBefore = installs.length
+const watchingFailTools = createStudioTools({
+    getDev: () => ({ ...dev, status: async () => [watchingFailStatus], build: async () => watchingFailStatus }),
+    getPluginHost: () => pluginHost,
+})
+const watchingFail = await watchingFailTools.buildPluginProject.execute({ root: ROOT })
+check(
+    'errors: watching + error is a failure',
+    watchingFail.ok === false && /boom/.test(String(watchingFail.error)),
+    JSON.stringify(watchingFail),
+)
+check('errors: stale build not re-installed on failure', installs.length === installsBefore, String(installs.length))
+
 /* Host-API reference: the agent reads the standard packages before writing. */
 const apiPackages = await tools.listHostApiPackages.execute({})
 check(

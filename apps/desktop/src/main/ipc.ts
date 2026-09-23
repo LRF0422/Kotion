@@ -131,7 +131,10 @@ export function setupIpcHandlers() {
   // Installed from here so it shares this module's fs allowlist: a dev project
   // root is only reachable if it lives in a standard user directory or in a
   // folder the user picked in a native dialog.
-  setupDevIpcHandlers({ assertAllowedPath })
+  const devManager = setupDevIpcHandlers({ assertAllowedPath });
+  // The manager owns the dev-server child processes and nothing else calls
+  // dispose(), so reap them on quit instead of leaving orphaned watchers.
+  app.on('will-quit', () => devManager.dispose());
 
   // ==================== system ====================
   handle('system.info', () => ({

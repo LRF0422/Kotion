@@ -54,7 +54,7 @@
 
 ### 人：图形界面
 
-`pnpm desktop:dev` → **设置 → 插件开发台**：
+`pnpm desktop:dev` → **右侧边栏 → 插件开发台**：
 
 - **新建工程**：输入包名即可，**不弹目录选择器**，工程建在内置目录里。
 - **添加已有目录**：想开发磁盘上已有的工程时才用（这时才需要选目录）。
@@ -64,7 +64,7 @@
 
 ### agent：工具驱动
 
-插件向 agent 注册了 15 个工具（`editorExtension.tools`，见 `PluginManager.resolveTools`）：
+插件向 agent 注册了 20 个工具（`editorExtension.tools`，见 `PluginManager.resolveTools`）：
 
 | 工具 | 作用 |
 | --- | --- |
@@ -83,13 +83,19 @@
 | `searchHostApi` | 在标准包源码里按名字搜索类型/接口（返回文件+行号） |
 | `readHostApiFile` | 读取标准包里的一个源码文件，查看真实接口定义 |
 | `installPluginDependencies` | 安装第三方 npm 包（调用 npm/pnpm/yarn 并写入 package.json） |
+| `listInstalledPlugins` | 列出宿主里已安装/激活的插件（来源 system/installed/dev、版本、是否可卸载） |
+| `uninstallInstalledPlugin` | 按运行时 name 卸载已安装插件（宿主自带 system 插件会拒绝） |
+| `listMyPlugins` | 列出我在市场上的提交/已上架插件（拿 pluginId、审核状态） |
+| `publishPluginProject` | 构建并上传产物，然后上架（提交审核）或发布新版本 |
+| `upgradePluginVersion` | 把已安装插件升级到市场里的目标版本 |
 
 所以你可以直接说：
 
 > 「给我做一个插件：侧边栏显示当前页面的字数统计。」
 
 agent 会：`createPluginProject` → `writePluginProjectFile` 写 `src/index.tsx` 和面板组件 →
-`runPluginProject` 热更 → 你立刻能看到效果 → 不满意就继续说，agent 改完自动热更 →
+`runPluginProject` 热更 → 你立刻能看到效果 → 不满意就继续说，agent 改完重新 `runPluginProject` / `buildPluginProject` 热更
+（开发台面板打开时，保存文件会自动重建并热更）→
 `buildPluginProject({ writeToDisk: true })` 出 `dist/index.js`，可直接上传插件市场。
 
 ### 工程约定
@@ -149,11 +155,16 @@ pnpm test:plugin-dev:electron
 | --- | --- | --- |
 | `bundler.test.mjs` | 19 | 清单解析、esbuild 打包、宿主模块 shim、注册代码、构建错误上报 |
 | `dev-server.test.mjs` | 10 | NDJSON 协议、文件监听重建、stdin 手动构建、错误隔离、干净退出 |
-| `studio-tools.test.mjs` | 46 | **agent 工具面**：名称/描述/schema、create→write→run→build→list→stop 的每次能力调用、失败装订、缺能力时的提示 |
+| `manager.test.mjs` | 7 | **失败重建**立即释放等待、错误上报、会话存活、恢复；防回归「卡 30s」 |
+| `host-api.test.mjs` | 14 | 标准包枚举/搜索/读取、越界与未知包拒绝 |
+| `project-files.test.mjs` | 10 | 工程文件枚举/搜索/过滤、跳过 node_modules、截断上报 |
+| `package-install.test.mjs` | 20 | 包名/版本校验、管理器探测、argv 构造、假 spawn 安装 |
+| `tailwind.test.mjs` | 9 | 用宿主配置编译插件工具类、去除 @keyframes、空工程 |
+| `studio-tools.test.mjs` | 111 | **agent 工具面**：名称/描述/schema、create→write→run→build→list→stop 的每次能力调用、失败装订、缺能力提示、失败不装旧产物 |
 | `studio.smoke.mjs` | 25 | 真实 `PluginManager.installPluginFromSource` + Blob URL + 真实 loader；热更替换、单实例、坏代码不中断、恢复；**内置目录建工程并可直接构建** |
-| `electron.smoke.mjs` | 25 | 真实 preload 能力白名单、`dev.*` IPC、`ELECTRON_RUN_AS_NODE` 子进程、`desktop:event:dev` 推送、**无对话框 scaffold + list + 读写文件**、越界路径拒绝 |
+| `electron.smoke.mjs` | 28 | 真实 preload 能力白名单、`dev.*` IPC、`ELECTRON_RUN_AS_NODE` 子进程、`desktop:event:dev` 推送、**无对话框 scaffold + list + 读写文件**、越界路径拒绝 |
 
-合计 125 项检查。
+`pnpm test:plugin-dev` 合计 225 项检查；`pnpm test:plugin-dev:electron` 另有 28 项（需要先构建出 `out/preload/index.js`）。
 
 ## 能力清单（`desktop.dev.*`）
 

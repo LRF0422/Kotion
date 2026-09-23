@@ -10,7 +10,7 @@
  * watcher) must never block or crash the host window.
  */
 import { watch } from 'node:fs'
-import { dirname, extname, join, relative, resolve, sep } from 'node:path'
+import { extname, join, resolve } from 'node:path'
 import { readFile } from 'node:fs/promises'
 import { buildPlugin, readProjectManifest } from './bundler.mjs'
 

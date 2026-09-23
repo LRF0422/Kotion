@@ -386,7 +386,7 @@ export const DevPanel: React.FC = () => {
 - 入口：\`src/index.tsx\`，默认导出一个 \`KPlugin\` 实例
 - 依赖 \`react\`、\`@kn/common\`、\`@kn/ui\` 等由宿主提供，不要打包进产物
 
-在「设置 → 插件开发台」里把本目录加入工作区即可开始开发。
+在「插件开发台」侧边面板里把本目录加入工作区即可开始开发。
 `
 
     return {

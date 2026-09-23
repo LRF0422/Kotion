@@ -4,13 +4,12 @@
  * A compact manager for the user's own dev plugins: pick a project (from the
  * host's managed directory or added folders), start/stop its watch, build and
  * hot-install it, or uninstall the running dev plugin — without leaving the
- * document. The full editor (scaffold dialog, conventions) stays in Settings.
+ * document. The scaffold dialog and conventions live in this panel.
  *
  * All user-facing text goes through the plugin's zh/en locale bundles.
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-    Badge,
     Button,
     Dialog,
     DialogContent,
@@ -29,6 +28,7 @@ import {
     Play,
     Plus,
     RefreshCw,
+    RotateCw,
     Square,
     Trash2,
     TriangleAlert,
@@ -44,8 +44,6 @@ import {
     useDevCapability,
     useHasDesktop,
     useInstallBundle,
-    useInstalledPlugins,
-    usePluginManagement,
     useProjects,
 } from './studio-service'
 import { usePublishProject } from './StudioMarketplacePanel'
@@ -79,18 +77,28 @@ const dotTone = (state?: string, active?: boolean) => {
     return 'bg-muted-foreground/40'
 }
 
+/** Centered, bordered hint used by empty lists. */
+const EmptyHint: React.FC<{ icon: React.ReactNode; text: string }> = ({ icon, text }) => (
+    <div className="flex flex-col items-center gap-1.5 rounded-lg border border-dashed border-border/70 px-3 py-7 text-center">
+        <span className="text-muted-foreground/50">{icon}</span>
+        <p className="max-w-[220px] text-[11px] leading-snug text-muted-foreground">{text}</p>
+    </div>
+)
+
 export const StudioDockPanel: React.FC<DockPanelProps> = ({ close }) => {
     const { t } = useTranslation()
     const capability = useDevCapability()
     const isDesktop = useHasDesktop()
     const desktop = useOptionalService('desktop')
     const pluginHost = useOptionalService('pluginHost')
-    const pluginManagement = usePluginManagement()
     const installBundle = useInstallBundle()
     const { projects, addProject, removeProject, touchProject } = useProjects()
-    const installed = useInstalledPlugins()
-    const [view, setView] = useState<'projects' | 'installed'>('projects')
     const publish = usePublishProject()
+    /**
+     * Last (root, buildCount) hot-installed. A build event and the explicit
+     * start/build path both want to install the same build; this dedupes them.
+     */
+    const installedBuildRef = useRef<{ root?: string; count: number }>({ count: 0 })
 
     const [managed, setManaged] = useState<DevProjectEntry[]>([])
     const [selectedRoot, setSelectedRoot] = useState<string | undefined>()
@@ -164,6 +172,19 @@ export const StudioDockPanel: React.FC<DockPanelProps> = ({ close }) => {
         }
     }, [capability, selectedRoot])
 
+    /** Logs only — used after a build event, which already carried the status. */
+    const refreshLogs = useCallback(async () => {
+        if (!capability || !selectedRoot) {
+            setLogs([])
+            return
+        }
+        try {
+            setLogs(await capability.dev.logs({ root: selectedRoot, limit: 120 }))
+        } catch (cause) {
+            setError(String((cause as Error)?.message ?? cause))
+        }
+    }, [capability, selectedRoot])
+
     useEffect(() => {
         void refreshManaged()
     }, [refreshManaged])
@@ -172,14 +193,38 @@ export const StudioDockPanel: React.FC<DockPanelProps> = ({ close }) => {
         void refreshStatus()
     }, [refreshStatus])
 
+    /**
+     * Hot-install a successfully built bundle, at most once per (root, build).
+     * A failed rebuild is skipped, so the previous (stale) build is never
+     * re-installed on top of the user's broken edit.
+     */
+    const maybeInstall = useCallback(
+        async (next: DevSessionStatus | undefined) => {
+            if (!next?.build?.code || next.error) return false
+            const previous = installedBuildRef.current
+            if (previous.root === next.root && previous.count === next.buildCount) return false
+            installedBuildRef.current = { root: next.root, count: next.buildCount }
+            return installBundle(next)
+        },
+        [installBundle],
+    )
+
     const onBuild = useCallback(
         (next: DevSessionStatus) => {
             if (next.root !== selectedRoot) return
             setStatus(next)
-            void refreshStatus()
+            void refreshLogs()
             void refreshManaged()
+            // Saving a file in a watched project hot-reloads it, which is the
+            // point of the studio. maybeInstall dedupes the first build against
+            // the explicit start path and skips failed rebuilds.
+            if (next.watching) {
+                void maybeInstall(next).catch((cause) =>
+                    setError(String((cause as Error)?.message ?? cause)),
+                )
+            }
         },
-        [refreshManaged, refreshStatus, selectedRoot],
+        [maybeInstall, refreshLogs, refreshManaged, selectedRoot],
     )
     useBuildEvents(onBuild, selectedRoot)
 
@@ -200,7 +245,7 @@ export const StudioDockPanel: React.FC<DockPanelProps> = ({ close }) => {
             if (!capability || !selectedRoot) return
             const next = await capability.dev.start({ root: selectedRoot, watch: true })
             setStatus(next)
-            if (next.build) await installBundle(next)
+            await maybeInstall(next)
             await Promise.all([refreshStatus(), refreshManaged()])
         })
 
@@ -216,7 +261,7 @@ export const StudioDockPanel: React.FC<DockPanelProps> = ({ close }) => {
             if (!capability || !selectedRoot) return
             const next = await capability.dev.build({ root: selectedRoot })
             setStatus(next)
-            if (next.build) await installBundle(next)
+            await maybeInstall(next)
             await refreshStatus()
         })
 
@@ -238,25 +283,6 @@ export const StudioDockPanel: React.FC<DockPanelProps> = ({ close }) => {
         if (!selectedRoot) return
         removeProject(selectedRoot)
         setSelectedRoot(undefined)
-    }
-
-    const sourceLabel = (source: string) =>
-        source === 'system'
-            ? t('pluginStudio.sourceSystem')
-            : source === 'dev'
-              ? t('pluginStudio.sourceDev')
-              : t('pluginStudio.sourceInstalled')
-
-    const uninstallInstalled = async (name: string) => {
-        if (!pluginManagement) return
-        setError(null)
-        try {
-            if (!pluginManagement.uninstall(name)) {
-                setError(t('pluginStudio.uninstallFailed', { name }))
-            }
-        } catch (cause) {
-            setError(String((cause as Error)?.message ?? cause))
-        }
     }
 
     const addExisting = async () => {
@@ -288,25 +314,29 @@ export const StudioDockPanel: React.FC<DockPanelProps> = ({ close }) => {
             setScaffoldOpen(false)
             const next = await capability.dev.start({ root: created.root, watch: true })
             setStatus(next)
-            if (next.build) await installBundle(next)
+            await maybeInstall(next)
             await refreshManaged()
         })
 
     if (!isDesktop || !capability) {
         return (
-            <div className="flex h-full flex-col">
-                <header className="flex items-center justify-between border-b px-3 py-2">
-                    <div className="flex items-center gap-2 text-xs font-medium">
-                        <Wrench className="h-3.5 w-3.5" />
-                        {t('pluginStudio.title')}
+            <div className="flex h-full flex-col bg-background">
+                <header className="flex h-10 shrink-0 items-center justify-between border-b px-3">
+                    <div className="flex items-center gap-2">
+                        <span className="grid h-5 w-5 place-items-center rounded-md bg-primary/10 text-primary">
+                            <Wrench className="h-3 w-3" />
+                        </span>
+                        <span className="text-[13px] font-semibold">{t('pluginStudio.title')}</span>
                     </div>
                     <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={close}>
                         <X className="h-3.5 w-3.5" />
                     </Button>
                 </header>
-                <div className="flex items-start gap-2 p-3 text-xs text-muted-foreground">
-                    {isDesktop ? <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" /> : null}
-                    <span>{isDesktop ? t('pluginStudio.missingDev') : t('pluginStudio.desktopOnly')}</span>
+                <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
+                    <TriangleAlert className={cn('h-5 w-5', isDesktop ? 'text-amber-500' : 'text-muted-foreground')} />
+                    <p className="max-w-[240px] text-[11px] leading-relaxed text-muted-foreground">
+                        {isDesktop ? t('pluginStudio.missingDev') : t('pluginStudio.desktopOnly')}
+                    </p>
                 </div>
             </div>
         )
@@ -325,20 +355,21 @@ export const StudioDockPanel: React.FC<DockPanelProps> = ({ close }) => {
                   : t('pluginStudio.state.idle')
 
     return (
-        <div className="flex h-full flex-col">
-            <header className="flex items-center justify-between border-b px-3 py-2">
-                <div className="flex min-w-0 items-center gap-2 text-xs font-medium">
-                    <Wrench className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate">{t('pluginStudio.title')}</span>
-                    <Badge variant="secondary" className="text-[10px]">
-                        {rows.length}
-                    </Badge>
+        <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background text-xs">
+            <header className="flex h-10 shrink-0 items-center justify-between border-b px-3">
+                <div className="flex min-w-0 items-center gap-2">
+                    <span className="grid h-5 w-5 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
+                        <Wrench className="h-3 w-3" />
+                    </span>
+                    <span className="truncate text-[13px] font-semibold tracking-tight">
+                        {t('pluginStudio.title')}
+                    </span>
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-0.5">
                     <Button
                         variant="ghost"
                         size="sm"
-                        className="h-6 w-6 p-0"
+                        className="h-6 w-6 p-0 text-muted-foreground"
                         title={t('pluginStudio.refresh')}
                         onClick={() => {
                             void refreshManaged()
@@ -347,277 +378,237 @@ export const StudioDockPanel: React.FC<DockPanelProps> = ({ close }) => {
                     >
                         <RefreshCw className="h-3.5 w-3.5" />
                     </Button>
-                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={close}>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 text-muted-foreground"
+                        onClick={close}
+                    >
                         <X className="h-3.5 w-3.5" />
                     </Button>
                 </div>
             </header>
 
-            <div className="flex items-center gap-1 border-b px-2 py-1.5">
-                <Button
-                    variant={view === 'projects' ? 'secondary' : 'ghost'}
-                    size="sm"
-                    className="h-6 text-[11px]"
-                    onClick={() => setView('projects')}
-                >
-                    {t('pluginStudio.tabProjects')}
-                </Button>
-                <Button
-                    variant={view === 'installed' ? 'secondary' : 'ghost'}
-                    size="sm"
-                    className="h-6 text-[11px]"
-                    onClick={() => setView('installed')}
-                >
-                    {t('pluginStudio.tabInstalled')}
-                    <Badge variant="secondary" className="ml-1 text-[10px]">
-                        {installed.length}
-                    </Badge>
-                </Button>
-            </div>
-
-            {view === 'installed' ? (
-                <ScrollArea className="flex-1">
-                    <div className="space-y-0.5 p-2">
-                        {installed.length === 0 ? (
-                            <p className="px-1 py-2 text-xs text-muted-foreground">
-                                {t('pluginStudio.installedEmpty')}
-                            </p>
-                        ) : (
-                            installed.map((plugin) => {
-                                const removable = pluginManagement?.isRemovable(plugin.name) ?? false
-                                return (
-                                    <div
-                                        key={plugin.name}
-                                        className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs"
-                                    >
-                                        <span className="min-w-0 flex-1">
-                                            <span className="block truncate font-medium">{plugin.name}</span>
-                                            <span className="block truncate text-[10px] text-muted-foreground">
-                                                {plugin.pluginKey}
-                                                {plugin.version ? ' · ' + plugin.version : ''}
-                                            </span>
-                                        </span>
-                                        <Badge variant="secondary" className="shrink-0 text-[10px]">
-                                            {sourceLabel(plugin.source)}
-                                        </Badge>
-                                        {removable ? (
+            <div className="flex min-h-0 flex-1 flex-col">
+                <div className="shrink-0 border-b">
+                    <ScrollArea className="max-h-56">
+                        <div className="space-y-0.5 p-2">
+                            {rows.length === 0 ? (
+                                <EmptyHint
+                                    icon={<FolderOpen className="h-5 w-5" />}
+                                    text={t('pluginStudio.noProjectsDock')}
+                                />
+                            ) : (
+                                rows.map((row) => {
+                                    const isSelected = row.root === selectedRoot
+                                    const state = isSelected ? status?.state : undefined
+                                    return (
+                                        <div
+                                            key={row.root}
+                                            className={cn(
+                                                'group flex items-center gap-1 rounded-md pr-1 transition-colors',
+                                                isSelected ? 'bg-primary/10' : 'hover:bg-accent/60',
+                                            )}
+                                        >
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setSelectedRoot(row.root)
+                                                    touchProject(row.root)
+                                                }}
+                                                className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left"
+                                            >
+                                                <span
+                                                    className={cn(
+                                                        'h-1.5 w-1.5 shrink-0 rounded-full',
+                                                        dotTone(state, row.active),
+                                                    )}
+                                                />
+                                                <span className="min-w-0 flex-1">
+                                                    <span className="block truncate text-[11px] font-medium leading-tight">
+                                                        {row.label}
+                                                    </span>
+                                                    <span className="block truncate text-[10px] leading-tight text-muted-foreground">
+                                                        {row.pluginKey || row.root}
+                                                    </span>
+                                                </span>
+                                                {row.active ? (
+                                                    <CheckCircle2 className="h-3 w-3 shrink-0 text-emerald-500" />
+                                                ) : null}
+                                            </button>
                                             <Button
                                                 variant="ghost"
                                                 size="sm"
-                                                className="h-6 w-6 shrink-0 p-0 text-muted-foreground hover:text-destructive"
-                                                title={t('pluginStudio.uninstallHint')}
-                                                onClick={() => void uninstallInstalled(plugin.name)}
+                                                className="h-6 w-6 shrink-0 p-0 text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+                                                title={t('pluginStudio.publishAction')}
+                                                onClick={() => {
+                                                    setSelectedRoot(row.root)
+                                                    publishProject(row)
+                                                }}
                                             >
-                                                <Trash2 className="h-3 w-3" />
+                                                <Upload className="h-3 w-3" />
                                             </Button>
-                                        ) : null}
-                                    </div>
-                                )
-                            })
-                        )}
-                    </div>
-                </ScrollArea>
-            ) : (
-                <>
-
-            <div className="border-b">
-                <ScrollArea className="max-h-44">
-                    <div className="space-y-0.5 p-2">
-                        {rows.length === 0 ? (
-                            <p className="px-1 py-2 text-xs text-muted-foreground">
-                                {t('pluginStudio.noProjectsDock')}
-                            </p>
-                        ) : (
-                            rows.map((row) => {
-                                const isSelected = row.root === selectedRoot
-                                const state = isSelected ? status?.state : undefined
-                                return (
-                                    <div
-                                        key={row.root}
-                                        className={cn(
-                                            'flex items-center gap-1 rounded-md transition-colors',
-                                            isSelected ? 'bg-primary/10' : 'hover:bg-accent',
-                                        )}
-                                    >
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setSelectedRoot(row.root)
-                                                touchProject(row.root)
-                                            }}
-                                            className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left text-xs"
-                                        >
-                                            <span
-                                                className={cn(
-                                                    'h-1.5 w-1.5 shrink-0 rounded-full',
-                                                    dotTone(state, row.active),
-                                                )}
-                                            />
-                                            <span className="min-w-0 flex-1">
-                                                <span className="block truncate font-medium">{row.label}</span>
-                                                <span className="block truncate text-[10px] text-muted-foreground">
-                                                    {row.pluginKey || row.root}
-                                                </span>
-                                            </span>
-                                            {row.active ? (
-                                                <CheckCircle2 className="h-3 w-3 shrink-0 text-emerald-500" />
-                                            ) : null}
-                                        </button>
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="mr-1 h-6 w-6 shrink-0 p-0 text-muted-foreground hover:text-foreground"
-                                            title={t('pluginStudio.publishAction')}
-                                            onClick={() => {
-                                                setSelectedRoot(row.root)
-                                                publishProject(row)
-                                            }}
-                                        >
-                                            <Upload className="h-3 w-3" />
-                                        </Button>
-                                    </div>
-                                )
-                            })
-                        )}
-                    </div>
-                </ScrollArea>
-                <div className="flex items-center gap-1 px-2 pb-2">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 flex-1 text-[11px]"
-                        onClick={() => setScaffoldOpen(true)}
-                    >
-                        <Plus className="mr-1 h-3 w-3" />
-                        {t('pluginStudio.newProject')}
-                    </Button>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 flex-1 text-[11px]"
-                        onClick={() => void addExisting()}
-                    >
-                        <FolderOpen className="mr-1 h-3 w-3" />
-                        {t('pluginStudio.addFolder')}
-                    </Button>
-                </div>
-            </div>
-
-            {selected ? (
-                <div className="space-y-2 border-b p-3 text-xs">
-                    <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">{t('pluginStudio.status')}</span>
-                        <span className={cn(stateTone(status?.state))}>{stateText}</span>
-                    </div>
-                    {status?.build ? (
-                        <div className="flex items-center justify-between text-muted-foreground">
-                            <span>{t('pluginStudio.output')}</span>
-                            <span>
-                                #{status.buildCount} · {formatBytes(status.build.bytes)} · {status.build.durationMs}ms
-                            </span>
+                                        </div>
+                                    )
+                                })
+                            )}
                         </div>
-                    ) : null}
-                    <div className="flex flex-wrap gap-1.5 pt-1">
+                    </ScrollArea>
+                    <div className="flex items-center gap-1.5 px-2 pb-2 pt-0.5">
                         <Button
                             size="sm"
-                            className="h-7 text-[11px]"
-                            onClick={watching ? stopWatching : startWatching}
-                            disabled={busy !== null}
+                            className="h-7 flex-1 gap-1 px-2 text-[11px]"
+                            onClick={() => setScaffoldOpen(true)}
                         >
-                            {busy === 'start' ? (
-                                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                            ) : watching ? (
-                                <Square className="mr-1 h-3 w-3" />
-                            ) : (
-                                <Play className="mr-1 h-3 w-3" />
-                            )}
-                            {watching ? t('pluginStudio.stop') : t('pluginStudio.watch')}
+                            <Plus className="h-3.5 w-3.5" />
+                            {t('pluginStudio.newProject')}
                         </Button>
                         <Button
                             size="sm"
                             variant="outline"
-                            className="h-7 text-[11px]"
-                            onClick={buildAndInstall}
-                            disabled={busy !== null}
+                            className="h-7 flex-1 gap-1 px-2 text-[11px]"
+                            onClick={() => void addExisting()}
                         >
-                            {busy === 'build' ? (
-                                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                            ) : (
-                                <Upload className="mr-1 h-3 w-3" />
-                            )}
-                            {t('pluginStudio.hotReload')}
+                            <FolderOpen className="h-3.5 w-3.5" />
+                            {t('pluginStudio.addFolder')}
                         </Button>
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 text-[11px]"
-                            title={t('pluginStudio.publishAction')}
-                            onClick={() => selected && publishProject(selected)}
-                        >
-                            <Upload className="mr-1 h-3 w-3" />
-                            {t('pluginStudio.publishAction')}
-                        </Button>
-                        <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 text-[11px]"
-                            title={t('pluginStudio.uninstallHint')}
-                            onClick={uninstallRunning}
-                            disabled={busy !== null || !status?.plugin}
-                        >
-                            <Trash2 className="mr-1 h-3 w-3" />
-                            {t('pluginStudio.uninstall')}
-                        </Button>
-                        {!selected.managed ? (
+                    </div>
+                </div>
+
+                {selected ? (
+                    <div className="shrink-0 space-y-2 border-b bg-muted/30 p-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                            <div className="flex min-w-0 items-center gap-1.5">
+                                <span
+                                    className={cn(
+                                        'h-1.5 w-1.5 shrink-0 rounded-full',
+                                        dotTone(status?.state, selected.active),
+                                    )}
+                                />
+                                <span className={cn('truncate text-[11px] font-medium', stateTone(status?.state))}>
+                                    {stateText}
+                                </span>
+                            </div>
+                            {status?.build ? (
+                                <span className="shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground">
+                                    #{status.buildCount} · {formatBytes(status.build.bytes)} ·{' '}
+                                    {status.build.durationMs}ms
+                                </span>
+                            ) : null}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-1">
+                            <Button
+                                size="sm"
+                                className="h-7 gap-1 px-2.5 text-[11px]"
+                                onClick={watching ? stopWatching : startWatching}
+                                disabled={busy !== null}
+                            >
+                                {busy === 'start' || busy === 'stop' ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : watching ? (
+                                    <Square className="h-3.5 w-3.5" />
+                                ) : (
+                                    <Play className="h-3.5 w-3.5" />
+                                )}
+                                {watching ? t('pluginStudio.stop') : t('pluginStudio.watch')}
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 gap-1 px-2 text-[11px]"
+                                onClick={buildAndInstall}
+                                disabled={busy !== null}
+                            >
+                                {busy === 'build' ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                    <RotateCw className="h-3.5 w-3.5" />
+                                )}
+                                {t('pluginStudio.hotReload')}
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 gap-1 px-2 text-[11px]"
+                                title={t('pluginStudio.publishAction')}
+                                onClick={() => selected && publishProject(selected)}
+                            >
+                                <Upload className="h-3.5 w-3.5" />
+                                {t('pluginStudio.publishAction')}
+                            </Button>
                             <Button
                                 size="sm"
                                 variant="ghost"
-                                className="h-7 text-[11px] text-muted-foreground"
-                                title={t('pluginStudio.removeHint')}
-                                onClick={removeFromList}
-                                disabled={busy !== null}
+                                className="h-7 w-7 p-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                                title={t('pluginStudio.uninstallHint')}
+                                onClick={uninstallRunning}
+                                disabled={busy !== null || !status?.plugin}
                             >
-                                {t('pluginStudio.remove')}
+                                <Trash2 className="h-3.5 w-3.5" />
                             </Button>
+                            {!selected.managed ? (
+                                <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                                    title={t('pluginStudio.removeHint')}
+                                    onClick={removeFromList}
+                                    disabled={busy !== null}
+                                >
+                                    <X className="h-3.5 w-3.5" />
+                                </Button>
+                            ) : null}
+                        </div>
+
+                        {status?.error || error ? (
+                            <pre className="max-h-24 overflow-auto whitespace-pre-wrap rounded-md border border-destructive/20 bg-destructive/5 p-2 text-[10.5px] leading-relaxed text-destructive">
+                                {status?.error || error}
+                            </pre>
                         ) : null}
                     </div>
-                    {status?.error || error ? (
-                        <pre className="max-h-24 overflow-auto whitespace-pre-wrap rounded bg-destructive/10 p-1.5 text-[11px] text-destructive">
-                            {status?.error || error}
-                        </pre>
-                    ) : null}
-                </div>
-            ) : (
-                <div className="border-b p-3 text-xs text-muted-foreground">{t('pluginStudio.selectOrCreate')}</div>
-            )}
+                ) : (
+                    <div className="shrink-0 border-b px-3 py-6 text-center text-[11px] text-muted-foreground">
+                        {t('pluginStudio.selectOrCreate')}
+                    </div>
+                )}
 
-            <div className="flex items-center justify-between px-3 pt-2 text-[11px] text-muted-foreground">
-                <span>{t('pluginStudio.buildLogs')}</span>
-                <Button variant="ghost" size="sm" className="h-6 text-[11px]" onClick={() => void refreshStatus()}>
-                    {t('pluginStudio.refresh')}
-                </Button>
-            </div>
-            <ScrollArea className="flex-1">
-                <div className="space-y-0.5 p-3 font-mono text-[11px] leading-relaxed">
-                    {logs.length === 0 ? (
-                        <p className="text-muted-foreground">{t('pluginStudio.noLogs')}</p>
-                    ) : (
-                        logs.map((entry, index) => (
-                            <div
-                                key={entry.at + '-' + index}
-                                className={cn(
-                                    entry.level === 'error' && 'text-destructive',
-                                    entry.level === 'warn' && 'text-amber-600 dark:text-amber-400',
-                                )}
-                            >
-                                {entry.message}
-                            </div>
-                        ))
-                    )}
+                <div className="flex min-h-0 flex-1 flex-col">
+                    <div className="flex shrink-0 items-center justify-between px-3 pb-1 pt-2">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            {t('pluginStudio.buildLogs')}
+                        </span>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-5 gap-1 px-1.5 text-[10px] text-muted-foreground"
+                            onClick={() => void refreshStatus()}
+                        >
+                            <RefreshCw className="h-3 w-3" />
+                            {t('pluginStudio.refresh')}
+                        </Button>
+                    </div>
+                    <ScrollArea className="min-h-0 flex-1">
+                        <div className="space-y-0.5 break-words px-3 pb-3 font-mono text-[11px] leading-relaxed">
+                            {logs.length === 0 ? (
+                                <p className="text-muted-foreground/70">{t('pluginStudio.noLogs')}</p>
+                            ) : (
+                                logs.map((entry, index) => (
+                                    <div
+                                        key={entry.at + '-' + index}
+                                        className={cn(
+                                            entry.level === 'error' && 'text-destructive',
+                                            entry.level === 'warn' && 'text-amber-600 dark:text-amber-400',
+                                        )}
+                                    >
+                                        {entry.message}
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </ScrollArea>
                 </div>
-            </ScrollArea>
-                </>
-            )}
+            </div>
 
             <Dialog open={scaffoldOpen} onOpenChange={setScaffoldOpen}>
                 <DialogContent className="max-w-md">
