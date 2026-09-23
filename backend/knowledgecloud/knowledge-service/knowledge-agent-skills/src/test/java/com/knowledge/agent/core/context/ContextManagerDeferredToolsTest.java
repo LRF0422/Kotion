@@ -54,6 +54,24 @@ class ContextManagerDeferredToolsTest {
     }
 
     @Test
+    void trimsLongDescriptionsToTheConfiguredBudget() {
+        StringBuilder longDescription = new StringBuilder();
+        for (int i = 0; i < 600; i++) {
+            longDescription.append('x');
+        }
+        ToolSpec verbose = ToolSpec.of("verbose", longDescription.toString(),
+                new LinkedHashMap<>(), ToolKind.FRONTEND, true, "client");
+
+        String content = contextManager.buildVolatileContext(null, null,
+                new ArrayList<>(Arrays.asList(verbose)), null);
+
+        assertTrue(content.contains("verbose()"));
+        assertFalse(content.contains(longDescription.toString()),
+                "a 600-char description must be trimmed out of the directory");
+        assertTrue(content.contains("…"));
+    }
+
+    @Test
     void withholdsTheNestedSchemaBody() {
         String volatileContext = contextManager.buildVolatileContext(null, null,
                 new ArrayList<>(Arrays.asList(insertChart())), null);

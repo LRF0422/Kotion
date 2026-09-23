@@ -143,12 +143,6 @@ public class ContextManager {
             + "未展开完整的参数结构。首次调用后其完整参数结构会加载进工具列表；"
             + "若首次调用因参数不符被拒绝，请依据返回的错误与随后出现的参数结构重试。";
 
-    /** Per-tool description budget in the directory (chars). */
-    private static final int DEFERRED_DESC_LIMIT = 400;
-
-    /** Max parameters rendered per tool signature. */
-    private static final int DEFERRED_PARAM_LIMIT = 12;
-
     /**
      * {@code name} marker carried by the per-turn context message. The message
      * is a normal {@code user} turn for the provider (so it is a legal prefix
@@ -473,6 +467,12 @@ public class ContextManager {
                 content.append(directory);
             }
         }
+        if (content.length() > 0) {
+            log.info("Stable injected context: {} chars ({} skill fragments, {} deferred tools)",
+                    content.length(),
+                    skillFragments == null ? 0 : skillFragments.size(),
+                    deferredTools == null ? 0 : deferredTools.size());
+        }
         return content.length() == 0 ? null : content.toString();
     }
 
@@ -515,17 +515,21 @@ public class ContextManager {
         if (deferredTools == null || deferredTools.isEmpty()) {
             return;
         }
+        int descLimit = ctx().getDeferredToolDescLimit();
         content.append(DEFERRED_TOOLS_HEADER);
         for (ToolSpec spec : deferredTools) {
             if (spec == null || spec.getName() == null) {
                 continue;
             }
             content.append("\n- ").append(spec.getName()).append(signature(spec.getInputSchema()));
+            if (descLimit <= 0) {
+                continue; // name + signature only
+            }
             String description = spec.getDescription();
             if (description != null && !description.trim().isEmpty()) {
                 String trimmed = description.trim();
-                if (trimmed.length() > DEFERRED_DESC_LIMIT) {
-                    trimmed = trimmed.substring(0, DEFERRED_DESC_LIMIT) + "…";
+                if (trimmed.length() > descLimit) {
+                    trimmed = trimmed.substring(0, descLimit) + "…";
                 }
                 content.append(": ").append(trimmed);
             }
@@ -557,9 +561,10 @@ public class ContextManager {
         }
         StringBuilder signature = new StringBuilder("(");
         int rendered = 0;
+        int paramLimit = Math.max(1, ctx().getDeferredToolParamLimit());
         for (java.util.Map.Entry<String, Object> entry
                 : ((java.util.Map<String, Object>) propertiesNode).entrySet()) {
-            if (rendered >= DEFERRED_PARAM_LIMIT) {
+            if (rendered >= paramLimit) {
                 signature.append(", …");
                 break;
             }

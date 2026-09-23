@@ -57,6 +57,11 @@ agent:
     compaction-model:
     summary-max-tokens: 1024
     summary-prompt-max-chars: 20000
+    # The injected deferred-tool directory is a constant prefix on every request,
+    # so its per-tool description is capped (0 = keep only name + signature) and
+    # signatures render at most this many parameters.
+    deferred-tool-desc-limit: 160
+    deferred-tool-param-limit: 8
   checkpoint:
     enabled: true
   event:

@@ -136,6 +136,15 @@ public class AgentCoreProperties {
         private int summaryMaxTokens = 1024;
         /** Max rendered middle-segment characters sent to the L2 summarizer. */
         private int summaryPromptMaxChars = 20000;
+        /**
+         * Max characters of one deferred tool's description in the injected
+         * directory (0 = omit descriptions, keeping only name + signature).
+         * The directory is a constant prefix, so this directly bounds a large
+         * share of every request.
+         */
+        private int deferredToolDescLimit = 160;
+        /** Max parameters rendered per deferred-tool signature. */
+        private int deferredToolParamLimit = 8;
     }
 
     /** Checkpoint (断点) settings. */
