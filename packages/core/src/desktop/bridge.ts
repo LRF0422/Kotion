@@ -16,6 +16,10 @@ import type {
     DevStatusOptions,
     DevLogsOptions,
     DevLogEntry,
+    DevHostApiOptions,
+    DevHostApiResult,
+    DevFilesOptions,
+    DevFilesResult,
 } from '@kn/common'
 
 /**
@@ -46,6 +50,8 @@ const DEV_CAPABILITIES: DesktopCapability[] = [
     'dev.list',
     'dev.readFile',
     'dev.writeFile',
+    'dev.hostApi',
+    'dev.files',
 ]
 
 const createDevBridge = (
@@ -105,6 +111,14 @@ const createDevBridge = (
         writeFile: (options): Promise<void> => {
             requireCapability('dev.writeFile')
             return invoke('dev.writeFile', options)
+        },
+        hostApi: (options?: DevHostApiOptions): Promise<DevHostApiResult> => {
+            requireCapability('dev.hostApi')
+            return invoke('dev.hostApi', options)
+        },
+        files: (options: DevFilesOptions): Promise<DevFilesResult> => {
+            requireCapability('dev.files')
+            return invoke('dev.files', options)
         },
         /**
          * The main process broadcasts one `dev` event channel; filtering by root

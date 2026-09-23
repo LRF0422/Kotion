@@ -11,7 +11,7 @@
     "scripts": {
         "build": "rollup -c",
         "typecheck": "tsc --noEmit -p tsconfig.json",
-        "test": "node src/studio-service.test.mjs"
+        "test": "node src/studio-tools.test.mjs"
     },
     "dependencies": {
         "@kn/common": "workspace:*",

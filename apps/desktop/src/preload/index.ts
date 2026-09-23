@@ -47,6 +47,10 @@ const CAPABILITIES = [
   'dev.list',
   'dev.readFile',
   'dev.writeFile',
+  // Read-only reference for the agent: the standard host packages' source.
+  'dev.hostApi',
+  // Project file discovery (list/search) for the agent.
+  'dev.files',
 ] as readonly string[]
 
 const knDesktop = {

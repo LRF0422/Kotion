@@ -4,6 +4,7 @@
         "esModuleInterop": true,
         "forceConsistentCasingInFileNames": true,
         "isolatedModules": true,
+        "module": "ESNext",
         "moduleResolution": "node",
         "preserveWatchOutput": true,
         "skipLibCheck": true,

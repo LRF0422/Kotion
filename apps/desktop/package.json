@@ -6,7 +6,7 @@
     "author": "KN Team",
     "main": "./out/main/index.js",
     "scripts": {
-        "dev": "NODE_OPTIONS='--max-old-space-size=16384' electron-vite dev",
+        "dev": "NODE_OPTIONS='--max-old-space-size=16384' electron-vite dev --watch",
         "build": "NODE_OPTIONS='--max-old-space-size=16384' electron-vite build",
         "preview": "NODE_OPTIONS='--max-old-space-size=16384' electron-vite preview",
         "package": "NODE_OPTIONS='--max-old-space-size=16384' electron-vite build && electron-builder --mac --win --linux",

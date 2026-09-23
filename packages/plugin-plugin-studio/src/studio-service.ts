@@ -13,10 +13,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
     useOptionalService,
-    createServiceResolver,
+    resolveOptionalService,
     type DevBridge,
     type DevSessionStatus,
-    type Services,
 } from '@kn/common'
 
 const STORAGE_KEY = 'kn.plugin-studio.projects.v1'
@@ -89,10 +88,9 @@ export const useInstallBundle = () => {
 
 /** Imperative resolver for the plugin host service (agent tools, event handlers). */
 export const resolvePluginHost = () => {
-    const resolver = createServiceResolver<Services>()
     return {
-        has: (name: string) => resolver.resolveOptional('pluginHost')?.has(name) ?? false,
-        getActiveNames: () => resolver.resolveOptional('pluginHost')?.getActiveNames() ?? [],
+        has: (name: string) => resolveOptionalService('pluginHost')?.has(name) ?? false,
+        getActiveNames: () => resolveOptionalService('pluginHost')?.getActiveNames() ?? [],
     }
 }
 

@@ -126,7 +126,8 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                 label: t("settings.nav.plugins"),
                 items: pluginSettings.map((p) => ({
                     id: p.key,
-                    label: p.label,
+                    // i18n key with the raw label as fallback, like dock titles.
+                    label: t(p.label, p.label),
                     icon: p.icon || <Puzzle />,
                     contentKey: p.key,
                 })),
@@ -144,7 +145,14 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
     // 当前内容的标题/描述（用于内容区头部与移动端详情头）。
     const meta = useMemo(() => {
         const plugin = pluginSettings.find((p) => p.key === currentKey);
-        if (plugin) return { title: plugin.label, description: plugin.description };
+        if (plugin) {
+            return {
+                title: t(plugin.label, plugin.label),
+                description: plugin.description
+                    ? t(plugin.description, plugin.description)
+                    : plugin.description,
+            };
+        }
         switch (currentKey) {
             case "MyAccount":
                 return { title: t("settings.account.title"), description: t("settings.account.desc") };

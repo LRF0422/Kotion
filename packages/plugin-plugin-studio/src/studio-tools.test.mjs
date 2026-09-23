@@ -11,6 +11,7 @@
  * Run: node packages/plugin-plugin-studio/src/studio-tools.test.mjs
  */
 import { createStudioTools } from './studio-tools.ts'
+import { pluginAuthoringSkill } from './skills/plugin-authoring.ts'
 
 const results = []
 const check = (name, condition, detail = '') => {
@@ -25,6 +26,7 @@ const calls = []
 const installs = []
 const ROOT = '/managed/agent-made-plugin'
 const sessions = new Map()
+const files = new Map()
 let buildCounter = 0
 
 const status = (root, buildCount, marker) => ({
@@ -89,10 +91,61 @@ const dev = {
     },
     async readFile(options) {
         calls.push(['readFile', options])
-        return 'export const plugin = 1'
+        return files.has(options.path) ? files.get(options.path) : 'export const plugin = 1'
     },
     async writeFile(options) {
         calls.push(['writeFile', options])
+        files.set(options.path, String(options.contents ?? ''))
+    },
+    async files(options = {}) {
+        calls.push(['files', options])
+        if (typeof options.query === 'string' && options.query) {
+            return {
+                kind: 'search',
+                root: options.root,
+                matches: [{ path: 'src/index.tsx', line: 1, text: 'export const x = 1' }],
+                truncated: false,
+            }
+        }
+        return {
+            kind: 'list',
+            root: options.root,
+            files: ['package.json', 'src/DevPanel.tsx', 'src/index.tsx'],
+            truncated: false,
+        }
+    },
+    async hostApi(options = {}) {
+        calls.push(['hostApi', options])
+        if (typeof options.query === 'string' && options.query) {
+            return {
+                kind: 'search',
+                matches: [
+                    {
+                        package: '@kn/common',
+                        path: 'src/core/dock.ts',
+                        line: 35,
+                        text: 'export interface DockPanelConfig {',
+                    },
+                ],
+                truncated: false,
+            }
+        }
+        if (typeof options.path === 'string' && options.path) {
+            return {
+                kind: 'file',
+                package: '@kn/common',
+                path: options.path,
+                contents: 'export interface DockPanelConfig {}',
+                bytes: 35,
+            }
+        }
+        return {
+            kind: 'list',
+            root: '/repo',
+            packages: [
+                { name: '@kn/common', version: '0.0.16', root: '/repo/packages/common', entry: 'src/index.ts' },
+            ],
+        }
     },
 }
 
@@ -114,10 +167,16 @@ const EXPECTED = [
     'createPluginProject',
     'writePluginProjectFile',
     'readPluginProjectFile',
+    'editPluginProjectFile',
+    'listPluginProjectFiles',
+    'searchPluginProject',
     'runPluginProject',
     'buildPluginProject',
     'stopPluginProject',
     'pluginProjectLogs',
+    'listHostApiPackages',
+    'searchHostApi',
+    'readHostApiFile',
 ]
 check('surface: all tools present', EXPECTED.every((name) => names.includes(name)), names.join(', '))
 
@@ -168,7 +227,55 @@ check(
 )
 
 const read = await tools.readPluginProjectFile.execute({ path: `${ROOT}/src/index.tsx` })
-check('read: returns file contents', read.contents === 'export const plugin = 1')
+check(
+    'read: returns line-numbered content',
+    read.totalLines === 1 && read.lines[0]?.text === 'export const x = 1',
+    JSON.stringify(read.lines),
+)
+
+/* DSH-style targeted edit, with the read-before-edit observation policy. */
+const edited = await tools.editPluginProjectFile.execute({
+    path: `${ROOT}/src/index.tsx`,
+    oldString: 'export const x = 1',
+    newString: 'export const x = 2',
+})
+check('edit: applies a unique replacement', edited.ok === true && edited.replacements === 1 && edited.totalLines === 1)
+check(
+    'edit: writes the new content',
+    files.get(`${ROOT}/src/index.tsx`) === 'export const x = 2',
+    files.get(`${ROOT}/src/index.tsx`),
+)
+
+let unreadEdit = ''
+try {
+    await tools.editPluginProjectFile.execute({ path: `${ROOT}/src/NeverRead.tsx`, oldString: 'a', newString: 'b' })
+} catch (error) {
+    unreadEdit = error.message
+}
+check('edit: refuses an unread file', /readPluginProjectFile/.test(unreadEdit), unreadEdit)
+
+let missingText = ''
+try {
+    await tools.editPluginProjectFile.execute({ path: `${ROOT}/src/index.tsx`, oldString: 'NOT_PRESENT', newString: 'x' })
+} catch (error) {
+    missingText = error.message
+}
+check('edit: refuses a missing oldString', /不存在/.test(missingText), missingText)
+
+const projectFiles = await tools.listPluginProjectFiles.execute({ root: ROOT })
+check(
+    'files: lists project files',
+    projectFiles.count === 3 && projectFiles.files.includes('src/index.tsx'),
+    JSON.stringify(projectFiles.files),
+)
+const projectSearch = await tools.searchPluginProject.execute({ root: ROOT, query: 'export' })
+check(
+    'files: searches the project',
+    projectSearch.count === 1 && projectSearch.matches[0].line === 1,
+    JSON.stringify(projectSearch.matches),
+)
+check('files: list reached dev.files', calls.some(([name, args]) => name === 'files' && !args.query))
+check('files: search reached dev.files', calls.some(([name, args]) => name === 'files' && args.query === 'export'))
 
 const ran = await tools.runPluginProject.execute({ root: ROOT })
 check('run: starts a watching session', ran.state === 'watching' && ran.ok === true, JSON.stringify({ state: ran.state }))
@@ -205,6 +312,33 @@ const failingTools = createStudioTools({
 const failed = await failingTools.buildPluginProject.execute({ root: ROOT })
 check('errors: reported, not thrown', failed.ok === false && /Expected/.test(String(failed.error)), String(failed.error))
 
+/* Host-API reference: the agent reads the standard packages before writing. */
+const apiPackages = await tools.listHostApiPackages.execute({})
+check(
+    'hostApi: lists packages with entry',
+    apiPackages.packages[0]?.name === '@kn/common' && apiPackages.packages[0]?.entry === 'src/index.ts',
+    JSON.stringify(apiPackages.packages),
+)
+check('hostApi: list reaches dev.hostApi', calls.some(([name]) => name === 'hostApi'))
+
+const apiSearch = await tools.searchHostApi.execute({ query: 'DockPanelConfig' })
+check(
+    'hostApi: search returns file + line',
+    apiSearch.matches[0]?.path === 'src/core/dock.ts' && apiSearch.matches[0]?.line === 35,
+    JSON.stringify(apiSearch.matches[0]),
+)
+check(
+    'hostApi: search forwards query',
+    calls.some(([name, args]) => name === 'hostApi' && args.query === 'DockPanelConfig'),
+)
+
+const apiFile = await tools.readHostApiFile.execute({ package: '@kn/common', path: 'src/core/dock.ts' })
+check('hostApi: read returns contents', apiFile.contents.includes('DockPanelConfig'), apiFile.contents)
+check(
+    'hostApi: read forwards package + path',
+    calls.some(([name, args]) => name === 'hostApi' && args.package === '@kn/common' && args.path === 'src/core/dock.ts'),
+)
+
 /* Without a dev-capable host the tools must explain themselves. */
 let message = ''
 try {
@@ -222,6 +356,22 @@ try {
     installMessage = error.message
 }
 check('guard: missing pluginHost reported', /pluginHost/.test(installMessage), installMessage)
+
+/*
+ * The authoring skill must own every studio tool. An extension that declares
+ * `skills` no longer auto-generates a default skill from `tools`, so a tool
+ * missing from requiredTools would lose its prompt guidance.
+ */
+const toolNames = Object.keys(createStudioTools({ getDev: () => dev, getPluginHost: () => pluginHost }))
+check(
+    'skill: ships a prompt fragment',
+    typeof pluginAuthoringSkill.systemPromptFragment === 'string'
+        && pluginAuthoringSkill.systemPromptFragment.length > 200,
+)
+const uncoveredTools = toolNames.filter((name) => !pluginAuthoringSkill.requiredTools.includes(name))
+check('skill: owns every studio tool', uncoveredTools.length === 0, uncoveredTools.join(', '))
+const unknownTools = pluginAuthoringSkill.requiredTools.filter((name) => !toolNames.includes(name))
+check('skill: references no unknown tools', unknownTools.length === 0, unknownTools.join(', '))
 
 const failedChecks = results.filter((entry) => !entry.ok)
 console.log(`\n${results.length - failedChecks.length}/${results.length} checks passed`)

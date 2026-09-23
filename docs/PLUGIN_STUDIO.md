@@ -64,18 +64,24 @@
 
 ### agent：工具驱动
 
-插件向 agent 注册了 8 个工具（`editorExtension.tools`，见 `PluginManager.resolveTools`）：
+插件向 agent 注册了 14 个工具（`editorExtension.tools`，见 `PluginManager.resolveTools`）：
 
 | 工具 | 作用 |
 | --- | --- |
 | `listPluginProjects` | 列出内置目录里的工程（含 pluginKey / 入口 / 是否在监听） |
 | `createPluginProject` | 在**内置目录**创建模板工程，**不需要选目录** |
 | `writePluginProjectFile` | 写工程文件（自动建父目录），用于改源码 |
-| `readPluginProjectFile` | 读工程文件 |
+| `readPluginProjectFile` | 读工程文件（带行号；编辑前必须先读，宿主强制） |
+| `editPluginProjectFile` | 精确替换（`oldString`→`newString`，唯一性校验；改代码优先用它） |
+| `listPluginProjectFiles` | 列出工程内源码文件（跳过 node_modules/dist） |
+| `searchPluginProject` | 在工程源码里搜索（返回文件+行号） |
 | `runPluginProject` | 开始监听 + 把首个构建热更进当前窗口（**实时预览**入口） |
 | `buildPluginProject` | 一次性构建 + 热更 |
 | `stopPluginProject` | 停止监听、回收子进程 |
 | `pluginProjectLogs` | 构建日志，用于排查编译错误 |
+| `listHostApiPackages` | 列出可查阅的标准宿主包与类型入口 |
+| `searchHostApi` | 在标准包源码里按名字搜索类型/接口（返回文件+行号） |
+| `readHostApiFile` | 读取标准包里的一个源码文件，查看真实接口定义 |
 
 所以你可以直接说：
 
@@ -160,6 +166,8 @@ pnpm test:plugin-dev:electron
 | `dev.scaffold` | 写模板工程；**省略 `parentDir` 即用内置目录**，返回 `managed: true` |
 | `dev.list` | 枚举工程目录 |
 | `dev.readFile` / `dev.writeFile` | 读写工程文件（agent 改源码用） |
+| `dev.hostApi` | 只读标准宿主包源码：列出包（无参）/ 搜索（`query`）/ 读文件（`package`+`path`） |
+| `dev.files` | 枚举/搜索一个工程的源码文件：列出（无 `query`）/ 搜索（`query`，返回文件+行号） |
 
 配套宿主服务：`pluginHost.installFromSource()` / `uninstall()` / `subscribe()`
 （`packages/core/src/App.tsx` 注册，插件通过 `useOptionalService('pluginHost')` 使用）。

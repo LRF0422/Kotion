@@ -47,6 +47,8 @@ export type DesktopCapability =
     | 'dev.list'
     | 'dev.readFile'
     | 'dev.writeFile'
+    | 'dev.hostApi'
+    | 'dev.files'
 
 export interface DesktopAppInfo {
     version: string
@@ -358,6 +360,87 @@ export interface DevFileOptions {
     contents?: string
 }
 
+/* ------------------------------------------------------------------ *
+ * Host package API reference (plugin-studio authoring)
+ *
+ * The agent writes plugins against the standard host packages (@kn/common,
+ * @kn/ui, …), so the studio exposes their TypeScript source as a read-only
+ * reference. It is resolved by the desktop main process from the checkout;
+ * a packaged build without source reports the surface as unavailable.
+ * ------------------------------------------------------------------ */
+
+/** One standard host package exposed to the studio's API reference. */
+export interface DevHostPackage {
+    /** Package name, for example `@kn/common`. */
+    name: string
+    /** Version from the package's package.json. */
+    version?: string
+    /** Absolute package directory. */
+    root: string
+    /** Package-relative entry file, when one exists. */
+    entry?: string
+}
+
+/** A single source line matched by a host-API search. */
+export interface DevHostApiMatch {
+    /** Package name, for example `@kn/common`. */
+    package: string
+    /** Package-relative file path. */
+    path: string
+    /** 1-based line number. */
+    line: number
+    /** The matching line, trimmed. */
+    text: string
+}
+
+/**
+ * Host-API access options. Omit `query`/`path` to list packages; pass `query`
+ * to search the source; pass `package` + `path` to read one file.
+ */
+export interface DevHostApiOptions {
+    /** Package name (`@kn/common`) or short name (`common`). */
+    package?: string
+    /** Package-relative file path; requires `package`. */
+    path?: string
+    /** Case-insensitive substring to search for. */
+    query?: string
+    /** Maximum matches for `query`. Defaults to 60, capped at 200. */
+    limit?: number
+}
+
+/** Result of a {@link DevBridge.hostApi} call, discriminated by `kind`. */
+export type DevHostApiResult =
+    | { kind: 'list'; root: string; packages: DevHostPackage[] }
+    | { kind: 'search'; matches: DevHostApiMatch[]; truncated: boolean }
+    | { kind: 'file'; package: string; path: string; contents: string; bytes: number }
+
+/** A source line matched by a plugin-project search. */
+export interface DevFileMatch {
+    /** Project-relative file path. */
+    path: string
+    /** 1-based line number. */
+    line: number
+    /** The matching line, trimmed. */
+    text: string
+}
+
+/** List or search the files of one plugin project. */
+export interface DevFilesOptions {
+    /** Absolute project root (validated against the fs allowlist). */
+    root: string
+    /** Case-insensitive substring to search for; omit to list files. */
+    query?: string
+    /** Optional substring filter on project-relative paths. */
+    include?: string
+    /** Max files (list) or matches (search). */
+    limit?: number
+}
+
+/** Result of {@link DevBridge.files}, discriminated by `kind`. */
+export type DevFilesResult =
+    | { kind: 'list'; root: string; files: string[]; truncated: boolean }
+    | { kind: 'search'; root: string; matches: DevFileMatch[]; truncated: boolean }
+
 /**
  * The plugin-development surface of the desktop bridge. Separate from
  * {@link DesktopBridge} so a plugin can feature-detect a dev-capable host:
@@ -382,6 +465,14 @@ export interface DevBridge {
     readFile(options: DevFileOptions): Promise<string>
     /** Write a project file as UTF-8 text, creating parent directories. */
     writeFile(options: DevFileOptions): Promise<void>
+    /**
+     * Read the standard host packages' TypeScript source as an authoring
+     * reference. Omit options to list packages, pass `query` to search, or
+     * pass `package` + `path` to read one file.
+     */
+    hostApi(options?: DevHostApiOptions): Promise<DevHostApiResult>
+    /** Enumerate or search the files of one project. */
+    files(options: DevFilesOptions): Promise<DevFilesResult>
     /**
      * Subscribe to successful rebuilds. `root` filters to one project; omit to
      * receive every project's rebuilds. Returns an unsubscribe function.
@@ -433,6 +524,8 @@ export interface DesktopCapabilityContract {
     'dev.list': { params?: DevListOptions; result: DevProjectEntry[] }
     'dev.readFile': { params: DevFileOptions; result: string }
     'dev.writeFile': { params: DevFileOptions; result: void }
+    'dev.hostApi': { params: DevHostApiOptions; result: DevHostApiResult }
+    'dev.files': { params: DevFilesOptions; result: DevFilesResult }
 }
 
 /**

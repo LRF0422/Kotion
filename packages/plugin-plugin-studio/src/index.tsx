@@ -12,19 +12,24 @@
  * surfaces render an explanation instead of failing.
  */
 import React from 'react'
-import { KPlugin, createServiceResolver, type PluginConfig, type Services } from '@kn/common'
+import { KPlugin, resolveOptionalService, type PluginConfig } from '@kn/common'
 import { Wrench } from '@kn/icon'
 import { StudioSettings } from './StudioSettings'
 import { StudioDockPanel } from './StudioDockPanel'
 import { createStudioTools } from './studio-tools'
+import { pluginAuthoringSkill } from './skills/plugin-authoring'
 
-/** Resolves the studio's own dependencies; see studio-tools.ts. */
-const services = createServiceResolver<Services>()
-
+/**
+ * Resolve through the globally bound resolver from @kn/common (bound in
+ * App.tsx via bindServiceRegistry), not a local createServiceResolver()
+ * instance. A fresh instance is never bound, so resolveOptional would always
+ * return undefined and the agent tools would report 'no desktop dev
+ * capability' even inside the desktop host.
+ */
 const studioTools = createStudioTools({
-    getDev: () => services.resolveOptional('desktop')?.dev,
+    getDev: () => resolveOptionalService('desktop')?.dev,
     getPluginHost: () =>
-        services.resolveOptional('pluginHost') as ReturnType<
+        resolveOptionalService('pluginHost') as ReturnType<
             Parameters<typeof createStudioTools>[0]['getPluginHost']
         >,
 })
@@ -36,9 +41,9 @@ export const pluginStudio = new PluginStudio({
     status: 'ACTIVE',
     desktopOnly: true,
     /**
-     * Agent tools. `editorExtension` is the only tool contribution point a
-     * plugin has (PluginManager.resolveTools reads `ext.tools`), and these
-     * tools are editor-independent — they drive the studio's desktop
+     * Agent surface. `editorExtension` is the only contribution point a plugin
+     * has for agent tools and skills (PluginManager.resolveTools/resolveSkills),
+     * and both are editor-independent — they drive the studio's desktop
      * capabilities, not the document.
      */
     editorExtension: [
@@ -52,19 +57,24 @@ export const pluginStudio = new PluginStudio({
                 readOnly: Boolean((tool as { readOnly?: boolean }).readOnly),
                 execute: () => tool.execute as (params: unknown) => unknown,
             })),
+            // Teach the agent *how* to author a plugin; without this the
+            // extension is tools-only and resolveSkills emits a contentless
+            // default skill.
+            skills: [pluginAuthoringSkill],
         },
     ],
     settings: {
         key: 'plugin-studio',
-        label: '插件开发台',
-        description: '在桌面端开发、热更、打包插件',
+        // i18n key; the host resolves it with the raw string as fallback.
+        label: 'pluginStudio.title',
+        description: 'pluginStudio.settingsDesc',
         icon: React.createElement(Wrench, { className: 'h-4 w-4' }),
         component: StudioSettings,
     },
     dockPanels: [
         {
             id: 'plugin-studio-status',
-            title: '插件开发台',
+            title: 'pluginStudio.title',
             icon: React.createElement(Wrench, { className: 'h-4 w-4' }),
             position: 'right',
             order: 120,
@@ -78,11 +88,68 @@ export const pluginStudio = new PluginStudio({
             translation: {
                 pluginStudio: {
                     title: 'Plugin Studio',
-                    status: 'Build status',
-                    empty: 'Open Settings → Plugin Studio to add a plugin project.',
-                    watching: 'Watching',
-                    idle: 'Idle',
-                    failed: 'Build failed',
+                    subtitle:
+                        'Pick a local plugin project; saving hot-reloads it into the current window, then package when ready',
+                    settingsDesc: 'Develop, hot-reload and package plugins on the desktop',
+                    desktopOnlyTitle: 'Plugin Studio needs the desktop app',
+                    desktopOnly:
+                        'Bundling and hot reload need the desktop app\'s child process and filesystem. Open this page in the KN desktop client.',
+                    missingDevTitle: 'This desktop build does not support Plugin Studio yet',
+                    missingDev:
+                        'This client lacks the dev.* capabilities (dev.start / dev.build / dev.scaffold). Update the desktop app to develop plugins here; other features are unaffected.',
+                    refresh: 'Refresh',
+                    newProject: 'New',
+                    newProjectLong: 'New project',
+                    addFolder: 'Add',
+                    addExisting: 'Add existing folder',
+                    status: 'Status',
+                    output: 'Output',
+                    stop: 'Stop',
+                    watch: 'Watch',
+                    stopWatching: 'Stop watching',
+                    startWatching: 'Start watching',
+                    hotReload: 'Hot reload',
+                    buildOnce: 'Build once',
+                    installNow: 'Hot reload into window',
+                    uninstall: 'Uninstall',
+                    uninstallHint: 'Uninstall the running dev plugin from the host',
+                    remove: 'Remove',
+                    removeHint: 'Remove from the list only; files on disk are kept',
+                    noProjectsDock: 'No plugin projects yet. Create or add one below.',
+                    selectOrCreate: 'Select or create a plugin project.',
+                    emptyTitle: 'No plugin projects yet',
+                    emptyHint:
+                        'Create a template project, let the agent create one, or add an existing folder from disk',
+                    managedGroup: 'Managed directory (agent-ready)',
+                    addedGroup: 'Added folders',
+                    buildLogs: 'Build log',
+                    noLogs: 'No logs yet',
+                    createTitle: 'New plugin project',
+                    packageName: 'Package name',
+                    displayName: 'Display name',
+                    cancel: 'Cancel',
+                    createAndWatch: 'Create & watch',
+                    createAndStart: 'Create & start watching',
+                    pickFolderTitle: 'Select an existing plugin project folder',
+                    nameRequired: 'Project name is required',
+                    autoInstall: 'Auto hot-reload on save',
+                    pluginKeyLabel: 'pluginKey: ',
+                    modulesLabel: 'Modules: ',
+                    conventionsTitle: 'Project conventions',
+                    conventions:
+                        'The <code>knPluginStudio</code> block in <code>package.json</code> describes the project: <code>pluginKey</code> (registry key), <code>entry</code> (entry file, defaults to src/index.tsx) and <code>displayName</code>.<br /><code>react</code>, <code>@kn/common</code>, <code>@kn/ui</code>, <code>@kn/icon</code>, <code>@kn/editor</code> and <code>@kn/plugin-api</code> are injected by the host and are not bundled.',
+                    noBuildYet: 'No build output to install yet',
+                    installRejected: 'The host refused activation: check the plugin version or name conflicts',
+                    autoInstallFailed: 'Auto-install failed: {{message}}',
+                    selectFirst: 'Select a plugin project first',
+                    unsupported: 'This host does not support plugin development',
+                    state: {
+                        watching: 'Watching',
+                        starting: 'Building',
+                        failed: 'Build failed',
+                        stopped: 'Stopped',
+                        idle: 'Idle',
+                    },
                 },
             },
         },
@@ -90,11 +157,65 @@ export const pluginStudio = new PluginStudio({
             translation: {
                 pluginStudio: {
                     title: '插件开发台',
-                    status: '构建状态',
-                    empty: '在「设置 → 插件开发台」里添加一个插件工程。',
-                    watching: '监听中',
-                    idle: '未启动',
-                    failed: '构建失败',
+                    subtitle: '选择本地插件工程，保存即热更到当前窗口，满意后一键打包',
+                    settingsDesc: '在桌面端开发、热更、打包插件',
+                    desktopOnlyTitle: '插件开发台需要桌面客户端',
+                    desktopOnly: '打包与热更依赖桌面端的子进程与文件系统能力。请在 KN 桌面客户端中打开本页面。',
+                    missingDevTitle: '当前桌面版本还不支持插件开发台',
+                    missingDev:
+                        '这个客户端缺少 dev.* 能力（dev.start / dev.build / dev.scaffold）。升级桌面客户端后即可在这里开发插件；其余功能不受影响。',
+                    refresh: '刷新',
+                    newProject: '新建',
+                    newProjectLong: '新建工程',
+                    addFolder: '添加',
+                    addExisting: '添加已有目录',
+                    status: '状态',
+                    output: '产物',
+                    stop: '停止',
+                    watch: '监听',
+                    stopWatching: '停止监听',
+                    startWatching: '开始监听',
+                    hotReload: '热更',
+                    buildOnce: '构建一次',
+                    installNow: '热更到当前窗口',
+                    uninstall: '卸载',
+                    uninstallHint: '从宿主卸载正在运行的开发插件',
+                    remove: '移除',
+                    removeHint: '仅从列表移除，不删除磁盘文件',
+                    noProjectsDock: '还没有插件工程，用下面的按钮新建或添加。',
+                    selectOrCreate: '选择或新建一个插件工程。',
+                    emptyTitle: '还没有插件工程',
+                    emptyHint: '新建一个模板工程，或让 agent 直接创建；也可以添加磁盘上已有的插件目录',
+                    managedGroup: '内置目录（可直接让 agent 开发）',
+                    addedGroup: '已添加的目录',
+                    buildLogs: '构建日志',
+                    noLogs: '暂无日志',
+                    createTitle: '新建插件工程',
+                    packageName: '包名',
+                    displayName: '显示名',
+                    cancel: '取消',
+                    createAndWatch: '创建并监听',
+                    createAndStart: '创建并开始监听',
+                    pickFolderTitle: '选择已有插件工程目录',
+                    nameRequired: '工程名不能为空',
+                    autoInstall: '保存后自动热更',
+                    pluginKeyLabel: 'pluginKey：',
+                    modulesLabel: '模块：',
+                    conventionsTitle: '工程约定',
+                    conventions:
+                        '<code>package.json</code> 里的 <code>knPluginStudio</code> 字段描述这个工程：<code>pluginKey</code>（注册键）、<code>entry</code>（入口文件，默认按 src/index.tsx 查找）、<code>displayName</code>。<br /><code>react</code>、<code>@kn/common</code>、<code>@kn/ui</code>、<code>@kn/icon</code>、<code>@kn/editor</code>、<code>@kn/plugin-api</code> 由宿主注入，不会打进产物。',
+                    noBuildYet: '还没有可安装的构建产物',
+                    installRejected: '宿主拒绝激活：请查看插件版本或名称冲突',
+                    autoInstallFailed: '自动安装失败：{{message}}',
+                    selectFirst: '请先选择一个插件工程',
+                    unsupported: '当前宿主不支持插件开发',
+                    state: {
+                        watching: '监听中',
+                        starting: '构建中',
+                        failed: '构建失败',
+                        stopped: '已停止',
+                        idle: '未启动',
+                    },
                 },
             },
         },

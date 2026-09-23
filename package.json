@@ -62,7 +62,7 @@
     "desktop:package:win": "pnpm --filter @kn/desktop package:win",
     "desktop:package:mac": "pnpm --filter @kn/desktop package:mac",
     "desktop:package:linux": "pnpm --filter @kn/desktop package:linux",
-    "test:plugin-dev": "node apps/desktop/src/main/plugin-dev/bundler.test.mjs && node apps/desktop/src/main/plugin-dev/dev-server.test.mjs && node packages/plugin-plugin-studio/src/studio-tools.test.mjs && node apps/desktop/src/main/plugin-dev/studio.smoke.mjs",
+    "test:plugin-dev": "node apps/desktop/src/main/plugin-dev/bundler.test.mjs && node apps/desktop/src/main/plugin-dev/dev-server.test.mjs && node apps/desktop/src/main/plugin-dev/host-api.test.mjs && node apps/desktop/src/main/plugin-dev/project-files.test.mjs && node packages/plugin-plugin-studio/src/studio-tools.test.mjs && node apps/desktop/src/main/plugin-dev/studio.smoke.mjs",
     "test:plugin-dev:electron": "apps/desktop/node_modules/.bin/electron apps/desktop/src/main/plugin-dev/electron.smoke.mjs --no-sandbox",
     "build:plugin-studio": "pnpm --filter @kn/plugin-plugin-studio build"
   },

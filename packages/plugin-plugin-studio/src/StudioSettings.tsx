@@ -5,7 +5,8 @@
  * hot-install / build / stop), scaffolds new projects, and shows build output.
  *
  * Every action degrades to an explanation instead of throwing when the host is
- * the web build or a desktop build without the studio runtime.
+ * the web build or a desktop build without the studio runtime. All user-facing
+ * text goes through the plugin's zh/en locale bundles.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
@@ -44,7 +45,7 @@ import {
     Wrench,
 } from '@kn/icon'
 import type { DevSessionStatus, DevLogEntry, DevProjectEntry } from '@kn/common'
-import { useOptionalService } from '@kn/common'
+import { Trans, useOptionalService, useTranslation } from '@kn/common'
 import {
     formatBytes,
     useBuildEvents,
@@ -70,22 +71,8 @@ const stateTone = (state?: string) => {
     }
 }
 
-const stateLabel = (state?: string) => {
-    switch (state) {
-        case 'watching':
-            return '监听中'
-        case 'starting':
-            return '构建中'
-        case 'failed':
-            return '构建失败'
-        case 'stopped':
-            return '已停止'
-        default:
-            return '未启动'
-    }
-}
-
 export const StudioSettings: React.FC<{ pluginKey?: string }> = () => {
+    const { t } = useTranslation()
     const capability = useDevCapability()
     const isDesktop = useHasDesktop()
     const desktop = useOptionalService('desktop')
@@ -103,6 +90,21 @@ export const StudioSettings: React.FC<{ pluginKey?: string }> = () => {
     const [managed, setManaged] = useState<DevProjectEntry[]>([])
     const [scaffoldName, setScaffoldName] = useState('my-kn-plugin')
     const [scaffoldDisplayName, setScaffoldDisplayName] = useState('My Plugin')
+
+    const stateLabel = (state?: string) => {
+        switch (state) {
+            case 'watching':
+                return t('pluginStudio.state.watching')
+            case 'starting':
+                return t('pluginStudio.state.starting')
+            case 'failed':
+                return t('pluginStudio.state.failed')
+            case 'stopped':
+                return t('pluginStudio.state.stopped')
+            default:
+                return t('pluginStudio.state.idle')
+        }
+    }
 
     const selected = useMemo(
         () => projects.find((project) => project.root === selectedRoot),
@@ -180,13 +182,13 @@ export const StudioSettings: React.FC<{ pluginKey?: string }> = () => {
                 try {
                     await installBundle(next)
                 } catch (cause) {
-                    setError(`自动安装失败：${String((cause as Error)?.message ?? cause)}`)
+                    setError(t('pluginStudio.autoInstallFailed', { message: String((cause as Error)?.message ?? cause) }))
                 }
             }
             const entries = await capability?.dev.logs({ root: next.root, limit: 120 })
             if (entries) setLogs(entries)
         },
-        [autoInstall, capability, installBundle, selectedRoot],
+        [autoInstall, capability, installBundle, selectedRoot, t],
     )
 
     useBuildEvents(handleBuild)
@@ -207,9 +209,9 @@ export const StudioSettings: React.FC<{ pluginKey?: string }> = () => {
 
     const createProject = async () => {
         await runAction('start', async () => {
-            if (!capability) throw new Error('当前宿主不支持插件开发')
+            if (!capability) throw new Error(t('pluginStudio.unsupported'))
             const name = scaffoldName.trim()
-            if (!name) throw new Error('项目名不能为空')
+            if (!name) throw new Error(t('pluginStudio.nameRequired'))
 
             // No folder dialog: the host creates the project in its own managed
             // directory, which is what lets an agent do this on its own too.
@@ -229,7 +231,7 @@ export const StudioSettings: React.FC<{ pluginKey?: string }> = () => {
 
     /** Put an existing on-disk project folder under the studio. */
     const addExistingProject = async () => {
-        const folder = await pickDirectory('选择已有插件工程目录')
+        const folder = await pickDirectory(t('pluginStudio.pickFolderTitle'))
         if (!folder) return
         addProject({ root: folder, label: folder.split(/[\\/]/).filter(Boolean).pop() || folder })
         setSelectedRoot(folder)
@@ -237,7 +239,7 @@ export const StudioSettings: React.FC<{ pluginKey?: string }> = () => {
 
     const startWatching = () =>
         runAction('start', async () => {
-            if (!capability || !selectedRoot) throw new Error('请先选择一个插件工程')
+            if (!capability || !selectedRoot) throw new Error(t('pluginStudio.selectFirst'))
             const next = await capability.dev.start({ root: selectedRoot, watch: true })
             setStatus(next)
             if (autoInstall && next.build) await installBundle(next)
@@ -252,7 +254,7 @@ export const StudioSettings: React.FC<{ pluginKey?: string }> = () => {
 
     const buildOnce = () =>
         runAction('build', async () => {
-            if (!capability || !selectedRoot) throw new Error('请先选择一个插件工程')
+            if (!capability || !selectedRoot) throw new Error(t('pluginStudio.selectFirst'))
             const next = await capability.dev.build({ root: selectedRoot })
             setStatus(next)
             if (next.build) await installBundle(next)
@@ -260,9 +262,9 @@ export const StudioSettings: React.FC<{ pluginKey?: string }> = () => {
 
     const installNow = () =>
         runAction('install', async () => {
-            if (!status) throw new Error('还没有可安装的构建产物')
+            if (!status) throw new Error(t('pluginStudio.noBuildYet'))
             const activated = await installBundle(status)
-            if (!activated) throw new Error('宿主拒绝激活：请查看插件版本或名称冲突')
+            if (!activated) throw new Error(t('pluginStudio.installRejected'))
         })
 
     /* ---- capability fallbacks ------------------------------------------- */
@@ -271,10 +273,8 @@ export const StudioSettings: React.FC<{ pluginKey?: string }> = () => {
         return (
             <Card>
                 <CardHeader className="pb-3">
-                    <CardTitle className="text-sm">插件开发台需要桌面客户端</CardTitle>
-                    <CardDescription className="text-xs">
-                        打包与热更依赖桌面端的子进程与文件系统能力。请在 KN 桌面客户端中打开本页面。
-                    </CardDescription>
+                    <CardTitle className="text-sm">{t('pluginStudio.desktopOnlyTitle')}</CardTitle>
+                    <CardDescription className="text-xs">{t('pluginStudio.desktopOnly')}</CardDescription>
                 </CardHeader>
             </Card>
         )
@@ -286,12 +286,9 @@ export const StudioSettings: React.FC<{ pluginKey?: string }> = () => {
                 <CardHeader className="pb-3">
                     <div className="flex items-center gap-2">
                         <TriangleAlert className="h-4 w-4 text-amber-500" />
-                        <CardTitle className="text-sm">当前桌面版本还不支持插件开发台</CardTitle>
+                        <CardTitle className="text-sm">{t('pluginStudio.missingDevTitle')}</CardTitle>
                     </div>
-                    <CardDescription className="text-xs">
-                        这个客户端缺少 dev.* 能力（dev.start / dev.build / dev.scaffold）。
-                        升级桌面客户端后即可在这里开发插件；其余功能不受影响。
-                    </CardDescription>
+                    <CardDescription className="text-xs">{t('pluginStudio.missingDev')}</CardDescription>
                 </CardHeader>
             </Card>
         )
@@ -311,20 +308,18 @@ export const StudioSettings: React.FC<{ pluginKey?: string }> = () => {
                                 <Wrench className="h-3.5 w-3.5 text-primary" />
                             </div>
                             <div>
-                                <CardTitle className="text-sm">插件开发台</CardTitle>
-                                <CardDescription className="text-xs">
-                                    选择本地插件工程，保存即热更到当前窗口，满意后一键打包
-                                </CardDescription>
+                                <CardTitle className="text-sm">{t('pluginStudio.title')}</CardTitle>
+                                <CardDescription className="text-xs">{t('pluginStudio.subtitle')}</CardDescription>
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
                             <Button size="sm" variant="ghost" onClick={addExistingProject}>
                                 <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
-                                添加已有目录
+                                {t('pluginStudio.addExisting')}
                             </Button>
                             <Button size="sm" onClick={() => setScaffoldOpen(true)}>
                                 <Plus className="mr-1.5 h-3.5 w-3.5" />
-                                新建工程
+                                {t('pluginStudio.newProjectLong')}
                             </Button>
                         </div>
                     </div>
@@ -333,13 +328,11 @@ export const StudioSettings: React.FC<{ pluginKey?: string }> = () => {
                     {projects.length === 0 ? (
                         <div className="rounded-lg border border-dashed p-6 text-center">
                             <Boxes className="mx-auto mb-2 h-6 w-6 text-muted-foreground" />
-                            <p className="text-sm font-medium">还没有插件工程</p>
-                            <p className="mt-1 text-xs text-muted-foreground">
-                                新建一个模板工程，或让 agent 直接创建；也可以添加磁盘上已有的插件目录
-                            </p>
+                            <p className="text-sm font-medium">{t('pluginStudio.emptyTitle')}</p>
+                            <p className="mt-1 text-xs text-muted-foreground">{t('pluginStudio.emptyHint')}</p>
                             <Button className="mt-3" size="sm" onClick={() => setScaffoldOpen(true)}>
                                 <Plus className="mr-1.5 h-3.5 w-3.5" />
-                                新建插件工程
+                                {t('pluginStudio.newProjectLong')}
                             </Button>
                         </div>
                     ) : (
@@ -348,7 +341,7 @@ export const StudioSettings: React.FC<{ pluginKey?: string }> = () => {
                             <div className="space-y-1.5">
                                 {managed.length > 0 && (
                                     <p className="px-1 pt-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-                                        内置目录（可直接让 agent 开发）
+                                        {t('pluginStudio.managedGroup')}
                                     </p>
                                 )}
                                 {managed.map((project) => (
@@ -387,7 +380,7 @@ export const StudioSettings: React.FC<{ pluginKey?: string }> = () => {
                                 ))}
                                 {managed.length > 0 && projects.length > 0 && (
                                     <p className="px-1 pt-1.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-                                        已添加的目录
+                                        {t('pluginStudio.addedGroup')}
                                     </p>
                                 )}
                                 {projects.map((project: StudioProject) => (
@@ -423,7 +416,7 @@ export const StudioSettings: React.FC<{ pluginKey?: string }> = () => {
                                     onClick={() => setScaffoldOpen(true)}
                                 >
                                     <Plus className="mr-1.5 h-3.5 w-3.5" />
-                                    新建工程
+                                    {t('pluginStudio.newProjectLong')}
                                 </Button>
                             </div>
 
@@ -444,7 +437,7 @@ export const StudioSettings: React.FC<{ pluginKey?: string }> = () => {
                                                 ) : (
                                                     <Play className="mr-1.5 h-3.5 w-3.5" />
                                                 )}
-                                                {watching ? '停止监听' : '开始监听'}
+                                                {watching ? t('pluginStudio.stopWatching') : t('pluginStudio.startWatching')}
                                             </Button>
                                             <Button
                                                 size="sm"
@@ -458,7 +451,7 @@ export const StudioSettings: React.FC<{ pluginKey?: string }> = () => {
                                                         busy === 'build' && 'animate-spin',
                                                     )}
                                                 />
-                                                构建一次
+                                                {t('pluginStudio.buildOnce')}
                                             </Button>
                                             <Button
                                                 size="sm"
@@ -467,7 +460,7 @@ export const StudioSettings: React.FC<{ pluginKey?: string }> = () => {
                                                 disabled={busy !== null || !status?.build}
                                             >
                                                 <Upload className="mr-1.5 h-3.5 w-3.5" />
-                                                热更到当前窗口
+                                                {t('pluginStudio.installNow')}
                                             </Button>
                                             <Button
                                                 size="sm"
@@ -487,11 +480,11 @@ export const StudioSettings: React.FC<{ pluginKey?: string }> = () => {
                                                     checked={autoInstall}
                                                     onCheckedChange={setAutoInstall}
                                                 />
-                                                保存后自动热更
+                                                {t('pluginStudio.autoInstall')}
                                             </label>
                                             {status?.plugin?.pluginKey && (
                                                 <span className="text-muted-foreground">
-                                                    pluginKey：
+                                                    {t('pluginStudio.pluginKeyLabel')}
                                                     <code className="rounded bg-muted px-1 py-0.5">
                                                         {status.plugin.pluginKey}
                                                     </code>
@@ -506,14 +499,15 @@ export const StudioSettings: React.FC<{ pluginKey?: string }> = () => {
                                             {status?.watching && (
                                                 <Badge variant="secondary" className="gap-1 text-[10px]">
                                                     <CheckCircle2 className="h-3 w-3" />
-                                                    watching
+                                                    {t('pluginStudio.state.watching')}
                                                 </Badge>
                                             )}
                                         </div>
 
                                         {status?.build?.modules?.length ? (
                                             <p className="truncate text-[11px] text-muted-foreground">
-                                                模块：{status.build.modules.join(', ')}
+                                                {t('pluginStudio.modulesLabel')}
+                                                {status.build.modules.join(', ')}
                                             </p>
                                         ) : null}
 
@@ -532,24 +526,28 @@ export const StudioSettings: React.FC<{ pluginKey?: string }> = () => {
 
                                         <div>
                                             <div className="mb-1.5 flex items-center justify-between">
-                                                <span className="text-xs font-medium">构建日志</span>
+                                                <span className="text-xs font-medium">
+                                                    {t('pluginStudio.buildLogs')}
+                                                </span>
                                                 <Button
                                                     variant="ghost"
                                                     size="sm"
                                                     className="h-6 text-[11px]"
                                                     onClick={() => void refreshStatus()}
                                                 >
-                                                    刷新
+                                                    {t('pluginStudio.refresh')}
                                                 </Button>
                                             </div>
                                             <ScrollArea className="h-40 rounded-md border">
                                                 <div className="space-y-0.5 p-2 font-mono text-[11px] leading-relaxed">
                                                     {logs.length === 0 ? (
-                                                        <p className="text-muted-foreground">暂无日志</p>
+                                                        <p className="text-muted-foreground">
+                                                            {t('pluginStudio.noLogs')}
+                                                        </p>
                                                     ) : (
                                                         logs.map((entry, index) => (
                                                             <div
-                                                                key={`${entry.at}-${index}`}
+                                                                key={entry.at + '-' + index}
                                                                 className={cn(
                                                                     entry.level === 'error' && 'text-destructive',
                                                                     entry.level === 'warn' &&
@@ -573,14 +571,12 @@ export const StudioSettings: React.FC<{ pluginKey?: string }> = () => {
 
             <Card>
                 <CardHeader className="pb-3">
-                    <CardTitle className="text-sm">工程约定</CardTitle>
+                    <CardTitle className="text-sm">{t('pluginStudio.conventionsTitle')}</CardTitle>
                     <CardDescription className="text-xs">
-                        <code>package.json</code> 里的 <code>knPluginStudio</code> 字段描述这个工程：
-                        <code>pluginKey</code>（注册键）、<code>entry</code>（入口文件，默认按
-                        src/index.tsx 查找）、<code>displayName</code>。
-                        <br />
-                        <code>react</code>、<code>@kn/common</code>、<code>@kn/ui</code>、<code>@kn/icon</code>、
-                        <code>@kn/editor</code>、<code>@kn/plugin-api</code> 由宿主注入，不会打进产物。
+                        <Trans
+                            i18nKey="pluginStudio.conventions"
+                            components={{ code: <code />, br: <br /> }}
+                        />
                     </CardDescription>
                 </CardHeader>
             </Card>
@@ -588,16 +584,13 @@ export const StudioSettings: React.FC<{ pluginKey?: string }> = () => {
             <Dialog open={scaffoldOpen} onOpenChange={setScaffoldOpen}>
                 <DialogContent className="max-w-md">
                     <DialogHeader>
-                        <DialogTitle className="text-base">新建插件工程</DialogTitle>
-                        <DialogDescription className="text-xs">
-                            生成一个最小可运行的插件（清单 + 入口 + 一个侧边面板），保存在桌面端内置的工程目录里，
-                            不需要选择位置；agent 也可以直接创建和开发这些工程。
-                        </DialogDescription>
+                        <DialogTitle className="text-base">{t('pluginStudio.createTitle')}</DialogTitle>
+                        <DialogDescription className="text-xs">{t('pluginStudio.emptyHint')}</DialogDescription>
                     </DialogHeader>
                     <div className="space-y-3">
                         <div className="space-y-1.5">
                             <Label htmlFor="studio-name" className="text-xs">
-                                包名
+                                {t('pluginStudio.packageName')}
                             </Label>
                             <Input
                                 id="studio-name"
@@ -608,7 +601,7 @@ export const StudioSettings: React.FC<{ pluginKey?: string }> = () => {
                         </div>
                         <div className="space-y-1.5">
                             <Label htmlFor="studio-display" className="text-xs">
-                                显示名
+                                {t('pluginStudio.displayName')}
                             </Label>
                             <Input
                                 id="studio-display"
@@ -620,10 +613,10 @@ export const StudioSettings: React.FC<{ pluginKey?: string }> = () => {
                     </div>
                     <DialogFooter>
                         <Button variant="outline" size="sm" onClick={() => setScaffoldOpen(false)}>
-                            取消
+                            {t('pluginStudio.cancel')}
                         </Button>
                         <Button size="sm" onClick={createProject} disabled={busy !== null}>
-                            创建并开始监听
+                            {t('pluginStudio.createAndStart')}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

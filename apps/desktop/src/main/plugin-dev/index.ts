@@ -9,8 +9,10 @@
 import { ipcMain, BrowserWindow, app } from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { DevSessionManager } from './manager.mjs'
+import { queryHostApi, resolveWorkspaceRoot } from './host-api.mjs'
+import { queryProjectFiles } from './project-files.mjs'
 
 /** Subdirectory of userData that the studio owns; see DEV_PROJECTS_DIR_NAME. */
 const PROJECTS_DIR_NAME = 'plugin-projects'
@@ -37,6 +39,22 @@ const requireString = (value: unknown, field: string): string => {
     }
     return value
 }
+
+/**
+ * Candidates for the monorepo root, most specific first. Dev runs from the
+ * checkout; a packaged app ships no `packages/`, so resolution returns
+ * undefined and the host-API reference reports itself as unavailable.
+ */
+const workspaceRootCandidates = (): Array<string | undefined> => [
+    process.env.KN_WORKSPACE_ROOT,
+    resolve(app.getAppPath(), '..', '..'),
+    resolve(app.getAppPath(), '..'),
+    app.getAppPath(),
+    resolve(__dirname, '..', '..', '..', '..'),
+    process.cwd(),
+    resolve(process.cwd(), '..'),
+    resolve(process.cwd(), '..', '..'),
+]
 
 export interface DevIpcOptions {
     /** Resolve + validate an absolute path against the fs allowlist. */
@@ -138,6 +156,25 @@ export function setupDevIpcHandlers({ assertAllowedPath }: DevIpcOptions): DevSe
         }
         await mkdir(dirname(filePath), { recursive: true })
         await writeFile(filePath, params.contents, 'utf8')
+    })
+
+    // Read-only reference for the agent, scoped to <workspace>/packages. It
+    // deliberately bypasses the fs allowlist (a checkout may live anywhere)
+    // but never escapes the selected package root.
+    handle('dev.hostApi', (_event, raw) =>
+        queryHostApi(resolveWorkspaceRoot(workspaceRootCandidates()), asRecord(raw)),
+    )
+
+    // Enumerate or search one project's own files. The root goes through the
+    // same fs allowlist as every other dev.* path.
+    handle('dev.files', async (_event, raw) => {
+        const params = asRecord(raw)
+        const root = assertAllowedPath(params.root, 'root')
+        return queryProjectFiles(root, {
+            query: typeof params.query === 'string' ? params.query : undefined,
+            include: typeof params.include === 'string' ? params.include : undefined,
+            limit: typeof params.limit === 'number' ? params.limit : undefined,
+        })
     })
 
     return manager

@@ -61,6 +61,35 @@ export interface StudioLogEntry {
     at: number
 }
 
+export interface StudioHostPackage {
+    name: string
+    version?: string
+    root: string
+    entry?: string
+}
+
+export interface StudioHostApiMatch {
+    package: string
+    path: string
+    line: number
+    text: string
+}
+
+export type StudioHostApiResult =
+    | { kind: 'list'; root: string; packages: StudioHostPackage[] }
+    | { kind: 'search'; matches: StudioHostApiMatch[]; truncated: boolean }
+    | { kind: 'file'; package: string; path: string; contents: string; bytes: number }
+
+export interface StudioFileMatch {
+    path: string
+    line: number
+    text: string
+}
+
+export type StudioFilesResult =
+    | { kind: 'list'; root: string; files: string[]; truncated: boolean }
+    | { kind: 'search'; root: string; matches: StudioFileMatch[]; truncated: boolean }
+
 export interface StudioDevBridge {
     start(options: { root: string; watch?: boolean; writeToDisk?: boolean; externals?: string[] }): Promise<StudioSessionStatus>
     build(options: { root: string; writeToDisk?: boolean; watch?: boolean; externals?: string[] }): Promise<StudioSessionStatus>
@@ -77,6 +106,20 @@ export interface StudioDevBridge {
     list(options?: { dir?: string }): Promise<StudioProjectEntry[]>
     readFile(options: { path: string }): Promise<string>
     writeFile(options: { path: string; contents?: string }): Promise<void>
+    /** Read the standard host packages' source; see StudioHostApiResult. */
+    hostApi(options?: {
+        package?: string
+        path?: string
+        query?: string
+        limit?: number
+    }): Promise<StudioHostApiResult>
+    /** List or search one project's files; see StudioFilesResult. */
+    files(options: {
+        root: string
+        query?: string
+        include?: string
+        limit?: number
+    }): Promise<StudioFilesResult>
 }
 
 export interface StudioPluginHost {
@@ -115,6 +158,39 @@ const requirePluginHost = (deps: StudioToolDeps): StudioPluginHost => {
     const pluginHost = deps.getPluginHost()
     if (!pluginHost) throw new Error('宿主未注册 pluginHost 服务，无法热更插件')
     return pluginHost
+}
+
+const requireHostApi = (deps: StudioToolDeps): NonNullable<StudioDevBridge['hostApi']> => {
+    const dev = requireDev(deps)
+    if (typeof dev.hostApi !== 'function') {
+        throw new Error(
+            '当前桌面端不支持读取标准包接口（缺少 dev.hostApi 能力），请升级 KN 桌面客户端。',
+        )
+    }
+    return dev.hostApi.bind(dev)
+}
+
+const requireFiles = (deps: StudioToolDeps): NonNullable<StudioDevBridge['files']> => {
+    const dev = requireDev(deps)
+    if (typeof dev.files !== 'function') {
+        throw new Error('当前桌面端不支持工程文件检索（缺少 dev.files 能力），请升级 KN 桌面客户端。')
+    }
+    return dev.files.bind(dev)
+}
+
+/**
+ * Absolute paths the agent has observed this session. DSH's fs-observation
+ * policy: an edit is refused until the file has been read (or written), so
+ * the model never blind-replaces text it has not actually seen.
+ */
+const observedFiles = new Set<string>()
+
+const requireObservation = (path: string): void => {
+    if (!observedFiles.has(path)) {
+        throw new Error(
+            `请先调用 readPluginProjectFile({ path: "${path}" }) 查看当前内容再编辑；禁止未读就改。`,
+        )
+    }
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -245,7 +321,7 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
 
     writePluginProjectFile: {
         description:
-            '写入（或覆盖）插件工程里的一个文件，自动创建父目录。用于改写插件源码——例如给 src/index.tsx 增加 dockPanels、settings、pageTypes 等贡献点。' +
+            '写入（或覆盖）插件工程里的一个文件，自动创建父目录。适合新建文件或整体重写；只改少量内容时请优先用 editPluginProjectFile，避免整文件重写带来的错误与 token 浪费。' +
             '只能写在本机允许的目录内（用户目录 / 工程目录）。',
         inputSchema: {
             type: 'object',
@@ -258,21 +334,153 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
         execute: async (args: { path: string; contents: string }) => {
             if (typeof args?.contents !== 'string') throw new Error('contents 必须是字符串')
             await requireDev(deps).writeFile({ path: args.path, contents: args.contents })
+            observedFiles.add(args.path)
             return { ok: true, path: args.path, bytes: args.contents.length }
         },
     },
 
     readPluginProjectFile: {
-        description: '读取插件工程里的一个文件内容，用于在改写前确认当前实现。',
+        description:
+            '读取插件工程里的一个文件，返回带行号的内容（行号从 1 开始），用于编辑前确认现状。' +
+            '大文件可用 offset/limit 只读片段。编辑任何文件前都必须先读它。',
         inputSchema: {
             type: 'object',
-            properties: { path: { type: 'string', description: '文件绝对路径。' } },
+            properties: {
+                path: { type: 'string', description: '文件绝对路径。' },
+                offset: { type: 'number', description: '可选。起始行号（1 起），默认 1。' },
+                limit: { type: 'number', description: '可选。最多返回行数，默认 400。' },
+            },
             required: ['path'],
         },
         readOnly: true,
-        execute: async (args: { path: string }) => {
+        execute: async (args: { path: string; offset?: number; limit?: number }) => {
             const contents = await requireDev(deps).readFile({ path: args.path })
-            return { ok: true, path: args.path, contents, bytes: contents.length }
+            observedFiles.add(args.path)
+            const raw = contents.split('\n')
+            const all = raw.length > 0 && raw[raw.length - 1] === '' ? raw.slice(0, -1) : raw
+            const offset = Math.max(1, Math.floor(args.offset ?? 1))
+            const limit = Math.max(1, Math.floor(args.limit ?? 400))
+            const slice = all.slice(offset - 1, offset - 1 + limit)
+            return {
+                ok: true,
+                path: args.path,
+                bytes: contents.length,
+                totalLines: all.length,
+                startLine: offset,
+                endLine: offset - 1 + slice.length,
+                lines: slice.map((text, index) => ({ number: offset + index, text })),
+            }
+        },
+    },
+
+    editPluginProjectFile: {
+        description:
+            '对插件工程里的文件做精确替换：把 oldString 字面量替换为 newString。' +
+            'oldString 在文件中必须唯一，否则报错——请带足上下文；确实要全部替换时传 replaceAll: true。' +
+            '编辑前必须先用 readPluginProjectFile 读过该文件。改代码优先用它，而不是整文件重写。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                path: { type: 'string', description: '文件绝对路径。' },
+                oldString: { type: 'string', description: '要被替换的原文（精确匹配，含缩进与换行）。' },
+                newString: { type: 'string', description: '替换后的文本；空字符串表示删除。' },
+                replaceAll: { type: 'boolean', description: '可选。oldString 出现多次时是否全部替换，默认 false。' },
+            },
+            required: ['path', 'oldString', 'newString'],
+        },
+        execute: async (args: {
+            path: string
+            oldString: string
+            newString: string
+            replaceAll?: boolean
+        }) => {
+            if (typeof args?.oldString !== 'string' || args.oldString.length === 0) {
+                throw new Error('oldString 必须是非空字符串')
+            }
+            if (typeof args?.newString !== 'string') throw new Error('newString 必须是字符串')
+            requireObservation(args.path)
+            const dev = requireDev(deps)
+            const current = await dev.readFile({ path: args.path })
+            const occurrences = current.split(args.oldString).length - 1
+            if (occurrences === 0) {
+                throw new Error('oldString 在文件中不存在；请先用 readPluginProjectFile 确认原文（注意缩进与换行）。')
+            }
+            if (occurrences > 1 && args.replaceAll !== true) {
+                throw new Error(
+                    'oldString 在文件中出现 ' + occurrences + ' 次；请扩大上下文使其唯一，或传 replaceAll: true。',
+                )
+            }
+            // split/join 做字面量替换；String.replace 会把 newString 里的 $ 当模式。
+            const next = current.split(args.oldString).join(args.newString)
+            await dev.writeFile({ path: args.path, contents: next })
+            const nextLines = next.split('\n')
+            const totalLines = nextLines.length > 0 && nextLines[nextLines.length - 1] === ''
+                ? nextLines.length - 1
+                : nextLines.length
+            return {
+                ok: true,
+                path: args.path,
+                replacements: args.replaceAll === true ? occurrences : 1,
+                bytes: next.length,
+                totalLines,
+            }
+        },
+    },
+
+    listPluginProjectFiles: {
+        description:
+            '列出插件工程里的源码文件（工程内相对路径），自动跳过 node_modules/dist 等。' +
+            '用于了解工程结构、找要改的文件；可选 include 按路径子串过滤（如 "src/"、".tsx"）。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                root: { type: 'string', description: '工程根目录。' },
+                include: { type: 'string', description: '可选。路径子串过滤。' },
+                limit: { type: 'number', description: '可选。最多返回条数，默认 400。' },
+            },
+            required: ['root'],
+        },
+        readOnly: true,
+        execute: async (args: { root: string; include?: string; limit?: number }) => {
+            const result = await requireFiles(deps)({ root: args.root, include: args.include, limit: args.limit })
+            if (result.kind !== 'list') throw new Error('dev.files 返回了意外的结果')
+            return {
+                root: result.root,
+                count: result.files.length,
+                truncated: result.truncated,
+                files: result.files,
+            }
+        },
+    },
+
+    searchPluginProject: {
+        description:
+            '在插件工程源码里按子串搜索，返回文件、行号与该行内容。改代码前用它定位符号与调用点；可选 include 限定路径。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                root: { type: 'string', description: '工程根目录。' },
+                query: { type: 'string', description: '要搜索的字符串（大小写不敏感）。' },
+                include: { type: 'string', description: '可选。路径子串过滤，如 "src/"。' },
+                limit: { type: 'number', description: '可选。最多返回条数，默认 60。' },
+            },
+            required: ['root', 'query'],
+        },
+        readOnly: true,
+        execute: async (args: { root: string; query: string; include?: string; limit?: number }) => {
+            const result = await requireFiles(deps)({
+                root: args.root,
+                query: args.query,
+                include: args.include,
+                limit: args.limit,
+            })
+            if (result.kind !== 'search') throw new Error('dev.files 返回了意外的结果')
+            return {
+                root: result.root,
+                count: result.matches.length,
+                truncated: result.truncated,
+                matches: result.matches,
+            }
         },
     },
 
@@ -384,6 +592,82 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
             return {
                 count: logs.length,
                 logs: logs.map((entry) => ({ level: entry.level, message: entry.message })),
+            }
+        },
+    },
+
+    /**
+     * Host-API reference. The agent authors plugins against the standard
+     * packages, so these three tools expose their real TypeScript source:
+     * list the packages, locate a symbol, then read the defining file.
+     */
+    listHostApiPackages: {
+        description:
+            '列出可查阅的标准宿主包（@kn/common、@kn/core、@kn/ui、@kn/icon、@kn/editor、@kn/plugin-api）及其类型入口。' +
+            '写插件代码前先调用它；然后用 searchHostApi 定位接口，用 readHostApiFile 读取定义，确保 API 名称与签名正确。',
+        inputSchema: { type: 'object', properties: {} },
+        readOnly: true,
+        execute: async () => {
+            const result = await requireHostApi(deps)({})
+            if (result.kind !== 'list') throw new Error('宿主 API 返回了意外的结果')
+            return {
+                root: result.root,
+                packages: result.packages.map((pkg) => ({
+                    name: pkg.name,
+                    version: pkg.version ?? null,
+                    entry: pkg.entry ?? null,
+                })),
+                hint: '先读 @kn/plugin-api 的入口，它列出了所有契约类型；再用 searchHostApi 找具体定义。',
+            }
+        },
+    },
+
+    searchHostApi: {
+        description:
+            '在标准宿主包源码里按名字搜索类型/接口/组件，返回文件名与行号。写插件前用它确认 API 的确切名称与位置，' +
+            '例如 query: "DockPanelConfig"、"useOptionalService"、"KPlugin"。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                query: { type: 'string', description: '要搜索的名字或片段（大小写不敏感）。' },
+                package: { type: 'string', description: '可选。限定包，如 @kn/common。' },
+                limit: { type: 'number', description: '可选。最多返回条数，默认 60。' },
+            },
+            required: ['query'],
+        },
+        readOnly: true,
+        execute: async (args: { query: string; package?: string; limit?: number }) => {
+            const result = await requireHostApi(deps)({
+                query: args.query,
+                package: args.package,
+                limit: args.limit,
+            })
+            if (result.kind !== 'search') throw new Error('宿主 API 返回了意外的结果')
+            return { count: result.matches.length, truncated: result.truncated, matches: result.matches }
+        },
+    },
+
+    readHostApiFile: {
+        description:
+            '读取标准宿主包里的一个源码文件（包内相对路径，如 src/core/PluginManager.ts），查看真实接口定义。' +
+            '先用 searchHostApi 定位文件，再用它读取；路径必须在包内，且不要读无关的大文件。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                package: { type: 'string', description: '包名，如 @kn/common 或 common。' },
+                path: { type: 'string', description: '包内相对路径，如 src/index.ts。' },
+            },
+            required: ['package', 'path'],
+        },
+        readOnly: true,
+        execute: async (args: { package: string; path: string }) => {
+            const result = await requireHostApi(deps)({ package: args.package, path: args.path })
+            if (result.kind !== 'file') throw new Error('宿主 API 返回了意外的结果')
+            return {
+                package: result.package,
+                path: result.path,
+                bytes: result.bytes,
+                contents: result.contents,
             }
         },
     },
