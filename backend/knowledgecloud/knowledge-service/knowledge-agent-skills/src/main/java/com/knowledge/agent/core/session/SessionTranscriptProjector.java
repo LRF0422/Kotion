@@ -58,6 +58,15 @@ public class SessionTranscriptProjector {
     private static final int SCHEMA_VERSION = 3;
     private static final int MAX_MODEL_MESSAGES = 400;
     private static final int MAX_CONTENT_CHARS = 20000;
+    /**
+     * The engine-injected per-turn context carries every skill fragment plus the
+     * whole deferred-tool directory, and it is persisted so the next turn's
+     * request stays a byte-prefix extension. The generic 20k cap silently cut
+     * its tail — which is exactly where the deferred-tool directory lives — and
+     * made every deferred tool uncallable (the model saw the skill text but no
+     * tool to call). It gets its own, much larger budget.
+     */
+    private static final int MAX_INJECTED_CONTEXT_CHARS = 200_000;
     private static final int MAX_REASONING_CHARS = 20000;
     /** Cap on persisted base64 image data per message (chars). */
     private static final int MAX_IMAGE_PART_CHARS = 4_000_000;
@@ -102,17 +111,27 @@ public class SessionTranscriptProjector {
     }
 
     /**
-     * As {@link #prepareHistory(AgentRun, List)}, but first appends the
-     * engine-injected per-turn context block (when present) immediately before
-     * the new user turn. Persisting it keeps the model log append-only, which is
-     * what lets the provider's prefix cache survive into the next turn;
-     * {@link #toUi} skips it so it never renders as a user bubble.
-     *
-     * @param contextMessage durable context message from
-     *     {@link ContextManager#buildInjectedContextMessage(String)}, or null
+     * As {@link #prepareHistory(AgentRun, List)}, but appends one engine-injected
+     * context block (when present) immediately before the new user turn.
      */
     public List<ChatMessage> prepareHistory(AgentRun run, List<ChatMessage> input,
                                             ChatMessage contextMessage) {
+        return prepareHistory(run, input, null, contextMessage);
+    }
+
+    /**
+     * As above, with the STABLE and PER-TURN context blocks kept separate.
+     *
+     * <p>The stable block (skill fragments + the deferred-tool directory) is
+     * large and independent of the current turn, so it is appended only when its
+     * content actually changes — repeating it every turn would grow the model
+     * log without bound. The per-turn block (memory / profile / summary / page
+     * note) is appended each turn. Both are persisted so the next request stays
+     * a byte-prefix extension of the previous one (provider prefix cache);
+     * {@link #toUi} skips them so they never render as user bubbles.
+     */
+    public List<ChatMessage> prepareHistory(AgentRun run, List<ChatMessage> input,
+                                            ChatMessage stableContext, ChatMessage perTurnContext) {
         if (!eligible(run)) {
             return input != null ? input : new ArrayList<ChatMessage>();
         }
@@ -133,16 +152,14 @@ public class SessionTranscriptProjector {
                     // the canonical log becomes the next run's context.
                     repairToolPairing(state.messages, state::insertAt);
                     if (state.messages.isEmpty()) {
-                        if (contextMessage != null) {
-                            state.add(forLog(contextMessage));
-                        }
+                        appendContext(state, stableContext, ContextManager.STABLE_CONTEXT_NAME);
+                        appendContext(state, perTurnContext, ContextManager.INJECTED_CONTEXT_NAME);
                         appendInput(state, input);
                     } else {
                         ChatMessage newUser = lastUser(input);
                         if (newUser != null && !isDuplicateLastUser(state.messages, newUser)) {
-                            if (contextMessage != null) {
-                                state.add(forLog(contextMessage));
-                            }
+                            appendContext(state, stableContext, ContextManager.STABLE_CONTEXT_NAME);
+                            appendContext(state, perTurnContext, ContextManager.INJECTED_CONTEXT_NAME);
                             state.add(forLog(newUser));
                         }
                     }
@@ -299,9 +316,16 @@ public class SessionTranscriptProjector {
     }
 
     private ChatMessage forLog(ChatMessage message) {
+        boolean injected = ContextManager.isInjectedContext(message);
+        int contentLimit = injected ? MAX_INJECTED_CONTEXT_CHARS : MAX_CONTENT_CHARS;
+        if (injected && message.getContent() != null
+                && message.getContent().length() > MAX_INJECTED_CONTEXT_CHARS) {
+            log.warn("Injected context exceeds {} chars ({}); the deferred-tool directory may be cut",
+                    MAX_INJECTED_CONTEXT_CHARS, message.getContent().length());
+        }
         return ChatMessage.builder()
                 .role(message.getRole())
-                .content(truncate(message.getContent(), MAX_CONTENT_CHARS))
+                .content(truncate(message.getContent(), contentLimit))
                 .contentParts(persistedContentParts(message))
                 .toolCallId(message.getToolCallId())
                 .name(message.getName())
@@ -852,6 +876,32 @@ public class SessionTranscriptProjector {
             }
         }
         return last;
+    }
+
+    /**
+     * Append one injected-context block unless the most recent block carrying
+     * the same marker already has identical content. The stable block (skill
+     * fragments + deferred-tool directory) rarely changes, so this stops it from
+     * being duplicated on every turn.
+     */
+    private void appendContext(State state, ChatMessage context, String marker) {
+        if (context == null || hasSameLastContext(state.messages, context, marker)) {
+            return;
+        }
+        state.add(forLog(context));
+    }
+
+    private boolean hasSameLastContext(List<ChatMessage> canonical, ChatMessage candidate, String marker) {
+        if (candidate.getContent() == null) {
+            return false;
+        }
+        for (int i = canonical.size() - 1; i >= 0; i--) {
+            ChatMessage message = canonical.get(i);
+            if (marker.equals(message.getName())) {
+                return candidate.getContent().equals(message.getContent());
+            }
+        }
+        return false;
     }
 
     private boolean isDuplicateLastUser(List<ChatMessage> canonical, ChatMessage candidate) {

@@ -221,9 +221,9 @@ public class ProfileExtractionService {
                 if (!"user".equalsIgnoreCase(role) && !"assistant".equalsIgnoreCase(role)) {
                     continue;
                 }
-                // Engine-injected per-turn context is not a user utterance.
-                if (com.knowledge.agent.core.context.ContextManager.INJECTED_CONTEXT_NAME
-                        .equals(message.path("name").asText(""))) {
+                // Engine-injected context (stable or per-turn) is not a user utterance.
+                if (com.knowledge.agent.core.context.ContextManager.isInjectedContextName(
+                        message.path("name").asText(""))) {
                     continue;
                 }
                 String content = message.path("content").asText("");

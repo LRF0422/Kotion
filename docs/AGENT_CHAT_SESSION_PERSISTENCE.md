@@ -27,11 +27,14 @@ UI transcript 只是它的**纯投影**（可重建缓存）。这是对 DSH 分
    压缩是**前锚定、一次性**的：超长工具结果按「头 + 标记 + 尾」确定性裁剪（与年龄无关，幂等），
    超预算时按固定的 prompt 预算把**最旧**的连续区段折叠成摘要，直到装得下。
    这样模型可见前缀是 append-only 日志的纯函数，不会随尾部增长被反复改写（provider 前缀缓存只增不减）。
-6. **每轮注入上下文是可持久化的独立消息**。记忆 / 画像 / 技能片段 / 滚动摘要 / 绑定页面提示
-   不再作为「本轮插入、下轮丢弃」的临时消息，而是由 `DefaultRunSupervisor` 组进
-   `ContextManager.buildInjectedContextMessage`，随用户轮一起写入规范日志（`name=__context__`）。
-   数据模型里上下文块因此始终位于历史之后、本轮用户消息之前，下一轮请求是上一轮请求的
-   **字节前缀扩展**，跨轮缓存不再在注入点断裂；UI 投影按标记跳过该消息，不会出现气泡。
+6. **注入上下文分「稳定 / 每轮」两段持久化**（不再「本轮插入、下轮丢弃」）：
+   - 稳定段（技能片段 + deferred 工具目录，`name=__context_stable__`）大且与当前轮无关，
+     由 `ContextManager.buildStableContext` 生成，**只在内容变化时**追加一次——否则每轮都会重复一条
+     数万字符的目录，日志随轮数线性膨胀；
+   - 每轮段（记忆 / 画像 / 摘要 / 绑定页面提示，`name=__context__`）小且逐轮变化，每轮追加。
+   两段都位于历史之后、本轮用户消息之前，下一轮请求是上一轮的**字节前缀扩展**，跨轮缓存不再在注入点断裂；
+   UI 投影与画像/技能/会话摘要消费方按标记跳过。`forLog` 对注入上下文使用独立的大上限
+   （`MAX_INJECTED_CONTEXT_CHARS`）——通用的 2 万字符截断曾把目录整段切掉，导致所有 deferred 工具不可调用。
    绑定页面提示走 `CreateRunRequest.contextNote`，**不再拼进 `systemPrompt`（index 0）**。
 7. **压缩摘要持久化，但不重写 model log**。摘要写入 `CompactionSummaryStore`
    （Redis：`agent:compaction:summary:{conversation}:{sha256(model+span)}`，TTL 30 天，失败即当未命中）。

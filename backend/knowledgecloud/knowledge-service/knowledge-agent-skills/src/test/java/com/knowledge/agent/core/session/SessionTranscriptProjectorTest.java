@@ -212,6 +212,59 @@ class SessionTranscriptProjectorTest {
     }
 
     @Test
+    void stableContextIsPersistedOnceWhilePerTurnContextAppends() throws Exception {
+        ContextManager contextManager = new ContextManager();
+        when(store.get(1L, 2L, "conv-1")).thenReturn(null);
+        List<ChatMessage> turn1 = projector.prepareHistory(run("run-1"),
+                Collections.singletonList(user("第一轮")),
+                contextManager.buildStableContextMessage("【按需工具】目录"),
+                contextManager.buildInjectedContextMessage("【关于用户的长期记忆】A"));
+        // [stable, perTurn, user]
+        assertEquals(3, turn1.size());
+
+        // Turn 2: identical stable block (must NOT be duplicated) + changed
+        // per-turn block (must be appended before the new user turn).
+        AgentChatSessionEntity existing = new AgentChatSessionEntity();
+        existing.setModelMessagesJson("[{\"m\":" + mapper.writeValueAsString(turn1.get(0)) + ",\"t\":1},"
+                + "{\"m\":" + mapper.writeValueAsString(turn1.get(1)) + ",\"t\":2},"
+                + "{\"m\":{\"role\":\"user\",\"content\":\"第一轮\"},\"t\":3}]");
+        when(store.get(1L, 2L, "conv-1")).thenReturn(existing);
+
+        List<ChatMessage> turn2 = projector.prepareHistory(run("run-2"),
+                Collections.singletonList(user("第二轮")),
+                contextManager.buildStableContextMessage("【按需工具】目录"),
+                contextManager.buildInjectedContextMessage("【关于用户的长期记忆】B"));
+
+        // [stable, perTurnA, user1, perTurnB, user2] — exactly one stable block.
+        assertEquals(5, turn2.size());
+        assertEquals(ContextManager.STABLE_CONTEXT_NAME, turn2.get(0).getName());
+        assertEquals(ContextManager.INJECTED_CONTEXT_NAME, turn2.get(1).getName());
+        assertEquals("第一轮", turn2.get(2).getContent());
+        assertEquals(ContextManager.INJECTED_CONTEXT_NAME, turn2.get(3).getName());
+        assertEquals("第二轮", turn2.get(4).getContent());
+    }
+
+    @Test
+    void injectedContextIsPersistedWithoutTheGenericContentCap() throws Exception {
+        when(store.get(1L, 2L, "conv-1")).thenReturn(null);
+        ContextManager contextManager = new ContextManager();
+        StringBuilder body = new StringBuilder("【按需工具】");
+        for (int i = 0; i < 60000; i++) {
+            body.append('x');
+        }
+        ChatMessage injected = contextManager.buildInjectedContextMessage(body.toString());
+
+        projector.prepareHistory(run("run-1"),
+                Collections.singletonList(user("你好")), injected);
+
+        JsonNode model = mapper.readTree(captureSaved().getModelMessagesJson());
+        String content = model.get(0).path("m").path("content").asText();
+        assertTrue(content.length() > 20000,
+                "the deferred-tool directory must survive persistence (was cut at 20k)");
+        assertTrue(content.contains("【按需工具】"));
+    }
+
+    @Test
     void injectedContextKeepsTheConversationLogAppendOnly() throws Exception {
         ContextManager contextManager = new ContextManager();
         when(store.get(1L, 2L, "conv-1")).thenReturn(null);

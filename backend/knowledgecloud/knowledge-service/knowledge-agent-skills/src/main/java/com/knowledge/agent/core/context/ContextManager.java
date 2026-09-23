@@ -158,6 +158,14 @@ public class ContextManager {
      */
     public static final String INJECTED_CONTEXT_NAME = "__context__";
 
+    /**
+     * Marker for the STABLE half of the injected context (skill fragments + the
+     * deferred-tool directory). It is persisted once and only re-appended when
+     * the catalog actually changes, so a large, unchanged directory does not
+     * accumulate one copy per turn.
+     */
+    public static final String STABLE_CONTEXT_NAME = "__context_stable__";
+
     private static final String INJECTED_CONTEXT_OPEN = "<context>";
     private static final String INJECTED_CONTEXT_CLOSE = "</context>";
     private static final String INJECTED_CONTEXT_FOOTER =
@@ -391,7 +399,12 @@ public class ContextManager {
     public static boolean isInjectedContext(ChatMessage message) {
         return message != null
                 && "user".equalsIgnoreCase(message.getRole())
-                && INJECTED_CONTEXT_NAME.equals(message.getName());
+                && isInjectedContextName(message.getName());
+    }
+
+    /** True for either injected-context marker (stable or per-turn). */
+    public static boolean isInjectedContextName(String name) {
+        return INJECTED_CONTEXT_NAME.equals(name) || STABLE_CONTEXT_NAME.equals(name);
     }
 
     /**
@@ -411,15 +424,91 @@ public class ContextManager {
      * skips it in the UI projection.
      */
     public ChatMessage buildInjectedContextMessage(String volatileContext) {
-        if (volatileContext == null || volatileContext.trim().isEmpty()) {
+        return buildContextMessage(volatileContext, INJECTED_CONTEXT_NAME);
+    }
+
+    /**
+     * Stable context block (skill fragments + deferred-tool directory). The
+     * projector persists it once and only re-appends it when the content
+     * changes, so the directory is not repeated in every request.
+     */
+    public ChatMessage buildStableContextMessage(String stableContext) {
+        return buildContextMessage(stableContext, STABLE_CONTEXT_NAME);
+    }
+
+    private ChatMessage buildContextMessage(String body, String name) {
+        if (body == null || body.trim().isEmpty()) {
             return null;
         }
         return ChatMessage.builder()
                 .role("user")
-                .name(INJECTED_CONTEXT_NAME)
-                .content(INJECTED_CONTEXT_OPEN + "\n" + volatileContext.trim() + "\n"
+                .name(name)
+                .content(INJECTED_CONTEXT_OPEN + "\n" + body.trim() + "\n"
                         + INJECTED_CONTEXT_CLOSE + "\n" + INJECTED_CONTEXT_FOOTER)
                 .build();
+    }
+
+    /**
+     * The cache-stable half of the injected context: skill prompt fragments and
+     * the deferred-tool directory. Independent of the current turn, so it only
+     * needs to be persisted once instead of repeated in every request.
+     */
+    public String buildStableContext(List<String> skillFragments, List<ToolSpec> deferredTools) {
+        StringBuilder content = new StringBuilder();
+        if (skillFragments != null) {
+            for (String fragment : skillFragments) {
+                if (fragment == null || fragment.trim().isEmpty()) {
+                    continue;
+                }
+                if (content.length() > 0) {
+                    content.append("\n\n");
+                }
+                content.append(fragment.trim());
+            }
+        }
+        if (deferredTools != null && !deferredTools.isEmpty()) {
+            StringBuilder directory = new StringBuilder();
+            appendDeferredTools(directory, deferredTools);
+            if (directory.length() > 0) {
+                content.append(directory);
+            }
+        }
+        return content.length() == 0 ? null : content.toString();
+    }
+
+    /**
+     * The per-turn half of the injected context: the bound-page note, long-term
+     * memory, the low-sensitivity profile and the rolling session summary. It
+     * is small and genuinely changes between turns, so it is appended per turn.
+     */
+    public String buildPerTurnContext(List<String> memoryLines, List<String> profileLines,
+                                      String sessionSummary, String contextNote) {
+        StringBuilder content = new StringBuilder();
+        if (contextNote != null && !contextNote.trim().isEmpty()) {
+            content.append("【本次运行绑定页面】\n").append(contextNote.trim());
+        }
+        if (memoryLines != null && !memoryLines.isEmpty()) {
+            StringBuilder block = new StringBuilder();
+            for (String line : memoryLines) {
+                if (line != null && !line.trim().isEmpty()) {
+                    block.append("\n- ").append(line.trim());
+                }
+            }
+            if (block.length() > 0) {
+                if (content.length() > 0) {
+                    content.append("\n\n");
+                }
+                content.append("【关于用户的长期记忆】").append(block);
+            }
+        }
+        appendProfileBlock(content, profileLines);
+        if (sessionSummary != null && !sessionSummary.trim().isEmpty()) {
+            if (content.length() > 0) {
+                content.append("\n\n");
+            }
+            content.append("【本次会话的近期进展（会话记忆）】\n").append(sessionSummary.trim());
+        }
+        return content.length() == 0 ? null : content.toString();
     }
 
     private void appendDeferredTools(StringBuilder content, List<ToolSpec> deferredTools) {

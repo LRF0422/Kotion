@@ -188,13 +188,14 @@ public class DefaultRunSupervisor {
         // rolling summary, bound-page note) is persisted as its own append-only
         // message in front of the user turn — a transient block would break the
         // provider prefix at the insertion point on every new turn.
-        ChatMessage injectedContext = buildInjectedContext(cmd);
-        List<ChatMessage> history =
-                transcriptProjector.prepareHistory(run, cmd.getMessages(), injectedContext);
+        ChatMessage stableContext = buildStableContextMessage(cmd);
+        ChatMessage perTurnContext = buildPerTurnContextMessage(cmd);
+        List<ChatMessage> history = transcriptProjector.prepareHistory(
+                run, cmd.getMessages(), stableContext, perTurnContext);
         // Only skip the loop-side injection when the context is actually in the
         // history the model will see (an ineligible/aborted projection must
         // still get the transient block, or the run loses its memory).
-        cmd.setContextInHistory(containsInjectedContext(history, injectedContext));
+        cmd.setContextInHistory(containsInjectedContext(history));
         LoopHandle handle = startLoop(run, null, new CommandRunInput(cmd, history));
         if (handle == null) {
             markFailed(run, "lease_unavailable", "无法获取执行租约");
@@ -202,31 +203,25 @@ public class DefaultRunSupervisor {
         return RunView.of(run);
     }
 
-    /**
-     * Compose the per-turn context block for a root run: long-term memory,
-     * derived profile, retrieved skill fragments, deferred-tool directory, the
-     * rolling thread summary and the optional bound-page note. Returns
-     * {@code null} when there is nothing to inject.
-     */
-    private ChatMessage buildInjectedContext(CreateRunCommand cmd) {
-        String volatileContext = contextManager.buildVolatileContext(
-                cmd.getMemoryLines(), cmd.getProfileLines(), cmd.getSkillFragments(),
-                cmd.getSkillTools(), cmd.getThreadSummary());
-        String note = cmd.getContextNote();
-        if (note != null && !note.trim().isEmpty()) {
-            String block = "【本次运行绑定页面】\n" + note.trim();
-            volatileContext = volatileContext == null ? block : block + "\n\n" + volatileContext;
-        }
-        return contextManager.buildInjectedContextMessage(volatileContext);
+    /** Stable injected-context block (skill fragments + deferred tools). */
+    private ChatMessage buildStableContextMessage(CreateRunCommand cmd) {
+        return contextManager.buildStableContextMessage(
+                contextManager.buildStableContext(cmd.getSkillFragments(), cmd.getSkillTools()));
+    }
+
+    /** Per-turn injected-context block (page note / memory / profile / summary). */
+    private ChatMessage buildPerTurnContextMessage(CreateRunCommand cmd) {
+        return contextManager.buildInjectedContextMessage(
+                contextManager.buildPerTurnContext(cmd.getMemoryLines(), cmd.getProfileLines(),
+                        cmd.getThreadSummary(), cmd.getContextNote()));
     }
 
     /**
-     * Whether the prepared history already carries this run's injected context
-     * block (matched by the marker {@link ContextManager#INJECTED_CONTEXT_NAME}),
-     * so the loop must not append a second copy.
+     * Whether the prepared history already carries an injected context block,
+     * so the loop must not append a transient second copy.
      */
-    private static boolean containsInjectedContext(List<ChatMessage> history, ChatMessage injected) {
-        if (injected == null || history == null) {
+    private static boolean containsInjectedContext(List<ChatMessage> history) {
+        if (history == null) {
             return false;
         }
         for (ChatMessage message : history) {
