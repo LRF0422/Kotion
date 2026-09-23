@@ -62,6 +62,11 @@ agent:
     # signatures render at most this many parameters.
     deferred-tool-desc-limit: 0
     deferred-tool-param-limit: 8
+    # Keep the provider tools[] array byte-stable for the whole conversation:
+    # a deferred tool's schema rides back with its first result instead of
+    # being merged into tools[] (which would reset the prefix cache). Set false
+    # only if the provider rejects undeclared historical tool_calls.
+    freeze-deferred-tools: true
   checkpoint:
     enabled: true
   event:

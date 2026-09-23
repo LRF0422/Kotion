@@ -146,6 +146,20 @@ public class AgentCoreProperties {
         private int deferredToolDescLimit = 0;
         /** Max parameters rendered per deferred-tool signature. */
         private int deferredToolParamLimit = 8;
+        /**
+         * Keep the provider {@code tools} array byte-stable for the whole
+         * conversation: a skill-owned (deferred) tool is NEVER merged into
+         * {@code tools} after its first call. Merging changes the rendered
+         * prefix, which invalidates the provider context cache for every
+         * earlier step (the prefix is matched before the messages). The tool is
+         * still callable — its directory entry advertises the name/signature and
+         * its full schema is returned with the first result.
+         *
+         * <p>Set false only if a provider rejects a historical {@code tool_calls}
+         * whose function is not in {@code tools} (then promotion is required and
+         * one prefix invalidation per newly used tool is unavoidable).
+         */
+        private boolean freezeDeferredTools = true;
     }
 
     /** Checkpoint (断点) settings. */

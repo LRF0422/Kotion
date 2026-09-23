@@ -195,18 +195,25 @@ public class AgentLoop implements Runnable {
 
     /**
      * Deferred client tools (skill-owned): routable and executable, but absent
-     * from the tools JSON until the model actually calls one, at which point the
-     * spec is promoted into {@link #clientToolSpecs}. Keeps plugin schemas
-     * (chart/mermaid/drawio…) out of every prompt without making them
-     * uncallable.
+     * from the tools JSON for the whole run. Keeping them out of {@code tools}
+     * is what lets the provider prefix cache survive — {@code tools} renders
+     * before the messages, so merging one mid-run would invalidate the cached
+     * prefix of every earlier step. The model learns a deferred tool from the
+     * injected directory (name + signature), and its full schema is returned
+     * with the first result (see {@link #deferredSchemaNote}).
      *
-     * <p>The promotion invalidates the provider prefix once per newly used tool.
-     * That cost is deliberate and must stay: while a historical {@code
-     * tool_calls} entry is in the conversation, the provider needs the matching
-     * function declared in {@code tools} or it rejects the request. The tool
-     * list is kept insertion-ordered so the only change is the appended schema.
+     * <p>If a provider rejects a historical {@code tool_calls} whose function is
+     * not declared, {@code agent.context.freeze-deferred-tools=false} restores
+     * promotion, at the cost of one prefix invalidation per newly used tool.
      */
     private final Map<String, ToolSpec> deferredToolSpecs = new java.util.LinkedHashMap<>();
+
+    /** Deferred tools whose schema has already been returned this run. */
+    private final java.util.Set<String> announcedDeferredTools = new java.util.HashSet<>();
+
+    private boolean frozenDeferredTools() {
+        return properties != null && properties.getContext().isFreezeDeferredTools();
+    }
 
     /** Live sub-agent delegations keyed by the parent-side delegate call id. */
     private final Map<String, Delegation> activeDelegations = new java.util.LinkedHashMap<>();
@@ -433,6 +440,12 @@ public class AgentLoop implements Runnable {
                     }
                 }, this::isCancelled);
 
+                long stepPrompt = result.getPromptTokens();
+                long stepCached = result.getCachedPromptTokens();
+                log.info("Run {} step {}: prompt={} cached={} hit={}% (tools={}, msgs={})",
+                        run.getRunId(), checkpoint.getNextStep(), stepPrompt, stepCached,
+                        stepPrompt > 0 ? String.format(java.util.Locale.ROOT, "%.1f", 100.0 * stepCached / stepPrompt) : "n/a",
+                        toolCount, messages.size());
                 checkpoint.setPromptTokens(checkpoint.getPromptTokens() + result.getPromptTokens());
                 checkpoint.setCompletionTokens(checkpoint.getCompletionTokens() + result.getCompletionTokens());
                 checkpoint.setCachedPromptTokens(checkpoint.getCachedPromptTokens() + result.getCachedPromptTokens());
@@ -543,7 +556,12 @@ public class AgentLoop implements Runnable {
                         if (planGateBlocksClient(call.getName())) {
                             rejectToolCall(call, "PLAN_MODE_BLOCKED");
                         } else {
-                            activateDeferred(call.getName());
+                            // Frozen (default): the tools array never changes, so
+                            // the provider prefix cache stays valid. The schema
+                            // rides back with the first result instead.
+                            if (!frozenDeferredTools()) {
+                                activateDeferred(call.getName());
+                            }
                             frontendCalls.add(call);
                         }
                     } else {
@@ -929,11 +947,18 @@ public class AgentLoop implements Runnable {
                 String rendered = item.isOk()
                         ? (images.isEmpty() ? renderResult(item.getResult()) : imageToolSummaryJson(images))
                         : "{\"error\":\"" + escapeJson(item.getError()) + "\"}";
+                String toolContent = render(rendered);
+                if (frozenDeferredTools()) {
+                    String schemaNote = deferredSchemaNote(match.getTool());
+                    if (schemaNote != null) {
+                        toolContent = toolContent + schemaNote;
+                    }
+                }
                 checkpoint.getMessages().add(ChatMessage.builder()
                         .role("tool")
                         .toolCallId(item.getCallId())
                         .name(match.getTool())
-                        .content(render(rendered))
+                        .content(toolContent)
                         .build());
                 appendImageVisionMessage(images);
             }
@@ -1900,6 +1925,31 @@ public class AgentLoop implements Runnable {
      * in the conversation. No-op for tools that were never deferred (or are
      * already active).
      */
+    /**
+     * Full parameter schema for a deferred tool, appended to the result of its
+     * FIRST call only (see {@code freezeDeferredTools}). The tools array stays
+     * byte-stable, so the provider prefix cache survives; the model still
+     * learns the exact arguments before retrying. Returns {@code null} for an
+     * active or already-announced tool.
+     */
+    private String deferredSchemaNote(String toolName) {
+        if (toolName == null || announcedDeferredTools.contains(toolName)) {
+            return null;
+        }
+        ToolSpec spec = deferredToolSpecs.get(toolName);
+        if (spec == null) {
+            return null;
+        }
+        announcedDeferredTools.add(toolName);
+        String schema;
+        try {
+            schema = objectMapper.writeValueAsString(spec.getInputSchema());
+        } catch (Exception e) {
+            schema = String.valueOf(spec.getInputSchema());
+        }
+        return "\n\n【工具 " + toolName + " 的参数结构（首次调用后返回，之后可直接按此传参）】\n" + schema;
+    }
+
     private void activateDeferred(String toolName) {
         ToolSpec spec = deferredToolSpecs.remove(toolName);
         if (spec == null) {
