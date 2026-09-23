@@ -888,12 +888,23 @@ export class PluginManager {
                 }
 
                 if (tool.execute && isFunction(tool.execute)) {
+                    let executable: unknown
+                    try {
+                        executable = tool.execute(editor)
+                    } catch (error) {
+                        // A factory that needs a live editor must not take the
+                        // whole catalog down with it: skip that tool and keep the
+                        // rest. The agent chat stays mounted with no active
+                        // editor (see ChatDockPanel), so this path is expected.
+                        logger.warn(`Tool ${tool.name} could not be instantiated`, error)
+                        continue
+                    }
                     if (res[tool.name]) {
                         logger.warn(`Tool ${tool.name} already exists, overwriting`)
                     }
                     res[tool.name] = {
                         ...tool,
-                        execute: tool.execute(editor)
+                        execute: executable
                     }
                     logger.debug('Resolved tool:', tool.name)
                 }

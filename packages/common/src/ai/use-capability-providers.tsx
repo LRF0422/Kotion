@@ -177,8 +177,22 @@ export function useCapabilityProviders(
      * an explicit editor — is also what per-agent tool builds reuse.
      */
     const collectPluginToolsByPlugin = useCallback((targetEditor: Editor | null): Array<{ pluginName: string; tools: ToolsRecord }> => {
-        if (!pluginManager || !targetEditor) return []
-        const allPluginTools = pluginManager.resolveTools?.(targetEditor) || {}
+        if (!pluginManager) return []
+        // Resolve plugin tools even with NO active editor. Plugins such as
+        // plugin-studio contribute editor-INDEPENDENT tools (they drive the
+        // desktop host, not the document), and ToolProvider#updateEditor clears
+        // every plugin tool on each editor swap. Bailing out on a null editor
+        // therefore erased those tools from the catalog while the plugin's skill
+        // kept advertising them — the model knew the tool names but had no
+        // schema to call. Editor-bound factories that truly need an editor fail
+        // per tool inside PluginManager#resolveTools and are skipped.
+        let allPluginTools: ToolsRecord = {}
+        try {
+            allPluginTools = (pluginManager.resolveTools?.(targetEditor as Editor) as ToolsRecord) || {}
+        } catch (error) {
+            console.warn('[Agent] Plugin tool resolution failed:', error)
+            return []
+        }
         const extensions = pluginManager.resolveEditorExtensions?.() || []
         const groups: Array<{ pluginName: string; tools: ToolsRecord }> = []
         for (const ext of extensions) {
