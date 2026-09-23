@@ -184,12 +184,57 @@ public class DefaultRunSupervisor {
 
         // Root runs rebuild their conversation from the engine-owned session log;
         // the caller only supplies the new turn (prepareHistory appends it).
-        List<ChatMessage> history = transcriptProjector.prepareHistory(run, cmd.getMessages());
+        // Per-turn context (memory, profile, retrieved skills, deferred tools,
+        // rolling summary, bound-page note) is persisted as its own append-only
+        // message in front of the user turn — a transient block would break the
+        // provider prefix at the insertion point on every new turn.
+        ChatMessage injectedContext = buildInjectedContext(cmd);
+        List<ChatMessage> history =
+                transcriptProjector.prepareHistory(run, cmd.getMessages(), injectedContext);
+        // Only skip the loop-side injection when the context is actually in the
+        // history the model will see (an ineligible/aborted projection must
+        // still get the transient block, or the run loses its memory).
+        cmd.setContextInHistory(containsInjectedContext(history, injectedContext));
         LoopHandle handle = startLoop(run, null, new CommandRunInput(cmd, history));
         if (handle == null) {
             markFailed(run, "lease_unavailable", "无法获取执行租约");
         }
         return RunView.of(run);
+    }
+
+    /**
+     * Compose the per-turn context block for a root run: long-term memory,
+     * derived profile, retrieved skill fragments, deferred-tool directory, the
+     * rolling thread summary and the optional bound-page note. Returns
+     * {@code null} when there is nothing to inject.
+     */
+    private ChatMessage buildInjectedContext(CreateRunCommand cmd) {
+        String volatileContext = contextManager.buildVolatileContext(
+                cmd.getMemoryLines(), cmd.getProfileLines(), cmd.getSkillFragments(),
+                cmd.getSkillTools(), cmd.getThreadSummary());
+        String note = cmd.getContextNote();
+        if (note != null && !note.trim().isEmpty()) {
+            String block = "【本次运行绑定页面】\n" + note.trim();
+            volatileContext = volatileContext == null ? block : block + "\n\n" + volatileContext;
+        }
+        return contextManager.buildInjectedContextMessage(volatileContext);
+    }
+
+    /**
+     * Whether the prepared history already carries this run's injected context
+     * block (matched by the marker {@link ContextManager#INJECTED_CONTEXT_NAME}),
+     * so the loop must not append a second copy.
+     */
+    private static boolean containsInjectedContext(List<ChatMessage> history, ChatMessage injected) {
+        if (injected == null || history == null) {
+            return false;
+        }
+        for (ChatMessage message : history) {
+            if (ContextManager.isInjectedContext(message)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Create a child run (sub-agent) — M3 delegate support. */
@@ -635,6 +680,11 @@ public class DefaultRunSupervisor {
         @Override
         public String systemPrompt() {
             return cmd.getSystemPrompt();
+        }
+
+        @Override
+        public boolean contextInHistory() {
+            return cmd.isContextInHistory();
         }
 
         @Override

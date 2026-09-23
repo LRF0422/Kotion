@@ -3,6 +3,7 @@ package com.knowledge.agent.core.savedskill;
 import com.knowledge.agent.api.dto.ChatMessage;
 import com.knowledge.agent.core.checkpoint.Checkpoint;
 import com.knowledge.agent.core.config.AgentCoreProperties;
+import com.knowledge.agent.core.context.ContextManager;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import org.springframework.stereotype.Component;
@@ -51,6 +52,9 @@ public class ConversationTranscriptProjector {
             if (message == null || message.getRole() == null
                     || "system".equalsIgnoreCase(message.getRole())) {
                 continue;
+            }
+            if (ContextManager.isInjectedContext(message)) {
+                continue; // engine-injected per-turn context is never transcript
             }
             String role = message.getRole().toLowerCase(java.util.Locale.ROOT);
             if ("assistant".equals(role)) {

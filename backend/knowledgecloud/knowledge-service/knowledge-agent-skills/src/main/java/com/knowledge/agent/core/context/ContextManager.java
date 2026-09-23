@@ -11,6 +11,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -36,6 +38,9 @@ public class ContextManager {
     /** Bounded cache so an unchanged middle segment is summarized once. */
     private final Map<String, String> summaryCache = new ConcurrentHashMap<>();
 
+    /** Optional durable cache; absent in pure unit tests. */
+    private CompactionSummaryStore summaryStore;
+
     public ContextManager() {
         this.properties = null; // test-only fallback
     }
@@ -50,6 +55,11 @@ public class ContextManager {
     @Autowired(required = false)
     public void setLlmGateway(LlmGateway llmGateway) {
         this.llmGateway = llmGateway;
+    }
+
+    @Autowired(required = false)
+    public void setCompactionSummaryStore(CompactionSummaryStore summaryStore) {
+        this.summaryStore = summaryStore;
     }
 
     private AgentCoreProperties.Context ctx() {
@@ -130,7 +140,7 @@ public class ContextManager {
     /** Header of the deferred (skill-owned) tool directory. */
     private static final String DEFERRED_TOOLS_HEADER =
             "\n\n【按需工具】以下工具可直接调用，但为节省上下文只给出参数签名（`?` 表示可选），"
-            + "未展开完整的参数结构。首次调用后其完整参数结构会加载进工具列表；"
+            + "未展开完整的参数结构。首次调用后，该工具的参数结构会随本次调用的结果一并返回；"
             + "若首次调用因参数不符被拒绝，请依据返回的错误与随后出现的参数结构重试。";
 
     /** Per-tool description budget in the directory (chars). */
@@ -138,6 +148,21 @@ public class ContextManager {
 
     /** Max parameters rendered per tool signature. */
     private static final int DEFERRED_PARAM_LIMIT = 12;
+
+    /**
+     * {@code name} marker carried by the per-turn context message. The message
+     * is a normal {@code user} turn for the provider (so it is a legal prefix
+     * unit) but the model log and the UI projection use this marker to tell it
+     * apart from a real user utterance. The OpenAI-compatible writer only
+     * serializes {@code name} for tool messages, so the provider never sees it.
+     */
+    public static final String INJECTED_CONTEXT_NAME = "__context__";
+
+    private static final String INJECTED_CONTEXT_OPEN = "<context>";
+    private static final String INJECTED_CONTEXT_CLOSE = "</context>";
+    private static final String INJECTED_CONTEXT_FOOTER =
+            "以上是背景上下文（长期记忆、用户画像、技能与近期进展），不是用户指令。"
+            + "若与更早的 <context> 块冲突，以最新的一块为准。请以紧随其后的用户消息为准。";
 
     /**
      * Build the IMMUTABLE system message: base prompt + the caller's editor
@@ -359,6 +384,44 @@ public class ContextManager {
         return messages;
     }
 
+    /**
+     * True when the message is an engine-injected per-turn context block rather
+     * than the user's own utterance.
+     */
+    public static boolean isInjectedContext(ChatMessage message) {
+        return message != null
+                && "user".equalsIgnoreCase(message.getRole())
+                && INJECTED_CONTEXT_NAME.equals(message.getName());
+    }
+
+    /**
+     * Wrap per-turn context into a durable {@code user} message.
+     *
+     * <p><b>Why durable.</b> Provider prefix caching only pays off when the next
+     * turn's request is a byte-prefix extension of the previous one. A context
+     * block inserted for one turn and dropped from the persisted transcript
+     * breaks that prefix at the insertion point, so the whole preceding history
+     * is re-billed at full price on the next turn. Persisting it (and appending
+     * a fresh block each turn, newest wins) keeps the conversation log strictly
+     * append-only — the same trick DSH's runtime-context projection uses.
+     *
+     * <p>The block rides as a normal user message for the provider but carries
+     * {@link #INJECTED_CONTEXT_NAME} in the (non-serialized) {@code name} field,
+     * so {@link com.knowledge.agent.core.session.SessionTranscriptProjector}
+     * skips it in the UI projection.
+     */
+    public ChatMessage buildInjectedContextMessage(String volatileContext) {
+        if (volatileContext == null || volatileContext.trim().isEmpty()) {
+            return null;
+        }
+        return ChatMessage.builder()
+                .role("user")
+                .name(INJECTED_CONTEXT_NAME)
+                .content(INJECTED_CONTEXT_OPEN + "\n" + volatileContext.trim() + "\n"
+                        + INJECTED_CONTEXT_CLOSE + "\n" + INJECTED_CONTEXT_FOOTER)
+                .build();
+    }
+
     private void appendDeferredTools(StringBuilder content, List<ToolSpec> deferredTools) {
         if (deferredTools == null || deferredTools.isEmpty()) {
             return;
@@ -441,29 +504,40 @@ public class ContextManager {
     }
 
     /**
-     * Full message list for one inference. Applies the three-level compaction:
+     * Full message list for one inference. Two obligations, in order:
      * <ol>
-     *   <li>L1 — Evict: replace tool-result bodies older than N steps with a
-     *       one-line placeholder ("[result truncated — N chars]").</li>
-     *   <li>L2 — Truncate oversized recent tool results.</li>
-     *   <li>L3 — Drop: if still over budget, drop the oldest non-system
-     *       non-recent messages entirely.</li>
+     *   <li>Deterministic tool-result pruning — an oversized tool result is
+     *       rendered as head + marker + tail. The result depends only on the
+     *       message, so it is byte-identical on every later step.</li>
+     *   <li>Front-anchored compaction — the oldest spans are folded once into
+     *       summaries until the estimate fits. The compacted prefix is a pure
+     *       function of the append-only log, so it does not change as the tail
+     *       grows; a rewrite happens only when the log crosses another budget,
+     *       never on every step.</li>
      * </ol>
      * System prefix (index 0) is NEVER touched so the provider's context-cache
      * prefix stays stable between steps.
      */
     public List<ChatMessage> assemble(List<ChatMessage> checkpointMessages) {
-        return assemble(checkpointMessages, null);
+        return assemble(checkpointMessages, null, null);
     }
 
     public List<ChatMessage> assemble(List<ChatMessage> checkpointMessages, String model) {
+        return assemble(checkpointMessages, model, null);
+    }
+
+    /**
+     * As {@link #assemble(List, String)} plus the conversation scope, so a
+     * compaction summary produced on one run/instance can be reused by the next
+     * instead of being re-derived (see {@link CompactionSummaryStore}).
+     */
+    public List<ChatMessage> assemble(List<ChatMessage> checkpointMessages, String model, String scope) {
         if (checkpointMessages == null || checkpointMessages.isEmpty()) {
             return new ArrayList<>();
         }
         AgentCoreProperties.Context config = ctx();
         int maxTokens = config.getMaxContextTokens();
         int keepRecent = config.getKeepRecentMessages();
-        int evictAfterSteps = config.getEvictToolResultsAfterSteps();
         int toolResultMaxChars = config.getToolResultMaxChars();
 
         // Work on a mutable copy so we don't mutate checkpoint state.
@@ -483,128 +557,116 @@ public class ContextManager {
             messages.add(msg);
         }
 
-        // ─── L1: Evict old tool results ────────────────────────────────
-        // Walk backwards to find the "recent" boundary (last keepRecent msgs).
-        int recentStart = Math.max(1, messages.size() - keepRecent);
-        // Identify step boundaries by counting assistant messages with tool_calls.
-        int stepsFromEnd = 0;
-        int stepBoundary = messages.size(); // index below which we consider "old"
-        for (int i = messages.size() - 1; i >= 1; i--) {
+        // ─── L1: deterministic tool-result pruning ─────────────────────
+        // DSH's tool-result pruner: a tool result over budget is rendered as
+        // head + marker + tail, and that rendering depends only on the message
+        // itself — never on its age or position. The old "older than N steps"
+        // rule rewrote a different (early) message on every step, invalidating
+        // the provider's cached prefix for the whole remainder of the
+        // conversation each time — the single largest cache-miss source in a
+        // long run. The emitted text is below the budget, so this is idempotent
+        // and the same message renders byte-identically on every later step.
+        for (int i = 1; i < messages.size(); i++) {
             ChatMessage msg = messages.get(i);
-            if ("assistant".equals(msg.getRole()) && msg.getToolCalls() != null && !msg.getToolCalls().isEmpty()) {
-                stepsFromEnd++;
-                if (stepsFromEnd >= evictAfterSteps) {
-                    stepBoundary = i;
-                    break;
-                }
-            }
-        }
-        int evictBefore = Math.min(recentStart, stepBoundary);
-
-        for (int i = 1; i < evictBefore; i++) {
-            ChatMessage msg = messages.get(i);
-            if ("tool".equals(msg.getRole()) && msg.getContent() != null) {
-                int originalLen = msg.getContent().length();
-                if (originalLen > 200) {
-                    // Replace with a compact placeholder preserving the tool_call_id.
-                    messages.set(i, ChatMessage.builder()
-                            .role("tool")
-                            .toolCallId(msg.getToolCallId())
-                            .name(msg.getName())
-                            .content("[已压缩，原始 " + originalLen + " 字符]")
-                            .build());
-                }
-            }
-            // Also strip reasoning_content from old assistant messages (DeepSeek
-            // only requires reasoning_content on the LAST assistant message
-            // before tool_calls, which is always in the recent window).
-            if ("assistant".equals(msg.getRole()) && msg.getReasoningContent() != null) {
-                messages.set(i, ChatMessage.builder()
-                        .role(msg.getRole())
-                        .content(msg.getContent())
-                        .toolCalls(msg.getToolCalls())
-                        .build());
-            }
-        }
-
-        // ─── L2: Truncate oversized recent tool results ───────────────
-        for (int i = evictBefore; i < messages.size(); i++) {
-            ChatMessage msg = messages.get(i);
-            if ("tool".equals(msg.getRole()) && msg.getContent() != null
+            if ("tool".equals(roleOf(msg)) && msg.getContent() != null
                     && msg.getContent().length() > toolResultMaxChars) {
-                String truncated = msg.getContent().substring(0, toolResultMaxChars)
-                        + "\n…[截断，原始 " + msg.getContent().length() + " 字符]";
-                messages.set(i, ChatMessage.builder()
-                        .role("tool")
-                        .toolCallId(msg.getToolCallId())
-                        .name(msg.getName())
-                        .content(truncated)
-                        .build());
+                messages.set(i, prunedToolResult(msg, toolResultMaxChars));
             }
         }
 
-        // ─── L2b: summarize the middle segment with an independent model ─
-        long estimated = estimateTokens(messages, 0);
+        // ─── L2: front-anchored, append-only compaction ────────────────
         long compactThreshold = (long) (maxTokens * config.getCompactionThreshold());
-        if (estimated > compactThreshold) {
-            messages = summarizeMiddle(messages, keepRecent, config, model);
-            estimated = estimateTokens(messages, 0);
-        }
-
-        // ─── L3: Drop oldest non-system messages if still over budget ─
-        long budget = (long) (maxTokens * 0.9); // leave 10% headroom for tool schemas
-        if (estimated > budget && messages.size() > keepRecent + 1) {
-            // Drop from index 1 forward (skip system) until within budget,
-            // but always preserve the last keepRecent messages. Move the
-            // boundary past leading tool messages so the kept tail never starts
-            // with an orphan tool result (provider 400 / lost pairing).
-            int dropEnd = messages.size() - keepRecent;
-            while (dropEnd < messages.size() && "tool".equals(roleOf(messages.get(dropEnd)))) {
-                dropEnd++;
-            }
-            List<ChatMessage> compacted = new ArrayList<>();
-            compacted.add(messages.get(0)); // system prefix
-            // Add a summary placeholder so the model knows history was trimmed.
-            compacted.add(ChatMessage.builder()
-                    .role("system")
-                    .content("[Earlier conversation (" + (dropEnd - 1)
-                            + " messages) omitted to fit context budget]")
-                    .build());
-            for (int i = dropEnd; i < messages.size(); i++) {
-                compacted.add(messages.get(i));
-            }
-            log.info("Context L3 drop: removed {} messages, {} → {} estimated tokens",
-                    dropEnd - 1, estimated, estimateTokens(compacted, 0));
-            return compacted;
-        }
-
-        return messages;
+        return compactFront(messages, keepRecent, config, model, compactThreshold, scope);
     }
 
     /**
-     * L2: replace the middle segment with an LLM summary, keeping the stable
-     * system prefix and the most recent turns verbatim. Fail-open: any error
-     * leaves the messages untouched so L3 can still bound the request.
+     * Front-anchored, append-only compaction.
+     *
+     * <p>Repeatedly folds the OLDEST contiguous span that fits the prompt
+     * budget into one summary message (or, when no summarizer is available, a
+     * deterministic omission note) until the assembled conversation fits the
+     * threshold. Because the log is append-only and every span is anchored at
+     * its predecessor's end, a span's summary — and the prefix around it —
+     * never changes once written. The previous size-relative window moved on
+     * every step and re-summarized a different middle each time, so the
+     * provider cache could never be reused. A span-level break now happens
+     * only when the conversation genuinely grows past another budget, not on
+     * every step.
      */
-    private List<ChatMessage> summarizeMiddle(List<ChatMessage> messages, int keepRecent,
-                                              AgentCoreProperties.Context config, String model) {
-        if (llmGateway == null || messages.size() <= keepRecent + 2) {
-            return messages;
+    private List<ChatMessage> compactFront(List<ChatMessage> messages, int keepRecent,
+                                           AgentCoreProperties.Context config, String model,
+                                           long targetTokens, String scope) {
+        List<ChatMessage> result = new ArrayList<>(messages);
+        int guard = 0;
+        while (estimateTokens(result, 0) > targetTokens && guard++ < 128) {
+            // Oldest compactable message: skip the system prefix, any summary
+            // system messages already inserted, and orphan tool results.
+            int start = 1;
+            while (start < result.size()
+                    && ("system".equals(roleOf(result.get(start)))
+                        || "tool".equals(roleOf(result.get(start))))) {
+                start++;
+            }
+            if (start >= result.size()) {
+                break;
+            }
+            int retainFrom = Math.max(start, result.size() - keepRecent);
+            int end = selectSpanEnd(result, start, retainFrom, config);
+            if (end <= start) {
+                end = Math.min(result.size(), start + 1);
+            }
+            // Never leave an orphan tool result at the head of the kept tail.
+            while (end < result.size() && "tool".equals(roleOf(result.get(end)))) {
+                end++;
+            }
+            if (end <= start) {
+                break;
+            }
+            String summary = summarizeSpan(result, start, end, config, model, scope);
+            List<ChatMessage> next = new ArrayList<>(result.size());
+            next.addAll(result.subList(0, start));
+            next.add(ChatMessage.builder().role("system")
+                    .content(summary == null || summary.isEmpty()
+                            ? "[Earlier conversation (" + (end - start)
+                                    + " messages) omitted to fit context budget]"
+                            : "[较早对话摘要（L2 压缩）]\n" + summary)
+                    .build());
+            next.addAll(result.subList(end, result.size()));
+            result = next;
         }
-        int middleStart = 1;
-        while (middleStart < messages.size() && "tool".equals(roleOf(messages.get(middleStart)))) {
-            middleStart++;
-        }
-        int middleEnd = messages.size() - keepRecent;
-        while (middleEnd > middleStart && "tool".equals(roleOf(messages.get(middleEnd)))) {
-            middleEnd++;
-        }
-        if (middleEnd - middleStart < 4) {
-            return messages;
-        }
+        return result;
+    }
+
+    /**
+     * End of the oldest contiguous span that may be compacted: it is bounded by
+     * the summarization prompt budget and never reaches into the retained
+     * recent tail.
+     */
+    private int selectSpanEnd(List<ChatMessage> messages, int start, int retainFrom,
+                              AgentCoreProperties.Context config) {
         int maxChars = Math.max(2000, config.getSummaryPromptMaxChars());
+        int end = start;
+        long used = 0;
+        while (end < retainFrom && used < maxChars) {
+            String content = messages.get(end).getContent();
+            used += (content == null ? 0 : Math.min(content.length(), 2000)) + 16L;
+            end++;
+        }
+        return end;
+    }
+
+    /**
+     * Summarize one front-anchored span. The request replays the exact
+     * conversation prefix (system prompt + leading messages) and appends the
+     * instruction as the FINAL user message, so the auxiliary call is a genuine
+     * prefix of the last routed request and reuses the provider prompt cache
+     * (DSH's compaction practice). Returns {@code ""} on any failure so the
+     * caller falls back to a deterministic omission note.
+     */
+    private String summarizeSpan(List<ChatMessage> messages, int start, int end,
+                                 AgentCoreProperties.Context config, String model, String scope) {
         StringBuilder segment = new StringBuilder();
-        for (int i = middleStart; i < middleEnd && segment.length() < maxChars; i++) {
+        for (int i = start; i < end; i++) {
             ChatMessage message = messages.get(i);
             String content = message.getContent() == null ? "" : message.getContent();
             if (content.length() > 2000) {
@@ -613,52 +675,107 @@ public class ContextManager {
             segment.append(roleOf(message)).append(": ").append(content).append('\n');
         }
         if (segment.length() == 0) {
-            return messages;
+            return "";
         }
-        String cacheKey = Integer.toHexString(segment.toString().hashCode());
-        String summary = summaryCache.get(cacheKey);
-        if (summary == null) {
-            String resolvedModel = config.getCompactionModel() != null
-                    && !config.getCompactionModel().trim().isEmpty()
-                    ? config.getCompactionModel().trim() : model;
-            try {
-                LlmInferRequest request = LlmInferRequest.builder()
-                        .model(resolvedModel)
-                        .messages(java.util.Arrays.asList(ChatMessage.builder()
-                                .role("user")
-                                .content("请把下面这段 agent 对话压缩成简短要点，只保留与后续任务相关的事实、"
-                                        + "已完成的动作和未决事项，不要寒暄：\n\n" + segment)
-                                .build()))
-                        .temperature(properties != null ? properties.getLlm().getPlanningTemperature() : 0.0)
-                        .maxTokens(config.getSummaryMaxTokens())
-                        .build();
-                LlmResult result = llmGateway.infer(request);
-                summary = result != null && result.getText() != null ? result.getText().trim() : "";
-            } catch (Exception e) {
-                log.warn("Context L2 summarize failed: {}", e.getMessage());
-                return messages;
+        String cacheKey = spanKey(model, segment.toString());
+        String cached = summaryCache.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
+        // Another instance / a previous JVM may already hold this exact span.
+        if (summaryStore != null) {
+            String stored = summaryStore.find(scope, cacheKey);
+            if (stored != null && !stored.isEmpty()) {
+                rememberSummary(cacheKey, stored);
+                return stored;
             }
+        }
+        if (llmGateway == null) {
+            return "";
+        }
+        String resolvedModel = config.getCompactionModel() != null
+                && !config.getCompactionModel().trim().isEmpty()
+                ? config.getCompactionModel().trim() : model;
+        try {
+            List<ChatMessage> summaryPrompt = new ArrayList<>(messages.subList(0, end));
+            summaryPrompt.add(ChatMessage.builder()
+                    .role("user")
+                    .content("请把上面的 agent 对话压缩成简短要点，只保留与后续任务相关的事实、"
+                            + "已完成的动作和未决事项，不要寒暄。直接输出摘要。")
+                    .build());
+            LlmInferRequest request = LlmInferRequest.builder()
+                    .model(resolvedModel)
+                    .messages(summaryPrompt)
+                    .temperature(properties != null ? properties.getLlm().getPlanningTemperature() : 0.0)
+                    .maxTokens(config.getSummaryMaxTokens())
+                    .build();
+            LlmResult result = llmGateway.infer(request);
+            String summary = result != null && result.getText() != null ? result.getText().trim() : "";
             if (summary.isEmpty()) {
-                return messages;
+                return "";
             }
-            if (summaryCache.size() > 64) {
-                summaryCache.clear();
+            rememberSummary(cacheKey, summary);
+            if (summaryStore != null) {
+                summaryStore.save(scope, cacheKey, summary);
             }
-            summaryCache.put(cacheKey, summary);
+            return summary;
+        } catch (Exception e) {
+            log.warn("Context L2 summarize failed: {}", e.getMessage());
+            return "";
         }
-        if (summary.isEmpty()) {
-            return messages;
+    }
+
+    /** Bounded in-process memo for one span's summary. */
+    private void rememberSummary(String cacheKey, String summary) {
+        if (summaryCache.size() > 64) {
+            summaryCache.clear();
         }
-        List<ChatMessage> compacted = new ArrayList<>();
-        for (int i = 0; i < middleStart; i++) {
-            compacted.add(messages.get(i));
+        summaryCache.put(cacheKey, summary);
+    }
+
+    /**
+     * Stable fingerprint of one summarized span. The model is part of the key
+     * because a different model would summarize it differently, and SHA-256
+     * avoids the collisions a 32-bit {@code hashCode} would risk across the
+     * persistent store's longer lifetime.
+     */
+    private String spanKey(String model, String segment) {
+        String material = (model == null ? "" : model) + "\n" + segment;
+        try {
+            byte[] hash = MessageDigest.getInstance("SHA-256")
+                    .digest(material.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                hex.append(String.format("%02x", b & 0xff));
+            }
+            return hex.toString();
+        } catch (Exception e) {
+            return Integer.toHexString(material.hashCode());
         }
-        compacted.add(ChatMessage.builder().role("system")
-                .content("[较早对话摘要（L2 压缩）]\n" + summary).build());
-        for (int i = middleEnd; i < messages.size(); i++) {
-            compacted.add(messages.get(i));
+    }
+
+    /**
+     * Deterministic head + marker + tail replacement (DSH's tool-result pruner).
+     * The emitted text stays below the budget, so re-running this is idempotent
+     * and the message renders byte-identically in every later request.
+     */
+    private ChatMessage prunedToolResult(ChatMessage message, int maxChars) {
+        String content = message.getContent();
+        int head = Math.max(1, (int) (maxChars * 0.6));
+        int tail = Math.max(0, (int) (maxChars * 0.2));
+        int tailStart = Math.max(head, content.length() - tail);
+        if (tailStart >= content.length()) {
+            tailStart = content.length();
         }
-        return compacted;
+        String pruned = content.substring(0, Math.min(head, content.length()))
+                + "\n\n[... middle pruned: " + content.length() + " chars ...]\n\n"
+                + content.substring(tailStart);
+        return ChatMessage.builder()
+                .role("tool")
+                .toolCallId(message.getToolCallId())
+                .name(message.getName())
+                .content(pruned)
+                .build();
     }
 
     private String roleOf(ChatMessage message) {

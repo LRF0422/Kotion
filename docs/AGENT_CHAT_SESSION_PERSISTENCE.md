@@ -23,7 +23,24 @@ UI transcript 只是它的**纯投影**（可重建缓存）。这是对 DSH 分
    assistant/tool 消息插入会话日志（`inputMessageCount - 1` 位置，见下）。
 4. **UI 投影由规范日志纯推导**。`toUi(modelLog)` 每次写库时重算，二者不可能分叉；
    不再单独 append UI。
-5. **压缩交给 `ContextManager.assemble`**（原有 L1/L2/L3），引擎日志只做容量上限（400 条）。
+5. **压缩交给 `ContextManager.assemble`**，引擎日志只做容量上限（400 条）。
+   压缩是**前锚定、一次性**的：超长工具结果按「头 + 标记 + 尾」确定性裁剪（与年龄无关，幂等），
+   超预算时按固定的 prompt 预算把**最旧**的连续区段折叠成摘要，直到装得下。
+   这样模型可见前缀是 append-only 日志的纯函数，不会随尾部增长被反复改写（provider 前缀缓存只增不减）。
+6. **每轮注入上下文是可持久化的独立消息**。记忆 / 画像 / 技能片段 / 滚动摘要 / 绑定页面提示
+   不再作为「本轮插入、下轮丢弃」的临时消息，而是由 `DefaultRunSupervisor` 组进
+   `ContextManager.buildInjectedContextMessage`，随用户轮一起写入规范日志（`name=__context__`）。
+   数据模型里上下文块因此始终位于历史之后、本轮用户消息之前，下一轮请求是上一轮请求的
+   **字节前缀扩展**，跨轮缓存不再在注入点断裂；UI 投影按标记跳过该消息，不会出现气泡。
+   绑定页面提示走 `CreateRunRequest.contextNote`，**不再拼进 `systemPrompt`（index 0）**。
+7. **压缩摘要持久化，但不重写 model log**。摘要写入 `CompactionSummaryStore`
+   （Redis：`agent:compaction:summary:{conversation}:{sha256(model+span)}`，TTL 30 天，失败即当未命中）。
+   之所以不把压缩后的会话写回 `model_messages_json`：该列同时是 UI transcript 的来源，覆盖它会让
+   已被压缩的历史回合从用户回滚里消失（DSH 能压缩 surface 是因为 UI 读独立的事件日志，本仓库尚未分层）。
+   持久化「摘要」消除了压缩里唯一的非确定性 —— 换实例 / 重启后重建出的模型前缀与上一轮一致。
+8. **run 内工具数组冻结**。deferred（技能自带）工具不再在首次调用时并入 `tools`：provider 把工具
+   渲染在消息之前，中途并入会让此前每一步的前缀缓存全部作废。其参数结构改为随首次调用的结果返回
+   （`AgentLoop.deferredSchemaNote`），模型照样在重试前拿到完整签名。
 
 ## 顺序与并发
 

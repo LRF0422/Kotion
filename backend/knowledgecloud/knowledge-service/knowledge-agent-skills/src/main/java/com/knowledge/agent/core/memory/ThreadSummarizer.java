@@ -3,6 +3,7 @@ package com.knowledge.agent.core.memory;
 import com.knowledge.agent.api.dto.ChatMessage;
 import com.knowledge.agent.core.checkpoint.Checkpoint;
 import com.knowledge.agent.core.checkpoint.CheckpointStore;
+import com.knowledge.agent.core.context.ContextManager;
 import com.knowledge.agent.core.entity.AgentThreadEntity;
 import com.knowledge.agent.core.llm.LlmGateway;
 import com.knowledge.agent.core.llm.LlmInferRequest;
@@ -162,7 +163,7 @@ public class ThreadSummarizer {
     private String renderConversation(List<ChatMessage> messages) {
         StringBuilder builder = new StringBuilder();
         for (ChatMessage message : messages) {
-            if (message == null) {
+            if (message == null || ContextManager.isInjectedContext(message)) {
                 continue;
             }
             builder.append("[").append(message.getRole()).append("] ");

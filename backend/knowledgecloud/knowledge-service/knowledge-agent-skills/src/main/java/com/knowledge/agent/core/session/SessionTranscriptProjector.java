@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.node.TextNode;
 import com.knowledge.agent.api.dto.ChatMessage;
 import com.knowledge.agent.core.checkpoint.Checkpoint;
 import com.knowledge.agent.core.checkpoint.CheckpointStore;
+import com.knowledge.agent.core.context.ContextManager;
 import com.knowledge.agent.core.entity.AgentChatSessionEntity;
 import com.knowledge.agent.core.memory.ThreadSummarizer;
 import com.knowledge.agent.core.run.AgentRun;
@@ -97,6 +98,21 @@ public class SessionTranscriptProjector {
 
     /** Accumulate the caller's new turn and return the full context history. */
     public List<ChatMessage> prepareHistory(AgentRun run, List<ChatMessage> input) {
+        return prepareHistory(run, input, null);
+    }
+
+    /**
+     * As {@link #prepareHistory(AgentRun, List)}, but first appends the
+     * engine-injected per-turn context block (when present) immediately before
+     * the new user turn. Persisting it keeps the model log append-only, which is
+     * what lets the provider's prefix cache survive into the next turn;
+     * {@link #toUi} skips it so it never renders as a user bubble.
+     *
+     * @param contextMessage durable context message from
+     *     {@link ContextManager#buildInjectedContextMessage(String)}, or null
+     */
+    public List<ChatMessage> prepareHistory(AgentRun run, List<ChatMessage> input,
+                                            ChatMessage contextMessage) {
         if (!eligible(run)) {
             return input != null ? input : new ArrayList<ChatMessage>();
         }
@@ -117,10 +133,16 @@ public class SessionTranscriptProjector {
                     // the canonical log becomes the next run's context.
                     repairToolPairing(state.messages, state::insertAt);
                     if (state.messages.isEmpty()) {
+                        if (contextMessage != null) {
+                            state.add(forLog(contextMessage));
+                        }
                         appendInput(state, input);
                     } else {
                         ChatMessage newUser = lastUser(input);
                         if (newUser != null && !isDuplicateLastUser(state.messages, newUser)) {
+                            if (contextMessage != null) {
+                                state.add(forLog(contextMessage));
+                            }
                             state.add(forLog(newUser));
                         }
                     }
@@ -402,6 +424,12 @@ public class SessionTranscriptProjector {
             long timestamp = state.timeAt(index);
             String role = role(message);
             if ("user".equals(role)) {
+                if (ContextManager.isInjectedContext(message)) {
+                    // Engine-injected per-turn context: part of the model log
+                    // (and therefore of the cacheable prefix) but never a
+                    // user-visible turn.
+                    continue;
+                }
                 finalizeRun(run, runActivity, runSteps, answerStepId, answerText, runReasoning);
                 run = null;
                 runSteps = null;

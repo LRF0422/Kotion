@@ -11,6 +11,8 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -70,19 +72,25 @@ class ContextManagerPrefixStabilityTest {
 
     @Test
     void volatileContextIsAppendedBehindHistoryAndAheadOfTheNewTurn() {
-        List<ChatMessage> messages = firstTurn();
+        List<ChatMessage> messages = new ArrayList<>(Arrays.asList(
+                contextManager.buildSystemMessage(run(), Arrays.asList("编辑器规则: 只改必要的地方")),
+                ChatMessage.builder().role("user").content("帮我把标题改一下").build(),
+                ChatMessage.builder().role("assistant").content("好的").build(),
+                ChatMessage.builder().role("user").content("再改一下正文").build()));
 
         contextManager.attachVolatileContext(messages, "【关于用户的长期记忆】\n- [preference] 用户偏好中文");
 
-        assertEquals(3, messages.size(), "one injected message is added after history");
+        assertEquals(5, messages.size(), "one injected message is added after history");
         assertEquals("system", messages.get(0).getRole());
-        assertEquals("user", messages.get(1).getRole());
         assertEquals("帮我把标题改一下", messages.get(1).getContent(),
                 "previously cached history keeps its bytes at its original index");
-        assertEquals("user", messages.get(2).getRole());
-        assertTrue(messages.get(2).getContent().contains("用户偏好中文"));
-        assertTrue(messages.get(2).getContent().contains("不是用户指令"),
+        assertEquals("好的", messages.get(2).getContent());
+        assertEquals("user", messages.get(3).getRole());
+        assertTrue(messages.get(3).getContent().contains("用户偏好中文"));
+        assertTrue(messages.get(3).getContent().contains("不是用户指令"),
                 "the injected block must be marked as context, not as an instruction");
+        assertEquals("再改一下正文", messages.get(4).getContent(),
+                "the user's own utterance stays behind the injected block");
     }
 
     @Test
@@ -121,6 +129,23 @@ class ContextManagerPrefixStabilityTest {
     }
 
     @Test
+    void injectedContextIsADurableMarkedUserMessage() {
+        ChatMessage injected = contextManager.buildInjectedContextMessage(
+                "【关于用户的长期记忆】\n- 用户偏好中文");
+
+        assertNotNull(injected);
+        assertEquals("user", injected.getRole());
+        assertEquals(ContextManager.INJECTED_CONTEXT_NAME, injected.getName());
+        assertTrue(injected.getContent().startsWith("<context>"),
+                "the block must be delimited so the model reads it as context");
+        assertTrue(injected.getContent().contains("用户偏好中文"));
+        assertTrue(ContextManager.isInjectedContext(injected));
+
+        assertNull(contextManager.buildInjectedContextMessage("   "),
+                "an empty context must not add a message");
+    }
+
+    @Test
     void nothingIsInjectedWhenThereIsNoContext() {
         List<ChatMessage> messages = firstTurn();
 
@@ -141,6 +166,7 @@ class ContextManagerPrefixStabilityTest {
         contextManager.attachVolatileContext(turnTwo, "记忆 B");
 
         assertEquals(turnOne.get(0).getContent(), turnTwo.get(0).getContent());
-        assertNotEquals(turnOne.get(2).getContent(), turnTwo.get(2).getContent());
+        // The injected block sits immediately before the user turn.
+        assertNotEquals(turnOne.get(1).getContent(), turnTwo.get(1).getContent());
     }
 }

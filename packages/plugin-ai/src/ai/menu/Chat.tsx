@@ -722,9 +722,11 @@ export const ExpandableChatDemo: React.FC<{
             setTargetPage(runTarget)
         }
 
-        // The bound-page notice is model context, not part of the user's turn:
-        // send it as this run's system prompt. Baking it into the user message
-        // persisted it with the transcript, so a reload showed it in the bubble.
+        // The bound-page notice is volatile model context, not part of the
+        // user turn and not an invariant system rule. Send it as contextNote so
+        // the backend persists it as an append-only <context> block behind the
+        // cacheable history — putting it in the system prompt would rewrite
+        // message index 0 and invalidate the whole conversation prefix cache.
         const boundPageNote = runTarget
             ? t('ai.chat.boundPagePrefix', { title: runTarget.title })
             : undefined
@@ -747,7 +749,7 @@ export const ExpandableChatDemo: React.FC<{
                 mode: 'execute',
                 temperature: modelParams.temperature,
                 maxTokens: modelParams.maxTokens,
-                systemPrompt: boundPageNote,
+                contextNote: boundPageNote,
             })
         } catch (err: any) {
             setError(classifyError(err))

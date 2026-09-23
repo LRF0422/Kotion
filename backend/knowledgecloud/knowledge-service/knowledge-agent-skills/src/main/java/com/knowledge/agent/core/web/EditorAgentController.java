@@ -86,6 +86,7 @@ public class EditorAgentController {
         cmd.setTemperature(request.getTemperature());
         cmd.setMaxTokens(request.getMaxTokens());
         cmd.setSystemPrompt(request.getSystemPrompt());
+        cmd.setContextNote(request.getContextNote());
         cmd.setNoTools(request.isNoTools());
         cmd.setSpaceId(request.getSpaceId());
         cmd.setPageId(request.getPageId());

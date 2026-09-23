@@ -113,9 +113,16 @@ export interface CreateRunInput {
     skills?: AgentSkillInput[]
     /**
      * Extra system-prompt text appended after the backend's base prompt —
-     * the client's editor rules and page/document guidance.
+     * invariant host/editor rules only (they sit at message index 0 and must
+     * not change between turns).
      */
     systemPrompt?: string
+    /**
+     * Per-turn volatile context (e.g. the bound page header). The backend
+     * persists it as an append-only <context> block behind the cacheable
+     * history, so a page switch cannot invalidate the prefix cache.
+     */
+    contextNote?: string
     temperature?: number
     maxTokens?: number
     /** Pure-text mode: no tools offered to the model at all. */

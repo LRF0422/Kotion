@@ -41,6 +41,14 @@ public class CreateRunRequest {
      */
     private String systemPrompt;
 
+    /**
+     * Per-run volatile context (e.g. the bound page title). Appended to the
+     * injected context block behind the cacheable history instead of the
+     * invariant system prompt, so a page switch cannot invalidate the whole
+     * conversation's prefix cache.
+     */
+    private String contextNote;
+
     /** Pure-text mode: no tools offered to the model at all. */
     private boolean noTools;
 

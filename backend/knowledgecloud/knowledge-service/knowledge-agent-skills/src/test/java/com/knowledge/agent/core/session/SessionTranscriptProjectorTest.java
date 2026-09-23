@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.knowledge.agent.api.dto.ChatMessage;
 import com.knowledge.agent.core.checkpoint.Checkpoint;
 import com.knowledge.agent.core.checkpoint.CheckpointStore;
+import com.knowledge.agent.core.context.ContextManager;
 import com.knowledge.agent.core.entity.AgentChatSessionEntity;
 import com.knowledge.agent.core.run.AgentRun;
 import org.junit.jupiter.api.BeforeEach;
@@ -178,6 +179,68 @@ class SessionTranscriptProjectorTest {
         run.setParentRunId("parent");
         projector.onRunTerminal(run);
         verify(store, never()).saveTranscriptCas(any(AgentChatSessionEntity.class));
+    }
+
+    @Test
+    void prepareHistoryPersistsInjectedContextBeforeTheUserTurnAndHidesItFromUi() throws Exception {
+        when(store.get(1L, 2L, "conv-1")).thenReturn(null);
+        ContextManager contextManager = new ContextManager();
+        ChatMessage injected = contextManager.buildInjectedContextMessage(
+                "【关于用户的长期记忆】\n- 用户偏好中文");
+
+        List<ChatMessage> history = projector.prepareHistory(run("run-1"),
+                Collections.singletonList(user("你好")), injected);
+
+        assertEquals(2, history.size());
+        assertEquals("user", history.get(0).getRole());
+        assertEquals(ContextManager.INJECTED_CONTEXT_NAME, history.get(0).getName());
+        assertEquals("你好", history.get(1).getContent());
+
+        AgentChatSessionEntity saved = captureSaved();
+        JsonNode model = mapper.readTree(saved.getModelMessagesJson());
+        assertEquals(2, model.size());
+        assertEquals(ContextManager.INJECTED_CONTEXT_NAME,
+                model.get(0).path("m").path("name").asText());
+        assertTrue(model.get(0).path("m").path("content").asText().startsWith("<context>"));
+        assertEquals("你好", model.get(1).path("m").path("content").asText());
+
+        JsonNode ui = mapper.readTree(saved.getMessagesJson());
+        assertEquals(1, ui.size(),
+                "the injected context block must never render as a user bubble");
+        assertEquals("user", ui.get(0).path("sender").asText());
+        assertEquals("你好", ui.get(0).path("content").asText());
+    }
+
+    @Test
+    void injectedContextKeepsTheConversationLogAppendOnly() throws Exception {
+        ContextManager contextManager = new ContextManager();
+        when(store.get(1L, 2L, "conv-1")).thenReturn(null);
+
+        List<ChatMessage> turn1 = projector.prepareHistory(run("run-1"),
+                Collections.singletonList(user("第一轮")),
+                contextManager.buildInjectedContextMessage("记忆 A"));
+        assertEquals(2, turn1.size());
+
+        // The engine already persisted turn 1's produced answer.
+        AgentChatSessionEntity existing = new AgentChatSessionEntity();
+        existing.setModelMessagesJson("[{\"m\":" + mapper.writeValueAsString(turn1.get(0)) + ",\"t\":1},"
+                + "{\"m\":{\"role\":\"user\",\"content\":\"第一轮\"},\"t\":2},"
+                + "{\"m\":{\"role\":\"assistant\",\"content\":\"好的\"},\"t\":3}]");
+        when(store.get(1L, 2L, "conv-1")).thenReturn(existing);
+
+        List<ChatMessage> turn2 = projector.prepareHistory(run("run-2"),
+                Collections.singletonList(user("第二轮")),
+                contextManager.buildInjectedContextMessage("记忆 B"));
+
+        // turn2 = [ctx1, user1, assistant, ctx2, user2]: the previous turn's
+        // exact bytes survive at their original indices, so the next model
+        // request is a genuine prefix extension and the provider cache hits.
+        assertEquals(5, turn2.size());
+        assertEquals(turn1.get(0).getContent(), turn2.get(0).getContent());
+        assertEquals("第一轮", turn2.get(1).getContent());
+        assertEquals("好的", turn2.get(2).getContent());
+        assertEquals(ContextManager.INJECTED_CONTEXT_NAME, turn2.get(3).getName());
+        assertEquals("第二轮", turn2.get(4).getContent());
     }
 
     @Test

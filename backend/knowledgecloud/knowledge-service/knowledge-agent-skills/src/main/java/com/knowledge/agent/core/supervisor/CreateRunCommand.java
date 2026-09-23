@@ -64,6 +64,20 @@ public class CreateRunCommand {
     /** Extra system-prompt text appended after the base prompt (client editor rules). */
     private String systemPrompt;
 
+    /**
+     * Per-run volatile context note (e.g. the bound page). It is folded into
+     * the appended context block — never into the invariant system prefix —
+     * and persisted with the turn so the conversation log stays append-only.
+     */
+    private String contextNote;
+
+    /**
+     * True when the injected per-turn context is already part of the supplied
+     * conversation history (the supervisor persisted it), so the loop must not
+     * inject a second copy.
+     */
+    private boolean contextInHistory;
+
     /** Step budget (sub-runs may pass their own; null = config default). */
     private Integer maxSteps;
 

@@ -34,7 +34,7 @@ public class ProfileExtractionService {
 
     /** Context blocks this system injects — never treat them as user evidence. */
     private static final String[] INJECTED_MARKERS = {
-            "【用户画像", "【关于用户的长期记忆", "【本次会话的近期进展"
+            "<context>", "【用户画像", "【关于用户的长期记忆", "【本次会话的近期进展"
     };
     private static final int MAX_EXCERPT_CHARS = 200;
 
@@ -219,6 +219,11 @@ public class ProfileExtractionService {
                 }
                 String role = message.path("role").asText("");
                 if (!"user".equalsIgnoreCase(role) && !"assistant".equalsIgnoreCase(role)) {
+                    continue;
+                }
+                // Engine-injected per-turn context is not a user utterance.
+                if (com.knowledge.agent.core.context.ContextManager.INJECTED_CONTEXT_NAME
+                        .equals(message.path("name").asText(""))) {
                     continue;
                 }
                 String content = message.path("content").asText("");

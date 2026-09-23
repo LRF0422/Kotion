@@ -1,6 +1,7 @@
 package com.knowledge.agent.core.savedskill;
 
 import com.knowledge.agent.api.dto.ChatMessage;
+import com.knowledge.agent.core.context.ContextManager;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -57,6 +58,9 @@ public class ExplicitSkillSaveIntentPolicy {
         }
         for (int i = messages.size() - 1; i >= 0; i--) {
             ChatMessage message = messages.get(i);
+            if (ContextManager.isInjectedContext(message)) {
+                continue; // memory/profile context is not user consent
+            }
             if (message != null && "user".equalsIgnoreCase(message.getRole())
                     && message.getContent() != null && !message.getContent().trim().isEmpty()) {
                 return message.getContent().trim();

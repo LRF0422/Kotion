@@ -97,12 +97,12 @@ export interface StartTurnOptions {
     temperature?: number
     maxTokens?: number
     /**
-     * Extra system-prompt text for THIS run only, appended after the host's
-     * {@link UseEditorAgentOptions.systemPrompt}. It rides in the run's system
-     * message (and checkpoint), never in the persisted user turn, so per-turn
-     * context (e.g. the bound page) cannot leak into the visible transcript.
+     * Per-turn volatile context (e.g. the bound page header). The backend
+     * appends it to the persisted <context> block behind the cacheable
+     * history — never into the invariant system prefix, and never as a visible
+     * user bubble.
      */
-    systemPrompt?: string
+    contextNote?: string
 }
 
 export interface EditorAgentApi {
@@ -248,18 +248,18 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
                 }
                 if (!mountedRef.current || generation !== generationRef.current) return
                 createAttempted = true
-                // Host rules stay prefix-cacheable; a per-run fragment (the bound
-                // page) is appended behind them for this run only.
-                const runSystemPrompt = [systemPrompt, opts.systemPrompt]
-                    .map(part => (part ?? '').trim())
-                    .filter(part => part.length > 0)
-                    .join('\n\n')
+                // Host rules are invariant for the conversation and stay at
+                // message index 0 (the cacheable prefix). Per-run context (the
+                // bound page) travels in contextNote, which the backend
+                // persists as an append-only block behind the history.
+                const runSystemPrompt = (systemPrompt ?? '').trim()
                 const run = await client.createRun({
                     conversationId,
                     messages,
                     tools,
                     skills,
                     systemPrompt: runSystemPrompt.length > 0 ? runSystemPrompt : undefined,
+                    contextNote: opts.contextNote,
                     spaceId,
                     pageId,
                     model: opts.model,
