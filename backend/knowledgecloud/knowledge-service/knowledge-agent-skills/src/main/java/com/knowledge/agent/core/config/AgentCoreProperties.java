@@ -139,10 +139,11 @@ public class AgentCoreProperties {
         /**
          * Max characters of one deferred tool's description in the injected
          * directory (0 = omit descriptions, keeping only name + signature).
-         * The directory is a constant prefix, so this directly bounds a large
-         * share of every request.
+         * The directory is a constant prefix on every request. It measured
+         * ~35k chars for 132 tools, ~200 of which were description text that is
+         * already covered by the skill fragments — so 0 is the default.
          */
-        private int deferredToolDescLimit = 160;
+        private int deferredToolDescLimit = 0;
         /** Max parameters rendered per deferred-tool signature. */
         private int deferredToolParamLimit = 8;
     }

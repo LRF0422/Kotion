@@ -1,6 +1,7 @@
 package com.knowledge.agent.core.context;
 
 import com.knowledge.agent.api.dto.ChatMessage;
+import com.knowledge.agent.core.config.AgentCoreProperties;
 import com.knowledge.agent.core.run.AgentRun;
 import com.knowledge.agent.core.tool.ToolKind;
 import com.knowledge.agent.core.tool.ToolSpec;
@@ -49,12 +50,26 @@ class ContextManagerDeferredToolsTest {
         String volatileContext = contextManager.buildVolatileContext(null, null,
                 new ArrayList<>(Arrays.asList(insertChart())), null);
 
-        assertTrue(volatileContext.contains("insertChart(chartType: string, data?: object): 插入图表"),
+        assertTrue(volatileContext.contains("insertChart(chartType: string, data?: object)"),
                 "directory must carry the call signature; was: " + volatileContext);
+        assertFalse(volatileContext.contains("插入图表"),
+                "by default the directory is name + signature only (descriptions live in the skill fragments)");
     }
 
     @Test
-    void trimsLongDescriptionsToTheConfiguredBudget() {
+    void omitsDescriptionsWhenTheBudgetIsZero() {
+        String content = contextManager.buildVolatileContext(null, null,
+                new ArrayList<>(Arrays.asList(insertChart())), null);
+
+        assertTrue(content.contains("insertChart(chartType: string, data?: object)"));
+        assertFalse(content.contains("插入图表"));
+    }
+
+    @Test
+    void trimsLongDescriptionsOnlyWhenABudgetIsConfigured() {
+        AgentCoreProperties props = new AgentCoreProperties();
+        props.getContext().setDeferredToolDescLimit(120);
+        ContextManager configured = new ContextManager(props);
         StringBuilder longDescription = new StringBuilder();
         for (int i = 0; i < 600; i++) {
             longDescription.append('x');
@@ -62,13 +77,13 @@ class ContextManagerDeferredToolsTest {
         ToolSpec verbose = ToolSpec.of("verbose", longDescription.toString(),
                 new LinkedHashMap<>(), ToolKind.FRONTEND, true, "client");
 
-        String content = contextManager.buildVolatileContext(null, null,
+        String content = configured.buildVolatileContext(null, null,
                 new ArrayList<>(Arrays.asList(verbose)), null);
 
         assertTrue(content.contains("verbose()"));
-        assertFalse(content.contains(longDescription.toString()),
-                "a 600-char description must be trimmed out of the directory");
         assertTrue(content.contains("…"));
+        assertFalse(content.contains(longDescription.toString()),
+                "a 600-char description must be trimmed to the configured budget");
     }
 
     @Test
@@ -99,7 +114,7 @@ class ContextManagerDeferredToolsTest {
 
         String content = contextManager.buildVolatileContext(null, null, deferred, null);
 
-        assertTrue(content.contains("ping(): no args"));
+        assertTrue(content.contains("ping()"));
         assertTrue(content.contains("weird()"));
     }
 
