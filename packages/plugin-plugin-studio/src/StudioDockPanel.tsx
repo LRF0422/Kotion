@@ -44,8 +44,11 @@ import {
     useDevCapability,
     useHasDesktop,
     useInstallBundle,
+    useInstalledPlugins,
+    usePluginManagement,
     useProjects,
 } from './studio-service'
+import { usePublishProject } from './StudioMarketplacePanel'
 
 type Busy = 'start' | 'stop' | 'build' | 'uninstall' | null
 
@@ -82,8 +85,12 @@ export const StudioDockPanel: React.FC<DockPanelProps> = ({ close }) => {
     const isDesktop = useHasDesktop()
     const desktop = useOptionalService('desktop')
     const pluginHost = useOptionalService('pluginHost')
+    const pluginManagement = usePluginManagement()
     const installBundle = useInstallBundle()
     const { projects, addProject, removeProject, touchProject } = useProjects()
+    const installed = useInstalledPlugins()
+    const [view, setView] = useState<'projects' | 'installed'>('projects')
+    const publish = usePublishProject()
 
     const [managed, setManaged] = useState<DevProjectEntry[]>([])
     const [selectedRoot, setSelectedRoot] = useState<string | undefined>()
@@ -220,10 +227,36 @@ export const StudioDockPanel: React.FC<DockPanelProps> = ({ close }) => {
             await refreshStatus()
         })
 
+    const publishProject = (row: StudioRow) => {
+        setError(null)
+        void publish({ root: row.root, pluginKey: row.pluginKey, name: row.label }).catch((cause) => {
+            setError(String((cause as Error)?.message ?? cause))
+        })
+    }
+
     const removeFromList = () => {
         if (!selectedRoot) return
         removeProject(selectedRoot)
         setSelectedRoot(undefined)
+    }
+
+    const sourceLabel = (source: string) =>
+        source === 'system'
+            ? t('pluginStudio.sourceSystem')
+            : source === 'dev'
+              ? t('pluginStudio.sourceDev')
+              : t('pluginStudio.sourceInstalled')
+
+    const uninstallInstalled = async (name: string) => {
+        if (!pluginManagement) return
+        setError(null)
+        try {
+            if (!pluginManagement.uninstall(name)) {
+                setError(t('pluginStudio.uninstallFailed', { name }))
+            }
+        } catch (cause) {
+            setError(String((cause as Error)?.message ?? cause))
+        }
     }
 
     const addExisting = async () => {
@@ -320,6 +353,73 @@ export const StudioDockPanel: React.FC<DockPanelProps> = ({ close }) => {
                 </div>
             </header>
 
+            <div className="flex items-center gap-1 border-b px-2 py-1.5">
+                <Button
+                    variant={view === 'projects' ? 'secondary' : 'ghost'}
+                    size="sm"
+                    className="h-6 text-[11px]"
+                    onClick={() => setView('projects')}
+                >
+                    {t('pluginStudio.tabProjects')}
+                </Button>
+                <Button
+                    variant={view === 'installed' ? 'secondary' : 'ghost'}
+                    size="sm"
+                    className="h-6 text-[11px]"
+                    onClick={() => setView('installed')}
+                >
+                    {t('pluginStudio.tabInstalled')}
+                    <Badge variant="secondary" className="ml-1 text-[10px]">
+                        {installed.length}
+                    </Badge>
+                </Button>
+            </div>
+
+            {view === 'installed' ? (
+                <ScrollArea className="flex-1">
+                    <div className="space-y-0.5 p-2">
+                        {installed.length === 0 ? (
+                            <p className="px-1 py-2 text-xs text-muted-foreground">
+                                {t('pluginStudio.installedEmpty')}
+                            </p>
+                        ) : (
+                            installed.map((plugin) => {
+                                const removable = pluginManagement?.isRemovable(plugin.name) ?? false
+                                return (
+                                    <div
+                                        key={plugin.name}
+                                        className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs"
+                                    >
+                                        <span className="min-w-0 flex-1">
+                                            <span className="block truncate font-medium">{plugin.name}</span>
+                                            <span className="block truncate text-[10px] text-muted-foreground">
+                                                {plugin.pluginKey}
+                                                {plugin.version ? ' · ' + plugin.version : ''}
+                                            </span>
+                                        </span>
+                                        <Badge variant="secondary" className="shrink-0 text-[10px]">
+                                            {sourceLabel(plugin.source)}
+                                        </Badge>
+                                        {removable ? (
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-6 w-6 shrink-0 p-0 text-muted-foreground hover:text-destructive"
+                                                title={t('pluginStudio.uninstallHint')}
+                                                onClick={() => void uninstallInstalled(plugin.name)}
+                                            >
+                                                <Trash2 className="h-3 w-3" />
+                                            </Button>
+                                        ) : null}
+                                    </div>
+                                )
+                            })
+                        )}
+                    </div>
+                </ScrollArea>
+            ) : (
+                <>
+
             <div className="border-b">
                 <ScrollArea className="max-h-44">
                     <div className="space-y-0.5 p-2">
@@ -332,34 +432,50 @@ export const StudioDockPanel: React.FC<DockPanelProps> = ({ close }) => {
                                 const isSelected = row.root === selectedRoot
                                 const state = isSelected ? status?.state : undefined
                                 return (
-                                    <button
+                                    <div
                                         key={row.root}
-                                        type="button"
-                                        onClick={() => {
-                                            setSelectedRoot(row.root)
-                                            touchProject(row.root)
-                                        }}
                                         className={cn(
-                                            'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors',
+                                            'flex items-center gap-1 rounded-md transition-colors',
                                             isSelected ? 'bg-primary/10' : 'hover:bg-accent',
                                         )}
                                     >
-                                        <span
-                                            className={cn(
-                                                'h-1.5 w-1.5 shrink-0 rounded-full',
-                                                dotTone(state, row.active),
-                                            )}
-                                        />
-                                        <span className="min-w-0 flex-1">
-                                            <span className="block truncate font-medium">{row.label}</span>
-                                            <span className="block truncate text-[10px] text-muted-foreground">
-                                                {row.pluginKey || row.root}
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setSelectedRoot(row.root)
+                                                touchProject(row.root)
+                                            }}
+                                            className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left text-xs"
+                                        >
+                                            <span
+                                                className={cn(
+                                                    'h-1.5 w-1.5 shrink-0 rounded-full',
+                                                    dotTone(state, row.active),
+                                                )}
+                                            />
+                                            <span className="min-w-0 flex-1">
+                                                <span className="block truncate font-medium">{row.label}</span>
+                                                <span className="block truncate text-[10px] text-muted-foreground">
+                                                    {row.pluginKey || row.root}
+                                                </span>
                                             </span>
-                                        </span>
-                                        {row.active ? (
-                                            <CheckCircle2 className="h-3 w-3 shrink-0 text-emerald-500" />
-                                        ) : null}
-                                    </button>
+                                            {row.active ? (
+                                                <CheckCircle2 className="h-3 w-3 shrink-0 text-emerald-500" />
+                                            ) : null}
+                                        </button>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="mr-1 h-6 w-6 shrink-0 p-0 text-muted-foreground hover:text-foreground"
+                                            title={t('pluginStudio.publishAction')}
+                                            onClick={() => {
+                                                setSelectedRoot(row.root)
+                                                publishProject(row)
+                                            }}
+                                        >
+                                            <Upload className="h-3 w-3" />
+                                        </Button>
+                                    </div>
                                 )
                             })
                         )}
@@ -433,6 +549,16 @@ export const StudioDockPanel: React.FC<DockPanelProps> = ({ close }) => {
                         </Button>
                         <Button
                             size="sm"
+                            variant="outline"
+                            className="h-7 text-[11px]"
+                            title={t('pluginStudio.publishAction')}
+                            onClick={() => selected && publishProject(selected)}
+                        >
+                            <Upload className="mr-1 h-3 w-3" />
+                            {t('pluginStudio.publishAction')}
+                        </Button>
+                        <Button
+                            size="sm"
                             variant="ghost"
                             className="h-7 text-[11px]"
                             title={t('pluginStudio.uninstallHint')}
@@ -490,6 +616,8 @@ export const StudioDockPanel: React.FC<DockPanelProps> = ({ close }) => {
                     )}
                 </div>
             </ScrollArea>
+                </>
+            )}
 
             <Dialog open={scaffoldOpen} onOpenChange={setScaffoldOpen}>
                 <DialogContent className="max-w-md">

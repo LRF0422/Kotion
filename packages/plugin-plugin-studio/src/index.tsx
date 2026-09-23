@@ -1,10 +1,9 @@
 /**
  * Plugin Studio — a plugin that builds plugins.
  *
- * Everything interesting lives behind two contribution points:
- *  - a settings panel (`StudioSettings`) for managing projects end to end
- *  - a side-dock panel (`StudioDockPanel`) that follows the active project's
- *    build state while you keep working in the app
+ * Everything interesting lives behind one contribution point: a side-dock
+ * panel (`StudioDockPanel`) that manages the user's dev projects (start/stop,
+ * hot reload, publish) and installed plugins while they keep working.
  *
  * The plugin is desktop-only: `desktopOnly` is honest metadata here, because
  * bundling needs a Node child process, which only the Electron host provides.
@@ -14,7 +13,6 @@
 import React from 'react'
 import { KPlugin, resolveOptionalService, type PluginConfig } from '@kn/common'
 import { Wrench } from '@kn/icon'
-import { StudioSettings } from './StudioSettings'
 import { StudioDockPanel } from './StudioDockPanel'
 import { createStudioTools } from './studio-tools'
 import { pluginAuthoringSkill } from './skills/plugin-authoring'
@@ -31,6 +29,14 @@ const studioTools = createStudioTools({
     getPluginHost: () =>
         resolveOptionalService('pluginHost') as ReturnType<
             Parameters<typeof createStudioTools>[0]['getPluginHost']
+        >,
+    getPluginManagement: () =>
+        resolveOptionalService('pluginManagement') as ReturnType<
+            NonNullable<Parameters<typeof createStudioTools>[0]['getPluginManagement']>
+        >,
+    getMarketplace: () =>
+        resolveOptionalService('pluginMarketplace') as ReturnType<
+            NonNullable<Parameters<typeof createStudioTools>[0]['getMarketplace']>
         >,
 })
 
@@ -63,14 +69,7 @@ export const pluginStudio = new PluginStudio({
             skills: [pluginAuthoringSkill],
         },
     ],
-    settings: {
-        key: 'plugin-studio',
-        // i18n key; the host resolves it with the raw string as fallback.
-        label: 'pluginStudio.title',
-        description: 'pluginStudio.settingsDesc',
-        icon: React.createElement(Wrench, { className: 'h-4 w-4' }),
-        component: StudioSettings,
-    },
+
     dockPanels: [
         {
             id: 'plugin-studio-status',
@@ -143,6 +142,40 @@ export const pluginStudio = new PluginStudio({
                     autoInstallFailed: 'Auto-install failed: {{message}}',
                     selectFirst: 'Select a plugin project first',
                     unsupported: 'This host does not support plugin development',
+                    publishTitle: 'Publish to marketplace',
+                    publishDesc: 'Build this project, upload the artifact, then submit it for review or publish a new version.',
+                    publishListed: 'Listed',
+                    publishNew: 'New plugin',
+                    publishSelectProject: 'Select a plugin project first.',
+                    publishNoBuild: 'Build failed; nothing to publish.',
+                    publishSubmitAction: 'Submit for review',
+                    publishVersionAction: 'Publish version',
+                    publishSubmitDone: 'Submitted for review.',
+                    publishVersionDone: 'Published version {{version}}.',
+                    marketplaceUnavailable: 'This host does not expose the plugin marketplace service.',
+                    upgradeTitle: 'Plugin updates',
+                    upgradeDesc: 'Installed plugins with a newer version available.',
+                    upgradeAction: 'Upgrade',
+                    upgradeEmpty: 'Everything is up to date.',
+                    version: 'Version',
+                    category: 'Category',
+                    descriptionLabel: 'Description',
+                    descriptionPlaceholder: 'What does this plugin do? (at least 10 characters)',
+                    tagsLabel: 'Tags (comma separated)',
+                    tabProjects: 'Projects',
+                    tabInstalled: 'Installed',
+                    tabPublish: 'Publish',
+                    versionDescTitle: 'Version notes',
+                    versionDescFeature: 'Feature (what it does)',
+                    versionDescDetail: 'Detail (how it works)',
+                    versionDescChangeLog: 'Change log (what changed in this version)',
+                    versionDescRequired: 'Add at least one version note (Feature / Detail / ChangeLog).',
+                    publishAction: 'Publish',
+                    installedEmpty: 'No installed plugins yet.',
+                    sourceSystem: 'System',
+                    sourceInstalled: 'Installed',
+                    sourceDev: 'Dev',
+                    uninstallFailed: 'Could not uninstall {{name}}',
                     state: {
                         watching: 'Watching',
                         starting: 'Building',
@@ -209,6 +242,40 @@ export const pluginStudio = new PluginStudio({
                     autoInstallFailed: '自动安装失败：{{message}}',
                     selectFirst: '请先选择一个插件工程',
                     unsupported: '当前宿主不支持插件开发',
+                    publishTitle: '发布到插件市场',
+                    publishDesc: '构建当前工程、上传产物，然后提交审核（上架）或发布新版本。',
+                    publishListed: '已上架',
+                    publishNew: '新插件',
+                    publishSelectProject: '请先选择一个插件工程。',
+                    publishNoBuild: '构建失败，没有可发布的产物。',
+                    publishSubmitAction: '上架（提交审核）',
+                    publishVersionAction: '发布新版本',
+                    publishSubmitDone: '已提交审核。',
+                    publishVersionDone: '已发布版本 {{version}}。',
+                    marketplaceUnavailable: '当前宿主没有提供插件市场服务。',
+                    upgradeTitle: '插件更新',
+                    upgradeDesc: '有更新版本可用的已安装插件。',
+                    upgradeAction: '升级',
+                    upgradeEmpty: '全部已是最新。',
+                    version: '版本',
+                    category: '分类',
+                    descriptionLabel: '描述',
+                    descriptionPlaceholder: '这个插件是做什么的？（至少 10 字）',
+                    tagsLabel: '标签（逗号分隔）',
+                    tabProjects: '工程',
+                    tabInstalled: '已安装',
+                    tabPublish: '发布',
+                    versionDescTitle: '版本说明',
+                    versionDescFeature: '功能（这个插件是做什么的）',
+                    versionDescDetail: '细节（如何使用/实现）',
+                    versionDescChangeLog: '更新日志（这个版本改了什么）',
+                    versionDescRequired: '至少填写一段版本说明（功能/细节/更新日志）。',
+                    publishAction: '发布',
+                    installedEmpty: '还没有已安装的插件。',
+                    sourceSystem: '自带',
+                    sourceInstalled: '已安装',
+                    sourceDev: '开发中',
+                    uninstallFailed: '卸载失败：{{name}}',
                     state: {
                         watching: '监听中',
                         starting: '构建中',

@@ -54,7 +54,15 @@ export interface PluginSubmissionRecord extends Partial<PluginSubmissionValues> 
 }
 
 export interface PluginUploaderProps {
-  children: ReactNode;
+  /** Trigger content; omit when the dialog is controlled via `open`. */
+  children?: ReactNode;
   submission?: PluginSubmissionRecord;
   onSubmitted?: () => void;
+  /** Controlled open state. Omit to use the built-in trigger. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** Prefill the wizard (e.g. from a dev project manifest). */
+  initialValues?: Partial<PluginSubmissionValues>;
+  /** An artifact the caller already uploaded (dev build). */
+  initialArtifact?: { resourcePath: string; integrity?: string };
 }

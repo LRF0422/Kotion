@@ -1,6 +1,8 @@
 import type { SpacePageService } from "../domain/space-page/operations";
 import type { DesktopBridge } from "./desktop-bridge";
 import type { PluginHostService } from "./plugin-host";
+import type { PluginManagementService } from "./plugin-management";
+import type { PluginMarketplaceService } from "./plugin-marketplace";
 
 export type KeysWithTypeOf<T, Type> = { [P in keyof T]: T[P] extends Type ? P : never }[keyof T];
 export type ValuesOf<T> = T[keyof T];
@@ -311,4 +313,16 @@ export interface Services {
      * to hot-install a locally built bundle.
      */
     pluginHost?: PluginHostService;
+    /**
+     * Full plugin-management surface (list active plugins with source/version,
+     * install from URL or in-memory source, uninstall). Registered by the host;
+     * the plugin studio manages installed plugins through it.
+     */
+    pluginManagement?: PluginManagementService;
+    /**
+     * Plugin catalogue lifecycle (submit for review, publish a version,
+     * upgrade an installed plugin). Registered by the host; the plugin studio
+     * drives 上架/发布/升级 through it.
+     */
+    pluginMarketplace?: PluginMarketplaceService;
 }

@@ -149,11 +149,52 @@ export interface StudioPluginHost {
     }): Promise<boolean>
 }
 
+export interface StudioManagedPlugin {
+    name: string
+    pluginKey: string
+    version?: string
+    source: 'system' | 'installed' | 'dev'
+    desktopOnly: boolean
+}
+
+/** Full management surface; a superset of StudioPluginHost. */
+export interface StudioPluginManagement extends StudioPluginHost {
+    list(): StudioManagedPlugin[]
+    get(name: string): StudioManagedPlugin | undefined
+    isRemovable(name: string): boolean
+    uninstall(name: string): boolean
+    has(name: string): boolean
+    getActiveNames(): string[]
+}
+
+export interface StudioMarketplaceMine {
+    id: string | number
+    name?: string
+    pluginKey?: string
+    version?: string
+    status?: string
+    [key: string]: unknown
+}
+
+/** Plugin-catalogue lifecycle surface (上架 / 发布 / 升级). */
+export interface StudioPluginMarketplace {
+    listMine(): Promise<StudioMarketplaceMine[]>
+    listInstalled(): Promise<Array<Record<string, unknown>>>
+    uploadArtifact(input: { fileName: string; data: Blob }): Promise<{ resourcePath: string; integrity?: string }>
+    submit(input: Record<string, unknown>): Promise<unknown>
+    publishVersion(pluginId: string | number, input: Record<string, unknown>): Promise<unknown>
+    upgrade(versionId: string | number): Promise<void>
+}
+
 export interface StudioToolDeps {
     /** The desktop bridge's dev surface, or undefined on a non-dev host. */
     getDev: () => StudioDevBridge | undefined
     /** The host plugin registry, or undefined when the host did not register it. */
     getPluginHost: () => StudioPluginHost | undefined
+    /** Full plugin-management service; optional for older hosts and tests. */
+    getPluginManagement?: () => StudioPluginManagement | undefined
+    /** Plugin-marketplace lifecycle service; optional for older hosts and tests. */
+    getMarketplace?: () => StudioPluginMarketplace | undefined
 }
 
 /* ------------------------------------------------------------------ *
@@ -170,10 +211,28 @@ const requireDev = (deps: StudioToolDeps): StudioDevBridge => {
     return dev
 }
 
+/**
+ * The narrow installer surface, preferring the full management service so a
+ * hot-install goes through the same path as every other plugin install.
+ */
 const requirePluginHost = (deps: StudioToolDeps): StudioPluginHost => {
+    const management = deps.getPluginManagement?.()
+    if (management) return management
     const pluginHost = deps.getPluginHost()
-    if (!pluginHost) throw new Error('宿主未注册 pluginHost 服务，无法热更插件')
+    if (!pluginHost) throw new Error('宿主未注册 pluginHost/pluginManagement 服务，无法热更插件')
     return pluginHost
+}
+
+const requirePluginManagement = (deps: StudioToolDeps): StudioPluginManagement => {
+    const management = deps.getPluginManagement?.()
+    if (!management) throw new Error('宿主未注册 pluginManagement 服务，无法管理已安装插件')
+    return management
+}
+
+const requireMarketplace = (deps: StudioToolDeps): StudioPluginMarketplace => {
+    const marketplace = deps.getMarketplace?.()
+    if (!marketplace) throw new Error('宿主未注册 pluginMarketplace 服务，无法发布/升级插件')
+    return marketplace
 }
 
 const requireHostApi = (deps: StudioToolDeps): NonNullable<StudioDevBridge['hostApi']> => {
@@ -545,6 +604,164 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
                 output: result.output,
                 next: '现在可以在源码里 import 这些包；改完用 runPluginProject / buildPluginProject 验证。',
             }
+        },
+    },
+
+    listInstalledPlugins: {
+        description:
+            '列出当前宿主里已经安装/激活的插件（含宿主自带的 system 插件）。返回 name、pluginKey、来源（system/installed/dev）、' +
+            '版本、是否桌面专属、是否可卸载。管理已安装插件或排查冲突前先调用它。',
+        inputSchema: { type: 'object', properties: {} },
+        readOnly: true,
+        execute: async () => {
+            const management = requirePluginManagement(deps)
+            const plugins = management.list()
+            return { count: plugins.length, plugins }
+        },
+    },
+
+    uninstallInstalledPlugin: {
+        description:
+            '卸载一个已安装的插件（按运行时 name，来自 listInstalledPlugins）。宿主自带的 system 插件不可卸载，会直接报错。',
+        inputSchema: {
+            type: 'object',
+            properties: { name: { type: 'string', description: '插件的运行时名字。' } },
+            required: ['name'],
+        },
+        execute: async (args: { name: string }) => {
+            const management = requirePluginManagement(deps)
+            if (!management.isRemovable(args.name)) {
+                throw new Error('插件不可卸载（未安装，或为宿主自带）：' + args.name)
+            }
+            const removed = management.uninstall(args.name)
+            return { ok: removed, name: args.name }
+        },
+    },
+
+    listMyPlugins: {
+        description:
+            '列出我在插件市场上的插件与提交记录（含审核状态、id、pluginKey、版本）。发布新版本或查看审核进度前先调用它拿到 pluginId。',
+        inputSchema: { type: 'object', properties: {} },
+        readOnly: true,
+        execute: async () => {
+            const plugins = await requireMarketplace(deps).listMine()
+            return { count: plugins.length, plugins }
+        },
+    },
+
+    publishPluginProject: {
+        description:
+            '把插件工程构建并发布到插件市场：先构建，再上传产物；新插件走“上架”（提交审核，不传 pluginId），' +
+            '已上架插件走“发布新版本”（传 pluginId，来自 listMyPlugins）。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                root: { type: 'string', description: '工程根目录。' },
+                version: { type: 'string', description: '语义化版本，如 1.0.0。' },
+                pluginId: {
+                    type: ['string', 'number'],
+                    description: '已上架插件的 id；发布新版本时传，上架新插件时省略。',
+                },
+                name: { type: 'string', description: '插件显示名（省略时取工程清单）。' },
+                pluginKey: { type: 'string', description: '注册键（省略时取工程清单）。' },
+                description: { type: 'string', description: '插件描述（上架新插件必填，至少 10 字）。' },
+                category: { type: 'string', enum: ['APP', 'FEATURE', 'CONNECTOR'], description: '分类，默认 FEATURE。' },
+                tags: { type: 'array', items: { type: 'string' }, description: '可选标签，1-5 个。' },
+                icon: { type: 'string', description: '可选图标文件名（先上传得到）。' },
+                permissions: { type: 'array', items: { type: 'string' }, description: '可选能力声明，如 NETWORK / DESKTOP。' },
+                versionDescs: {
+                    type: 'array',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            label: { type: 'string', description: '小节标题，如 Feature / Detail / ChangeLog。' },
+                            content: { type: 'string', description: '该小节的富文本内容（JSON 字符串）。' },
+                        },
+                        required: ['label', 'content'],
+                    },
+                    description: '可选版本说明小节。',
+                },
+            },
+            required: ['root', 'version'],
+        },
+        execute: async (args: {
+            root: string
+            version: string
+            pluginId?: string | number
+            name?: string
+            pluginKey?: string
+            description?: string
+            category?: string
+            tags?: string[]
+            icon?: string
+            permissions?: string[]
+            versionDescs?: Array<{ label: string; content: string }>
+        }) => {
+            const dev = requireDev(deps)
+            const marketplace = requireMarketplace(deps)
+            const status = await dev.build({ root: args.root })
+            if (!status.build?.code) {
+                throw new Error('构建失败，无法发布：' + (status.error ?? '没有构建产物'))
+            }
+            const uploaded = await marketplace.uploadArtifact({
+                fileName: args.pluginKey ? args.pluginKey + '.js' : 'index.js',
+                data: new Blob([status.build.code], { type: 'text/javascript' }),
+            })
+            if (args.pluginId !== undefined && args.pluginId !== null) {
+                await marketplace.publishVersion(args.pluginId, {
+                    version: args.version,
+                    resourcePath: uploaded.resourcePath,
+                    integrity: uploaded.integrity,
+                    versionDescs: args.versionDescs,
+                })
+                return {
+                    ok: true,
+                    mode: 'version',
+                    pluginId: args.pluginId,
+                    version: args.version,
+                    resourcePath: uploaded.resourcePath,
+                    buildCount: status.buildCount,
+                }
+            }
+            const name = args.name ?? status.plugin.name
+            const pluginKey = args.pluginKey ?? status.plugin.pluginKey
+            await marketplace.submit({
+                name,
+                pluginKey,
+                version: args.version,
+                category: args.category ?? 'FEATURE',
+                description: args.description ?? name,
+                resourcePath: uploaded.resourcePath,
+                integrity: uploaded.integrity,
+                tags: args.tags,
+                icon: args.icon ?? null,
+                permissions: args.permissions,
+                versionDescs: args.versionDescs,
+            })
+            return {
+                ok: true,
+                mode: 'submit',
+                pluginKey,
+                version: args.version,
+                resourcePath: uploaded.resourcePath,
+                buildCount: status.buildCount,
+            }
+        },
+    },
+
+    upgradePluginVersion: {
+        description:
+            '把已安装插件升级/更新到市场里的指定版本：传 versionId（目标版本记录 id，来自 listMyPlugins 或已安装列表）。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                versionId: { type: ['string', 'number'], description: '目标版本记录 id。' },
+            },
+            required: ['versionId'],
+        },
+        execute: async (args: { versionId: string | number }) => {
+            await requireMarketplace(deps).upgrade(args.versionId)
+            return { ok: true, versionId: args.versionId }
         },
     },
 

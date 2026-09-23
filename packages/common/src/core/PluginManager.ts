@@ -19,6 +19,7 @@ import {
     type RemotePluginDescriptor,
     type RemotePluginInput,
 } from "./plugin-runtime";
+import type { PluginManagementEntry, PluginSource } from "./plugin-management";
 import { pluginScriptLoader } from "../utils/import-util";
 import { logger } from "../utils/logger";
 import { event, PLUGIN_INCOMPATIBLE } from "../event";
@@ -227,6 +228,13 @@ export class PluginManager {
     private _cacheDockPanels: ResolvedDockPanel[] | null = null
     private _cachePageTypes: ResolvedPageType[] | null = null
     private _pluginMap: Map<string, KPlugin<any>> = new Map()
+    /** Install metadata per active plugin; drives the pluginManagement service. */
+    private _pluginMeta = new Map<string, {
+        pluginKey: string
+        version?: string
+        source: PluginSource
+        desktopOnly: boolean
+    }>()
     private _incompatiblePlugins = new Map<string, PluginApiIncompatibility>()
 
     // Built-in dock panels contributed by the host itself (e.g. the AI agent
@@ -275,9 +283,18 @@ export class PluginManager {
         return () => { this._changeListeners.delete(listener) }
     }
 
-    private _buildPluginMap(plugins: KPlugin<any>[]) {
+    private _buildPluginMap(plugins: KPlugin<any>[], source: PluginSource = 'system') {
         plugins.forEach(plugin => {
             this._pluginMap.set(plugin.name, plugin)
+            // The remote-install path records metadata (with the version) before
+            // this runs, so only label plugins that do not have an entry yet.
+            if (!this._pluginMeta.has(plugin.name)) {
+                this._pluginMeta.set(plugin.name, {
+                    pluginKey: plugin.pluginKey || plugin.name,
+                    source,
+                    desktopOnly: plugin.desktopOnly,
+                })
+            }
         })
     }
 
@@ -461,6 +478,7 @@ export class PluginManager {
                 this.plugins = [...this._initialPlugins];
                 // Rebuild plugin map with only initial plugins
                 this._pluginMap.clear();
+                this._pluginMeta.clear();
                 this._buildPluginMap(this._initialPlugins);
                 this._rebuildServices();
 
@@ -474,6 +492,7 @@ export class PluginManager {
                 if (conflicts.size > 0) {
                     this.plugins = this.plugins.filter(plugin => !conflicts.has(plugin.name))
                     this._pluginMap.clear()
+                    this._pluginMeta.clear()
                     this._buildPluginMap(this.plugins)
                     this._rebuildServices()
                 }
@@ -562,6 +581,12 @@ export class PluginManager {
                 }
                 seenPluginNames.add(instance.name)
                 successfulPlugins.push(instance)
+                this._pluginMeta.set(instance.name, {
+                    pluginKey: plugin.pluginKey,
+                    version: plugin.version,
+                    source: 'installed',
+                    desktopOnly: instance.desktopOnly || plugin.desktopOnly === true,
+                })
                 if (plugin.pluginKey) activatedPluginKeys.add(plugin.pluginKey)
             })
 
@@ -583,6 +608,7 @@ export class PluginManager {
                     this.plugins = this.plugins.filter(plugin => !rejected.has(plugin.name))
                     rejectedRemoteNames.forEach(name => {
                         this._pluginMap.delete(name)
+                        this._pluginMeta.delete(name)
                         failedPlugins.add(name)
                     })
                     this._rebuildServices()
@@ -610,6 +636,7 @@ export class PluginManager {
             logger.error('Fatal error during plugin initialization:', error)
             this.plugins = [...this._initialPlugins]
             this._pluginMap.clear()
+            this._pluginMeta.clear()
             this._buildPluginMap(this._initialPlugins)
             this._rebuildServices()
             this._incompatiblePlugins = new Map()
@@ -646,6 +673,7 @@ export class PluginManager {
         if (plugin) {
             this.plugins = this.plugins.filter(it => it.name !== key)
             this._pluginMap.delete(key)
+            this._pluginMeta.delete(key)
         }
 
         // Invalidate the script cache so that if the plugin is re-installed,
@@ -770,7 +798,7 @@ export class PluginManager {
                 logger.error(`Failed to load plugin instance for ${name}`)
                 return false
             }
-            return this._activateRegistration(registration, plugin, callBack)
+            return this._activateRegistration(registration, plugin, callBack, 'dev')
         } catch (error) {
             logger.error(`Error installing plugin from source ${name}:`, error)
             return false
@@ -788,6 +816,7 @@ export class PluginManager {
         registration: PluginRegistration,
         plugin: RemotePluginDescriptor,
         callBack?: () => void,
+        source: PluginSource = 'installed',
     ): boolean {
         const incompatibility = this._getApiIncompatibility(registration.meta, plugin)
         if (incompatibility) {
@@ -816,6 +845,12 @@ export class PluginManager {
 
         this.plugins = [...this.plugins, loadedPlugin]
         this._pluginMap.set(loadedPlugin.name, loadedPlugin)
+        this._pluginMeta.set(loadedPlugin.name, {
+            pluginKey: plugin.pluginKey,
+            version: plugin.version,
+            source,
+            desktopOnly: loadedPlugin.desktopOnly || plugin.desktopOnly === true,
+        })
         this._clearPluginIncompatibility(plugin)
 
         logger.info(`Plugin ${loadedPlugin.name} installed successfully`)
@@ -831,6 +866,7 @@ export class PluginManager {
         if (plugin) {
             this.plugins = this.plugins.filter(it => it.name !== name)
             this._pluginMap.delete(name)
+            this._pluginMeta.delete(name)
             this._rebuildServices()
             logger.debug(`Plugin ${name} removed from manager`)
             this._notifyChange()
@@ -848,6 +884,33 @@ export class PluginManager {
 
     getAllPluginNames(): string[] {
         return Array.from(this._pluginMap.keys())
+    }
+
+    /**
+     * Active plugins with their install metadata. Backs the `pluginManagement`
+     * core service so management UIs (and the plugin studio) do not need to
+     * reach into the manager.
+     */
+    getPluginEntries(): PluginManagementEntry[] {
+        return Array.from(this._pluginMap.values()).map(plugin => {
+            const meta = this._pluginMeta.get(plugin.name)
+            return {
+                name: plugin.name,
+                pluginKey: meta?.pluginKey ?? plugin.pluginKey ?? plugin.name,
+                version: meta?.version,
+                source: meta?.source ?? 'system',
+                desktopOnly: meta?.desktopOnly ?? plugin.desktopOnly,
+            }
+        })
+    }
+
+    getPluginEntry(name: string): PluginManagementEntry | undefined {
+        return this.getPluginEntries().find(entry => entry.name === name)
+    }
+
+    /** Host-owned (system) plugins are part of the app and cannot be removed. */
+    isPluginRemovable(name: string): boolean {
+        return this._pluginMap.has(name) && this._pluginMeta.get(name)?.source !== 'system'
     }
 
     get initStatus() {

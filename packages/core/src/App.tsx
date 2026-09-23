@@ -35,6 +35,8 @@ import { createDesktopBridge } from "./desktop/bridge";
 import { OrganizationInvitationAccept } from "./components/settings/OrganizationInvitationAccept";
 import { createSpacePageService } from "./domain/space-page";
 import { uploadTaskService } from "./services/upload/upload-task-service";
+import { createPluginMarketplaceService } from "./services/plugin-marketplace";
+import { PluginPublisherHost } from "./components/Shop/PluginUploader/PluginPublisherHost";
 
 const { createBrowserRouter,
     createRoutesFromElements, Route, RouterProvider, Provider, EntitlementsProvider,
@@ -326,6 +328,23 @@ export const App: React.FC<AppProps> = (props) => {
             getActiveNames: () => manager.getAllPluginNames(),
             subscribe: (listener: () => void) => manager.onChange(listener),
         })
+        // Fuller plugin-management surface: the studio (and any future
+        // management UI) lists installed plugins with source/version and
+        // drives install/uninstall through this instead of the manager.
+        manager.registerCoreService('pluginManagement', {
+            list: () => manager.getPluginEntries(),
+            get: (name) => manager.getPluginEntry(name),
+            has: (name) => manager.hasPlugin(name),
+            getActiveNames: () => manager.getAllPluginNames(),
+            install: (input) => manager.installPlugin(input),
+            installFromSource: (options) => manager.installPluginFromSource(options),
+            uninstall: (name) => manager.uninstallPlugin(name),
+            isRemovable: (name) => manager.isPluginRemovable(name),
+            subscribe: (listener) => manager.onChange(listener),
+        })
+        // Catalogue lifecycle (submit / publish a version / upgrade), shared
+        // by the Shop UI and the plugin studio's publish flow.
+        manager.registerCoreService('pluginMarketplace', createPluginMarketplaceService())
         return manager
     }, [])
     const [pluginsReady, setPluginsReady] = useState(false)
@@ -466,6 +485,8 @@ export const App: React.FC<AppProps> = (props) => {
                     </div>
                 }
                 <Toaster />
+                {/* Host-owned publish UI; plugins open it via pluginMarketplace. */}
+                <PluginPublisherHost />
             </Provider>
             </ResponsiveProvider>
         </ThemeProvider>

@@ -16,6 +16,7 @@ import {
     resolveOptionalService,
     type DevBridge,
     type DevSessionStatus,
+    type PluginManagementEntry,
 } from '@kn/common'
 
 const STORAGE_KEY = 'kn.plugin-studio.projects.v1'
@@ -63,17 +64,21 @@ export const useHasDesktop = (): boolean => Boolean(useOptionalService('desktop'
  * plugin with the same runtime name is uninstalled first.
  */
 export const useInstallBundle = () => {
+    const pluginManagement = useOptionalService('pluginManagement')
     const pluginHost = useOptionalService('pluginHost')
     return useCallback(
         async (status: DevSessionStatus): Promise<boolean> => {
-            if (!pluginHost) {
-                throw new Error('pluginHost service is unavailable in this host')
+            // Prefer the full management service; pluginHost is the older,
+            // narrower surface kept for hosts that predate it.
+            const installer = pluginManagement ?? pluginHost
+            if (!installer) {
+                throw new Error('pluginManagement/pluginHost service is unavailable in this host')
             }
             const build = status.build
             if (!build?.code) {
                 throw new Error('This project has no successful build yet')
             }
-            return pluginHost.installFromSource({
+            return installer.installFromSource({
                 code: build.code,
                 pluginKey: status.plugin.pluginKey,
                 name: status.plugin.name,
@@ -82,8 +87,37 @@ export const useInstallBundle = () => {
                 sourceLabel: status.root,
             })
         },
-        [pluginHost],
+        [pluginManagement, pluginHost],
     )
+}
+
+/** Imperative resolver for the full plugin-management service. */
+export const resolvePluginManagement = () => resolveOptionalService('pluginManagement')
+
+/** The full plugin-management service, when this host registers it. */
+export const usePluginManagement = () => useOptionalService('pluginManagement')
+
+/** The plugin-marketplace (catalogue lifecycle) service, when registered. */
+export const useMarketplace = () => useOptionalService('pluginMarketplace')
+
+/**
+ * Active plugins (host-owned included) with install metadata. Subscribes to
+ * the management service, so install/uninstall re-renders the caller.
+ */
+export const useInstalledPlugins = (): PluginManagementEntry[] => {
+    const pluginManagement = useOptionalService('pluginManagement')
+    const [entries, setEntries] = useState<PluginManagementEntry[]>(
+        () => pluginManagement?.list() ?? [],
+    )
+    useEffect(() => {
+        if (!pluginManagement) {
+            setEntries([])
+            return undefined
+        }
+        setEntries(pluginManagement.list())
+        return pluginManagement.subscribe(() => setEntries(pluginManagement.list()))
+    }, [pluginManagement])
+    return entries
 }
 
 /** Imperative resolver for the plugin host service (agent tools, event handlers). */

@@ -67,6 +67,10 @@ export const PluginUploader: React.FC<PluginUploaderProps> = ({
   children,
   submission,
   onSubmitted,
+  open: openProp,
+  onOpenChange,
+  initialValues,
+  initialArtifact,
 }) => {
   const { t } = useTranslation();
   const schema = React.useMemo(() => createPluginSubmissionSchema(t), [t]);
@@ -76,7 +80,22 @@ export const PluginUploader: React.FC<PluginUploaderProps> = ({
     mode: "onBlur",
   });
 
-  const [open, setOpen] = React.useState(false);
+  const [internalOpen, setInternalOpen] = React.useState(false);
+  const isControlled = openProp !== undefined;
+  const open = isControlled ? Boolean(openProp) : internalOpen;
+  const setOpen = React.useCallback(
+    (next: boolean) => {
+      if (!isControlled) setInternalOpen(next);
+      onOpenChange?.(next);
+    },
+    [isControlled, onOpenChange],
+  );
+  // Prefill/artifact live in refs so re-renders do not reset a form the user
+  // is editing; they are applied only when the dialog opens.
+  const prefillRef = React.useRef(initialValues);
+  prefillRef.current = initialValues;
+  const artifactRef = React.useRef(initialArtifact);
+  artifactRef.current = initialArtifact;
   const [showExitDialog, setShowExitDialog] = React.useState(false);
   const [currentStep, setCurrentStep] = React.useState(1);
   const [highestStep, setHighestStep] = React.useState(1);
@@ -137,7 +156,16 @@ export const PluginUploader: React.FC<PluginUploaderProps> = ({
   React.useEffect(() => {
     if (!open) return;
     resetWizard();
-  }, [open, resetWizard]);
+    const prefill = prefillRef.current;
+    if (prefill && Object.keys(prefill).length > 0) {
+      form.reset({ ...createDefaultPluginSubmission(), ...prefill });
+    }
+    const artifact = artifactRef.current;
+    if (artifact?.resourcePath) {
+      form.setValue('resourcePath', artifact.resourcePath, { shouldDirty: true, shouldValidate: true });
+      form.setValue('integrity', artifact.integrity ?? '', { shouldDirty: true, shouldValidate: true });
+    }
+  }, [open, resetWizard, form]);
 
   const syncEditors = React.useCallback(() => {
     const descriptions = form.getValues("versionDescs");
@@ -333,9 +361,11 @@ export const PluginUploader: React.FC<PluginUploaderProps> = ({
   return (
     <>
       <Dialog open={open} onOpenChange={closeSafely}>
-        <DialogTrigger asChild onClick={() => setOpen(true)}>
-          {children}
-        </DialogTrigger>
+        {children ? (
+          <DialogTrigger asChild onClick={() => setOpen(true)}>
+            {children}
+          </DialogTrigger>
+        ) : null}
         <DialogContent
           aria-describedby={undefined}
           className="flex h-[100dvh] max-w-full flex-col gap-0 overflow-hidden rounded-none border-0 p-0 sm:h-[720px] sm:max-w-[960px] sm:rounded-xl sm:border"

@@ -165,7 +165,68 @@ const pluginHost = {
     },
 }
 
-const tools = createStudioTools({ getDev: () => dev, getPluginHost: () => pluginHost })
+const managedPlugins = [
+    { name: 'PluginStudio', pluginKey: 'PluginStudio', source: 'system', desktopOnly: false },
+    { name: 'Agent Made', pluginKey: 'agent-made-plugin', version: 'dev.1', source: 'dev', desktopOnly: true },
+]
+const pluginManagement = {
+    async installFromSource(options) {
+        installs.push(options)
+        return true
+    },
+    list() {
+        return managedPlugins
+    },
+    get(name) {
+        return managedPlugins.find((plugin) => plugin.name === name)
+    },
+    has(name) {
+        return managedPlugins.some((plugin) => plugin.name === name)
+    },
+    getActiveNames() {
+        return managedPlugins.map((plugin) => plugin.name)
+    },
+    isRemovable(name) {
+        return name !== 'PluginStudio'
+    },
+    uninstall(name) {
+        calls.push(['uninstallInstalled', name])
+        return name !== 'PluginStudio'
+    },
+}
+
+const marketplace = {
+    async listMine() {
+        return [
+            { id: 11, name: 'Agent Made', pluginKey: 'agent-made-plugin', version: '1.0.0', status: 'DONE' },
+        ]
+    },
+    async listInstalled() {
+        return []
+    },
+    async uploadArtifact(options) {
+        calls.push(['uploadArtifact', { fileName: options.fileName, bytes: options.data?.size ?? 0 }])
+        return { resourcePath: 'plugins/agent-made.js', integrity: 'sha256-abc' }
+    },
+    async submit(input) {
+        calls.push(['submit', input])
+        return { id: 12 }
+    },
+    async publishVersion(id, input) {
+        calls.push(['publishVersion', { id }])
+        return { id }
+    },
+    async upgrade(versionId) {
+        calls.push(['upgrade', versionId])
+    },
+}
+
+const tools = createStudioTools({
+    getDev: () => dev,
+    getPluginHost: () => pluginHost,
+    getPluginManagement: () => pluginManagement,
+    getMarketplace: () => marketplace,
+})
 const names = Object.keys(tools)
 
 /* ------------------------------------------------------------------ *
@@ -180,6 +241,11 @@ const EXPECTED = [
     'listPluginProjectFiles',
     'searchPluginProject',
     'installPluginDependencies',
+    'listInstalledPlugins',
+    'uninstallInstalledPlugin',
+    'listMyPlugins',
+    'publishPluginProject',
+    'upgradePluginVersion',
     'runPluginProject',
     'buildPluginProject',
     'stopPluginProject',
@@ -297,6 +363,47 @@ check(
     'install: forwards packages',
     calls.some(([name, args]) => name === 'installDependencies' && args.packages?.[0] === 'date-fns@^3'),
 )
+
+/* Plugin management: list installed plugins and uninstall the removable ones. */
+const managed = await tools.listInstalledPlugins.execute({})
+check(
+    'managed: lists installed plugins with source',
+    managed.count === 2 && managed.plugins[0].source === 'system' && managed.plugins[1].source === 'dev',
+    JSON.stringify(managed.plugins),
+)
+const uninstalled = await tools.uninstallInstalledPlugin.execute({ name: 'Agent Made' })
+check(
+    'managed: uninstalls a removable plugin',
+    uninstalled.ok === true && calls.some(([name, arg]) => name === 'uninstallInstalled' && arg === 'Agent Made'),
+)
+let systemUninstall = ''
+try {
+    await tools.uninstallInstalledPlugin.execute({ name: 'PluginStudio' })
+} catch (error) {
+    systemUninstall = error.message
+}
+check('managed: refuses system plugins', /不可卸载/.test(systemUninstall), systemUninstall)
+
+/* Marketplace lifecycle: 上架 (submit) / 发布 (publish version) / 升级 (upgrade). */
+const mine = await tools.listMyPlugins.execute({})
+check('market: lists my plugins', mine.count === 1 && mine.plugins[0].id === 11, JSON.stringify(mine.plugins))
+
+const submitted = await tools.publishPluginProject.execute({ root: ROOT, version: '1.0.0', description: 'A test plugin' })
+check('market: submits a new plugin', submitted.ok === true && submitted.mode === 'submit', JSON.stringify(submitted))
+check(
+    'market: uploads the built artifact, then submits',
+    calls.some(([name]) => name === 'uploadArtifact') && calls.some(([name]) => name === 'submit'),
+)
+
+const published = await tools.publishPluginProject.execute({ root: ROOT, version: '1.1.0', pluginId: 11 })
+check(
+    'market: publishes a new version',
+    published.ok === true && published.mode === 'version' && published.pluginId === 11,
+    JSON.stringify(published),
+)
+
+const upgraded = await tools.upgradePluginVersion.execute({ versionId: 99 })
+check('market: upgrades a version', upgraded.ok === true && calls.some(([name, value]) => name === 'upgrade' && value === 99))
 
 const ran = await tools.runPluginProject.execute({ root: ROOT })
 check('run: starts a watching session', ran.state === 'watching' && ran.ok === true, JSON.stringify({ state: ran.state }))
