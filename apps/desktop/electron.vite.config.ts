@@ -1,13 +1,45 @@
 import { resolve } from 'path'
+import { copyFile, mkdir } from 'fs/promises'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import tsconfigPaths from 'vite-tsconfig-paths'
+
+/**
+ * The plugin studio's bundler runs in a **child process**, not in the main
+ * bundle: it must be a real file on disk so ELECTRON_RUN_AS_NODE can execute it
+ * and so esbuild can resolve from the app's node_modules. Rollup never sees
+ * these two modules as entries, so they are copied verbatim into out/main.
+ */
+const childProcessAssets = ['dev-server.mjs', 'bundler.mjs']
+
+const copyPluginDevAssets = () => ({
+  name: 'kn-copy-plugin-dev-assets',
+  apply: 'build' as const,
+  async closeBundle() {
+    const from = resolve(__dirname, 'src/main/plugin-dev')
+    const to = resolve(__dirname, 'out/main/plugin-dev')
+    await mkdir(to, { recursive: true })
+    await Promise.all(
+      childProcessAssets.map((file) => copyFile(resolve(from, file), resolve(to, file))),
+    )
+  },
+})
 
 export default defineConfig({
   main: {
     // `fs-extra` must be bundled (not left as a runtime require): the packaged
     // app.asar ships only `out/**` and excludes node_modules.
-    plugins: [externalizeDepsPlugin({ exclude: ['@electron-toolkit/utils', 'fs-extra'] })]
+    //
+    // `esbuild` is excluded for the opposite reason: the plugin studio's
+    // dev-server child needs the real package (its JS + platform binary), not a
+    // bundled copy, and it is resolved from the app's node_modules at runtime.
+    plugins: [
+      externalizeDepsPlugin({
+        exclude: ['@electron-toolkit/utils', 'fs-extra'],
+        include: ['esbuild'],
+      }),
+      copyPluginDevAssets(),
+    ],
   },
   preload: {
     plugins: [externalizeDepsPlugin({ exclude: ['@electron-toolkit/preload'] })]

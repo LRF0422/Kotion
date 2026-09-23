@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { join } from 'node:path';
 import * as dns from 'node:dns';
 import * as net from 'node:net';
+import { setupDevIpcHandlers } from './plugin-dev/index';
 
 /**
  * Desktop capability IPC handlers.
@@ -126,6 +127,12 @@ const handle = (capability: string, fn: CapabilityHandler): void => {
 };
 
 export function setupIpcHandlers() {
+  // ==================== plugin development (plugin-studio) ====================
+  // Installed from here so it shares this module's fs allowlist: a dev project
+  // root is only reachable if it lives in a standard user directory or in a
+  // folder the user picked in a native dialog.
+  setupDevIpcHandlers({ assertAllowedPath })
+
   // ==================== system ====================
   handle('system.info', () => ({
     version: app.getVersion(),

@@ -37,6 +37,16 @@ export type DesktopCapability =
     | 'window.setFullScreen'
     | 'window.isFullScreen'
     | 'window.setTrafficLights'
+    // ---- plugin development (plugin-studio) --------------------------------
+    | 'dev.start'
+    | 'dev.stop'
+    | 'dev.build'
+    | 'dev.status'
+    | 'dev.logs'
+    | 'dev.scaffold'
+    | 'dev.list'
+    | 'dev.readFile'
+    | 'dev.writeFile'
 
 export interface DesktopAppInfo {
     version: string
@@ -194,6 +204,191 @@ export interface DesktopHttpResponse {
     finalUrl: string
 }
 
+/* ------------------------------------------------------------------ *
+ * Plugin development (plugin-studio)
+ *
+ * These capabilities turn a plugin *source project* on disk into a bundle the
+ * host can install into the running window. The bundler runs in a separate
+ * Node child process (`ELECTRON_RUN_AS_NODE`), watches the project, and hands
+ * back freshly built source over NDJSON — so no plugin needs a public HTTP
+ * origin, and a broken build never takes the host down with it.
+ * ------------------------------------------------------------------ */
+
+export type DevSessionState = 'idle' | 'starting' | 'watching' | 'failed' | 'stopped'
+
+/** Where a built bundle came from, for the studio's provenance display. */
+export interface DevBuildOutput {
+    /** Bundled, host-runtime-ready JavaScript (UMD-ish IIFE). */
+    code: string
+    /** Absolute path of the bundle on disk, when it was written. */
+    outFile?: string
+    /** Size of `code` in bytes. */
+    bytes: number
+    /** Build duration in ms. */
+    durationMs: number
+    /** Files the bundler pulled into this build (project-relative). */
+    modules: string[]
+}
+
+/** What a project's manifest declares about the plugin it builds. */
+export interface DevPluginDescriptor {
+    /** Registry key the host looks the plugin up by. */
+    pluginKey: string
+    /** Human-readable name shown in the studio. */
+    name: string
+    /** Optional icon (emoji or URL) for the studio list. */
+    icon?: string
+}
+
+export interface DevSessionStatus {
+    /** Absolute project directory. */
+    root: string
+    state: DevSessionState
+    plugin: DevPluginDescriptor
+    /** Last successful build; absent before the first successful build. */
+    build?: DevBuildOutput
+    /** Last error message (build failure or spawn failure). */
+    error?: string
+    /** Monotonic counter incremented on every successful build. */
+    buildCount: number
+    /** Epoch ms of the last successful build. */
+    updatedAt: number
+    /** True when at least one file watcher is active. */
+    watching: boolean
+}
+
+export interface DevStartOptions {
+    /** Absolute path of the plugin project (must be inside an allowed root). */
+    root: string
+    /** Rebuild on file change. Defaults to true. */
+    watch?: boolean
+    /** Also write the bundle to disk (dist/index.js) on every build. */
+    writeToDisk?: boolean
+    /**
+     * Extra import specifiers to treat as host globals. Merged with the
+     * built-in host map (@kn/common, react, …).
+     */
+    externals?: string[]
+}
+
+export interface DevBuildOptions {
+    root: string
+    writeToDisk?: boolean
+    externals?: string[]
+}
+
+export interface DevStopOptions {
+    root: string
+}
+
+export interface DevStatusOptions {
+    /** Omit to list every known session. */
+    root?: string
+}
+
+export interface DevLogsOptions {
+    root: string
+    /** Max entries to return (most recent last). Defaults to 200. */
+    limit?: number
+}
+
+export interface DevLogEntry {
+    level: 'info' | 'warn' | 'error'
+    message: string
+    at: number
+}
+
+export interface DevScaffoldOptions {
+    /**
+     * Directory to create the project in. Optional: when omitted the host uses
+     * its own managed projects directory (`<userData>/plugin-projects`), which
+     * is already inside the fs allowlist — so scaffolding needs no native dialog
+     * and an agent can create a project end to end on its own.
+     */
+    parentDir?: string
+    /** Project folder name and package name suffix. */
+    name: string
+    /** Human-readable plugin name; defaults to `name`. */
+    displayName?: string
+    /** Registry key; defaults to a slug of `name`. */
+    pluginKey?: string
+    /** Overwrite an existing directory. Defaults to false. */
+    overwrite?: boolean
+}
+
+export interface DevScaffoldResult {
+    root: string
+    pluginKey: string
+    files: string[]
+    /** True when the host chose the managed directory (no `parentDir` given). */
+    managed: boolean
+}
+
+/** One plugin project the host can enumerate from disk. */
+export interface DevProjectEntry {
+    /** Absolute project directory. */
+    root: string
+    /** Directory name, used as the default display label. */
+    name: string
+    /** Registry key from `knPluginStudio.pluginKey`. */
+    pluginKey?: string
+    /** Display name from `knPluginStudio.displayName`. */
+    displayName?: string
+    /** Resolved entry file, when one was found. */
+    entry?: string
+    /** Epoch ms of the last change to the project's package.json. */
+    updatedAt?: number
+    /** True when a dev session is currently running for this project. */
+    active?: boolean
+}
+
+/** Subdirectory of `system.paths().userData` that the studio owns. */
+export const DEV_PROJECTS_DIR_NAME = 'plugin-projects'
+
+export interface DevListOptions {
+    /** Directory to scan; defaults to the managed projects directory. */
+    dir?: string
+}
+
+/** Read/write a file inside a plugin project (path validated against the allowlist). */
+export interface DevFileOptions {
+    /** Absolute path of the file. */
+    path: string
+    /** Only for dev.writeFile; UTF-8 text. */
+    contents?: string
+}
+
+/**
+ * The plugin-development surface of the desktop bridge. Separate from
+ * {@link DesktopBridge} so a plugin can feature-detect a dev-capable host:
+ * `desktop.dev` is undefined on builds without the studio runtime.
+ */
+export interface DevBridge {
+    /** Start (or restart) a watched dev build for a project. */
+    start(options: DevStartOptions): Promise<DevSessionStatus>
+    /** Stop the child process and drop the session. */
+    stop(options: DevStopOptions): Promise<boolean>
+    /** One-shot rebuild; resolves with the session status after the build. */
+    build(options: DevBuildOptions): Promise<DevSessionStatus>
+    /** Status of one session, or of every known session. */
+    status(options?: DevStatusOptions): Promise<DevSessionStatus[]>
+    /** Tail of a session's build log. */
+    logs(options: DevLogsOptions): Promise<DevLogEntry[]>
+    /** Write a minimal plugin project to disk and return its layout. */
+    scaffold(options: DevScaffoldOptions): Promise<DevScaffoldResult>
+    /** Enumerate plugin projects on disk (managed directory by default). */
+    list(options?: DevListOptions): Promise<DevProjectEntry[]>
+    /** Read a project file as UTF-8 text (throws when outside the allowlist). */
+    readFile(options: DevFileOptions): Promise<string>
+    /** Write a project file as UTF-8 text, creating parent directories. */
+    writeFile(options: DevFileOptions): Promise<void>
+    /**
+     * Subscribe to successful rebuilds. `root` filters to one project; omit to
+     * receive every project's rebuilds. Returns an unsubscribe function.
+     */
+    onBuild(listener: (status: DevSessionStatus) => void, root?: string): () => void
+}
+
 /**
  * Per-capability params/result contract. Plugins call
  * DesktopBridge.invoke(capability, params) and get the matching result type.
@@ -229,6 +424,15 @@ export interface DesktopCapabilityContract {
     'window.setFullScreen': { params: { value: boolean }; result: void }
     'window.isFullScreen': { params?: void; result: boolean }
     'window.setTrafficLights': { params: DesktopTrafficLightPosition; result: void }
+    'dev.start': { params: DevStartOptions; result: DevSessionStatus }
+    'dev.stop': { params: DevStopOptions; result: boolean }
+    'dev.build': { params: DevBuildOptions; result: DevSessionStatus }
+    'dev.status': { params?: DevStatusOptions; result: DevSessionStatus[] }
+    'dev.logs': { params: DevLogsOptions; result: DevLogEntry[] }
+    'dev.scaffold': { params: DevScaffoldOptions; result: DevScaffoldResult }
+    'dev.list': { params?: DevListOptions; result: DevProjectEntry[] }
+    'dev.readFile': { params: DevFileOptions; result: string }
+    'dev.writeFile': { params: DevFileOptions; result: void }
 }
 
 /**
@@ -247,4 +451,9 @@ export interface DesktopBridge {
     ): Promise<DesktopCapabilityContract[C]['result']>
     /** Subscribe to native fullscreen changes; returns an unsubscribe function. */
     onFullScreenChange(listener: (isFullScreen: boolean) => void): () => void
+    /**
+     * Plugin-development surface. Present on desktop builds that ship the
+     * studio runtime; undefined elsewhere. Feature-detect before using it.
+     */
+    readonly dev?: DevBridge
 }

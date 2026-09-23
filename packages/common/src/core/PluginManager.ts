@@ -10,6 +10,7 @@ import {
     ServiceRegistry,
     type ServiceRegistryView,
     pluginServiceOwner,
+    CORE_SERVICE_OWNER,
 } from "./ServiceRegistry";
 import { PluginMeta, PluginRegistration } from "./global-namespace";
 import {
@@ -165,6 +166,21 @@ export interface PluginManagerOptions {
     hostApiVersion: string
     /** Application-owned services that plugins cannot replace. */
     coreServices?: Partial<Services>
+    /**
+     * How long a single plugin script may take to load before the request is
+     * aborted and the plugin is reported through `failedPlugins` (ms).
+     * Bounds one bad artifact; it never fails initialization.
+     * @default 10000
+     */
+    loadTimeoutMs?: number
+    /**
+     * Hard budget for the whole remote-plugin loading phase (ms). Plugins that
+     * have not settled by then are abandoned and reported through
+     * `failedPlugins`, so `init()` always resolves and the host can boot with
+     * whatever did load. A non-positive value disables the budget.
+     * @default 15000
+     */
+    bootstrapTimeoutMs?: number
 }
 
 export interface PluginApiIncompatibility {
@@ -189,6 +205,8 @@ export class PluginManager {
     private _serviceRegistryView: ServiceRegistryView
     private _resolveUrl: (resourcePath: string) => string
     private _hostApiVersion: string
+    private _loadTimeoutMs: number
+    private _bootstrapTimeoutMs: number
     _init: boolean = false
 
     // Version counter that increments whenever plugins change.
@@ -219,6 +237,8 @@ export class PluginManager {
     constructor(options: PluginManagerOptions, initalPlugins: KPlugin<any>[]) {
         this._resolveUrl = options.resolveUrl
         this._hostApiVersion = options.hostApiVersion
+        this._loadTimeoutMs = options.loadTimeoutMs ?? 10_000
+        this._bootstrapTimeoutMs = options.bootstrapTimeoutMs ?? 15_000
         this._serviceRegistry = new ServiceRegistry(options.coreServices)
         this._serviceRegistryView = Object.freeze({
             get: <K extends keyof Services>(name: K) => this._serviceRegistry.get(name),
@@ -402,6 +422,29 @@ export class PluginManager {
         return plugin
     }
 
+    /**
+     * Wait for `promises` to settle, but never longer than `budgetMs`.
+     * Returns `true` when every promise settled inside the budget, `false` when
+     * the budget expired first. Rejections are absorbed: stragglers keep running
+     * harmlessly and are ignored by the caller.
+     */
+    private async _settleWithin(promises: Promise<unknown>[], budgetMs: number): Promise<boolean> {
+        const all = Promise.allSettled(promises).then(() => true)
+        if (!Number.isFinite(budgetMs) || budgetMs <= 0) return all
+
+        let timer: ReturnType<typeof setTimeout> | undefined
+        try {
+            return await Promise.race([
+                all,
+                new Promise<boolean>(resolve => {
+                    timer = setTimeout(() => resolve(false), budgetMs)
+                }),
+            ])
+        } finally {
+            if (timer !== undefined) clearTimeout(timer)
+        }
+    }
+
     public async init(remotePlugins: readonly RemotePluginInput[]): Promise<PluginInitResult> {
         logger.info('Initializing remote plugins:', remotePlugins);
         logger.info('Current init status:', this._init);
@@ -457,52 +500,70 @@ export class PluginManager {
                 return false
             })
 
-            const loadResults = await Promise.allSettled(loadableRemotePlugins.map(async (plugin) => {
-                try {
-                    const path = this._buildPluginUrl(plugin)
-                    const registration = await pluginScriptLoader.load(path, plugin.pluginKey, plugin.name, {
-                        integrity: plugin.integrity || undefined
-                    })
-                    return { plugin, registration }
-                } catch (error) {
-                    logger.error(`Failed to load plugin ${plugin.name}:`, error)
-                    throw error
+            // Plugin boot is bounded and failure-isolated: a script that errors,
+            // never answers, or exceeds its budget is reported through
+            // `failedPlugins` and skipped. Initialization still resolves so the
+            // host can start without it.
+            const loadOutcomes = new Map<number, { registration: PluginRegistration } | { error: unknown }>()
+            const loadPromises = loadableRemotePlugins.map((plugin, index) => {
+                const path = this._buildPluginUrl(plugin)
+                return pluginScriptLoader.load(path, plugin.pluginKey, plugin.name, {
+                    integrity: plugin.integrity || undefined,
+                    timeout: this._loadTimeoutMs,
+                }).then(
+                    registration => {
+                        loadOutcomes.set(index, { registration })
+                    },
+                    error => {
+                        logger.error(`Failed to load plugin ${plugin.name}:`, error)
+                        loadOutcomes.set(index, { error })
+                    },
+                )
+            })
+            await this._settleWithin(loadPromises, this._bootstrapTimeoutMs)
+            loadableRemotePlugins.forEach((plugin, index) => {
+                const outcome = loadOutcomes.get(index)
+                // Script/registration failures were already logged where they
+                // were captured; they are reported, not fatal.
+                if (outcome) {
+                    if ('error' in outcome) failedPlugins.add(plugin.name || plugin.pluginKey || 'unknown')
+                    return
                 }
-            }))
-            console.log('Load results:', loadResults);
-
-            const incompatiblePlugins = new Map<string, PluginApiIncompatibility>()
-            loadResults.forEach((result, index) => {
-                if (result.status === 'rejected') {
-                    failedPlugins.add(loadableRemotePlugins[index]?.name || loadableRemotePlugins[index]?.pluginKey || 'unknown')
-                }
+                const name = plugin.name || plugin.pluginKey || 'unknown'
+                failedPlugins.add(name)
+                logger.warn(
+                    `Plugin ${name} did not finish loading within ${this._bootstrapTimeoutMs}ms; ` +
+                    'skipping it so the workspace can start'
+                )
             })
 
+            const incompatiblePlugins = new Map<string, PluginApiIncompatibility>()
             const successfulPlugins: KPlugin<any>[] = []
             const activatedPluginKeys = new Set<string>()
             const seenPluginNames = new Set(this._initialPlugins.map(plugin => plugin.name))
-            for (const result of loadResults) {
-                if (result.status !== 'fulfilled') continue
-                const { plugin, registration } = result.value
+            loadableRemotePlugins.forEach((plugin, index) => {
+                const outcome = loadOutcomes.get(index)
+                if (!outcome || !('registration' in outcome)) return
+                const { registration } = outcome
                 const incompatibility = this._getApiIncompatibility(registration.meta, plugin)
                 if (incompatibility) {
                     incompatiblePlugins.set(this._pluginIdentity(plugin), incompatibility)
-                    continue
+                    return
                 }
                 const instance = this._extractPlugin(registration)
                 if (!instance) {
                     logger.warn(`Invalid plugin ${plugin.name} detected, skipping`)
                     failedPlugins.add(plugin.name || plugin.pluginKey)
-                    continue
+                    return
                 }
                 if (seenPluginNames.has(instance.name)) {
                     logger.info(`Skipping plugin ${instance.name}: a plugin with the same runtime name is already active`)
-                    continue
+                    return
                 }
                 seenPluginNames.add(instance.name)
                 successfulPlugins.push(instance)
                 if (plugin.pluginKey) activatedPluginKeys.add(plugin.pluginKey)
-            }
+            })
 
             for (const [key, issue] of incompatiblePlugins) {
                 if (issue.pluginKey && activatedPluginKeys.has(issue.pluginKey)) {
@@ -622,7 +683,8 @@ export class PluginManager {
             const path = this._buildPluginUrl(plugin)
             const registration = await pluginScriptLoader.load(path, plugin.pluginKey, plugin.name, {
                 bustCache: true,
-                integrity: plugin.integrity || undefined
+                integrity: plugin.integrity || undefined,
+                timeout: this._loadTimeoutMs,
             })
 
             if (!registration) {
@@ -630,44 +692,137 @@ export class PluginManager {
                 return false
             }
 
-            const incompatibility = this._getApiIncompatibility(registration.meta, plugin)
-            if (incompatibility) {
-                this._clearPluginIncompatibility(plugin)
-                this._incompatiblePlugins.set(this._pluginIdentity(plugin), incompatibility)
-                this._notifyChange()
-                return false
-            }
-
-            const loadedPlugin = this._extractPlugin(registration)
-            if (!loadedPlugin) {
-                logger.error(`Invalid plugin structure for ${plugin.name}`)
-                return false
-            }
-            if (!this._validatePlugin(loadedPlugin)) {
-                logger.error(`Plugin ${loadedPlugin.name} conflicts with an active runtime plugin`)
-                return false
-            }
-
-            if (loadedPlugin.services) {
-                this._serviceRegistry.registerAll(
-                    loadedPlugin.services,
-                    pluginServiceOwner(loadedPlugin.name)
-                )
-            }
-
-            this.plugins = [...this.plugins, loadedPlugin]
-            this._pluginMap.set(loadedPlugin.name, loadedPlugin)
-            this._clearPluginIncompatibility(plugin)
-
-            logger.info(`Plugin ${loadedPlugin.name} installed successfully`)
-            // Notify listeners (does NOT emit global events – callers do that)
-            this._notifyChange()
-            callBack && callBack()
-            return true
+            return this._activateRegistration(registration, plugin, callBack)
         } catch (error) {
             logger.error(`Error installing plugin ${plugin?.name}:`, error)
             return false
         }
+    }
+
+    /**
+     * Install a plugin from JavaScript source that is already in hand, instead
+     * of from a URL.
+     *
+     * The plugin studio builds a project's bundle in a child process and holds
+     * the code in memory; it should not have to publish that bundle to an
+     * origin first. The source is loaded through an object URL, so it goes
+     * through exactly the same activation path as a remote artifact — API
+     * version handshake, `KPlugin` extraction, service registration.
+     *
+     * Pass `replace: true` for hot reload: any active plugin with the same name
+     * is uninstalled first, and a stale object URL is never reused.
+     */
+    async installPluginFromSource(
+        options: {
+            /** JavaScript previously produced by the dev bundler. */
+            code: string
+            /** Registry key the bundle registered itself under. */
+            pluginKey: string
+            /** Human-readable name, used for logs and the incompatible list. */
+            name: string
+            version?: string
+            /** Uninstall an active plugin with the same runtime name first. */
+            replace?: boolean
+            /** Label for logs; defaults to the plugin name. */
+            sourceLabel?: string
+        },
+        callBack?: () => void,
+    ): Promise<boolean> {
+        const { code, pluginKey, name } = options
+        if (!code || !pluginKey || !name) {
+            logger.error('installPluginFromSource requires code, pluginKey and name')
+            return false
+        }
+
+        const plugin: RemotePluginDescriptor = {
+            pluginKey,
+            name,
+            version: options.version,
+            resourcePath: `inline://${options.sourceLabel ?? name}`,
+        }
+
+        if (this._isInitialPluginKey(pluginKey)) {
+            logger.warn(`Plugin ${pluginKey} is provided by the host and cannot be installed from source`)
+            return false
+        }
+
+        if (options.replace) {
+            const active = this._pluginMap.get(name)
+            if (active) {
+                // Safe: the reload is about to install a fresh instance.
+                this.uninstallPlugin(name)
+            }
+        }
+
+        if (!this._validatePlugin(plugin)) {
+            logger.error('Plugin validation failed')
+            return false
+        }
+
+        let objectUrl: string | undefined
+        try {
+            objectUrl = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }))
+            const registration = await pluginScriptLoader.load(objectUrl, pluginKey, name, {
+                bustCache: true,
+                timeout: this._loadTimeoutMs,
+            })
+            if (!registration) {
+                logger.error(`Failed to load plugin instance for ${name}`)
+                return false
+            }
+            return this._activateRegistration(registration, plugin, callBack)
+        } catch (error) {
+            logger.error(`Error installing plugin from source ${name}:`, error)
+            return false
+        } finally {
+            // The registration is cached in memory; the URL itself is not needed.
+            if (objectUrl) URL.revokeObjectURL(objectUrl)
+        }
+    }
+
+    /**
+     * Shared tail of every install path: version handshake, `KPlugin`
+     * extraction, service registration and change notification.
+     */
+    private _activateRegistration(
+        registration: PluginRegistration,
+        plugin: RemotePluginDescriptor,
+        callBack?: () => void,
+    ): boolean {
+        const incompatibility = this._getApiIncompatibility(registration.meta, plugin)
+        if (incompatibility) {
+            this._clearPluginIncompatibility(plugin)
+            this._incompatiblePlugins.set(this._pluginIdentity(plugin), incompatibility)
+            this._notifyChange()
+            return false
+        }
+
+        const loadedPlugin = this._extractPlugin(registration)
+        if (!loadedPlugin) {
+            logger.error(`Invalid plugin structure for ${plugin.name}`)
+            return false
+        }
+        if (!this._validatePlugin(loadedPlugin)) {
+            logger.error(`Plugin ${loadedPlugin.name} conflicts with an active runtime plugin`)
+            return false
+        }
+
+        if (loadedPlugin.services) {
+            this._serviceRegistry.registerAll(
+                loadedPlugin.services,
+                pluginServiceOwner(loadedPlugin.name)
+            )
+        }
+
+        this.plugins = [...this.plugins, loadedPlugin]
+        this._pluginMap.set(loadedPlugin.name, loadedPlugin)
+        this._clearPluginIncompatibility(plugin)
+
+        logger.info(`Plugin ${loadedPlugin.name} installed successfully`)
+        // Notify listeners (does NOT emit global events – callers do that)
+        this._notifyChange()
+        callBack && callBack()
+        return true
     }
 
     remove(name: string) {
@@ -1074,7 +1229,7 @@ export class PluginManager {
                     pluginUrl,
                     plugin.pluginKey,
                     plugin.name,
-                    { integrity: plugin.integrity },
+                    { integrity: plugin.integrity, timeout: this._loadTimeoutMs },
                 );
 
                 // Version handshake before extracting the KPlugin instance
@@ -1108,6 +1263,17 @@ export class PluginManager {
     /** Read-only service access for hooks and plugin consumers. */
     get serviceRegistry(): ServiceRegistryView {
         return this._serviceRegistryView
+    }
+
+    /**
+     * Register a host-owned core service after construction.
+     *
+     * Needed when a service's implementation closes over the manager itself
+     * (e.g. `pluginHost`), which is impossible to express in the constructor's
+     * `coreServices` object. Core services cannot be replaced by plugins.
+     */
+    registerCoreService<K extends keyof Services>(name: K, service: NonNullable<Services[K]>): void {
+        this._serviceRegistry.register(name, service, CORE_SERVICE_OWNER)
     }
 
     /**

@@ -42,6 +42,12 @@ export interface KnGlobalNamespace {
      * VITE_* variables at runtime via {@code getAppEnv}.
      */
     env?: Record<string, string | boolean | undefined>
+    /**
+     * The `@kn/plugin-api` module (contract version constants and types at
+     * runtime). Published so plugins authored in the studio can import the
+     * package as a host module instead of bundling their own copy.
+     */
+    pluginApi?: any
     /** Called by plugin bundles (rollup outro) to register their exports. */
     definePlugin: (packageName: string, exports: Record<string, unknown>, meta?: PluginMeta) => void
     /** Retrieve a previously registered plugin bundle. */
@@ -66,6 +72,8 @@ export interface SetupGlobalNamespaceOptions {
     hostApiVersion: string
     /** Host build-time env published to plugins (see KnGlobalNamespace.env). */
     env?: Record<string, string | boolean | undefined>
+    /** The `@kn/plugin-api` module, published for studio-authored plugins. */
+    pluginApi?: any
 }
 
 /**
@@ -96,6 +104,7 @@ export function setupGlobalNamespace(opts: SetupGlobalNamespaceOptions): KnGloba
         editor: opts.editor,
         hostApiVersion: opts.hostApiVersion,
         env: opts.env ?? {},
+        pluginApi: opts.pluginApi,
         definePlugin: (packageName, exports, meta) => {
             registry.set(packageName, { exports, meta: meta ?? {} })
         },

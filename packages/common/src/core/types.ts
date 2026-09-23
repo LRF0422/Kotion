@@ -1,5 +1,6 @@
 import type { SpacePageService } from "../domain/space-page/operations";
 import type { DesktopBridge } from "./desktop-bridge";
+import type { PluginHostService } from "./plugin-host";
 
 export type KeysWithTypeOf<T, Type> = { [P in keyof T]: T[P] extends Type ? P : never }[keyof T];
 export type ValuesOf<T> = T[keyof T];
@@ -304,4 +305,10 @@ export interface Services {
      * only; on the web the service is absent — use useOptionalService("desktop").
      */
     desktop?: DesktopBridge;
+    /**
+     * Host-side plugin lifecycle surface (install from source, uninstall,
+     * change notifications). Registered by the host; the plugin studio uses it
+     * to hot-install a locally built bundle.
+     */
+    pluginHost?: PluginHostService;
 }

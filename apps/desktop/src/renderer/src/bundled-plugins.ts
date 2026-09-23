@@ -9,10 +9,15 @@ import { logicFlow } from '@kn/plugin-logicflow'
 import { apiClient } from '@kn/plugin-api-client'
 import { github } from '@kn/plugin-github'
 import { zhihu } from '@kn/plugin-zhihu'
+import { pluginStudio } from '@kn/plugin-plugin-studio'
 
 /**
  * Development-only compatibility set. Imported lazily behind `import.meta.env.DEV`
  * so production builds tree-shake it and ship only {@link systemPlugins}.
+ *
+ * The plugin studio is bundled in development so a fresh checkout can author
+ * plugins immediately; in packaged builds it arrives through the marketplace
+ * like any other plugin.
  */
 export const bundledPlugins = [
     DefaultPluginInstance,
@@ -26,4 +31,5 @@ export const bundledPlugins = [
     apiClient,
     github,
     zhihu,
+    pluginStudio,
 ]

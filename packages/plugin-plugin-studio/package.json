@@ -1,0 +1,33 @@
+{
+    "name": "@kn/plugin-plugin-studio",
+    "version": "0.0.1",
+    "description": "Plugin Studio — author, hot-preview and package plugins from inside the desktop app",
+    "main": "src/index.tsx",
+    "publishConfig": {
+        "main": "dist/index.js",
+        "types": "dist/index.d.ts",
+        "registry": "http://localhost:8081/repository/npm-hosted/"
+    },
+    "scripts": {
+        "build": "rollup -c",
+        "typecheck": "tsc --noEmit -p tsconfig.json",
+        "test": "node src/studio-service.test.mjs"
+    },
+    "dependencies": {
+        "@kn/common": "workspace:*",
+        "@kn/icon": "workspace:*",
+        "@kn/ui": "workspace:*"
+    },
+    "keywords": [
+        "plugin",
+        "studio",
+        "desktop",
+        "development"
+    ],
+    "author": "",
+    "license": "ISC",
+    "devDependencies": {
+        "@kn/rollup-config": "workspace:*",
+        "@kn/typescript-config": "workspace:*"
+    }
+}

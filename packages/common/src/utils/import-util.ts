@@ -85,8 +85,11 @@ export class PluginScriptLoader {
         // Clear the invalidated flag
         this.invalidatedUrls.delete(url)
 
-        // When busting cache, append a timestamp to bypass browser HTTP cache
-        const fetchUrl = shouldBust
+        // When busting cache, append a timestamp to bypass the browser HTTP
+        // cache. Object URLs are already unique per creation and cannot carry a
+        // query string (`blob:…#x?y` is a different, non-existent resource), so
+        // they are never decorated.
+        const fetchUrl = shouldBust && !url.startsWith('blob:')
             ? `${url}${url.includes('?') ? '&' : '?'}_t=${Date.now()}`
             : url
 
@@ -102,42 +105,57 @@ export class PluginScriptLoader {
             }
             document.head.appendChild(script)
 
-            // Timeout guard
-            const timer = setTimeout(() => {
+            let settled = false
+            let timer: ReturnType<typeof setTimeout> | undefined
+
+            /**
+             * Detach the script node and stop listening. Removing the node also
+             * aborts a request that is still in flight (or queued behind the
+             * browser's per-host connection limit), so a host that gives up on a
+             * plugin does not leak a permanently pending request.
+             */
+            const cleanup = () => {
+                if (timer !== undefined) clearTimeout(timer)
+                script.removeEventListener('load', onLoad)
+                script.removeEventListener('error', onError)
+                if (script.parentNode) script.parentNode.removeChild(script)
+            }
+
+            const finish = (fn: () => void) => {
+                if (settled) return
+                settled = true
                 cleanup()
-                reject(new Error(`Plugin "${name}" load timed out after ${timeout}ms (${url})`))
+                fn()
+            }
+
+            // Timeout guard: a plugin artifact that never answers must not pin a
+            // connection (or the caller) open forever.
+            timer = setTimeout(() => {
+                finish(() => reject(new Error(`Plugin "${name}" load timed out after ${timeout}ms (${url})`)))
             }, timeout)
 
             const onLoad = () => {
-                cleanup()
-                document.head.removeChild(script)
-                // New bundles register themselves via window.__KN__.definePlugin;
-                // legacy bundles only expose their exports on window[packageName].
-                const registration: PluginRegistration | undefined =
-                    window.__KN__?.getPlugin?.(packageName)
-                    ?? window.__KN__?.findPlugin?.(packageName)
-                    ?? ((window as any)[packageName]
-                        ? { exports: (window as any)[packageName], meta: {} }
-                        : undefined)
-                if (!registration) {
-                    reject(new Error(`Plugin ${packageName} not found in window scope`))
-                    return
-                }
-                // Always cache under the original URL key (without timestamp)
-                this.cache.set(url, registration)
-                resolve(registration)
+                finish(() => {
+                    // New bundles register themselves via window.__KN__.definePlugin;
+                    // legacy bundles only expose their exports on window[packageName].
+                    const registration: PluginRegistration | undefined =
+                        window.__KN__?.getPlugin?.(packageName)
+                        ?? window.__KN__?.findPlugin?.(packageName)
+                        ?? ((window as any)[packageName]
+                            ? { exports: (window as any)[packageName], meta: {} }
+                            : undefined)
+                    if (!registration) {
+                        reject(new Error(`Plugin ${packageName} not found in window scope`))
+                        return
+                    }
+                    // Always cache under the original URL key (without timestamp)
+                    this.cache.set(url, registration)
+                    resolve(registration)
+                })
             }
 
             const onError = (error: Event | ErrorEvent) => {
-                cleanup()
-                document.head.removeChild(script)
-                reject(error)
-            }
-
-            const cleanup = () => {
-                clearTimeout(timer)
-                script.removeEventListener('load', onLoad)
-                script.removeEventListener('error', onError)
+                finish(() => reject(error))
             }
 
             script.addEventListener('load', onLoad)

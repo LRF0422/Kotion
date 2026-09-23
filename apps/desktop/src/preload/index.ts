@@ -35,6 +35,18 @@ const CAPABILITIES = [
   'window.setFullScreen',
   'window.isFullScreen',
   'window.setTrafficLights',
+  // Plugin development (plugin-studio). These validate every path in the main
+  // process against the same fs allowlist as the fs.* capabilities, and the
+  // only process they can start is the bundled plugin dev-server.
+  'dev.start',
+  'dev.stop',
+  'dev.build',
+  'dev.status',
+  'dev.logs',
+  'dev.scaffold',
+  'dev.list',
+  'dev.readFile',
+  'dev.writeFile',
 ] as readonly string[]
 
 const knDesktop = {

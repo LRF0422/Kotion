@@ -30,6 +30,7 @@ import { ErrorPage } from "./components/ErrorPage";
 import { PluginErrorBoundary } from "./components/PluginErrorBoundary";
 import ReactDOM from "react-dom";
 import { PLUGIN_API_VERSION } from "@kn/plugin-api";
+import * as pluginApi from "@kn/plugin-api";
 import { createDesktopBridge } from "./desktop/bridge";
 import { OrganizationInvitationAccept } from "./components/settings/OrganizationInvitationAccept";
 import { createSpacePageService } from "./domain/space-page";
@@ -304,7 +305,7 @@ export const App: React.FC<AppProps> = (props) => {
         // Desktop capabilities are registered as a core service on Electron and
         // stay absent on the web, so plugins use useOptionalService("desktop").
         const desktop = createDesktopBridge()
-        return new common.PluginManager({
+        const manager = new common.PluginManager({
             // Plugin artifacts are served from the public (no-auth) plugin endpoint
             // so script tags need no Authorization query param and SRI/CORS work.
             resolveUrl: (resourcePath: string) => usePath(resourcePath)
@@ -316,6 +317,16 @@ export const App: React.FC<AppProps> = (props) => {
                 ...(desktop ? { desktop } : {}),
             },
         }, plugins)
+        // The plugin studio (and any future tooling plugin) hot-installs local
+        // bundles through this narrow surface instead of importing the manager.
+        manager.registerCoreService('pluginHost', {
+            installFromSource: (options) => manager.installPluginFromSource(options),
+            uninstall: (name: string) => manager.uninstallPlugin(name),
+            has: (name: string) => manager.hasPlugin(name),
+            getActiveNames: () => manager.getAllPluginNames(),
+            subscribe: (listener: () => void) => manager.onChange(listener),
+        })
+        return manager
     }, [])
     const [pluginsReady, setPluginsReady] = useState(false)
     const [refreshFlag, setRefreshFlag] = useState(0)
@@ -476,4 +487,6 @@ common.setupGlobalNamespace({
     // Publish the host's build-time env so plugin UMD bundles can read VITE_*
     // variables at runtime via @kn/common's getAppEnv().
     env: { ...(import.meta as any).env },
+    // Published so plugins can resolve `@kn/plugin-api` as a host module.
+    pluginApi,
 })
