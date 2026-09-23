@@ -140,7 +140,7 @@ public class ContextManager {
     /** Header of the deferred (skill-owned) tool directory. */
     private static final String DEFERRED_TOOLS_HEADER =
             "\n\n【按需工具】以下工具可直接调用，但为节省上下文只给出参数签名（`?` 表示可选），"
-            + "未展开完整的参数结构。首次调用后，该工具的参数结构会随本次调用的结果一并返回；"
+            + "未展开完整的参数结构。首次调用后其完整参数结构会加载进工具列表；"
             + "若首次调用因参数不符被拒绝，请依据返回的错误与随后出现的参数结构重试。";
 
     /** Per-tool description budget in the directory (chars). */

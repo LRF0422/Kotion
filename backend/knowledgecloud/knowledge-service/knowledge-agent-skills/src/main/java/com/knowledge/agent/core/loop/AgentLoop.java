@@ -32,7 +32,6 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -192,20 +191,22 @@ public class AgentLoop implements Runnable {
 
     private volatile boolean externallyCancelled;
 
-    private final Map<String, ToolSpec> clientToolSpecs = new HashMap<>();
+    private final Map<String, ToolSpec> clientToolSpecs = new java.util.LinkedHashMap<>();
 
     /**
      * Deferred client tools (skill-owned): routable and executable, but absent
-     * from the tools JSON for the WHOLE run. Keeping the tools array frozen is
-     * deliberate — the provider renders tools ahead of messages, so promoting
-     * one mid-run would invalidate the cached prefix of every earlier step. A
-     * deferred tool's schema is instead returned with the result of its first
-     * call (see {@link #deferredSchemaNote}).
+     * from the tools JSON until the model actually calls one, at which point the
+     * spec is promoted into {@link #clientToolSpecs}. Keeps plugin schemas
+     * (chart/mermaid/drawio…) out of every prompt without making them
+     * uncallable.
+     *
+     * <p>The promotion invalidates the provider prefix once per newly used tool.
+     * That cost is deliberate and must stay: while a historical {@code
+     * tool_calls} entry is in the conversation, the provider needs the matching
+     * function declared in {@code tools} or it rejects the request. The tool
+     * list is kept insertion-ordered so the only change is the appended schema.
      */
     private final Map<String, ToolSpec> deferredToolSpecs = new java.util.LinkedHashMap<>();
-
-    /** Deferred tools whose schema has already been handed back this run. */
-    private final Set<String> announcedDeferredTools = new HashSet<>();
 
     /** Live sub-agent delegations keyed by the parent-side delegate call id. */
     private final Map<String, Delegation> activeDelegations = new java.util.LinkedHashMap<>();
@@ -542,10 +543,7 @@ public class AgentLoop implements Runnable {
                         if (planGateBlocksClient(call.getName())) {
                             rejectToolCall(call, "PLAN_MODE_BLOCKED");
                         } else {
-                            // The tools array is never mutated mid-run: a changed
-                            // tool list invalidates the provider's whole prefix
-                            // cache. The deferred schema rides back with the
-                            // first result instead.
+                            activateDeferred(call.getName());
                             frontendCalls.add(call);
                         }
                     } else {
@@ -931,16 +929,11 @@ public class AgentLoop implements Runnable {
                 String rendered = item.isOk()
                         ? (images.isEmpty() ? renderResult(item.getResult()) : imageToolSummaryJson(images))
                         : "{\"error\":\"" + escapeJson(item.getError()) + "\"}";
-                String toolContent = render(rendered);
-                String schemaNote = deferredSchemaNote(match.getTool());
-                if (schemaNote != null) {
-                    toolContent = toolContent + schemaNote;
-                }
                 checkpoint.getMessages().add(ChatMessage.builder()
                         .role("tool")
                         .toolCallId(item.getCallId())
                         .name(match.getTool())
-                        .content(toolContent)
+                        .content(render(rendered))
                         .build());
                 appendImageVisionMessage(images);
             }
@@ -1901,28 +1894,24 @@ public class AgentLoop implements Runnable {
     }
 
     /**
-     * Full parameter schema for a deferred tool, appended to the result of its
-     * FIRST call only. The tools array stays frozen (a mid-run change would
-     * invalidate the provider prefix cache), but the model still learns the
-     * exact arguments before retrying. Returns {@code null} for an active or
-     * already-announced tool.
+     * Promotes a deferred tool into the active catalog on its first call, so the
+     * model sees its full parameter schema from the next step onwards AND the
+     * provider has the function declared while its {@code tool_calls} entry is
+     * in the conversation. No-op for tools that were never deferred (or are
+     * already active).
      */
-    private String deferredSchemaNote(String toolName) {
-        if (toolName == null || announcedDeferredTools.contains(toolName)) {
-            return null;
-        }
-        ToolSpec spec = deferredToolSpecs.get(toolName);
+    private void activateDeferred(String toolName) {
+        ToolSpec spec = deferredToolSpecs.remove(toolName);
         if (spec == null) {
-            return null;
+            return;
         }
-        announcedDeferredTools.add(toolName);
-        String schema;
-        try {
-            schema = objectMapper.writeValueAsString(spec.getInputSchema());
-        } catch (Exception e) {
-            schema = String.valueOf(spec.getInputSchema());
+        clientToolSpecs.put(toolName, spec);
+        if (checkpoint.getClientTools() == null) {
+            checkpoint.setClientTools(new ArrayList<>());
         }
-        return "\n\n【工具 " + toolName + " 的参数结构（首次调用后返回，之后可直接按此传参）】\n" + schema;
+        checkpoint.getClientTools().add(spec);
+        checkpoint.setDeferredTools(new ArrayList<>(deferredToolSpecs.values()));
+        log.debug("Run {} activated deferred tool {}", run.getRunId(), toolName);
     }
 
     private ToolContext buildToolContext() {
