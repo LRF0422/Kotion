@@ -49,6 +49,7 @@ export type DesktopCapability =
     | 'dev.writeFile'
     | 'dev.hostApi'
     | 'dev.files'
+    | 'dev.installDependencies'
 
 export interface DesktopAppInfo {
     version: string
@@ -441,6 +442,32 @@ export type DevFilesResult =
     | { kind: 'list'; root: string; files: string[]; truncated: boolean }
     | { kind: 'search'; root: string; matches: DevFileMatch[]; truncated: boolean }
 
+/** Install npm packages into one plugin project. */
+export interface DevInstallOptions {
+    /** Absolute project root (validated against the fs allowlist). */
+    root: string
+    /** Package specs, for example ["date-fns@^3", "@octokit/rest"]. */
+    packages: string[]
+    /** Save as devDependencies instead of dependencies. */
+    dev?: boolean
+    /** Force a package manager; otherwise detected from lockfiles. */
+    manager?: 'npm' | 'pnpm' | 'yarn'
+    /** Kill the install after this many ms. Defaults to 180000. */
+    timeoutMs?: number
+}
+
+/** Result of {@link DevBridge.installDependencies}. */
+export interface DevInstallResult {
+    ok: boolean
+    /** Package manager that ran. */
+    manager: string
+    /** Specs that were installed (de-duplicated). */
+    packages: string[]
+    /** Combined stdout/stderr tail for the studio log. */
+    output: string
+    error?: string
+}
+
 /**
  * The plugin-development surface of the desktop bridge. Separate from
  * {@link DesktopBridge} so a plugin can feature-detect a dev-capable host:
@@ -473,6 +500,8 @@ export interface DevBridge {
     hostApi(options?: DevHostApiOptions): Promise<DevHostApiResult>
     /** Enumerate or search the files of one project. */
     files(options: DevFilesOptions): Promise<DevFilesResult>
+    /** Install npm packages into one project (runs the package manager). */
+    installDependencies(options: DevInstallOptions): Promise<DevInstallResult>
     /**
      * Subscribe to successful rebuilds. `root` filters to one project; omit to
      * receive every project's rebuilds. Returns an unsubscribe function.
@@ -526,6 +555,7 @@ export interface DesktopCapabilityContract {
     'dev.writeFile': { params: DevFileOptions; result: void }
     'dev.hostApi': { params: DevHostApiOptions; result: DevHostApiResult }
     'dev.files': { params: DevFilesOptions; result: DevFilesResult }
+    'dev.installDependencies': { params: DevInstallOptions; result: DevInstallResult }
 }
 
 /**

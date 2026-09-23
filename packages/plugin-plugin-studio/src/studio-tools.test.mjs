@@ -147,6 +147,15 @@ const dev = {
             ],
         }
     },
+    async installDependencies(options = {}) {
+        calls.push(['installDependencies', options])
+        return {
+            ok: true,
+            manager: 'npm',
+            packages: options.packages ?? [],
+            output: 'added 1 package',
+        }
+    },
 }
 
 const pluginHost = {
@@ -170,6 +179,7 @@ const EXPECTED = [
     'editPluginProjectFile',
     'listPluginProjectFiles',
     'searchPluginProject',
+    'installPluginDependencies',
     'runPluginProject',
     'buildPluginProject',
     'stopPluginProject',
@@ -276,6 +286,17 @@ check(
 )
 check('files: list reached dev.files', calls.some(([name, args]) => name === 'files' && !args.query))
 check('files: search reached dev.files', calls.some(([name, args]) => name === 'files' && args.query === 'export'))
+
+const installed = await tools.installPluginDependencies.execute({ root: ROOT, packages: ['date-fns@^3'] })
+check(
+    'install: reports success',
+    installed.ok === true && installed.manager === 'npm' && installed.packages[0] === 'date-fns@^3',
+    JSON.stringify(installed),
+)
+check(
+    'install: forwards packages',
+    calls.some(([name, args]) => name === 'installDependencies' && args.packages?.[0] === 'date-fns@^3'),
+)
 
 const ran = await tools.runPluginProject.execute({ root: ROOT })
 check('run: starts a watching session', ran.state === 'watching' && ran.ok === true, JSON.stringify({ state: ran.state }))

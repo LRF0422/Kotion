@@ -20,6 +20,8 @@ import type {
     DevHostApiResult,
     DevFilesOptions,
     DevFilesResult,
+    DevInstallOptions,
+    DevInstallResult,
 } from '@kn/common'
 
 /**
@@ -52,6 +54,7 @@ const DEV_CAPABILITIES: DesktopCapability[] = [
     'dev.writeFile',
     'dev.hostApi',
     'dev.files',
+    'dev.installDependencies',
 ]
 
 const createDevBridge = (
@@ -119,6 +122,10 @@ const createDevBridge = (
         files: (options: DevFilesOptions): Promise<DevFilesResult> => {
             requireCapability('dev.files')
             return invoke('dev.files', options)
+        },
+        installDependencies: (options: DevInstallOptions): Promise<DevInstallResult> => {
+            requireCapability('dev.installDependencies')
+            return invoke('dev.installDependencies', options)
         },
         /**
          * The main process broadcasts one `dev` event channel; filtering by root

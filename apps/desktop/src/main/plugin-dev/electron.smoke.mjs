@@ -158,6 +158,7 @@ const run = async () => {
         'dev.writeFile',
         'dev.hostApi',
         'dev.files',
+        'dev.installDependencies',
     ]) {
         const name = capability === 'dev.devstatus' ? 'dev.status' : capability
         check(`bridge: capability ${name}`, capabilities?.includes(name) === true)

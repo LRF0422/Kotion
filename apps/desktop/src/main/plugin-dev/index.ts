@@ -13,6 +13,7 @@ import { dirname, join, resolve } from 'node:path'
 import { DevSessionManager } from './manager.mjs'
 import { queryHostApi, resolveWorkspaceRoot } from './host-api.mjs'
 import { queryProjectFiles } from './project-files.mjs'
+import { installDependencies } from './package-install.mjs'
 
 /** Subdirectory of userData that the studio owns; see DEV_PROJECTS_DIR_NAME. */
 const PROJECTS_DIR_NAME = 'plugin-projects'
@@ -174,6 +175,20 @@ export function setupDevIpcHandlers({ assertAllowedPath }: DevIpcOptions): DevSe
             query: typeof params.query === 'string' ? params.query : undefined,
             include: typeof params.include === 'string' ? params.include : undefined,
             limit: typeof params.limit === 'number' ? params.limit : undefined,
+        })
+    })
+
+    // Install third-party packages into a project. The root goes through the
+    // fs allowlist; package specs are validated inside the module.
+    handle('dev.installDependencies', async (_event, raw) => {
+        const params = asRecord(raw)
+        const root = assertAllowedPath(params.root, 'root')
+        return installDependencies({
+            root,
+            packages: Array.isArray(params.packages) ? params.packages : [],
+            dev: params.dev === true,
+            manager: typeof params.manager === 'string' ? params.manager : undefined,
+            timeoutMs: typeof params.timeoutMs === 'number' ? params.timeoutMs : undefined,
         })
     })
 

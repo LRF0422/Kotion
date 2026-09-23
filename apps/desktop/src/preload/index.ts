@@ -51,6 +51,8 @@ const CAPABILITIES = [
   'dev.hostApi',
   // Project file discovery (list/search) for the agent.
   'dev.files',
+  // Install third-party npm packages into a plugin project.
+  'dev.installDependencies',
 ] as readonly string[]
 
 const knDesktop = {

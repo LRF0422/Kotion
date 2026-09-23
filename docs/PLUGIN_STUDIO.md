@@ -64,7 +64,7 @@
 
 ### agent：工具驱动
 
-插件向 agent 注册了 14 个工具（`editorExtension.tools`，见 `PluginManager.resolveTools`）：
+插件向 agent 注册了 15 个工具（`editorExtension.tools`，见 `PluginManager.resolveTools`）：
 
 | 工具 | 作用 |
 | --- | --- |
@@ -82,6 +82,7 @@
 | `listHostApiPackages` | 列出可查阅的标准宿主包与类型入口 |
 | `searchHostApi` | 在标准包源码里按名字搜索类型/接口（返回文件+行号） |
 | `readHostApiFile` | 读取标准包里的一个源码文件，查看真实接口定义 |
+| `installPluginDependencies` | 安装第三方 npm 包（调用 npm/pnpm/yarn 并写入 package.json） |
 
 所以你可以直接说：
 
@@ -168,10 +169,19 @@ pnpm test:plugin-dev:electron
 | `dev.readFile` / `dev.writeFile` | 读写工程文件（agent 改源码用） |
 | `dev.hostApi` | 只读标准宿主包源码：列出包（无参）/ 搜索（`query`）/ 读文件（`package`+`path`） |
 | `dev.files` | 枚举/搜索一个工程的源码文件：列出（无 `query`）/ 搜索（`query`，返回文件+行号） |
+| `dev.installDependencies` | 在工程目录里安装第三方 npm 包（自动识别 npm/pnpm/yarn，校验包名） |
 
 配套宿主服务：`pluginHost.installFromSource()` / `uninstall()` / `subscribe()`
 （`packages/core/src/App.tsx` 注册，插件通过 `useOptionalService('pluginHost')` 使用）。
 
+## 第三方依赖与 Tailwind
+
+- **第三方 npm 包**：用 `installPluginDependencies({ root, packages })`（或设置面板外的手动 `npm install`）装到工程目录。
+  打包时第三方包会被打进产物；`react`、`react-dom`、`@kn/*` 仍由宿主注入。插件运行在浏览器环境，
+  不能用 Node 内置模块；带原生二进制的包不支持。安装需要网络，并会执行包管理器（可信开发机使用）。
+- **Tailwind**：直接在源码里写工具类即可。构建时 dev-server 会用宿主的 `@kn/ui/tailwind.config` 把你的类
+  编译成 CSS，并用一个按 pluginKey 命名的 `<style>` 注入到宿主窗口（热更时替换，不会堆叠）。
+  无需自己写 `@tailwind` 指令；宿主已注入的 `react`/`@kn/*` 依赖不要重复安装。
 ## 已知边界
 
 1. **主进程代码不能热更**：热更只覆盖窗口内的插件模块；改了 `apps/desktop/src/main/**` 仍需重启。

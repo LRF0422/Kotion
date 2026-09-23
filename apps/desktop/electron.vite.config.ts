@@ -10,7 +10,7 @@ import tsconfigPaths from 'vite-tsconfig-paths'
  * and so esbuild can resolve from the app's node_modules. Rollup never sees
  * these two modules as entries, so they are copied verbatim into out/main.
  */
-const childProcessAssets = ['dev-server.mjs', 'bundler.mjs']
+const childProcessAssets = ['dev-server.mjs', 'bundler.mjs', 'tailwind.mjs']
 
 const copyPluginDevAssets = () => ({
   name: 'kn-copy-plugin-dev-assets',

@@ -90,6 +90,14 @@ export type StudioFilesResult =
     | { kind: 'list'; root: string; files: string[]; truncated: boolean }
     | { kind: 'search'; root: string; matches: StudioFileMatch[]; truncated: boolean }
 
+export interface StudioInstallResult {
+    ok: boolean
+    manager: string
+    packages: string[]
+    output: string
+    error?: string
+}
+
 export interface StudioDevBridge {
     start(options: { root: string; watch?: boolean; writeToDisk?: boolean; externals?: string[] }): Promise<StudioSessionStatus>
     build(options: { root: string; writeToDisk?: boolean; watch?: boolean; externals?: string[] }): Promise<StudioSessionStatus>
@@ -120,6 +128,14 @@ export interface StudioDevBridge {
         include?: string
         limit?: number
     }): Promise<StudioFilesResult>
+    /** Install npm packages into a project; see StudioInstallResult. */
+    installDependencies(options: {
+        root: string
+        packages: string[]
+        dev?: boolean
+        manager?: string
+        timeoutMs?: number
+    }): Promise<StudioInstallResult>
 }
 
 export interface StudioPluginHost {
@@ -176,6 +192,16 @@ const requireFiles = (deps: StudioToolDeps): NonNullable<StudioDevBridge['files'
         throw new Error('当前桌面端不支持工程文件检索（缺少 dev.files 能力），请升级 KN 桌面客户端。')
     }
     return dev.files.bind(dev)
+}
+
+const requireInstall = (deps: StudioToolDeps): NonNullable<StudioDevBridge['installDependencies']> => {
+    const dev = requireDev(deps)
+    if (typeof dev.installDependencies !== 'function') {
+        throw new Error(
+            '当前桌面端不支持安装第三方依赖（缺少 dev.installDependencies 能力），请升级 KN 桌面客户端。',
+        )
+    }
+    return dev.installDependencies.bind(dev)
 }
 
 /**
@@ -480,6 +506,44 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
                 count: result.matches.length,
                 truncated: result.truncated,
                 matches: result.matches,
+            }
+        },
+    },
+
+    installPluginDependencies: {
+        description:
+            '在插件工程里安装第三方 npm 包：调用工程所用的包管理器（npm/pnpm/yarn）并写入 package.json。' +
+            '安装成功后即可在源码里 import（打包时会打进产物；react 与 @kn/* 仍由宿主提供）。需要网络。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                root: { type: 'string', description: '工程根目录。' },
+                packages: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: '要安装的包，如 ["date-fns@^3", "@octokit/rest"]。',
+                },
+                dev: { type: 'boolean', description: '可选。装到 devDependencies，默认 false。' },
+            },
+            required: ['root', 'packages'],
+        },
+        execute: async (args: { root: string; packages: string[]; dev?: boolean }) => {
+            const result = await requireInstall(deps)({
+                root: args.root,
+                packages: Array.isArray(args.packages) ? args.packages : [],
+                dev: args.dev === true,
+            })
+            if (!result.ok) {
+                throw new Error(
+                    '依赖安装失败（' + result.manager + '）：' + (result.error || '未知错误') + '\n' + result.output,
+                )
+            }
+            return {
+                ok: true,
+                manager: result.manager,
+                packages: result.packages,
+                output: result.output,
+                next: '现在可以在源码里 import 这些包；改完用 runPluginProject / buildPluginProject 验证。',
             }
         },
     },

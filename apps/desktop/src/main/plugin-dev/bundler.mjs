@@ -20,6 +20,7 @@
 import { createRequire } from 'node:module'
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { dirname, extname, join, relative, resolve, sep } from 'node:path'
+import { buildPluginCss } from './tailwind.mjs'
 
 const require = createRequire(import.meta.url)
 
@@ -286,6 +287,32 @@ export const findEntry = async (root) => {
     return null
 }
 
+
+/**
+ * CSS injection snippet prepended to the bundle. A per-plugin style tag means
+ * a hot reload replaces the previous CSS instead of stacking copies.
+ */
+export const buildCssInjection = (pluginKey, css) => {
+    if (!css) return ''
+    return `
+var __knStyleKey = ${JSON.stringify(pluginKey)};
+var __knCss = ${JSON.stringify(css)};
+try {
+  var __knDocument = typeof document !== 'undefined' ? document : null;
+  if (__knDocument && __knCss) {
+    var __knSelector = 'style[data-kn-plugin-style="' + __knStyleKey + '"]';
+    var __knStyle = __knDocument.querySelector(__knSelector);
+    if (!__knStyle) {
+      __knStyle = __knDocument.createElement('style');
+      __knStyle.setAttribute('data-kn-plugin-style', __knStyleKey);
+      (__knDocument.head || __knDocument.documentElement).appendChild(__knStyle);
+    }
+    __knStyle.textContent = __knCss;
+  }
+} catch (__knCssError) { /* CSS injection is best-effort */ }
+`
+}
+
 /** Minimal single-file scaffold written by `dev.scaffold`. */
 export const renderScaffold = ({ name, pluginKey, displayName }) => {
     const title = displayName || name
@@ -478,6 +505,11 @@ export const buildPlugin = async ({ root, entry, pluginKey, name, writeToDisk = 
 
         const modules = collectModules(result.metafile, root, entry)
 
+        // Compile the plugin's Tailwind utilities with the host theme and
+        // inject them with the bundle. CSS problems degrade to warnings.
+        const cssResult = await buildPluginCss({ root })
+        for (const warning of cssResult.warnings) warnings.push(warning)
+
         // esbuild rewrites externals to its own `__require` helper (sometimes
         // suffixed, e.g. `__require2`). Redirect every such *call* to the host
         // shim; the declaration site is skipped by the lookahead, and
@@ -505,6 +537,7 @@ export const buildPlugin = async ({ root, entry, pluginKey, name, writeToDisk = 
         // CommonJS module wrapper does not expose `module` to the entry.
         const code = `(() => {
 ${body}
+${buildCssInjection(pluginKey, cssResult.css)}
 var __knNamespace;
 try {
   __knNamespace = globalThis[${JSON.stringify(deliverSlot)}];
