@@ -10,6 +10,18 @@
 export { AgentClient } from './client'
 export type { AgentClientOptions } from './client'
 export {
+    acquireAgentStreamSlot,
+    agentStreamBudgetSnapshot,
+    configureAgentStreamBudget,
+    resetAgentStreamBudget,
+} from './stream-budget'
+export type {
+    AgentStreamBudgetConfig,
+    AgentStreamBudgetSnapshot,
+    AgentStreamOptions,
+    AgentStreamPriority,
+} from './stream-budget'
+export {
     configureAgentTransport,
     getAgentTransport,
     AgentTransportNotConfiguredError,

@@ -14,6 +14,7 @@
 import {
     authorizedFetch,
     configureAgentPersistence,
+    configureAgentStreamBudget,
     configureAgentTransport,
     type AgentPersistence,
 } from '@kn/common'
@@ -36,4 +37,10 @@ export function registerAgentRuntime(): void {
         store: new RunStore(),
         lock: new RunLock(),
     }))
+    // Cap concurrent live run streams per client. Every open run costs a
+    // permanently-open HTTP connection, so an unbounded fan-out of delegated
+    // agents starves ordinary API calls (the browser caps ~6 per HTTP/1.1
+    // origin). One slot stays reserved for the conversation; children attach
+    // later from their durable event log via afterSeq, losing nothing.
+    configureAgentStreamBudget({ maxConcurrentStreams: 4, reservedForRootStreams: 1 })
 }

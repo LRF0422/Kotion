@@ -23,6 +23,7 @@
 import type { ToolExecutionResult } from './tool-executor'
 import type { AgentRunStore } from './persistence'
 import type { AgentEvent, ResumePayload, RunView } from './types'
+import type { AgentStreamOptions } from './stream-budget'
 
 /**
  * The slice of `AgentClient` this worker needs. Declared structurally so the
@@ -30,12 +31,18 @@ import type { AgentEvent, ResumePayload, RunView } from './types'
  * and runs it in isolation).
  */
 export interface SubRunClient {
-    streamEvents(runId: string, afterSeq?: number, signal?: AbortSignal): AsyncGenerator<AgentEvent>
+    streamEvents(
+        runId: string,
+        afterSeq?: number,
+        signal?: AbortSignal,
+        options?: AgentStreamOptions
+    ): AsyncGenerator<AgentEvent>
     resume(
         runId: string,
         payload: ResumePayload,
         afterSeq?: number,
-        signal?: AbortSignal
+        signal?: AbortSignal,
+        options?: AgentStreamOptions
     ): Promise<AsyncGenerator<AgentEvent>>
     getRun(runId: string): Promise<RunView>
 }
@@ -200,9 +207,12 @@ export class SubRunWorker {
     private async consumeOnce(state: ChildState): Promise<void> {
         const payload = state.resumePayload
         state.resumePayload = null
+        // Delegated runs are 'child' streams: the stream budget lets the
+        // conversation through even when many sub-runs are live.
+        const streamOptions: AgentStreamOptions = { priority: 'child' }
         const events = payload
-            ? await this.client.resume(state.runId, payload, state.lastSeq, state.abort.signal)
-            : this.client.streamEvents(state.runId, state.lastSeq, state.abort.signal)
+            ? await this.client.resume(state.runId, payload, state.lastSeq, state.abort.signal, streamOptions)
+            : this.client.streamEvents(state.runId, state.lastSeq, state.abort.signal, streamOptions)
 
         for await (const event of events) {
             if (state.settled || this.stopped) return

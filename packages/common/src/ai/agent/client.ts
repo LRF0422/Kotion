@@ -10,6 +10,7 @@ import {
     getAgentTransport,
     type AgentTransport,
 } from './transport'
+import { acquireAgentStreamSlot, type AgentStreamOptions } from './stream-budget'
 import {
     acceptAgentEvent,
     AgentControlError,
@@ -182,7 +183,28 @@ export class AgentClient {
      * backoff, max 5 attempts) whenever the stream drops without a terminal
      * event, resuming from the last received seq — events are never duplicated.
      */
-    async *streamEvents(runId: string, afterSeq = 0, signal?: AbortSignal): AsyncGenerator<AgentEvent> {
+    async *streamEvents(
+        runId: string,
+        afterSeq = 0,
+        signal?: AbortSignal,
+        options?: AgentStreamOptions,
+    ): AsyncGenerator<AgentEvent> {
+        // Hold one stream slot for the whole subscription: within its lifetime
+        // this generator keeps at most one HTTP connection open (reconnects
+        // replace the previous one), so a slot maps 1:1 to a live connection.
+        const release = await acquireAgentStreamSlot(options?.priority ?? 'root', signal)
+        try {
+            yield* this.streamEventsUnbudgeted(runId, afterSeq, signal)
+        } finally {
+            release()
+        }
+    }
+
+    private async *streamEventsUnbudgeted(
+        runId: string,
+        afterSeq = 0,
+        signal?: AbortSignal,
+    ): AsyncGenerator<AgentEvent> {
         let cursor = wireNumber(afterSeq)
         let reconnects = 0
         while (true) {
@@ -236,7 +258,8 @@ export class AgentClient {
         runId: string,
         payload: ResumePayload,
         afterSeq = 0,
-        signal?: AbortSignal
+        signal?: AbortSignal,
+        options?: AgentStreamOptions,
     ): Promise<AsyncGenerator<AgentEvent>> {
         const controller = new AbortController()
         const forwardAbort = () => controller.abort()
@@ -270,12 +293,19 @@ export class AgentClient {
             throw new Error('Resume response body is null')
         }
         const events = this.streamFromBody(response.body, afterSeq)
+        const priority = options?.priority ?? 'root'
         return (async function* () {
+            // The resume POST resolves once response headers arrive; the body is
+            // the long-lived stream, so the slot is taken for its lifetime (not
+            // the request/response header round-trip).
+            let release: (() => void) | null = null
             try {
+                release = await acquireAgentStreamSlot(priority, signal)
                 yield* events
             } finally {
                 signal?.removeEventListener('abort', forwardAbort)
                 controller.abort()
+                release?.()
             }
         })()
     }
