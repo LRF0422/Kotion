@@ -51,6 +51,7 @@ import {
     useTranslation,
     getAccessToken,
     getAppEnv,
+    getSessionPageBinding,
     setPageEditWindowImpl,
     type GlobalState,
     type PageEditWindowProps,
@@ -201,7 +202,7 @@ const bindMinimizedResize = () => {
     minimizedResizeBound = true;
 };
 
-const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose }) => {
+const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, embedded = false }) => {
     const t = useWindowI18n();
     const navigator = useNavigator();
     const service = useSpacePageService();
@@ -258,6 +259,8 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose }) 
     // Register in the stack on mount (new windows open on top); deregister on
     // unmount so remaining windows compact back down toward BASE_Z.
     useEffect(() => {
+        // Embedded (side-peek) mode is not part of the floating window stack.
+        if (embedded) return;
         bringToFront();
         return () => {
             const el = winRef.current;
@@ -270,7 +273,7 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose }) 
                 layoutMinimized(true);
             }
         };
-    }, [bringToFront]);
+    }, [bringToFront, embedded]);
 
     // ---- Minimize / restore ----
     // Geometry lives on the DOM node, so collapsing and expanding is a style
@@ -525,6 +528,21 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose }) 
         },
     })
 
+    // ---- Claim the page for this visible editor ----
+    // While this window/pane shows the page, its editor is the page's SINGLE
+    // writer: the conversation's hidden off-screen session for the page is
+    // dropped, and the agent's document tools resolve to THIS editor instead of
+    // racing a second one (the "page updated by another writer" conflict).
+    useEffect(() => {
+        if (!editorInstance || !pageId) return;
+        const binding = getSessionPageBinding();
+        if (!binding?.claimEditor) return;
+        binding.claimEditor(pageId, editorInstance);
+        return () => {
+            binding.releaseEditor?.(pageId, editorInstance);
+        };
+    }, [editorInstance, pageId]);
+
     // Declare the session role in awareness (same field/value as the main
     // PageEditor, so the two cannot drift).
     useEffect(() => {
@@ -658,27 +676,36 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose }) 
         <div
             ref={winRef}
             className={cn(
-                "fixed flex flex-col overflow-hidden",
-                "rounded-lg border border-border bg-background shadow-2xl",
-                // Enter reuses the Dialog keyframes; exit is a transition rather
-                // than the paired keyframe so the faded-out state holds until
-                // the parent unmounts us (no animation-fill-mode ordering
-                // dependency). Both touch opacity/transform only — GPU-composited.
-                "animate-dialog-in transition-[opacity,transform] duration-150",
-                closing && "pointer-events-none scale-95 opacity-0",
+                // Embedded mode: a plain full-height column that fills its host
+                // (the side pane). Floating mode: the draggable window chrome.
+                embedded
+                    ? "relative flex h-full min-h-0 flex-col overflow-hidden"
+                    : "fixed flex flex-col overflow-hidden rounded-lg border border-border bg-background shadow-2xl",
+                !embedded && [
+                    // Enter reuses the Dialog keyframes; exit is a transition
+                    // rather than the paired keyframe so the faded-out state
+                    // holds until the parent unmounts us.
+                    "animate-dialog-in transition-[opacity,transform] duration-150",
+                    closing && "pointer-events-none scale-95 opacity-0",
+                ],
             )}
-            style={{ left: initialRect.x, top: initialRect.y, width: initialRect.w, height: initialRect.h, zIndex: BASE_Z }}
-            role="dialog"
+            style={embedded
+                ? undefined
+                : { left: initialRect.x, top: initialRect.y, width: initialRect.w, height: initialRect.h, zIndex: BASE_Z }}
+            role={embedded ? undefined : "dialog"}
             aria-label={page?.title || t('page')}
             // Capture phase so clicks anywhere inside (header, editor, resize
             // handle) raise this window, even if a child stops propagation.
-            onPointerDownCapture={bringToFront}
+            onPointerDownCapture={embedded ? undefined : bringToFront}
         >
-            {/* Header — drag handle (collapsed: the taskbar pill itself) */}
+            {/* Header — drag handle (collapsed: the taskbar pill itself). The
+                embedded pane owns its chrome (see AgentPaneHostImpl), so the
+                window header is dropped there. */}
             <div
                 className={cn(
                     "flex h-10 flex-shrink-0 select-none items-center gap-2 border-b border-border bg-muted/40 px-3 touch-none",
                     minimized ? "cursor-pointer border-b-transparent" : "cursor-move",
+                    embedded && "hidden",
                 )}
                 onPointerDown={onHeaderPointerDown}
                 onPointerMove={onHeaderPointerMove}
@@ -800,8 +827,8 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose }) 
                 )}
             </div>
 
-            {/* Resize handle */}
-            {!minimized && (
+            {/* Resize handle (floating mode only) */}
+            {!minimized && !embedded && (
                 <div
                     className="absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize touch-none"
                     onPointerDown={onResizePointerDown}
@@ -818,7 +845,9 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose }) 
         </div>
     );
 
-    return createPortal(window_, document.body);
+    // Embedded: render in place (inside the side pane). Floating: portal to
+    // document.body so window chrome escapes any clipping ancestor.
+    return embedded ? window_ : createPortal(window_, document.body);
 };
 
 PageEditWindowImpl.displayName = 'PageEditWindowImpl';

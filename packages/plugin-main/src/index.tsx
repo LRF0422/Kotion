@@ -13,6 +13,7 @@ import React from 'react'
 import { LayoutGrid } from '@kn/icon'
 import "@kn/ui/globals.css"
 import { mainDockPanels } from './dock'
+import { PageArtifactCard, PagePreviewPane } from './ai/PageArtifact'
 // export * from "./service"
 // @ts-ignore
 import pkg from '../package.json'
@@ -78,8 +79,60 @@ export const DefaultPluginInstance = new DefaultPlugin({
       id: '/home',
       activePaths: ['/', '/home', '/spaces', '/all-spaces', '/space-detail']
     }
-  ]
-  ,
+  ],
+  /**
+   * Workspace capabilities contributed to the kernel agent (M3): core owns the
+   * implementation (registered at startup), plugin-main only declares which
+   * ones it exposes. Installing plugin-main is what grants the agent page
+   * search / creation; its card + preview are plugin-side too (S2).
+   */
+  agent: {
+    include: [
+      'searchPages',
+      'searchContent',
+      'createPage',
+      'listSpaces',
+      'getSpacePageTree',
+      'openPage',
+      'openPageSide',
+      'focusArtifact',
+    ],
+    toolRenderers: [
+      { tool: 'createPage', render: PageArtifactCard },
+      // Opening beside also leaves a card (jump back / open for editing).
+      { tool: 'openPageSide', render: PageArtifactCard },
+    ],
+    artifactRenderers: [
+      { kind: 'page', render: PagePreviewPane },
+    ],
+    /**
+     * Plugin agent (hybrid delegation, docs/plugin-agents.md): the multi-step
+     * "research → land it as a page → show it" workflow gets its own agent with
+     * a focused persona, while the direct tools above stay available for
+     * one-shot actions.
+     */
+    agents: [
+      {
+        id: 'page-ops',
+        name: '页面操作员',
+        description: '需要跨多步在知识库里检索、整理并落地成页面时委派给它：搜索页面与正文、创建页面、把内容写进去、在侧边展示结果。',
+        systemPrompt: [
+          '你是知识库的页面操作员。',
+          '工作流：检索（searchPages / searchContent）→ 汇总 → 用 createPage 落地成页面并写入内容 → 用 openPageSide 展示给用户。',
+          '只做页面级操作，不要臆造不存在的工具；完成后用一段话汇报你创建或修改了哪些页面。',
+        ].join('\n'),
+        scope: 'any',
+        include: [
+          'searchPages',
+          'searchContent',
+          'createPage',
+          'openPageSide',
+          'getSpacePageTree',
+          'listSpaces',
+        ],
+      },
+    ],
+  },
   // 主页功能引导:在 welcome 引导(priority 100)之后自动接续播放
   tours: [
     {
@@ -119,6 +172,11 @@ export const DefaultPluginInstance = new DefaultPlugin({
   locales: {
     "zh": {
       translation: {
+        pageArtifact: {
+          "untitled": "未命名页面",
+          "openBeside": "在侧边查看",
+          "openPage": "打开页面"
+        },
         dock: {
           "graph": "关系图谱",
           "collapse": "收起面板"
@@ -730,6 +788,11 @@ export const DefaultPluginInstance = new DefaultPlugin({
     },
     "en": {
       translation: {
+        pageArtifact: {
+          "untitled": "Untitled page",
+          "openBeside": "Open beside",
+          "openPage": "Open page"
+        },
         dock: {
           "graph": "Relation Graph",
           "collapse": "Collapse panel"

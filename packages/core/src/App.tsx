@@ -17,11 +17,12 @@ import { Marketplace } from "./components/Shop/Marketplace";
 
 import { resources } from "./locales/resources"
 import { merge } from "lodash";
-import { clearContextSensitiveClientState, normalizeTokenResponse, notifyContextChanged, setRequestToast, setSessionExpiredHandler, resetSessionExpiredGuard, setEntitlementRequiredHandler, subscribeToContextChanges, useAsyncEffect, useSafeState, useTranslation, useApi, useUploadFile, APIS, saveTokens } from "@kn/common"
-import { registerCoreToolFactories } from "./ai/tools/register"
+import { AgentPaneProvider, clearContextSensitiveClientState, normalizeTokenResponse, notifyContextChanged, setRequestToast, setSessionExpiredHandler, resetSessionExpiredGuard, setEntitlementRequiredHandler, subscribeToContextChanges, useAsyncEffect, useSafeState, useTranslation, useApi, useUploadFile, APIS, saveTokens } from "@kn/common"
+import { registerCoreAgentTools, registerCoreToolFactories } from "./ai/tools/register"
 import { registerOffscreenEditorBridge, setMaxOffscreenSessions } from "./ai/offscreen"
 import { registerAgentDocumentBridge } from "./ai/agentdoc"
 import { registerAgentRuntime } from "./ai/agent/runtime"
+import { registerAgentPaneHost } from "./components/AgentPaneHostImpl"
 import { AIAssistantPage } from "./pages/AIAssistantPage"
 import { registerPageEditWindow } from "./components/PageEditWindowImpl"
 import { toast, AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel, Button, Input, Label } from "@kn/ui"
@@ -287,6 +288,12 @@ const ensureCoreRuntimeRegistered = () => {
     // Agent SDK runtime: gateway path + JWT-aware fetch (see ai/agent/runtime).
     registerAgentRuntime()
     registerCoreToolFactories()
+    // Editor-free workspace tool IMPLEMENTATIONS (M3). A plugin must still
+    // declare them via `agent.include` before the agent can call them.
+    registerCoreAgentTools()
+    // Kernel side-peek pane host (plugin-rendered artifact previews) — owns
+    // the chrome that @kn/common cannot import.
+    registerAgentPaneHost()
     registerOffscreenEditorBridge()
     // Per-agent private documents (真并行): delegated agents fork their own
     // copy of a page and merge back when they finish.
@@ -471,6 +478,9 @@ export const App: React.FC<AppProps> = (props) => {
         <ThemeProvider>
             <ResponsiveProvider>
             <Provider store={store}>
+                {/* Kernel agent-pane state: surfaces mount <AgentPaneHost /> in
+                    their own split layout (side peek, not an overlay). */}
+                <AgentPaneProvider>
                 {router
                     ? <RouterProvider router={router} />
                     : <div className="fixed inset-0 flex items-center justify-center bg-background">
@@ -484,6 +494,7 @@ export const App: React.FC<AppProps> = (props) => {
                         </div>
                     </div>
                 }
+                </AgentPaneProvider>
                 <Toaster />
                 {/* Host-owned publish UI; plugins open it via pluginMarketplace. */}
                 <PluginPublisherHost />

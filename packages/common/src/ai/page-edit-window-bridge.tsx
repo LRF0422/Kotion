@@ -16,6 +16,13 @@ export interface PageEditWindowProps {
     /** Page to open in the floating editor window. */
     pageId: string;
     onClose: () => void;
+    /**
+     * Render as an inline, full-height column instead of a floating window.
+     * Used by the kernel side pane; the host owns the surrounding chrome.
+     * Still a full CollaborationEditor on the page's Y.Doc room, so it is
+     * editable and live-syncs with the agent's edits.
+     */
+    embedded?: boolean;
 }
 
 let impl: React.ComponentType<PageEditWindowProps> | null = null;

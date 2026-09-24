@@ -206,6 +206,17 @@ export const offscreenSessionManager = {
         })
     },
 
+    /**
+     * Destroy a page's session immediately when it has no holders. A visible
+     * editor claiming the page must stop the hidden one from writing at once —
+     * the idle timeout would leave two writers for up to a minute.
+     */
+    destroyIdle(pageId: string): void {
+        const record = sessions.get(String(pageId))
+        if (!record || record.refCount > 0) return
+        void destroySession(String(pageId))
+    },
+
     /** Host callback: the session's editor is ready for programmatic edits. */
     markReady(pageId: string, ready: { editor: any; title?: string; flush: () => Promise<void> }): void {
         const record = sessions.get(String(pageId))

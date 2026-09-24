@@ -87,9 +87,19 @@ export function collectCapabilityCatalog(
     // Tools any skill claims. Their schemas ride along inside SkillPayload.tools
     // and are registered as deferred, so keeping them out of tools[] costs
     // nothing in reachability but saves the schema in every prompt.
+    // A skill survives only if it is runnable in THIS session: a prompt-only
+    // skill (no requirements), or one with at least one executable required
+    // tool. Otherwise it would advertise tools the run cannot resolve
+    // (TOOL_NOT_FOUND) — e.g. editor-plugin skills in a run with no editor.
+    const skillSurvives = (skill: { requiredTools?: string[] }): boolean => {
+        const required = skill.requiredTools ?? []
+        return required.length === 0 || required.some(name => !!executableTools[name])
+    }
     const claimedByASkill = new Set<string>()
     for (const skill of allSkills) {
+        if (!skillSurvives(skill)) continue
         for (const name of [...(skill.requiredTools ?? []), ...(skill.optionalTools ?? [])]) {
+            if (!executableTools[name]) continue
             claimedByASkill.add(name)
         }
     }
@@ -137,28 +147,31 @@ export function collectCapabilityCatalog(
     const sortedSkills = allSkills
         .slice()
         .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
-    const skills: SkillPayload[] = sortedSkills.map(skill => {
+    const skills: SkillPayload[] = []
+    for (const skill of sortedSkills) {
+        // Dropped above: its required tools are not runnable here.
+        if (!skillSurvives(skill)) continue
+
         // User-installed skills are stored as `source: 'plugin'` with a `user:` pluginName
         // prefix; surface them to the backend as a distinct `user` source.
         const isUserInstalled = skill.source === 'plugin' &&
             typeof skill.pluginName === 'string' &&
             skill.pluginName.startsWith('user:')
 
+        const requiredTools = (skill.requiredTools ?? []).filter(name => !!executableTools[name])
+        const optionalTools = (skill.optionalTools ?? []).filter(name => !!executableTools[name])
+
         // Embed the full OpenAI-shaped definitions for every tool the skill
-        // references. This is the only path by which claimed plugin tool schemas
-        // reach the backend; it also re-states built-in ones, which the backend
-        // dedupes against `tools[]` so they never become deferred.
-        const referencedNames = [
-            ...(skill.requiredTools ?? []),
-            ...(skill.optionalTools ?? []),
-        ].sort((a, b) => a.localeCompare(b))
+        // still references. This is the only path by which claimed plugin tool
+        // schemas reach the backend; it also re-states built-in ones, which the
+        // backend dedupes against `tools[]` so they never become deferred.
         const seen = new Set<string>()
         const skillTools: ToolPayload[] = []
-        for (const name of referencedNames) {
+        for (const name of [...requiredTools, ...optionalTools].sort((a, b) => a.localeCompare(b))) {
             if (seen.has(name)) continue
             seen.add(name)
             const executable = executableTools[name]
-            if (!executable) continue // tool not registered in this session; skip
+            if (!executable) continue
             const meta = toolProvider.getToolMetadata(name)
             skillTools.push({
                 type: 'function' as const,
@@ -174,17 +187,17 @@ export function collectCapabilityCatalog(
         const payload: SkillPayload = {
             name: skill.name,
             description: skill.description,
-            requiredTools: skill.requiredTools,
+            requiredTools,
             source: isUserInstalled ? 'user' : skill.source,
         }
-        if (skill.optionalTools) payload.optionalTools = skill.optionalTools
+        if (optionalTools.length > 0) payload.optionalTools = optionalTools
         if (skillTools.length > 0) payload.tools = skillTools
         if (skill.systemPromptFragment) payload.systemPromptFragment = skill.systemPromptFragment
         if (skill.tags) payload.tags = skill.tags
         if (skill.domain) payload.domain = skill.domain
         if (skill.pluginName) payload.pluginName = skill.pluginName
-        return payload
-    })
+        skills.push(payload)
+    }
 
     const version = hashCatalog(skills, tools)
     return { skills, tools, version }

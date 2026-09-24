@@ -47,28 +47,28 @@ export const pluginStudio = new PluginStudio({
     status: 'ACTIVE',
     desktopOnly: true,
     /**
-     * Agent surface. `editorExtension` is the only contribution point a plugin
-     * has for agent tools and skills (PluginManager.resolveTools/resolveSkills),
-     * and both are editor-independent — they drive the studio's desktop
-     * capabilities, not the document.
+     * Agent surface, on the first-class `agent` contribution point.
+     *
+     * These tools and the authoring skill are editor-independent — they drive
+     * the studio's desktop capabilities, not the document — so they declare
+     * `scope: 'any'` and read no editor from the tool context. They used to
+     * masquerade as an empty `editorExtension` because that was the only
+     * contribution point a plugin had for agent tools. See
+     * docs/ai-kernel-plan.md (M0).
      */
-    editorExtension: [
-        {
-            extendsion: [],
-            name: 'plugin-studio-tools',
-            tools: Object.entries(studioTools).map(([name, tool]) => ({
-                name,
-                description: tool.description,
-                inputSchema: tool.inputSchema,
-                readOnly: Boolean((tool as { readOnly?: boolean }).readOnly),
-                execute: () => tool.execute as (params: unknown) => unknown,
-            })),
-            // Teach the agent *how* to author a plugin; without this the
-            // extension is tools-only and resolveSkills emits a contentless
-            // default skill.
-            skills: [pluginAuthoringSkill],
-        },
-    ],
+    agent: {
+        tools: Object.entries(studioTools).map(([name, tool]) => ({
+            name,
+            description: tool.description,
+            inputSchema: tool.inputSchema,
+            readOnly: Boolean((tool as { readOnly?: boolean }).readOnly),
+            scope: 'any',
+            create: () => tool.execute as (params: unknown) => unknown,
+        })),
+        // Teach the agent *how* to author a plugin. Names in this skill are
+        // local and are resolved to wire names by the capability registry.
+        skills: [pluginAuthoringSkill],
+    },
 
     dockPanels: [
         {

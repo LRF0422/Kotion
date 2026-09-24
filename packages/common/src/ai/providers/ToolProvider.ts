@@ -201,10 +201,10 @@ export class ToolProvider {
      * Swap the editor reference and rebuild the built-in tools against it.
      *
      * Plugin tools are deliberately NOT carried over: their executors come from
-     * `pluginManager.resolveTools(editor)` and close over that editor, so
-     * preserving them would silently target the previous editor. The caller
-     * (`useCapabilityProviders.rebindEditor`) re-resolves and re-registers them
-     * for the new editor right after this returns.
+     * `pluginManager.resolvePluginToolGroups(editor)` and close over that
+     * editor, so preserving them would silently target the previous editor. The
+     * caller (`useCapabilityProviders.rebindEditor`) re-resolves and
+     * re-registers them for the new editor right after this returns.
      */
     updateEditor(editor: any): void {
         this.editor = editor

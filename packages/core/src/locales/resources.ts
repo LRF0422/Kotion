@@ -1,6 +1,12 @@
 export const resources = {
   zh: {
     translation: {
+      agentPane: {
+        preview: "预览",
+        openPage: "打开页面",
+        close: "关闭",
+        noRenderer: "没有插件为「{{kind}}」提供预览视图。",
+      },
       // 请求层兜底文案（见 packages/common/src/utils/request.tsx）。
       // 后端返回的 msg 优先展示；只有后端没给消息（网络错误/5xx 无 body）时才用这里。
       apiError: {
@@ -1400,6 +1406,12 @@ export const resources = {
   },
   en: {
     translation: {
+      agentPane: {
+        preview: "Preview",
+        openPage: "Open page",
+        close: "Close",
+        noRenderer: "No plugin provides a preview for “{{kind}}”.",
+      },
       // Fallbacks for the request layer (see packages/common/src/utils/request.tsx).
       // The backend's own `msg` wins; these are only used when it sent none
       // (network failures, bodiless 5xx).

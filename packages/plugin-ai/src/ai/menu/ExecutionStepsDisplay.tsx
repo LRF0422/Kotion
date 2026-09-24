@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react'
 import { Check, ChevronDown, Loader2, Sparkles } from '@kn/icon'
 import { Streamdown, useAutoScroll } from '@kn/ui'
 import type { AgentStepRecord } from '@kn/common'
-import { useTranslation } from '@kn/common'
+import { AgentToolResultCard, useTranslation } from '@kn/common'
 import { ExecutionStep, formatToolName, sanitizeToolPayload } from './chat-types'
 import { ShimmerText } from './chat/ShimmerText'
 
@@ -274,6 +274,15 @@ function ToolItem({ step }: { step: ExecutionStep }) {
                     <span className="shrink-0 text-destructive">{t('ai.chat.toolFailed')}</span>
                 )}
             </div>
+            {/* Plugin-registered card for this tool's result. Renders nothing
+                when no plugin declared a renderer, so the JSON block below
+                remains the universal fallback. */}
+            <AgentToolResultCard
+                tool={step.toolName}
+                args={step.args}
+                result={step.result}
+                owner={step.subRunId}
+            />
             {userChoice && (
                 <div className="mt-1 space-y-0.5 pl-[22px] text-[11px]">
                     {userChoice.question && (

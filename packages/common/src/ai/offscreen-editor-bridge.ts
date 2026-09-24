@@ -31,6 +31,12 @@ export interface OffscreenEditorBridge {
      * fired) and the content is ready for programmatic edits.
      */
     acquire: (pageId: string) => Promise<OffscreenEditorHandle>
+    /**
+     * Destroy an UNHELD session immediately instead of after the idle timeout.
+     * Used when a visible editor (side pane / floating window) claims the page,
+     * so the hidden editor stops being a second writer at once.
+     */
+    destroyIdle?: (pageId: string) => void
 }
 
 let currentBridge: OffscreenEditorBridge | null = null

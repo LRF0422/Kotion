@@ -486,9 +486,13 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
         pendingRef.current = null
         retryCountRef.current = 0
         tracker.requireReconcile()
+        // Deliberately NOT setError: a stale/conflict batch is recovered by the
+        // next attempt (a full-document reconcile), so flashing "save failed" or
+        // toasting it would report a self-healing retry as an error.
+      } else {
+        setError(e)
+        console.error('[useOpSave] write failed:', e)
       }
-      setError(e)
-      console.error('[useOpSave] write failed:', e)
     } finally {
       setProgress(null)
       savingRef.current = false

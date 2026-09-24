@@ -110,6 +110,20 @@ public class Delegator {
         cmd.setSystemPrompt(ctx.getSystemPrompt());
         cmd.setSkillFragments(ctx.getSkillFragments() != null
                 ? new ArrayList<>(ctx.getSkillFragments()) : new ArrayList<>());
+        // Plugin agent (hybrid delegation): it owns its own persona and rules, so
+        // it must NOT inherit the KERNEL agent's system prompt or skill fragments
+        // — those describe a different scope (see docs/plugin-agents.md). The
+        // caller passes the agent's prompt; absent it, behaviour is unchanged.
+        String agentId = strArg(args.get("agentId"));
+        String agentPrompt = strArg(args.get("systemPrompt"));
+        if (agentPrompt != null) {
+            cmd.setSystemPrompt(agentPrompt);
+            cmd.setSkillFragments(new ArrayList<>());
+        }
+        if (agentId != null) {
+            log.info("delegate -> plugin agent {} (parent run {}, tools {})",
+                    agentId, ctx.getRunId(), cmd.getTools() == null ? 0 : cmd.getTools().size());
+        }
         cmd.setMemoryLines(ctx.getMemoryLines() != null
                 ? new ArrayList<>(ctx.getMemoryLines()) : new ArrayList<>());
         cmd.setSavedSkillProvenance(ctx.getSavedSkillProvenance() != null
@@ -169,6 +183,14 @@ public class Delegator {
         delegation.setTimeoutMs(properties.getRun().getDelegateTimeoutSeconds() * 1000L);
         delegation.setSubscription(eventLog.subscribe(record.getSubRunId()));
         return delegation;
+    }
+
+    private String strArg(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String text = String.valueOf(value).trim();
+        return text.isEmpty() ? null : text;
     }
 
     private int intArg(Object value, String name) {

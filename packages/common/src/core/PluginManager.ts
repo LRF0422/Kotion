@@ -1,4 +1,4 @@
-import { isFunction, merge } from "lodash";
+import { merge } from "lodash";
 import { ExtensionWrapper } from "./editor";
 import { DockPanelConfig, DockPosition, ResolvedDockPanel } from "./dock";
 import { PageTypeConfig, ResolvedPageType } from "./page-type";
@@ -24,6 +24,23 @@ import { pluginScriptLoader } from "../utils/import-util";
 import { logger } from "../utils/logger";
 import { event, PLUGIN_INCOMPATIBLE } from "../event";
 import { Editor } from "@tiptap/core";
+import {
+    agentScopeMatches,
+    filterContributionByScope,
+    getAgentToolImplementation,
+    legacyExtensionToAgentContribution,
+    resolveAgentToolNames,
+    toAgentWireName,
+} from "../ai/plugin-agent";
+import type {
+    AgentContribution,
+    AgentScope,
+    AgentToolContext,
+    AgentToolDefinition,
+    ResolvedAgentCapabilities,
+    ResolvedAgentContribution,
+    ResolvedAgentScope,
+} from "../ai/plugin-agent";
 
 export interface PluginSettingsConfig {
     /**
@@ -79,6 +96,13 @@ export interface PluginConfig {
      */
     pageTypes?: PageTypeConfig[]
     /**
+     * Kernel agent contribution — tools, skills, context, actions and named
+     * agents this plugin adds to the agent. The first-class, editor-optional
+     * contribution point (see ai/plugin-agent/types.ts). Installing this plugin
+     * adds these capabilities to the agent; uninstalling removes them.
+     */
+    agent?: AgentContribution
+    /**
      * True when the plugin needs desktop (Electron) capabilities. Surfaced to
      * the marketplace so it can mark the plugin desktop-only and, on the web,
      * refuse to install it.
@@ -100,6 +124,7 @@ export class KPlugin<T extends PluginConfig> {
     private _tours?: TourConfig[]
     private _dockPanels?: DockPanelConfig[]
     private _pageTypes?: PageTypeConfig[]
+    private _agent?: AgentContribution
     private _desktopOnly?: boolean
 
     constructor(config: T) {
@@ -114,6 +139,7 @@ export class KPlugin<T extends PluginConfig> {
         this._tours = config.tours
         this._dockPanels = config.dockPanels
         this._pageTypes = config.pageTypes
+        this._agent = config.agent
         this._desktopOnly = config.desktopOnly
     }
 
@@ -156,6 +182,11 @@ export class KPlugin<T extends PluginConfig> {
 
     get pageTypes(): PageTypeConfig[] {
         return this._pageTypes || []
+    }
+
+    /** Kernel agent contribution declared by this plugin. */
+    get agent(): AgentContribution | undefined {
+        return this._agent
     }
 
 }
@@ -227,6 +258,7 @@ export class PluginManager {
     private _cacheTours: TourConfig[] | null = null
     private _cacheDockPanels: ResolvedDockPanel[] | null = null
     private _cachePageTypes: ResolvedPageType[] | null = null
+    private _cacheAgentContributions: ResolvedAgentContribution[] | null = null
     private _pluginMap: Map<string, KPlugin<any>> = new Map()
     /** Install metadata per active plugin; drives the pluginManagement service. */
     private _pluginMeta = new Map<string, {
@@ -313,6 +345,7 @@ export class PluginManager {
         this._cacheTours = null
         this._cacheDockPanels = null
         this._cachePageTypes = null
+        this._cacheAgentContributions = null
         this._version++
         this._changeListeners.forEach(fn => fn())
     }
@@ -935,45 +968,318 @@ export class PluginManager {
         return routes
     }
 
-    resolveTools(editor: Editor) {
-        const res: any = {}
-        const extensions = this.resolveEditorExtensions()
+    // ---- Kernel agent capabilities (M0) ----
+    // Plugins grow the agent through `PluginConfig.agent` (see
+    // ai/plugin-agent/types.ts). Legacy `editorExtension[].tools/skills` are
+    // adapted behind the same path so existing plugins keep working unchanged.
 
-        for (const ext of extensions) {
-            if (!ext.tools) continue
+    /**
+     * Build the context handed to plugin agent tools. Scope is derived from
+     * whether an editor is published: a run with an editor is page-scoped,
+     * otherwise workspace-scoped. Editor-free tools simply ignore `editor`.
+     */
+    private buildAgentToolContext(editor: Editor | null, scope: ResolvedAgentScope): AgentToolContext {
+        return {
+            scope,
+            editor: editor ?? undefined,
+            resolveService: (name: string) => this._serviceRegistryView.get(name as keyof Services),
+        }
+    }
 
-            const tools = Array.isArray(ext.tools) ? ext.tools : [ext.tools]
+    private agentPluginKey(plugin: KPlugin<any>): string {
+        return this._pluginMeta.get(plugin.name)?.pluginKey || plugin.pluginKey || plugin.name
+    }
 
-            for (const tool of tools) {
+    private agentWireNameFor(pluginKey: string, tool: AgentToolDefinition): string {
+        return tool.namespace === false ? tool.name : toAgentWireName(pluginKey, tool.name)
+    }
+
+    /**
+     * Per-plugin agent contributions with provenance. Explicit `agent` blocks
+     * are merged with adapted legacy extension tools/skills.
+     */
+    resolveAgentContributions(): ResolvedAgentContribution[] {
+        if (this._cacheAgentContributions) {
+            return this._cacheAgentContributions
+        }
+
+        const resolved: ResolvedAgentContribution[] = []
+        for (const plugin of this.plugins) {
+            const explicit = plugin.agent
+            const tools: AgentToolDefinition[] = [...(explicit?.tools ?? [])]
+            const skills: NonNullable<AgentContribution['skills']> = [...(explicit?.skills ?? [])]
+
+            for (const ext of plugin.editorExtensions) {
+                const adapted = legacyExtensionToAgentContribution(ext)
+                if (adapted.tools) tools.push(...adapted.tools)
+                if (adapted.skills) skills.push(...adapted.skills)
+            }
+
+            resolved.push({
+                pluginName: plugin.name,
+                pluginKey: this.agentPluginKey(plugin),
+                desktopOnly: plugin.desktopOnly,
+                contribution: {
+                    tools,
+                    skills,
+                    include: explicit?.include,
+                    context: explicit?.context,
+                    actions: explicit?.actions,
+                    agents: explicit?.agents,
+                    toolRenderers: explicit?.toolRenderers,
+                    artifactRenderers: explicit?.artifactRenderers,
+                },
+            })
+        }
+
+        this._cacheAgentContributions = resolved
+        return resolved
+    }
+
+    /**
+     * Flatten every plugin contribution into model-facing capability sets:
+     * tool names are namespaced and `include` references are resolved against
+     * the core implementation registry. With `runScope`, only declarations
+     * covering that scope are returned — page tools never reach a workspace run.
+     */
+    resolveAgentCapabilities(runScope?: ResolvedAgentScope): ResolvedAgentCapabilities {
+        const capabilities: ResolvedAgentCapabilities = {
+            tools: [], skills: [], context: [], actions: [], agents: [],
+            toolRenderers: [], artifactRenderers: [],
+        }
+
+        for (const entry of this.resolveAgentContributions()) {
+            const projected = runScope
+                ? filterContributionByScope(entry.contribution, runScope)
+                : entry.contribution
+            const localToWire = new Map<string, string>()
+
+            const pushTool = (
+                def: AgentToolDefinition,
+                scope: AgentScope | AgentScope[] | undefined,
+                wireName: string,
+            ) => {
+                capabilities.tools.push({
+                    ...def,
+                    scope,
+                    wireName,
+                    pluginName: entry.pluginName,
+                    pluginKey: entry.pluginKey,
+                    desktopOnly: entry.desktopOnly,
+                })
+            }
+
+            for (const tool of projected.tools ?? []) {
                 if (!tool || !tool.name) {
-                    logger.warn('Invalid tool detected, skipping')
+                    logger.warn('Invalid agent tool detected, skipping')
                     continue
                 }
+                if (runScope && !agentScopeMatches(tool.scope, runScope)) continue
+                const wireName = this.agentWireNameFor(entry.pluginKey, tool)
+                localToWire.set(tool.name, wireName)
+                pushTool(tool, tool.scope, wireName)
+            }
 
-                if (tool.execute && isFunction(tool.execute)) {
-                    let executable: unknown
-                    try {
-                        executable = tool.execute(editor)
-                    } catch (error) {
-                        // A factory that needs a live editor must not take the
-                        // whole catalog down with it: skip that tool and keep the
-                        // rest. The agent chat stays mounted with no active
-                        // editor (see ChatDockPanel), so this path is expected.
-                        logger.warn(`Tool ${tool.name} could not be instantiated`, error)
-                        continue
-                    }
-                    if (res[tool.name]) {
-                        logger.warn(`Tool ${tool.name} already exists, overwriting`)
-                    }
-                    res[tool.name] = {
-                        ...tool,
-                        execute: executable
-                    }
-                    logger.debug('Resolved tool:', tool.name)
+            for (const raw of projected.include ?? []) {
+                const ref = typeof raw === 'string' ? { name: raw } : raw
+                const impl = getAgentToolImplementation(ref.name)
+                if (!impl) {
+                    logger.warn(`Agent tool include "${ref.name}" is not registered by the host`)
+                    continue
                 }
+                const scope = ref.scope ?? impl.scope
+                if (runScope && !agentScopeMatches(scope, runScope)) continue
+                const wireName = toAgentWireName(entry.pluginKey, impl.name)
+                localToWire.set(impl.name, wireName)
+                pushTool(
+                    {
+                        name: impl.name,
+                        description: impl.description,
+                        inputSchema: impl.inputSchema,
+                        readOnly: impl.readOnly,
+                        scope,
+                        artifactFromResult: impl.artifactFromResult,
+                        create: impl.create,
+                    },
+                    scope,
+                    wireName,
+                )
+            }
+
+            const mapNames = (names?: string[]): string[] | undefined =>
+                resolveAgentToolNames(names, localToWire)
+
+            for (const skill of projected.skills ?? []) {
+                if (!skill || !skill.name) continue
+                capabilities.skills.push({
+                    ...skill,
+                    requiredTools: mapNames(skill.requiredTools) ?? [],
+                    optionalTools: mapNames(skill.optionalTools),
+                    source: 'plugin',
+                    pluginName: entry.pluginName,
+                    pluginKey: entry.pluginKey,
+                })
+            }
+            for (const provider of projected.context ?? []) {
+                if (runScope && !agentScopeMatches(provider.scope, runScope)) continue
+                capabilities.context.push({ ...provider, pluginName: entry.pluginName, pluginKey: entry.pluginKey })
+            }
+            for (const action of projected.actions ?? []) {
+                if (runScope && !agentScopeMatches(action.scope, runScope)) continue
+                capabilities.actions.push({
+                    ...action, tools: mapNames(action.tools),
+                    pluginName: entry.pluginName, pluginKey: entry.pluginKey,
+                })
+            }
+            // Plugin agents (hybrid delegation): the kernel only ever sees the
+            // directory entry; the tools are resolved to wire names so a
+            // delegated child run can be restricted to exactly them.
+            for (const agent of projected.agents ?? []) {
+                if (!agent || !agent.id || !agent.name) continue
+                if (runScope && !agentScopeMatches(agent.scope, runScope)) continue
+                const toolNames: string[] = []
+                for (const tool of agent.tools ?? []) {
+                    if (!tool || !tool.name) continue
+                    const wireName = this.agentWireNameFor(entry.pluginKey, tool)
+                    localToWire.set(tool.name, wireName)
+                    toolNames.push(wireName)
+                }
+                for (const raw of agent.include ?? []) {
+                    const ref = typeof raw === 'string' ? { name: raw } : raw
+                    const impl = getAgentToolImplementation(ref.name)
+                    if (!impl) continue
+                    const wireName = toAgentWireName(entry.pluginKey, impl.name)
+                    localToWire.set(impl.name, wireName)
+                    toolNames.push(wireName)
+                }
+                capabilities.agents.push({
+                    ...agent,
+                    // Namespaced like tools: two plugins may both declare
+                    // `page-ops`, and the model must be able to tell them apart.
+                    id: toAgentWireName(entry.pluginKey, agent.id),
+                    toolNames,
+                    pluginName: entry.pluginName,
+                    pluginKey: entry.pluginKey,
+                })
+            }
+
+            // Conversation cards / sheet previews. The tool key is resolved
+            // through the same local→wire table as skills, so a plugin can name
+            // its own tools by their local name.
+            for (const renderer of projected.toolRenderers ?? []) {
+                if (!renderer || !renderer.tool || !renderer.render) continue
+                capabilities.toolRenderers.push({
+                    ...renderer,
+                    tool: localToWire.get(renderer.tool) ?? renderer.tool,
+                    pluginName: entry.pluginName,
+                    pluginKey: entry.pluginKey,
+                })
+            }
+            for (const renderer of projected.artifactRenderers ?? []) {
+                if (!renderer || !renderer.kind || !renderer.render) continue
+                capabilities.artifactRenderers.push({
+                    kind: renderer.kind,
+                    render: renderer.render,
+                    pluginName: entry.pluginName,
+                    pluginKey: entry.pluginKey,
+                })
             }
         }
 
+        return capabilities
+    }
+
+    /**
+     * Instantiate every plugin's agent tools for `editor`, grouped by plugin.
+     * The single resolution path shared by {@link resolveTools} and the
+     * capability provider, so a tool can never be advertised in one place and
+     * missing in the other.
+     */
+    resolvePluginToolGroups(editor: Editor | null): Array<{ pluginName: string; tools: Record<string, any> }> {
+        const scope: ResolvedAgentScope = editor ? 'page' : 'workspace'
+        const ctx = this.buildAgentToolContext(editor, scope)
+        const groups: Array<{ pluginName: string; tools: Record<string, any> }> = []
+
+        for (const entry of this.resolveAgentContributions()) {
+            const projected = filterContributionByScope(entry.contribution, scope)
+            const record: Record<string, any> = {}
+
+            const instantiate = (
+                wireName: string,
+                create: (ctx: AgentToolContext) => unknown,
+                def: { description: string; inputSchema: any; readOnly?: boolean },
+            ) => {
+                try {
+                    const execute = create(ctx)
+                    if (typeof execute !== 'function') return
+                    if (record[wireName]) logger.warn(`Tool ${wireName} already exists, overwriting`)
+                    record[wireName] = {
+                        description: def.description,
+                        inputSchema: def.inputSchema,
+                        readOnly: def.readOnly,
+                        execute,
+                    }
+                } catch (error) {
+                    // A factory that needs a live editor must not take the whole
+                    // catalog down with it: skip that tool and keep the rest.
+                    logger.warn(`Tool ${wireName} could not be instantiated`, error)
+                }
+            }
+
+            for (const tool of projected.tools ?? []) {
+                if (!tool || !tool.name) continue
+                instantiate(this.agentWireNameFor(entry.pluginKey, tool), tool.create, tool)
+            }
+
+            for (const raw of projected.include ?? []) {
+                const ref = typeof raw === 'string' ? { name: raw } : raw
+                const impl = getAgentToolImplementation(ref.name)
+                if (!impl) {
+                    logger.warn(`Agent tool include "${ref.name}" is not registered by the host`)
+                    continue
+                }
+                if (!agentScopeMatches(ref.scope ?? impl.scope, scope)) continue
+                instantiate(toAgentWireName(entry.pluginKey, impl.name), impl.create, impl)
+            }
+
+            // Plugin-agent tools exist for their CHILD run: instantiate them so
+            // the client can execute a delegated call. filterContributionByScope
+            // already gated each agent by its own scope, so a page-scoped agent's
+            // tools never appear in a run without an editor.
+            for (const agent of projected.agents ?? []) {
+                for (const tool of agent.tools ?? []) {
+                    if (!tool || !tool.name) continue
+                    instantiate(this.agentWireNameFor(entry.pluginKey, tool), tool.create, tool)
+                }
+                for (const raw of agent.include ?? []) {
+                    const ref = typeof raw === 'string' ? { name: raw } : raw
+                    const impl = getAgentToolImplementation(ref.name)
+                    if (!impl) continue
+                    if (!agentScopeMatches(ref.scope ?? impl.scope, scope)) continue
+                    instantiate(toAgentWireName(entry.pluginKey, impl.name), impl.create, impl)
+                }
+            }
+
+            if (Object.keys(record).length > 0) {
+                groups.push({ pluginName: entry.pluginName, tools: record })
+            }
+        }
+
+        return groups
+    }
+
+    /**
+     * Flat name → tool map, without provenance.
+     *
+     * @deprecated Prefer {@link resolvePluginToolGroups}, which keeps the
+     * per-plugin grouping the capability provider needs to register metadata.
+     * Kept only as a convenience view for callers that just want a flat map.
+     */
+    resolveTools(editor: Editor | null) {
+        const res: Record<string, any> = {}
+        for (const group of this.resolvePluginToolGroups(editor)) {
+            Object.assign(res, group.tools)
+        }
         logger.debug('Total resolved tools:', Object.keys(res).length)
         return res
     }
@@ -1108,7 +1414,12 @@ export class PluginManager {
             const panels: ResolvedDockPanel[] = []
             const seen = new Set<string>()
 
-            const collect = (panel: DockPanelConfig, source: 'plugin' | 'core', owner: string) => {
+            const collect = (
+                panel: DockPanelConfig,
+                source: 'plugin' | 'core',
+                owner: string,
+                pluginKey: string,
+            ) => {
                 if (!panel || !panel.id || !panel.component) {
                     logger.warn(`Invalid dock panel from ${owner}, skipping`)
                     return
@@ -1118,13 +1429,16 @@ export class PluginManager {
                     return
                 }
                 seen.add(panel.id)
-                panels.push({ ...panel, source, owner })
+                panels.push({ ...panel, source, owner, pluginKey })
             }
 
-            this._coreDockPanels.forEach(panel => collect(panel, 'core', 'core'))
+            this._coreDockPanels.forEach(panel => collect(panel, 'core', 'core', 'core'))
             for (const plugin of this.plugins) {
+                // The runtime name is what the host renders under; the registry
+                // key is what the plugin's injected CSS is scoped to.
+                const pluginKey = this._pluginMeta.get(plugin.name)?.pluginKey || plugin.pluginKey || plugin.name
                 for (const panel of plugin.dockPanels) {
-                    collect(panel, 'plugin', plugin.name)
+                    collect(panel, 'plugin', plugin.name, pluginKey)
                 }
             }
 
@@ -1265,6 +1579,49 @@ export class PluginManager {
             }
         }
 
+        // Kernel agent contributions (M0): explicit `agent.skills` travel with
+        // names already resolved to wire names. Agent tools no skill claims get
+        // an auto-generated default so skills-only catalog mode cannot drop them
+        // (legacy extension tools keep their existing default-skill path above).
+        const agentCapabilities = this.resolveAgentCapabilities()
+        for (const skill of agentCapabilities.skills) {
+            skills.push({
+                name: skill.name,
+                description: skill.description,
+                requiredTools: skill.requiredTools,
+                optionalTools: skill.optionalTools,
+                systemPromptFragment: skill.systemPromptFragment,
+                tags: skill.tags,
+                source: 'plugin',
+                pluginName: skill.pluginName,
+            })
+        }
+
+        const claimedAgentTools = new Set<string>()
+        for (const skill of agentCapabilities.skills) {
+            for (const name of [...(skill.requiredTools ?? []), ...(skill.optionalTools ?? [])]) {
+                claimedAgentTools.add(name)
+            }
+        }
+        const unclaimedByPlugin = new Map<string, string[]>()
+        for (const tool of agentCapabilities.tools) {
+            if (tool.namespace === false) continue
+            if (claimedAgentTools.has(tool.wireName)) continue
+            const list = unclaimedByPlugin.get(tool.pluginName) ?? []
+            list.push(tool.wireName)
+            unclaimedByPlugin.set(tool.pluginName, list)
+        }
+        for (const [pluginName, toolNames] of unclaimedByPlugin) {
+            if (toolNames.length === 0) continue
+            skills.push({
+                name: `${pluginName}-default`,
+                description: `Default skill for ${pluginName} plugin`,
+                requiredTools: toolNames,
+                source: 'plugin',
+                pluginName,
+            })
+        }
+
         logger.debug('Total resolved skills:', skills.length)
         return skills
     }
@@ -1357,20 +1714,4 @@ export class PluginManager {
         return this._serviceRegistry.getAll()
     }
 
-    // ---- Deprecated method aliases (old typo names) ----
-
-    /** @deprecated Use resolveRoutes() instead */
-    resloveRoutes(): RouteConfig[] { return this.resolveRoutes() }
-
-    /** @deprecated Use resolveTools() instead */
-    resloveTools(editor: Editor) { return this.resolveTools(editor) }
-
-    /** @deprecated Use resolveLocales() instead */
-    resloveLocales(): any { return this.resolveLocales() }
-
-    /** @deprecated Use resolveEditorExtensions() instead */
-    resloveEditorExtension(): ExtensionWrapper[] { return this.resolveEditorExtensions() }
-
-    /** @deprecated Use resolveMenus() instead */
-    resloveMenus(): SiderMenuItemProps[] { return this.resolveMenus() }
 }

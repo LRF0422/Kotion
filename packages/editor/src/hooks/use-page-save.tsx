@@ -23,6 +23,9 @@ type PageSaveDocumentOperations = Pick<
     | 'flushPageOperations'
 >
 
+/** Backend code for PAGE_REVISION_CONFLICT (see WikiException). */
+const REVISION_CONFLICT_CODE = 3016
+
 export interface PageSavedInfo {
     /** Whether the acknowledged write touched the `title` node. */
     titleChanged: boolean
@@ -129,6 +132,26 @@ export function usePageSave(options: UsePageSaveOptions): UsePageSaveReturn {
 
     // ---- Writing ----
 
+    // ---- Concurrent-writer recovery ----
+    // The backend rejects a batch whose baseRev is behind the database with
+    // PAGE_REVISION_CONFLICT (3016). That is not a failure the user should see:
+    // it means another editor (or another of this user's editors) moved the page
+    // first, and the writer's job is then to reconcile the whole document. Turn
+    // it into the same signal the stale-op path uses.
+    const asReconcileSignal = useCallback((error: unknown): unknown => {
+        const code = (error as { code?: unknown } | null)?.code
+        const message = (error as { message?: unknown } | null)?.message
+        const isConflict = code === REVISION_CONFLICT_CODE
+            || (typeof message === 'string' && /revisionConflict|revision conflict/i.test(message))
+        if (!isConflict) return error
+        console.warn('[usePageSave] page revision conflict; reconciling instead of failing')
+        const tracker = (editor?.storage as any)?.opTracker
+        tracker?.requireReconcile?.()
+        const signal = new Error('Page revision conflict; reconciling the document')
+        ;(signal as any).staleOps = true
+        return signal
+    }, [editor])
+
     // Per-op verdicts the server returned. A request can succeed with parts of
     // its batch `stale` or `rejected` — the baseline this client trusted no
     // longer matches the database, so the next write must be a whole-document
@@ -153,18 +176,28 @@ export function usePageSave(options: UsePageSaveOptions): UsePageSaveReturn {
 
     const handleApplyOps = useCallback(async (req: ApplyOpsRequest): Promise<ApplyOpsResult> => {
         if (!pageId) throw new Error('No pageId')
-        const data = await documentsRef.current.applyPageOperations(pageId, req)
+        let data: ApplyOpsResult
+        try {
+            data = await documentsRef.current.applyPageOperations(pageId, req)
+        } catch (error) {
+            throw asReconcileSignal(error)
+        }
         assertApplied(data, editor)
         // The title lives in a block like any other, so a title edit is just an
         // op whose node happens to be of type `title`. Only claim "saved" when
         // the batch actually landed — a stale title op must not refresh the tree.
         noteSaved(req.ops.some(op => (op.node as any)?.type === 'title'))
         return data
-    }, [pageId, noteSaved, assertApplied, editor])
+    }, [pageId, noteSaved, assertApplied, editor, asReconcileSignal])
 
     const handleReconcile = useCallback(async (req: ReconcileRequest): Promise<ApplyOpsResult> => {
         if (!pageId) throw new Error('No pageId')
-        const data = await documentsRef.current.reconcilePageDocument(pageId, req)
+        let data: ApplyOpsResult
+        try {
+            data = await documentsRef.current.reconcilePageDocument(pageId, req)
+        } catch (error) {
+            throw asReconcileSignal(error)
+        }
         assertApplied(data, editor)
         // A reconcile always carries the title, so "did the title change" is only
         // answerable by whether the server found anything to do at all. The first
@@ -172,7 +205,7 @@ export function usePageSave(options: UsePageSaveOptions): UsePageSaveReturn {
         // nothing — which is exactly when callers must not refresh the page tree.
         noteSaved((data.opsApplied ?? 0) > 0)
         return data
-    }, [pageId, noteSaved, assertApplied, editor])
+    }, [pageId, noteSaved, assertApplied, editor, asReconcileSignal])
 
     // Read the page straight from the block table, for the host to fold a
     // write it did not make back into its own document. Deliberately not

@@ -86,6 +86,11 @@ interface ChatComposerProps {
     /** Page hosting this chat — shown as the implicit default target. */
     currentPage?: ChatTargetPage
     targetStatus: TargetPageStatus
+    /**
+     * Hide the "@-page" affordance. Workspace-scoped surfaces have no document
+     * to bind, so the chip would only advertise something that does not apply.
+     */
+    hideTargetPage?: boolean
     onPickPage: (page: ChatTargetPage) => void
     onClearPage: () => void
     onRetryPage: () => void
@@ -122,7 +127,7 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
         value, onChange, onSubmit, onStop, isLoading,
         mode, onModeChange, model, onModelChange,
         modelParams, onModelParamsChange,
-        targetPage, currentPage, targetStatus, onPickPage, onClearPage, onRetryPage, onOpenPageWindow,
+        targetPage, currentPage, targetStatus, hideTargetPage, onPickPage, onClearPage, onRetryPage, onOpenPageWindow,
         tracking, onToggleTracking, images, onAddImages, onRemoveImage,
         visionSupported, visionModelLabel,
     },
@@ -224,18 +229,20 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
                     </span>
                 </div>
             )}
-            <PageMentionPicker
-                targetPage={targetPage}
-                currentPage={currentPage}
-                status={targetStatus}
-                disabled={isLoading}
-                open={mentionOpen}
-                onOpenChange={setMentionOpen}
-                onPick={onPickPage}
-                onClear={onClearPage}
-                onRetry={onRetryPage}
-                onOpenWindow={onOpenPageWindow}
-            />
+            {!hideTargetPage && (
+                <PageMentionPicker
+                    targetPage={targetPage}
+                    currentPage={currentPage}
+                    status={targetStatus}
+                    disabled={isLoading}
+                    open={mentionOpen}
+                    onOpenChange={setMentionOpen}
+                    onPick={onPickPage}
+                    onClear={onClearPage}
+                    onRetry={onRetryPage}
+                    onOpenWindow={onOpenPageWindow}
+                />
+            )}
             {images && images.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 px-3 pt-2.5">
                     {images.map((src, index) => (
@@ -291,16 +298,18 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
             <div className="flex flex-wrap items-center gap-1 px-2 pb-1.5 pt-0.5">
                 <ModeToggle mode={mode} onModeChange={onModeChange} disabled={isLoading} />
                 <AgentSelector disabled={isLoading} triggerClassName="hover:bg-muted/60" />
-                <button
-                    type="button"
-                    disabled={isLoading || visionBlocked}
-                    onClick={() => fileInputRef.current?.click()}
-                    title={attachImageLabel}
-                    aria-label={attachImageLabel}
-                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground disabled:opacity-50 lg:h-7 lg:w-7 lg:rounded-md"
-                >
-                    <ImagePlus className="h-3.5 w-3.5 shrink-0" />
-                </button>
+                {onAddImages && (
+                    <button
+                        type="button"
+                        disabled={isLoading || visionBlocked}
+                        onClick={() => fileInputRef.current?.click()}
+                        title={attachImageLabel}
+                        aria-label={attachImageLabel}
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground disabled:opacity-50 lg:h-7 lg:w-7 lg:rounded-md"
+                    >
+                        <ImagePlus className="h-3.5 w-3.5 shrink-0" />
+                    </button>
+                )}
                 <ModelSelector
                     model={model}
                     onModelChange={onModelChange}

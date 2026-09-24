@@ -172,43 +172,27 @@ export function useCapabilityProviders(
     }, [pluginManager, skillProvider])
 
     /**
-     * Plugin tools grouped by the extension that owns them. Keeps the per-plugin
-     * `pluginName` metadata of the active catalog intact, and — resolving against
-     * an explicit editor — is also what per-agent tool builds reuse.
+     * Plugin tools grouped by the plugin that contributes them.
+     *
+     * Resolution goes through PluginManager#resolvePluginToolGroups — the same
+     * path `resolveTools` uses — so a plugin contributing via `agent.tools`
+     * (M0) is attributed to the plugin itself and can never be advertised in
+     * one place and missing in the other.
+     *
+     * Resolved even with NO active editor: plugin tools are editor-INDEPENDENT
+     * in general (they may drive the desktop host or the workspace, not the
+     * document). Page-scoped tools that truly need an editor are skipped per
+     * tool inside resolvePluginToolGroups, and ToolProvider#updateEditor clears
+     * every plugin tool on an editor swap, so the next rebind re-registers them.
      */
     const collectPluginToolsByPlugin = useCallback((targetEditor: Editor | null): Array<{ pluginName: string; tools: ToolsRecord }> => {
         if (!pluginManager) return []
-        // Resolve plugin tools even with NO active editor. Plugins such as
-        // plugin-studio contribute editor-INDEPENDENT tools (they drive the
-        // desktop host, not the document), and ToolProvider#updateEditor clears
-        // every plugin tool on each editor swap. Bailing out on a null editor
-        // therefore erased those tools from the catalog while the plugin's skill
-        // kept advertising them — the model knew the tool names but had no
-        // schema to call. Editor-bound factories that truly need an editor fail
-        // per tool inside PluginManager#resolveTools and are skipped.
-        let allPluginTools: ToolsRecord = {}
         try {
-            allPluginTools = (pluginManager.resolveTools?.(targetEditor as Editor) as ToolsRecord) || {}
+            return (pluginManager.resolvePluginToolGroups?.(targetEditor) as Array<{ pluginName: string; tools: ToolsRecord }>) || []
         } catch (error) {
             console.warn('[Agent] Plugin tool resolution failed:', error)
             return []
         }
-        const extensions = pluginManager.resolveEditorExtensions?.() || []
-        const groups: Array<{ pluginName: string; tools: ToolsRecord }> = []
-        for (const ext of extensions) {
-            const toolNames = ext.tools
-                ? (Array.isArray(ext.tools) ? ext.tools : [ext.tools]).map((t: any) => t.name)
-                : []
-            if (toolNames.length === 0) continue
-            const filtered: ToolsRecord = {}
-            for (const name of toolNames) {
-                if (allPluginTools[name]) filtered[name] = allPluginTools[name]
-            }
-            if (Object.keys(filtered).length > 0) {
-                groups.push({ pluginName: ext.name, tools: filtered })
-            }
-        }
-        return groups
     }, [pluginManager])
 
     /**

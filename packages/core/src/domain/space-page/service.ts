@@ -58,8 +58,18 @@ export const createSpacePageService = (
         pages.forEach(rememberPage);
         return pages;
     };
-    const execute = <T = unknown>(endpoint: SpacePageEndpoint, requestParams?: object, body?: unknown) =>
-        transport.execute<T>({ endpoint, params: requestParams ? params(requestParams) : undefined, body });
+    const execute = <T = unknown>(
+        endpoint: SpacePageEndpoint,
+        requestParams?: object,
+        body?: unknown,
+        options?: { silent?: boolean },
+    ) =>
+        transport.execute<T>({
+            endpoint,
+            params: requestParams ? params(requestParams) : undefined,
+            body,
+            silent: options?.silent,
+        });
     const keepalive = (result: void | Promise<unknown>, onSuccess: () => void): void | Promise<unknown> => {
         if (result && typeof (result as Promise<unknown>).then === "function") {
             return (result as Promise<unknown>).then((value) => { onSuccess(); return value; });
@@ -344,8 +354,12 @@ export const createSpacePageService = (
         async claimPageSession(request) { const p = normalizeId(request.pageId, "pageId"); const state = normalizeSession(await execute(E.documents.claimSession, { id: p }, { clientId: request.clientId })); changes.emit("page.session.changed", { pageId: p }); return state; },
         async heartbeatPageSession(request) { const p = normalizeId(request.pageId, "pageId"); return normalizeSession(await execute(E.documents.heartbeatSession, { id: p }, { clientId: request.clientId })); },
         releasePageSession(request) { const p = normalizeId(request.pageId, "pageId"); return keepalive(transport.keepalive({ endpoint: E.documents.releaseSession, pathParams: { id: p }, body: { clientId: request.clientId } }), () => changes.emit("page.session.changed", { pageId: p })); },
-        async applyPageOperations(pageId, request) { const p = normalizeId(pageId, "pageId"); const result = normalizeOperationResult(await execute(E.documents.applyOperations, { id: p }, request)); changes.emit("page.document.changed", { pageId: p, spaceId: pageSpaces.get(p), scope: "content", result }); return result; },
-        async reconcilePageDocument(pageId, request) { const p = normalizeId(pageId, "pageId"); const result = normalizeOperationResult(await execute(E.documents.reconcile, { id: p }, request)); changes.emit("page.document.changed", { pageId: p, spaceId: pageSpaces.get(p), scope: "content", result }); return result; },
+        // Document writes are SILENT: a revision conflict is expected under
+        // concurrent editors and is recovered by reconciling, so the global
+        // toast would only report a self-healing retry. The editor owns the
+        // save-status UI.
+        async applyPageOperations(pageId, request) { const p = normalizeId(pageId, "pageId"); const result = normalizeOperationResult(await execute(E.documents.applyOperations, { id: p }, request, { silent: true })); changes.emit("page.document.changed", { pageId: p, spaceId: pageSpaces.get(p), scope: "content", result }); return result; },
+        async reconcilePageDocument(pageId, request) { const p = normalizeId(pageId, "pageId"); const result = normalizeOperationResult(await execute(E.documents.reconcile, { id: p }, request, { silent: true })); changes.emit("page.document.changed", { pageId: p, spaceId: pageSpaces.get(p), scope: "content", result }); return result; },
         flushPageOperations(pageId, request) { const p = normalizeId(pageId, "pageId"); return keepalive(transport.keepalive({ endpoint: E.documents.applyOperations, pathParams: { id: p }, body: request }), () => changes.emit("page.document.changed", { pageId: p, spaceId: pageSpaces.get(p), scope: "content" })); },
         async claimPageSeed(request) { const p = normalizeId(request.pageId, "pageId"); const raw = await execute(E.documents.claimSeed, { id: p, clientId: request.clientId }, null); return raw === true; },
         releasePageSeed(request) { const p = normalizeId(request.pageId, "pageId"); return transport.keepalive({ endpoint: E.documents.releaseSeed, pathParams: { id: p }, query: { clientId: request.clientId } }); },

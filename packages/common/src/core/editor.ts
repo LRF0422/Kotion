@@ -1,5 +1,6 @@
 import { AnyExtension, Editor } from "@tiptap/core";
 import { ElementType, ReactNode } from "react";
+import type { AgentArtifact } from "../ai/plugin-agent/types";
 
 export type Group = "block" | "inline" | "mark" | "custom";
 export interface MenuConfigItem {
@@ -34,6 +35,11 @@ export interface ExtensionWrapper {
     description: string;
     inputSchema: any;
     readOnly?: boolean;
+    /**
+     * Optional artifact mapping (kernel spec). Legacy editor plugins can
+     * declare it without migrating to `agent.tools`.
+     */
+    artifactFromResult?: (result: unknown, args: unknown) => AgentArtifact | null;
     execute: (editor: Editor) => (params: any) => any;
   }[];
   skills?: {

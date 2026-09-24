@@ -19,5 +19,6 @@ export { offscreenSessionManager, offscreenSessionStats, setMaxOffscreenSessions
 export function registerOffscreenEditorBridge(): void {
     setOffscreenEditorBridge({
         acquire: (pageId: string) => offscreenSessionManager.acquire(pageId),
+        destroyIdle: (pageId: string) => offscreenSessionManager.destroyIdle(pageId),
     })
 }

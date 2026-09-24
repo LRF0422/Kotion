@@ -13,6 +13,8 @@ import {
     useEditorAgent,
     useCapabilityProviders,
     buildAgentRunInputs,
+    describePluginAgents,
+    useAgentCapabilities,
     getAgentDocumentBridge,
     getPageNavigationBridge,
     setSessionPageBinding,
@@ -182,6 +184,9 @@ export const ExpandableChatDemo: React.FC<{
         resolveSharedEditorForPage,
         releaseOwner,
         releaseAllOwners,
+        claimedEditorsRef,
+        claimEditor,
+        releaseEditor,
     } = useOffscreenTargets({ editor, boundPageRef })
 
     const [offscreenHandle, setOffscreenHandle] = useState<OffscreenEditorHandle | null>(null)
@@ -371,6 +376,13 @@ export const ExpandableChatDemo: React.FC<{
 
     // ─── AgentCore driver ─────────────────────────────────────────
     const isAskMode = chatMode === 'ask'
+    // Plugin agents available in this scope (hybrid delegation, docs/plugin-agents.md).
+    const agentCapabilities = useAgentCapabilities('page')
+    const pluginAgentNote = useMemo(
+        () => describePluginAgents(agentCapabilities.agents),
+        [agentCapabilities],
+    )
+
     const { getCatalog, rebindEditor, resolveTools, isReadOnlyTool } = useCapabilityProviders(agentEditor, {
         onUserChoiceRequest: handleUserChoiceRequest,
     })
@@ -389,8 +401,49 @@ export const ExpandableChatDemo: React.FC<{
         const binding: SessionPageBinding = {
             bindPage: (page) => { bindTargetPage(page) },
             getBoundPage: () => (boundPageRef.current ? { ...boundPageRef.current } : null),
+            // A visible editor claims the page: the hidden session for it was
+            // just destroyed, so the live tool map MUST follow the visible
+            // editor. Otherwise every document tool — including every editor
+            // plugin's tools — keeps pointing at the dead off-screen instance and
+            // silently stops working.
+            claimEditor: (pageId, claimedEditor) => {
+                claimEditor(pageId, claimedEditor)
+                const boundId = boundPageRef.current?.pageId
+                if (boundId === undefined || String(boundId) !== String(pageId)) return
+                offscreenHandleRef.current = null
+                setOffscreenHandle(null)
+                setTargetStatus('current')
+                rebindEditor(claimedEditor)
+            },
+            // The visible editor is gone. If it was the conversation target,
+            // re-acquire a hidden session so the target keeps a live editor for
+            // its own document (falling back to the open page would silently
+            // point the tools at the wrong document).
+            releaseEditor: (pageId, releasedEditor) => {
+                releaseEditor(pageId, releasedEditor)
+                const bound = boundPageRef.current
+                if (!bound || String(bound.pageId) !== String(pageId)) return
+                void switchEditTarget(bound).then(({ handle }) => {
+                    if (!handle) return
+                    offscreenHandleRef.current = handle
+                    setOffscreenHandle(handle)
+                    setTargetStatus('ready')
+                    rebindEditor(handle.editor)
+                }).catch(() => { /* fall back to the visible editor */ })
+            },
             openPageWindow: (pageId) => setEditWindowPageId(String(pageId)),
             editPage: async (page) => {
+                // A visible editor (side pane / floating window) owns this page:
+                // use it directly instead of acquiring a hidden second writer.
+                const claimed = claimedEditorsRef.current.get(String(page.pageId))
+                if (claimed) {
+                    rebindEditor(claimed)
+                    offscreenHandleRef.current = null
+                    setOffscreenHandle(null)
+                    setTargetStatus('current')
+                    const record = bindTargetPage(page)
+                    return { ...record, editor: claimed }
+                }
                 const { record, handle } = await switchEditTarget(page)
                 const targetEditor = (handle?.editor as Editor) ?? editor
                 // Rebind built-in AND plugin tools to the target editor in one
@@ -408,7 +461,11 @@ export const ExpandableChatDemo: React.FC<{
                 bindTargetPage(record)
                 return { ...record, editor: targetEditor }
             },
-            getEditor: () => (offscreenHandleRef.current?.editor as Editor) ?? editor,
+            getEditor: () => {
+                const boundId = boundPageRef.current?.pageId
+                const claimed = boundId ? claimedEditorsRef.current.get(String(boundId)) : undefined
+                return claimed ?? (offscreenHandleRef.current?.editor as Editor) ?? editor
+            },
             // ─── Per-agent (delegated child) targeting ───────────────
             getPageFor,
             getEditorFor: (owner: string) => {
@@ -420,6 +477,8 @@ export const ExpandableChatDemo: React.FC<{
                 if (handle?.editor) return handle.editor
                 const target = ownerTargetsRef.current.get(owner)
                 if (target) {
+                    const claimed = claimedEditorsRef.current.get(String(target.pageId))
+                    if (claimed) return claimed
                     const currentPageId = getPageNavigationBridge()?.getCurrentPage()?.pageId
                     if (currentPageId !== undefined && String(currentPageId) === String(target.pageId)) {
                         return editor
@@ -516,7 +575,7 @@ export const ExpandableChatDemo: React.FC<{
         }
         setSessionPageBinding(binding)
         return () => clearSessionPageBinding(binding)
-    }, [bindTargetPage, switchEditTarget, rebindEditor, editor, getPageFor, acquireOwnerTarget, releaseOwner])
+    }, [bindTargetPage, switchEditTarget, rebindEditor, editor, getPageFor, acquireOwnerTarget, releaseOwner, claimEditor, releaseEditor])
     const liveCurrentPageId = getPageNavigationBridge()?.getCurrentPage()?.pageId
     const targetToolsReady = !targetPageId
         ? !!currentPage?.pageId
@@ -730,6 +789,10 @@ export const ExpandableChatDemo: React.FC<{
         const boundPageNote = runTarget
             ? t('ai.chat.boundPagePrefix', { title: runTarget.title })
             : undefined
+        // Volatile per-turn context: the plugin-agent directory rides with the
+        // bound-page note (append-only <context>, never the system prefix), so
+        // the kernel agent always knows which agents it can delegate to.
+        const contextNote = [boundPageNote, pluginAgentNote].filter(Boolean).join('\n\n') || undefined
 
         // Conversation history is engine-owned (session model log); the client
         // only sends the new turn. Images ride as multimodal content parts so
@@ -749,14 +812,14 @@ export const ExpandableChatDemo: React.FC<{
                 mode: 'execute',
                 temperature: modelParams.temperature,
                 maxTokens: modelParams.maxTokens,
-                contextNote: boundPageNote,
+                contextNote,
             })
         } catch (err: any) {
             setError(classifyError(err))
         }
     }, [
         agent, generateMessageId, targetPage, currentPage, setTargetPage,
-        selectedModel, modelParams, setMessages, t,
+        selectedModel, modelParams, setMessages, t, pluginAgentNote,
     ])
 
     const handleSend = useCallback(() => {

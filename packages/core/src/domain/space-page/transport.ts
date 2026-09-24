@@ -11,6 +11,8 @@ export interface SpacePageTransportRequest {
     params?: Record<string, unknown>;
     body?: unknown;
     headers?: Record<string, string>;
+    /** Suppress the global error toast — the caller owns the error UI. */
+    silent?: boolean;
 }
 
 export interface SpacePageKeepaliveRequest {
@@ -71,12 +73,13 @@ export const sendSpacePageKeepalive = ({
 };
 
 export const createCommonSpacePageTransport = (): SpacePageTransport => ({
-    async execute<T>({ endpoint, params, body, headers }: SpacePageTransportRequest): Promise<T> {
+    async execute<T>({ endpoint, params, body, headers, silent }: SpacePageTransportRequest): Promise<T> {
         const response = await handleRequest(
             endpoint as API<T, Record<string, unknown>, unknown>,
             params,
             body,
-            headers
+            headers,
+            silent
         );
         return response.data;
     },

@@ -5,7 +5,8 @@
  * can use editor-specific tools through the registry without referencing @kn/core.
  */
 
-import { registerToolFactories } from '@kn/common'
+import { registerAgentToolImplementations, registerToolFactories } from '@kn/common'
+import { createWorkspaceToolImplementations } from './workspace-tools'
 import { createReadTools } from './read-tools'
 import { createInsertTools } from './insert-tools'
 import { createDeleteTools } from './delete-tools'
@@ -29,6 +30,14 @@ import { createImageTools } from './image-tools'
  * Register all core tool factories into the global registry.
  * Must be called once at application startup (before any AI agent is created).
  */
+/**
+ * Register the editor-free workspace tool implementations (M3). Declaration
+ * still belongs to a plugin (\`agent.include\`); this only makes them available.
+ */
+export function registerCoreAgentTools(): void {
+    registerAgentToolImplementations(createWorkspaceToolImplementations())
+}
+
 export function registerCoreToolFactories(): void {
     registerToolFactories([
         createReadTools,

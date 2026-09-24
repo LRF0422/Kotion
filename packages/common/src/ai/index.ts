@@ -36,6 +36,12 @@ export * from "./use-capability-providers"
 // Capability catalog collector (replaces progressive discovery on the frontend)
 export * from "./capabilities"
 
+// Plugin agent contribution contract (kernel capability aggregation, M0)
+export * from "./plugin-agent"
+
+// Kernel runtime — capability-selective agent surfaces (workspace/space/page)
+export * from "./kernel"
+
 // Model discovery — kept /api/v1/models endpoint
 export * from "./models"
 

@@ -30,6 +30,15 @@ export interface SessionPageBinding {
     bindPage: (page: SessionPageBindingPage) => void
     /** The page the active conversation edits off-screen, if any. */
     getBoundPage: () => SessionPageBindingPage | null
+    /**
+     * A host-rendered editor (the side pane / the floating window) claims a
+     * page: the conversation's document tools must act on THIS editor, and the
+     * page's hidden off-screen session is dropped so exactly ONE client writes.
+     * Optional — hosts without such an editor never call it.
+     */
+    claimEditor?: (pageId: string, editor: any) => void
+    /** Release a claim made by {@link claimEditor}. */
+    releaseEditor?: (pageId: string, editor: any) => void
     /** Open `pageId` in the floating editor window (no route navigation). */
     openPageWindow: (pageId: string) => void
     /**
