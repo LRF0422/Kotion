@@ -11,7 +11,7 @@
 
 import type { OnToolExecution, ToolDefinition, ToolsRecord } from '../types'
 import type { SessionPageBinding } from '../session-page-binding'
-import { AGENT_IMAGES_KEY } from '../image/image-attachments'
+import { AGENT_IMAGES_KEY } from '../image/agent-image-contract'
 import { withDocumentWrite } from './document-write-lock'
 
 /**

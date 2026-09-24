@@ -5,7 +5,7 @@
 
 // ============ Messages ============
 
-import type { AgentContentPart } from '../image/image-attachments'
+import type { AgentContentPart } from '../image/agent-image-contract'
 
 export interface AgentToolCallInfo {
     id: string

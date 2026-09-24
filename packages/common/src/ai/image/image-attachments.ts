@@ -9,9 +9,11 @@
  */
 
 import { authorizedFetch } from '../../utils/session'
+import { AGENT_IMAGES_KEY, type AgentContentPart } from './agent-image-contract'
 
-/** Tool-result key that carries images from a frontend tool to the backend. */
-export const AGENT_IMAGES_KEY = '__agentImages'
+// Re-exported so image-attachments stays the public home of both names.
+export { AGENT_IMAGES_KEY } from './agent-image-contract'
+export type { AgentContentPart } from './agent-image-contract'
 
 /** A single image prepared for the agent (base64, no `data:` prefix). */
 export interface AgentImageData {
@@ -33,14 +35,6 @@ export interface AgentImageToolResult {
     /** Short human-readable summary (kept small — the images travel separately). */
     note?: string
 }
-
-/**
- * OpenAI-compatible multimodal content part. Sent to the backend verbatim and
- * forwarded to the provider as the message's `content` array.
- */
-export type AgentContentPart =
-    | { type: 'text'; text: string }
-    | { type: 'image_url'; image_url: { url: string } }
 
 /** True when a frontend tool result carries agent images. */
 export function isAgentImageToolResult(value: unknown): value is AgentImageToolResult {
