@@ -75,9 +75,10 @@ export const DOCK_MAX_WIDTH = 720
 /**
  * Which dock positions currently have a host mounted.
  *
- * The dock lives inside the space workspace, so entry points that live outside
- * it (sidebar menu, mobile tab bar) need to know whether emitting
- * TOGGLE_DOCK_PANEL will reach anyone before falling back to a full page.
+ * The dock is a core shell feature rendered by the app shell on workspace
+ * routes, so entry points outside it (sidebar menu, mobile tab bar) need to
+ * know whether emitting TOGGLE_DOCK_PANEL will reach anyone before falling
+ * back to a full page.
  */
 const mountedDocks = new Set<DockPosition>()
 

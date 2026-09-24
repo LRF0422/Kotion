@@ -88,6 +88,31 @@ export const useInstallBundle = () => {
 /** The plugin-marketplace (catalogue lifecycle) service, when registered. */
 export const useMarketplace = () => useOptionalService('pluginMarketplace')
 
+/**
+ * Permanently delete a plugin project's files from disk.
+ *
+ * The studio's project list is only a pointer; this is the destructive half of
+ * "delete plugin project" and goes through the desktop host's allowlisted
+ * `fs.remove` capability (the managed projects directory and any folder the
+ * user added through the dialog are already inside that allowlist). The caller
+ * owns stopping the watcher and dropping the list entry first/after.
+ */
+export const useDeleteProject = () => {
+    const desktop = useOptionalService('desktop')
+    return useCallback(
+        async (root: string): Promise<void> => {
+            if (!desktop) {
+                throw new Error('当前宿主不是桌面客户端，无法删除工程文件')
+            }
+            const result = await desktop.invoke('fs.remove', { path: root })
+            if (result && result.success === false) {
+                throw new Error(result.error || `删除工程目录失败：${root}`)
+            }
+        },
+        [desktop],
+    )
+}
+
 /** Subscribe to build events for one project (or all of them). */
 export const useBuildEvents = (
     onBuild: (status: DevSessionStatus) => void,

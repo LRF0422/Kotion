@@ -577,6 +577,21 @@ export function setupIpcHandlers() {
     return BrowserWindow.fromWebContents(event.sender)?.isFullScreen() ?? false;
   });
 
+  // ==================== devtools (host controls) ====================
+  handle('window.toggleDevTools', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return;
+    if (win.webContents.isDevToolsOpened()) win.webContents.closeDevTools();
+    else win.webContents.openDevTools();
+  });
+
+  // ==================== app (host controls) ====================
+  // The app menu's 退出 action. Quitting from the renderer keeps the menu a
+  // single source of truth for the "leave the app" affordance.
+  handle('app.quit', () => {
+    app.quit();
+  });
+
   handle('window.setTrafficLights', (event, raw) => {
     if (process.platform !== 'darwin') return;
     const win = BrowserWindow.fromWebContents(event.sender) as any;

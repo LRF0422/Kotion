@@ -35,6 +35,8 @@ const CAPABILITIES = [
   'window.setFullScreen',
   'window.isFullScreen',
   'window.setTrafficLights',
+  'window.toggleDevTools',
+  'app.quit',
   // Plugin development (plugin-studio). These validate every path in the main
   // process against the same fs allowlist as the fs.* capabilities, and the
   // only process they can start is the bundled plugin dev-server.

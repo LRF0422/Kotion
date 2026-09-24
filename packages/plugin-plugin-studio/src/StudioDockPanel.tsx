@@ -11,6 +11,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
     Button,
+    ConfirmDialog,
     Dialog,
     DialogContent,
     DialogFooter,
@@ -32,6 +33,7 @@ import {
     Square,
     Trash2,
     TriangleAlert,
+    Unplug,
     Upload,
     Wrench,
     X,
@@ -39,16 +41,17 @@ import {
 import type { DevLogEntry, DevProjectEntry, DevSessionStatus, DockPanelProps } from '@kn/common'
 import { useOptionalService, useTranslation } from '@kn/common'
 import {
-    formatBytes,
     useBuildEvents,
+    useDeleteProject,
     useDevCapability,
     useHasDesktop,
     useInstallBundle,
     useProjects,
+    formatBytes,
 } from './studio-service'
 import { usePublishProject } from './StudioMarketplacePanel'
 
-type Busy = 'start' | 'stop' | 'build' | 'uninstall' | null
+type Busy = 'start' | 'stop' | 'build' | 'uninstall' | 'delete' | null
 
 interface StudioRow {
     root: string
@@ -91,7 +94,9 @@ export const StudioDockPanel: React.FC<DockPanelProps> = ({ close }) => {
     const isDesktop = useHasDesktop()
     const desktop = useOptionalService('desktop')
     const pluginHost = useOptionalService('pluginHost')
+    const pluginManagement = useOptionalService('pluginManagement')
     const installBundle = useInstallBundle()
+    const deleteFiles = useDeleteProject()
     const { projects, addProject, removeProject, touchProject } = useProjects()
     const publish = usePublishProject()
     /**
@@ -109,6 +114,8 @@ export const StudioDockPanel: React.FC<DockPanelProps> = ({ close }) => {
     const [scaffoldOpen, setScaffoldOpen] = useState(false)
     const [scaffoldName, setScaffoldName] = useState('my-kn-plugin')
     const [scaffoldDisplayName, setScaffoldDisplayName] = useState('My Plugin')
+    /** Project whose files are about to be deleted (confirm dialog). */
+    const [deleteTarget, setDeleteTarget] = useState<StudioRow | null>(null)
 
     /** Managed projects first, then locally added folders, deduped by root. */
     const rows = useMemo<StudioRow[]>(() => {
@@ -285,6 +292,32 @@ export const StudioDockPanel: React.FC<DockPanelProps> = ({ close }) => {
         setSelectedRoot(undefined)
     }
 
+    /**
+     * Delete a plugin project for good: stop its watcher, drop any build that is
+     * still hot-installed in this window, then remove the directory from disk.
+     * Only reachable through the confirm dialog — it cannot be undone.
+     */
+    const deleteProject = (row: StudioRow) =>
+        run('delete', async () => {
+            // Stop watching first: on Windows an open file handle would make the
+            // recursive delete fail, and a lingering session would keep reporting
+            // the project after its files are gone.
+            if (capability) await capability.dev.stop({ root: row.root }).catch(() => undefined)
+
+            // A deleted project must not stay active in the current window.
+            const active = pluginManagement?.list().filter(
+                (entry) =>
+                    entry.source === 'dev' &&
+                    (row.pluginKey ? entry.pluginKey === row.pluginKey : entry.name === row.label),
+            )
+            for (const entry of active ?? []) pluginManagement?.uninstall(entry.name)
+
+            await deleteFiles(row.root)
+            removeProject(row.root)
+            if (selectedRoot === row.root) setSelectedRoot(undefined)
+            await Promise.all([refreshStatus(), refreshManaged()])
+        })
+
     const addExisting = async () => {
         if (!desktop) return
         setError(null)
@@ -448,6 +481,18 @@ export const StudioDockPanel: React.FC<DockPanelProps> = ({ close }) => {
                                             >
                                                 <Upload className="h-3 w-3" />
                                             </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-6 w-6 shrink-0 p-0 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
+                                                title={t('pluginStudio.deleteProjectHint')}
+                                                onClick={() => {
+                                                    setSelectedRoot(row.root)
+                                                    setDeleteTarget(row)
+                                                }}
+                                            >
+                                                <Trash2 className="h-3 w-3" />
+                                            </Button>
                                         </div>
                                     )
                                 })
@@ -540,12 +585,30 @@ export const StudioDockPanel: React.FC<DockPanelProps> = ({ close }) => {
                             <Button
                                 size="sm"
                                 variant="ghost"
-                                className="h-7 w-7 p-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                                className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
                                 title={t('pluginStudio.uninstallHint')}
                                 onClick={uninstallRunning}
                                 disabled={busy !== null || !status?.plugin}
                             >
-                                <Trash2 className="h-3.5 w-3.5" />
+                                {busy === 'uninstall' ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                    <Unplug className="h-3.5 w-3.5" />
+                                )}
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 w-7 p-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                                title={t('pluginStudio.deleteProjectHint')}
+                                onClick={() => setDeleteTarget(selected)}
+                                disabled={busy !== null}
+                            >
+                                {busy === 'delete' ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                )}
                             </Button>
                             {!selected.managed ? (
                                 <Button
@@ -649,6 +712,22 @@ export const StudioDockPanel: React.FC<DockPanelProps> = ({ close }) => {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            <ConfirmDialog
+                open={deleteTarget !== null}
+                title={t('pluginStudio.deleteConfirmTitle')}
+                description={t('pluginStudio.deleteConfirmDesc', { path: deleteTarget?.root ?? '' })}
+                confirmLabel={t('pluginStudio.deleteConfirmAction')}
+                cancelLabel={t('pluginStudio.cancel')}
+                variant="destructive"
+                confirmDisabled={busy !== null}
+                onOpenChange={(open) => {
+                    if (!open) setDeleteTarget(null)
+                }}
+                onConfirm={() => {
+                    if (deleteTarget) deleteProject(deleteTarget)
+                }}
+            />
         </div>
     )
 }

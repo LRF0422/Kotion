@@ -37,6 +37,8 @@ export type DesktopCapability =
     | 'window.setFullScreen'
     | 'window.isFullScreen'
     | 'window.setTrafficLights'
+    | 'window.toggleDevTools'
+    | 'app.quit'
     // ---- plugin development (plugin-studio) --------------------------------
     | 'dev.start'
     | 'dev.stop'
@@ -544,6 +546,10 @@ export interface DesktopCapabilityContract {
     'window.setFullScreen': { params: { value: boolean }; result: void }
     'window.isFullScreen': { params?: void; result: boolean }
     'window.setTrafficLights': { params: DesktopTrafficLightPosition; result: void }
+    /** Toggle Chromium DevTools for the sender's window. */
+    'window.toggleDevTools': { params?: void; result: void }
+    /** Quit the desktop app (the menu's 退出 action). */
+    'app.quit': { params?: void; result: void }
     'dev.start': { params: DevStartOptions; result: DevSessionStatus }
     'dev.stop': { params: DevStopOptions; result: boolean }
     'dev.build': { params: DevBuildOptions; result: DevSessionStatus }

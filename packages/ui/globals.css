@@ -249,8 +249,18 @@ html[data-ui-style="modern"] #root {
 }
 
 @layer components {
+  :root {
+    /* Top shell band height. macOS keeps its 38px title band (the native
+       traffic lights live there); elsewhere the band still hosts the app menu,
+       so it needs room for its 28px controls. */
+    --kn-titlebar-height: 40px;
+  }
+
   .kn-app-shell {
     background: hsl(var(--muted) / 0.4);
+    /* Reserve the shell band so the absolutely positioned band never covers
+       page content. */
+    padding-top: var(--kn-titlebar-height);
   }
 
   html[data-ui-style="modern"] .kn-app-shell {
@@ -259,6 +269,7 @@ html[data-ui-style="modern"] #root {
     height: 100dvh;
     min-height: 100dvh;
     padding: var(--kn-app-shell-padding);
+    padding-top: var(--kn-titlebar-height);
     padding-inline: calc(var(--kn-app-shell-padding) * 0.5);
     gap: calc(var(--kn-workspace-gap) * 0.5);
     background: hsl(var(--muted) / 0.58);
@@ -270,13 +281,24 @@ html[data-ui-style="modern"] #root {
     gap: var(--kn-workspace-gap);
   }
 
+  /* The band is always laid out: it hosts the app menu on both web and
+     desktop. The web has no native drag region, so the class is inert there. */
   .kn-shell-top-drag-region {
-    display: none;
+    display: block;
+    height: var(--kn-titlebar-height);
+  }
+
+  /* Classic only: the band's bottom edge is the top of the sidebar frame.
+     Modern panes already carry their own borders, so a line here would double
+     up and read as a faint extra border. Use an inset shadow (not a border) so
+     it never changes the band's content box and skews control centring. */
+  html:not([data-ui-style="modern"]) .kn-shell-top-drag-region {
+    box-shadow: inset 0 -1px 0 hsl(var(--border) / 0.8);
   }
 
   html[data-ui-style="modern"] .kn-shell-top-drag-region {
     display: block;
-    height: var(--kn-app-shell-padding);
+    height: var(--kn-titlebar-height);
   }
 
   html[data-ui-style="modern"] .kn-route-pane,
@@ -355,44 +377,14 @@ html[data-ui-style="modern"] #root {
     gap: var(--kn-workspace-gap);
   }
 
-  /* ------------------------------------------------------------------
-     macOS window chrome
-     The frameless window uses 'hiddenInset', so the native traffic lights
-     float at (x16, y12). Modern (floating panes) insets the whole shell;
-     classic (flush panes) reserves the strip on the left columns only, so the
-     editor keeps its document tab bar at the top. Height is 0 elsewhere.
-     ------------------------------------------------------------------ */
+  /* macOS title band. The frameless window uses 'hiddenInset', so the native
+     traffic lights float at (x16, y12); the shared band above reserves their
+     space in both styles and is simply taller here. The band also hosts the app
+     menu and the screenshot / recording control, so it stays in fullscreen too
+     — the empty left space just becomes draggable chrome. */
   html[data-platform="darwin"] {
     --kn-titlebar-height: 38px;
   }
-
-  /* Inset the whole shell in BOTH modes so no page (space editor, file
-     manager, home, …) can place content under the lights. The band is empty, so
-     the drag region above it never covers interactive content — and it restores
-     macOS double-click-to-zoom on the title area.
-     The modern shell declares a `padding` shorthand at equal specificity, so
-     the modern variants add an extra attribute selector to win the cascade. */
-  html[data-platform="darwin"]:not([data-ui-style="modern"]) .kn-app-shell {
-    padding-top: var(--kn-titlebar-height);
-  }
-
-  html[data-platform="darwin"]:not([data-ui-style="modern"]) .kn-shell-top-drag-region {
-    display: block;
-    height: var(--kn-titlebar-height);
-  }
-
-  html[data-ui-style="modern"][data-platform="darwin"] .kn-app-shell {
-    padding-top: var(--kn-titlebar-height);
-  }
-
-  html[data-ui-style="modern"][data-platform="darwin"] .kn-shell-top-drag-region {
-    display: block;
-    height: var(--kn-titlebar-height);
-  }
-
-  /* Native fullscreen hides the traffic lights, but the band also hosts the
-     built-in screenshot / recording control, so it stays in every mode. The
-     empty left space simply becomes draggable chrome. */
 }
 
 /* Tablet keeps real 44px touch targets while desktop retains the compact rail. */

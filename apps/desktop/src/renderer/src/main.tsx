@@ -18,15 +18,15 @@ document.documentElement.dataset.platform =
     document.documentElement.dataset.fullscreen = isFullscreen ? 'true' : 'false'
 })
 
-// Keep the native traffic lights aligned with the interface style. The buttons
-// are native window controls, so only the main process can move them.
-// The title band's capture control is vertically centred at y=19 (a 24px
-// control in the 38px band), so the native buttons use y=13 as their top edge
-// to share the same centre. Previously modern used y=20, which sat noticeably
-// lower than the band's control.
+// Keep the native traffic lights aligned with the shell band's controls and the
+// left rail. The buttons are native window controls, so only the main process
+// can move them. Measured on device, the band controls are 28px tall and centred
+// in the 38px band (centre y≈19), while y=13 rendered the lights ~2px lower; x
+// centres the first light over the rail's icon column (centre x≈24). Hence the
+// shared x=18, y=11 for both styles.
 const TRAFFIC_LIGHT_POSITION = {
-    classic: { x: 16, y: 13 },
-    modern: { x: 22, y: 13 },
+    classic: { x: 18, y: 11 },
+    modern: { x: 18, y: 11 },
 } as const
 
 const syncTrafficLights = () => {

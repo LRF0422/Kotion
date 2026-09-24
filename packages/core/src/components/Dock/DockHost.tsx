@@ -24,7 +24,7 @@ import { X } from "@kn/icon"
 import { useDockState } from "./use-dock-state"
 
 export interface DockHostProps {
-    /** Which edge the dock sits on. Only 'right' is wired into the workspace today. */
+    /** Which edge the dock sits on. Only 'right' is wired into the shell today. */
     position?: DockPosition
     spaceId?: string
     /** Active page tab; panels that need a page use it (and opt out when absent). */

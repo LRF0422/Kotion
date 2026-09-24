@@ -5,12 +5,14 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { TourHost } from "./components/Tour/TourHost"
 import { ChevronLeft } from "@kn/icon"
 import { MobileTabBar } from "./components/mobile/MobileTabBar"
-import { useApi, APIS, useAsyncEffect, useLocation, Outlet, useNavigator, useUploadFile, getAccessToken, getRefreshToken, getTokenContextState, clearContextSensitiveClientState, clearTokens, normalizeTokenResponse, notifyContextChanged, saveTokens, useDispatch, AppContext, event, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS, TOGGLE_AI_ASSISTANT, TOGGLE_DOCK_PANEL, dockRuntime, logger } from "@kn/common"
+import { useApi, APIS, useAsyncEffect, useLocation, Outlet, useNavigator, useUploadFile, getAccessToken, getRefreshToken, getTokenContextState, clearContextSensitiveClientState, clearTokens, normalizeTokenResponse, notifyContextChanged, saveTokens, useDispatch, AppContext, event, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS, TOGGLE_AI_ASSISTANT, TOGGLE_DOCK_PANEL, dockRuntime, logger, useDesktop } from "@kn/common"
 import { toast } from "@kn/ui"
 import React from "react"
 import { MobilePageHeaderProvider, useMobilePageHeader } from "@kn/common"
 import { OffscreenEditorHost } from "./ai/offscreen"
 import { CaptureTitleButton } from "./capture/CaptureTitleButton"
+import { AppMenuButton } from "./components/AppMenuButton"
+import { DockHost } from "./components/Dock"
 import { AgentDocumentHost } from "./ai/agentdoc"
 import { UploadTaskHost } from "./components/UploadTasks/UploadTaskHost"
 import { toRemotePluginDescriptor, type PluginRecord } from "./components/Shop/plugin-model"
@@ -99,6 +101,11 @@ export function Layout({ onPluginsReady }: LayoutProps) {
     const navigator = useNavigator()
     const location = useLocation()
     const isWorkspaceRoute = location.pathname.startsWith('/space-detail/')
+    // Space / page the shell dock renders against. Parsed from the route so the
+    // dock can live in the app shell instead of the workspace page subtree.
+    const workspaceMatch = location.pathname.match(/^\/space-detail\/([^/]+)(?:\/page\/edit\/([^/]+))?/)
+    const workspaceSpaceId = workspaceMatch?.[1]
+    const workspacePageId = workspaceMatch?.[2]
     const { pluginManager } = useContext(AppContext)
     const [pluginsLoaded, setPluginsLoaded] = useState(false)
     const [pluginLoadError, setPluginLoadError] = useState<unknown>(null)
@@ -328,6 +335,34 @@ export function Layout({ onPluginsReady }: LayoutProps) {
     // Frameless-window drag regions only work in the Electron shell (their CSS
     // lives in the desktop app); in the browser they'd be invisible click blockers.
     const isDesktopShell = typeof window !== 'undefined' && typeof (window as any).knDesktop !== 'undefined'
+    const desktopBridge = useDesktop()
+    // Native fullscreen hides the macOS traffic lights, so the band must drop
+    // the left gap and align its actions with the window edge.
+    const [isFullScreen, setIsFullScreen] = useState(
+        () => typeof document !== 'undefined' && document.documentElement.dataset.fullscreen === 'true'
+    )
+
+    useEffect(() => {
+        if (!desktopBridge) return
+        let alive = true
+        desktopBridge.invoke('window.isFullScreen')
+            .then((value) => { if (alive) setIsFullScreen(Boolean(value)) })
+            .catch(() => undefined)
+        const unsubscribe = desktopBridge.onFullScreenChange((value) => setIsFullScreen(value))
+        return () => {
+            alive = false
+            unsubscribe()
+        }
+    }, [desktopBridge])
+
+    // macOS reserves the left edge of the band for the native traffic lights;
+    // every other host — and fullscreen, where the lights are hidden — starts
+    // the actions at the box corner.
+    // Fall back to the raw preload platform so the first paint already knows
+    // where the actions go, before the desktop service finishes registering.
+    const desktopPlatform = desktopBridge?.platform
+        ?? (isDesktopShell ? (window as any).knDesktop?.platform : undefined)
+    const hasTrafficLights = isDesktopShell && desktopPlatform === 'darwin' && !isFullScreen
 
     return (
         <MobilePageHeaderProvider>
@@ -371,16 +406,30 @@ export function Layout({ onPluginsReady }: LayoutProps) {
                         "grid w-full transition-opacity",
                         isMobile
                             ? "min-h-screen grid-cols-1"
-                            : "kn-app-shell relative h-screen min-h-0 grid-cols-[var(--kn-global-rail-width)_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] overflow-hidden [--kn-global-rail-width:48px] [--kn-app-shell-padding:0px] [--kn-workspace-gap:0px] [--kn-workspace-radius:0px] md:[--kn-app-shell-padding:6px] md:[--kn-workspace-gap:4px] md:[--kn-workspace-radius:10px] lg:[--kn-app-shell-padding:8px] lg:[--kn-workspace-gap:6px] lg:[--kn-workspace-radius:12px]",
+                            : "kn-app-shell relative h-screen min-h-0 grid-cols-[var(--kn-global-rail-width)_minmax(0,1fr)_auto] grid-rows-[minmax(0,1fr)] overflow-hidden [--kn-global-rail-width:48px] [--kn-app-shell-padding:0px] [--kn-workspace-gap:0px] [--kn-workspace-radius:0px] md:[--kn-app-shell-padding:6px] md:[--kn-workspace-gap:4px] md:[--kn-workspace-radius:10px] lg:[--kn-app-shell-padding:8px] lg:[--kn-workspace-gap:6px] lg:[--kn-workspace-radius:12px]",
                         !pluginsLoaded && "opacity-0"
                     )} >
-                        {!isMobile && isDesktopShell && (
+                        {/* Shared top shell band. It stays mounted on the web too, so the
+                            app menu is always reachable; only the desktop-only controls
+                            (drag chrome + capture) depend on the Electron shell. */}
+                        {!isMobile && (
                             <div className="kn-shell-top-drag-region titlebar-drag-region absolute inset-x-0 top-0 z-50">
-                                {/* Desktop actions sit right of the traffic lights (x16..~74),
-                                    separated by a hairline so they read as their own control. */}
-                                <div className="titlebar-no-drag absolute bottom-0 left-[90px] top-0 flex items-center gap-2">
-                                    <span className="h-4 w-px bg-border/70" aria-hidden="true" />
-                                    <CaptureTitleButton />
+                                <div className={cn(
+                                    "titlebar-no-drag absolute bottom-0 top-0 flex items-center gap-2",
+                                    // Slide between the traffic-light gap and the window
+                                    // corner when fullscreen toggles.
+                                    "transition-[left] duration-300 ease-out motion-reduce:transition-none",
+                                    hasTrafficLights ? "left-[90px]" : "left-3"
+                                )}>
+                                    <AppMenuButton />
+                                    {isDesktopShell && (
+                                        <>
+                                            {/* The capture control is separated by a hairline
+                                                so it reads as its own desktop-only action. */}
+                                            <span className="h-4 w-px bg-border/70" aria-hidden="true" />
+                                            <CaptureTitleButton />
+                                        </>
+                                    )}
                                 </div>
                             </div>
                         )}
@@ -421,6 +470,18 @@ export function Layout({ onPluginsReady }: LayoutProps) {
                             {/* Mobile bottom navigation (hidden while typing) */}
                             {isMobile && !keyboardOpen && <MobileTabBar />}
                         </div>
+                        {/* Right dock — a core shell feature. Rendered by the app
+                            shell (not the workspace page) so it spans full height
+                            and meets the top shell; mobile uses DockHost's own
+                            sheet branch. */}
+                        {isWorkspaceRoute && (
+                            <DockHost
+                                position="right"
+                                spaceId={workspaceSpaceId}
+                                pageId={workspacePageId}
+                                className={isMobile ? undefined : "kn-workspace-dock"}
+                            />
+                        )}
                         <AlertDialog open={open} onOpenChange={setOpen}>
                             <AlertDialogTrigger />
                             <AlertDialogContent>
