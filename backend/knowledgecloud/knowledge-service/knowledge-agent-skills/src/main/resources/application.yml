@@ -41,6 +41,19 @@ agent:
   llm:
     timeout-seconds: 120
     idle-timeout-seconds: 30
+    # Shared-provider protection. Every in-flight inference holds one provider
+    # connection for the whole stream; with one loop thread per run an unguarded
+    # fan-out of agents stampedes the provider and every call times out. The
+    # gate bounds concurrent calls globally (0 = unlimited), optionally per
+    # provider (e.g. "{deepseek: 8}"), and a caller that cannot get a slot within
+    # acquire-timeout-seconds fails fast instead of queueing forever.
+    max-concurrent-calls: 12
+    provider-max-concurrent: {}
+    acquire-timeout-seconds: 180
+    # Retry 429 / 5xx / connect / timeout failures before any content arrived.
+    max-attempts: 3
+    retry-base-delay-ms: 500
+    retry-max-delay-ms: 10000
   tool:
     timeout-seconds: 180
     max-parallel: 5

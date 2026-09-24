@@ -3,6 +3,9 @@ package com.knowledge.agent.core.config;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /**
  * AgentCore runtime configuration — the fresh, single source of truth for the
  * redesigned agent (prefix {@code agent}, replaces the deleted V2
@@ -102,6 +105,31 @@ public class AgentCoreProperties {
         private int idleTimeoutSeconds = 30;
         /** Temperature for planning/summarization calls (deterministic). */
         private double planningTemperature = 0.0;
+        /**
+         * Global cap on concurrent provider calls across all runs (0 = no cap).
+         *
+         * <p>Without it, N delegated agents each open a provider stream, the
+         * provider throttles every one of them, and the whole conversation looks
+         * like "everything times out". One slot is a provider connection held for
+         * the duration of one inference, so this is a connection cap, not a
+         * request-rate cap.
+         */
+        private int maxConcurrentCalls = 12;
+        /**
+         * Per-provider overrides of {@link #maxConcurrentCalls} (provider name →
+         * cap, e.g. {@code {deepseek: 8}}). Empty = the global cap only.
+         */
+        private Map<String, Integer> providerMaxConcurrent = new LinkedHashMap<>();
+        /**
+         * How long one inference may wait for a free provider slot before it
+         * fails with a busy error instead of queueing forever (seconds).
+         */
+        private int acquireTimeoutSeconds = 180;
+        /** Total attempts for one inference, including the first (1 = no retry). */
+        private int maxAttempts = 3;
+        /** Base / cap for exponential retry backoff on 429/5xx/network errors (ms). */
+        private long retryBaseDelayMs = 500;
+        private long retryMaxDelayMs = 10_000;
     }
 
     /** Tool execution settings. */

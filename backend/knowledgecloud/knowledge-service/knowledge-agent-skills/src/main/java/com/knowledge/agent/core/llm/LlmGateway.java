@@ -8,9 +8,14 @@ import com.knowledge.agent.llm.StreamChunk;
 import com.knowledge.agent.core.config.AgentCoreProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.netty.http.client.PrematureCloseException;
 
+import java.net.ConnectException;
+import java.net.SocketTimeoutException;
+import java.net.UnknownHostException;
 import java.time.Duration;
 import java.util.Iterator;
 import java.util.concurrent.TimeoutException;
@@ -26,6 +31,18 @@ import java.util.function.BooleanSupplier;
  * call fragments are merged by a {@link ToolCallAccumulator}. Cancellation is
  * cooperative via the {@code cancelled} flag (checked between chunks) and
  * thread interruption.
+ *
+ * <p>Two pieces of shared-provider protection live here, because this is the
+ * single choke point every inference goes through:
+ * <ul>
+ *   <li>{@link LlmConcurrencyGate} bounds concurrent provider calls globally
+ *       (and optionally per provider), so many agents cannot stampede one
+ *       provider and turn every call into a timeout;</li>
+ *   <li>retriable failures (429 / 5xx / connect / timeout / premature close)
+ *       are retried with exponential backoff, honouring {@code Retry-After},
+ *       but only before any content has arrived — a half-streamed answer is
+ *       never duplicated.</li>
+ * </ul>
  */
 @Slf4j
 @Component
@@ -33,10 +50,22 @@ public class LlmGateway {
 
     private final LlmClientFactory clientFactory;
     private final AgentCoreProperties properties;
+    private final LlmConcurrencyGate concurrencyGate;
+    private final int maxAttempts;
+    private final long retryBaseDelayMs;
+    private final long retryMaxDelayMs;
+    private final long acquireTimeoutMillis;
 
     public LlmGateway(LlmClientFactory clientFactory, AgentCoreProperties properties) {
         this.clientFactory = clientFactory;
         this.properties = properties;
+        AgentCoreProperties.Llm llm = properties.getLlm();
+        this.concurrencyGate = new LlmConcurrencyGate(
+                llm.getMaxConcurrentCalls(), llm.getProviderMaxConcurrent());
+        this.maxAttempts = Math.max(1, llm.getMaxAttempts());
+        this.acquireTimeoutMillis = Math.max(0L, (long) llm.getAcquireTimeoutSeconds()) * 1000L;
+        this.retryBaseDelayMs = Math.max(0L, llm.getRetryBaseDelayMs());
+        this.retryMaxDelayMs = Math.max(this.retryBaseDelayMs, llm.getRetryMaxDelayMs());
     }
 
     /**
@@ -56,18 +85,52 @@ public class LlmGateway {
 
     /** Streaming inference (the normal path). */
     public LlmResult streamInfer(LlmInferRequest request, Sink sink, BooleanSupplier cancelled) {
-        return streamInfer(request, sink, cancelled, 1);
+        int firstTokenSeconds = Math.max(1, properties.getLlm().getTimeoutSeconds());
+        int idleSeconds = Math.max(1, properties.getLlm().getIdleTimeoutSeconds());
+        if (isCancelled(cancelled)) {
+            return cancelledResult();
+        }
+        for (int attempt = 1; ; attempt++) {
+            LlmClient client = clientFactory.getClientForModel(request.getModel());
+            LlmConcurrencyGate.Permit permit = acquirePermit(client, cancelled);
+            if (permit == null) {
+                return cancelledResult();
+            }
+            try {
+                return streamInferOnce(client, request, sink, cancelled, firstTokenSeconds, idleSeconds);
+            } catch (StreamFailure failure) {
+                Throwable cause = failure.getCause() == null ? failure : failure.getCause();
+                boolean canRetry = !failure.anyChunk()
+                        && attempt < maxAttempts
+                        && !isCancelled(cancelled)
+                        && isRetriable(cause);
+                if (!canRetry) {
+                    RuntimeException runtime = cause instanceof RuntimeException
+                            ? (RuntimeException) cause
+                            : new IllegalStateException(cause);
+                    if (isTimeout(runtime)) {
+                        throw new LlmTimeoutException(timeoutMessage(firstTokenSeconds, idleSeconds), runtime);
+                    }
+                    throw runtime;
+                }
+                long delay = retryDelayMillis(attempt, cause);
+                log.warn("LLM stream failed before first chunk (attempt {}/{}): {} — retrying in {}ms",
+                        attempt, maxAttempts, cause.getMessage(), delay);
+                sleepQuietly(delay);
+            } finally {
+                permit.close();
+            }
+        }
     }
 
-    private LlmResult streamInfer(LlmInferRequest request, Sink sink, BooleanSupplier cancelled, int attempt) {
-        LlmClient client = clientFactory.getClientForModel(request.getModel());
+    /** One provider attempt; failures are wrapped so the caller can see partial output. */
+    private LlmResult streamInferOnce(LlmClient client, LlmInferRequest request, Sink sink,
+                                      BooleanSupplier cancelled, int firstTokenSeconds, int idleSeconds) {
         LlmRequest llmRequest = toLlmRequest(request, true);
 
         LlmResult result = new LlmResult();
         ToolCallAccumulator accumulator = new ToolCallAccumulator();
         boolean anyChunk = false;
-        int firstTokenSeconds = Math.max(1, properties.getLlm().getTimeoutSeconds());
-        int idleSeconds = Math.max(1, properties.getLlm().getIdleTimeoutSeconds());
 
         try {
             Iterator<StreamChunk> iterator = withStreamTimeouts(
@@ -75,7 +138,7 @@ public class LlmGateway {
                     .toStream()
                     .iterator();
             while (iterator.hasNext()) {
-                if (cancelled != null && cancelled.getAsBoolean()) {
+                if (isCancelled(cancelled)) {
                     result.setFinishReason("cancelled");
                     break;
                 }
@@ -84,7 +147,7 @@ public class LlmGateway {
                     chunk = iterator.next();
                 } catch (RuntimeException e) {
                     // Blocking iterator throws on interruption — surface as cancel.
-                    if (Thread.currentThread().isInterrupted() || (cancelled != null && cancelled.getAsBoolean())) {
+                    if (Thread.currentThread().isInterrupted() || isCancelled(cancelled)) {
                         result.setFinishReason("cancelled");
                         break;
                     }
@@ -124,16 +187,7 @@ public class LlmGateway {
                 }
             }
         } catch (RuntimeException e) {
-            // Retry once for transient transport errors before any content arrived.
-            if (!anyChunk && attempt < 2 && !(cancelled != null && cancelled.getAsBoolean())) {
-                log.warn("LLM stream failed before first chunk (attempt {}): {} — retrying",
-                        attempt, e.getMessage());
-                return streamInfer(request, sink, cancelled, attempt + 1);
-            }
-            if (isTimeout(e)) {
-                throw new LlmTimeoutException(timeoutMessage(firstTokenSeconds, idleSeconds), e);
-            }
-            throw e;
+            throw new StreamFailure(e, anyChunk);
         }
 
         result.setToolCalls(accumulator.results());
@@ -173,6 +227,114 @@ public class LlmGateway {
         return false;
     }
 
+    /**
+     * Whether a pre-first-chunk failure is worth retrying: provider rate limits
+     * and server errors, plus transport-level failures. A 4xx (other than 429)
+     * is the caller's fault and is never retried.
+     */
+    private static boolean isRetriable(Throwable error) {
+        Throwable current = error;
+        while (current != null) {
+            if (current instanceof WebClientResponseException) {
+                int status = ((WebClientResponseException) current).getRawStatusCode();
+                return status == 429 || status >= 500;
+            }
+            if (current instanceof TimeoutException
+                    || current instanceof SocketTimeoutException
+                    || current instanceof ConnectException
+                    || current instanceof UnknownHostException
+                    || current instanceof PrematureCloseException) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    /** Exponential backoff with jitter, capped; {@code Retry-After} wins when present. */
+    private long retryDelayMillis(int attempt, Throwable cause) {
+        long retryAfter = retryAfterMillis(cause);
+        if (retryAfter > 0L) {
+            return Math.min(retryAfter, retryMaxDelayMs);
+        }
+        if (retryBaseDelayMs <= 0L) {
+            return 0L;
+        }
+        long exponential = retryBaseDelayMs * (1L << Math.min(attempt - 1, 10));
+        long jitter = (long) (exponential * 0.2d * Math.random());
+        return Math.min(retryMaxDelayMs, exponential + jitter);
+    }
+
+    /** {@code Retry-After} in seconds, when the provider sent one. */
+    private static long retryAfterMillis(Throwable error) {
+        Throwable current = error;
+        while (current != null) {
+            if (current instanceof WebClientResponseException) {
+                String header = ((WebClientResponseException) current).getHeaders().getFirst("Retry-After");
+                if (header != null && !header.trim().isEmpty()) {
+                    try {
+                        return Long.parseLong(header.trim()) * 1000L;
+                    } catch (NumberFormatException ignored) {
+                        // HTTP-date form is rare here; fall back to backoff.
+                    }
+                }
+            }
+            current = current.getCause();
+        }
+        return 0L;
+    }
+
+    /** Take a provider slot; {@code null} means the run was cancelled while waiting. */
+    private LlmConcurrencyGate.Permit acquirePermit(LlmClient client, BooleanSupplier cancelled) {
+        String provider = client != null ? client.getProviderName() : null;
+        try {
+            return concurrencyGate.acquire(provider, cancelled, acquireTimeoutMillis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new LlmBusyException("LLM 调用在等待并发配额时被中断 (provider=" + provider + ")", e);
+        } catch (LlmConcurrencyGate.BusyException e) {
+            throw new LlmBusyException(e.getMessage(), e);
+        }
+    }
+
+    private static void sleepQuietly(long millis) {
+        if (millis <= 0L) {
+            return;
+        }
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private static boolean isCancelled(BooleanSupplier cancelled) {
+        return cancelled != null && cancelled.getAsBoolean();
+    }
+
+    private static LlmResult cancelledResult() {
+        LlmResult result = new LlmResult();
+        result.setFinishReason("cancelled");
+        return result;
+    }
+
+    /**
+     * A failed attempt. Carries whether any chunk arrived, so the retry loop
+     * never restarts an inference that already streamed output to the client.
+     */
+    private static final class StreamFailure extends RuntimeException {
+        private final boolean anyChunk;
+
+        private StreamFailure(RuntimeException cause, boolean anyChunk) {
+            super(cause.getMessage(), cause);
+            this.anyChunk = anyChunk;
+        }
+
+        private boolean anyChunk() {
+            return anyChunk;
+        }
+    }
+
     /** Provider stream stalled past the configured timeouts. */
     public static class LlmTimeoutException extends RuntimeException {
         public LlmTimeoutException(String message, Throwable cause) {
@@ -180,19 +342,31 @@ public class LlmGateway {
         }
     }
 
+    /** No provider slot became free within {@code agent.llm.acquire-timeout-seconds}. */
+    public static class LlmBusyException extends RuntimeException {
+        public LlmBusyException(String message, Throwable cause) {
+            super(message, cause);
+        }
+    }
+
     /** Non-streaming inference — planning/summarization calls. */
     public LlmResult infer(LlmInferRequest request) {
         LlmClient client = clientFactory.getClientForModel(request.getModel());
-        LlmResponse response = client.chat(toLlmRequest(request, false));
-        LlmResult result = new LlmResult();
-        if (response != null) {
-            result.setFinishReason(response.getFinishReason() != null ? response.getFinishReason() : "stop");
-            if (response.getContent() != null) {
-                result.setText(response.getContent());
+        LlmConcurrencyGate.Permit permit = acquirePermit(client, null);
+        try {
+            LlmResponse response = client.chat(toLlmRequest(request, false));
+            LlmResult result = new LlmResult();
+            if (response != null) {
+                result.setFinishReason(response.getFinishReason() != null ? response.getFinishReason() : "stop");
+                if (response.getContent() != null) {
+                    result.setText(response.getContent());
+                }
+                applyUsage(result, response.getUsage());
             }
-            applyUsage(result, response.getUsage());
+            return result;
+        } finally {
+            permit.close();
         }
-        return result;
     }
 
     private void applyUsage(LlmResult result, LlmResponse.Usage usage) {
