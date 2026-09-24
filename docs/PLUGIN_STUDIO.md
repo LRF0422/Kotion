@@ -195,6 +195,10 @@ pnpm test:plugin-dev:electron
 - **Tailwind**：直接在源码里写工具类即可。构建时 dev-server 会用宿主的 `@kn/ui/tailwind.config` 把你的类
   编译成 CSS，并用一个按 pluginKey 命名的 `<style>` 注入到宿主窗口（热更时替换，不会堆叠）。
   无需自己写 `@tailwind` 指令；宿主已注入的 `react`/`@kn/*` 依赖不要重复安装。
+- **样式隔离**：插件用的是宿主的 Tailwind 配置，类名与宿主一致；如果把这些全局类规则直接注入，就会在加载时
+  覆盖宿主自己的样式。因此编译产物会被限定在 `[data-kn-plugin="<pluginKey>"]` 作用域内，宿主渲染插件的
+  侧边面板时会打上对应属性，插件样式只影响自己的 DOM，不会改到宿主。
+  （注意：通过 `createPortal` 渲染到 `document.body` 的内容在作用域之外，只能用宿主已有的工具类。）
 ## 已知边界
 
 1. **主进程代码不能热更**：热更只覆盖窗口内的插件模块；改了 `apps/desktop/src/main/**` 仍需重启。

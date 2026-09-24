@@ -10,7 +10,7 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { buildPlugin, readProjectManifest } from './bundler.mjs'
+import { buildPlugin, pluginCssScope, readProjectManifest } from './bundler.mjs'
 
 const results = []
 const check = (name, condition, detail = '') => {
@@ -67,6 +67,10 @@ const manifest = await readProjectManifest(root)
 check('manifest: entry resolved', manifest.entry?.endsWith('src/index.tsx'), manifest.entry)
 check('manifest: pluginKey read', manifest.pluginKey === 'test-dev-plugin', manifest.pluginKey)
 check('manifest: displayName read', manifest.displayName === 'Test Dev Plugin')
+
+check('css scope: plain key', pluginCssScope('test-dev-plugin') === '[data-kn-plugin="test-dev-plugin"]', pluginCssScope('test-dev-plugin'))
+check('css scope: quotes escaped', pluginCssScope('a"b') === '[data-kn-plugin="a\\"b"]', pluginCssScope('a"b'))
+check('css scope: backslashes escaped', pluginCssScope('a\\b') === '[data-kn-plugin="a\\\\b"]', pluginCssScope('a\\b'))
 
 const built = await buildPlugin({
     root,

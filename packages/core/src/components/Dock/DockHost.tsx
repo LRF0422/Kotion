@@ -206,7 +206,10 @@ export const DockHost: React.FC<DockHostProps> = ({
                             </SheetTitle>
                         </SheetHeader>
                     )}
-                    <div className="flex-1 min-h-0 overflow-hidden">
+                    <div
+                        className="flex-1 min-h-0 overflow-hidden"
+                        data-kn-plugin={activePanel?.pluginKey}
+                    >
                         {PanelComponent && <PanelComponent {...context} close={close} />}
                     </div>
                 </SheetContent>
@@ -247,6 +250,7 @@ export const DockHost: React.FC<DockHostProps> = ({
                         <div
                             key={panel.id}
                             id={isPanelActive ? panelId : undefined}
+                            data-kn-plugin={panel.pluginKey}
                             className={cn(
                                 "kn-dock-panel absolute top-0 flex h-full flex-col border-l bg-background",
                                 // Anchored to the edge the rail sits on, so the

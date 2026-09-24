@@ -66,6 +66,12 @@ export interface ResolvedDockPanel extends DockPanelConfig {
     source: 'plugin' | 'core'
     /** Contributing plugin name, or 'core' for built-in panels. */
     owner: string
+    /**
+     * Stable registry key of the contributing plugin, or 'core' for built-in
+     * panels. The host tags each panel's DOM with it so a plugin's injected CSS
+     * can be scoped to its own subtree instead of restyling the whole document.
+     */
+    pluginKey: string
 }
 
 export const DOCK_DEFAULT_WIDTH = 320

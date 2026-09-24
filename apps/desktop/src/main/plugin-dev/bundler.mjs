@@ -313,6 +313,18 @@ try {
 `
 }
 
+/** Escape a value for use inside a double-quoted CSS attribute selector. */
+const escapeCssAttributeValue = (value) => String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+
+/**
+ * The DOM scope the host tags a plugin's dock panel with. The bundler scopes
+ * the plugin's compiled CSS to it so the plugin's utilities cannot leak into
+ * the host document; the host sets the matching `data-kn-plugin` attribute in
+ * its dock (see DockHost).
+ */
+export const pluginCssScope = (pluginKey) =>
+    `[data-kn-plugin="${escapeCssAttributeValue(pluginKey)}"]`
+
 /** Minimal single-file scaffold written by `dev.scaffold`. */
 export const renderScaffold = ({ name, pluginKey, displayName }) => {
     const title = displayName || name
@@ -506,8 +518,9 @@ export const buildPlugin = async ({ root, entry, pluginKey, name, writeToDisk = 
         const modules = collectModules(result.metafile, root, entry)
 
         // Compile the plugin's Tailwind utilities with the host theme and
-        // inject them with the bundle. CSS problems degrade to warnings.
-        const cssResult = await buildPluginCss({ root })
+        // inject them with the bundle, scoped to the plugin's own DOM so they
+        // cannot restyle the host. CSS problems degrade to warnings.
+        const cssResult = await buildPluginCss({ root, scope: pluginCssScope(pluginKey) })
         for (const warning of cssResult.warnings) warnings.push(warning)
 
         // esbuild rewrites externals to its own `__require` helper (sometimes

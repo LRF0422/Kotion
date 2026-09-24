@@ -50,10 +50,16 @@ export const loadTailwindConfig = (configPath) => {
 /**
  * Compile the plugin's Tailwind utilities.
  *
+ * Every rule is prefixed with `scope` (when given) so the plugin's CSS only
+ * applies inside its own DOM subtree. The plugin deliberately compiles with the
+ * host's Tailwind config — so its classes and CSS variables match the host —
+ * but without scoping those global class rules would override the host's own
+ * utilities (and anything the host overrides on top of them) on load.
+ *
  * Never throws: CSS is a nice-to-have, so a missing config or a Tailwind error
  * degrades to a warning and the JS build still succeeds.
  */
-export const buildPluginCss = async ({ root, configPath } = {}) => {
+export const buildPluginCss = async ({ root, configPath, scope } = {}) => {
     const loaded = loadTailwindConfig(configPath)
     if (!loaded.config) {
         return { css: '', warnings: ['Tailwind config not found; plugin CSS was skipped'] }
@@ -85,6 +91,14 @@ export const buildPluginCss = async ({ root, configPath } = {}) => {
         parsed.walkAtRules((atRule) => {
             if (atRule.name === 'keyframes' || atRule.name === '-webkit-keyframes') atRule.remove()
         })
+        // Prefix every selector with the plugin's scope so these global utility
+        // class rules cannot reach the host. Keyframes were removed above, so
+        // walkRules only sees real selectors (including those nested in @media).
+        if (scope) {
+            parsed.walkRules((rule) => {
+                rule.selectors = rule.selectors.map((selector) => `${scope} ${selector}`)
+            })
+        }
         return { css: parsed.toString(), warnings: [] }
     } catch (error) {
         return { css: '', warnings: ['Tailwind compile failed: ' + error.message] }

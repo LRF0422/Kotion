@@ -72,9 +72,10 @@ export const BubbleMenu: React.FC<BubbleMenuProps> = ({
   // trap them below body-level overlays such as margin cards.
   const defaultAppendTo = typeof document !== "undefined" ? document.body : undefined;
   const builtInAppendTo = appendTo ?? defaultAppendTo;
-  // The custom menu is rendered by React and moved with appendChild rather than
-  // createPortal. Moving it outside the React root breaks delegated onClick
-  // handlers, so only move it when a caller explicitly provides a target.
+  // The custom menu is a plugin-owned host (see react-bubble-menu): only its
+  // React children are portaled into it, so the plugin may freely append/remove
+  // the host. `appendTo` therefore just picks where the host lives; when it is
+  // omitted the plugin falls back to the editor's own DOM parent.
   const nodeAppendTo = typeof appendTo === "function"
     ? (typeof document !== "undefined" ? appendTo() : undefined)
     : appendTo;
