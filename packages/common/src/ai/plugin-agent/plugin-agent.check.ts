@@ -369,23 +369,29 @@ function checkEveryCallableToolIsAdvertised(): void {
 
     const catalog: any = collectCapabilityCatalog(skillProvider, toolProvider)
     const names = catalog.tools.map((t: any) => t.function.name)
-    assert.deepEqual(names, ['createPage', 'insertChart', 'insertNear', 'replaceContent'])
+    // Progressive discovery: the schema of a tool a skill owns is NOT sent up
+    // front — the skill names it (below) and `load_skill` delivers the schema when
+    // the model needs it. Everything nobody claims keeps travelling with its schema.
+    assert.deepEqual(names, ['createPage', 'insertChart'])
     // Core is decided by NAME, not by the (plugin-rewritten) metadata source.
     const createPage = catalog.tools.find((t: any) => t.function.name === 'createPage')
     assert.equal(createPage.core, true, 'a re-registered core tool is still core')
     assert.equal(catalog.tools.find((t: any) => t.function.name === 'insertChart').core, false)
-    // Claimed tools keep their schema...
-    const replace = catalog.tools.find((t: any) => t.function.name === 'replaceContent')
-    assert.deepEqual(replace.function.parameters, { type: 'object', properties: { x: { type: 'string' } } })
-    // ...and are NOT duplicated into a per-skill envelope.
+    // The client still holds the executable — and its schema — which is exactly what
+    // `load_skill` hands over and what the client runs once the model asks.
+    const replaceExecutable = toolProvider.getAllTools().replaceContent
+    assert.deepEqual(replaceExecutable.inputSchema, { type: 'object', properties: { x: { type: 'string' } } })
+    // No per-skill schema envelope either: the skill carries names, not payloads.
     assert.equal(catalog.skills[0].tools, undefined)
     assert.deepEqual(catalog.skills[0].requiredTools, ['replaceContent', 'insertNear'])
 
     // The catalog itself defers nothing: the budget is applied to the run input.
     const runInput = buildAgentRunInputs(catalog)
-    assert.deepEqual(runInput.tools.map(t => t.name),
-        ['createPage', 'insertChart', 'insertNear', 'replaceContent'])
+    assert.deepEqual(runInput.tools.map(t => t.name), ['createPage', 'insertChart'])
     assert.deepEqual(runInput.deferredTools, [])
+    // Withheld, never hidden: the skill still declares the names it owns, which is
+    // what the model reads to know it can ask for them.
+    assert.deepEqual(runInput.skills[0].requiredTools, ['replaceContent', 'insertNear'])
 }
 
 /**
@@ -443,10 +449,40 @@ function checkToolBudgetOverflow(): void {
     assert.equal(unlimitedRun.tools.length, 5)
     assert.deepEqual(unlimitedRun.deferredTools, [])
 
-    // No budget on the catalog → the module default, which these five fit under.
+    // No budget on the catalog → the default is NO ceiling: nothing is deferred,
+    // however large the catalog is. Hiding a tool is a last resort for a provider
+    // that hard-caps `tools`, never a default policy.
     const defaulted: any = { ...catalog }
     delete defaulted.toolBudget
     assert.deepEqual(buildAgentRunInputs(defaulted).deferredTools, [])
+
+    const big: any = {
+        ...catalog,
+        tools: Array.from({ length: 400 }, (_, i) => fn(`pluginTool${i}`, { core: false, priority: 5 })),
+    }
+    delete big.toolBudget
+    const bigRun = buildAgentRunInputs(big)
+    assert.equal(bigRun.tools.length, 400, 'the default must advertise every callable tool')
+    assert.deepEqual(bigRun.deferredTools, [])
+
+    // A partially advertised multi-tool capability is barely usable, so the
+    // ceiling must not be imposed by default: bitable's read/write tools have to
+    // survive alongside its insert tool unless a host explicitly asks for a cap.
+    const bitable: any = {
+        version: 'v',
+        tools: [
+            fn('insertBitable', { core: false, priority: 9 }),
+            fn('getBitableList', { core: false, priority: 5 }),
+            fn('addBitableRecord', { core: false, priority: 5 }),
+            fn('updateBitableRecord', { core: false, priority: 5 }),
+            fn('deleteBitableRecords', { core: false, priority: 5 }),
+        ],
+        skills: [],
+    }
+    const bitableRun = buildAgentRunInputs(bitable)
+    assert.deepEqual(names(bitableRun.tools),
+        ['addBitableRecord', 'deleteBitableRecords', 'getBitableList', 'insertBitable', 'updateBitableRecord'],
+        'a plugin multi-tool capability must arrive whole by default')
 
     // Declared priority outranks the alphabetical fallback: a document-insertion
     // tool (priority 9) must win the last slot over a get*/list* tool that would

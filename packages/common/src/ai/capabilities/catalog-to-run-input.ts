@@ -16,20 +16,33 @@ import type { AgentSkillInput, AgentToolSpec } from '../agent/types'
 import type { AgentCapabilityCatalog, ToolPayload } from './payload-types'
 
 /**
- * Default ceiling for CLIENT tools advertised in one request.
+ * Default ceiling for CLIENT tools advertised in one request. **0 = no ceiling:
+ * advertise every callable tool**, which is the default and the intent.
  *
- * OpenAI-compatible endpoints cap the `tools` array at 128 functions (a real,
- * observed 400), and a large `tools` array is also charged against the context
- * budget. A page run in this repo can offer ~166 client tools (77 built-in
- * editor tools + ~89 plugin tools), so the surplus cannot simply be dropped:
- * dropping a core editor tool is what made the agent unable to edit at all.
+ * The catalog exists to make capabilities usable, so hiding one is a last resort
+ * with a specific cause: a provider that hard-caps its `tools` array. OpenAI's
+ * compatible endpoints cap it at 128 functions; DeepSeek's own API documents no
+ * count limit (only unique, ≤128-char names), and this repo's deployments talk to
+ * a DeepSeek-compatible gateway — so the ceiling stays OFF unless a host sets it.
  *
- * The reserve below the 128 cap covers what the backend adds on top: its own
- * built-in tools (~12) plus any remote-skill tools registered for the tenant.
+ * Measured cost of leaving it off: a page run offers ~166 client tools (77
+ * built-in + ~89 from the 11 default-loaded plugins), ~178 including the
+ * backend's own. `estimateTokens` charges 64 tokens per tool, i.e. ~11k of the
+ * 60k context budget, and the array rides in the provider's cached prefix.
  *
- * 0 = no budget (advertise every callable tool).
+ * History: an earlier default of 112 sliced that catalog to 35 plugin slots, which
+ * pushed whole capabilities into the deferred directory —
+ * `addBitableRecord`/`getBitableList`/`updateBitableRecord` and
+ * `updateChart`/`listCharts` disappeared while `insertBitable`/`insertChart`
+ * stayed, so a multi-step plugin capability (insert, then read, then write) could
+ * not be completed at all. A tool list that hides half of a workflow is worse
+ * than a long one.
+ *
+ * A host that does hit a provider cap sets `VITE_KN_MAX_ADVERTISED_TOOLS` (or
+ * passes `toolBudget`); see {@link selectAdvertisedTools} for what is dropped
+ * first.
  */
-export const DEFAULT_TOOL_BUDGET = 112
+export const DEFAULT_TOOL_BUDGET = 0
 
 export interface AgentRunInputs {
     /** Tools offered to the model with their full schemas. */
@@ -60,15 +73,20 @@ function toToolSpec(tool: ToolPayload): AgentToolSpec {
  * Split the catalog into what the model is offered and what the provider's tool
  * ceiling pushed into the deferred channel.
  *
- * Rules, in order:
+ * With no budget (the default) nothing is deferred. When a host sets one — only
+ * because its provider hard-caps `tools` — the rules are, in order:
  *  - A core (built-in editor) tool is NEVER deferred. It is the tool family the
  *    agent cannot work without, and hiding one is the regression this whole path
  *    exists to prevent.
  *  - Plugin tools fill whatever room remains, ranked by: tools a skill's prompt
  *    fragment talks about first (the model is most likely to call them; see
- *    `ContextManager#renderSkillFragment`), then metadata priority, then name.
+ *    `ContextManager#renderSkillFragment`), then metadata priority, then name. A
+ *    plugin's insertion tools declare priority 9 precisely so a capability keeps
+ *    its entry point.
  *  - The surplus goes to `deferredTools` WITH its schema, so the backend can both
- *    route it and hand the schema back on first use.
+ *    route it and hand the schema back on first use. Note that a partially
+ *    advertised multi-tool capability is barely usable — the directory lists names
+ *    and signatures but no descriptions.
  *
  * Sorting of the advertised list is preserved from the catalog (by name) so the
  * request payload stays byte-stable across turns and the provider's prefix cache
@@ -119,6 +137,7 @@ function selectAdvertisedTools(
     budget?: number,
 ): ToolPayload[] {
     const limit = budget ?? DEFAULT_TOOL_BUDGET
+    // 0 = no ceiling (the default): advertise everything, defer nothing.
     if (!limit || limit <= 0 || tools.length <= limit) {
         return tools
     }

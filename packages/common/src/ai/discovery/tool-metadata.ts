@@ -58,6 +58,17 @@ export const CATEGORY_DESCRIPTIONS: Record<ToolCategory, string> = {
 
 // Built-in tool metadata registry
 export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
+    // ===== Discovery =====
+    {
+        name: 'load_skill',
+        category: 'discovery',
+        description: '加载某个技能（skill）的工具参数格式：技能说明列出了它拥有的工具名，调用本工具可拿到这些工具的完整参数结构，随后按名字直接调用。',
+        priority: 10,
+        tags: ['skill', 'discovery', 'essential'],
+        loaded: false,
+        source: 'builtin'
+    },
+
     // ===== Document Read Tools =====
     {
         name: 'getDocumentStructure',

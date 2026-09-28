@@ -5,7 +5,7 @@
  * can use editor-specific tools through the registry without referencing @kn/core.
  */
 
-import { registerAgentToolImplementations, registerToolFactories } from '@kn/common'
+import { registerAgentToolImplementations, registerToolFactories, createSkillTools } from '@kn/common'
 import { createWorkspaceToolImplementations } from './workspace-tools'
 import { createReadTools } from './read-tools'
 import { createInsertTools } from './insert-tools'
@@ -58,5 +58,7 @@ export function registerCoreToolFactories(): void {
         createPageTools,
         createReferenceTools,
         createImageTools,
+        // Progressive discovery: hands out a skill's tool schemas on demand.
+        createSkillTools,
     ])
 }

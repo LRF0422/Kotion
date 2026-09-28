@@ -34,15 +34,27 @@ import { ToolProvider } from "./providers/ToolProvider"
 import type { ResolvedPluginToolGroup } from "../core/PluginManager"
 import { SkillProvider } from "./providers/SkillProvider"
 import { collectCapabilityCatalog, isReadOnlyTool, type CapabilityCatalog } from "./capabilities"
-import { builtinSkills, getSkillRegistry } from "./skills"
+import { builtinSkills, createSkillToolSource, getSkillRegistry, registerSkillToolSource } from "./skills"
 import { wrapToolsWithCallback } from "./utils/tool-wrapper"
 import { getSessionPageBinding, type SessionPageBinding } from "./session-page-binding"
 
 /**
+ * Progressive skill discovery (`VITE_KN_SKILL_DISCOVERY=false` opts out).
+ *
+ * On (default): the request carries a small essential tool set plus the skills,
+ * and a skill's tool schemas are delivered by the `load_skill` tool result when
+ * the model asks for them — see the bridge in skills/skill-tool-bridge.
+ */
+function skillDiscoveryEnabled(): boolean {
+    return (import.meta as any)?.env?.KN_SKILL_DISCOVERY !== 'false'
+}
+
+/**
  * Host-configured ceiling on the client tools advertised in one request
- * (`VITE_KN_MAX_ADVERTISED_TOOLS`, 0 = unlimited). Undefined lets
- * `buildAgentRunInputs` apply its own default, sized under the 128-tool ceiling
- * of OpenAI-compatible endpoints. See {@link DEFAULT_TOOL_BUDGET}.
+ * (`VITE_KN_MAX_ADVERTISED_TOOLS`). Unset (the norm) means UNLIMITED: every
+ * callable tool is advertised and nothing is deferred. Set it only when the
+ * provider hard-caps its `tools` array (OpenAI-compatible: 128) — see
+ * {@link DEFAULT_TOOL_BUDGET} for the cost and for what a cap drops first.
  */
 function configuredToolBudget(): number | undefined {
     const raw = (import.meta as any)?.env?.KN_MAX_ADVERTISED_TOOLS
@@ -327,11 +339,22 @@ export function useCapabilityProviders(
         return wrapToolsWithCallback(allTools, onToolExecution)
     }, [allTools, onToolExecution])
 
+    /**
+     * The discovery source behind `load_skill`: given a skill the run was told
+     * about, return its tools' full specs (schemas included). Reads the live
+     * providers, so a plugin installed or removed mid-session is reflected at once.
+     */
+    useEffect(() => {
+        registerSkillToolSource(createSkillToolSource(skillProvider, toolProvider))
+        return () => registerSkillToolSource(null)
+    }, [skillProvider, toolProvider, version])
+
     // Rebuild the capability catalog whenever providers change (cached via ref).
     const getCatalog = useCallback((activeSkills?: Set<string>): CapabilityCatalog => {
         if (!catalogRef.current) {
             catalogRef.current = collectCapabilityCatalog(skillProvider, toolProvider, {
                 toolBudget: configuredToolBudget(),
+                skillDiscovery: skillDiscoveryEnabled(),
             })
         }
         if (!activeSkills || activeSkills.size === 0) {

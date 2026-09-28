@@ -23,6 +23,7 @@ import com.knowledge.agent.core.run.RunStatus;
 import com.knowledge.agent.core.run.RunStore;
 import com.knowledge.agent.core.savedskill.SavedSkillProvenance;
 import com.knowledge.agent.core.tool.BackendTool;
+import com.knowledge.agent.core.tool.ClientToolActivation;
 import com.knowledge.agent.core.tool.ToolContext;
 import com.knowledge.agent.core.tool.ToolGateway;
 import com.knowledge.agent.core.tool.ToolOutcome;
@@ -1479,6 +1480,12 @@ public class AgentLoop implements Runnable {
                         .content(toolContent)
                         .build());
                 appendImageVisionMessage(images);
+                if (item.isOk()) {
+                    // Progressive discovery: a client tool may hand back the specs of
+                    // the tools it just taught the model about. They ride in as an
+                    // appended tool message (cache-safe) and become routable here.
+                    registerClientActivatedTools(item.getResult());
+                }
             }
             emit(RunEvents.TOOL_COMPLETED,
                     RunEvents.toolCompleted(item.getCallId(), match.getTool(), item.isOk(),
@@ -2466,6 +2473,45 @@ public class AgentLoop implements Runnable {
             schema = String.valueOf(spec.getInputSchema());
         }
         return "\n\n【工具 " + toolName + " 的参数结构（首次调用后返回，之后可直接按此传参）】\n" + schema;
+    }
+
+    /**
+     * Make the tools a client disclosed in a tool result callable for the rest of
+     * the run, and persist them for recovery.
+     *
+     * <p>The schemas already reached the model inside that tool result, so this
+     * only affects ROUTING. They are deliberately not merged into the provider's
+     * {@code tools} array: that array renders before the messages, so adding to it
+     * mid-conversation would invalidate the cached prefix for every earlier step.
+     * A host whose provider refuses calls to undeclared functions sets
+     * {@code agent.context.freeze-deferred-tools=false}, which promotes them here
+     * at the documented cost of one prefix invalidation per activation.
+     */
+    private void registerClientActivatedTools(Object result) {
+        List<ToolSpec> specs = ClientToolActivation.extract(result);
+        if (specs.isEmpty()) {
+            return;
+        }
+        int added = 0;
+        for (ToolSpec spec : specs) {
+            String name = spec.getName();
+            if (clientToolSpecs.containsKey(name) || deferredToolSpecs.containsKey(name)) {
+                continue;
+            }
+            deferredToolSpecs.put(name, spec);
+            added++;
+        }
+        if (added == 0) {
+            return;
+        }
+        log.info("Run {}: client disclosed {} tool(s) for the rest of the run",
+                run.getRunId(), added);
+        checkpoint.setDeferredTools(new ArrayList<>(deferredToolSpecs.values()));
+        if (!frozenDeferredTools()) {
+            for (ToolSpec spec : new ArrayList<>(deferredToolSpecs.values())) {
+                activateDeferred(spec.getName());
+            }
+        }
     }
 
     private void activateDeferred(String toolName) {
