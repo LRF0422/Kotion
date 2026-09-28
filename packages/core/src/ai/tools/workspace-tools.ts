@@ -150,26 +150,50 @@ const focusArtifact: AgentToolImplementation = {
  * Build the workspace implementations core registers at startup.
  *
  * `createPage` gets a personal-space fallback so the workspace agent can create
- * a page without knowing a spaceId, and always runs with `bindToSession: false`
- * (there is no editor to bind).
+ * a page without knowing a spaceId.
+ *
+ * These implementations carry the SAME bare names as the core editor tools
+ * (`createPage`, `searchPages`, …) and plugin-main declares them via
+ * `agent.include`, so in page scope they ARE the live tool (a plugin tool
+ * replaces a same-named built-in — see ToolProvider#registerPluginTools). They
+ * must therefore behave like the editor-bound original when a run HAS an editor:
+ * the tools are built against `ctx.editor`, and `bindToSession` keeps the tool's
+ * own default (`true`) instead of being forced off. Forcing it off made a page
+ * the agent had just created stop being the conversation's edit target, so every
+ * following document tool silently edited the previously bound page.
  */
 export function createWorkspaceToolImplementations(): AgentToolImplementation[] {
-    const pageTools = createPageTools(null as any) as Record<string, any>
+    // Metadata (description / schema / readOnly) does not depend on the editor;
+    // one editor-free instance supplies it at registry time.
+    const blueprint = createPageTools(null as any) as Record<string, any>
 
     const implementations: AgentToolImplementation[] = WORKSPACE_PAGE_TOOLS.flatMap((id) => {
-        const tool = pageTools[id]
-        if (!tool?.execute) return []
+        const meta = blueprint[id]
+        if (!meta?.execute) return []
         return [{
             name: id,
-            description: tool.description,
-            inputSchema: tool.inputSchema,
-            readOnly: Boolean(tool.readOnly),
+            description: meta.description,
+            inputSchema: meta.inputSchema,
+            readOnly: Boolean(meta.readOnly),
             scope: 'any' as const,
             artifactFromResult: id === 'createPage' ? pageArtifactFromResult : undefined,
+            // Bind to THIS run's editor. In page scope that restores the
+            // built-in behaviour (resolveActivePage resolves the page for the
+            // calling agent's editor, so a delegated child is not pointed at the
+            // parent's target); in workspace scope there is no editor and the
+            // editor-free tools are used, exactly as before.
             create: (ctx) => {
+                const tool = (createPageTools((ctx.editor ?? null) as any) as Record<string, any>)[id]
+                if (!tool?.execute) throw new Error(`page tool ${id} is unavailable`)
                 if (id !== 'createPage') return tool.execute
                 return async (params: any, callId?: string, execCtx?: any) => {
-                    const args: any = { ...(params ?? {}), bindToSession: false }
+                    const args: any = { ...(params ?? {}) }
+                    // Editor-less run: there is no conversation to bind, and the
+                    // module-level session binding may belong to a different
+                    // surface — do not let a workspace-run createPage steal it.
+                    if (!ctx.editor && args.bindToSession === undefined) {
+                        args.bindToSession = false
+                    }
                     if (!args.spaceId) {
                         try {
                             const service = ctx.resolveService('spacePageService')

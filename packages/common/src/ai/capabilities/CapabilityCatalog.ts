@@ -23,6 +23,15 @@ const READ_ONLY_CATEGORIES = new Set(['document-read', 'discovery', 'interaction
  * Core tools always offered with full schemas regardless of skill claims.
  * These are the most frequently used tools that justify the per-turn cost.
  * Everything else goes deferred (schema withheld until first call).
+ *
+ * The page tools are listed explicitly because plugin-main re-declares them
+ * through `agent.include` (the same bare names, so a workspace run gets a
+ * workspace-scoped copy). That re-declaration turns their metadata into
+ * `source: 'plugin'`, which makes them "unclaimed plugin tools" and lets
+ * `PluginManager#resolveSkills`'s auto-generated `<plugin>-default` skill claim
+ * them — and a claim pulls a tool out of `tools[]`. Without these names the
+ * model loses the page/search/create schemas it is told to use in
+ * `CORE_EDITING_RULES` / `STANDARD_WORKFLOW`, even though they are callable.
  */
 const ALWAYS_ON_TOOLS = new Set([
     'getDocumentStructure',
@@ -35,6 +44,12 @@ const ALWAYS_ON_TOOLS = new Set([
     'updateTitle',
     'askUserChoice',
     'referenceBlocks',
+    // Page tools shadowed by plugin-main's `agent.include`.
+    'searchPages',
+    'createPage',
+    'getSpacePageTree',
+    'listSpaces',
+    'openPage',
 ])
 
 /**

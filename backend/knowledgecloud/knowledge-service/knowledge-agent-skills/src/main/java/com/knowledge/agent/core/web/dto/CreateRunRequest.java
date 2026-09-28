@@ -70,12 +70,25 @@ public class CreateRunRequest {
         private String systemPromptFragment;
 
         /**
+         * Names of the tools this skill owns, as declared by the client. They are
+         * rendered under the fragment (see
+         * {@code ContextManager#renderSkillFragment}) so the model can map the
+         * prose description onto exact function names: the deferred directory
+         * lists names and signatures but no descriptions, so without this the two
+         * halves of the catalogue never meet.
+         */
+        private List<String> requiredTools = new ArrayList<>();
+
+        /** Tools the skill may call in addition to its required ones. */
+        private List<String> optionalTools = new ArrayList<>();
+
+        /**
          * Tool schemas this skill owns (typically editor plugin tools).
          *
          * <p>These are <em>deferred</em>: registered as callable but kept out of
          * the model's tool list, so their JSON Schemas don't inflate every
-         * prompt. The system prompt advertises them by name + description, and
-         * the first call activates the schema for the remainder of the run.
+         * prompt. The directory advertises them by name + signature, and the
+         * first call returns the full schema.
          */
         private List<ToolSpec> tools = new ArrayList<>();
     }

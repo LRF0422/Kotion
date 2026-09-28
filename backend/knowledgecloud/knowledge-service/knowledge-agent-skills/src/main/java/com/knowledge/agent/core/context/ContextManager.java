@@ -71,7 +71,9 @@ public class ContextManager {
             "你是知识库（Kotion）的编辑器 Agent，直接操作用户的知识文档。\n"
             + "\n"
             + "能力与工具：\n"
-            + "- editor.* 工具：读取、插入、删除、格式化文档内容（块、标题、列表、表格、代码块、callout、数学公式等）。\n"
+            + "- 文档工具（函数名就是工具名，没有命名空间前缀）：读用 getDocumentStructure / readChunk / searchInDocument；"
+            + "写用 replaceBlockById / insertAtBlockId / applyEdits / deleteBlocks / updateTitle，按块 id 定位（块 id 由读工具返回）。\n"
+            + "- 更多编辑、格式、表格、布局工具列在上下文的按需工具目录中，按其名称直接调用；不要给工具名加任何前缀。\n"
             + "- 其他工具：网络检索、长期记忆、工作记忆、任务委派（delegate）。\n"
             + "\n"
             + "工作准则：\n"
@@ -135,6 +137,70 @@ public class ContextManager {
                 ? instruction.trim()
                 : PLAIN_TEXT_SYSTEM_PROMPT;
         return ChatMessage.builder().role("system").content(content).build();
+    }
+
+    /**
+     * A skill's prompt fragment plus the EXACT names of the tools it owns.
+     *
+     * <p>Two halves of the capability catalogue are deliberately kept apart: the
+     * injected deferred directory carries names and signatures but no
+     * descriptions, while a skill fragment describes the workflow in prose and
+     * usually never spells a tool name ("find-and-replace content" vs
+     * {@code replaceContent}). The model was left to join them on its own — which
+     * is where it invented names ({@code editor_insertBlocks}) and burned steps
+     * on {@code TOOL_NOT_FOUND}. Naming the owned tools directly under the
+     * fragment makes that join explicit.
+     *
+     * <p>The association is folded into the fragment TEXT on purpose: fragments
+     * travel as {@code List<String>} through the checkpoint and into delegated
+     * children, so a sibling structured field would be dropped exactly where a
+     * child agent needs it most.
+     *
+     * @param fragment      the skill's own prompt fragment; blank means the skill
+     *                      has no prose to attach names to
+     * @param requiredTools tools the skill must be able to call (may be null)
+     * @param optionalTools tools it may call as well (may be null)
+     * @return the fragment to inject, or {@code null} when there is nothing to add
+     */
+    public static String renderSkillFragment(String fragment, List<String> requiredTools,
+                                            List<String> optionalTools) {
+        String text = fragment == null ? "" : fragment.trim();
+        if (text.isEmpty()) {
+            // A fragment-less skill (the auto-generated `<plugin>-default`) has no
+            // prose for the model to associate names with; its tools stay in the
+            // directory instead of growing a synthetic "skill".
+            return null;
+        }
+        List<String> owned = new ArrayList<>();
+        appendToolNames(owned, requiredTools);
+        appendToolNames(owned, optionalTools);
+        if (owned.isEmpty()) {
+            return text;
+        }
+        StringBuilder names = new StringBuilder();
+        for (int i = 0; i < owned.size(); i++) {
+            if (i > 0) {
+                names.append(", ");
+            }
+            names.append(owned.get(i));
+        }
+        return text + "\n（本技能可直接调用的工具：" + names + "）";
+    }
+
+    /** Append non-blank, not-yet-listed tool names, preserving declaration order. */
+    private static void appendToolNames(List<String> target, List<String> names) {
+        if (names == null) {
+            return;
+        }
+        for (String name : names) {
+            if (name == null) {
+                continue;
+            }
+            String trimmed = name.trim();
+            if (!trimmed.isEmpty() && !target.contains(trimmed)) {
+                target.add(trimmed);
+            }
+        }
     }
 
     /** Header of the deferred (skill-owned) tool directory. */

@@ -47,3 +47,17 @@ export interface ToolPayload {
     /** Whether this tool only reads document/editor state (safe in PLAN mode). */
     readOnly?: boolean
 }
+
+/**
+ * Structural view of a capability catalog.
+ *
+ * Lives here, next to the payloads, so consumers that must stay import.meta-free
+ * — the pure-logic check harness compiles them under CommonJS — can accept a
+ * catalog without pulling in `capabilities/CapabilityCatalog.ts`.
+ */
+export interface AgentCapabilityCatalog {
+    skills: SkillPayload[]
+    tools: ToolPayload[]
+    deferredTools?: ToolPayload[]
+    version: string
+}

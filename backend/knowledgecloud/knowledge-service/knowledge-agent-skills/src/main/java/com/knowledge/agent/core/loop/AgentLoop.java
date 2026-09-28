@@ -712,8 +712,8 @@ public class AgentLoop implements Runnable {
         cp.setMemoryLines(memoryLines);
         cp.setSystemPrompt(runInput != null ? runInput.systemPrompt() : null);
         // Pure-text mode (inline translate / polish / summarize, the AI block,
-        // ...): do NOT inject the editor-agent persona, which advertises
-        // editor.*/web-search tools this run cannot call. With no tool schemas
+        // ...): do NOT inject the editor-agent persona, which names document and
+        // web-search tools this run cannot call. With no tool schemas
         // offered, the model otherwise answered with a raw tool-call markup
         // (DeepSeek DSML tokens) as content — the exact inline-translation bug.
         // The caller's own instruction (hoisted into systemPrompt by

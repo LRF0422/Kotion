@@ -45,9 +45,20 @@ export interface AgentSkillInput {
     name: string
     systemPromptFragment?: string
     /**
+     * Tools the skill declares as required. Sent so the backend can name them
+     * directly under the skill's prompt fragment: the deferred directory lists
+     * signatures without descriptions, so without the association the model has
+     * to guess which function a prose step ("find-and-replace content") refers
+     * to — and invents names when it guesses wrong. Already filtered to the
+     * callable catalog by `collectCapabilityCatalog`.
+     */
+    requiredTools?: string[]
+    /** Additionally callable tools the skill references. */
+    optionalTools?: string[]
+    /**
      * Tools this skill owns. The backend registers them as *deferred*: callable,
-     * but their schemas stay out of the model's tool list until first use (only
-     * name + description are advertised in the system prompt). Tools that are
+     * but their schemas stay out of the model's tool list until first use (the
+     * injected directory advertises name + parameter signature). Tools that are
      * also in the run's top-level `tools` are ignored here.
      */
     tools?: AgentToolSpec[]

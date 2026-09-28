@@ -28,6 +28,7 @@ import {
     type AgentToolContext,
 } from './index'
 import { filterAgentCatalog } from '../kernel/filter-catalog'
+import { buildAgentRunInputs } from '../capabilities/catalog-to-run-input'
 import { agentArtifactKey, collectAgentArtifacts } from '../kernel/agent-artifact-collect'
 
 function ctx(editor?: any, scope: AgentToolContext['scope'] = 'workspace'): AgentToolContext {
@@ -260,6 +261,50 @@ function checkArtifactCollection(): void {
     assert.deepEqual(collectAgentArtifacts([], mappers), [])
 }
 
+/**
+ * The declared tool names of a skill must survive the catalog → run-input
+ * mapping. They are what lets the backend name each skill's own tools under its
+ * prompt fragment (the deferred directory carries signatures, not descriptions),
+ * so silently dropping them puts the model back to guessing which function the
+ * prose means.
+ */
+function checkSkillToolNamesTravel(): void {
+    const fn = (name: string) => ({ type: 'function' as const, function: { name, description: '', parameters: {} } })
+    const catalog: any = {
+        version: 'v',
+        tools: [],
+        deferredTools: [],
+        skills: [{
+            name: 'document-write',
+            description: '',
+            source: 'builtin',
+            // Declared names may repeat or carry padding; both are normalised away.
+            requiredTools: ['replaceContent', ' insertNear ', 'replaceContent', ''],
+            optionalTools: ['write', 'write'],
+            systemPromptFragment: 'You can find-and-replace content.',
+            tools: [fn('replaceContent'), fn('insertNear'), fn('write')],
+        }],
+    }
+
+    const { skills } = buildAgentRunInputs(catalog)
+    assert.deepEqual(skills[0].requiredTools, ['replaceContent', 'insertNear'])
+    assert.deepEqual(skills[0].optionalTools, ['write'])
+    assert.equal(skills[0].systemPromptFragment, 'You can find-and-replace content.')
+    // The schemas still travel as the deferred catalog — the name list is an
+    // addition, never a replacement.
+    assert.deepEqual((skills[0].tools ?? []).map((t: any) => t.name),
+        ['replaceContent', 'insertNear', 'write'])
+
+    // No declared names → the fields stay absent, so an unchanged catalog keeps
+    // producing a byte-identical request payload.
+    const bare = buildAgentRunInputs({
+        ...catalog,
+        skills: [{ name: 'x', description: '', source: 'builtin', tools: [] }],
+    } as any)
+    assert.equal(bare.skills[0].requiredTools, undefined)
+    assert.equal(bare.skills[0].optionalTools, undefined)
+}
+
 function checkContextWhitelist(): void {
     // Deny by default: declaring a provider is not authorizing it.
     clearAgentContextWhitelist()
@@ -290,6 +335,7 @@ function main(): void {
     checkRegistry()
     checkToolNameResolution()
     checkCatalogFilter()
+    checkSkillToolNamesTravel()
     checkArtifactCollection()
     checkContextWhitelist()
     console.log('plugin-agent checks passed')

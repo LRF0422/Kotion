@@ -1,5 +1,6 @@
 package com.knowledge.agent.core.web;
 
+import com.knowledge.agent.core.context.ContextManager;
 import com.knowledge.agent.core.loop.ResumePayload;
 import com.knowledge.agent.core.memory.MemoryEntry;
 import com.knowledge.agent.core.memory.MemoryScope;
@@ -117,9 +118,17 @@ public class EditorAgentController {
                 if (skill == null) {
                     continue;
                 }
-                if (skill.getSystemPromptFragment() != null
-                        && !skill.getSystemPromptFragment().trim().isEmpty()) {
-                    cmd.getSkillFragments().add(skill.getSystemPromptFragment().trim());
+                // Name the skill's own tools under its fragment: the deferred
+                // directory gives signatures without descriptions, so the model
+                // otherwise has to guess which function a prose step refers to
+                // (and invents names when it guesses wrong). Blank fragments
+                // yield null and are dropped.
+                String fragment = ContextManager.renderSkillFragment(
+                        skill.getSystemPromptFragment(),
+                        skill.getRequiredTools(),
+                        skill.getOptionalTools());
+                if (fragment != null) {
+                    cmd.getSkillFragments().add(fragment);
                 }
                 if (skill.getTools() == null) {
                     continue;

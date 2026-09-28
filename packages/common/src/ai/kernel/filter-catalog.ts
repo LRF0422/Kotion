@@ -17,15 +17,13 @@
  * compile under CommonJS.
  */
 
-import type { SkillPayload, ToolPayload } from '../capabilities/payload-types'
+import type {
+    AgentCapabilityCatalog,
+    SkillPayload,
+    ToolPayload,
+} from '../capabilities/payload-types'
 
-/** Structural view of a capability catalog (matches CapabilityCatalog). */
-export interface AgentCapabilityCatalog {
-    skills: SkillPayload[]
-    tools: ToolPayload[]
-    deferredTools?: ToolPayload[]
-    version: string
-}
+export type { AgentCapabilityCatalog }
 
 /**
  * Drop every tool the scope cannot run, and reconcile the skills that
