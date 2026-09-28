@@ -127,7 +127,11 @@ export class ToolProvider {
      * Register plugin tools. Tools are instantiated immediately and added to
      * the catalog with metadata derived from the plugin.
      */
-    registerPluginTools(tools: ToolsRecord, pluginName: string): void {
+    registerPluginTools(
+        tools: ToolsRecord,
+        pluginName: string,
+        options?: { deferred?: boolean },
+    ): void {
         let changed = false
         for (const [name, tool] of Object.entries(tools)) {
             const metadata: ToolMetadata = {
@@ -139,6 +143,7 @@ export class ToolProvider {
                 loaded: true,
                 source: 'plugin',
                 pluginName,
+                ...(options?.deferred ? { deferred: true } : {}),
             }
 
             const existing = this.tools.get(name)

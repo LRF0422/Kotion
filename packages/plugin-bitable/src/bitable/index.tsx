@@ -2,8 +2,6 @@ import { ExtensionWrapper } from "@kn/common";
 import { Bitable } from "./bitable-node";
 import { TableIcon } from "@kn/icon";
 import React from "react";
-import { bitableTools } from "./bitable-tools";
-import { bitableSkill } from "./skills/bitable-skill";
 
 export const BitableExtension: ExtensionWrapper = {
     name: Bitable.name,
@@ -25,7 +23,5 @@ export const BitableExtension: ExtensionWrapper = {
                 editor.commands.insertBitable();
             }
         }
-    ],
-    tools: bitableTools,
-    skills: [bitableSkill]
+    ]
 };

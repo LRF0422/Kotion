@@ -45,6 +45,9 @@ import {
     EDITOR_AGENT_PROMPT,
     composeAgentSystemPrompt,
     useCustomAgents,
+    useAgentCapabilities,
+    describePluginAgents,
+    toPluginAgentSpecs,
 } from '@kn/common'
 import { SubAgentTree, buildSubAgentTreeLabels } from './SubAgentTree'
 import { PlanApprovalCard } from './PlanApprovalCard'
@@ -180,7 +183,18 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
     const subAgentLabels = useMemo(() => buildSubAgentTreeLabels(t), [t])
     const catalog = useMemo(() => getCatalog(), [getCatalog])
     // tools[] 常驻；技能自带的工具随 skills[] 下发，首次调用前不展开参数结构。
-    const { tools: toolSpecs, skills } = useMemo(() => buildAgentRunInputs(catalog), [catalog])
+    // deferredTools 是插件 agent 的工具：可被委派子 run 调用，不向本 run 广告。
+    const { tools: toolSpecs, skills, deferredTools } = useMemo(() => buildAgentRunInputs(catalog), [catalog])
+    // 插件 agent 目录：既随 run 下发（后端按 agentId 解析），也写进每轮 contextNote。
+    const agentCapabilities = useAgentCapabilities('page')
+    const pluginAgents = useMemo(
+        () => toPluginAgentSpecs(agentCapabilities.agents),
+        [agentCapabilities],
+    )
+    const pluginAgentNote = useMemo(
+        () => describePluginAgents(agentCapabilities.agents),
+        [agentCapabilities],
+    )
     const currentPage = getPageNavigationBridge()?.getCurrentPage()
 
     // Custom agent selected for this panel. Its guidance is appended to the
@@ -191,6 +205,8 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
         conversationId,
         tools: toolSpecs,
         skills,
+        deferredTools,
+        pluginAgents,
         // Editor rules the backend cannot import; appended to its base prompt,
         // followed by the selected custom agent's guidance when there is one.
         systemPrompt: composeAgentSystemPrompt(EDITOR_AGENT_PROMPT, selectedAgent),
@@ -261,9 +277,11 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
         setMessages(prev => [...prev, userMessage])
         setInput('')
         // History is engine-owned (session model log); send only the new turn.
-        await agent.start([{ role: 'user', content: trimmed }], { mode })
-            .catch(() => undefined)
-    }, [input, agent, mode, currentPage?.pageId])
+        await agent.start([{ role: 'user', content: trimmed }], {
+            mode,
+            contextNote: pluginAgentNote,
+        }).catch(() => undefined)
+    }, [input, agent, mode, currentPage?.pageId, pluginAgentNote])
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
         if (e.key === 'Enter' && !e.shiftKey) {

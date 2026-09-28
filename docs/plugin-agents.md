@@ -239,3 +239,67 @@ check:plugin-agent passed（新增 describePluginAgents 用例）；tsc -p 四�
 ### 11.4 验证
 
 check:plugin-agent passed；tsc -p 四包自身源码 0 错。
+---
+
+## 12. P2 完成：全量迁移 + 后端按 agentId 解析 + deferred 通道
+
+> 本节取代 §10.2 / §11.3 的「还差什么」清单。
+
+### 12.1 本轮落地
+
+1. **9 个 legacy 业务插件全部迁移**（每插件一个 agent，tools/skills 收入其中）：
+   - plugin-zhihu → `zhihu-researcher`（scope **any**，纯开放平台连接器，不碰 editor）
+   - plugin-comment → `comment-ops`、plugin-sticky-note → `sticky-note-ops`
+   - plugin-mermaid → `mermaid-ops`、plugin-chart → `chart-ops`、plugin-excalidraw → `excalidraw-ops`
+   - plugin-office → `spreadsheet-ops`、plugin-bitable → `bitable-ops`、plugin-github → `github-ops`（均 scope page）
+   它们的 `editorExtension[].tools/skills` 已删除；迁移只做「提升」，工具/技能实现一行未改。
+2. **§32 扁平聚合退役**：`PluginManager.resolveAgentContributions()` 不再读取
+   `editorExtension[].tools/skills`。仍在用的插件会被 logger 点名（而不是被静默适配）。
+   `resolveSkills()` 收敛为「contribution 级 agent.skills + 未认领 agent 工具的默认技能」。
+3. **deferred 通道**：插件 agent 的工具**不进入内核 agent 的工具列表**。
+   `ToolMetadata.deferred` → `CapabilityCatalog.deferredTools` →
+   `CreateRunInput.deferredTools` → 后端 `CreateRunRequest.deferredTools` →
+   `Checkpoint.deferredTools`。子 run 仍能调用它们（`Delegator` 从 deferred 目录
+   `selectTools`），但 schema 不再出现在内核每轮的工具表里。
+4. **后端按 agentId 解析**：插件 agent 目录随 run 下发
+   （`CreateRunInput.pluginAgents` → `CreateRunRequest` → `CreateRunCommand` →
+   `Checkpoint` → `ToolContext` → `Delegator`）。模型只需 `delegate({ agentId, task })`，
+   系统自动装载该 agent 的 systemPrompt 与工具子集；显式传入的 tools/systemPrompt 仍然优先
+   （手写委派不受影响）。id 大小写不敏感，命名空间前缀可省（`page-ops` 命中
+   `kn_plugin-main__page-ops`）。
+5. **scope-aware 的编辑器守卫**：`liftLegacyTools` 按 scope 决定是否要求编辑器 ——
+   `page` 组无编辑器即拒绝实例化（§32 守卫保留）；`any`/`workspace` 组允许
+   `ctx.editor === undefined`。否则 zhihu 这类连接器在 workspace run 里会被跳过，
+   而内核目录仍然广告它的工具（github 迁移时发现的真实缺陷）。个别「声明 any 实际要编辑器」
+   的工具可用 `requiresEditor: true` 显式覆盖。
+
+### 12.2 能力流向
+
+\`\`\`
+插件声明 agent（prompt + tools + skills + scope）
+   ├─ describePluginAgents  → 内核只看到「有哪些 agent、各自能做什么」
+   ├─ pluginAgents 随 run   → 后端按 agentId 组装子 run 的 prompt / 工具子集
+   └─ agent 工具 deferred   → 内核工具表里没有它们，委派子 run 能调用
+\`\`\`
+
+### 12.3 仍未做（诚实清单）
+
+- **§33 的 skill 对账没有删除**：`CapabilityCatalog#skillSurvives` 仍在。插件那半边成因
+  （扁平目录里 skill 与工具各走各的通道）已经消失，但内置技能与用户安装技能仍需要这道过滤：
+  技能引用的工具在某个 scope 不可执行时，必须把技能丢掉，否则又回到 TOOL_NOT_FOUND。
+  它已从「插件补丁」变成通用安全网。
+- **github 仍是单个 page agent**：`insert*` 与 `list*/get*/search*` 逻辑上可拆
+  page + any 两个 agent，本轮未拆。
+- **agent.context 有白名单但不消费**：`setAgentContextWhitelist` 已在解析处强制
+  （默认全拒），但还没有 surface 加载并注入 context；core 注册的是空白名单。
+- **agent.actions 仍无 UI 入口**。
+- **端到端委派未在真机验证**：需要构建插件 + 刷新应用后实跑一次 delegate。
+
+### 12.4 验证
+
+- `pnpm -F @kn/common check:plugin-agent` 通过（新增 agent 技能装配、context 白名单、
+  scope-aware 编辑器守卫断言）。
+- `tsc -p --noEmit`：@kn/common 0 错；plugin-ai / core 自身源码 0 错（其余为既有跨包 alias 报错）。
+- 后端 `mvn -pl knowledge-service/knowledge-agent-skills -am compile` → BUILD SUCCESS。
+- 迁移的 9 个插件包 `pnpm -F @kn/<pkg> build`（rollup）退出码 0。
+

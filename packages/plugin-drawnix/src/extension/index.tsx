@@ -2,8 +2,6 @@ import type { ExtensionWrapper } from "@kn/common";
 import { Paintbrush2 } from "@kn/icon";
 import React from "react";
 import { Drawnix } from "./drawnix";
-import { drawnixSkill } from "./skills/drawnix-skill";
-import { drawnixTools } from "./tools/drawnix-tools";
 
 export const DrawnixExtension: ExtensionWrapper = {
   name: "drawnix",
@@ -18,6 +16,4 @@ export const DrawnixExtension: ExtensionWrapper = {
       },
     },
   ],
-  tools: drawnixTools,
-  skills: [drawnixSkill],
 };

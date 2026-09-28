@@ -1,6 +1,7 @@
 package com.knowledge.agent.core.supervisor;
 
 import com.knowledge.agent.api.dto.ChatMessage;
+import com.knowledge.agent.core.delegate.PluginAgentSpec;
 import com.knowledge.agent.core.savedskill.SavedSkillProvenance;
 import com.knowledge.agent.core.tool.ToolSpec;
 import lombok.Data;
@@ -37,6 +38,12 @@ public class CreateRunCommand {
 
     /** Skills system-prompt fragments. */
     private List<String> skillFragments = new ArrayList<>();
+
+    /**
+     * Delegatable plugin agents (see {@link PluginAgentSpec}). Resolved by
+     * {@code Delegator} when the model delegates with an {@code agentId}.
+     */
+    private List<PluginAgentSpec> pluginAgents = new ArrayList<>();
 
     /** Long-term memory lines injected at run start (M2). */
     private List<String> memoryLines = new ArrayList<>();

@@ -886,3 +886,52 @@ agent 工具编辑页面 → session-page-binding 路由到该页的编辑器（
 - 这是「**skill 与工具集合同源**」的契约，与 §14 的「能力随插件/作用域变化」一致。
 
 **验证**：`pnpm -F @kn/common check:plugin-agent` passed；`tsc -p` 四包自身源码 0 错。
+
+---
+
+## 34. P2：插件全量迁移 + 后端按 agentId 解析 + deferred 通道
+
+> 详细设计见 [docs/plugin-agents.md](plugin-agents.md) §12。本节记录「这一轮到底改了什么、什么还没做」。
+
+### 34.1 改动
+
+1. **14 个插件完成迁移**（9 个业务插件 + 5 个此前漏查的：netease-music / bilibili / logicflow / drawnix / file-manager）。
+   每插件一个 agent，`tools` / `skills` 从 `editorExtension` 移入 `agent.agents[]`。
+   迁移只做「提升」（`liftLegacyTools` / `liftLegacySkills`），工具实现一行未改。
+2. **§32 的成因退役**：`PluginManager.resolveAgentContributions()` 不再聚合
+   `editorExtension[].tools/skills`；仍在用的插件会被 logger 点名。
+   `resolveSkills()` 收敛为「contribution 级 agent.skills + 未认领 agent 工具的默认技能」。
+3. **deferred 通道**：插件 agent 的工具不再出现在内核 agent 的工具表里。
+   `ToolMetadata.deferred` → `CapabilityCatalog.deferredTools` →
+   `CreateRunInput.deferredTools` → 后端 `deferredTools` → `Checkpoint.deferredTools`。
+   委派子 run 通过 `Delegator.selectTools(ctx.getDeferredTools(), …)` 拿到它们。
+4. **后端按 agentId 解析**：`pluginAgents` 随 run 下发
+   （`CreateRunInput` → `CreateRunRequest` → `CreateRunCommand` → `Checkpoint` → `ToolContext` → `Delegator`）。
+   `delegate({ agentId, task })` 即可，systemPrompt / tools 由后端从目录取出；
+   显式传入的参数仍然优先（手写委派兼容）。
+5. **scope-aware 编辑器守卫**：`liftLegacyTools` 只对 `page` 组要求编辑器。
+   `any` 组允许 `ctx.editor === undefined` —— 否则 zhihu 这类连接器在 workspace run 里
+   没有执行器，而内核目录仍在广告它（github 迁移时暴露的真实缺陷）。
+6. **dock 的产物分栏**：page artifact 走全功能浮窗 `PageEditWindow`（dock 只有 ~400px，
+   内联分栏会把对话挤没），其余 artifact 走内联 side peek；移动端分栏改为整屏接管。
+7. **工作目标跨刷新持久化**：target 存进会话元数据（`ChatSessionMeta.targetArtifact`），
+   切会话时恢复 / 清空。
+8. **agent.context 白名单强制**：`setAgentContextWhitelist`（默认全拒），
+   在 `resolveAgentCapabilities` 处就把未授权 provider 丢掉；core 注册空白名单。
+
+### 34.2 仍未做（诚实清单）
+
+| 项 | 状态 |
+|---|---|
+| §33 的 `skillSurvives` | **保留**。插件那半边成因已消失，但内置/用户技能仍需要它，否则又回到 TOOL_NOT_FOUND |
+| github 拆 page + any 两个 agent | 未拆（收益有限） |
+| `agent.context` 真正加载注入 | 未做（只有白名单强制） |
+| `agent.actions` UI 入口 | 未做 |
+| 真机端到端委派 | 未做（需构建插件后刷新应用） |
+
+### 34.3 验证
+
+- `pnpm -F @kn/common check:plugin-agent` passed（新增 agent 技能装配 / context 白名单 /
+  scope-aware 守卫断言）。
+- `tsc -p --noEmit`：@kn/common、plugin-ai 自身源码 0 错；14 个迁移插件自身源码 0 错。
+- 后端 `mvn -pl knowledge-service/knowledge-agent-skills -am compile` → BUILD SUCCESS。

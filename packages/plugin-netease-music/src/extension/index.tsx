@@ -3,8 +3,6 @@ import { NeteaseMusicNodeView } from './NeteaseMusicNodeView';
 import { ExtensionWrapper } from '@kn/common';
 import { Music } from '@kn/icon';
 import React from 'react';
-import { neteaseMusicTools } from './tools';
-import { neteaseMusicSkill } from './skills/netease-music-skill';
 
 declare module '@kn/editor' {
     interface Commands<ReturnType> {
@@ -114,6 +112,4 @@ export const NeteaseMusicExt: ExtensionWrapper = {
             }
         }
     ],
-    tools: neteaseMusicTools,
-    skills: [neteaseMusicSkill],
 };

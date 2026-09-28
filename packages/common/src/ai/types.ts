@@ -158,6 +158,13 @@ export interface ToolMetadata {
     loaded: boolean
     source: 'builtin' | 'plugin'
     pluginName?: string   // 来源插件名称
+    /**
+     * Callable but NOT advertised to the kernel agent: the tool belongs to a
+     * plugin agent's child run (docs/plugin-agents.md) and its schema must not
+     * inflate the kernel's tool list. It still travels with the run as a
+     * deferred tool so a delegated child can call it.
+     */
+    deferred?: boolean
 }
 
 export interface CategoryInfo {

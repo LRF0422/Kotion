@@ -83,6 +83,7 @@ public class EditorAgentController {
         cmd.setMode(request.getMode());
         cmd.setMessages(request.getMessages());
         cmd.setTools(request.getTools());
+        cmd.setPluginAgents(request.getPluginAgents());
         cmd.setTemperature(request.getTemperature());
         cmd.setMaxTokens(request.getMaxTokens());
         cmd.setSystemPrompt(request.getSystemPrompt());
@@ -95,16 +96,25 @@ public class EditorAgentController {
         cmd.setToken(SecurityContextUtil.getToken());
         cmd.setSkillFragments(new ArrayList<>());
         cmd.setSkillTools(new ArrayList<>());
-        if (request.getSkills() != null) {
-            // Skill tools are deduped by name and kept out of `tools` on purpose:
-            // the loop registers them as deferred (callable, but absent from the
-            // model's tool list until first use).
-            java.util.Set<String> seenTools = new java.util.HashSet<>();
-            for (ToolSpec spec : request.getTools() != null ? request.getTools() : new ArrayList<ToolSpec>()) {
-                if (spec != null && spec.getName() != null) {
-                    seenTools.add(spec.getName());
+        // The deferred catalog is deduped against the always-on tools list and
+        // kept out of `tools` on purpose: the loop registers these as callable,
+        // but absent from the model's tool list until first use. Two sources:
+        // skill-owned tools, and the plugin agents' tools (which a delegated
+        // child run needs but the kernel agent must not see).
+        java.util.Set<String> seenTools = new java.util.HashSet<>();
+        for (ToolSpec spec : request.getTools() != null ? request.getTools() : new ArrayList<ToolSpec>()) {
+            if (spec != null && spec.getName() != null) {
+                seenTools.add(spec.getName());
+            }
+        }
+        if (request.getDeferredTools() != null) {
+            for (ToolSpec spec : request.getDeferredTools()) {
+                if (spec != null && spec.getName() != null && seenTools.add(spec.getName())) {
+                    cmd.getSkillTools().add(spec);
                 }
             }
+        }
+        if (request.getSkills() != null) {
             for (CreateRunRequest.SkillInput skill : request.getSkills()) {
                 if (skill == null) {
                     continue;

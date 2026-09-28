@@ -14,7 +14,10 @@ import {
     useCapabilityProviders,
     buildAgentRunInputs,
     describePluginAgents,
+    toPluginAgentSpecs,
     useAgentCapabilities,
+    useAgentPane,
+    AgentPaneHost,
     getAgentDocumentBridge,
     getPageNavigationBridge,
     setSessionPageBinding,
@@ -159,6 +162,8 @@ export const ExpandableChatDemo: React.FC<{
         clearActiveMessages,
         targetPage,
         setTargetPage,
+        targetArtifact,
+        setTargetArtifact,
     } = useChatSessions()
 
     // The conversation's bound page. Page tools reach it through the binding
@@ -286,6 +291,43 @@ export const ExpandableChatDemo: React.FC<{
         if (targetPage) setEditWindowPageId(targetPage.pageId)
     }, [targetPage])
 
+    // ─── Working-target pane (artifact cards → preview) ───────────
+    // The dock is a narrow, user-resizable panel (default 400px), so it splits
+    // its behaviour by what the artifact needs:
+    //   • a PAGE opens in the full floating editor (PageEditWindow) — real
+    //     editing, live peer updates, and no cramped document column;
+    //   • every other kind (source lists, future cards) renders in the inline
+    //     side peek, which needs no editor session.
+    // Closing the pane only hides it: the working target survives (spec I2).
+    const pane = useAgentPane()
+    const paneTarget = pane.open ? pane.target : null
+    const paneIsPage = paneTarget?.kind === 'page'
+    const inlinePaneArtifact = paneTarget && !paneIsPage ? paneTarget : null
+
+    useEffect(() => {
+        if (!paneIsPage || !paneTarget) return
+        setEditWindowPageId(String(paneTarget.id))
+        // The floating window IS the preview for a page, so the inline column
+        // must not also open — that would be two editors for one document.
+        pane.close()
+    }, [paneIsPage, paneTarget, pane.close])
+
+    // Restore the conversation's target on switch (it is stored with the
+    // session) and persist whatever the agent/user opens afterwards.
+    const paneOpenArtifact = pane.openArtifact
+    const paneClearTarget = pane.clearTarget
+    const restoreSessionRef = useRef<string | null>(null)
+    useEffect(() => {
+        if (restoreSessionRef.current === activeSessionId) return
+        restoreSessionRef.current = activeSessionId
+        if (targetArtifact) paneOpenArtifact(targetArtifact)
+        else paneClearTarget()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeSessionId])
+    useEffect(() => {
+        setTargetArtifact(pane.target)
+    }, [pane.target, setTargetArtifact])
+
     // ─── Session page binding bridge ─────────────────────────────
     // Page tools (createPage / openPage / editPage) live in core and cannot
     // reach this session's state. They call through this registry so a page the
@@ -382,6 +424,12 @@ export const ExpandableChatDemo: React.FC<{
         () => describePluginAgents(agentCapabilities.agents),
         [agentCapabilities],
     )
+    // The same directory travels WITH the run so delegate({ agentId }) resolves
+    // the child's prompt/tools server-side (see CreateRunInput.pluginAgents).
+    const pluginAgents = useMemo(
+        () => toPluginAgentSpecs(isAskMode ? [] : agentCapabilities.agents),
+        [isAskMode, agentCapabilities],
+    )
 
     const { getCatalog, rebindEditor, resolveTools, isReadOnlyTool } = useCapabilityProviders(agentEditor, {
         onUserChoiceRequest: handleUserChoiceRequest,
@@ -389,7 +437,7 @@ export const ExpandableChatDemo: React.FC<{
     const catalog = useMemo(() => getCatalog(), [getCatalog])
     // tools[] carries the always-on schemas; skill-owned tools ride inside
     // skills[] and stay deferred until the model calls one.
-    const { tools: toolSpecs, skills } = useMemo(() => buildAgentRunInputs(catalog), [catalog])
+    const { tools: toolSpecs, skills, deferredTools } = useMemo(() => buildAgentRunInputs(catalog), [catalog])
 
     // ─── Session page binding bridge ─────────────────────────────
     // Registered after the capability hook so editPage can rebind the live tool
@@ -603,6 +651,8 @@ export const ExpandableChatDemo: React.FC<{
         conversationId: activeSessionId,
         tools: isAskMode ? [] : toolSpecs,
         skills: isAskMode ? [] : skills,
+        deferredTools: isAskMode ? [] : deferredTools,
+        pluginAgents,
         // Editor rules the backend cannot import; appended to its base prompt.
         // A selected custom agent's guidance rides behind them.
         systemPrompt: composeAgentSystemPrompt(
@@ -923,7 +973,10 @@ export const ExpandableChatDemo: React.FC<{
                 />
             </ExpandableChatHeader>
 
-            <ExpandableChatBody className="bg-muted/20 dark:bg-background overflow-x-hidden">
+            <ExpandableChatBody className="bg-muted/20 dark:bg-background overflow-x-hidden flex-row">
+                {/* On mobile the pane takes over the panel (push navigation);
+                    on desktop it is an inline side peek next to the chat. */}
+                <div className={`flex min-h-0 min-w-0 flex-1 flex-col ${inlinePaneArtifact ? 'hidden md:flex' : ''}`}>
                 <ChatMessageList>
                     {loadingTranscript && messages.length === 0 && (
                         <div
@@ -1012,6 +1065,16 @@ export const ExpandableChatDemo: React.FC<{
                         />
                     )}
                 </ChatMessageList>
+                </div>
+                {inlinePaneArtifact && (
+                    <aside className="flex min-h-0 min-w-0 flex-1 flex-col border-l border-border bg-background md:w-3/5 md:flex-none">
+                        <AgentPaneHost
+                            artifact={inlinePaneArtifact}
+                            onClose={pane.close}
+                            onOpenInPage={pane.openInPage}
+                        />
+                    </aside>
+                )}
             </ExpandableChatBody>
 
             <ExpandableChatFooter className="border-t bg-background p-2">

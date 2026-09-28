@@ -31,6 +31,7 @@ import { event, PLUGIN_CHANGED } from "../event"
 
 import type { OnToolExecution, OnUserChoiceRequest, ToolsRecord, ToolDefinition } from "./types"
 import { ToolProvider } from "./providers/ToolProvider"
+import type { ResolvedPluginToolGroup } from "../core/PluginManager"
 import { SkillProvider } from "./providers/SkillProvider"
 import { collectCapabilityCatalog, isReadOnlyTool, type CapabilityCatalog } from "./capabilities"
 import { builtinSkills, getSkillRegistry } from "./skills"
@@ -161,7 +162,16 @@ export function useCapabilityProviders(
      */
     const perEditorToolsRef = useRef<WeakMap<object, ToolsRecord>>(new WeakMap())
 
-    /** Plugin skills are editor-independent; register them whenever they change. */
+    /**
+     * Plugin skills that live at PLUGIN level (\`agent.skills\`) are
+     * editor-independent, so register them whenever they change.
+     *
+     * Agent-OWNED skills (\`agent.agents[].skills\`) deliberately do not pass
+     * through here: they belong to their plugin agent's child run, and
+     * PluginManager folds their prompt fragments into that agent's system
+     * prompt. Putting them in the global catalog as well would advertise a
+     * prompt for tools the kernel agent cannot call.
+     */
     const registerPluginSkills = useCallback(() => {
         if (!pluginManager) return
         const pluginSkills = pluginManager.resolveSkills?.() || []
@@ -185,10 +195,10 @@ export function useCapabilityProviders(
      * tool inside resolvePluginToolGroups, and ToolProvider#updateEditor clears
      * every plugin tool on an editor swap, so the next rebind re-registers them.
      */
-    const collectPluginToolsByPlugin = useCallback((targetEditor: Editor | null): Array<{ pluginName: string; tools: ToolsRecord }> => {
+    const collectPluginToolsByPlugin = useCallback((targetEditor: Editor | null): ResolvedPluginToolGroup[] => {
         if (!pluginManager) return []
         try {
-            return (pluginManager.resolvePluginToolGroups?.(targetEditor) as Array<{ pluginName: string; tools: ToolsRecord }>) || []
+            return (pluginManager.resolvePluginToolGroups?.(targetEditor) as ResolvedPluginToolGroup[]) || []
         } catch (error) {
             console.warn('[Agent] Plugin tool resolution failed:', error)
             return []
@@ -209,8 +219,18 @@ export function useCapabilityProviders(
         perEditorToolsRef.current = new WeakMap()
 
         for (const group of collectPluginToolsByPlugin(nextEditor)) {
-            console.log(`[Agent] Registering ${Object.keys(group.tools).length} tools from plugin "${group.pluginName}"`)
+            const kernelTools = Object.keys(group.tools).length
+            const agentTools = Object.keys(group.agentTools ?? {}).length
+            if (kernelTools + agentTools > 0) {
+                console.log(
+                    `[Agent] Registering ${kernelTools} tools + ${agentTools} agent-deferred tools `
+                    + `from plugin "${group.pluginName}"`,
+                )
+            }
             toolProvider.registerPluginTools(group.tools, group.pluginName)
+            // Agent-owned tools: callable in a delegated child run, invisible to
+            // the kernel agent's own tool list (see ToolMetadata.deferred).
+            toolProvider.registerPluginTools(group.agentTools ?? {}, group.pluginName, { deferred: true })
         }
         return toolProvider.getAllTools()
     }, [toolProvider, pluginManager, registerPluginSkills, collectPluginToolsByPlugin])
@@ -229,6 +249,9 @@ export function useCapabilityProviders(
         const record = toolProvider.buildToolsFor(targetEditor)
         for (const group of collectPluginToolsByPlugin(targetEditor)) {
             Object.assign(record, group.tools)
+            // A child agent's executor needs them too; the deferred flag only
+            // governs catalog advertisement, not executability.
+            Object.assign(record, group.agentTools ?? {})
         }
         perEditorToolsRef.current.set(targetEditor, record)
         return record

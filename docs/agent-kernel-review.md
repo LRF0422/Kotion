@@ -113,3 +113,36 @@
 | **P0** | 让 2–3 个核心业务插件落地 artifact：**plugin-bitable / plugin-office / plugin-chart**（用户按「产物」看表格与图表最直观）。注意 insert 类工具当前**不返回 block id**，需先补 `blockId`（可在插入后读 `doc.resolve(selection.from).nodeBefore.attrs.blockId`）。 |
 | **P1** | legacy 重名保护升级为硬失败；`agent.actions` 接线首页快捷动作。 |
 | **P2** | target 持久化到会话元数据；dock 接分栏；`agent.context` 白名单落地。 |
+
+---
+
+## 5. P2 复核（插件全量迁移之后）
+
+§4 的 P2 三项已落地，另附本轮新增结论：
+
+| 事项 | 状态 |
+|---|---|
+| target 持久化到会话元数据 | ✅ `ChatSessionMeta.targetArtifact` + `setTargetArtifact`；切会话恢复/清空 |
+| dock 接分栏 | ✅ page artifact 走全功能浮窗（dock 窄），其余走内联 side peek；移动端整屏接管 |
+| `agent.context` 白名单落地 | ✅ `setAgentContextWhitelist`（默认全拒）在 `resolveAgentCapabilities` 处强制；但尚无 surface 真正加载注入 |
+
+### 5.1 迁移暴露的两个真实缺陷（已修）
+
+1. **编辑器守卫过宽**：`liftLegacyTools` 早期对任何工具都要求 `ctx.editor`，
+   导致 `scope: 'any'` 的连接器（zhihu）在 workspace run 里被跳过，而内核目录
+   仍在广告它。现改为按 scope 推导 `requiresEditor`（`page` 才强制），并可用
+   `requiresEditor: true` 显式覆盖。
+2. **同一工具两处声明**：plugin-main 既在贡献级暴露页面工具，又交给 `page-ops` agent；
+   若 agent 侧以 deferred 再注册一次，会把内核可见工具静默降级为 deferred。
+   现规定「贡献级声明优先」，去重后再分组。
+
+### 5.2 仍然开放
+
+| 优先级 | 事项 |
+|---|---|
+| **P0** | 给 bitable / office / chart 的 insert 类工具补 `blockId` 并声明 `artifactFromResult`（产物架目前看不到表格/图表） |
+| **P1** | `agent.actions` 接线首页快捷动作；`agent.context` 真正加载注入 |
+| **P1** | 后端按 agentId 解析已就绪 → 可移除 `delegate` 参数里「让模型复制 prompt」的兜底说明 |
+| **P2** | github 拆 page + any 两个 agent |
+| **P2** | 真机端到端：构建插件 + 刷新应用后实跑一次 delegate，确认子 run 拿到 agent 工具 |
+

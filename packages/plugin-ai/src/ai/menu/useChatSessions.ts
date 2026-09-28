@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 
 import { i18n } from '@kn/common'
+import type { AgentArtifact } from '@kn/common'
 
 import type { Message } from './chat-types'
 import {
@@ -58,6 +59,10 @@ export interface UseChatSessionsResult {
     boundPage: ChatTargetPage | undefined
     /** Bind / unbind the active session's owning page. */
     setBoundPage: (page: ChatTargetPage | null) => void
+    /** Conversation's working target (kernel artifact), if any. */
+    targetArtifact: AgentArtifact | undefined
+    /** Persist / clear the active session's working target. */
+    setTargetArtifact: (artifact: AgentArtifact | null) => void
 }
 
 /** Upper bound on sessions fetched from the backend. */
@@ -461,6 +466,20 @@ export function useChatSessions(): UseChatSessionsResult {
         [updateMeta],
     )
 
+    const targetArtifact = activeSession?.targetArtifact
+
+    const setTargetArtifact = useCallback(
+        (artifact: AgentArtifact | null) => {
+            // Like the page binding, a target change is agent activity, not user
+            // activity: it must not reorder the session list.
+            updateMeta(activeIdRef.current, s => ({
+                ...s,
+                targetArtifact: artifact ?? undefined,
+            }))
+        },
+        [updateMeta],
+    )
+
     return {
         sessions,
         activeSession,
@@ -477,5 +496,7 @@ export function useChatSessions(): UseChatSessionsResult {
         setTargetPage,
         boundPage,
         setBoundPage,
+        targetArtifact,
+        setTargetArtifact,
     }
 }

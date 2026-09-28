@@ -14,6 +14,8 @@ import { useCallback, useMemo } from 'react'
 import { useCapabilityProviders } from '../use-capability-providers'
 import { buildAgentRunInputs } from '../capabilities'
 import { filterAgentCatalog } from './filter-catalog'
+import { describePluginAgents, toPluginAgentSpecs } from './plugin-agents'
+import { useAgentCapabilities } from './use-agent-capabilities'
 import { useEditorAgent, type EditorAgentApi } from '../agent/use-editor-agent'
 import type { AgentChatMessage } from '../agent/types'
 import type { OnToolExecution } from '../types'
@@ -88,18 +90,33 @@ export function useWorkspaceAgent(options: WorkspaceAgentOptions = {}): Workspac
         () => filterAgentCatalog(providers.getCatalog(), isAvailableTool),
         [providers.getCatalog, isAvailableTool],
     )
-    const { tools, skills } = useMemo(() => buildAgentRunInputs(catalog), [catalog])
+    const { tools, skills, deferredTools } = useMemo(() => buildAgentRunInputs(catalog), [catalog])
 
     // Ask mode ships no tools — a pure-text answer over whatever the model can
     // already see. Kept memoized so the tool arrays stay identity-stable.
     const isAskMode = options.mode === 'ask'
     const runTools = useMemo(() => (isAskMode ? [] : tools), [isAskMode, tools])
     const runSkills = useMemo(() => (isAskMode ? [] : skills), [isAskMode, skills])
+    const runDeferredTools = useMemo(
+        () => (isAskMode ? [] : deferredTools),
+        [isAskMode, deferredTools],
+    )
+
+    // Plugin-agent directory: published to the backend (agentId → prompt/tools)
+    // and to the model (see KernelHomePage, which appends describePluginAgents
+    // to each turn's contextNote).
+    const { agents: pluginAgentList } = useAgentCapabilities('workspace')
+    const pluginAgents = useMemo(
+        () => toPluginAgentSpecs(isAskMode ? [] : pluginAgentList),
+        [isAskMode, pluginAgentList],
+    )
 
     const agent = useEditorAgent({
         conversationId,
         tools: runTools,
         skills: runSkills,
+        deferredTools: runDeferredTools,
+        pluginAgents,
         resolveTools: providers.resolveTools,
         isReadOnlyTool: providers.isReadOnlyTool,
         systemPrompt: options.systemPrompt ?? WORKSPACE_AGENT_PROMPT,

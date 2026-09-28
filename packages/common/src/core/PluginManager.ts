@@ -28,7 +28,7 @@ import {
     agentScopeMatches,
     filterContributionByScope,
     getAgentToolImplementation,
-    legacyExtensionToAgentContribution,
+    isAgentContextAllowed,
     resolveAgentToolNames,
     toAgentWireName,
 } from "../ai/plugin-agent";
@@ -40,6 +40,7 @@ import type {
     ResolvedAgentCapabilities,
     ResolvedAgentContribution,
     ResolvedAgentScope,
+    ResolvedAgentSkill,
 } from "../ai/plugin-agent";
 
 export interface PluginSettingsConfig {
@@ -64,6 +65,21 @@ export interface PluginSettingsConfig {
      * Description of the settings panel
      */
     description?: string;
+}
+
+/**
+ * One plugin's instantiated agent tools, split by who may see them.
+ *
+ * - `tools`: the plugin's kernel-facing tools (contribution-level
+ *   `agent.tools` / `agent.include`). Advertised to the kernel agent.
+ * - `agentTools`: tools owned by this plugin's AGENTS. Instantiated so a
+ *   delegated child run can call them, registered as *deferred* so their
+ *   schemas never inflate the kernel agent's tool list.
+ */
+export interface ResolvedPluginToolGroup {
+    pluginName: string
+    tools: Record<string, any>
+    agentTools: Record<string, any>
 }
 
 export interface PluginConfig {
@@ -995,8 +1011,13 @@ export class PluginManager {
     }
 
     /**
-     * Per-plugin agent contributions with provenance. Explicit `agent` blocks
-     * are merged with adapted legacy extension tools/skills.
+     * Per-plugin agent contributions with provenance.
+     *
+     * Only `PluginConfig.agent` is read. Editor-extension tools/skills are no
+     * longer aggregated: that flat path is what let a plugin's tools, skills and
+     * scope drift apart (§32/§33). A plugin still using it is reported instead of
+     * silently adapted — the fix is to move the declaration into `agent`
+     * (use {@link liftLegacyTools} / {@link liftLegacySkills}).
      */
     resolveAgentContributions(): ResolvedAgentContribution[] {
         if (this._cacheAgentContributions) {
@@ -1005,30 +1026,21 @@ export class PluginManager {
 
         const resolved: ResolvedAgentContribution[] = []
         for (const plugin of this.plugins) {
-            const explicit = plugin.agent
-            const tools: AgentToolDefinition[] = [...(explicit?.tools ?? [])]
-            const skills: NonNullable<AgentContribution['skills']> = [...(explicit?.skills ?? [])]
-
             for (const ext of plugin.editorExtensions) {
-                const adapted = legacyExtensionToAgentContribution(ext)
-                if (adapted.tools) tools.push(...adapted.tools)
-                if (adapted.skills) skills.push(...adapted.skills)
+                if ((ext.tools && ext.tools.length > 0) || (ext.skills && ext.skills.length > 0)) {
+                    logger.warn(
+                        `Plugin "${plugin.name}" still declares AI tools/skills on its editor `
+                        + `extension "${ext.name}". That path was retired: move them into the `
+                        + 'plugin\'s `agent` declaration — see docs/plugin-agents.md.',
+                    )
+                }
             }
 
             resolved.push({
                 pluginName: plugin.name,
                 pluginKey: this.agentPluginKey(plugin),
                 desktopOnly: plugin.desktopOnly,
-                contribution: {
-                    tools,
-                    skills,
-                    include: explicit?.include,
-                    context: explicit?.context,
-                    actions: explicit?.actions,
-                    agents: explicit?.agents,
-                    toolRenderers: explicit?.toolRenderers,
-                    artifactRenderers: explicit?.artifactRenderers,
-                },
+                contribution: plugin.agent ?? {},
             })
         }
 
@@ -1122,6 +1134,17 @@ export class PluginManager {
             }
             for (const provider of projected.context ?? []) {
                 if (runScope && !agentScopeMatches(provider.scope, runScope)) continue
+                // Context providers read user data, so declaring one is not
+                // enough: the hosting app must authorize its id (see
+                // ai/plugin-agent/context-whitelist.ts). Deny by default —
+                // dropping here means no surface can even observe it.
+                if (!isAgentContextAllowed(provider.id)) {
+                    logger.warn(
+                        `Plugin "${entry.pluginName}" declares context provider "${provider.id}" `
+                        + 'but the host did not authorize it; ignoring',
+                    )
+                    continue
+                }
                 capabilities.context.push({ ...provider, pluginName: entry.pluginName, pluginKey: entry.pluginKey })
             }
             for (const action of projected.actions ?? []) {
@@ -1137,12 +1160,20 @@ export class PluginManager {
             for (const agent of projected.agents ?? []) {
                 if (!agent || !agent.id || !agent.name) continue
                 if (runScope && !agentScopeMatches(agent.scope, runScope)) continue
+                // Agent-local name table. Skills are resolved against THIS map,
+                // never the plugin-wide one: a skill and the tools it names have
+                // the same owner, so the mismatch §33 patched cannot happen.
+                const agentTools = new Map<string, string>()
                 const toolNames: string[] = []
+                const addTool = (localName: string, wireName: string) => {
+                    agentTools.set(localName, wireName)
+                    if (!toolNames.includes(wireName)) toolNames.push(wireName)
+                }
                 for (const tool of agent.tools ?? []) {
                     if (!tool || !tool.name) continue
                     const wireName = this.agentWireNameFor(entry.pluginKey, tool)
                     localToWire.set(tool.name, wireName)
-                    toolNames.push(wireName)
+                    addTool(tool.name, wireName)
                 }
                 for (const raw of agent.include ?? []) {
                     const ref = typeof raw === 'string' ? { name: raw } : raw
@@ -1150,14 +1181,46 @@ export class PluginManager {
                     if (!impl) continue
                     const wireName = toAgentWireName(entry.pluginKey, impl.name)
                     localToWire.set(impl.name, wireName)
-                    toolNames.push(wireName)
+                    addTool(impl.name, wireName)
                 }
+
+                const skillNames: string[] = []
+                const skillFragments: string[] = []
+                for (const skill of agent.skills ?? []) {
+                    if (!skill || !skill.name) continue
+                    const resolve = (names?: string[]) =>
+                        (names ?? []).map(name => agentTools.get(name) ?? name)
+                    const required = resolve(skill.requiredTools)
+                    const missing = required.filter(name => !toolNames.includes(name))
+                    if (missing.length > 0) {
+                        // Not a kernel-scale reconciliation: this is one author's
+                        // own declaration disagreeing with itself. Drop the skill
+                        // and say so instead of shipping a prompt whose tools the
+                        // child run does not have.
+                        logger.warn(
+                            `Plugin agent ${agent.id}: skill "${skill.name}" requires unavailable `
+                            + `tools [${missing.join(', ')}], skipped`,
+                        )
+                        continue
+                    }
+                    skillNames.push(skill.name)
+                    if (skill.systemPromptFragment) {
+                        skillFragments.push(skill.systemPromptFragment)
+                    }
+                }
+
+                const systemPrompt = [agent.systemPrompt, ...skillFragments]
+                    .filter((part): part is string => !!part && part.trim().length > 0)
+                    .join('\n\n')
+
                 capabilities.agents.push({
                     ...agent,
                     // Namespaced like tools: two plugins may both declare
                     // `page-ops`, and the model must be able to tell them apart.
                     id: toAgentWireName(entry.pluginKey, agent.id),
+                    systemPrompt: systemPrompt || undefined,
                     toolNames,
+                    skillNames,
                     pluginName: entry.pluginName,
                     pluginKey: entry.pluginKey,
                 })
@@ -1195,25 +1258,30 @@ export class PluginManager {
      * capability provider, so a tool can never be advertised in one place and
      * missing in the other.
      */
-    resolvePluginToolGroups(editor: Editor | null): Array<{ pluginName: string; tools: Record<string, any> }> {
+    resolvePluginToolGroups(editor: Editor | null): ResolvedPluginToolGroup[] {
         const scope: ResolvedAgentScope = editor ? 'page' : 'workspace'
         const ctx = this.buildAgentToolContext(editor, scope)
-        const groups: Array<{ pluginName: string; tools: Record<string, any> }> = []
+        const groups: ResolvedPluginToolGroup[] = []
 
         for (const entry of this.resolveAgentContributions()) {
             const projected = filterContributionByScope(entry.contribution, scope)
             const record: Record<string, any> = {}
+            // Tools a plugin AGENT owns. They are instantiated (a delegated
+            // child must be able to call them) but registered as DEFERRED, so
+            // their schemas never enter the kernel agent's own tool list.
+            const agentRecord: Record<string, any> = {}
 
             const instantiate = (
                 wireName: string,
                 create: (ctx: AgentToolContext) => unknown,
                 def: { description: string; inputSchema: any; readOnly?: boolean },
+                target: Record<string, any> = record,
             ) => {
                 try {
                     const execute = create(ctx)
                     if (typeof execute !== 'function') return
-                    if (record[wireName]) logger.warn(`Tool ${wireName} already exists, overwriting`)
-                    record[wireName] = {
+                    if (target[wireName]) logger.warn(`Tool ${wireName} already exists, overwriting`)
+                    target[wireName] = {
                         description: def.description,
                         inputSchema: def.inputSchema,
                         readOnly: def.readOnly,
@@ -1249,39 +1317,33 @@ export class PluginManager {
             for (const agent of projected.agents ?? []) {
                 for (const tool of agent.tools ?? []) {
                     if (!tool || !tool.name) continue
-                    instantiate(this.agentWireNameFor(entry.pluginKey, tool), tool.create, tool)
+                    instantiate(this.agentWireNameFor(entry.pluginKey, tool), tool.create, tool, agentRecord)
                 }
                 for (const raw of agent.include ?? []) {
                     const ref = typeof raw === 'string' ? { name: raw } : raw
                     const impl = getAgentToolImplementation(ref.name)
                     if (!impl) continue
                     if (!agentScopeMatches(ref.scope ?? impl.scope, scope)) continue
-                    instantiate(toAgentWireName(entry.pluginKey, impl.name), impl.create, impl)
+                    instantiate(toAgentWireName(entry.pluginKey, impl.name), impl.create, impl, agentRecord)
                 }
             }
 
-            if (Object.keys(record).length > 0) {
-                groups.push({ pluginName: entry.pluginName, tools: record })
+            // A name declared BOTH ways (plugin-main exposes some page tools
+            // directly and also hands them to its `page-ops` agent) must stay
+            // kernel-visible. The contribution-level declaration is
+            // authoritative; leaving the duplicate in `agentTools` would
+            // re-register it as deferred and quietly remove it from the
+            // kernel's tool list.
+            for (const name of Object.keys(record)) {
+                if (agentRecord[name]) delete agentRecord[name]
+            }
+
+            if (Object.keys(record).length > 0 || Object.keys(agentRecord).length > 0) {
+                groups.push({ pluginName: entry.pluginName, tools: record, agentTools: agentRecord })
             }
         }
 
         return groups
-    }
-
-    /**
-     * Flat name → tool map, without provenance.
-     *
-     * @deprecated Prefer {@link resolvePluginToolGroups}, which keeps the
-     * per-plugin grouping the capability provider needs to register metadata.
-     * Kept only as a convenience view for callers that just want a flat map.
-     */
-    resolveTools(editor: Editor | null) {
-        const res: Record<string, any> = {}
-        for (const group of this.resolvePluginToolGroups(editor)) {
-            Object.assign(res, group.tools)
-        }
-        logger.debug('Total resolved tools:', Object.keys(res).length)
-        return res
     }
 
     resolveLocales(): any {
@@ -1510,103 +1572,30 @@ export class PluginManager {
     }
 
     /**
-     * Resolve all skills from plugin editor extensions
-     * Returns an array of skill definitions with plugin metadata
+     * Plugin skills for the frontend skill provider: the contribution-level
+     * `agent.skills` (tool names already resolved to wire names), plus an
+     * auto-generated default skill for every agent tool no skill claims — in a
+     * skills-only catalog that default is the tool's only route to the backend.
+     *
+     * Agent-OWNED skills (`agent.agents[].skills`) are deliberately excluded:
+     * they belong to their plugin agent's child run, and PluginManager folds
+     * their prompt fragments into that agent's system prompt. Advertising them
+     * here as well would describe tools this run cannot call.
      */
-    resolveSkills(): Array<{
-        name: string
-        description: string
-        requiredTools: string[]
-        optionalTools?: string[]
-        systemPromptFragment?: string
-        tags?: string[]
-        source: 'plugin'
-        pluginName: string
-    }> {
-        const skills: Array<{
-            name: string
-            description: string
-            requiredTools: string[]
-            optionalTools?: string[]
-            systemPromptFragment?: string
-            tags?: string[]
-            source: 'plugin'
-            pluginName: string
-        }> = []
+    resolveSkills(): ResolvedAgentSkill[] {
+        const capabilities = this.resolveAgentCapabilities()
+        const skills: ResolvedAgentSkill[] = [...capabilities.skills]
 
-        const extensions = this.resolveEditorExtensions()
-
-        for (const ext of extensions) {
-            // Process explicitly defined skills
-            if (ext.skills) {
-                const extSkills = Array.isArray(ext.skills) ? ext.skills : [ext.skills]
-
-                for (const skill of extSkills) {
-                    if (!skill || !skill.name) {
-                        logger.warn('Invalid skill detected, skipping')
-                        continue
-                    }
-
-                    skills.push({
-                        ...skill,
-                        source: 'plugin',
-                        pluginName: ext.name
-                    })
-                    logger.debug('Resolved skill:', skill.name, 'from plugin:', ext.name)
-                }
-            }
-
-            // Auto-generate a default skill for extensions that define tools
-            // but no skills — ensures no plugin is left behind when tools[] is
-            // removed from the wire payload (skills-only transmission).
-            if (!ext.skills && ext.tools) {
-                const extTools = Array.isArray(ext.tools) ? ext.tools : [ext.tools]
-                const toolNames = extTools
-                    .filter((t: any) => t && t.name)
-                    .map((t: any) => t.name)
-
-                if (toolNames.length > 0) {
-                    const extName = ext.name || 'unknown'
-                    skills.push({
-                        name: `${extName}-default`,
-                        description: `Default skill for ${extName} plugin`,
-                        requiredTools: toolNames,
-                        source: 'plugin',
-                        pluginName: extName,
-                    })
-                    logger.debug('Auto-generated default skill for plugin:', extName, 'with tools:', toolNames)
-                }
-            }
-        }
-
-        // Kernel agent contributions (M0): explicit `agent.skills` travel with
-        // names already resolved to wire names. Agent tools no skill claims get
-        // an auto-generated default so skills-only catalog mode cannot drop them
-        // (legacy extension tools keep their existing default-skill path above).
-        const agentCapabilities = this.resolveAgentCapabilities()
-        for (const skill of agentCapabilities.skills) {
-            skills.push({
-                name: skill.name,
-                description: skill.description,
-                requiredTools: skill.requiredTools,
-                optionalTools: skill.optionalTools,
-                systemPromptFragment: skill.systemPromptFragment,
-                tags: skill.tags,
-                source: 'plugin',
-                pluginName: skill.pluginName,
-            })
-        }
-
-        const claimedAgentTools = new Set<string>()
-        for (const skill of agentCapabilities.skills) {
+        const claimed = new Set<string>()
+        for (const skill of capabilities.skills) {
             for (const name of [...(skill.requiredTools ?? []), ...(skill.optionalTools ?? [])]) {
-                claimedAgentTools.add(name)
+                claimed.add(name)
             }
         }
         const unclaimedByPlugin = new Map<string, string[]>()
-        for (const tool of agentCapabilities.tools) {
+        for (const tool of capabilities.tools) {
             if (tool.namespace === false) continue
-            if (claimedAgentTools.has(tool.wireName)) continue
+            if (claimed.has(tool.wireName)) continue
             const list = unclaimedByPlugin.get(tool.pluginName) ?? []
             list.push(tool.wireName)
             unclaimedByPlugin.set(tool.pluginName, list)
@@ -1619,6 +1608,7 @@ export class PluginManager {
                 requiredTools: toolNames,
                 source: 'plugin',
                 pluginName,
+                pluginKey: pluginName,
             })
         }
 

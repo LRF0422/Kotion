@@ -3,8 +3,6 @@ import { Folder } from "./folder";
 import { FolderInline } from "./folder-inline";
 import { FolderIcon } from "@kn/icon";
 import React from "react";
-import { fileManagerTools } from "./tools";
-import { fileManagerSkill } from "./skills/file-manager-skill";
 import { createT } from "../../i18n";
 import { showFileSelector } from "../utils/showFileSelector";
 
@@ -48,6 +46,4 @@ export const FolderExtension: ExtensionWrapper = {
             },
         },
     ],
-    tools: fileManagerTools,
-    skills: [fileManagerSkill],
 };

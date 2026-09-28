@@ -46,6 +46,10 @@
 | **I9** | 未知 artifact 类型必须**优雅降级**：卡片/分栏缺失时回退到通用展示，shelf 的 kind 标签回退为原始 kind 字符串。 |
 | **I10** | **一个页面同时只有一个 writer。** 当分栏/浮窗等**可见编辑器**展示某页时，它通过 `claimEditor(pageId, editor)` **认领**该页：该页的隐藏离屏会话被**立即销毁**，agent 的文档工具与 conversation target 一律解析到该编辑器。可见编辑器关闭时 `releaseEditor`，下次按需惰性重建离屏会话。 |
 | **I11** | 认领是**按页**、**幂等**的；同一页的多个可见编辑器之间由服务端写租约选举，落败方不写（并由 §29 的 reconcile 自愈兜底）。 |
+| **I12** | **能力归属插件。** 插件把工具/技能声明在自己的 agent 上（`agent.agents[]`）；内核 agent 只看目录（id / name / description），看不到它们的工具细节。 |
+| **I13** | **插件 agent 的工具对内核不可见。** 它们以 deferred 注册（可执行、可路由，但不进入内核 run 的工具表与 schema）。 |
+| **I14** | **后端按 agentId 解析委派。** 插件 agent 目录随 run 下发并冻结进 checkpoint；`delegate({ agentId, task })` 由后端取出该 agent 的 prompt 与工具子集。调用方显式传入的 `tools` / `systemPrompt` 优先（手写委派不受影响）。 |
+| **I15** | **target 跨刷新存活。** target 随会话元数据持久化；刷新后恢复到同一对象，切换会话则清空（I7）。 |
 
 ---
 
@@ -63,10 +67,24 @@ interface AgentToolDefinition {
 }
 
 interface AgentContribution {
-  tools?: AgentToolDefinition[]
+  tools?: AgentToolDefinition[]                   // 内核可见的轻量直连工具
   include?: AgentToolInclude[]                    // core 实现，插件按名声明
+  agents?: PluginAgentDefinition[]                // 插件自己的 agent（I12）
   toolRenderers?: { tool: string; render: …; artifactFromResult?: … }[]
   artifactRenderers?: { kind: string; render: … }[]
+}
+
+// 插件 agent：工具/技能只在它的子 run 里出现（I12/I13）
+interface PluginAgentDefinition {
+  id: string
+  name: string
+  description: string                             // 这就是它的「接口」，内核据此选择
+  systemPrompt?: string
+  scope?: AgentScope | AgentScope[]
+  tools?: AgentToolDefinition[]
+  include?: AgentToolInclude[]
+  skills?: AgentSkillDefinition[]                 // 与工具同源，prompt 片段折进 systemPrompt
+  model?: string
 }
 ```
 

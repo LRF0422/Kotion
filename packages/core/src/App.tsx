@@ -17,7 +17,7 @@ import { Marketplace } from "./components/Shop/Marketplace";
 
 import { resources } from "./locales/resources"
 import { merge } from "lodash";
-import { AgentPaneProvider, clearContextSensitiveClientState, normalizeTokenResponse, notifyContextChanged, setRequestToast, setSessionExpiredHandler, resetSessionExpiredGuard, setEntitlementRequiredHandler, subscribeToContextChanges, useAsyncEffect, useSafeState, useTranslation, useApi, useUploadFile, APIS, saveTokens } from "@kn/common"
+import { AgentPaneProvider, clearContextSensitiveClientState, normalizeTokenResponse, notifyContextChanged, setRequestToast, setSessionExpiredHandler, resetSessionExpiredGuard, setEntitlementRequiredHandler, setAgentContextWhitelist, subscribeToContextChanges, useAsyncEffect, useSafeState, useTranslation, useApi, useUploadFile, APIS, saveTokens } from "@kn/common"
 import { registerCoreAgentTools, registerCoreToolFactories } from "./ai/tools/register"
 import { registerOffscreenEditorBridge, setMaxOffscreenSessions } from "./ai/offscreen"
 import { registerAgentDocumentBridge } from "./ai/agentdoc"
@@ -294,6 +294,11 @@ const ensureCoreRuntimeRegistered = () => {
     // Kernel side-peek pane host (plugin-rendered artifact previews) — owns
     // the chrome that @kn/common cannot import.
     registerAgentPaneHost()
+    // Agent CONTEXT providers run only for ids the application authorizes
+    // (contract decision 3 — context reads user data). Empty on purpose: no
+    // surface consumes context yet, so nothing is authorized. Add an id here
+    // together with the surface that injects the loaded context.
+    setAgentContextWhitelist([])
     registerOffscreenEditorBridge()
     // Per-agent private documents (真并行): delegated agents fork their own
     // copy of a page and merge back when they finish.

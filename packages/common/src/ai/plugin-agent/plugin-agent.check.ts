@@ -10,11 +10,15 @@ import { strict as assert } from 'node:assert'
 import {
     agentNamespace,
     agentScopeMatches,
+    clearAgentContextWhitelist,
     clearAgentToolImplementations,
     filterContributionByScope,
+    isAgentContextAllowed,
+    liftLegacySkills,
+    liftLegacyTools,
+    setAgentContextWhitelist,
     getAgentToolImplementation,
     getAgentToolImplementations,
-    legacyExtensionToAgentContribution,
     normalizeAgentScopes,
     registerAgentToolImplementations,
     resolveAgentToolNames,
@@ -25,7 +29,7 @@ import {
 } from './index'
 import { filterAgentCatalog } from '../kernel/filter-catalog'
 import { agentArtifactKey, collectAgentArtifacts } from '../kernel/agent-artifact-collect'
-import { describePluginAgents } from '../kernel/plugin-agents'
+import { describePluginAgents, toPluginAgentSpecs } from '../kernel/plugin-agents'
 
 function ctx(editor?: any, scope: AgentToolContext['scope'] = 'workspace'): AgentToolContext {
     return { scope, editor, resolveService: () => undefined }
@@ -80,7 +84,12 @@ function checkLegacyAdapter(): void {
         ],
     }
 
-    const contribution = legacyExtensionToAgentContribution(ext)
+    // The migration helper — legacy editor-bound tools lifted into the agent
+    // contract. This is what a plugin moving to `agent.agents[]` calls.
+    const contribution: AgentContribution = {
+        tools: liftLegacyTools(ext.tools, { scope: 'page', namespace: false }),
+        skills: liftLegacySkills(ext.skills),
+    }
     assert.equal(contribution.tools?.length, 1)
     const tool = contribution.tools![0]
     assert.equal(tool.name, 'legacyDoThing')
@@ -98,10 +107,8 @@ function checkLegacyAdapter(): void {
 
     // A factory that needs an editor fails when none is published, which is
     // exactly how the resolver skips editor-bound tools in workspace scope.
-    const noEditor = legacyExtensionToAgentContribution({
-        extendsion: [],
-        name: 'editor-bound',
-        tools: [
+    const noEditor = {
+        tools: liftLegacyTools([
             {
                 name: 'needsEditor',
                 description: 'needs editor',
@@ -111,9 +118,35 @@ function checkLegacyAdapter(): void {
                     return () => 1
                 },
             },
-        ],
-    } as any)
+        ], { scope: 'page' }),
+    }
     assert.throws(() => noEditor.tools![0].create(ctx(undefined)))
+
+    // A scope-wide group is editor-OPTIONAL: an editor-free connector (zhihu)
+    // must instantiate in a workspace run, otherwise its agent would advertise
+    // tool names no run can execute. The factory still receives whatever editor
+    // the context has — here, none.
+    const editorFree = liftLegacyTools([
+        {
+            name: 'searchSomething',
+            description: 'pure network tool',
+            inputSchema: {},
+            execute: (editor: any) => (params: any) => ({ editorSeen: editor, params }),
+        },
+    ], { scope: 'any' })
+    assert.deepEqual(normalizeAgentScopes(editorFree[0].scope), ['any'])
+    const freeExecutor = editorFree[0].create(ctx(undefined))
+    assert.deepEqual(freeExecutor({ q: 2 }), { editorSeen: undefined, params: { q: 2 } })
+
+    // An explicit override still protects a mis-declared scope.
+    assert.throws(() => liftLegacyTools([
+        {
+            name: 'secretlyNeedsEditor',
+            description: 'mis-declared',
+            inputSchema: {},
+            execute: () => () => 1,
+        },
+    ], { scope: 'any', requiresEditor: true })[0].create(ctx(undefined)))
 
     assert.equal(contribution.skills?.[0].name, 'Legacy Skill')
     assert.deepEqual(contribution.skills?.[0].requiredTools, ['legacyDoThing'])
@@ -240,22 +273,55 @@ function checkAgentDirectory(): void {
     assert.equal(describePluginAgents(undefined), undefined)
     assert.equal(describePluginAgents([]), undefined)
 
-    const note = describePluginAgents([{
+    const agents = [{
         id: 'kn_plugin-main__page-ops',
         name: '页面操作',
         description: '创建/重命名/移动页面',
         systemPrompt: '你是页面操作员。',
         toolNames: ['kn_plugin-main__createPage'],
+        skillNames: ['page-ops'],
         pluginName: 'Basic plugin',
         pluginKey: '@kn/plugin-main',
-    }] as any)!
+    }] as any
 
+    const note = describePluginAgents(agents)!
     assert.ok(note.includes('可委派的插件 Agent'))
     assert.ok(note.includes('kn_plugin-main__page-ops'))
     assert.ok(note.includes('页面操作'))
-    assert.ok(note.includes('systemPrompt'))
-    assert.ok(note.includes('你是页面操作员。'))
-    assert.ok(note.includes('kn_plugin-main__createPage'))
+    assert.ok(note.includes('它独有的工具：kn_plugin-main__createPage'))
+    assert.ok(note.includes('它带着的技能：page-ops'))
+    assert.ok(note.includes('delegate({ agentId: "kn_plugin-main__page-ops", task: "<你的任务>" })'))
+    // The prompt and tool subset travel with the RUN, not in the note: the
+    // backend resolves them from agentId, so repeating them per turn would be
+    // pure token waste — and would invite the model to paraphrase them.
+    assert.ok(!note.includes('你是页面操作员。'))
+
+    const specs = toPluginAgentSpecs(agents)
+    assert.equal(specs.length, 1)
+    assert.equal(specs[0].id, 'kn_plugin-main__page-ops')
+    assert.equal(specs[0].systemPrompt, '你是页面操作员。')
+    assert.deepEqual(specs[0].toolNames, ['kn_plugin-main__createPage'])
+}
+
+function checkContextWhitelist(): void {
+    // Deny by default: declaring a provider is not authorizing it.
+    clearAgentContextWhitelist()
+    assert.equal(isAgentContextAllowed('page-selection'), false)
+    assert.equal(isAgentContextAllowed(undefined), false)
+    assert.equal(isAgentContextAllowed(''), false)
+
+    setAgentContextWhitelist(['page-selection', '  workspace-outline  '])
+    assert.equal(isAgentContextAllowed('page-selection'), true)
+    // Ids are trimmed, so a padded declaration still matches.
+    assert.equal(isAgentContextAllowed('workspace-outline'), true)
+    assert.equal(isAgentContextAllowed('open-tabs'), false)
+
+    // An empty authorization list is still deny-all, never allow-all.
+    setAgentContextWhitelist([])
+    assert.equal(isAgentContextAllowed('page-selection'), false)
+
+    setAgentContextWhitelist(null)
+    assert.equal(isAgentContextAllowed('page-selection'), false)
 }
 
 function main(): void {
@@ -269,6 +335,7 @@ function main(): void {
     checkCatalogFilter()
     checkArtifactCollection()
     checkAgentDirectory()
+    checkContextWhitelist()
     console.log('plugin-agent checks passed')
 }
 

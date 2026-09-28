@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ChatMessageList, PlanApprovalCard, cn } from '@kn/ui'
+import { ChatMessageList, PlanApprovalCard, cn, useResponsive } from '@kn/ui'
 import { LoaderCircle } from '@kn/icon'
 import {
     AgentPaneHost,
@@ -81,6 +81,7 @@ export const KernelHomePage: React.FC = () => {
     const {
         sessions, activeSessionId, messages, setMessages, loadingTranscript,
         createSession, switchSession, deleteSession, clearActiveMessages,
+        targetArtifact, setTargetArtifact,
     } = useChatSessions()
     const [sessionError, setSessionError] = useState<ChatError | null>(null)
     const [input, setInput] = useState('')
@@ -128,6 +129,9 @@ export const KernelHomePage: React.FC = () => {
     const [paneOpen, setPaneOpen] = useState(false)
     const [paneDisplay, setPaneDisplay] = useState<AgentArtifact | null>(null)
     const [resizing, setResizing] = useState(false)
+    // Narrow viewports have no room for a split: the pane takes over the
+    // surface (push navigation) instead of squeezing the conversation.
+    const { isMobile } = useResponsive()
 
     useEffect(() => {
         if (pane.open && pane.target) {
@@ -140,6 +144,30 @@ export const KernelHomePage: React.FC = () => {
         const timer = setTimeout(() => setPaneDisplay(null), PANE_TRANSITION_MS)
         return () => clearTimeout(timer)
     }, [pane.open, pane.target])
+
+    // ─── Working target survives a refresh ───────────────────────────
+    // The target belongs to the CONVERSATION, so it is stored with the session
+    // metadata. Restoring runs on session switch only: re-running it on every
+    // target change would fight the user's own pane interactions.
+
+    const paneOpenArtifact = pane.openArtifact
+    const paneClearTarget = pane.clearTarget
+    const restoreSessionRef = useRef<string | null>(null)
+    useEffect(() => {
+        if (restoreSessionRef.current === activeSessionId) return
+        restoreSessionRef.current = activeSessionId
+        // A new conversation starts with no target (spec: session switch clears).
+        if (targetArtifact) paneOpenArtifact(targetArtifact)
+        else paneClearTarget()
+        // Deliberately keyed on the session id: this is a restore, not a sync.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeSessionId])
+
+    // Persist changes the agent or the user makes (openArtifact / close / clear
+    // is tracked through the target itself; close keeps the target).
+    useEffect(() => {
+        setTargetArtifact(pane.target)
+    }, [pane.target, setTargetArtifact])
 
     const handleResizeStart = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
         event.preventDefault()
@@ -344,7 +372,7 @@ export const KernelHomePage: React.FC = () => {
 
     return (
         <div className="flex h-full min-h-0 bg-background">
-            <div className="flex min-w-0 flex-1 flex-col">
+            <div className={cn('flex min-w-0 flex-1 flex-col', paneOpen && isMobile && 'hidden')}>
             <div className="flex shrink-0 items-center gap-1 border-b pr-2">
                 <div className="min-w-0 flex-1">
                     <ChatHeader
@@ -472,11 +500,13 @@ export const KernelHomePage: React.FC = () => {
             <aside
                 aria-hidden={!paneOpen}
                 className={cn(
-                    'relative hidden shrink-0 overflow-hidden bg-background md:block',
+                    'relative flex shrink-0 overflow-hidden bg-background',
                     paneOpen && 'border-l border-border',
                 )}
                 style={{
-                    width: paneOpen ? paneWidth : 0,
+                    // Mobile: full-width pane (the conversation is hidden above).
+                    // Desktop: the resizable inline column (side peek).
+                    width: paneOpen ? (isMobile ? '100%' : paneWidth) : 0,
                     transition: resizing ? 'none' : 'width 200ms ease-out',
                 }}
             >

@@ -1,14 +1,6 @@
 import React from "react";
 import type { ExtensionWrapper } from "@kn/common";
 import { Flame } from "@kn/icon";
-import {
-    zhihuAskTool,
-    zhihuGlobalSearchTool,
-    zhihuHotListTool,
-    zhihuQuotaTool,
-    zhihuSearchTool,
-} from "./tools/tools";
-import { zhihuResearcherSkill } from "./skills/zhihu-researcher";
 import { ZhihuHotListNode } from "./nodes/zhihu-hot-list-node";
 
 export const ZhihuExtension: ExtensionWrapper = {
@@ -31,14 +23,6 @@ export const ZhihuExtension: ExtensionWrapper = {
             },
         },
     ],
-    tools: [
-        zhihuSearchTool,
-        zhihuGlobalSearchTool,
-        zhihuHotListTool,
-        zhihuAskTool,
-        zhihuQuotaTool,
-    ],
-    skills: [zhihuResearcherSkill],
 };
 
 export * from "./tools/tools";

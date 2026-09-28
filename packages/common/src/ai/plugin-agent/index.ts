@@ -5,6 +5,7 @@ export * from './types'
 export * from './namespace'
 export * from './registry'
 export * from './adapter'
+export * from './context-whitelist'
 
 import type { ComponentType } from 'react'
 import type {
@@ -57,12 +58,21 @@ export interface ResolvedAgentAction extends AgentActionDefinition {
     pluginKey: string
 }
 
-export interface ResolvedPluginAgent extends Omit<PluginAgentDefinition, 'tools'> {
+export interface ResolvedPluginAgent
+    extends Omit<PluginAgentDefinition, 'tools' | 'include' | 'skills'> {
     /**
      * The agent's own tools, resolved to their wire names — this is the child
      * run's tool subset (the kernel never advertises them on its own).
      */
     toolNames: string[]
+    /** Names of the skills that survived the agent-local tool check. */
+    skillNames: string[]
+    /**
+     * `systemPrompt` with every surviving skill's `systemPromptFragment`
+     * appended, in declaration order. Skills and tools share one owner, so the
+     * assembled prompt is always consistent with `toolNames`.
+     */
+    systemPrompt?: string
     pluginName: string
     pluginKey: string
 }

@@ -621,8 +621,15 @@ export const ExcalidrawExtension: ExtensionWrapper = {
                 editor.commands.insertExcalidraw()
             }
         }
-    ],
-    tools: [
+    ]
+};
+
+/**
+ * Legacy Excalidraw tools, lifted into the `excalidraw-ops` plugin agent.
+ * They no longer live on the editor extension, so the kernel's flat tool
+ * catalog never advertises them; only the delegated child run sees them.
+ */
+export const excalidrawTools: NonNullable<ExtensionWrapper['tools']> = [
         // Tool 1: Insert Excalidraw Diagram
         {
             name: 'insertExcalidrawDiagram',
@@ -1061,9 +1068,10 @@ AI 只需描述图的逻辑结构，工具自动计算所有坐标和布局。
                 }
             }
         }
-    ],
+    ];
 
-    skills: [{
+/** Legacy Excalidraw skill, lifted into the `excalidraw-ops` plugin agent. */
+export const excalidrawSkills: NonNullable<ExtensionWrapper['skills']> = [{
         name: 'excalidraw-drawing',
         description: 'Excalidraw 绘图技能：将用户需求转化为结构化图表',
         requiredTools: ['createExcalidrawFromGraph', 'insertExcalidrawDiagram',
@@ -1154,5 +1162,4 @@ AI 只需描述图的逻辑结构，工具自动计算所有坐标和布局。
 - 边的 label 只在需要说明关系类型时添加
 - 不要超过 15 个节点，太多会影响可读性
 - 更新已有图表时，先用 listExcalidrawDiagrams 获取位置`
-    }]
-}
+    }];

@@ -3,8 +3,6 @@ import { SpreadsheetNode } from "./spreadsheet-node"
 import { Sheet } from "@kn/icon"
 import React from "react"
 import { pickExcelFileFromCenter } from "./excel-file-picker"
-import { spreadsheetTools } from "./tools"
-import { spreadsheetExpertSkill } from "./skills"
 import { createT } from "../i18n"
 
 const t = createT();
@@ -48,6 +46,4 @@ export const SpreadsheetExtension: ExtensionWrapper = {
             action: importExcelAction,
         },
     ],
-    tools: spreadsheetTools,
-    skills: [spreadsheetExpertSkill],
 }

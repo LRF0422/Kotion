@@ -110,19 +110,49 @@ public class Delegator {
         cmd.setSystemPrompt(ctx.getSystemPrompt());
         cmd.setSkillFragments(ctx.getSkillFragments() != null
                 ? new ArrayList<>(ctx.getSkillFragments()) : new ArrayList<>());
-        // Plugin agent (hybrid delegation): it owns its own persona and rules, so
-        // it must NOT inherit the KERNEL agent's system prompt or skill fragments
-        // — those describe a different scope (see docs/plugin-agents.md). The
-        // caller passes the agent's prompt; absent it, behaviour is unchanged.
+        // Plugin agent (hybrid delegation): it owns its persona, its tools and
+        // its rules, so it must NOT inherit the KERNEL agent's system prompt or
+        // skill fragments — those describe a different scope (see
+        // docs/plugin-agents.md).
+        //
+        // Resolution order, most specific first:
+        //   1. explicit systemPrompt / tools args (hand-written delegation),
+        //   2. the plugin-agent directory shipped WITH the run, keyed by agentId,
+        //   3. unchanged inheritance from the parent.
+        //
+        // (2) is the point of the directory: the model only names an agent, and
+        // the plugin's own declaration supplies the prompt and the tool subset —
+        // no long prompt copied into a tool argument, no tool list to mistype.
         String agentId = strArg(args.get("agentId"));
         String agentPrompt = strArg(args.get("systemPrompt"));
+        Object toolsArg = args.get("tools");
+        PluginAgentSpec spec = findPluginAgent(ctx.getPluginAgents(), agentId);
+        if (agentId != null) {
+            if (spec == null) {
+                log.warn("delegate: agentId {} is not in this run's plugin-agent directory "
+                        + "(run {}); falling back to caller-supplied tools/systemPrompt",
+                        agentId, ctx.getRunId());
+            } else {
+                if (agentPrompt == null) {
+                    agentPrompt = strArg(spec.getSystemPrompt());
+                }
+                if (!hasItems(toolsArg) && spec.getToolNames() != null && !spec.getToolNames().isEmpty()) {
+                    toolsArg = spec.getToolNames();
+                }
+                String agentModel = strArg(spec.getModel());
+                if (agentModel != null) {
+                    cmd.setModel(agentModel);
+                }
+            }
+        }
         if (agentPrompt != null) {
             cmd.setSystemPrompt(agentPrompt);
             cmd.setSkillFragments(new ArrayList<>());
         }
         if (agentId != null) {
-            log.info("delegate -> plugin agent {} (parent run {}, tools {})",
-                    agentId, ctx.getRunId(), cmd.getTools() == null ? 0 : cmd.getTools().size());
+            log.info("delegate -> plugin agent {} (parent run {}, resolved {}, tools {})",
+                    agentId, ctx.getRunId(), spec != null,
+                    spec == null ? "caller-supplied" : spec.getToolNames());
         }
         cmd.setMemoryLines(ctx.getMemoryLines() != null
                 ? new ArrayList<>(ctx.getMemoryLines()) : new ArrayList<>());
@@ -142,9 +172,9 @@ public class Delegator {
                 .content("【主 Agent 委派的任务】\n\n" + task)
                 .build());
         cmd.setMessages(messages);
-        cmd.setTools(selectTools(ctx.getClientTools(), args.get("tools")));
+        cmd.setTools(selectTools(ctx.getClientTools(), toolsArg));
         // Deferred tools stay deferred in the child: same subsetting, same laziness.
-        cmd.setSkillTools(selectTools(ctx.getDeferredTools(), args.get("tools")));
+        cmd.setSkillTools(selectTools(ctx.getDeferredTools(), toolsArg));
 
         RunView child = supervisor().createChild(cmd, ctx.getRunId(), ctx.getDelegateDepth() + 1);
 
@@ -183,6 +213,44 @@ public class Delegator {
         delegation.setTimeoutMs(properties.getRun().getDelegateTimeoutSeconds() * 1000L);
         delegation.setSubscription(eventLog.subscribe(record.getSubRunId()));
         return delegation;
+    }
+
+    /**
+     * Look up a plugin agent by id. Matching is case-insensitive and the
+     * namespace prefix is optional: a model that saw
+     * `kn_plugin-main__page-ops` may reasonably write `page-ops`.
+     */
+    private PluginAgentSpec findPluginAgent(List<PluginAgentSpec> agents, String agentId) {
+        if (agents == null || agents.isEmpty() || agentId == null) {
+            return null;
+        }
+        String wanted = agentId.trim().toLowerCase(Locale.ROOT);
+        for (PluginAgentSpec spec : agents) {
+            if (spec == null || spec.getId() == null) {
+                continue;
+            }
+            String id = spec.getId().trim().toLowerCase(Locale.ROOT);
+            if (id.equals(wanted) || id.endsWith("__" + wanted)) {
+                return spec;
+            }
+        }
+        return null;
+    }
+
+    /** Whether the caller actually supplied a non-empty tools selection. */
+    private boolean hasItems(Object toolsArg) {
+        if (toolsArg == null) {
+            return false;
+        }
+        if (toolsArg instanceof List) {
+            for (Object item : (List<?>) toolsArg) {
+                if (item != null && !String.valueOf(item).trim().isEmpty()) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return !String.valueOf(toolsArg).trim().isEmpty();
     }
 
     private String strArg(Object value) {

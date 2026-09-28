@@ -50,7 +50,14 @@ export function isReadOnlyTool(meta: { category: string } | undefined, executabl
 export interface CapabilityCatalog {
     skills: SkillPayload[]
     tools: ToolPayload[]
-    /** Stable hash of (skills, tools). Sent as `capabilitiesVersion` so the backend can cache. */
+    /**
+     * Tools that are CALLABLE but not advertised to the kernel agent: they
+     * belong to a plugin agent's child run (docs/plugin-agents.md). They travel
+     * as the backend's deferred catalog, so a delegated child can call them
+     * while their JSON Schemas stay out of the kernel's own tool list.
+     */
+    deferredTools: ToolPayload[]
+    /** Stable hash of (skills, tools, deferredTools). Sent as `capabilitiesVersion` so the backend can cache. */
     version: string
 }
 
@@ -112,7 +119,31 @@ export function collectCapabilityCatalog(
     //
     // When skillsOnly is enabled, tools[] is left empty — every tool schema
     // is embedded in the skills that reference it (SkillPayload.tools).
-    const tools: ToolPayload[] = skillsOnly ? [] : toolProvider.getAllMetadata()
+    const allMetadata = toolProvider.getAllMetadata()
+
+    const toPayload = (meta: (typeof allMetadata)[number]): ToolPayload => {
+        const executable = executableTools[meta.name]
+        const parameters = executable
+            ? resolveInputSchema(executable.inputSchema)
+            : { type: 'object', properties: {} }
+
+        return {
+            type: 'function' as const,
+            function: {
+                name: meta.name,
+                description: meta.description,
+                parameters,
+            },
+            readOnly: isReadOnlyTool(meta, executable),
+        }
+    }
+
+    const byName = (a: { name: string }, b: { name: string }) =>
+        (a.name || '').localeCompare(b.name || '')
+
+    const tools: ToolPayload[] = skillsOnly ? [] : allMetadata
+        // Agent-owned tools are deferred, never advertised here.
+        .filter(meta => !meta.deferred)
         .filter(meta => !!executableTools[meta.name])
         .filter(meta => {
             // Always-on core tools are always offered with full schemas.
@@ -122,23 +153,16 @@ export function collectCapabilityCatalog(
             // Unclaimed tools stay in tools[] (their only route to the backend).
             return true
         })
-        .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
-        .map(meta => {
-            const executable = executableTools[meta.name]
-            const parameters = executable
-                ? resolveInputSchema(executable.inputSchema)
-                : { type: 'object', properties: {} }
+        .sort(byName)
+        .map(toPayload)
 
-            return {
-                type: 'function' as const,
-                function: {
-                    name: meta.name,
-                    description: meta.description,
-                    parameters,
-                },
-                readOnly: isReadOnlyTool(meta, executable),
-            }
-        })
+    // Agent-owned tools: callable by a delegated child run, schemas withheld
+    // from the kernel agent. They ride in the run's deferred catalog. Included
+    // even in skillsOnly mode — they have no skill to travel with.
+    const deferredTools: ToolPayload[] = allMetadata
+        .filter(meta => meta.deferred && !!executableTools[meta.name])
+        .sort(byName)
+        .map(toPayload)
 
     // Deterministic ordering: the catalog becomes part of every request's
     // prompt prefix, and provider context caches (DeepSeek etc.) only hit when
@@ -199,16 +223,16 @@ export function collectCapabilityCatalog(
         skills.push(payload)
     }
 
-    const version = hashCatalog(skills, tools)
-    return { skills, tools, version }
+    const version = hashCatalog(skills, tools, deferredTools)
+    return { skills, tools, deferredTools, version }
 }
 
 /**
  * FNV-1a 32-bit hash over the stringified catalog. Stable for identical
  * catalogs across turns so the backend can cheaply detect no-op updates.
  */
-function hashCatalog(skills: SkillPayload[], tools: ToolPayload[]): string {
-    const serialized = JSON.stringify({ skills, tools })
+function hashCatalog(skills: SkillPayload[], tools: ToolPayload[], deferredTools: ToolPayload[]): string {
+    const serialized = JSON.stringify({ skills, tools, deferredTools })
     let hash = 0x811c9dc5 >>> 0
     for (let i = 0; i < serialized.length; i++) {
         hash ^= serialized.charCodeAt(i)

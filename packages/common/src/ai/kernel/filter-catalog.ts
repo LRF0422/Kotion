@@ -23,6 +23,7 @@ import type { SkillPayload, ToolPayload } from '../capabilities/payload-types'
 export interface AgentCapabilityCatalog {
     skills: SkillPayload[]
     tools: ToolPayload[]
+    deferredTools?: ToolPayload[]
     version: string
 }
 
@@ -52,10 +53,16 @@ export function filterAgentCatalog<T extends AgentCapabilityCatalog>(
         skills.push({ ...skill, requiredTools, optionalTools, tools: skillTools })
     }
 
+    // Agent-deferred tools are callable only by a delegated child, but the
+    // child runs with the SAME scope as its parent, so the parent's scope
+    // filter applies to them too.
+    const deferredTools = catalog.deferredTools?.filter(tool => isAvailable(tool.function.name))
+
     return {
         ...catalog,
         tools,
         skills,
+        ...(deferredTools ? { deferredTools } : {}),
         // The filtered catalog is a distinct capability set. Keep a stable but
         // distinct version so the backend's capabilitiesVersion cache can never
         // answer with schemas from the unfiltered catalog.

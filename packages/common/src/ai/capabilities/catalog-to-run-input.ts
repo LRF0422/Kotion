@@ -17,6 +17,11 @@ export interface AgentRunInputs {
     tools: AgentToolSpec[]
     /** Prompt fragments plus each skill's deferred tools. */
     skills: AgentSkillInput[]
+    /**
+     * Callable but NOT offered to the model: plugin-agent tools. They reach the
+     * backend's deferred catalog so a delegated child run can call them.
+     */
+    deferredTools: AgentToolSpec[]
 }
 
 function toToolSpec(tool: ToolPayload): AgentToolSpec {
@@ -39,6 +44,7 @@ function toToolSpec(tool: ToolPayload): AgentToolSpec {
 export function buildAgentRunInputs(catalog: CapabilityCatalog): AgentRunInputs {
     return {
         tools: catalog.tools.map(toToolSpec),
+        deferredTools: (catalog.deferredTools ?? []).map(toToolSpec),
         skills: catalog.skills.map(skill => {
             const input: AgentSkillInput = {
                 name: skill.name,

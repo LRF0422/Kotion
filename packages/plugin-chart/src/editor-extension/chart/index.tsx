@@ -278,8 +278,15 @@ export const ChartExtension: ExtensionWrapper = {
                 editor.commands.insertChart()
             }
         }
-    ],
-    tools: [
+    ]
+};
+
+/**
+ * Legacy Chart tools, lifted into the `chart-ops` plugin agent.
+ * They no longer live on the editor extension, so the kernel's flat tool
+ * catalog never advertises them; only the delegated child run sees them.
+ */
+export const chartTools: NonNullable<ExtensionWrapper['tools']> = [
         // Tool 1: Insert Chart
         {
             name: 'insertChart',
@@ -721,6 +728,7 @@ export const ChartExtension: ExtensionWrapper = {
                 };
             }
         }
-    ],
-    skills: [chartSkill]
-}
+    ];
+
+/** Legacy Chart skill, lifted into the `chart-ops` plugin agent. */
+export const chartSkills: NonNullable<ExtensionWrapper['skills']> = [chartSkill];

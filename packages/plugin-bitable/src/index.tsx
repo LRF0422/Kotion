@@ -1,5 +1,7 @@
-import { KPlugin, PluginConfig } from "@kn/common";
+import { KPlugin, PluginConfig, liftLegacyTools, liftLegacySkills } from "@kn/common";
 import { BitableExtension } from "./bitable";
+import { bitableTools } from "./bitable/bitable-tools";
+import { bitableSkill } from "./bitable/skills/bitable-skill";
 import "./bitable/styles/bitable.css";
 
 interface BitablePluginConfig extends PluginConfig {
@@ -12,6 +14,24 @@ export const bitable = new BitablePlugin({
     status: '',
     name: 'Bitable',
     editorExtension: [BitableExtension],
+    agent: {
+        agents: [
+            {
+                id: 'bitable-ops',
+                name: '多维表格操作员',
+                description: '在当前页面读取和编辑多维表格块：查询表格与记录、增删改记录、管理字段与视图、插入新表；当用户要求整理表格数据、筛选/新增记录或调整字段、视图时派给它。',
+                scope: 'page',
+                systemPrompt: [
+                    '你是当前页面里的多维表格操作员，只负责这一页文档中的 bitable 块（记录增删改查、字段管理、视图管理、插入新表）。',
+                    '动手前先用 getBitableList / getBitableData 弄清表格序号、字段 ID、视图 ID 和记录 ID，再按 ID 精确修改；不要臆造字段或视图，也不要改动本页的其他内容。',
+                    '删除记录/字段/视图等破坏性操作要先说明依据，修改后复读校验结果。',
+                    '完成后用一段话汇报：操作了哪个表格，增删改了哪些记录、字段或视图，以及当前视图状态。',
+                ].join('\n'),
+                tools: liftLegacyTools(bitableTools, { scope: 'page' }),
+                skills: liftLegacySkills([bitableSkill]),
+            },
+        ],
+    },
     locales: {
         en: {
             translation: {

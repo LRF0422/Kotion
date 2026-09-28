@@ -104,6 +104,23 @@ export interface RunView {
     updateTime: number
 }
 
+/**
+ * One entry of the plugin-agent directory shipped with a run
+ * (docs/plugin-agents.md). It lets the backend resolve a delegated child run by
+ * `agentId` alone: the plugin owns the prompt and the tool subset, so neither
+ * travels through the model's tool arguments.
+ */
+export interface AgentPluginAgentSpec {
+    /** Namespaced agent id, exactly as the kernel shows it to the model. */
+    id: string
+    /** The agent's assembled system prompt (definition + surviving skills). */
+    systemPrompt?: string
+    /** Wire names of the tools that exist only inside this agent's run. */
+    toolNames?: string[]
+    /** Optional cheaper model for this agent's child run. */
+    model?: string
+}
+
 export interface CreateRunInput {
     conversationId: string
     model?: string
@@ -111,6 +128,17 @@ export interface CreateRunInput {
     messages: AgentChatMessage[]
     tools?: AgentToolSpec[]
     skills?: AgentSkillInput[]
+    /**
+     * Callable but NOT advertised to the model: plugin-agent tools. Registered
+     * as deferred so a delegated child run can call them while their schemas
+     * stay out of the kernel agent's own tool list.
+     */
+    deferredTools?: AgentToolSpec[]
+    /**
+     * Plugin agents this run may delegate to. Frozen into the run checkpoint so
+     * a delegated call resolves against the same declaration the parent saw.
+     */
+    pluginAgents?: AgentPluginAgentSpec[]
     /**
      * Extra system-prompt text appended after the backend's base prompt —
      * invariant host/editor rules only (they sit at message index 0 and must

@@ -117,8 +117,15 @@ export const MermaidExtension: ExtensionWrapper = {
                 editor.commands.insertMermaid()
             }
         }
-    ],
-    tools: [
+    ]
+};
+
+/**
+ * Legacy Mermaid tools, lifted into the `mermaid-ops` plugin agent.
+ * They no longer live on the editor extension, so the kernel's flat tool
+ * catalog never advertises them; only the delegated child run sees them.
+ */
+export const mermaidTools: NonNullable<ExtensionWrapper['tools']> = [
         // Tool 1: Insert Mermaid Diagram
         {
             name: 'insertMermaidDiagram',
@@ -434,6 +441,7 @@ export const MermaidExtension: ExtensionWrapper = {
                 };
             }
         }
-    ],
-    skills: [mermaidSkill]
-}
+    ];
+
+/** Legacy Mermaid skill, lifted into the `mermaid-ops` plugin agent. */
+export const mermaidSkills: NonNullable<ExtensionWrapper['skills']> = [mermaidSkill];

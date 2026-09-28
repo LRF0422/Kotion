@@ -1,3 +1,4 @@
+import type { AgentArtifact } from '@kn/common'
 import type { Message } from './chat-types'
 
 /**
@@ -51,6 +52,13 @@ export interface ChatSessionMeta {
      * follows whatever page the user is browsing.
      */
     boundPage?: ChatTargetPage
+    /**
+     * The conversation's working target (kernel spec: one artifact per
+     * conversation). Persisted with the session metadata so a refresh restores
+     * the same target — the agent is still working on the same object, and the
+     * user should not have to re-open it. Absent = no target.
+     */
+    targetArtifact?: AgentArtifact
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────
