@@ -33,10 +33,8 @@ export const neteaseMusic = new NeteaseMusicPlugin({
     name: "neteaseMusic",
     status: "enabled",
     editorExtension: [NeteaseMusicExt],
-    agent: {
-        tools: liftLegacyTools(neteaseMusicTools, { scope: 'page' }),
-        skills: liftLegacySkills([neteaseMusicSkill]),
-    },
+    tools: liftLegacyTools(neteaseMusicTools, { scope: 'page' }),
+    skills: liftLegacySkills([neteaseMusicSkill]),
     settings: {
         key: 'netease-music-settings',
         label: '网易云音乐',

@@ -1,13 +1,16 @@
 /**
- * useWorkspaceAgent — run the agent at `workspace` scope, with no editor.
+ * useWorkspaceAgent — run the agent at `workspace` scope from the workbench.
  *
- * Runtime half of the kernel home. It owns one conversation, builds the
- * tool/skill catalog from the currently installed plugins (page-scoped document
- * tools are excluded by scope — see PluginManager#filterContributionByScope),
- * and drives the run through the same AgentCore SDK the editor panel uses.
+ * Runtime half of the kernel home. It owns one conversation, and its capability
+ * set GROWS with the conversation: a run with no document offers the document-free
+ * capabilities (search, file centre, `scope: 'any'` plugin tools), and as soon as
+ * the agent creates or edits a page the surface acquires that page's hidden editor
+ * ({@link useWorkspaceDocumentTarget}) and rebinds to it, which brings in the whole
+ * document tool set plus every page-scoped plugin tool (charts, bitables, …).
  *
- * No editor means: document tools are simply absent from the catalog, and any
- * plugin tool declared `scope: 'any'` (e.g. plugin-studio) still works.
+ * That growth is the point: the workbench's own starter prompts ask for pages to be
+ * written, so a permanently editor-less run could not fulfil them — let alone
+ * "做一份可视化报表".
  */
 
 import { useCallback, useMemo } from 'react'
@@ -20,6 +23,7 @@ import type { OnToolExecution } from '../types'
 import type { CustomAgent } from '../agent/custom-agents'
 import { buildCustomAgentNote } from '../agent/custom-agents'
 import { workspaceHomeSkill } from './surface-skills'
+import { useWorkspaceDocumentTarget } from './use-workspace-document'
 import { buildImageContentParts, type AgentImageData } from '../image/image-attachments'
 
 export interface WorkspaceAgentOptions {
@@ -73,9 +77,16 @@ export function useWorkspaceAgent(options: WorkspaceAgentOptions = {}): Workspac
     const generatedConversationId = useMemo(() => newConversationId(), [])
     const conversationId = options.conversationId ?? generatedConversationId
 
-    // `null` editor: workspace scope. The provider resolves built-in tools plus
-    // every plugin tool whose scope covers `workspace`.
-    const providers = useCapabilityProviders(null, { onToolExecution: options.onToolExecution })
+    // The document the agent may work on. Null until it creates or opens a page;
+    // `createPage` / `editPage` then acquire that page's hidden editor and this
+    // rebinds, which is what makes document and page-scoped plugin tools appear.
+    const target = useWorkspaceDocumentTarget()
+    const sessionBinding = useMemo(() => () => target.binding, [target.binding])
+
+    const providers = useCapabilityProviders(target.editor, {
+        onToolExecution: options.onToolExecution,
+        sessionBinding,
+    })
 
     // Workspace scope has no editor, so the frontend's built-in (editor-bound)
     // tools are excluded: the run is grounded in plugin-declared capabilities
@@ -83,9 +94,20 @@ export function useWorkspaceAgent(options: WorkspaceAgentOptions = {}): Workspac
     // arrive through their plugin's declaration instead of failing at call
     // time. Core-implemented workspace tools declared via `agent.include`
     // register as plugin tools, so they pass this filter.
+    const hasDocument = target.editor !== null
     const isAvailableTool = useCallback((name: string) => {
-        return providers.toolProvider.getToolMetadata(name)?.source === 'plugin'
-    }, [providers.toolProvider])
+        const meta = providers.toolProvider.getToolMetadata(name)
+        if (!meta) return false
+        // A live edit target makes this a document session like any other: every
+        // registered tool can run, so all of them are offered.
+        if (hasDocument) return true
+        // Without one, plugin contributions still carry this scope's capabilities
+        // (a page-scoped tool is never registered in the first place) …
+        if (meta.source === 'plugin') return true
+        // … and a protocol-level tool such as the discovery tool must survive on
+        // every surface, or the run has no way to reach what it was told about.
+        return meta.scope === 'any' || meta.scope === 'workspace'
+    }, [providers.toolProvider, hasDocument])
 
     // getCatalog's identity changes with the provider version, so the catalog
     // (and therefore tools/skills) refreshes when plugins are installed.
@@ -119,8 +141,14 @@ export function useWorkspaceAgent(options: WorkspaceAgentOptions = {}): Workspac
         resolveTools: providers.resolveTools,
         isReadOnlyTool: providers.isReadOnlyTool,
         spaceId: options.spaceId,
-        // No page: this surface never binds a document.
-        pageId: undefined,
+        // The page the agent is working on, once it has one.
+        pageId: target.pageId,
+        // The run steers its own hidden edit target (page tools bind/retarget it).
+        sessionBinding,
+        // Discovery answers for THIS run: before it has a document, its page-scoped
+        // tools must not be offered (they are registered in the client but cannot
+        // run here); after `createPage` acquires one, they must be.
+        isToolAvailable: isAvailableTool,
         // Fresh surface: never adopt the dock's persisted run handle.
         persist: false,
     })

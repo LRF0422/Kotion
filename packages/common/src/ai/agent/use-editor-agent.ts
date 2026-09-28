@@ -90,6 +90,13 @@ export interface UseEditorAgentOptions {
      * own so the SDK does not depend on a module-level singleton.
      */
     sessionBinding?: () => SessionPageBinding | null
+    /**
+     * Whether THIS run can execute a tool right now — surface scope plus live
+     * state. Discovery tools (`load_skill`) answer for the asking run, so a
+     * workbench run without a document is not offered document tools. Omit when
+     * the surface can run everything it registered (the editor panel).
+     */
+    isToolAvailable?: (name: string) => boolean
 }
 
 export interface StartTurnOptions {
@@ -175,6 +182,12 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
         return pageId === undefined || pageId === null || pageId === '' ? null : String(pageId)
     }, [])
 
+    // Held in a ref so the executor is not rebuilt (and its result cache not
+    // dropped) when a surface's availability changes mid-conversation — the
+    // workbench gains a document exactly that way.
+    const isToolAvailableRef = useRef(options.isToolAvailable)
+    isToolAvailableRef.current = options.isToolAvailable
+
     const executor = useMemo(
         () => new EditorToolExecutor({
             resolveTools,
@@ -182,6 +195,7 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
             resolveDocumentId,
             onExecution: onToolExecution,
             getSessionBinding,
+            isToolAvailable: (name: string) => isToolAvailableRef.current?.(name) ?? true,
         }),
         [resolveTools, isReadOnlyTool, resolveDocumentId, onToolExecution, getSessionBinding]
     )
@@ -261,8 +275,10 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
                     tools: (tools ?? []).map(t => t.name),
                     skills: (skills ?? []).map(s => ({
                         name: s.name,
-                        tools: (s.tools ?? []).map(t => t.name),
+                        requiredTools: s.requiredTools,
+                        optionalTools: s.optionalTools?.length,
                     })),
+                    deferred: deferredTools?.length ?? 0,
                 })
                 const run = await client.createRun({
                     conversationId,

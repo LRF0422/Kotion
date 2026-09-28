@@ -34,6 +34,7 @@ import {
 } from "../ai/plugin-agent";import type {
     AgentContribution,
     AgentScope,
+    AgentSkillDefinition,
     AgentToolContext,
     AgentToolDefinition,
     ResolvedAgentCapabilities,
@@ -106,10 +107,27 @@ export interface PluginConfig {
      */
     pageTypes?: PageTypeConfig[]
     /**
-     * Kernel agent contribution — tools, skills, context, actions and named
-     * agents this plugin adds to the agent. The first-class, editor-optional
-     * contribution point (see ai/plugin-agent/types.ts). Installing this plugin
-     * adds these capabilities to the agent; uninstalling removes them.
+     * Agent tools this plugin adds to the model's catalog — the plugin's agent
+     * surface, declared at the top level next to its menus and routes. Nothing
+     * here is editor-bound: a tool that needs an editor declares its `scope`; a
+     * tool that does not is registered with `scope: 'any'`. Installing the plugin
+     * adds these tools, uninstalling removes them. Author them in the extension
+     * shape and lift with {@link liftLegacyTools}, or hand over an
+     * `AgentToolDefinition` directly.
+     */
+    tools?: AgentToolDefinition[]
+    /**
+     * Skills shipped with this plugin: a prompt fragment plus the tool names it
+     * owns. The fragment tells the model when and how to use those tools — and
+     * because it names them, their schemas can be delivered on demand instead of
+     * riding in every request.
+     */
+    skills?: AgentSkillDefinition[]
+    /**
+     * The rest of the agent contribution: core implementations this plugin
+     * exposes (`include`), context providers, actions, and the card renderers for
+     * tool results / artifacts. `agent.tools` / `agent.skills` still load but are
+     * deprecated — declare those two at the top level.
      */
     agent?: AgentContribution
     /**
@@ -134,6 +152,8 @@ export class KPlugin<T extends PluginConfig> {
     private _tours?: TourConfig[]
     private _dockPanels?: DockPanelConfig[]
     private _pageTypes?: PageTypeConfig[]
+    private _tools?: AgentToolDefinition[]
+    private _skills?: AgentSkillDefinition[]
     private _agent?: AgentContribution
     private _desktopOnly?: boolean
 
@@ -149,6 +169,8 @@ export class KPlugin<T extends PluginConfig> {
         this._tours = config.tours
         this._dockPanels = config.dockPanels
         this._pageTypes = config.pageTypes
+        this._tools = config.tools
+        this._skills = config.skills
         this._agent = config.agent
         this._desktopOnly = config.desktopOnly
     }
@@ -160,6 +182,16 @@ export class KPlugin<T extends PluginConfig> {
 
     get routes(): RouteConfig[] {
         return this._routes || []
+    }
+
+    /** Agent tools this plugin contributes (top-level `tools`). */
+    get tools(): AgentToolDefinition[] {
+        return this._tools || []
+    }
+
+    /** Skills shipped with this plugin (top-level `skills`). */
+    get skills(): AgentSkillDefinition[] {
+        return this._skills || []
     }
 
     get editorExtensions(): ExtensionWrapper[] {
@@ -979,9 +1011,10 @@ export class PluginManager {
     }
 
     // ---- Kernel agent capabilities (M0) ----
-    // Plugins grow the agent through `PluginConfig.agent` (see
-    // ai/plugin-agent/types.ts). Legacy `editorExtension[].tools/skills` are
-    // adapted behind the same path so existing plugins keep working unchanged.
+    // Plugins grow the agent through top-level `PluginConfig.tools` / `.skills`
+    // (plus `PluginConfig.agent` for includes, context, actions and renderers —
+    // see ai/plugin-agent/types.ts). Legacy `editorExtension[].tools/skills` were
+    // retired and are only reported.
 
     /**
      * Build the context handed to plugin agent tools. Scope is derived from
@@ -1022,11 +1055,14 @@ export class PluginManager {
     /**
      * Per-plugin agent contributions with provenance.
      *
-     * Only `PluginConfig.agent` is read. Editor-extension tools/skills are no
-     * longer aggregated: that flat path is what let a plugin's tools, skills and
-     * scope drift apart (§32/§33). A plugin still using it is reported instead of
-     * silently adapted — the fix is to move the declaration into `agent`
-     * (use {@link liftLegacyTools} / {@link liftLegacySkills}).
+     * Reads the plugin's TOP-LEVEL `tools` / `skills` — declared next to its
+     * menus and routes — plus whatever else lives under `agent` (`include`,
+     * context, actions, renderers). `agent.tools` / `agent.skills` still work so
+     * already-published plugins keep loading, but the nesting is reported: tools
+     * and skills are the plugin's agent surface, not a sub-object of it.
+     *
+     * Editor-extension tools/skills are not aggregated at all: that flat path is
+     * what let a plugin's tools, skills and scope drift apart (§32/§33).
      */
     resolveAgentContributions(): ResolvedAgentContribution[] {
         if (this._cacheAgentContributions) {
@@ -1039,17 +1075,35 @@ export class PluginManager {
                 if ((ext.tools && ext.tools.length > 0) || (ext.skills && ext.skills.length > 0)) {
                     logger.warn(
                         `Plugin "${plugin.name}" still declares AI tools/skills on its editor `
-                        + `extension "${ext.name}". That path was retired: move them into the `
-                        + 'plugin\'s `agent` declaration (see liftLegacyTools / liftLegacySkills).',
+                        + `extension "${ext.name}". That path was retired: move them onto the `
+                        + 'plugin itself as top-level `tools` / `skills` '
+                        + '(see liftLegacyTools / liftLegacySkills).',
                     )
                 }
             }
+
+            const agent = plugin.agent ?? {}
+            if ((agent.tools?.length ?? 0) > 0 || (agent.skills?.length ?? 0) > 0) {
+                logger.warn(
+                    `Plugin "${plugin.name}" declares tools/skills inside \`agent\`. That nesting is `
+                    + 'deprecated: declare `tools` and `skills` at the top level of the plugin config. '
+                    + 'The nested form still works, so published plugins keep loading.',
+                )
+            }
+            // Deprecated nesting first, top-level last: on a name collision the
+            // plugin's current declaration wins.
+            const tools = [...(agent.tools ?? []), ...plugin.tools]
+            const skills = [...(agent.skills ?? []), ...plugin.skills]
 
             resolved.push({
                 pluginName: plugin.name,
                 pluginKey: this.agentPluginKey(plugin),
                 desktopOnly: plugin.desktopOnly,
-                contribution: plugin.agent ?? {},
+                contribution: {
+                    ...agent,
+                    ...(tools.length > 0 ? { tools } : {}),
+                    ...(skills.length > 0 ? { skills } : {}),
+                },
             })
         }
 

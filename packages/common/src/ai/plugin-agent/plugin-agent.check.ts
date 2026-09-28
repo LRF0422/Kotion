@@ -289,7 +289,10 @@ function checkSkillToolNamesTravel(): void {
     const { skills } = buildAgentRunInputs(catalog)
     assert.deepEqual(skills[0].requiredTools, ['replaceContent', 'insertNear'])
     assert.deepEqual(skills[0].optionalTools, ['write'])
-    assert.equal(skills[0].systemPromptFragment, 'You can find-and-replace content.')
+    // The fragment travels verbatim except for the client's own name label, which is
+    // what lets the model ask for this skill by name.
+    assert.equal(skills[0].systemPromptFragment,
+        '【技能名】document-write\n\nYou can find-and-replace content.')
     // No per-skill schema envelope is produced any more: the tools travel in
     // tools[] like every other tool.
     assert.equal(skills[0].tools, undefined)
@@ -369,10 +372,10 @@ function checkEveryCallableToolIsAdvertised(): void {
 
     const catalog: any = collectCapabilityCatalog(skillProvider, toolProvider)
     const names = catalog.tools.map((t: any) => t.function.name)
-    // Progressive discovery: the schema of a tool a skill owns is NOT sent up
-    // front — the skill names it (below) and `load_skill` delivers the schema when
-    // the model needs it. Everything nobody claims keeps travelling with its schema.
-    assert.deepEqual(names, ['createPage', 'insertChart'])
+    // The collector is a faithful view: it withholds nothing. The discovery policy
+    // is applied when the run input is built, on the scope-filtered catalogue — see
+    // the assertions on `runInput` below.
+    assert.deepEqual(names, ['createPage', 'insertChart', 'insertNear', 'replaceContent'])
     // Core is decided by NAME, not by the (plugin-rewritten) metadata source.
     const createPage = catalog.tools.find((t: any) => t.function.name === 'createPage')
     assert.equal(createPage.core, true, 'a re-registered core tool is still core')
@@ -387,11 +390,19 @@ function checkEveryCallableToolIsAdvertised(): void {
 
     // The catalog itself defers nothing: the budget is applied to the run input.
     const runInput = buildAgentRunInputs(catalog)
+    // Progressive discovery: the schema of a tool a skill owns is NOT sent up front
+    // — the skill names it (below) and `load_skill` delivers it on demand. Tools
+    // nobody claims keep travelling with their schemas.
     assert.deepEqual(runInput.tools.map(t => t.name), ['createPage', 'insertChart'])
     assert.deepEqual(runInput.deferredTools, [])
     // Withheld, never hidden: the skill still declares the names it owns, which is
     // what the model reads to know it can ask for them.
     assert.deepEqual(runInput.skills[0].requiredTools, ['replaceContent', 'insertNear'])
+    // The model reaches a skill's tools by NAME, so the name has to reach the model:
+    // the prompt only carries the fragment, and an unlabelled fragment made it
+    // invent names ("插件开发台") and never find the capability.
+    assert.ok((runInput.skills[0].systemPromptFragment ?? '').startsWith(`【技能名】${runInput.skills[0].name}`),
+        'a shipped skill fragment must open with the name load_skill expects')
 }
 
 /**
@@ -425,6 +436,9 @@ function checkToolBudgetOverflow(): void {
             systemPromptFragment: 'You can insert described charts.',
         }],
         toolBudget: 3,
+        // Isolate the ceiling: discovery would withhold the skill-owned tool first,
+        // which is a different policy with its own assertions.
+        skillDiscovery: false,
     }
 
     const { tools, deferredTools } = buildAgentRunInputs(catalog)
@@ -491,6 +505,7 @@ function checkToolBudgetOverflow(): void {
     const priorityCatalog: any = {
         ...catalog,
         toolBudget: 3,
+        skillDiscovery: false,
         skills: [{ name: 'chart', description: '', source: 'plugin', requiredTools: [] }],
         tools: [
             fn('insertAtBlockId', { core: true, priority: 10 }),

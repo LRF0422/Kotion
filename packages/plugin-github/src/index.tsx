@@ -34,25 +34,23 @@ export const github = new GitHubPlugin({
      * read-only tools cannot be split into a separate `any` group without
      * advertising tools that fail in a workspace run.
      */
-    agent: {
-        tools: liftLegacyTools([
-            ...issueTools,
-            ...prTools,
-            ...repoTools,
-            ...codeTools,
-            ...searchTools,
-            ...historyTools,
-            ...structureTools,
-            ...releaseTools,
-        ], { scope: 'page' }),
-        skills: liftLegacySkills([
-            githubProjectManagerSkill,
-            githubCodeReviewerSkill,
-            githubChangelogWriterSkill,
-            githubProjectDocumenterSkill,
-            githubReleaseManagerSkill,
-        ]),
-    },
+    tools: liftLegacyTools([
+        ...issueTools,
+        ...prTools,
+        ...repoTools,
+        ...codeTools,
+        ...searchTools,
+        ...historyTools,
+        ...structureTools,
+        ...releaseTools,
+    ], { scope: 'page' }),
+    skills: liftLegacySkills([
+        githubProjectManagerSkill,
+        githubCodeReviewerSkill,
+        githubChangelogWriterSkill,
+        githubProjectDocumenterSkill,
+        githubReleaseManagerSkill,
+    ]),
     settings: {
         key: 'github-settings',
         label: 'GitHub',

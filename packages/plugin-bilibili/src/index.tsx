@@ -32,10 +32,8 @@ export const bilibili = new BilibiliPlugin({
     name: "bilibili",
     status: "enabled",
     editorExtension: [BilibiliExt],
-    agent: {
-        tools: liftLegacyTools(bilibiliTools, { scope: 'page' }),
-        skills: liftLegacySkills([bilibiliSkill]),
-    },
+    tools: liftLegacyTools(bilibiliTools, { scope: 'page' }),
+    skills: liftLegacySkills([bilibiliSkill]),
 });
 export * from "./extension";
 export * from "./extension/tools";

@@ -43,29 +43,24 @@ export const pluginStudio = new PluginStudio({
     status: 'ACTIVE',
     desktopOnly: true,
     /**
-     * Agent surface, on the first-class `agent` contribution point.
+     * The studio's tools + the authoring skill, declared at the top level of the
+     * plugin config.
      *
-     * These tools and the authoring skill are editor-independent — they drive
-     * the studio's desktop capabilities, not the document — so they declare
-     * `scope: 'any'` and read no editor from the tool context. They used to
-     * masquerade as an empty `editorExtension` because that was the only
-     * contribution point a plugin had for agent tools. See
-     * docs/ai-kernel-plan.md (M0).
+     * They are editor-independent — they drive the desktop dev capabilities, not
+     * the document — so every tool declares `scope: 'any'` and reads no editor
+     * from the tool context.
      */
-    agent: {
-        tools: Object.entries(studioTools).map(([name, tool]) => ({
-            name,
-            description: tool.description,
-            inputSchema: tool.inputSchema,
-            readOnly: Boolean((tool as { readOnly?: boolean }).readOnly),
-            scope: 'any',
-            create: () => tool.execute as (params: unknown) => unknown,
-        })),
-        // Teach the agent *how* to author a plugin. Names in this skill are
-        // local and are resolved to wire names by the capability registry.
-        skills: [pluginAuthoringSkill],
-    },
-
+    tools: Object.entries(studioTools).map(([name, tool]) => ({
+        name,
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+        readOnly: Boolean((tool as { readOnly?: boolean }).readOnly),
+        scope: 'any' as const,
+        create: () => tool.execute as (params: unknown) => unknown,
+    })),
+    // Teach the agent *how* to author a plugin. The skill names its tools, which
+    // is also what lets their schemas be delivered on demand.
+    skills: [pluginAuthoringSkill],
     dockPanels: [
         {
             id: 'plugin-studio-status',

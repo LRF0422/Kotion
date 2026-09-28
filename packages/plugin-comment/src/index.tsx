@@ -9,8 +9,6 @@ export const comment = new CommentPlugin({
     status: '',
     name: 'Comment',
     editorExtension: [CommentExtension],
-    agent: {
-        tools: liftLegacyTools([addCommentTool], { scope: 'page' }),
-        skills: liftLegacySkills([commentReviewerSkill]),
-    },
+    tools: liftLegacyTools([addCommentTool], { scope: 'page' }),
+    skills: liftLegacySkills([commentReviewerSkill]),
 })

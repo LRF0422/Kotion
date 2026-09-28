@@ -11,10 +11,8 @@ export const logicFlow = new LogicFlowPlugin({
   status: "ACTIVE",
   name: "LogicFlow",
   editorExtension: [LogicFlowExtension],
-  agent: {
-    tools: liftLegacyTools(logicFlowTools, { scope: 'page' }),
-    skills: liftLegacySkills([logicFlowSkill]),
-  },
+tools: liftLegacyTools(logicFlowTools, { scope: 'page' }),
+skills: liftLegacySkills([logicFlowSkill]),
   locales: logicFlowLocales,
 });
 

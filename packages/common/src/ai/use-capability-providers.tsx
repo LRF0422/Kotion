@@ -34,7 +34,13 @@ import { ToolProvider } from "./providers/ToolProvider"
 import type { ResolvedPluginToolGroup } from "../core/PluginManager"
 import { SkillProvider } from "./providers/SkillProvider"
 import { collectCapabilityCatalog, isReadOnlyTool, type CapabilityCatalog } from "./capabilities"
-import { builtinSkills, createSkillToolSource, getSkillRegistry, registerSkillToolSource } from "./skills"
+import {
+    builtinSkills,
+    createSkillToolSource,
+    getSkillRegistry,
+    registerSkillToolSource,
+    releaseSkillToolSource,
+} from "./skills"
 import { wrapToolsWithCallback } from "./utils/tool-wrapper"
 import { getSessionPageBinding, type SessionPageBinding } from "./session-page-binding"
 
@@ -345,8 +351,11 @@ export function useCapabilityProviders(
      * providers, so a plugin installed or removed mid-session is reflected at once.
      */
     useEffect(() => {
-        registerSkillToolSource(createSkillToolSource(skillProvider, toolProvider))
-        return () => registerSkillToolSource(null)
+        const source = createSkillToolSource(skillProvider, toolProvider)
+        registerSkillToolSource(source)
+        // Identity-matched release: an unrelated surface unmounting must not
+        // unregister THIS one's discovery source.
+        return () => releaseSkillToolSource(source)
     }, [skillProvider, toolProvider, version])
 
     // Rebuild the capability catalog whenever providers change (cached via ref).

@@ -14,10 +14,8 @@ export const bitable = new BitablePlugin({
     status: '',
     name: 'Bitable',
     editorExtension: [BitableExtension],
-    agent: {
-        tools: liftLegacyTools(bitableTools, { scope: 'page' }),
-        skills: liftLegacySkills([bitableSkill]),
-    },
+    tools: liftLegacyTools(bitableTools, { scope: 'page' }),
+    skills: liftLegacySkills([bitableSkill]),
     locales: {
         en: {
             translation: {

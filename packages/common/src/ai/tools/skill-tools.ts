@@ -1,6 +1,6 @@
 import { z } from "zod"
-import type { ToolsRecord } from "../types"
-import { getSkillToolSource } from "../skills/skill-tool-bridge"
+import type { ToolExecutionContext, ToolsRecord } from "../types"
+import { getSkillToolSource, suggestSkills } from "../skills/skill-tool-bridge"
 
 /**
  * `load_skill` — the discovery entry point the agent uses to pull in a skill's
@@ -33,20 +33,42 @@ export const createSkillTools = (_editor?: unknown): ToolsRecord => ({
             skill: z.string().describe('技能名（skill name），见上下文中【场景规范】各技能标题'),
         }),
         readOnly: true,
-        execute: async ({ skill }: { skill: string }) => {
+        execute: async ({ skill }: { skill: string }, _callId?: string, execCtx?: ToolExecutionContext) => {
             const source = getSkillToolSource()
             if (!source) {
                 return { error: '当前会话没有可发现的技能（能力目录未就绪）。' }
             }
+            // Ask as the CALLING run: a surface with no document yet must not be
+            // offered document tools it cannot execute, and one that just acquired a
+            // document must see what appeared.
+            const isAvailable = execCtx?.isToolAvailable
             const wanted = typeof skill === 'string' ? skill.trim() : ''
             if (!wanted) {
-                return { error: 'skill 不能为空。', available: source.skillNames() }
+                return { error: 'skill 不能为空。', available: source.skillNames(isAvailable) }
             }
-            const bundle = source.resolve(wanted)
+            const bundle = source.resolve(wanted, isAvailable)
             if (!bundle || bundle.tools.length === 0) {
+                const available = source.skillNames(isAvailable)
+                const diagnosis = source.diagnose(wanted, isAvailable)
+                if (diagnosis.name) {
+                    // The skill is real; this run just cannot execute its tools yet.
+                    // Saying "no such skill" here sent the model looking for a second
+                    // capability instead of fixing the missing precondition.
+                    return {
+                        error: `技能 "${diagnosis.name}" 存在，但它的工具在当前场景不可调用`
+                            + `（未就绪：${diagnosis.unavailable.join(', ')}）。`
+                            + '这类工具需要一个可编辑的目标：先在文档/页面上下文里工作'
+                            + '（例如先创建或打开一个页面），再调用本工具加载它的参数格式。',
+                        skill: diagnosis.name,
+                        unavailableTools: diagnosis.unavailable,
+                        available,
+                    }
+                }
+                const suggestions = suggestSkills(available, wanted)
                 return {
-                    error: `没有名为 "${wanted}" 的技能（或它没有可调用的工具）。`,
-                    available: source.skillNames(),
+                    error: `没有名为 "${wanted}" 的技能。`,
+                    ...(suggestions.length > 0 ? { didYouMean: suggestions } : {}),
+                    available,
                 }
             }
             return {

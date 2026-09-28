@@ -31,10 +31,8 @@ export const fileManager = new FileManager({
     status: '',
     name: 'File Manager',
     editorExtension: [FolderExtension, ImageExtension, AttachmentExtension],
-    agent: {
-        tools: liftLegacyTools(fileManagerTools, { scope: 'page' }),
-        skills: liftLegacySkills([fileManagerSkill]),
-    },
+    tools: liftLegacyTools(fileManagerTools, { scope: 'page' }),
+    skills: liftLegacySkills([fileManagerSkill]),
     routes: [
         {
             name: 'fileManager',

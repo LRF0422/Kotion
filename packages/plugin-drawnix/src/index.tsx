@@ -11,9 +11,7 @@ export const drawnix = new Drawnix({
   status: "",
   name: "Drawnix",
   editorExtension: [DrawnixExtension],
-  agent: {
-    tools: liftLegacyTools(drawnixTools, { scope: 'page' }),
-    skills: liftLegacySkills([drawnixSkill]),
-  },
+tools: liftLegacyTools(drawnixTools, { scope: 'page' }),
+skills: liftLegacySkills([drawnixSkill]),
   locales: drawnixLocales,
 });

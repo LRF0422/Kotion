@@ -2,9 +2,12 @@
  * Plugin Agent Contribution Contract (M0)
  *
  * The kernel agent is independent of any plugin. A plugin grows the agent by
- * declaring an {@link AgentContribution} on its `PluginConfig.agent` field —
- * the first-class, editor-optional contribution point that replaces the
- * "wrap everything in a fake editorExtension" workaround.
+ * declaring `tools` and `skills` at the TOP LEVEL of its config
+ * (`PluginConfig.tools` / `.skills`) — the first-class, editor-optional
+ * contribution points that replace the "wrap everything in a fake
+ * editorExtension" workaround. What is not a tool or a skill for a scope
+ * (`include`, context providers, actions, result/artifact renderers) stays under
+ * `PluginConfig.agent`, an {@link AgentContribution}.
  *
  * Design notes:
  * - `editor` is optional context, not a required argument. Tools that act on
@@ -200,12 +203,22 @@ export interface AgentArtifactRendererContribution {
 
 /** Everything a plugin can contribute to the kernel agent. */
 export interface AgentContribution {
+    /**
+     * @deprecated Declare `tools` at the TOP LEVEL of the plugin config
+     * (`PluginConfig.tools`). This nesting still works so published plugins keep
+     * loading, and using it logs a warning.
+     */
     tools?: AgentToolDefinition[]
     /**
      * Core-registered implementations this plugin exposes to the agent. A
      * declared name only reaches the catalog when a plugin lists it here.
      */
     include?: AgentToolInclude[]
+    /**
+     * @deprecated Declare `skills` at the TOP LEVEL of the plugin config
+     * (`PluginConfig.skills`). This nesting still works so published plugins keep
+     * loading, and using it logs a warning.
+     */
     skills?: AgentSkillDefinition[]
     context?: AgentContextProviderDefinition[]
     actions?: AgentActionDefinition[]

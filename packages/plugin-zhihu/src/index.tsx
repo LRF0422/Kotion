@@ -28,19 +28,17 @@ export const zhihu = new ZhihuPlugin({
     name: "zhihu",
     status: "ACTIVE",
     editorExtension: [ZhihuExtension],
-    agent: {
-        tools: liftLegacyTools(
-            [
-                zhihuSearchTool,
-                zhihuGlobalSearchTool,
-                zhihuHotListTool,
-                zhihuAskTool,
-                zhihuQuotaTool,
-            ],
-            { scope: "any" },
-        ),
-        skills: liftLegacySkills([zhihuResearcherSkill]),
-    },
+    tools: liftLegacyTools(
+        [
+            zhihuSearchTool,
+            zhihuGlobalSearchTool,
+            zhihuHotListTool,
+            zhihuAskTool,
+            zhihuQuotaTool,
+        ],
+        { scope: "any" },
+    ),
+    skills: liftLegacySkills([zhihuResearcherSkill]),
     settings: {
         key: "zhihu-settings",
         label: "知乎",

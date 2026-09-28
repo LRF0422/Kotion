@@ -44,28 +44,6 @@ const READ_ONLY_CATEGORIES = new Set(['document-read', 'discovery', 'interaction
 const CORE_TOOL_NAMES = new Set(BUILTIN_TOOL_METADATA.map(meta => meta.name))
 
 /**
- * Tools advertised with full schemas even when progressive discovery is on.
- *
- * The editing path itself (read → address by blockId → write → batch) plus the
- * interaction tools and the discovery tool: a run that cannot read, write or ask
- * cannot do anything, and every extra round trip to learn a schema costs a step.
- * Everything a skill owns is learned on demand through `load_skill` instead.
- */
-const ESSENTIAL_TOOL_NAMES = new Set([
-    'getDocumentStructure',
-    'readChunk',
-    'searchInDocument',
-    'replaceBlockById',
-    'insertAtBlockId',
-    'applyEdits',
-    'deleteBlocks',
-    'updateTitle',
-    'askUserChoice',
-    'referenceBlocks',
-    'load_skill',
-])
-
-/**
  * Read-only classification shared by the run catalog (plan-mode gating) and the
  * client executor (write-lease decision). A tool is read-only when it says so
  * explicitly, or when its category is inherently non-mutating.
@@ -84,6 +62,8 @@ export interface CapabilityCatalog {
      * {@link buildAgentRunInputs}.
      */
     toolBudget?: number
+    /** Progressive-discovery policy for this catalog; see CollectCapabilityCatalogOptions. */
+    skillDiscovery?: boolean
     /** Stable hash of (skills, tools). Sent as `capabilitiesVersion` so the backend can cache. */
     version: string
 }
@@ -98,6 +78,12 @@ export interface CollectCapabilityCatalogOptions {
      * Withhold the schemas of skill-owned tools and deliver them on demand through
      * the `load_skill` tool (default). `false` advertises every callable tool
      * upfront — the pre-discovery behaviour, kept as a host escape hatch.
+     *
+     * Recorded here and APPLIED when the run input is built, on the already
+     * scope-filtered catalogue. Deciding it here (before scope filtering) once left
+     * a workspace run with no client tools at all: the collector withheld every
+     * plugin tool and the scope filter then removed every built-in, including the
+     * discovery tool that was supposed to bring them back.
      */
     skillDiscovery?: boolean
 }
@@ -161,33 +147,15 @@ export function collectCapabilityCatalog(
             // editor tool is exactly what made the agent unable to edit.
             core: CORE_TOOL_NAMES.has(meta.name),
             priority: meta.priority,
+            scope: meta.scope,
         }
     }
 
     const byName = (a: { name: string }, b: { name: string }) =>
         (a.name || '').localeCompare(b.name || '')
 
-    // Progressive discovery: a tool a skill advertises by name is NOT sent with a
-    // schema — the fragment tells the model the name, and `load_skill` returns the
-    // schema when it is actually needed. Tools nobody claims (including every core
-    // tool no skill lists) stay upfront, so nothing becomes unreachable.
-    const discoverable = new Set<string>()
-    if (options.skillDiscovery !== false) {
-        for (const skill of allSkills) {
-            if (!skillSurvives(skill)) continue
-            // A fragment-less skill (the auto-generated `<plugin>-default`) has no
-            // prose to advertise its tools, so withholding their schemas would just
-            // hide them.
-            if (!skill.systemPromptFragment || !skill.systemPromptFragment.trim()) continue
-            for (const name of [...(skill.requiredTools ?? []), ...(skill.optionalTools ?? [])]) {
-                if (executableTools[name]) discoverable.add(name)
-            }
-        }
-    }
-
     const tools: ToolPayload[] = allMetadata
         .filter(meta => !!executableTools[meta.name])
-        .filter(meta => !discoverable.has(meta.name) || ESSENTIAL_TOOL_NAMES.has(meta.name))
         .sort(byName)
         .map(toPayload)
 
@@ -231,6 +199,7 @@ export function collectCapabilityCatalog(
     const version = hashCatalog(skills, tools)
     const catalog: CapabilityCatalog = { skills, tools, version }
     if (typeof options.toolBudget === 'number') catalog.toolBudget = options.toolBudget
+    if (typeof options.skillDiscovery === 'boolean') catalog.skillDiscovery = options.skillDiscovery
     return catalog
 }
 

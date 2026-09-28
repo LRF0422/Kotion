@@ -126,6 +126,13 @@ export interface ToolExecutionContext {
      * global for callers that predate the injection.
      */
     sessionBinding?: SessionPageBinding | null
+    /**
+     * Whether the CALLING run can execute a tool right now — the surface's scope
+     * plus its live state. Capability-discovery tools answer for the asking run
+     * with it: a workbench run without a document is not offered document tools it
+     * could not execute, and one that just acquired a document sees what appeared.
+     */
+    isToolAvailable?: (name: string) => boolean
 }
 
 export type ToolsRecord = Record<string, ToolDefinition>
@@ -164,6 +171,13 @@ export interface ToolMetadata {
      * is now advertised with its schema, regardless of this flag.
      */
     deferred?: boolean
+    /**
+     * Which run scopes may offer this tool. Absent means document-scoped (it needs
+     * a live editor). `any` marks a protocol-level tool — e.g. the discovery tool —
+     * that has to survive scope filtering on every surface, because a surface that
+     * drops it has no way left to reach anything.
+     */
+    scope?: 'any' | 'page' | 'workspace'
 }
 
 export interface CategoryInfo {

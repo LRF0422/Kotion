@@ -16,8 +16,6 @@ export const chart = new ChartPlugin({
     /**
      * Chart 工具与技能。scope 'page'：每个工具都需要当前编辑器实例。
      */
-    agent: {
-        tools: liftLegacyTools(chartTools, { scope: 'page' }),
-        skills: liftLegacySkills(chartSkills),
-    },
+    tools: liftLegacyTools(chartTools, { scope: 'page' }),
+    skills: liftLegacySkills(chartSkills),
 })

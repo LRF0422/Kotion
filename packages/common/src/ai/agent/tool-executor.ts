@@ -84,6 +84,12 @@ export interface EditorToolExecutorOptions {
      * context so tools do not read the global registry themselves.
      */
     getSessionBinding?: () => SessionPageBinding | null
+    /**
+     * Whether this run can execute a tool right now (surface scope + live state).
+     * Tools that discover capabilities on the model's behalf need it to answer for
+     * the asking run rather than for the whole client.
+     */
+    isToolAvailable?: (name: string) => boolean
 }
 
 export class EditorToolExecutor {
@@ -92,6 +98,7 @@ export class EditorToolExecutor {
     private readonly resolveDocumentId?: EditorToolExecutorOptions['resolveDocumentId']
     private readonly onExecution?: OnToolExecution
     private readonly getSessionBinding?: EditorToolExecutorOptions['getSessionBinding']
+    private readonly isToolAvailable?: EditorToolExecutorOptions['isToolAvailable']
     /** Idempotency cache: callId → result (replays/reconnects reuse it). */
     private readonly cache = new Map<string, ToolExecutionResult>()
     /** In-flight calls share one promise so rerenders cannot repeat side effects. */
@@ -103,6 +110,7 @@ export class EditorToolExecutor {
         this.resolveDocumentId = options.resolveDocumentId
         this.onExecution = options.onExecution
         this.getSessionBinding = options.getSessionBinding
+        this.isToolAvailable = options.isToolAvailable
     }
 
     /** Execute a frontend tool call; cached/in-flight results are shared by callId. */
@@ -168,6 +176,7 @@ export class EditorToolExecutor {
                 const run = () => definition.execute(args, callId, {
                     owner,
                     sessionBinding: this.getSessionBinding?.() ?? null,
+                    isToolAvailable: this.isToolAvailable,
                 })
                 const documentId = mutating ? (this.resolveDocumentId?.(owner) ?? null) : null
                 const result = documentId

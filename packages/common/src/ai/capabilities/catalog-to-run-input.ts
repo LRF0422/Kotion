@@ -2,10 +2,19 @@
  * Maps a capability catalog onto the run-creation contract
  * (`CreateRunRequest.tools` / `.skills` / `.deferredTools`).
  *
- * Every tool the catalog advertises travels in `tools[]` with its schema; each
- * skill travels with the names it owns so the backend can render them under its
- * prompt fragment. The only thing that ever moves out of `tools[]` is a tool the
- * provider's tool ceiling cannot fit (see {@link DEFAULT_TOOL_BUDGET}).
+ * Two policies are applied here, in this order, on the catalogue the run's scope
+ * can actually execute:
+ *
+ *  1. **Progressive discovery** — a tool a skill's fragment names is withheld and
+ *     delivered on demand through `load_skill`, except the essential editing path
+ *     and protocol tools (see {@link ESSENTIAL_TOOL_NAMES}).
+ *  2. **The provider ceiling** — only if a host set one; whatever does not fit goes
+ *     to the deferred directory (name + signature, schema on first call).
+ *
+ * Doing step 1 anywhere upstream is a bug with a proven failure mode: withholding
+ * before scope filtering left a workspace run with no client tools at all, because
+ * the filter then removed every built-in — including the discovery tool that was
+ * supposed to bring them back.
  *
  * The accepted type is the structural one from ./payload-types, not the
  * collector's `CapabilityCatalog`: that keeps this module free of the collector's
@@ -14,6 +23,40 @@
 
 import type { AgentSkillInput, AgentToolSpec } from '../agent/types'
 import type { AgentCapabilityCatalog, ToolPayload } from './payload-types'
+
+/**
+ * Tools advertised with full schemas even when progressive discovery is on.
+ *
+ * The editing path itself (read → address by blockId → write → batch), the
+ * page/space entry points that give a run something to edit, the interaction
+ * tools and the discovery tool: a run that cannot read, write, find a page or ask
+ * cannot do anything, and every extra round trip to learn a schema costs a step.
+ * Everything else a skill owns is learned on demand through `load_skill`.
+ */
+const ESSENTIAL_TOOL_NAMES = new Set([
+    // Page/space entry points (plugin-main). `createPage` in particular has to be
+    // callable on the first step of a workbench run: it is what GIVES the run a
+    // document, and a discovery round trip before it would stall the main flow.
+    'createPage',
+    'listSpaces',
+    'getSpacePageTree',
+    'searchPages',
+    'openPage',
+    'getDocumentStructure',
+    'readChunk',
+    'searchInDocument',
+    // Reading includes looking: an image in the document is read with the model's
+    // own vision, mid-read, not after a discovery round trip.
+    'readImage',
+    'replaceBlockById',
+    'insertAtBlockId',
+    'applyEdits',
+    'deleteBlocks',
+    'updateTitle',
+    'askUserChoice',
+    'referenceBlocks',
+    'load_skill',
+])
 
 /**
  * Default ceiling for CLIENT tools advertised in one request. **0 = no ceiling:
@@ -93,12 +136,30 @@ function toToolSpec(tool: ToolPayload): AgentToolSpec {
  * keeps hitting.
  */
 export function buildAgentRunInputs(catalog: AgentCapabilityCatalog): AgentRunInputs {
-    const advertised = selectAdvertisedTools(catalog.tools, describedNames(catalog.skills), catalog.toolBudget)
+    // Discovery is decided HERE, on the catalogue this scope can actually run.
+    // `described` is also the ceiling's ranking signal (a tool the prompt talks
+    // about is the one the model is most likely to call), so it stays available
+    // even when discovery is switched off.
+    const described = describedNames(catalog.skills)
+    const discoverable = catalog.skillDiscovery === false ? new Set<string>() : described
+
+    // A tool a skill names ships as a NAME only: the fragment advertises it and
+    // `load_skill` delivers its schema when the model asks for it. Protocol tools
+    // (`scope: 'any'`) and the essential editing path always ship in full.
+    const candidates = catalog.tools.filter(tool =>
+        !discoverable.has(tool.function.name)
+        || tool.scope === 'any'
+        || ESSENTIAL_TOOL_NAMES.has(tool.function.name))
+
+    const advertised = selectAdvertisedTools(candidates, described, catalog.toolBudget)
     const advertisedNames = new Set(advertised.map(tool => tool.function.name))
 
     return {
         tools: advertised.map(toToolSpec),
-        deferredTools: catalog.tools
+        // Only a ceiling defers a tool (name + signature in the directory, schema on
+        // first call). A withheld-but-discoverable tool is NOT deferred: `load_skill`
+        // hands it over whole.
+        deferredTools: candidates
             .filter(tool => !advertisedNames.has(tool.function.name))
             .map(toToolSpec),
         skills: catalog.skills.map(skill => {
@@ -106,7 +167,7 @@ export function buildAgentRunInputs(catalog: AgentCapabilityCatalog): AgentRunIn
             const optionalTools = uniqueNames(skill.optionalTools)
             const input: AgentSkillInput = {
                 name: skill.name,
-                systemPromptFragment: skill.systemPromptFragment,
+                systemPromptFragment: labelledFragment(skill.name, skill.systemPromptFragment),
             }
             // The declared names travel with the skill so the backend can render
             // them under its prompt fragment — the join between "find-and-replace
@@ -118,7 +179,30 @@ export function buildAgentRunInputs(catalog: AgentCapabilityCatalog): AgentRunIn
     }
 }
 
-/** Tool names a skill's prompt fragment describes, i.e. the ones it advertises. */
+/**
+ * Prefix a skill's fragment with its name.
+ *
+ * The model reaches a skill's tools by calling the discovery tool with the skill's
+ * NAME, but the prompt only ever carried the fragment's prose — so the name was
+ * unguessable and the model invented one ("插件开发台"), wasting a step per attempt.
+ * The label is the client's own wire convention (see the `capability-discovery`
+ * skill, which explains it), so the backend keeps rendering fragments verbatim
+ * without knowing anything about skills or discovery.
+ *
+ * A fragment-less skill is left alone: its tools are advertised directly, so there
+ * is nothing to discover by name.
+ */
+function labelledFragment(name: string, fragment: string | undefined): string | undefined {
+    const text = fragment?.trim()
+    if (!text) return fragment
+    return `【技能名】${name}\n\n${text}`
+}
+
+/**
+ * Tool names a skill's prompt fragment advertises — the ones the model is told
+ * exist and `load_skill` can deliver. A fragment-less skill (the auto-generated
+ * `<plugin>-default`) advertises nothing, so its tools keep their schemas.
+ */
 function describedNames(skills: AgentCapabilityCatalog['skills']): Set<string> {
     const described = new Set<string>()
     for (const skill of skills) {

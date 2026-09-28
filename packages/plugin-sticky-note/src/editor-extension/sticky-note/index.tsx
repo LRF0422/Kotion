@@ -17,6 +17,8 @@ export const StickyNoteExtension: ExtensionWrapper = {
  * 定义保持不变，只是不再挂在 editorExtension.tools 上，而是由插件 agent
  * 通过 liftLegacyTools 提升后只在子 run 中下发。
  */
+export { stickyNoteAnnotatorSkill } from './sticky-note-annotator'
+
 export const addStickyNoteTool = {
     name: "addStickyNote",
         priority: 9, // inserting into the document must never lose the tool ceiling race

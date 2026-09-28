@@ -19,8 +19,6 @@ export const excalidraw = new ExcalidrawPlugin({
     /**
      * Excalidraw 工具与技能。scope 'page'：每个工具都需要当前编辑器实例。
      */
-    agent: {
-        tools: liftLegacyTools(excalidrawTools, { scope: 'page' }),
-        skills: liftLegacySkills(excalidrawSkills),
-    },
+    tools: liftLegacyTools(excalidrawTools, { scope: 'page' }),
+    skills: liftLegacySkills(excalidrawSkills),
 })

@@ -22,8 +22,6 @@ export const office = new OfficePlugin({
     status: '',
     name: 'Office',
     editorExtension: [SpreadsheetExtension],
-    agent: {
-        tools: liftLegacyTools(spreadsheetTools, { scope: 'page' }),
-        skills: liftLegacySkills([spreadsheetExpertSkill]),
-    },
+    tools: liftLegacyTools(spreadsheetTools, { scope: 'page' }),
+    skills: liftLegacySkills([spreadsheetExpertSkill]),
 })

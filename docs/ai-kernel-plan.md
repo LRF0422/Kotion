@@ -337,7 +337,11 @@ core/App.tsx:289   registerCoreToolFactories()          # core 启动时注册�
 
 ### 11.2 改动
 
-- `PluginConfig.agent?: AgentContribution` + `KPlugin.agent` getter（`core/PluginManager.ts`）。
+- `PluginConfig.tools?` / `PluginConfig.skills?` + `KPlugin.tools` / `KPlugin.skills` getter
+  （`core/PluginManager.ts`）—— **插件在配置顶层声明 `tools` 与 `skills`**，它们才是插件的 agent 面。
+  `PluginConfig.agent?: AgentContribution` 保留给非工具/非技能的部分（`include`、context、actions、
+  tool/artifact renderers）；曾经的 `agent.tools` / `agent.skills` 嵌套写法仍可加载（已发布插件不受影响），
+  但会告警，迁移只需把这两个键提到顶层。
 - `PluginManager`：
   - `resolveAgentContributions()`：按插件聚合 explicit `agent` + legacy 适配，带 provenance；
   - `resolveAgentCapabilities(scope?)`：展平 + 命名空间 + `include` 解析 + scope 过滤；

@@ -14,6 +14,7 @@ import { LayoutGrid } from '@kn/icon'
 import "@kn/ui/globals.css"
 import { mainDockPanels } from './dock'
 import { PageArtifactCard, PagePreviewPane } from './ai/PageArtifact'
+import { knowledgeBaseSkill } from './ai/knowledge-base-skill'
 // export * from "./service"
 // @ts-ignore
 import pkg from '../package.json'
@@ -86,6 +87,13 @@ export const DefaultPluginInstance = new DefaultPlugin({
    * ones it exposes. Installing plugin-main is what grants the agent page
    * search / creation; its card + preview are plugin-side too (S2).
    */
+  /**
+   * The page/space capability's prose. These tools are declared here (see
+   * `agent.include` below) and framed by this skill, so the model knows when to
+   * search, when to create, and that a created page becomes the conversation's
+   * edit target.
+   */
+  skills: [knowledgeBaseSkill],
   agent: {
     include: [
       'searchPages',

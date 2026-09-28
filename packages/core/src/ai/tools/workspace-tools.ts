@@ -188,10 +188,16 @@ export function createWorkspaceToolImplementations(): AgentToolImplementation[] 
                 if (id !== 'createPage') return tool.execute
                 return async (params: any, callId?: string, execCtx?: any) => {
                     const args: any = { ...(params ?? {}) }
-                    // Editor-less run: there is no conversation to bind, and the
-                    // module-level session binding may belong to a different
-                    // surface — do not let a workspace-run createPage steal it.
-                    if (!ctx.editor && args.bindToSession === undefined) {
+                    // Editor-less run that has NO binding of its own: there is no
+                    // conversation to bind, and the module-level binding may belong
+                    // to a different surface — do not let this run steal it.
+                    //
+                    // A binding supplied by the caller (the workbench registers one
+                    // that acquires the new page's hidden editor) means the opposite:
+                    // binding is exactly how the agent gets a document to write into,
+                    // so the tool keeps its `true` default.
+                    const ownBinding = Boolean(execCtx?.sessionBinding)
+                    if (!ctx.editor && !ownBinding && args.bindToSession === undefined) {
                         args.bindToSession = false
                     }
                     if (!args.spaceId) {

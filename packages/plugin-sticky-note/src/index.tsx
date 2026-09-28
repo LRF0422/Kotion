@@ -1,5 +1,9 @@
-import { KPlugin, PluginConfig, liftLegacyTools } from "@kn/common";
-import { StickyNoteExtension, addStickyNoteTool } from "./editor-extension/sticky-note";
+import { KPlugin, PluginConfig, liftLegacySkills, liftLegacyTools } from "@kn/common";
+import {
+    StickyNoteExtension,
+    addStickyNoteTool,
+    stickyNoteAnnotatorSkill,
+} from "./editor-extension/sticky-note";
 
 interface StickyNotePluginConfig extends PluginConfig { }
 
@@ -9,9 +13,8 @@ export const stickyNote = new StickyNotePlugin({
     status: "",
     name: "StickyNote",
     editorExtension: [StickyNoteExtension],
-    agent: {
-        tools: liftLegacyTools([addStickyNoteTool], { scope: "page" }),
-    },
+    tools: liftLegacyTools([addStickyNoteTool], { scope: "page" }),
+    skills: liftLegacySkills([stickyNoteAnnotatorSkill]),
     locales: {
         en: {
             translation: {

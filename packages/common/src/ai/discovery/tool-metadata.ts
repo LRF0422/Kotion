@@ -66,7 +66,10 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
         priority: 10,
         tags: ['skill', 'discovery', 'essential'],
         loaded: false,
-        source: 'builtin'
+        source: 'builtin',
+        // Protocol-level: valid in every scope. A surface that filters it out loses
+        // its only route to a capability it was told about.
+        scope: 'any'
     },
 
     // ===== Document Read Tools =====

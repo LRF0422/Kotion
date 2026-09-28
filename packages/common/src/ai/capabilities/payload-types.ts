@@ -59,6 +59,8 @@ export interface ToolPayload {
     core?: boolean
     /** Frontend-only: metadata priority (1-10). Ranks tools against the budget. */
     priority?: number
+    /** Frontend-only: run scopes this tool may be offered in ('any' = all). */
+    scope?: 'any' | 'page' | 'workspace'
 }
 
 /**
@@ -76,5 +78,11 @@ export interface AgentCapabilityCatalog {
      * default). Carried on the catalog because a host reads it from its env.
      */
     toolBudget?: number
+    /**
+     * Progressive-discovery policy (default on): a tool a skill's fragment names is
+     * withheld and delivered on demand by `load_skill`. Applied when the run input
+     * is built, on the already scope-filtered catalogue.
+     */
+    skillDiscovery?: boolean
     version: string
 }
