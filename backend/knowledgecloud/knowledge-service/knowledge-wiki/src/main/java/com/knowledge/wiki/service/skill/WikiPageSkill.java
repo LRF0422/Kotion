@@ -379,11 +379,18 @@ public class WikiPageSkill {
      * @param spaceId the space ID where the page belongs (required for new pages)
      * @param pageId  the existing page ID to update (null to create a new page)
      * @return formatted result of the write operation
+     *
+     * @deprecated NOT exposed as an agent skill. This handler rebuilds a whole
+     *     page document from plain text / Markdown ({@code convertToPageDocument}
+     *     + {@code reconcileTrusted}), which silently discards the page's block
+     *     structure. Editing a page is the client-side document tools' job
+     *     (`editPage` + `applyEdits` / `insertAtBlockId` / `replaceBlockById` /
+     *     `deleteBlocks`); a second, lossier writer with an overlapping
+     *     description only invited the model to pick the wrong one. Kept as a
+     *     plain bean method — re-annotate with {@code @SkillTool(name =
+     *     "write_page", …)} to expose it again (and drop the matching entry from
+     *     {@code agent.remote-skill.excluded-tools} on the agent service).
      */
-    @SkillTool(name = "write_page", description = "Create a new page or update an existing page's content. " +
-            "To create a new page, provide title, content, and spaceId. " +
-            "To update an existing page, provide pageId along with the new title and/or content. " +
-            "When updating, omit title or content to keep the existing value unchanged.")
     public String writePage(
             @ToolParam(name = "title", description = "The page title (required for new pages; omit to keep existing title when updating)", type = "string", required = false) String title,
             @ToolParam(name = "content", description = "The page content in plain text or markdown format (required for new pages; omit to keep existing content when updating)", type = "string", required = false) String content,

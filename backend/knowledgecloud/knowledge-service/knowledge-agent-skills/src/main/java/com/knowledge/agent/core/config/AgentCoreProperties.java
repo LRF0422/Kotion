@@ -3,7 +3,10 @@ package com.knowledge.agent.core.config;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -278,6 +281,24 @@ public class AgentCoreProperties {
         private int callTimeoutSeconds = 30;
         /** Periodic “registered N remote skill(s)” debug log interval (minutes). */
         private int statsLogMinutes = 10;
+        /**
+         * Remote tool names the agent must never see or call. The registering
+         * microservice may keep its own handler; the tool simply stops being
+         * registered here.
+         *
+         * <p>{@code write_page} (knowledge-wiki) is excluded by default: it
+         * rebuilds a whole page document from plain text / Markdown
+         * ({@code convertToPageDocument} + {@code reconcileTrusted}), which
+         * silently replaces a page's block structure. The client-side document
+         * tools (`editPage` + `applyEdits` / `insertAtBlockId` /
+         * `replaceBlockById` / `deleteBlocks`) are the supported way to edit an
+         * existing page; a second, lossier writer with an overlapping
+         * description only invites the model to pick the wrong one.
+         *
+         * <p>Names are matched case-insensitively.
+         */
+        private List<String> excludedTools = new ArrayList<>(
+                Collections.singletonList("write_page"));
     }
 
     /** Tenant quota settings. */

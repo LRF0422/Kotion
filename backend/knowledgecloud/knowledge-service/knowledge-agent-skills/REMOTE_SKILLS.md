@@ -62,7 +62,24 @@ agent:
     enabled: true            # false = 完全不注册/不暴露
     stale-ms: 90000          # 无心跳判定为死亡的窗口
     call-timeout-seconds: 30 # 单次远程调用超时
+    excluded-tools:          # 永不对模型暴露的 tool 名（大小写不敏感）
+      - write_page
 ```
+
+### 排除名单（`excluded-tools`）
+
+被列入的 tool 在**注册/Redis 恢复/目录读取/查找**四处都会被拦掉：既不进模型的
+工具表，也无法通过 `ToolGateway` 调用（直接 `Backend tool not found`）。注册方
+服务仍然保留自己的 handler，只是这条能力对 agent 不可见。
+
+默认排除 `write_page`（knowledge-wiki）：它用纯文本/Markdown 经
+`convertToPageDocument` + `reconcileTrusted` **整篇重建**页面文档，会静默丢掉
+页面的块结构；而「改已有页面」的正确路径是前端文档工具
+（`editPage(pageId)` 之后 `applyEdits` / `insertAtBlockId` / `replaceBlockById` /
+`deleteBlocks`）。两个描述高度重叠的 writer 只会让模型选错，且整篇覆盖不可逆。
+
+要让 wiki 的整篇写回重新对 agent 开放，把这一项从名单里删掉（或设为空列表）即可，
+无需改代码。诊断接口 `GET /api/v1/skills/remote` 的每行会带 `excluded` 字段。
 
 注册方 SDK（可选，默认即可）：
 

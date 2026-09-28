@@ -15,6 +15,8 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
@@ -72,10 +74,10 @@ class RemoteSkillRegistryTest {
         registry.register("knowledge-wiki", Arrays.asList(
                 record("wiki-page", "summarize_page"),
                 record("wiki-page", "search_content"),
-                record("wiki-page", "write_page")));
+                record("wiki-page", "read_page")));
         expire(registry.find("summarize_page"),
                 registry.find("search_content"),
-                registry.find("write_page"));
+                registry.find("read_page"));
         assertTrue(registry.liveTools().isEmpty(), "tools should be stale before the heartbeat");
 
         // This is exactly what AgentSkillRegistrar sends.
@@ -83,6 +85,41 @@ class RemoteSkillRegistryTest {
 
         assertEquals(3, registry.liveTools().size(),
                 "one skill id must refresh all of its tools");
+    }
+
+    @Test
+    void writePageIsExcludedByDefault() {
+        registry.register("knowledge-wiki", Arrays.asList(
+                record("wiki-page", "summarize_page"),
+                record("wiki-page", "write_page")));
+
+        List<String> liveNames = registry.liveTools().stream()
+                .map(tool -> tool.getRecord().getToolName())
+                .collect(java.util.stream.Collectors.toList());
+
+        assertEquals(Collections.singletonList("summarize_page"), liveNames,
+                "an excluded tool must never reach the model tool list");
+        assertNull(registry.find("write_page"),
+                "an excluded tool must not resolve for execution either");
+        assertEquals(1, registry.size(),
+                "an excluded tool is not registered at all");
+
+        Map<String, Object> row = registry.statusSnapshot().get(0);
+        assertEquals("summarize_page", row.get("toolName"));
+    }
+
+    @Test
+    void exclusionIsConfigurable() {
+        // A host that really wants the wiki writer can clear the exclusion list.
+        AgentCoreProperties permissive = new AgentCoreProperties();
+        permissive.getRemoteSkill().setExcludedTools(Collections.emptyList());
+        RemoteSkillRegistry open = new RemoteSkillRegistry(
+                redis, new ObjectMapper(), mock(RemoteSkillInvoker.class), permissive);
+
+        open.register("knowledge-wiki", Collections.singletonList(record("wiki-page", "write_page")));
+
+        assertEquals(1, open.liveTools().size());
+        assertNotNull(open.find("write_page"));
     }
 
     @Test
@@ -100,8 +137,8 @@ class RemoteSkillRegistryTest {
     void emptyHeartbeatRefreshesWholeService() {
         registry.register("knowledge-wiki", Arrays.asList(
                 record("wiki-page", "summarize_page"),
-                record("wiki-page", "write_page")));
-        expire(registry.find("summarize_page"), registry.find("write_page"));
+                record("wiki-page", "search_content")));
+        expire(registry.find("summarize_page"), registry.find("search_content"));
 
         registry.heartbeat("knowledge-wiki", Collections.emptyList());
         assertEquals(2, registry.liveTools().size());

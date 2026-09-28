@@ -78,6 +78,11 @@ public class RemoteSkillRegistry implements ApplicationRunner {
         }
         long now = System.currentTimeMillis();
         for (RemoteSkillRecord record : records) {
+            if (isExcluded(record.getToolName())) {
+                log.info("Remote skill tool {} from {} is excluded by configuration; not registered",
+                        record.getToolName(), serviceId);
+                continue;
+            }
             record.setServiceId(serviceId);
             record.setLastHeartbeat(now);
             if (record.getStatus() == null || record.getStatus().trim().isEmpty()) {
@@ -148,6 +153,9 @@ public class RemoteSkillRegistry implements ApplicationRunner {
         List<RemoteSkillTool> live = new ArrayList<>();
         long now = System.currentTimeMillis();
         for (RemoteSkillTool tool : tools.values()) {
+            if (isExcluded(tool.getRecord().getToolName())) {
+                continue;
+            }
             if (isLive(tool.getRecord(), now)) {
                 live.add(tool);
             }
@@ -155,8 +163,13 @@ public class RemoteSkillRegistry implements ApplicationRunner {
         return live;
     }
 
+    /**
+     * Resolve one live tool by name. Excluded tools resolve to {@code null} so a
+     * call the model somehow still emits fails fast here instead of reaching the
+     * owning microservice.
+     */
     public RemoteSkillTool find(String toolName) {
-        if (toolName == null) {
+        if (toolName == null || isExcluded(toolName)) {
             return null;
         }
         for (RemoteSkillTool tool : tools.values()) {
@@ -184,7 +197,8 @@ public class RemoteSkillRegistry implements ApplicationRunner {
             row.put("status", record.getStatus());
             row.put("lastHeartbeat", record.getLastHeartbeat());
             row.put("heartbeatAgeMs", now - record.getLastHeartbeat());
-            row.put("live", isLive(record, now));
+            row.put("excluded", isExcluded(record.getToolName()));
+            row.put("live", !isExcluded(record.getToolName()) && isLive(record, now));
             row.put("callbackUrl", record.effectiveCallbackUrl());
             snapshot.add(row);
         }
@@ -222,6 +236,9 @@ public class RemoteSkillRegistry implements ApplicationRunner {
                         continue;
                     }
                     RemoteSkillRecord record = objectMapper.readValue(json, RemoteSkillRecord.class);
+                    if (isExcluded(record.getToolName())) {
+                        continue;
+                    }
                     // Treat restored registrations as freshly seen: otherwise a
                     // restart longer than the stale window instantly prunes every
                     // skill before its owner's next heartbeat can arrive.
@@ -267,6 +284,32 @@ public class RemoteSkillRegistry implements ApplicationRunner {
         }
         long configured = properties.getRemoteSkill().getStaleMs();
         return configured > 0 ? configured : DEFAULT_STALE_MS;
+    }
+
+    /**
+     * Whether the configured exclusion list rejects this tool name. Exclusion is
+     * applied at every entry point (registration, restore, catalog reads,
+     * lookup), so a tool listed here can neither be advertised to the model nor
+     * called through the gateway.
+     */
+    private boolean isExcluded(String toolName) {
+        if (toolName == null || toolName.trim().isEmpty()) {
+            return false;
+        }
+        if (properties == null || properties.getRemoteSkill() == null) {
+            return false;
+        }
+        List<String> excluded = properties.getRemoteSkill().getExcludedTools();
+        if (excluded == null || excluded.isEmpty()) {
+            return false;
+        }
+        String wanted = toolName.trim();
+        for (String name : excluded) {
+            if (name != null && wanted.equalsIgnoreCase(name.trim())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void save(RemoteSkillRecord record) {
