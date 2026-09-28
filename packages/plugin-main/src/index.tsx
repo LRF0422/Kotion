@@ -15,6 +15,7 @@ import "@kn/ui/globals.css"
 import { mainDockPanels } from './dock'
 import { PageArtifactCard, PagePreviewPane } from './ai/PageArtifact'
 import { knowledgeBaseSkill } from './ai/knowledge-base-skill'
+import { PAGE_AGENT_INCLUDE } from './ai/agent-surface'
 // export * from "./service"
 // @ts-ignore
 import pkg from '../package.json'
@@ -91,20 +92,14 @@ export const DefaultPluginInstance = new DefaultPlugin({
    * The page/space capability's prose. These tools are declared here (see
    * `agent.include` below) and framed by this skill, so the model knows when to
    * search, when to create, and that a created page becomes the conversation's
-   * edit target.
+   * edit target — and how to retarget to an existing page (`editPage`) instead of
+   * navigating the user away.
    */
   skills: [knowledgeBaseSkill],
   agent: {
-    include: [
-      'searchPages',
-      'searchContent',
-      'createPage',
-      'listSpaces',
-      'getSpacePageTree',
-      'openPage',
-      'openPageSide',
-      'focusArtifact',
-    ],
+    // Kept in `./ai/agent-surface` so the check harness can pin it against the
+    // names the skill claims without importing this React tree.
+    include: [...PAGE_AGENT_INCLUDE],
     toolRenderers: [
       { tool: 'createPage', render: PageArtifactCard },
       // Opening beside also leaves a card (jump back / open for editing).

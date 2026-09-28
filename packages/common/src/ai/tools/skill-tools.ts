@@ -6,10 +6,10 @@ import { getSkillToolSource, suggestSkills } from "../skills/skill-tool-bridge"
  * `load_skill` — the discovery entry point the agent uses to pull in a skill's
  * tool schemas.
  *
- * The run is advertised a small essential tool set plus the skills (whose
- * fragments name the tools they own). Everything else is learned on demand:
- * calling `load_skill` returns the JSON Schemas of that skill's tools *inside the
- * tool result*, which
+ * The run is advertised the whole core page-editing baseline (with schemas) plus
+ * the skills, whose fragments name the non-core tools they own. Those are learned
+ * on demand: calling `load_skill` returns the JSON Schemas of that skill's tools
+ * *inside the tool result*, which
  *
  *  - reaches the model as an appended message (the provider's cached prefix is
  *    untouched — adding a schema to the `tools` array would invalidate it), and

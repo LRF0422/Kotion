@@ -10,6 +10,8 @@
   },
   "scripts": {
     "build": "rollup -c",
+    "check": "pnpm check:knowledge-base-skill && pnpm check:template-cover",
+    "check:knowledge-base-skill": "rm -rf .tmp-check/knowledge-base && tsc src/ai/knowledge-base-skill.check.ts --outDir .tmp-check/knowledge-base --module commonjs --target ES2020 --skipLibCheck && node .tmp-check/knowledge-base/knowledge-base-skill.check.js",
     "check:template-cover": "tsc src/pages/SpaceDetail/TemplateCreator/template-cover.check.ts --outDir .tmp-check --module commonjs --target ES2020 --skipLibCheck && node .tmp-check/template-cover.check.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

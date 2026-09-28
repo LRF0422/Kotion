@@ -5,9 +5,13 @@
  * Two policies are applied here, in this order, on the catalogue the run's scope
  * can actually execute:
  *
- *  1. **Progressive discovery** — a tool a skill's fragment names is withheld and
- *     delivered on demand through `load_skill`, except the essential editing path
- *     and protocol tools (see {@link ESSENTIAL_TOOL_NAMES}).
+ *  1. **Progressive discovery** — a NON-CORE tool a skill's fragment names is
+ *     withheld and delivered on demand through `load_skill`. The page-editing
+ *     baseline is exempt: every core (built-in editor) tool ships with its full
+ *     schema on every request, so reading, writing, formatting and structuring a
+ *     page never costs a discovery round trip. Discovery is for capabilities the
+ *     run may not need — a plugin's tools, an installed skill's tools — never for
+ *     the editor itself (see also {@link ESSENTIAL_TOOL_NAMES}).
  *  2. **The provider ceiling** — only if a host set one; whatever does not fit goes
  *     to the deferred directory (name + signature, schema on first call).
  *
@@ -25,19 +29,28 @@ import type { AgentSkillInput, AgentToolSpec } from '../agent/types'
 import type { AgentCapabilityCatalog, ToolPayload } from './payload-types'
 
 /**
- * Tools advertised with full schemas even when progressive discovery is on.
+ * Non-core tools advertised with full schemas even when progressive discovery is on.
  *
- * The editing path itself (read → address by blockId → write → batch), the
- * page/space entry points that give a run something to edit, the interaction
- * tools and the discovery tool: a run that cannot read, write, find a page or ask
- * cannot do anything, and every extra round trip to learn a schema costs a step.
+ * Core (built-in editor) tools never take part in discovery at all — the filter in
+ * {@link buildAgentRunInputs} keeps every `core: true` tool, which is the whole
+ * page-editing baseline (read → address by blockId → write → format → structure →
+ * table → layout → page management). This set is the belt-and-braces companion: it
+ * forces the names below to ship even if `core` is not set on them — a host that
+ * registers a tool without the built-in registry, or the agent-protocol tools a
+ * surface adds itself. A name here is advertised regardless of which skill claims
+ * it.
+ *
  * Everything else a skill owns is learned on demand through `load_skill`.
  */
 const ESSENTIAL_TOOL_NAMES = new Set([
-    // Page/space entry points (plugin-main). `createPage` in particular has to be
-    // callable on the first step of a workbench run: it is what GIVES the run a
-    // document, and a discovery round trip before it would stall the main flow.
+    // Page/space entry points (plugin-main). `createPage` and `editPage` have to
+    // be callable on the first step of a workbench run: they are what GIVE the run
+    // a document (create a new one / retarget to an existing one), and a discovery
+    // round trip before either would stall the main flow.
     'createPage',
+    // Retargeting the off-screen edit target. Editing any page that is not the
+    // current target requires it, so it belongs to the baseline, not to discovery.
+    'editPage',
     'listSpaces',
     'getSpacePageTree',
     'searchPages',
@@ -72,6 +85,14 @@ const ESSENTIAL_TOOL_NAMES = new Set([
  * built-in + ~89 from the 11 default-loaded plugins), ~178 including the
  * backend's own. `estimateTokens` charges 64 tokens per tool, i.e. ~11k of the
  * 60k context budget, and the array rides in the provider's cached prefix.
+ *
+ * With progressive discovery ON (the default) that number is far lower, and the
+ * split is deliberate: the core built-in editing set ships in full (~78 tools,
+ * ≈5k tokens — the `core: true` half of the filter in
+ * {@link buildAgentRunInputs}), while a plugin/installed skill's tools travel as
+ * names and cost nothing until the model actually needs them. Paying a few hundred
+ * tokens per editing tool is the price of never making the agent learn how to
+ * write to a page it can already see.
  *
  * History: an earlier default of 112 sliced that catalog to 35 plugin slots, which
  * pushed whole capabilities into the deferred directory —
@@ -143,13 +164,20 @@ export function buildAgentRunInputs(catalog: AgentCapabilityCatalog): AgentRunIn
     const described = describedNames(catalog.skills)
     const discoverable = catalog.skillDiscovery === false ? new Set<string>() : described
 
-    // A tool a skill names ships as a NAME only: the fragment advertises it and
-    // `load_skill` delivers its schema when the model asks for it. Protocol tools
-    // (`scope: 'any'`) and the essential editing path always ship in full.
+    // A NON-CORE tool a skill names ships as a NAME only: the fragment advertises
+    // it and `load_skill` delivers its schema when the model asks for it.
+    //
+    // The editor baseline never rides discovery: every core (built-in editor) tool
+    // ships with its full schema, so a page run can read, write, format, table and
+    // restructure content on its FIRST step. Withholding a core tool is the exact
+    // regression this split exists to prevent — a model cannot reliably call a
+    // function it was never shown declared, whatever the prompt says about it.
+    // Protocol tools (`scope: 'any'`) and the pinned host names ship the same way.
     const candidates = catalog.tools.filter(tool =>
-        !discoverable.has(tool.function.name)
+        tool.core === true
         || tool.scope === 'any'
-        || ESSENTIAL_TOOL_NAMES.has(tool.function.name))
+        || ESSENTIAL_TOOL_NAMES.has(tool.function.name)
+        || !discoverable.has(tool.function.name))
 
     const advertised = selectAdvertisedTools(candidates, described, catalog.toolBudget)
     const advertisedNames = new Set(advertised.map(tool => tool.function.name))

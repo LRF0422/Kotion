@@ -47,9 +47,11 @@ import { getSessionPageBinding, type SessionPageBinding } from "./session-page-b
 /**
  * Progressive skill discovery (`VITE_KN_SKILL_DISCOVERY=false` opts out).
  *
- * On (default): the request carries a small essential tool set plus the skills,
- * and a skill's tool schemas are delivered by the `load_skill` tool result when
- * the model asks for them — see the bridge in skills/skill-tool-bridge.
+ * On (default): the request carries the whole core page-editing baseline (every
+ * built-in editor tool, schemas included) plus the skills, and a NON-CORE
+ * capability's tool schemas are delivered by the `load_skill` tool result when the
+ * model asks for them — see the bridge in skills/skill-tool-bridge. Page editing
+ * therefore never depends on discovery.
  */
 function skillDiscoveryEnabled(): boolean {
     return (import.meta as any)?.env?.KN_SKILL_DISCOVERY !== 'false'

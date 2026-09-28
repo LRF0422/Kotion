@@ -308,15 +308,17 @@ function checkSkillToolNamesTravel(): void {
 }
 
 /**
- * Cancelled discovery: nothing may be withheld from the tool list.
+ * The page-editing baseline is never withheld; only non-core capabilities are.
  *
- * The regression this pins is the deferral policy — a tool that a skill claimed
- * was pulled out of `tools[]` and registered as *deferred* (name + signature in
- * an injected directory, schema returned only after the first call). Models call
- * a function they can see declared; a tool advertised nowhere is a tool that
- * answers TOOL_NOT_FOUND.
+ * Two regressions are pinned here. (1) The collector is a faithful view: it
+ * withholds nothing, and core-ness is decided by NAME, not by the metadata
+ * `source` a plugin re-registration rewrote. (2) Discovery applies to a plugin's
+ * or an installed skill's tools only — a built-in editor tool a skill's fragment
+ * names still ships with its schema, because the model cannot reliably call a
+ * function it was never shown declared. A NON-core tool a skill claims is named by
+ * the skill and delivered by `load_skill` on demand.
  */
-function checkEveryCallableToolIsAdvertised(): void {
+function checkEditingBaselineIsNeverWithheld(): void {
     const tool = (name: string, category: string, source: 'builtin' | 'plugin' = 'builtin') => ({
         name,
         category,
@@ -335,15 +337,16 @@ function checkEveryCallableToolIsAdvertised(): void {
 
     const toolProvider: any = {
         getAllTools: () => ({
-            // Claimed by the skill below — the exact case that used to be
-            // silently moved out of tools[].
+            // Built-in editing tools, named by the built-in skill below: still
+            // advertised — the page-editing baseline never rides discovery.
             replaceContent: executable('replaceContent', { type: 'object', properties: { x: { type: 'string' } } }),
             insertNear: executable('insertNear', { type: 'object', properties: {} }),
-            // Pure plugin tool, unclaimed by any skill.
+            // A NON-core plugin tool, claimed by a plugin skill: this is exactly
+            // what discovery withholds and `load_skill` delivers.
             insertChart: executable('insertChart', { type: 'object', properties: {} }),
             // A CORE tool whose metadata a plugin re-registered (plugin-main's
             // agent.include does exactly this): `source` says plugin, the NAME is
-            // what makes it core, so the budget must never drop it.
+            // what makes it core, so it must never be withheld or dropped.
             createPage: executable('createPage', { type: 'object', properties: {} }),
             // Metadata without an executable must never be advertised.
             ghostTool: undefined,
@@ -361,13 +364,22 @@ function checkEveryCallableToolIsAdvertised(): void {
                 : tool(name, 'plugin', 'plugin'),
     }
     const skillProvider: any = {
-        getAllSkills: () => [{
-            name: 'document-write',
-            description: '',
-            source: 'builtin',
-            requiredTools: ['replaceContent', 'insertNear'],
-            systemPromptFragment: 'find-and-replace content',
-        }],
+        getAllSkills: () => [
+            {
+                name: 'chart-ops',
+                description: '',
+                source: 'plugin',
+                requiredTools: ['insertChart'],
+                systemPromptFragment: 'insert charts',
+            },
+            {
+                name: 'document-write',
+                description: '',
+                source: 'builtin',
+                requiredTools: ['replaceContent', 'insertNear'],
+                systemPromptFragment: 'find-and-replace content',
+            },
+        ],
     }
 
     const catalog: any = collectCapabilityCatalog(skillProvider, toolProvider)
@@ -385,24 +397,35 @@ function checkEveryCallableToolIsAdvertised(): void {
     const replaceExecutable = toolProvider.getAllTools().replaceContent
     assert.deepEqual(replaceExecutable.inputSchema, { type: 'object', properties: { x: { type: 'string' } } })
     // No per-skill schema envelope either: the skill carries names, not payloads.
-    assert.equal(catalog.skills[0].tools, undefined)
-    assert.deepEqual(catalog.skills[0].requiredTools, ['replaceContent', 'insertNear'])
+    const writeSkill = catalog.skills.find((s: any) => s.name === 'document-write')
+    const chartSkill = catalog.skills.find((s: any) => s.name === 'chart-ops')
+    assert.equal(writeSkill.tools, undefined)
+    assert.deepEqual(writeSkill.requiredTools, ['replaceContent', 'insertNear'])
+    assert.deepEqual(chartSkill.requiredTools, ['insertChart'])
 
     // The catalog itself defers nothing: the budget is applied to the run input.
     const runInput = buildAgentRunInputs(catalog)
-    // Progressive discovery: the schema of a tool a skill owns is NOT sent up front
-    // — the skill names it (below) and `load_skill` delivers it on demand. Tools
-    // nobody claims keep travelling with their schemas.
-    assert.deepEqual(runInput.tools.map(t => t.name), ['createPage', 'insertChart'])
+    // The editing baseline ships IN FULL even though a built-in skill names it:
+    // read → write → format is callable on the first step, with no discovery round
+    // trip to learn the schema.
+    assert.deepEqual(runInput.tools.map(t => t.name), ['createPage', 'insertNear', 'replaceContent'])
+    // A NON-core capability is the one that rides discovery: named by its skill,
+    // delivered by `load_skill`, and never parked in the deferred directory.
+    assert.ok(!runInput.tools.some(t => t.name === 'insertChart'),
+        'a plugin tool a skill names must not ride in every request')
     assert.deepEqual(runInput.deferredTools, [])
-    // Withheld, never hidden: the skill still declares the names it owns, which is
-    // what the model reads to know it can ask for them.
-    assert.deepEqual(runInput.skills[0].requiredTools, ['replaceContent', 'insertNear'])
+    // Withheld, never hidden: the skill still declares the name it owns, which is
+    // what the model reads to know it can ask for it.
+    assert.deepEqual(
+        runInput.skills.find(s => s.name === 'chart-ops')!.requiredTools, ['insertChart'])
     // The model reaches a skill's tools by NAME, so the name has to reach the model:
     // the prompt only carries the fragment, and an unlabelled fragment made it
     // invent names ("插件开发台") and never find the capability.
-    assert.ok((runInput.skills[0].systemPromptFragment ?? '').startsWith(`【技能名】${runInput.skills[0].name}`),
-        'a shipped skill fragment must open with the name load_skill expects')
+    for (const skill of runInput.skills) {
+        if (!skill.systemPromptFragment) continue
+        assert.ok(skill.systemPromptFragment.startsWith(`【技能名】${skill.name}`),
+            'a shipped skill fragment must open with the name load_skill expects')
+    }
 }
 
 /**
@@ -592,7 +615,7 @@ function main(): void {
     checkToolNameResolution()
     checkCatalogFilter()
     checkSkillToolNamesTravel()
-    checkEveryCallableToolIsAdvertised()
+    checkEditingBaselineIsNeverWithheld()
     checkToolBudgetOverflow()
     checkBuiltinSkillToolNamesExist()
     checkArtifactCollection()

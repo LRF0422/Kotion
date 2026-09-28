@@ -16,10 +16,22 @@ import { openAgentArtifact } from '@kn/common'
 import type { AgentArtifact, AgentToolImplementation } from '@kn/common'
 import { createPageTools } from './page-tools'
 
-/** Page tools that need no live editor. Exposed by name to plugin-main. */
+/**
+ * Page tools that need no live editor. Exposed by name to plugin-main.
+ *
+ * `editPage` belongs here for the same reason as `createPage`: it is the
+ * *retargeting* half of "give the run a document". A workbench run starts with no
+ * editor; `editPage(pageId)` drives the surface's session binding, which acquires
+ * that page's hidden editor and rebinds the capability providers — after which the
+ * whole document + page-scoped plugin set exists. Without it in this list it
+ * carries no scope, the workspace filter drops it, and editing an existing page at
+ * the workbench is impossible (`openPage` navigates the user away, which is not
+ * what "edit this page" means).
+ */
 const WORKSPACE_PAGE_TOOLS = [
     'searchPages',
     'createPage',
+    'editPage',
     'listSpaces',
     'getSpacePageTree',
     'openPage',

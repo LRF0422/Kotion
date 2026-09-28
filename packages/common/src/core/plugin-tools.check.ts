@@ -404,11 +404,12 @@ async function checkRealBitableDeclarationResolves(): Promise<void> {
 
 /**
  * plugin-main's page tools are claimed by a skill AND must remain immediately
- * callable: `createPage` is what gives a workbench run a document at all, so
- * making the model discover it first would stall the main flow.
+ * callable: `createPage` is what gives a workbench run a document at all, and
+ * `editPage` is what retargets that run to an existing page, so making the model
+ * discover either first would stall the main flow.
  */
 function checkEntryPointsStayCallableWhenAClaimedByASkill(): void {
-    const pageTools = ['createPage', 'listSpaces', 'getSpacePageTree', 'searchPages', 'openPage']
+    const pageTools = ['createPage', 'editPage', 'listSpaces', 'getSpacePageTree', 'searchPages', 'openPage']
         .map(name => legacyTool(name))
     const pluginInstance = new KPlugin<any>({
         name: 'Main',

@@ -3,9 +3,14 @@
  *
  * <p>This is the client's own mechanism description, so it ships from here: the
  * backend agent knows nothing about skills beyond "the fragments I was handed are
- * the scenario's rules" (see the backend's `AgentPrompts`). The tools themselves
- * arrive on demand — the model sees their names under each skill fragment, and
- * `load_skill` hands over the argument shapes when they are actually needed.
+ * the scenario's rules" (see the backend's `AgentPrompts`).
+ *
+ * <p>Only NON-CORE capabilities are discovered. The whole built-in page-editing
+ * baseline (read, write, format, tables, layout, page management) is already in
+ * the model's tool list with full schemas, so ordinary page work never spends a
+ * step here. What `load_skill` delivers is the tools of a plugin or an installed
+ * skill — the model sees their names under each skill fragment and asks for the
+ * argument shapes only when it actually needs them.
  *
  * <p>Carries no `requiredTools`, so it is never dropped by scope filtering: it
  * describes how to reach a capability, not a capability.
@@ -19,11 +24,14 @@ export const capabilityDiscoverySkill: Skill = {
     requiredTools: [],
     systemPromptFragment: `# CAPABILITY DISCOVERY
 
-本次运行只预先带了最常用的一小部分工具（带完整参数结构）。其余工具按**技能（skill）**分组，
+页面编辑的内置工具（读取、写入、格式化、表格、流程/布局、页面管理）已经全部在你的工具列表里，
+并且带完整参数结构——**直接用，不要为它们做任何发现**。
+
+需要发现的只有**插件/已安装技能**提供的能力，它们按**技能（skill）**分组；
 上面的【场景规范】里每个技能标题下都列出了它拥有的工具名。
 
 - 每条【场景规范】都以 \`【技能名】xxx\` 开头，**那个 xxx 就是技能名**，也是 \`load_skill\` 的参数，照抄即可，不要自己编名字。
-- 需要一个工具但它不在你的工具列表里 → 先调用 \`load_skill\`，参数写该技能名。
+- 需要插件工具但它不在你的工具列表里 → 先调用 \`load_skill\`，参数写该技能名。
   它的返回内容包含该技能全部工具的**完整参数结构**，之后就可以按名字直接调用。
 - 一次只加载一个技能；已经加载过的不用重复加载。
 - 不要猜工具的参数名；先 \`load_skill\` 再调用。

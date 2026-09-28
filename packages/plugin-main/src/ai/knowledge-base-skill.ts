@@ -2,22 +2,24 @@
  * Knowledge-base skill — the prose half of plugin-main's agent surface.
  *
  * plugin-main contributes the page/space tools the agent steers the workspace
- * with (`createPage`, `searchPages`, `openPageSide` …). Without a skill those
- * tools sat under the manager's generated fragment-less `<plugin>-default` skill:
- * they were callable but undocumented, and impossible to reach through discovery.
- * This is the missing half — when to search, when to create, and how a created
- * page becomes the conversation's edit target.
+ * with (`createPage`, `editPage`, `searchPages`, `openPageSide` …). Without a skill
+ * those tools sat under the manager's generated fragment-less `<plugin>-default`
+ * skill: they were callable but undocumented, and impossible to reach through
+ * discovery. This is the missing half — when to search, when to create, how a
+ * created page becomes the conversation's edit target, and how to retarget to an
+ * existing page without navigating the user away.
  */
 export const knowledgeBaseSkill = {
     name: 'Knowledge Base Pages',
     description:
         '知识库页面技能：在空间里找页面、找正文、建页面、看页面树、把页面展示给用户。'
-        + '新建的页面会默认成为本次对话的离屏编辑目标，之后的文档工具就写它。',
+        + '新建的页面会默认成为本次对话的离屏编辑目标；已有页面用 editPage 切换编辑目标后即可编辑。',
     requiredTools: [
         'listSpaces',
         'getSpacePageTree',
         'searchPages',
         'createPage',
+        'editPage',
         'openPage',
     ],
     optionalTools: [
@@ -41,6 +43,12 @@ export const knowledgeBaseSkill = {
 - \`createPage\` 默认 \`bindToSession: true\`：**新页面会成为本次对话的离屏编辑目标**，之后的文档工具（读结构、插入块、插图表、多维表格……）都写它，用户界面不会被带走。要落地产出时就用这个顺序：先 createPage，再往这个页面里写。
 - 需要在参照页面里加一条指向新页面的链接时，用 \`linkInDocument\`。
 
+## 切到已有页面编辑
+- \`editPage\`：把**离屏编辑目标切换到已存在的页面**。先用 searchPages / getSpacePageTree 拿到 pageId，再 \`editPage(pageId)\`。
+- 切换到哪个页面，之后的文档工具就作用于哪个页面，直到再次调用 editPage；用户界面始终留在原处。
+- **要编辑任何不是当前目标的页面，必须先 editPage**，否则文档工具会写到上一个目标里。
+- 目标页面里如果本来有内容，先 \`getDocumentStructure\` 读一遍再动；不要整页覆盖，用 replaceBlockById / applyEdits 增量修改。
+
 ## 给用户看
 - \`openPageSide\`：在右侧预览分栏打开（不离开对话）—— 展示调研结果、参考资料或刚建的页面的默认选择。
 - \`openPage\`：真正跳转过去（会离开当前页面）。**只在用户明确要求跳转时使用**，否则用 openPageSide。
@@ -48,5 +56,6 @@ export const knowledgeBaseSkill = {
 
 ## 边界
 - 读写页面**正文内容**用文档工具（需要先确定目标页面：createPage 或 editPage），本技能只管"页面/空间"这一层。
+- "编辑/修改/补充某个已有页面" → 是 \`editPage\` + 文档工具，不是 openPage；openPage 只用于用户明确要求跳转。
 - 删除、移动、改名等破坏性操作先说清打算做什么再调用。`,
 }

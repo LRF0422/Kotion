@@ -19,10 +19,11 @@ import type { AgentSkillInput } from '../agent/types'
  *
  * The workbench STARTS without a document, and that is the one thing the model
  * cannot infer: it must know that the way to write anything — text, a chart, a
- * bitable — is to first create or open a page, because acquiring that page's
- * editor is what brings the document and page-scoped plugin tools into the run.
- * Without this, a run honestly reports "createPage 未注册、调不通" and the user's
- * request to build a report dies at step one.
+ * bitable — is to first `createPage` or `editPage` (retarget to an existing page),
+ * because acquiring that page's editor is what brings the document and page-scoped
+ * plugin tools into the run. Without this, a run honestly reports
+ * "createPage 未注册、调不通" and the user's request to build a report dies at
+ * step one.
  */
 export const workspaceHomeSkill: AgentSkillInput = {
     name: 'workspace-home',
@@ -37,8 +38,10 @@ export const workspaceHomeSkill: AgentSkillInput = {
         '这不是"没有这个能力"，而是"还没有确定要写哪个页面"。',
         '',
         '要写内容（正文、图表、多维表格、图示……）：',
-        '1. 先用 `createPage` 建一个新页面（或在已有页面上用 `editPage`），把目标页面确定下来；',
-        '2. 页面确定后，这个会话就获得了完整的文档编辑能力，此后按需用 `load_skill` 取到对应工具的参数格式再调用；',
+        '1. 先确定目标页面：新建用 `createPage`；**编辑已有页面用 `editPage(pageId)`**',
+        '   （pageId 先用 `searchPages` / `getSpacePageTree` 查到），两者都不离开用户当前界面；',
+        '2. 页面确定后，这个会话就获得了完整的文档编辑能力：正文读写/格式/表格等内置工具**立刻可用**，',
+        '   插件能力（图表、多维表格、图示等）再按需用 `load_skill` 取参数格式；',
         '3. 同一个会话里继续往下写即可，不需要让用户先手动打开页面。',
         '',
         '## 通用要求',
