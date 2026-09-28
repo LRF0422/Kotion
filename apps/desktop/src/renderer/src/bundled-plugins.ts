@@ -1,6 +1,7 @@
 import { DefaultPluginInstance } from '@kn/plugin-main'
 import { fileManager } from '@kn/file-manager'
 import { blockReference } from '@kn/plugin-block-reference'
+import { chart } from '@kn/chart-plugin'
 import { ai } from '@kn/plugin-ai'
 import { bitable } from '@kn/plugin-bitable'
 import { theme } from '@kn/plugin-theme'
@@ -24,6 +25,7 @@ export const bundledPlugins = [
     fileManager,
     bitable,
     blockReference,
+    chart,
     ai,
     theme,
     speechToText,

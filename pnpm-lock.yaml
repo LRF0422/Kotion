@@ -169,6 +169,9 @@ importers:
       '@electron-toolkit/utils':
         specifier: ^3.0.0
         version: 3.0.0(electron@33.4.11)
+      '@kn/chart-plugin':
+        specifier: workspace:*
+        version: link:../../packages/plugin-chart
       '@kn/core':
         specifier: workspace:*
         version: link:../../packages/core
