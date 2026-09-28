@@ -48,12 +48,9 @@ public class Checkpoint {
     private boolean noTools;
 
     /**
-     * Extra client system-prompt text (editor rules) frozen at run creation.
-     * Kept on the checkpoint so delegated children inherit it and so a rebuilt
-     * loop reproduces the original system prefix.
-     *
-     * <p>Invariant for the whole conversation: this is the only caller-supplied
-     * text allowed into the cacheable system message.
+     * Backend-INTERNAL persona override, frozen at run creation. Never
+     * client-supplied: set only when the model itself names a persona for a
+     * delegated child ({@code delegate({systemPrompt})}).
      */
     private String systemPrompt;
 

@@ -290,6 +290,7 @@ export const chartTools: NonNullable<ExtensionWrapper['tools']> = [
         // Tool 1: Insert Chart
         {
             name: 'insertChart',
+            priority: 9, // inserting into the document must never lose the tool ceiling race
             description: `插入数据可视化图表。支持多种图表类型：
 - bar: 柱状图，用于比较不同类别的数值
 - line: 折线图，用于展示趋势变化

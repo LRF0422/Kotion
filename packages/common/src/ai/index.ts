@@ -33,7 +33,7 @@ export * from "./providers"
 // Capability providers wiring (tools/skills 供应商层，供面板与插件复用)
 export * from "./use-capability-providers"
 
-// Capability catalog collector (replaces progressive discovery on the frontend)
+// Capability catalog collector (no deferral; every callable tool ships with a schema)
 export * from "./capabilities"
 
 // Plugin agent contribution contract (kernel capability aggregation, M0)

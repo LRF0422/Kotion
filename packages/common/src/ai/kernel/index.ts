@@ -5,8 +5,8 @@
  * editor panels) never talks to AgentClient or PluginManager directly. It asks
  * for capabilities at a scope and runs a workspace-scoped agent.
  */
-export * from './prompts'
 export * from './filter-catalog'
+export { workspaceHomeSkill } from './surface-skills'
 export * from './use-agent-capabilities'
 export * from './use-agent-renderers'
 export * from './agent-pane'

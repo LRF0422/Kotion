@@ -114,6 +114,7 @@ function insertDocument(
 export const drawnixTools = [
   {
     name: "insertDrawnix",
+    priority: 9, // inserting into the document must never lose the tool ceiling race
     description: `插入一个新的思维导图。可以在指定位置插入空白思维导图
 
 插入位置定位（优先级从高到低）：
@@ -155,6 +156,7 @@ export const drawnixTools = [
   },
   {
     name: "insertDrawnixFromStructure",
+    priority: 9, // inserting into the document must never lose the tool ceiling race
     description: `根据JSON结构创建并插入思维导图。结构包含根节点文本和子节点数组
 
 插入位置定位（优先级从高到低）：
@@ -211,6 +213,7 @@ export const drawnixTools = [
   },
   {
     name: "insertDrawnixFromMarkdown",
+    priority: 9, // inserting into the document must never lose the tool ceiling race
     description: `将Markdown大纲格式转换为思维导图并插入。支持标准Markdown标题格式（# ## ### 等）和列表格式（- 或 *）`,
     inputSchema: z.object({
       markdown: z
@@ -244,6 +247,7 @@ export const drawnixTools = [
   },
   {
     name: "insertDrawnixFromMermaid",
+    priority: 9, // inserting into the document must never lose the tool ceiling race
     description:
       "将Mermaid图表代码转换为思维导图并插入。支持mindmap和flowchart语法",
     inputSchema: z.object({

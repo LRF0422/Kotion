@@ -80,7 +80,7 @@ export {
     normalizeCustomAgents,
     normalizeSelectedAgentId,
     findCustomAgent,
-    composeAgentSystemPrompt,
+    buildCustomAgentNote,
     useSelectedCustomAgentId,
     useCustomAgents,
 } from './custom-agents'

@@ -67,15 +67,11 @@ export interface UseEditorAgentOptions {
     isReadOnlyTool?: (name: string) => boolean
     skills?: AgentSkillInput[]
     /**
-     * Skill-owned tools: callable from the first turn, advertised by signature
-     * only until the model calls one, so their schemas stay out of the prompt.
+     * Tools past the provider's tool ceiling: callable from the first turn, but
+     * advertised by name + signature only until the model calls one, so their
+     * schemas stay out of the prompt. Produced by `buildAgentRunInputs`.
      */
     deferredTools?: AgentToolSpec[]
-    /**
-     * Extra system-prompt text appended by the backend after its base prompt.
-     * Hosts pass their editor rules here (the backend cannot import them).
-     */
-    systemPrompt?: string
     spaceId?: string
     pageId?: string
     client?: AgentClient
@@ -124,7 +120,7 @@ export interface EditorAgentApi {
 
 export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
     const {
-        conversationId, tools, resolveTools, skills, deferredTools, systemPrompt, spaceId, pageId, onToolExecution,
+        conversationId, tools, resolveTools, skills, deferredTools, spaceId, pageId, onToolExecution,
         autoExecuteTools = true, persist = true, store: providedStore, lock: providedLock,
     } = options
     const isReadOnlyTool = options.isReadOnlyTool
@@ -253,11 +249,10 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
                 }
                 if (!mountedRef.current || generation !== generationRef.current) return
                 createAttempted = true
-                // Host rules are invariant for the conversation and stay at
-                // message index 0 (the cacheable prefix). Per-run context (the
-                // bound page) travels in contextNote, which the backend
-                // persists as an append-only block behind the history.
-                const runSystemPrompt = (systemPrompt ?? '').trim()
+                // Per-run context (the bound page, a custom agent's guidance)
+                // travels in contextNote, which the backend persists as an
+                // append-only block behind the history. The system prompt is the
+                // backend's own; nothing here supplies prompt text.
                 // Diagnostic: exactly which capabilities this run ships. Helps
                 // pin down a plugin tool that registered but never reached the
                 // catalog. Cheap (one line per run) and worth keeping until the
@@ -275,7 +270,6 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
                     tools,
                     skills,
                     deferredTools: deferredTools && deferredTools.length > 0 ? deferredTools : undefined,
-                    systemPrompt: runSystemPrompt.length > 0 ? runSystemPrompt : undefined,
                     contextNote: opts.contextNote,
                     spaceId,
                     pageId,
@@ -329,7 +323,7 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
             startInFlightRef.current = tracked
             return tracked
         },
-        [client, conversationId, tools, skills, systemPrompt, spaceId, pageId, persist, store, lock, executor, startStream]
+        [client, conversationId, tools, skills, spaceId, pageId, persist, store, lock, executor, startStream]
     )
 
     // Frontend tool execution is its own concern (see ./use-pending-tools).

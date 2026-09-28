@@ -42,8 +42,7 @@ import {
     getPageNavigationBridge,
     cacheHitRate,
     useTranslation,
-    EDITOR_AGENT_PROMPT,
-    composeAgentSystemPrompt,
+    buildCustomAgentNote,
     useCustomAgents,
 } from '@kn/common'
 import { SubAgentTree, buildSubAgentTreeLabels } from './SubAgentTree'
@@ -179,22 +178,21 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
     const { t } = useTranslation()
     const subAgentLabels = useMemo(() => buildSubAgentTreeLabels(t), [t])
     const catalog = useMemo(() => getCatalog(), [getCatalog])
-    // tools[] 常驻；技能自带的工具随 skills[] 下发，首次调用前不展开参数结构。
+    // 所有可执行工具都带完整 schema 下发；skills[] 只补提示词片段与各自拥有的工具名。
+    // 仅超出 provider 工具上限的部分回落到 deferredTools。
     const { tools: toolSpecs, skills, deferredTools } = useMemo(() => buildAgentRunInputs(catalog), [catalog])
     const currentPage = getPageNavigationBridge()?.getCurrentPage()
 
-    // Custom agent selected for this panel. Its guidance is appended to the
-    // editor rules for every run it starts.
+    // Custom agent selected for this panel. Its guidance rides in the per-turn
+    // context note, never in the backend-owned system prompt.
     const { selectedAgent } = useCustomAgents()
+    const customAgentNote = useMemo(() => buildCustomAgentNote(selectedAgent), [selectedAgent])
 
     const agent = useEditorAgent({
         conversationId,
         tools: toolSpecs,
         skills,
         deferredTools,
-        // Editor rules the backend cannot import; appended to its base prompt,
-        // followed by the selected custom agent's guidance when there is one.
-        systemPrompt: composeAgentSystemPrompt(EDITOR_AGENT_PROMPT, selectedAgent),
         resolveTools,
         // Mutating calls take the document's write lease (no per-agent editor
         // target in this panel, so all agents share the conversation document).
@@ -264,8 +262,10 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
         // History is engine-owned (session model log); send only the new turn.
         await agent.start([{ role: 'user', content: trimmed }], {
             mode,
+            // A selected custom agent's guidance is per-turn context.
+            contextNote: customAgentNote,
         }).catch(() => undefined)
-    }, [input, agent, mode, currentPage?.pageId])
+    }, [input, agent, mode, currentPage?.pageId, customAgentNote])
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
         if (e.key === 'Enter' && !e.shiftKey) {

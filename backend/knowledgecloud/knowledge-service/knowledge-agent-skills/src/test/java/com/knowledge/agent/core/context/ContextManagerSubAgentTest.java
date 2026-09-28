@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -28,7 +29,7 @@ class ContextManagerSubAgentTest {
     @Test
     void delegatedSystemMessageScopesTheChildToItsTask() {
         String system = contextManager
-                .buildSystemMessage(childRun(), Arrays.asList("编辑器规则: 只改必要的地方"), true)
+                .buildSystemMessage(childRun(), true)
                 .getContent();
 
         assertTrue(system.contains("子 agent 规则"),
@@ -37,14 +38,17 @@ class ContextManagerSubAgentTest {
                 "the delegated task must be declared the authoritative goal");
         assertTrue(system.contains("除非委派任务明确要求"),
                 "out-of-scope document edits must be forbidden by default");
-        assertTrue(system.contains("编辑器规则"),
-                "inherited editor rules stay available for scoped editing work");
+        // The child gets the backend persona plus the scoping rules — and nothing
+        // from the caller (the client ships tools/skills as data, not prompt text).
+        assertEquals(AgentPrompts.AGENT_SYSTEM_PROMPT
+                        + ContextManager.DELEGATED_SUB_AGENT_RULES,
+                system);
     }
 
     @Test
     void rootSystemMessageDoesNotAdvertiseSubAgentRules() {
         String system = contextManager
-                .buildSystemMessage(childRun(), null, false)
+                .buildSystemMessage(childRun(), false)
                 .getContent();
 
         assertFalse(system.contains("子 agent 规则"),

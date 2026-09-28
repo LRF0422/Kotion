@@ -33,6 +33,7 @@ const parseNeteaseMusicUrl = (url: string): { musicId: string; musicType: 'song'
  */
 export const insertNeteaseMusicTool = {
     name: 'insertNeteaseMusic',
+            priority: 9, // inserting into the document must never lose the tool ceiling race
     description: '在文档中插入网易云音乐。可以提供歌曲/歌单/专辑链接或直接提供ID。',
     inputSchema: z.object({
         source: z.string().describe('网易云音乐的链接或歌曲ID'),

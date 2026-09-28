@@ -5,8 +5,8 @@
  * frontend can (a) ship the complete catalog to the backend in each chat
  * request and (b) execute any tool call the backend dispatches.
  *
- * Frontend no longer performs progressive discovery — that concern now lives
- * on the backend, which receives the catalog inline with every chat request.
+ * There is no discovery layer anywhere: no deferral, no activation step. The
+ * catalog the model receives IS the catalog this provider holds.
  */
 
 import type {
@@ -138,7 +138,9 @@ export class ToolProvider {
                 name,
                 category: 'plugin',
                 description: tool.description || `Plugin tool: ${name}`,
-                priority: 5,
+                // Declared priority (default 5) decides which plugin tools survive
+                // the provider's tools ceiling; see `buildAgentRunInputs`.
+                priority: typeof tool.priority === 'number' ? tool.priority : 5,
                 tags: ['plugin', pluginName],
                 loaded: true,
                 source: 'plugin',

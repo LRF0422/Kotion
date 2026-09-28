@@ -224,6 +224,7 @@ function pageSummary(
 export const logicFlowTools = [
   {
     name: "createLogicFlowFromGraph",
+    priority: 9, // inserting into the document must never lose the tool ceiling race
     description: `根据语义节点和连线创建可编辑的 LogicFlow 流程图，并自动计算稳定布局。优先用于流程、工作流和带判断分支的图，不要手写节点坐标。`,
     inputSchema: z.object({
       title: z.string().describe("流程图标题").optional(),

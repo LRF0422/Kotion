@@ -37,16 +37,14 @@ class ContextManagerPrefixStabilityTest {
     /** Simulates the roll-1 request that was cached in full. */
     private List<ChatMessage> firstTurn() {
         return new ArrayList<>(Arrays.asList(
-                contextManager.buildSystemMessage(run(), Arrays.asList("编辑器规则: 只改必要的地方")),
+                contextManager.buildSystemMessage(run()),
                 ChatMessage.builder().role("user").content("帮我把标题改一下").build()));
     }
 
     @Test
     void systemMessageStaysByteIdenticalWhenPerTurnContextChanges() {
-        List<String> editorRules = Arrays.asList("编辑器规则: 只改必要的地方");
-
-        ChatMessage turnOne = contextManager.buildSystemMessage(run(), editorRules);
-        ChatMessage turnTwo = contextManager.buildSystemMessage(run(), editorRules);
+        ChatMessage turnOne = contextManager.buildSystemMessage(run());
+        ChatMessage turnTwo = contextManager.buildSystemMessage(run());
 
         assertEquals(turnOne.getContent(), turnTwo.getContent(),
                 "the system prefix must not depend on anything that changes between turns");
@@ -54,7 +52,7 @@ class ContextManagerPrefixStabilityTest {
 
     @Test
     void memorySkillsAndSummaryNeverLeakIntoTheSystemPrefix() {
-        String system = contextManager.buildSystemMessage(run(), null).getContent();
+        String system = contextManager.buildSystemMessage(run()).getContent();
 
         assertFalse(system.contains("【关于用户的长期记忆】"),
                 "long-term memory is per-turn and must not sit at index 0");
@@ -62,18 +60,63 @@ class ContextManagerPrefixStabilityTest {
                 "the rolling summary is rewritten every run and must not sit at index 0");
     }
 
+    /**
+     * The prompt is the backend's, whole and domain-blind. It used to be the
+     * backend's persona with the client's editor rules appended — two owners, one
+     * string, and they drifted (the persona advertised a tool namespace the client
+     * had already deleted). Nothing caller-supplied may enter this message.
+     */
     @Test
-    void editorRulesStayInTheStablePrefix() {
-        String system = contextManager.buildSystemMessage(run(),
-                Arrays.asList("编辑器规则: 只改必要的地方")).getContent();
+    void systemPrefixIsExactlyTheBackendOwnedPrompt() {
+        assertEquals(AgentPrompts.AGENT_SYSTEM_PROMPT,
+                contextManager.buildSystemMessage(run()).getContent());
+    }
 
-        assertTrue(system.contains("编辑器规则"), "invariant caller rules belong in the cached prefix");
+    /**
+     * The agent must not know what the client's tools are FOR. Document models,
+     * block ids, columns, pages and the off-screen edit target all belong to the
+     * side that provides those tools (as tool descriptions and skills); naming
+     * them here is the coupling bug that produced `editor_insertBlocks`.
+     */
+    @Test
+    void agentPromptIsDomainBlind() {
+        String system = contextManager.buildSystemMessage(run()).getContent();
+        for (String clientConcept : Arrays.asList(
+                "insertAtBlockId", "replaceBlockById", "applyEdits", "getDocumentStructure",
+                "updateTitle", "editPage", "getSpacePageTree", "insertColumns", "buildLayout",
+                "blockId", "block id", "文档", "分栏", "编辑器", "页面")) {
+            assertFalse(system.contains(clientConcept),
+                    () -> "the agent prompt must not know about the client's domain ('"
+                            + clientConcept + "')");
+        }
+        // It may name its OWN tools — those it ships and executes.
+        assertTrue(system.contains("delegate"));
+        assertTrue(system.contains("remember"));
+    }
+
+    /** The delegated-child and plan-mode additions must be domain-blind too. */
+    @Test
+    void appendedRulesAreDomainBlind() {
+        String delegated = contextManager.buildSystemMessage(
+                AgentRun.create("child-1", "conv-1", 1L, 1L, "deepseek-chat", "execute", 0L), true)
+                .getContent();
+        AgentRun planRun = AgentRun.create("run-2", "conv-1", 1L, 1L, "deepseek-chat", "plan", 0L);
+        String plan = contextManager.buildSystemMessage(planRun).getContent();
+
+        for (String domainWord : Arrays.asList("文档", "页面", "编辑器", "分栏", "blockId")) {
+            assertFalse(delegated.contains(domainWord),
+                    () -> "delegated-child rules must not know the client's domain ('"
+                            + domainWord + "')");
+            assertFalse(plan.contains(domainWord),
+                    () -> "plan-mode rules must not know the client's domain ('"
+                            + domainWord + "')");
+        }
     }
 
     @Test
     void volatileContextIsAppendedBehindHistoryAndAheadOfTheNewTurn() {
         List<ChatMessage> messages = new ArrayList<>(Arrays.asList(
-                contextManager.buildSystemMessage(run(), Arrays.asList("编辑器规则: 只改必要的地方")),
+                contextManager.buildSystemMessage(run()),
                 ChatMessage.builder().role("user").content("帮我把标题改一下").build(),
                 ChatMessage.builder().role("assistant").content("好的").build(),
                 ChatMessage.builder().role("user").content("再改一下正文").build()));
@@ -98,7 +141,7 @@ class ContextManagerPrefixStabilityTest {
         // The real production shape: cached history, then this turn's user
         // message. The injected block must land between them.
         List<ChatMessage> messages = new ArrayList<>(Arrays.asList(
-                contextManager.buildSystemMessage(run(), null),
+                contextManager.buildSystemMessage(run()),
                 ChatMessage.builder().role("user").content("第一轮").build(),
                 ChatMessage.builder().role("assistant").content("第一轮回答").build(),
                 ChatMessage.builder().role("user").content("第二轮").build()));
@@ -117,7 +160,7 @@ class ContextManagerPrefixStabilityTest {
     @Test
     void injectionNeverLandsInFrontOfTheSystemPrefix() {
         List<ChatMessage> messages = new ArrayList<>(Arrays.asList(
-                contextManager.buildSystemMessage(run(), null),
+                contextManager.buildSystemMessage(run()),
                 ChatMessage.builder().role("assistant").content("好的，已修改").build()));
 
         contextManager.attachVolatileContext(messages, "【关于用户的长期记忆】\n- x");

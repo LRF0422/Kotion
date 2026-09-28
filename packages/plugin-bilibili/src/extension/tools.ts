@@ -41,6 +41,7 @@ const extractBvid = (url: string): string | null => {
  */
 export const insertBilibiliVideoTool = {
     name: 'insertBilibiliVideo',
+            priority: 9, // inserting into the document must never lose the tool ceiling race
     description: '在文档中插入Bilibili视频。可以提供BV号或Bilibili视频链接。',
     inputSchema: z.object({
         source: z.string().describe('Bilibili视频的BV号或完整URL'),

@@ -125,7 +125,7 @@ class ContextManagerDeferredToolsTest {
      */
     @Test
     void keepsTheDeferredDirectoryOutOfTheSystemPrefix() {
-        ChatMessage system = contextManager.buildSystemMessage(run(), null);
+        ChatMessage system = contextManager.buildSystemMessage(run());
 
         assertFalse(system.getContent().contains("【按需工具】"),
                 "deferred tools belong to the volatile tail, never the system prefix");

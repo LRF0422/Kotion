@@ -6,8 +6,8 @@
  * system-agent provider consume this so the provider/plugin/skill-registry
  * plumbing lives in exactly one place.
  *
- * The frontend ships the full catalog inline with every chat request; the
- * backend performs progressive discovery/activation. This hook owns:
+ * The frontend ships the full catalog inline with every chat request — every
+ * callable tool carrying its schema, no deferral and no discovery. This hook owns:
  *  - a {@link ToolProvider} (built-in + plugin tools, executable locally)
  *  - a {@link SkillProvider} (built-in + installed + plugin skills)
  *  - the skill-registry subscription and plugin (PLUGIN_CHANGED) wiring
@@ -37,6 +37,19 @@ import { collectCapabilityCatalog, isReadOnlyTool, type CapabilityCatalog } from
 import { builtinSkills, getSkillRegistry } from "./skills"
 import { wrapToolsWithCallback } from "./utils/tool-wrapper"
 import { getSessionPageBinding, type SessionPageBinding } from "./session-page-binding"
+
+/**
+ * Host-configured ceiling on the client tools advertised in one request
+ * (`VITE_KN_MAX_ADVERTISED_TOOLS`, 0 = unlimited). Undefined lets
+ * `buildAgentRunInputs` apply its own default, sized under the 128-tool ceiling
+ * of OpenAI-compatible endpoints. See {@link DEFAULT_TOOL_BUDGET}.
+ */
+function configuredToolBudget(): number | undefined {
+    const raw = (import.meta as any)?.env?.KN_MAX_ADVERTISED_TOOLS
+    if (raw === undefined || raw === null || raw === '') return undefined
+    const parsed = Number(raw)
+    return Number.isFinite(parsed) ? parsed : undefined
+}
 
 export interface CapabilityProviders {
     toolProvider: ToolProvider
@@ -317,7 +330,9 @@ export function useCapabilityProviders(
     // Rebuild the capability catalog whenever providers change (cached via ref).
     const getCatalog = useCallback((activeSkills?: Set<string>): CapabilityCatalog => {
         if (!catalogRef.current) {
-            catalogRef.current = collectCapabilityCatalog(skillProvider, toolProvider)
+            catalogRef.current = collectCapabilityCatalog(skillProvider, toolProvider, {
+                toolBudget: configuredToolBudget(),
+            })
         }
         if (!activeSkills || activeSkills.size === 0) {
             return catalogRef.current

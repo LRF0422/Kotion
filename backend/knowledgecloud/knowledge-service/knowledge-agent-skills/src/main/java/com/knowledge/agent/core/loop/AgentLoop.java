@@ -87,11 +87,15 @@ public class AgentLoop implements Runnable {
         List<String> skillFragments();
 
         /**
-         * Extra client system-prompt text (editor rules) appended after the
-         * base prompt. Must reach the model on root runs too — historically it
-         * was only merged for child runs, silently dropping the editor rules.
+         * Backend-internal persona override (a delegated child named by the model
+         * via {@code delegate({systemPrompt})}). Never client-supplied.
          */
         default String systemPrompt() {
+            return null;
+        }
+
+        /** Task instruction for a pure-text ({@code noTools}) run. */
+        default String instruction() {
             return null;
         }
 
@@ -228,6 +232,13 @@ public class AgentLoop implements Runnable {
      * prefix of every earlier step. The model learns a deferred tool from the
      * injected directory (name + signature), and its full schema is returned
      * with the first result (see {@link #deferredSchemaNote}).
+     *
+     * <p><b>Overflow channel, not a discovery mechanism.</b> The client
+     * advertises every callable tool in {@code tools} with its schema; only what
+     * the provider's tool ceiling cannot fit arrives here (the client budget is
+     * {@code buildAgentRunInputs}'s DEFAULT_TOOL_BUDGET). Nothing is deferred for
+     * prompt economy — a model cannot reliably call a function it never saw
+     * declared — so this pool is empty whenever the catalog fits.
      *
      * <p>If a provider rejects a historical {@code tool_calls} whose function is
      * not declared, {@code agent.context.freeze-deferred-tools=false} restores
@@ -699,30 +710,26 @@ public class AgentLoop implements Runnable {
         // per turn, so both belong in the appended tail (see
         // attachVolatileContext below) — keeping them here invalidated the
         // provider prefix cache for the whole history on every turn.
-        List<String> systemFragments = new ArrayList<>();
-        if (runInput != null && runInput.systemPrompt() != null
-                && !runInput.systemPrompt().trim().isEmpty()) {
-            systemFragments.add(runInput.systemPrompt().trim());
-        }
         List<String> skillFragments = runInput != null && runInput.skillFragments() != null
                 ? new ArrayList<>(runInput.skillFragments()) : new ArrayList<>();
         List<String> memoryLines = runInput != null && runInput.memoryLines() != null
                 ? new ArrayList<>(runInput.memoryLines()) : new ArrayList<>();
         cp.setSkillFragments(skillFragments);
         cp.setMemoryLines(memoryLines);
+        // Internal persona override only (delegated children); the wire carries none.
         cp.setSystemPrompt(runInput != null ? runInput.systemPrompt() : null);
         // Pure-text mode (inline translate / polish / summarize, the AI block,
-        // ...): do NOT inject the editor-agent persona, which names document and
+        // ...): do NOT inject an agent persona, which names document and
         // web-search tools this run cannot call. With no tool schemas
         // offered, the model otherwise answered with a raw tool-call markup
         // (DeepSeek DSML tokens) as content — the exact inline-translation bug.
-        // The caller's own instruction (hoisted into systemPrompt by
+        // The caller's own instruction (hoisted into `instruction` by
         // streamKnowledgeChat) becomes the whole system message instead.
         if (runInput != null && runInput.noTools()) {
             cp.getMessages().add(ContextManager.buildPlainTextSystemMessage(
-                    runInput.systemPrompt()));
+                    runInput.instruction()));
         } else {
-            cp.getMessages().add(contextManager.buildSystemMessage(run, systemFragments));
+            cp.getMessages().add(contextManager.buildSystemMessage(run));
         }
         if (runInput != null && runInput.messages() != null) {
             // A non-vision model must never receive image parts (the provider

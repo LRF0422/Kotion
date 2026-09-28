@@ -4,7 +4,7 @@
 
 import { strict as assert } from 'node:assert'
 import {
-    composeAgentSystemPrompt,
+    buildCustomAgentNote,
     findCustomAgent,
     normalizeCustomAgents,
     normalizeSelectedAgentId,
@@ -70,32 +70,22 @@ function checkFind(): void {
     assert.equal(findCustomAgent(agents, null), undefined)
 }
 
-function checkCompose(): void {
-    // No agent, no guidance: the base prompt is untouched.
-    assert.equal(composeAgentSystemPrompt('BASE', null), 'BASE')
-    assert.equal(composeAgentSystemPrompt('', null), undefined)
-    assert.equal(composeAgentSystemPrompt(undefined, undefined), undefined)
+function checkCustomAgentNote(): void {
+    // No agent / no guidance → no note at all (nothing to inject).
+    assert.equal(buildCustomAgentNote(null), undefined)
+    assert.equal(buildCustomAgentNote(undefined), undefined)
+    const blank: CustomAgent = { id: 'a', name: 'X', instructions: '   ', createdAt: 0, updatedAt: 0 }
+    assert.equal(buildCustomAgentNote(blank), undefined)
 
-    // Guidance without a base prompt still produces a usable system prompt.
-    const agentOnly = composeAgentSystemPrompt(undefined, {
-        id: 'a', name: 'Researcher', instructions: 'Cite sources.', createdAt: 0, updatedAt: 0,
-    })
-    assert.ok(agentOnly)
-    assert.ok(agentOnly!.includes('# CUSTOM AGENT: Researcher'))
-    assert.ok(agentOnly!.includes('Cite sources.'))
-
-    // Base first, custom guidance appended behind it (cache-friendly prefix).
-    const both = composeAgentSystemPrompt('BASE RULES', {
+    const note = buildCustomAgentNote({
         id: 'a', name: 'Researcher', instructions: 'Cite sources.', createdAt: 0, updatedAt: 0,
     })!
-    assert.ok(both.startsWith('BASE RULES'))
-    assert.ok(both.includes('# CUSTOM AGENT: Researcher'))
-    assert.ok(both.includes('Cite sources.'))
-    assert.ok(both.indexOf('BASE RULES') < both.indexOf('# CUSTOM AGENT'))
-
-    // Whitespace-only guidance behaves like no guidance at all.
-    const blank: CustomAgent = { id: 'a', name: 'X', instructions: '   ', createdAt: 0, updatedAt: 0 }
-    assert.equal(composeAgentSystemPrompt('BASE', blank), 'BASE')
+    assert.ok(note.includes('Researcher'))
+    assert.ok(note.includes('Cite sources.'))
+    // It must present itself as context that cannot override the system rules —
+    // the prompt itself is backend-owned and never includes this text.
+    assert.ok(note.includes('不是系统指令'))
+    assert.ok(note.includes('以系统规则为准'))
 }
 
 function main(): void {
@@ -104,7 +94,7 @@ function main(): void {
     checkNormalizeDedupesIds()
     checkNormalizeSelected()
     checkFind()
-    checkCompose()
+    checkCustomAgentNote()
     console.log('custom-agents checks passed')
 }
 

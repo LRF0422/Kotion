@@ -12,9 +12,8 @@
  * workspace tools through `agent.include`, those register as plugin tools too,
  * so they flow through here unchanged.
  *
- * Types come from ./payload-types rather than ../capabilities on purpose: the
- * collector module reads `import.meta`, which the pure-logic check scripts
- * compile under CommonJS.
+ * Types come from ./payload-types so this module stays independent of the
+ * collector's provider wiring.
  */
 
 import type {
@@ -27,8 +26,8 @@ export type { AgentCapabilityCatalog }
 
 /**
  * Drop every tool the scope cannot run, and reconcile the skills that
- * referenced them: a skill whose required tools all vanished (and that has no
- * tool payload left) is dropped, so it never advertises an unusable workflow.
+ * referenced them: a skill whose required tools all vanished is dropped, so it
+ * never advertises an unusable workflow.
  *
  * Generic over the catalog type so the caller keeps its concrete type.
  */
@@ -43,24 +42,17 @@ export function filterAgentCatalog<T extends AgentCapabilityCatalog>(
         const originalRequired = skill.requiredTools ?? []
         const requiredTools = originalRequired.filter(isAvailable)
         const optionalTools = skill.optionalTools?.filter(isAvailable)
-        const skillTools = skill.tools?.filter(tool => isAvailable(tool.function.name))
 
         const lostAllRequired = originalRequired.length > 0 && requiredTools.length === 0
-        if (lostAllRequired && (skillTools?.length ?? 0) === 0) continue
+        if (lostAllRequired) continue
 
-        skills.push({ ...skill, requiredTools, optionalTools, tools: skillTools })
+        skills.push({ ...skill, requiredTools, optionalTools })
     }
-
-    // Agent-deferred tools are callable only by a delegated child, but the
-    // child runs with the SAME scope as its parent, so the parent's scope
-    // filter applies to them too.
-    const deferredTools = catalog.deferredTools?.filter(tool => isAvailable(tool.function.name))
 
     return {
         ...catalog,
         tools,
         skills,
-        ...(deferredTools ? { deferredTools } : {}),
         // The filtered catalog is a distinct capability set. Keep a stable but
         // distinct version so the backend's capabilitiesVersion cache can never
         // answer with schemas from the unfiltered catalog.

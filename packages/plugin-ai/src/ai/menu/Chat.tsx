@@ -24,8 +24,7 @@ import {
     event,
     useTranslation,
     DOCK_PANEL_RUNNING,
-    EDITOR_AGENT_PROMPT,
-    composeAgentSystemPrompt,
+    buildCustomAgentNote,
     useCustomAgents,
     fileToAgentImage,
     buildImageContentParts,
@@ -420,8 +419,9 @@ export const ExpandableChatDemo: React.FC<{
         onUserChoiceRequest: handleUserChoiceRequest,
     })
     const catalog = useMemo(() => getCatalog(), [getCatalog])
-    // tools[] carries the always-on schemas; skill-owned tools ride inside
-    // skills[] and stay deferred until the model calls one.
+    // Every callable tool rides in tools[] with its schema; skills[] adds the
+    // prompt fragments and the tool names each skill owns. Only what the
+    // provider's tool ceiling cannot fit comes back as deferredTools.
     const { tools: toolSpecs, skills, deferredTools } = useMemo(() => buildAgentRunInputs(catalog), [catalog])
 
     // ─── Session page binding bridge ─────────────────────────────
@@ -637,12 +637,6 @@ export const ExpandableChatDemo: React.FC<{
         tools: isAskMode ? [] : toolSpecs,
         skills: isAskMode ? [] : skills,
         deferredTools: isAskMode ? [] : deferredTools,
-        // Editor rules the backend cannot import; appended to its base prompt.
-        // A selected custom agent's guidance rides behind them.
-        systemPrompt: composeAgentSystemPrompt(
-            isAskMode ? undefined : EDITOR_AGENT_PROMPT,
-            selectedAgent,
-        ),
         resolveTools,
         // Mutating calls are serialized per document (write lease), and a
         // delegated child resolves its tools against its own editor.
@@ -823,7 +817,11 @@ export const ExpandableChatDemo: React.FC<{
         const boundPageNote = runTarget
             ? t('ai.chat.boundPagePrefix', { title: runTarget.title })
             : undefined
-        const contextNote = boundPageNote || undefined
+        // Per-turn context only: the bound page, and a selected custom agent's
+        // guidance (which must not be able to rewrite the backend's prompt).
+        const contextNote = [boundPageNote, buildCustomAgentNote(selectedAgent)]
+            .filter(Boolean)
+            .join('\n\n') || undefined
 
         // Conversation history is engine-owned (session model log); the client
         // only sends the new turn. Images ride as multimodal content parts so
@@ -850,7 +848,7 @@ export const ExpandableChatDemo: React.FC<{
         }
     }, [
         agent, generateMessageId, targetPage, currentPage, setTargetPage,
-        selectedModel, modelParams, setMessages, t,
+        selectedModel, modelParams, setMessages, t, selectedAgent,
     ])
 
     const handleSend = useCallback(() => {

@@ -1,9 +1,9 @@
 /**
  * SkillProvider - Pure Skill Catalog
  *
- * Holds registered skills (built-in, plugin, user-installed). Activation is no
- * longer a frontend concern — the backend receives the full catalog in every
- * chat request and performs progressive discovery/activation internally.
+ * Holds registered skills (built-in, plugin, user-installed). Their prompt
+ * fragments and owned tool names ship inline with every chat request; there is
+ * no activation step on either side.
  */
 
 import type { Skill, ReloadCallback } from '../types'

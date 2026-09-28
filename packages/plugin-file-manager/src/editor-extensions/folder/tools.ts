@@ -49,6 +49,7 @@ const resolveFileItem = (file: any): FileItemInfo => ({
  */
 export const insertNetworkImageTool = {
     name: 'insertNetworkImage',
+            priority: 9, // inserting into the document must never lose the tool ceiling race
     description: '从网络URL插入图片到文档。需要提供有效的图片URL地址，可指定图片宽度。',
     inputSchema: z.object({
         url: z.string().url().describe('网络图片的URL地址，必须是有效的HTTP/HTTPS URL'),

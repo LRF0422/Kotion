@@ -129,6 +129,7 @@ export const mermaidTools: NonNullable<ExtensionWrapper['tools']> = [
         // Tool 1: Insert Mermaid Diagram
         {
             name: 'insertMermaidDiagram',
+            priority: 9, // inserting into the document must never lose the tool ceiling race
             description: `插入 Mermaid 图表。支持多种图表类型：
                         - flowchart: 流程图，用于展示流程、决策树
                         - sequence: 时序图，用于展示系统交互、API调用流程

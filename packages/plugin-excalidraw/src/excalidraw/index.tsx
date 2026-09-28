@@ -633,6 +633,7 @@ export const excalidrawTools: NonNullable<ExtensionWrapper['tools']> = [
         // Tool 1: Insert Excalidraw Diagram
         {
             name: 'insertExcalidrawDiagram',
+            priority: 9, // inserting into the document must never lose the tool ceiling race
             description: `插入 Excalidraw 手绘风格图表。支持以下模板类型：
 - flowchart: 流程图，展示流程和决策
 - architecture: 架构图，展示系统分层结构
@@ -973,6 +974,7 @@ export const excalidrawTools: NonNullable<ExtensionWrapper['tools']> = [
         // Tool 6: Create Excalidraw from Graph Description
         {
             name: 'createExcalidrawFromGraph',
+            priority: 9, // inserting into the document must never lose the tool ceiling race
             description: `从逻辑图描述（节点+边）自动创建布局合理的 Excalidraw 图表。
 AI 只需描述图的逻辑结构，工具自动计算所有坐标和布局。
 

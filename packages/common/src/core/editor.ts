@@ -36,6 +36,15 @@ export interface ExtensionWrapper {
     inputSchema: any;
     readOnly?: boolean;
     /**
+     * 1-10, default 5. A provider's `tools` ceiling cannot fit every plugin tool,
+     * so the surplus goes to a callable-but-unadvertised overflow directory (see
+     * `buildAgentRunInputs`); higher priority is advertised first. Document
+     * INSERTION tools should declare 9: a plugin's `get*`/`list*` tools degrade
+     * gracefully through that directory, while a missing "insert X here" makes
+     * the user's request impossible.
+     */
+    priority?: number;
+    /**
      * Optional artifact mapping (kernel spec). Legacy editor plugins can
      * declare it without migrating to `agent.tools`.
      */

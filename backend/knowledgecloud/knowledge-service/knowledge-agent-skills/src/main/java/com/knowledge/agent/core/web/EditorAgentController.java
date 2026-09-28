@@ -86,7 +86,10 @@ public class EditorAgentController {
         cmd.setTools(request.getTools());
         cmd.setTemperature(request.getTemperature());
         cmd.setMaxTokens(request.getMaxTokens());
-        cmd.setSystemPrompt(request.getSystemPrompt());
+        // No prompt text crosses this boundary. The agent prompt is the
+        // backend's own (AgentPrompts) and says nothing about the client's
+        // domain; only a pure-text run supplies its task instruction.
+        cmd.setInstruction(request.getInstruction());
         cmd.setContextNote(request.getContextNote());
         cmd.setNoTools(request.isNoTools());
         cmd.setSpaceId(request.getSpaceId());
@@ -96,10 +99,11 @@ public class EditorAgentController {
         cmd.setToken(SecurityContextUtil.getToken());
         cmd.setSkillFragments(new ArrayList<>());
         cmd.setSkillTools(new ArrayList<>());
-        // The deferred catalog is deduped against the always-on tools list and
-        // kept out of `tools` on purpose: the loop registers these as callable,
-        // but absent from the model's tool list until first use. Two sources:
-        // skill-owned tools and the request's explicit deferredTools.
+        // Overflow channel: the client advertises every callable tool in `tools`
+        // with its schema, and sends here only the surplus that the provider's
+        // tool ceiling cannot fit. Deduped against `tools` on purpose — a tool
+        // already advertised must not be re-registered as deferred, which would
+        // take its schema back out of the model's tool list.
         java.util.Set<String> seenTools = new java.util.HashSet<>();
         for (ToolSpec spec : request.getTools() != null ? request.getTools() : new ArrayList<ToolSpec>()) {
             if (spec != null && spec.getName() != null) {

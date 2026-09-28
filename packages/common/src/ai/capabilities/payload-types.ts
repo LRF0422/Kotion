@@ -1,6 +1,7 @@
 /**
  * Capability payload types — the OpenAI-shaped skill/tool envelopes shipped
- * inline with every chat request (backend performs progressive discovery).
+ * inline with every chat request. Nothing is deferred: every callable tool
+ * travels with its schema.
  *
  * These were previously defined in chat-client/types.ts; they moved here when
  * the legacy chat-client was removed so the CapabilityCatalog collector keeps a
@@ -9,20 +10,23 @@
 
 /**
  * Skill payload sent to the backend as part of the capability catalog.
- * The backend uses this catalog to perform progressive discovery; the frontend
- * no longer tracks activation state.
  *
- * The `tools` field carries the full OpenAI-shaped definitions of the skill's
- * `requiredTools` (+ `optionalTools`). This lets the backend learn the schema
- * of plugin tools through the skill envelope — plugin tools are not shipped
- * in the top-level `tools[]` array.
+ * Carries the skill's prompt fragment and the names of the tools it owns; the
+ * schemas of those tools travel in the catalog's top-level `tools[]` like every
+ * other tool. There is no per-skill tool envelope and no deferred/activation
+ * channel: the frontend performs no capability discovery.
  */
 export interface SkillPayload {
     name: string
     description: string
     requiredTools: string[]
     optionalTools?: string[]
-    /** Detailed OpenAI function-call definitions for this skill's required + optional tools. */
+    /**
+     * @deprecated No longer produced. Skills used to embed their tools' schemas
+     * so the backend could register them as *deferred*; every tool is now
+     * advertised in `tools[]` with its schema. Kept only so a consumer reading
+     * an older catalog still typechecks.
+     */
     tools?: ToolPayload[]
     systemPromptFragment?: string
     tags?: string[]
@@ -46,18 +50,31 @@ export interface ToolPayload {
     }
     /** Whether this tool only reads document/editor state (safe in PLAN mode). */
     readOnly?: boolean
+    /**
+     * Frontend-only classification: true when the tool is a built-in editor tool
+     * rather than a plugin contribution. A core tool is never dropped from the
+     * advertised list when the tool budget is applied (see
+     * `buildAgentRunInputs`) — hiding one is what broke basic editing.
+     */
+    core?: boolean
+    /** Frontend-only: metadata priority (1-10). Ranks tools against the budget. */
+    priority?: number
 }
 
 /**
  * Structural view of a capability catalog.
  *
- * Lives here, next to the payloads, so consumers that must stay import.meta-free
- * — the pure-logic check harness compiles them under CommonJS — can accept a
- * catalog without pulling in `capabilities/CapabilityCatalog.ts`.
+ * Consumers accept this shape rather than the collector's concrete type so the
+ * check harness can exercise catalog logic without the collector's provider
+ * dependencies.
  */
 export interface AgentCapabilityCatalog {
     skills: SkillPayload[]
     tools: ToolPayload[]
-    deferredTools?: ToolPayload[]
+    /**
+     * Max client tools to advertise to the model (0/undefined = the module
+     * default). Carried on the catalog because a host reads it from its env.
+     */
+    toolBudget?: number
     version: string
 }

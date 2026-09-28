@@ -5,6 +5,7 @@ import { requireGitHubToken as getToken } from '../../hooks/use-github-config'
 
 export const insertGitHubRepoTool = {
     name: 'insertGitHubRepo',
+    priority: 9, // inserting into the document must never lose the tool ceiling race
     description: '在文档中插入一个 GitHub 仓库卡片。',
     inputSchema: z.object({
         owner: z.string().describe('仓库所有者'),

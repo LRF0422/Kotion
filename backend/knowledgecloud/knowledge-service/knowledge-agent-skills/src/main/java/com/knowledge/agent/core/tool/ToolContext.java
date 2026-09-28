@@ -47,6 +47,7 @@ public class ToolContext {
     private java.util.List<com.knowledge.agent.core.tool.ToolSpec> deferredTools;
 
     /** Client system-prompt text frozen at run creation (child inheritance). */
+    /** Backend-internal persona override; never client-supplied. */
     private String systemPrompt;
 
     /** Skill system-prompt fragments frozen at run creation (child inheritance). */

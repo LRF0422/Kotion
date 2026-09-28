@@ -190,6 +190,7 @@ export const bitableTools = [
     // ========================================================================
     {
         name: "insertBitable",
+        priority: 9, // inserting into the document must never lose the tool ceiling race
         description: '在文档中插入一个新的多维表格，可以指定字段和初始数据。数据的key应使用字段标题（如"名称"、"状态"）',
         inputSchema: z.object({
             fields: z.array(FieldConfigSchema).optional().describe("自定义字段配置，不提供则使用默认字段"),
@@ -223,6 +224,7 @@ export const bitableTools = [
 
     {
         name: "insertBitableAtPosition",
+        priority: 9, // inserting into the document must never lose the tool ceiling race
         description: '在文档的指定位置插入一个新的多维表格，可以指定字段和初始数据。数据的key应使用字段标题（如"名称"、"状态"）',
         inputSchema: z.object({
             position: z.number().describe("插入位置的文档坐标"),

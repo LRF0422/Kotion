@@ -46,20 +46,21 @@ export interface AgentSkillInput {
     systemPromptFragment?: string
     /**
      * Tools the skill declares as required. Sent so the backend can name them
-     * directly under the skill's prompt fragment: the deferred directory lists
-     * signatures without descriptions, so without the association the model has
-     * to guess which function a prose step ("find-and-replace content") refers
-     * to — and invents names when it guesses wrong. Already filtered to the
-     * callable catalog by `collectCapabilityCatalog`.
+     * directly under the skill's prompt fragment: a fragment describes steps in
+     * prose ("find-and-replace content") without spelling function names, so
+     * without the association the model has to guess — and invents names when it
+     * guesses wrong. Already filtered to the callable catalog by
+     * `collectCapabilityCatalog`.
      */
     requiredTools?: string[]
     /** Additionally callable tools the skill references. */
     optionalTools?: string[]
     /**
-     * Tools this skill owns. The backend registers them as *deferred*: callable,
-     * but their schemas stay out of the model's tool list until first use (the
-     * injected directory advertises name + parameter signature). Tools that are
-     * also in the run's top-level `tools` are ignored here.
+     * @deprecated No longer produced. Skills used to embed their tools' schemas
+     * so the backend could register them as *deferred* (callable, but with the
+     * schema withheld until first use). Every callable tool now travels in the
+     * run's top-level `tools` with its schema. Kept so the wire contract still
+     * accepts a catalog built by an older client.
      */
     tools?: AgentToolSpec[]
 }
@@ -123,17 +124,19 @@ export interface CreateRunInput {
     tools?: AgentToolSpec[]
     skills?: AgentSkillInput[]
     /**
-     * Callable but NOT advertised to the model with a full schema: skill-owned
-     * tools. Registered as deferred so their schemas stay out of the tool list
-     * until the model actually calls one.
+     * Tools past the provider's tool ceiling: CALLABLE and routable, but not
+     * offered to the model with a schema until the first call (the backend
+     * advertises name + signature in the injected directory and returns the
+     * schema with that first result). Produced by `buildAgentRunInputs`; empty
+     * whenever every callable tool fits.
      */
     deferredTools?: AgentToolSpec[]
     /**
-     * Extra system-prompt text appended after the backend's base prompt —
-     * invariant host/editor rules only (they sit at message index 0 and must
-     * not change between turns).
+     * Instruction for a pure-text (`noTools`) run: the task itself ("translate
+     * this", "polish that"), used as the whole system message. Task data, not
+     * agent policy.
      */
-    systemPrompt?: string
+    instruction?: string
     /**
      * Per-turn volatile context (e.g. the bound page header). The backend
      * persists it as an append-only <context> block behind the cacheable

@@ -105,6 +105,7 @@ function errorMessage(error: unknown, fallback: string): string {
  */
 export const insertSpreadsheetTool = {
     name: 'insertSpreadsheet',
+            priority: 9, // inserting into the document must never lose the tool ceiling race
     description: '在文档中插入一个电子表格。可以插入空表格，也可以预填充数据（二维数组，第一行通常作为表头）。',
     inputSchema: z.object({
         data: z
@@ -572,6 +573,7 @@ function toGroupFields(value: unknown): PivotGroupField[] {
  */
 export const createPivotTableTool = {
     name: 'createPivotTable',
+            priority: 9, // inserting into the document must never lose the tool ceiling race
     description: 'Create or reconfigure a pivot table (cross-tab/group summary) in a spreadsheet. Supports multiple source sheets, row/column groups, date buckets, sum/count/average/max/min, and totals. Read source data first; output is a generated worksheet that refreshes when source cells change.',
     inputSchema: createPivotTableSchema,
     execute: (editor: Editor) => async (params: {

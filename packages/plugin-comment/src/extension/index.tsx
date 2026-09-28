@@ -15,6 +15,7 @@ import { CommentMarginPanel } from "./menu/CommentMarginPanel";
  */
 export const addCommentTool = {
     name: 'addComment',
+            priority: 9, // inserting into the document must never lose the tool ceiling race
     description: '为文档中指定的文本添加批注/评论。通过搜索文本定位目标内容，然后在该文本上添加评论标记',
     inputSchema: z.object({
         searchText: z.string().describe("要添加评论的目标文本（精确匹配文档中的一段文字）"),

@@ -27,13 +27,15 @@ public class CreateRunRequest {
     /** Client-declared (editor) tools — always registered and always offered to the model. */
     private List<ToolSpec> tools = new ArrayList<>();
 
-    /** Skills with system-prompt fragments (and their deferred tool schemas). */
+    /** Skills: prompt fragment plus the names and schemas of the tools they own. */
     private List<SkillInput> skills = new ArrayList<>();
 
     /**
-     * Tools that are callable but NOT advertised to this run's model with a
-     * full schema — the skill-owned tools. They reach the run through the
-     * deferred catalog, so the model's tool list stays small.
+     * Overflow past the provider's tool ceiling: CALLABLE, but not advertised to
+     * the model with a schema until its first call. Clients advertise every
+     * callable tool in {@link #tools} — a model cannot reliably call a function
+     * it never saw declared — so this list holds only what did not fit, and is
+     * empty whenever the catalog fits.
      */
     private List<ToolSpec> deferredTools = new ArrayList<>();
 
@@ -42,11 +44,11 @@ public class CreateRunRequest {
     private Integer maxTokens;
 
     /**
-     * Extra system-prompt text supplied by the client (editor rules, page-tree
-     * guidance) — appended after the backend's base prompt, since the backend
-     * cannot import the frontend constants that own them.
+     * Instruction for a pure-text run ({@link #noTools}): the task itself
+     * ("translate this", "polish that"), used as the whole system message. This
+     * is task DATA, not agent policy.
      */
-    private String systemPrompt;
+    private String instruction;
 
     /**
      * Per-run volatile context (e.g. the bound page title). Appended to the

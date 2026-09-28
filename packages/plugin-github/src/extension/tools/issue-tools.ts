@@ -5,6 +5,7 @@ import { requireGitHubToken as getToken } from '../../hooks/use-github-config'
 
 export const insertGitHubIssueTool = {
     name: 'insertGitHubIssue',
+    priority: 9, // inserting into the document must never lose the tool ceiling race
     description: '在文档中插入一个 GitHub Issue 卡片。需要提供 owner、repo 和 issue 编号。',
     inputSchema: z.object({
         owner: z.string().describe('仓库所有者'),

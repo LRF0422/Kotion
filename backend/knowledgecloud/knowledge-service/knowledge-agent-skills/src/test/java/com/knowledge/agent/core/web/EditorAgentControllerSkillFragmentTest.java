@@ -9,12 +9,12 @@ import com.knowledge.agent.core.web.dto.CreateRunRequest;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -24,10 +24,14 @@ import static org.mockito.Mockito.when;
 /**
  * A run request's skills must reach the loop with their tool names attached.
  *
- * <p>The client declares {@code skills[].requiredTools / optionalTools} because
- * the deferred-tool directory advertises names and signatures but no
- * descriptions: without the association rendered under the fragment, the model
- * has to guess which function a prose step ("find-and-replace content") means.
+ * <p>The client declares {@code skills[].requiredTools / optionalTools} because a
+ * fragment describes steps in prose without spelling function names: without the
+ * association rendered under the fragment, the model has to guess which function
+ * a prose step ("find-and-replace content") means.
+ *
+ * <p>It also pins the overflow path: only tools the provider's tool ceiling could
+ * not fit may end up in the deferred catalog, and never one that is already
+ * advertised — that would take its schema back out of the model's tool list.
  */
 class EditorAgentControllerSkillFragmentTest {
 
@@ -48,17 +52,29 @@ class EditorAgentControllerSkillFragmentTest {
         skill.setSystemPromptFragment("You can find-and-replace content.");
         skill.setRequiredTools(Arrays.asList("replaceContent", "insertNear"));
         skill.setOptionalTools(Collections.singletonList("write"));
-        ToolSpec replaceContent = new ToolSpec();
-        replaceContent.setName("replaceContent");
-        replaceContent.setDescription("find and replace");
-        skill.setTools(Collections.singletonList(replaceContent));
         request.setSkills(Collections.singletonList(skill));
+
+        // The advertised tools, then the overflow past the provider's ceiling.
+        ToolSpec replaceContent = tool("replaceContent");
+        request.setTools(new ArrayList<>(Collections.singletonList(replaceContent)));
+        request.setDeferredTools(new ArrayList<>(Arrays.asList(
+                tool("insertNear"),
+                // Already advertised → must NOT be re-registered as deferred, or
+                // its schema would leave the model's tool list.
+                tool("replaceContent"))));
 
         controller.create(request);
 
         ArgumentCaptor<CreateRunCommand> captor = ArgumentCaptor.forClass(CreateRunCommand.class);
         verify(supervisor).create(captor.capture());
         return captor.getValue();
+    }
+
+    private ToolSpec tool(String name) {
+        ToolSpec spec = new ToolSpec();
+        spec.setName(name);
+        spec.setDescription(name + " description");
+        return spec;
     }
 
     @Test
@@ -72,10 +88,10 @@ class EditorAgentControllerSkillFragmentTest {
     }
 
     @Test
-    void skillToolsStillLandInTheDeferredCatalog() {
-        // The fragment association must not replace the deferred registration:
-        // the schemas still have to arrive for execution.
-        assertFalse(capturedCommand().getSkillTools().isEmpty(),
-                "skills[].tools must still be registered as the deferred catalog");
+    void overflowToolsLandInTheDeferredCatalogWithoutDuplicatingAdvertisedOnes() {
+        List<ToolSpec> deferred = capturedCommand().getSkillTools();
+        assertEquals(Collections.singletonList("insertNear"),
+                deferred.stream().map(ToolSpec::getName).collect(java.util.stream.Collectors.toList()),
+                "only the overflow may be deferred, and it must stay callable");
     }
 }

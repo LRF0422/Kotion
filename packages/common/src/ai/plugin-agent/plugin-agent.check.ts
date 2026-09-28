@@ -28,6 +28,9 @@ import {
     type AgentToolContext,
 } from './index'
 import { filterAgentCatalog } from '../kernel/filter-catalog'
+import { collectCapabilityCatalog } from '../capabilities/CapabilityCatalog'
+import { builtinSkills } from '../skills/built-in'
+import { BUILTIN_TOOL_METADATA } from '../discovery/tool-metadata'
 import { buildAgentRunInputs } from '../capabilities/catalog-to-run-input'
 import { agentArtifactKey, collectAgentArtifacts } from '../kernel/agent-artifact-collect'
 
@@ -264,16 +267,14 @@ function checkArtifactCollection(): void {
 /**
  * The declared tool names of a skill must survive the catalog → run-input
  * mapping. They are what lets the backend name each skill's own tools under its
- * prompt fragment (the deferred directory carries signatures, not descriptions),
- * so silently dropping them puts the model back to guessing which function the
- * prose means.
+ * prompt fragment: a fragment describes steps in prose without spelling function
+ * names, so silently dropping the names puts the model back to guessing which
+ * function the prose means.
  */
 function checkSkillToolNamesTravel(): void {
-    const fn = (name: string) => ({ type: 'function' as const, function: { name, description: '', parameters: {} } })
     const catalog: any = {
         version: 'v',
         tools: [],
-        deferredTools: [],
         skills: [{
             name: 'document-write',
             description: '',
@@ -282,7 +283,6 @@ function checkSkillToolNamesTravel(): void {
             requiredTools: ['replaceContent', ' insertNear ', 'replaceContent', ''],
             optionalTools: ['write', 'write'],
             systemPromptFragment: 'You can find-and-replace content.',
-            tools: [fn('replaceContent'), fn('insertNear'), fn('write')],
         }],
     }
 
@@ -290,19 +290,209 @@ function checkSkillToolNamesTravel(): void {
     assert.deepEqual(skills[0].requiredTools, ['replaceContent', 'insertNear'])
     assert.deepEqual(skills[0].optionalTools, ['write'])
     assert.equal(skills[0].systemPromptFragment, 'You can find-and-replace content.')
-    // The schemas still travel as the deferred catalog — the name list is an
-    // addition, never a replacement.
-    assert.deepEqual((skills[0].tools ?? []).map((t: any) => t.name),
-        ['replaceContent', 'insertNear', 'write'])
+    // No per-skill schema envelope is produced any more: the tools travel in
+    // tools[] like every other tool.
+    assert.equal(skills[0].tools, undefined)
 
     // No declared names → the fields stay absent, so an unchanged catalog keeps
     // producing a byte-identical request payload.
     const bare = buildAgentRunInputs({
         ...catalog,
-        skills: [{ name: 'x', description: '', source: 'builtin', tools: [] }],
+        skills: [{ name: 'x', description: '', source: 'builtin', requiredTools: [] }],
     } as any)
     assert.equal(bare.skills[0].requiredTools, undefined)
     assert.equal(bare.skills[0].optionalTools, undefined)
+}
+
+/**
+ * Cancelled discovery: nothing may be withheld from the tool list.
+ *
+ * The regression this pins is the deferral policy — a tool that a skill claimed
+ * was pulled out of `tools[]` and registered as *deferred* (name + signature in
+ * an injected directory, schema returned only after the first call). Models call
+ * a function they can see declared; a tool advertised nowhere is a tool that
+ * answers TOOL_NOT_FOUND.
+ */
+function checkEveryCallableToolIsAdvertised(): void {
+    const tool = (name: string, category: string, source: 'builtin' | 'plugin' = 'builtin') => ({
+        name,
+        category,
+        description: `${name} description`,
+        priority: 5,
+        tags: [],
+        loaded: true,
+        source,
+    })
+    const executable = (name: string, inputSchema: any, readOnly?: boolean) => ({
+        description: `${name} description`,
+        inputSchema,
+        ...(readOnly ? { readOnly } : {}),
+        execute: async () => ({ ok: true }),
+    })
+
+    const toolProvider: any = {
+        getAllTools: () => ({
+            // Claimed by the skill below — the exact case that used to be
+            // silently moved out of tools[].
+            replaceContent: executable('replaceContent', { type: 'object', properties: { x: { type: 'string' } } }),
+            insertNear: executable('insertNear', { type: 'object', properties: {} }),
+            // Pure plugin tool, unclaimed by any skill.
+            insertChart: executable('insertChart', { type: 'object', properties: {} }),
+            // A CORE tool whose metadata a plugin re-registered (plugin-main's
+            // agent.include does exactly this): `source` says plugin, the NAME is
+            // what makes it core, so the budget must never drop it.
+            createPage: executable('createPage', { type: 'object', properties: {} }),
+            // Metadata without an executable must never be advertised.
+            ghostTool: undefined,
+        }),
+        getAllMetadata: () => [
+            tool('replaceContent', 'document-write'),
+            tool('insertNear', 'document-write'),
+            tool('insertChart', 'plugin', 'plugin'),
+            tool('createPage', 'plugin', 'plugin'),
+            tool('ghostTool', 'plugin', 'plugin'),
+        ],
+        getToolMetadata: (name: string) =>
+            name === 'replaceContent' || name === 'insertNear'
+                ? tool(name, 'document-write')
+                : tool(name, 'plugin', 'plugin'),
+    }
+    const skillProvider: any = {
+        getAllSkills: () => [{
+            name: 'document-write',
+            description: '',
+            source: 'builtin',
+            requiredTools: ['replaceContent', 'insertNear'],
+            systemPromptFragment: 'find-and-replace content',
+        }],
+    }
+
+    const catalog: any = collectCapabilityCatalog(skillProvider, toolProvider)
+    const names = catalog.tools.map((t: any) => t.function.name)
+    assert.deepEqual(names, ['createPage', 'insertChart', 'insertNear', 'replaceContent'])
+    // Core is decided by NAME, not by the (plugin-rewritten) metadata source.
+    const createPage = catalog.tools.find((t: any) => t.function.name === 'createPage')
+    assert.equal(createPage.core, true, 'a re-registered core tool is still core')
+    assert.equal(catalog.tools.find((t: any) => t.function.name === 'insertChart').core, false)
+    // Claimed tools keep their schema...
+    const replace = catalog.tools.find((t: any) => t.function.name === 'replaceContent')
+    assert.deepEqual(replace.function.parameters, { type: 'object', properties: { x: { type: 'string' } } })
+    // ...and are NOT duplicated into a per-skill envelope.
+    assert.equal(catalog.skills[0].tools, undefined)
+    assert.deepEqual(catalog.skills[0].requiredTools, ['replaceContent', 'insertNear'])
+
+    // The catalog itself defers nothing: the budget is applied to the run input.
+    const runInput = buildAgentRunInputs(catalog)
+    assert.deepEqual(runInput.tools.map(t => t.name),
+        ['createPage', 'insertChart', 'insertNear', 'replaceContent'])
+    assert.deepEqual(runInput.deferredTools, [])
+}
+
+/**
+ * The provider's tool ceiling: core tools are never the ones dropped, plugin
+ * tools are ranked by whether the prompt talks about them, and the surplus stays
+ * CALLABLE (schema returned with the first call) instead of vanishing.
+ */
+function checkToolBudgetOverflow(): void {
+    const fn = (name: string, extra: Record<string, unknown> = {}) => ({
+        type: 'function' as const,
+        function: { name, description: '', parameters: { type: 'object', properties: {} } },
+        ...extra,
+    })
+    const names = (specs: any[]) => specs.map(s => s.name).sort()
+
+    const catalog: any = {
+        version: 'v',
+        // Sorted by name, as the collector emits it.
+        tools: [
+            fn('deleteBlocks', { core: true, priority: 9 }),
+            fn('insertAtBlockId', { core: true, priority: 10 }),
+            fn('alphaPluginTool', { core: false, priority: 5 }),
+            fn('describedPluginTool', { core: false, priority: 5 }),
+            fn('zetaPluginTool', { core: false, priority: 5 }),
+        ],
+        skills: [{
+            name: 'chart',
+            description: '',
+            source: 'plugin',
+            requiredTools: ['describedPluginTool'],
+            systemPromptFragment: 'You can insert described charts.',
+        }],
+        toolBudget: 3,
+    }
+
+    const { tools, deferredTools } = buildAgentRunInputs(catalog)
+    // Both core tools fit and are ranked in first, then the one plugin tool the
+    // prompt fragment names — not the alphabetically first plugin tool.
+    assert.deepEqual(names(tools), ['deleteBlocks', 'describedPluginTool', 'insertAtBlockId'])
+    assert.deepEqual(names(deferredTools), ['alphaPluginTool', 'zetaPluginTool'])
+    // An overflowed tool keeps its schema: the backend needs it to route the call
+    // and to return it with the first result.
+    assert.deepEqual(deferredTools[0].inputSchema, { type: 'object', properties: {} })
+
+    // A budget smaller than the core set must not hide a core tool.
+    const squeezed: any = { ...catalog, toolBudget: 1 }
+    const squeezedRun = buildAgentRunInputs(squeezed)
+    assert.deepEqual(names(squeezedRun.tools), ['deleteBlocks', 'insertAtBlockId'])
+    assert.deepEqual(names(squeezedRun.deferredTools),
+        ['alphaPluginTool', 'describedPluginTool', 'zetaPluginTool'])
+
+    // 0 = unlimited: nothing is deferred.
+    const unlimited: any = { ...catalog, toolBudget: 0 }
+    const unlimitedRun = buildAgentRunInputs(unlimited)
+    assert.equal(unlimitedRun.tools.length, 5)
+    assert.deepEqual(unlimitedRun.deferredTools, [])
+
+    // No budget on the catalog → the module default, which these five fit under.
+    const defaulted: any = { ...catalog }
+    delete defaulted.toolBudget
+    assert.deepEqual(buildAgentRunInputs(defaulted).deferredTools, [])
+
+    // Declared priority outranks the alphabetical fallback: a document-insertion
+    // tool (priority 9) must win the last slot over a get*/list* tool that would
+    // otherwise sort first. Losing an insert tool makes the request impossible;
+    // losing a query tool only means the model calls it from the directory.
+    const priorityCatalog: any = {
+        ...catalog,
+        toolBudget: 3,
+        skills: [{ name: 'chart', description: '', source: 'plugin', requiredTools: [] }],
+        tools: [
+            fn('insertAtBlockId', { core: true, priority: 10 }),
+            fn('getChartTemplates', { core: false, priority: 3 }),
+            fn('insertChart', { core: false, priority: 9 }),
+            fn('listCharts', { core: false, priority: 4 }),
+        ],
+    }
+    const priorityRun = buildAgentRunInputs(priorityCatalog)
+    assert.deepEqual(names(priorityRun.tools),
+        ['insertAtBlockId', 'insertChart', 'listCharts'])
+    assert.deepEqual(names(priorityRun.deferredTools), ['getChartTemplates'])}
+
+/**
+ * A built-in skill may only claim tools that exist.
+ *
+ * The claim is what the backend renders as "本技能可直接调用的工具: …" under the
+ * skill's fragment — the join between prose and function names that the model
+ * relies on. A typo (or a tool renamed on the tool side) silently drops that name
+ * from the join, and the model is back to guessing which function the prose
+ * means.
+ */
+function checkBuiltinSkillToolNamesExist(): void {
+    const known = new Set(BUILTIN_TOOL_METADATA.map(meta => meta.name))
+    const unknown: string[] = []
+    for (const skill of builtinSkills) {
+        for (const name of [...(skill.requiredTools ?? []), ...(skill.optionalTools ?? [])]) {
+            if (!known.has(name)) unknown.push(`${skill.name} → ${name}`)
+        }
+    }
+    assert.deepEqual(unknown, [], 'built-in skills must only claim real tools')
+    // The editor domain policy must claim the core editing path, otherwise the
+    // client's own document rules would arrive without any tool names attached.
+    const policy = builtinSkills.find(skill => skill.name === 'document-editing')
+    assert.ok(policy, 'the editor domain policy skill must be registered')
+    for (const name of ['getDocumentStructure', 'replaceBlockById', 'insertAtBlockId', 'applyEdits']) {
+        assert.ok(policy!.requiredTools.includes(name), `document-editing must require ${name}`)
+    }
 }
 
 function checkContextWhitelist(): void {
@@ -336,6 +526,9 @@ function main(): void {
     checkToolNameResolution()
     checkCatalogFilter()
     checkSkillToolNamesTravel()
+    checkEveryCallableToolIsAdvertised()
+    checkToolBudgetOverflow()
+    checkBuiltinSkillToolNamesExist()
     checkArtifactCollection()
     checkContextWhitelist()
     console.log('plugin-agent checks passed')

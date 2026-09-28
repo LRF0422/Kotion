@@ -67,6 +67,15 @@ export interface AgentToolDefinition {
     description: string
     inputSchema: any
     readOnly?: boolean
+    /**
+     * 1-10, default 5. A provider's tool ceiling cannot fit every plugin tool, so
+     * the surplus goes to a callable-but-unadvertised overflow directory (see
+     * `buildAgentRunInputs`); higher priority is advertised first. Document
+     * INSERTION tools should declare 9 — a missing "insert X here" makes the
+     * request impossible, while a missing `get*` tool can still be called from
+     * that directory.
+     */
+    priority?: number
     /** Defaults to `['any']`. */
     scope?: AgentScope | AgentScope[]
     /**

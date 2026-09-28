@@ -17,8 +17,10 @@ import { filterAgentCatalog } from './filter-catalog'
 import { useEditorAgent, type EditorAgentApi } from '../agent/use-editor-agent'
 import type { AgentChatMessage } from '../agent/types'
 import type { OnToolExecution } from '../types'
+import type { CustomAgent } from '../agent/custom-agents'
+import { buildCustomAgentNote } from '../agent/custom-agents'
+import { workspaceHomeSkill } from './surface-skills'
 import { buildImageContentParts, type AgentImageData } from '../image/image-attachments'
-import { WORKSPACE_AGENT_PROMPT } from './prompts'
 
 export interface WorkspaceAgentOptions {
     /**
@@ -29,8 +31,11 @@ export interface WorkspaceAgentOptions {
     conversationId?: string
     /** Space the hero is scoped to, when the surface has one. */
     spaceId?: string
-    /** Override the invariant host rules (defaults to WORKSPACE_AGENT_PROMPT). */
-    systemPrompt?: string
+    /**
+     * Custom agent whose guidance should ride along as per-turn context. The
+     * agent's own prompt is backend-owned and selected from the `workspace` scope.
+     */
+    customAgent?: CustomAgent | null
     /**
      * Chat mode. `ask` offers no tools at all (read-only Q&A); `agent` (default)
      * ships the workspace catalog. Mirrors the editor chat's Ask/Agent toggle.
@@ -94,7 +99,13 @@ export function useWorkspaceAgent(options: WorkspaceAgentOptions = {}): Workspac
     // already see. Kept memoized so the tool arrays stay identity-stable.
     const isAskMode = options.mode === 'ask'
     const runTools = useMemo(() => (isAskMode ? [] : tools), [isAskMode, tools])
-    const runSkills = useMemo(() => (isAskMode ? [] : skills), [isAskMode, skills])
+    // The surface's own framing rides as a prompt-only skill; the shared catalog
+    // must not describe the workbench to a document-scoped run.
+    const runSkills = useMemo(
+        () => (isAskMode ? [] : [workspaceHomeSkill, ...skills]),
+        [isAskMode, skills],
+    )
+    // Overflow past the provider's tool ceiling: callable, schema on first call.
     const runDeferredTools = useMemo(
         () => (isAskMode ? [] : deferredTools),
         [isAskMode, deferredTools],
@@ -107,7 +118,6 @@ export function useWorkspaceAgent(options: WorkspaceAgentOptions = {}): Workspac
         deferredTools: runDeferredTools,
         resolveTools: providers.resolveTools,
         isReadOnlyTool: providers.isReadOnlyTool,
-        systemPrompt: options.systemPrompt ?? WORKSPACE_AGENT_PROMPT,
         spaceId: options.spaceId,
         // No page: this surface never binds a document.
         pageId: undefined,
@@ -133,10 +143,14 @@ export function useWorkspaceAgent(options: WorkspaceAgentOptions = {}): Workspac
             ? buildImageContentParts(content, images)
             : undefined
         const messages: AgentChatMessage[] = [{ role: 'user', content, contentParts }]
+        // A selected custom agent's guidance is context, never part of the prompt.
+        const contextNote = [startOptions?.contextNote, buildCustomAgentNote(options.customAgent)]
+            .filter(Boolean)
+            .join('\n\n') || undefined
         await agent.start(messages, {
             model: startOptions?.model,
             mode: startOptions?.mode ?? 'execute',
-            contextNote: startOptions?.contextNote,
+            contextNote,
         })
         // agent.start is stable for the life of the hook.
         // eslint-disable-next-line react-hooks/exhaustive-deps

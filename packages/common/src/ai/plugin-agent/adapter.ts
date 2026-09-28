@@ -47,6 +47,11 @@ export interface LiftLegacyOptions {
      * such a tool silently fails at call time instead.
      */
     requiresEditor?: boolean
+    /**
+     * Default priority (1-10) for every tool in this group when the tool itself
+     * does not declare one. See {@link AgentToolDefinition#priority}.
+     */
+    priority?: number
 }
 
 /** Convert one legacy tool factory into an agent tool definition. */
@@ -63,6 +68,7 @@ function liftLegacyTool(
         description: tool.description,
         inputSchema: tool.inputSchema,
         readOnly: tool.readOnly,
+        priority: tool.priority ?? options.priority,
         scope,
         artifactFromResult: tool.artifactFromResult,
         // Call the legacy factory EAGERLY. Guard the editor explicitly: most

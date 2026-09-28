@@ -37,7 +37,7 @@ class ContextManagerToolNamingTest {
     }
 
     private String systemPrompt() {
-        return contextManager.buildSystemMessage(run(), null).getContent();
+        return contextManager.buildSystemMessage(run()).getContent();
     }
 
     @Test
@@ -53,16 +53,16 @@ class ContextManagerToolNamingTest {
     }
 
     @Test
-    void basePromptNamesTheRealCoreTools() {
+    void agentPromptNamesNoClientTool() {
         String system = systemPrompt();
-        // The always-on editing path, spelled exactly as the tool catalog spells
-        // it. If these ever get renamed, this asserts the prompt moved with them.
-        for (String tool : Arrays.asList(
+        // Every tool the client ships is the client's business. The prompt may
+        // only name the backend's own tools (see AgentPrompts).
+        for (String clientTool : Arrays.asList(
                 "getDocumentStructure", "readChunk", "searchInDocument",
                 "replaceBlockById", "insertAtBlockId", "applyEdits",
-                "deleteBlocks", "updateTitle")) {
-            assertTrue(system.contains(tool),
-                    () -> "base prompt should name the real tool " + tool);
+                "deleteBlocks", "updateTitle", "referenceBlocks", "insertChart")) {
+            assertFalse(system.contains(clientTool),
+                    () -> "client tool " + clientTool + " must not appear in the agent prompt");
         }
     }
 

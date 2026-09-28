@@ -19,6 +19,7 @@ export const StickyNoteExtension: ExtensionWrapper = {
  */
 export const addStickyNoteTool = {
     name: "addStickyNote",
+        priority: 9, // inserting into the document must never lose the tool ceiling race
     description: "为文档中指定的文本添加便签/注释。通过搜索文本定位目标内容，然后在该文本上添加便签标记。",
     inputSchema: z.object({
         searchText: z.string().describe("要添加便签的目标文本（精确匹配文档中的一段文字）"),

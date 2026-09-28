@@ -2,6 +2,7 @@
  * Built-in Skills Export
  */
 
+export { documentEditingSkill } from './document-editing'
 export { documentRefactorSkill } from './document-refactor'
 export { contentAnalysisSkill } from './content-analysis'
 export { writingImprovementSkill } from './writing-improvement'
@@ -19,6 +20,7 @@ export { documentCalloutSkill } from './document-callout'
 export { documentColorSkill } from './document-color'
 export { documentInteractionSkill } from './document-interaction'
 
+import { documentEditingSkill } from './document-editing'
 import { documentRefactorSkill } from './document-refactor'
 import { contentAnalysisSkill } from './content-analysis'
 import { writingImprovementSkill } from './writing-improvement'
@@ -41,6 +43,9 @@ import type { Skill } from '../../types'
  * All built-in skills
  */
 export const builtinSkills: Skill[] = [
+    // Domain policy for this editor: shipped by the client because the backend
+    // agent is domain-blind (see the backend's AgentPrompts).
+    documentEditingSkill,
     documentRefactorSkill,
     contentAnalysisSkill,
     writingImprovementSkill,

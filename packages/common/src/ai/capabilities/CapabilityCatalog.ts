@@ -1,56 +1,47 @@
 /**
  * CapabilityCatalog - Collects the full frontend capability catalog
  *
- * The frontend no longer performs progressive discovery. Instead, it collects
- * the complete catalog (skills + tools) from every source and ships it inline
- * with every chat request. The backend is responsible for progressive
- * activation based on the catalog it receives.
+ * The frontend performs no capability discovery of any kind: it collects the
+ * complete catalog (skills + tools) from every source and ships it inline with
+ * every chat request, and every tool it ships carries its full JSON Schema.
+ *
+ * That is deliberate. The previous policy split the catalog by cost — a tool a
+ * skill claimed was pulled out of `tools[]` and registered as *deferred*, with
+ * the model given only a name + parameter signature in an injected directory and
+ * the schema returned after its first call. In practice the model cannot reliably
+ * call a function it has never seen declared: the directory has no descriptions
+ * (by design), the skill fragments describe steps in prose without spelling tool
+ * names, and the base prompt used to advertise a `editor.*` namespace that does
+ * not exist. The observed result was invented names (`editor_insertBlocks`),
+ * `TOOL_NOT_FOUND`, and retries with a different invented prefix.
+ *
+ * So: no deferral, no discovery. A tool the run cannot execute is simply not
+ * advertised; a tool it can execute is advertised with its schema. The single
+ * exception is capacity, not policy: a tool the provider's `tools` ceiling cannot
+ * fit is moved to the overflow channel by `buildAgentRunInputs`, and core editor
+ * tools are never the ones dropped.
  */
 
 import type { SkillPayload, ToolPayload } from './payload-types'
 import type { SkillProvider } from '../providers/SkillProvider'
 import type { ToolProvider } from '../providers/ToolProvider'
 import { resolveInputSchema } from '../utils/tool-wrapper'
-
-/** Feature flag: when true, tools[] is omitted from the catalog (skills-only mode).
- *  All tool schemas travel exclusively inside each SkillPayload.tools field. */
-const SKILLS_ONLY_DEFAULT = (import.meta as any).env?.KN_SKILLS_ONLY_CATALOG === 'true'
+import { BUILTIN_TOOL_METADATA } from '../discovery/tool-metadata'
 
 /** Tool categories that never mutate the document and are safe in PLAN mode. */
 const READ_ONLY_CATEGORIES = new Set(['document-read', 'discovery', 'interaction'])
 
 /**
- * Core tools always offered with full schemas regardless of skill claims.
- * These are the most frequently used tools that justify the per-turn cost.
- * Everything else goes deferred (schema withheld until first call).
+ * Every tool the built-in metadata registry owns.
  *
- * The page tools are listed explicitly because plugin-main re-declares them
- * through `agent.include` (the same bare names, so a workspace run gets a
- * workspace-scoped copy). That re-declaration turns their metadata into
- * `source: 'plugin'`, which makes them "unclaimed plugin tools" and lets
- * `PluginManager#resolveSkills`'s auto-generated `<plugin>-default` skill claim
- * them — and a claim pulls a tool out of `tools[]`. Without these names the
- * model loses the page/search/create schemas it is told to use in
- * `CORE_EDITING_RULES` / `STANDARD_WORKFLOW`, even though they are callable.
+ * Membership by NAME, not by `ToolMetadata.source`: plugin-main re-declares some
+ * core tools through `agent.include` (same bare names, workspace-scoped copies),
+ * and that re-registration rewrites their metadata to `source: 'plugin'`. The
+ * name is what identifies the capability, so the budget in
+ * `buildAgentRunInputs` must classify by name or it would treat `createPage` and
+ * `searchPages` as droppable plugin tools.
  */
-const ALWAYS_ON_TOOLS = new Set([
-    'getDocumentStructure',
-    'readChunk',
-    'searchInDocument',
-    'replaceBlockById',
-    'insertAtBlockId',
-    'applyEdits',
-    'deleteBlocks',
-    'updateTitle',
-    'askUserChoice',
-    'referenceBlocks',
-    // Page tools shadowed by plugin-main's `agent.include`.
-    'searchPages',
-    'createPage',
-    'getSpacePageTree',
-    'listSpaces',
-    'openPage',
-])
+const CORE_TOOL_NAMES = new Set(BUILTIN_TOOL_METADATA.map(meta => meta.name))
 
 /**
  * Read-only classification shared by the run catalog (plan-mode gating) and the
@@ -66,28 +57,39 @@ export interface CapabilityCatalog {
     skills: SkillPayload[]
     tools: ToolPayload[]
     /**
-     * Tools that are CALLABLE but not advertised to the model with a full
-     * schema until first use. They travel as the backend's deferred catalog, so
-     * their JSON Schemas stay out of every prompt.
+     * Max client tools to advertise to the model, when the host configured one
+     * (0 = unlimited). Applied later, on the scope-filtered catalog — see
+     * {@link buildAgentRunInputs}.
      */
-    deferredTools: ToolPayload[]
-    /** Stable hash of (skills, tools, deferredTools). Sent as `capabilitiesVersion` so the backend can cache. */
+    toolBudget?: number
+    /** Stable hash of (skills, tools). Sent as `capabilitiesVersion` so the backend can cache. */
     version: string
+}
+
+export interface CollectCapabilityCatalogOptions {
+    /**
+     * Provider tools[] ceiling for client tools. Undefined = the default applied
+     * when the run input is built. 0 disables the budget (advertise everything).
+     */
+    toolBudget?: number
 }
 
 /**
  * Build a {@link CapabilityCatalog} from the live providers.
  *
- * Tool catalog is split by cost:
- * - top-level `tools[]` — built-in tools, plus any plugin tool no skill claims.
- *   These are always offered to the model, schemas included.
- * - `SkillPayload.tools` — plugin tools owned by a skill. The backend registers
- *   these as *deferred*: callable and routable, but their JSON Schemas are kept
- *   out of the tool list until the model actually calls one. The skill prompt
- *   fragment plus a name/description directory is what the model sees first.
+ * Every executable tool is advertised in `tools[]` with its full schema, in the
+ * standard OpenAI function-call shape. Metadata entries without an instantiated
+ * executable (no registered factory, or a plugin tool skipped in this scope) are
+ * dropped: advertising a tool the frontend cannot run is worse than hiding it.
  *
- * Both halves must reach the backend: a tool present in neither is advertised
- * by its skill prompt yet rejected with `TOOL_NOT_FOUND` when called.
+ * `skills[]` carries prompt fragments and the names each skill owns — nothing
+ * else. Those names are what the backend renders under the fragment so the model
+ * can map a prose step ("find-and-replace content") onto the exact function
+ * (`replaceContent`); the schemas themselves are already in `tools[]`.
+ *
+ * Nothing is withheld here. The provider's tools-ceiling is enforced when the
+ * run input is built, against the already scope-filtered catalog, so a page run
+ * and a workspace run each get their own budget.
  *
  * Skill catalog includes all registered skills (built-in, plugin,
  * user-installed). User-installed skills arrive via `skillRegistry.toSkillFormat()`
@@ -97,42 +99,20 @@ export interface CapabilityCatalog {
 export function collectCapabilityCatalog(
     skillProvider: SkillProvider,
     toolProvider: ToolProvider,
-    /** When true, skip populating the top-level tools[] array — all tool
-     *  schemas travel inside SkillPayload.tools. Defaults to the
-     *  KN_SKILLS_ONLY_CATALOG env var. */
-    skillsOnly: boolean = SKILLS_ONLY_DEFAULT
+    options: CollectCapabilityCatalogOptions = {},
 ): CapabilityCatalog {
     const executableTools = toolProvider.getAllTools()
     const allSkills = skillProvider.getAllSkills()
 
-    // Tools any skill claims. Their schemas ride along inside SkillPayload.tools
-    // and are registered as deferred, so keeping them out of tools[] costs
-    // nothing in reachability but saves the schema in every prompt.
     // A skill survives only if it is runnable in THIS session: a prompt-only
     // skill (no requirements), or one with at least one executable required
-    // tool. Otherwise it would advertise tools the run cannot resolve
+    // tool. Otherwise it would describe tools the run cannot resolve
     // (TOOL_NOT_FOUND) — e.g. editor-plugin skills in a run with no editor.
     const skillSurvives = (skill: { requiredTools?: string[] }): boolean => {
         const required = skill.requiredTools ?? []
         return required.length === 0 || required.some(name => !!executableTools[name])
     }
-    const claimedByASkill = new Set<string>()
-    for (const skill of allSkills) {
-        if (!skillSurvives(skill)) continue
-        for (const name of [...(skill.requiredTools ?? []), ...(skill.optionalTools ?? [])]) {
-            if (!executableTools[name]) continue
-            claimedByASkill.add(name)
-        }
-    }
 
-    // Sent in the standard OpenAI function-call shape. A plugin tool no skill
-    // claims still has to be listed here — SkillPayload.tools is its only other
-    // route to the backend, and it has no skill to travel with. Metadata entries
-    // without an instantiated executable (no registered factory) are skipped —
-    // advertising a tool the frontend cannot run is worse than hiding it.
-    //
-    // When skillsOnly is enabled, tools[] is left empty — every tool schema
-    // is embedded in the skills that reference it (SkillPayload.tools).
     const allMetadata = toolProvider.getAllMetadata()
 
     const toPayload = (meta: (typeof allMetadata)[number]): ToolPayload => {
@@ -149,32 +129,18 @@ export function collectCapabilityCatalog(
                 parameters,
             },
             readOnly: isReadOnlyTool(meta, executable),
+            // Never the ones to drop when the budget bites: hiding a built-in
+            // editor tool is exactly what made the agent unable to edit.
+            core: CORE_TOOL_NAMES.has(meta.name),
+            priority: meta.priority,
         }
     }
 
     const byName = (a: { name: string }, b: { name: string }) =>
         (a.name || '').localeCompare(b.name || '')
 
-    const tools: ToolPayload[] = skillsOnly ? [] : allMetadata
-        // Agent-owned tools are deferred, never advertised here.
-        .filter(meta => !meta.deferred)
+    const tools: ToolPayload[] = allMetadata
         .filter(meta => !!executableTools[meta.name])
-        .filter(meta => {
-            // Always-on core tools are always offered with full schemas.
-            if (ALWAYS_ON_TOOLS.has(meta.name)) return true
-            // Any tool claimed by a skill goes deferred (schema withheld).
-            if (claimedByASkill.has(meta.name)) return false
-            // Unclaimed tools stay in tools[] (their only route to the backend).
-            return true
-        })
-        .sort(byName)
-        .map(toPayload)
-
-    // Agent-owned tools: callable by a delegated child run, schemas withheld
-    // from the kernel agent. They ride in the run's deferred catalog. Included
-    // even in skillsOnly mode — they have no skill to travel with.
-    const deferredTools: ToolPayload[] = allMetadata
-        .filter(meta => meta.deferred && !!executableTools[meta.name])
         .sort(byName)
         .map(toPayload)
 
@@ -196,31 +162,10 @@ export function collectCapabilityCatalog(
             typeof skill.pluginName === 'string' &&
             skill.pluginName.startsWith('user:')
 
+        // Names only, and only the ones this run can actually execute: a name the
+        // model cannot call must never appear under a skill's fragment.
         const requiredTools = (skill.requiredTools ?? []).filter(name => !!executableTools[name])
         const optionalTools = (skill.optionalTools ?? []).filter(name => !!executableTools[name])
-
-        // Embed the full OpenAI-shaped definitions for every tool the skill
-        // still references. This is the only path by which claimed plugin tool
-        // schemas reach the backend; it also re-states built-in ones, which the
-        // backend dedupes against `tools[]` so they never become deferred.
-        const seen = new Set<string>()
-        const skillTools: ToolPayload[] = []
-        for (const name of [...requiredTools, ...optionalTools].sort((a, b) => a.localeCompare(b))) {
-            if (seen.has(name)) continue
-            seen.add(name)
-            const executable = executableTools[name]
-            if (!executable) continue
-            const meta = toolProvider.getToolMetadata(name)
-            skillTools.push({
-                type: 'function' as const,
-                function: {
-                    name,
-                    description: meta?.description ?? executable.description ?? '',
-                    parameters: resolveInputSchema(executable.inputSchema),
-                },
-                readOnly: isReadOnlyTool(meta, executable),
-            })
-        }
 
         const payload: SkillPayload = {
             name: skill.name,
@@ -229,7 +174,6 @@ export function collectCapabilityCatalog(
             source: isUserInstalled ? 'user' : skill.source,
         }
         if (optionalTools.length > 0) payload.optionalTools = optionalTools
-        if (skillTools.length > 0) payload.tools = skillTools
         if (skill.systemPromptFragment) payload.systemPromptFragment = skill.systemPromptFragment
         if (skill.tags) payload.tags = skill.tags
         if (skill.domain) payload.domain = skill.domain
@@ -237,16 +181,18 @@ export function collectCapabilityCatalog(
         skills.push(payload)
     }
 
-    const version = hashCatalog(skills, tools, deferredTools)
-    return { skills, tools, deferredTools, version }
+    const version = hashCatalog(skills, tools)
+    const catalog: CapabilityCatalog = { skills, tools, version }
+    if (typeof options.toolBudget === 'number') catalog.toolBudget = options.toolBudget
+    return catalog
 }
 
 /**
  * FNV-1a 32-bit hash over the stringified catalog. Stable for identical
  * catalogs across turns so the backend can cheaply detect no-op updates.
  */
-function hashCatalog(skills: SkillPayload[], tools: ToolPayload[], deferredTools: ToolPayload[]): string {
-    const serialized = JSON.stringify({ skills, tools, deferredTools })
+function hashCatalog(skills: SkillPayload[], tools: ToolPayload[]): string {
+    const serialized = JSON.stringify({ skills, tools })
     let hash = 0x811c9dc5 >>> 0
     for (let i = 0; i < serialized.length; i++) {
         hash ^= serialized.charCodeAt(i)

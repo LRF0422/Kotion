@@ -106,13 +106,15 @@ public class Delegator {
         cmd.setMode("execute");
         cmd.setNoTools(ctx.isNoTools());
         // Freeze the parent's creation context onto the child so it does not
-        // lose the editor rules / skill fragments / memory / sampling settings.
+        // lose its skill fragments / memory / sampling settings.
         cmd.setSystemPrompt(ctx.getSystemPrompt());
         cmd.setSkillFragments(ctx.getSkillFragments() != null
                 ? new ArrayList<>(ctx.getSkillFragments()) : new ArrayList<>());
         // A delegated child may override the inherited persona and tool subset:
-        //   1. explicit systemPrompt / tools args (hand-written delegation),
+        //   1. an explicit systemPrompt / tools arg the MODEL asked for,
         //   2. unchanged inheritance from the parent.
+        // Only the model can set a persona — this is a backend-internal override,
+        // not a wire field (see CreateRunCommand#systemPrompt).
         String agentPrompt = strArg(args.get("systemPrompt"));
         Object toolsArg = args.get("tools");
         if (agentPrompt != null) {
@@ -138,7 +140,9 @@ public class Delegator {
                 .build());
         cmd.setMessages(messages);
         cmd.setTools(selectTools(ctx.getClientTools(), toolsArg));
-        // Deferred tools stay deferred in the child: same subsetting, same laziness.
+        // Overflow pool (tools past the provider's ceiling). Empty unless the
+        // parent's catalog exceeded the budget; subset it the same way so a child
+        // gets exactly the tools its parent had.
         cmd.setSkillTools(selectTools(ctx.getDeferredTools(), toolsArg));
 
         RunView child = supervisor().createChild(cmd, ctx.getRunId(), ctx.getDelegateDepth() + 1);

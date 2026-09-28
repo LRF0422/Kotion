@@ -258,18 +258,13 @@ public class DefaultRunSupervisor {
         checkpoint.setNextStep(1);
         checkpoint.setPlanGateOpen(run.isPlanGateOpen());
         checkpoint.setDelegateDepth(delegateDepth);
-        // Client editor rules ride in the system message — they are invariant
-        // for the whole session, so they stay prefix-cacheable. Skill fragments
-        // are retrieved per turn and therefore ride in the volatile tail.
-        List<String> systemFragments = new ArrayList<>();
-        if (cmd.getSystemPrompt() != null && !cmd.getSystemPrompt().trim().isEmpty()) {
-            systemFragments.add(cmd.getSystemPrompt().trim());
-        }
-        // A pure-text child (noTools) must not inherit the tool-advertising
-        // editor persona either — see AgentLoop#initFreshCheckpoint.
+        // The backend owns the prompt: the child gets the agent persona plus the
+        // delegated-child rules, never text from the client. Skill fragments are
+        // per-turn capability data and ride in the volatile tail. A pure-text
+        // child (noTools) gets the task instruction instead.
         checkpoint.getMessages().add(cmd.isNoTools()
-                ? ContextManager.buildPlainTextSystemMessage(cmd.getSystemPrompt())
-                : contextManager.buildSystemMessage(run, systemFragments, true));
+                ? ContextManager.buildPlainTextSystemMessage(cmd.getInstruction())
+                : contextManager.buildSystemMessage(run, true));
         if (cmd.getMessages() != null) {
             for (ChatMessage message : cmd.getMessages()) {
                 if (message == null || "system".equalsIgnoreCase(message.getRole())) {
@@ -298,7 +293,8 @@ public class DefaultRunSupervisor {
         checkpoint.setMaxTokens(cmd.getMaxTokens());
         checkpoint.setNoTools(cmd.isNoTools());
         checkpoint.setPlanGateOpen(run.isPlanGateOpen());
-        checkpoint.setSkillFragments(new ArrayList<>(systemFragments));
+        checkpoint.setSkillFragments(cmd.getSkillFragments() != null
+                ? new ArrayList<>(cmd.getSkillFragments()) : new ArrayList<>());
         checkpoint.setSystemPrompt(cmd.getSystemPrompt());
         checkpoint.setMemoryLines(cmd.getMemoryLines() != null
                 ? new ArrayList<>(cmd.getMemoryLines()) : new ArrayList<>());
@@ -675,6 +671,11 @@ public class DefaultRunSupervisor {
         @Override
         public String systemPrompt() {
             return cmd.getSystemPrompt();
+        }
+
+        @Override
+        public String instruction() {
+            return cmd.getInstruction();
         }
 
         @Override

@@ -35,8 +35,15 @@ public class CreateRunCommand {
      */
     private List<ToolSpec> skillTools = new ArrayList<>();
 
-    /** Skills system-prompt fragments. */
+    /** Skills system-prompt fragments (capability descriptions, per-turn). */
     private List<String> skillFragments = new ArrayList<>();
+
+    /**
+     * Backend-INTERNAL persona override. Never populated from the wire: it exists
+     * for {@code delegate({systemPrompt})}, where the model itself names the
+     * persona of a child run. The client has no way to reach it.
+     */
+    private String systemPrompt;
 
     /** Long-term memory lines injected at run start (M2). */
     private List<String> memoryLines = new ArrayList<>();
@@ -57,12 +64,15 @@ public class CreateRunCommand {
     /** Personal saved skills selected for this fresh run. */
     private List<SavedSkillProvenance> savedSkillProvenance = new ArrayList<>();
 
+    /**
+     * Instruction for a pure-text ({@code noTools}) run: the task itself, used as
+     * the whole system message. Task data, not agent policy.
+     */
+    private String instruction;
+
     private Double temperature;
 
     private Integer maxTokens;
-
-    /** Extra system-prompt text appended after the base prompt (client editor rules). */
-    private String systemPrompt;
 
     /**
      * Per-run volatile context note (e.g. the bound page). It is folded into

@@ -5,6 +5,7 @@ import { requireGitHubToken as getToken } from '../../hooks/use-github-config'
 
 export const insertGitHubCodeSnippetTool = {
     name: 'insertGitHubCodeSnippet',
+    priority: 9, // inserting into the document must never lose the tool ceiling race
     description: '在文档中插入 GitHub 代码片段。可以指定行范围。',
     inputSchema: z.object({
         owner: z.string().describe('仓库所有者'),

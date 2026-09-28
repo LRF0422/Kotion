@@ -159,9 +159,9 @@ export interface ToolMetadata {
     source: 'builtin' | 'plugin'
     pluginName?: string   // 来源插件名称
     /**
-     * Callable but NOT advertised with a full schema until the model calls it.
-     * It still travels with the run as a deferred tool, so the schema never
-     * inflates the per-turn tool list.
+     * @deprecated The deferred channel was cancelled: a tool withheld from the
+     * model's tool list is a tool the model does not call. Every executable tool
+     * is now advertised with its schema, regardless of this flag.
      */
     deferred?: boolean
 }

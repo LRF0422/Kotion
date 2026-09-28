@@ -3,8 +3,6 @@ import { ChatMessageList, PlanApprovalCard, cn, useResponsive } from '@kn/ui'
 import { LoaderCircle } from '@kn/icon'
 import {
     AgentPaneHost,
-    WORKSPACE_AGENT_PROMPT,
-    composeAgentSystemPrompt,
     fileToAgentImage,
     toImageDataUrl,
     useAgentArtifacts,
@@ -91,16 +89,12 @@ export const KernelHomePage: React.FC = () => {
     const [imageError, setImageError] = useState<string | null>(null)
     const { selectedAgent } = useCustomAgents()
 
-    // A selected custom agent rides behind the invariant workspace rules.
-    const systemPrompt = useMemo(
-        () => composeAgentSystemPrompt(WORKSPACE_AGENT_PROMPT, selectedAgent) ?? WORKSPACE_AGENT_PROMPT,
-        [selectedAgent],
-    )
-
+    // A selected custom agent's guidance rides as per-turn context; the agent
+    // prompt itself is backend-owned and selected from the `workspace` scope.
     const { agent, send } = useWorkspaceAgent({
         conversationId: activeSessionId,
         mode: chatMode,
-        systemPrompt,
+        customAgent: selectedAgent,
     })
     const { state } = agent
     const modelVision = useModelVisionSupport(selectedModel)

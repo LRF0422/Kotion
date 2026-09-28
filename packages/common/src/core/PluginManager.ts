@@ -1207,7 +1207,7 @@ export class PluginManager {
             const instantiate = (
                 wireName: string,
                 create: (ctx: AgentToolContext) => unknown,
-                def: { description: string; inputSchema: any; readOnly?: boolean },
+                def: { description: string; inputSchema: any; readOnly?: boolean; priority?: number },
             ) => {
                 try {
                     const execute = create(ctx)
@@ -1217,6 +1217,9 @@ export class PluginManager {
                         description: def.description,
                         inputSchema: def.inputSchema,
                         readOnly: def.readOnly,
+                        // Ranks this tool against the provider's tool ceiling; see
+                        // ToolProvider#registerPluginTools.
+                        priority: def.priority,
                         execute,
                     }
                 } catch (error) {
