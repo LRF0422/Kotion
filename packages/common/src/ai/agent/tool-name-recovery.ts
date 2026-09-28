@@ -180,7 +180,7 @@ export function unknownToolError(wanted: string, tools: ToolsRecord, limit: numb
         base,
         'Closest available tools (use the exact name and arguments):',
         ...lines,
-        'Do not invent names or namespace prefixes; if none of these fits, read the document again and use a listed tool.',
+        'Do not invent tool names; if none of these fits, read the document again and use a listed tool.',
     ].join('\n')
 }
 
@@ -190,4 +190,138 @@ function firstSentence(text: string): string {
     const stop = trimmed.search(/[。.!\n]/)
     const sentence = stop > 0 ? trimmed.slice(0, stop) : trimmed
     return sentence.length > 140 ? sentence.slice(0, 139) + '…' : sentence
+}
+
+
+/**
+ * Map a model-supplied tool name onto the run's canonical tool name.
+ *
+ * Backend counterpart exists in the agent loop (`AgentLoop#resolveToolName`) and
+ * the two must accept the same shapes: a plugin's tools are namespaced on the
+ * wire (`{pluginKey}__{localName}`) while the system prompt refers to them bare,
+ * so a dropped separator, a different case, or a namespace the model invented
+ * (`editor_insertBlocks`) must still reach the tool instead of failing.
+ *
+ * Resolution order, most literal first: exact name → a name that normalises to
+ * exactly one tool → the remainder after dropping leading namespace segments →
+ * a high-confidence near-match. Ambiguity never resolves: guessing between two
+ * real tools is worse than failing.
+ *
+ * @returns the canonical name, or `null` when nothing matches confidently.
+ */
+export function resolveToolName(wanted: string, tools: ToolsRecord): string | null {
+    const trimmed = (wanted || '').trim()
+    if (!trimmed) return null
+    const names = Object.keys(tools || {}).filter(
+        name => typeof (tools as Record<string, ToolDefinition>)[name]?.execute === 'function',
+    )
+    if (names.length === 0) return null
+
+    // Literal match always wins.
+    if (names.includes(trimmed)) return trimmed
+
+    const byKey = new Map<string, string | null>()
+    for (const name of names) {
+        const key = normalize(name)
+        if (!key) continue
+        byKey.set(key, byKey.has(key) ? null : name)
+    }
+
+    const key = normalize(trimmed)
+    if (!key) return null
+    const exact = byKey.get(key)
+    if (exact) return exact
+
+    // Drop leading namespace segments: `searchPages` → `kn_plugin-main__searchPages`,
+    // `editor_insertBlocks` → `insertAtBlockId`.
+    const segments = trimmed.replace(/^\/+/, '').split(/__|[\s/]+/).filter(Boolean)
+    for (let start = 1; start < segments.length; start++) {
+        const remainderKey = normalize(segments.slice(start).join(''))
+        if (!remainderKey) continue
+        const unique = byKey.get(remainderKey)
+        if (unique) return unique
+    }
+
+    // Last resort: the invented name's words are an ordered subset of a real
+    // tool's words (`editor_insertBlocks` → insert, blocks ⊂ insert, at, block,
+    // id). Strict by design — it either matches one tool or nothing.
+    return uniqueSubsequenceMatch(trimmed, names)
+}
+
+/**
+ * Words of a name as written: camelCase and non-alphanumerics are the only real
+ * word boundaries available (a concatenated `insertblocks` is not separable
+ * without a dictionary, which is exactly why string heuristics were unreliable).
+ */
+function nameWords(name: string): string[] {
+    return (name || '')
+        .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+        .split(/[^A-Za-z0-9]+/)
+        .filter(Boolean)
+        .map(part => normalize(part))
+        .filter(Boolean)
+}
+
+/**
+ * The single tool that best accounts for the wanted name's words.
+ *
+ * Reached only after exact / normalised / namespace-strip lookups failed, so the
+ * leading words here are namespace noise the model invented and are dropped
+ * progressively: `editor_insertBlocks` is scored on `insert` + `blocks` (an
+ * ordered subset of `insert, at, block, id`) rather than on `editor`, which no
+ * tool has. The winner must account for most of its own name; a tie means two
+ * tools fit the words and nothing resolves.
+ */
+function uniqueSubsequenceMatch(wanted: string, names: string[]): string | null {
+    const wantedWords = nameWords(wanted)
+    if (wantedWords.length === 0) return null
+    let match: string | null = null
+    for (const name of names) {
+        const candidateWords = nameWords(name)
+        if (candidateWords.length === 0) continue
+        let best = 0
+        for (let start = 0; start < wantedWords.length; start++) {
+            const tail = wantedWords.slice(start)
+            if (!isOrderedSubset(tail, candidateWords)) continue
+            const coverage = tail.reduce((sum, word) => sum + word.length, 0) / normalize(name).length
+            // One shared word is not evidence: `web_search` shares `search` with
+            // `searchPages` but needs two words (or one that is essentially the
+            // whole name) to be the tool it meant.
+            if (tail.length === 1 && coverage < 0.6) continue
+            if (coverage > best) best = coverage
+        }
+        if (best < 0.5) continue
+        if (match !== null) return null // ambiguous: two tools fit the words
+        match = name
+    }
+    return match
+}
+
+/**
+ * Two words refer to the same thing: equal, one a prefix of the other, or a
+ * shared stem. Deliberately strict — a loose "these letters appear in order"
+ * rule made `blocks` match `near`, so the real match came back ambiguous.
+ */
+function strongWordMatch(a: string, b: string): boolean {
+    if (!a || !b) return false
+    if (a === b) return true
+    const shorter = a.length <= b.length ? a : b
+    const longer = a.length <= b.length ? b : a
+    if (shorter.length < 3) return false
+    if (longer.startsWith(shorter)) return true
+    return 1 - editDistance(shorter, longer.slice(0, shorter.length)) / shorter.length >= 0.8
+}
+
+/**
+ * Whether every word of `wanted` can be matched, in order, by the candidate
+ * words, skipping candidates when needed — `blocks` skips `at` to reach `block`.
+ */
+function isOrderedSubset(wanted: string[], candidates: string[]): boolean {
+    if (wanted.length === 0) return true
+    const [head, ...tail] = wanted
+    for (let index = 0; index < candidates.length; index++) {
+        if (!strongWordMatch(head, candidates[index])) continue
+        if (isOrderedSubset(tail, candidates.slice(index + 1))) return true
+    }
+    return false
 }

@@ -35,9 +35,8 @@ export interface LiftLegacyOptions {
      */
     scope?: AgentScope | AgentScope[]
     /**
-     * Pass `false` to keep the bare name on the wire — only useful when
-     * reproducing the retired legacy path (the model may already know a bare
-     * name). Omit to namespace, which is what new declarations want.
+     * @deprecated Namespacing was removed: every lifted tool keeps its bare name.
+     * Accepted (and ignored) so existing call sites keep compiling.
      */
     namespace?: boolean
     /**
@@ -65,7 +64,6 @@ function liftLegacyTool(
         inputSchema: tool.inputSchema,
         readOnly: tool.readOnly,
         scope,
-        ...(options.namespace === undefined ? {} : { namespace: options.namespace }),
         artifactFromResult: tool.artifactFromResult,
         // Call the legacy factory EAGERLY. Guard the editor explicitly: most
         // legacy factories only CLOSE OVER the editor and return a

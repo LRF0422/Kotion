@@ -13,7 +13,7 @@ import type { OnToolExecution, ToolDefinition, ToolsRecord } from '../types'
 import type { SessionPageBinding } from '../session-page-binding'
 import { AGENT_IMAGES_KEY } from '../image/agent-image-contract'
 import { withDocumentWrite } from './document-write-lock'
-import { unknownToolError } from './tool-name-recovery'
+import { resolveToolName, unknownToolError } from './tool-name-recovery'
 
 /**
  * The wire result is what the backend needs (base64 included so the model can
@@ -148,7 +148,11 @@ export class EditorToolExecutor {
             // therefore fork a private document) or only read the live page.
             const mutating = this.isReadOnlyTool ? !this.isReadOnlyTool(toolName) : true
             const tools = await this.resolveTools(owner, { mutating })
-            const definition: ToolDefinition | undefined = tools[toolName]
+            // The backend routes names loosely (a namespaced plugin tool may
+            // arrive by its bare local name, or with an invented namespace), so
+            // resolve the same way before declaring the tool unavailable.
+            const name = resolveToolName(toolName, tools) ?? toolName
+            const definition: ToolDefinition | undefined = tools[name]
             if (!definition || typeof definition.execute !== 'function') {
                 // The model invented a name (usually a made-up namespace prefix
                 // plus a semantic suffix). Name the closest real tools so the
@@ -167,7 +171,7 @@ export class EditorToolExecutor {
                 })
                 const documentId = mutating ? (this.resolveDocumentId?.(owner) ?? null) : null
                 const result = documentId
-                    ? await withDocumentWrite(documentId, run, { label: toolName })
+                    ? await withDocumentWrite(documentId, run, { label: name })
                     : await run()
                 outcome = { ok: true, result }
             }

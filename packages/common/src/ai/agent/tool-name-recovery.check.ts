@@ -17,6 +17,7 @@ import {
     MAX_SUGGESTIONS,
     describeSignature,
     editDistance,
+    resolveToolName,
     suggestToolNames,
     unknownToolError,
 } from './tool-name-recovery'
@@ -118,7 +119,7 @@ function checkErrorMessage(): void {
     const message = unknownToolError('editor_insertBlocks', TOOLS)
     assert.ok(message.startsWith('Tool "editor_insertBlocks" is not registered'), message)
     assert.ok(message.includes('insertAtBlockId(blockId: string, markdown: string, position?: string)'), message)
-    assert.ok(message.includes('Do not invent names or namespace prefixes'), message)
+    assert.ok(message.includes('Do not invent tool names'), message)
 
     // Without any close match the message still tells the model what to do.
     const bare = unknownToolError('web_search', TOOLS)
@@ -138,6 +139,51 @@ function checkIgnoresNonExecutable(): void {
     assert.ok(!message.includes('Closest available'), message)
 }
 
+/**
+ * The resolver's cases mirror `AgentLoop#resolveToolName` on the backend (see
+ * AgentLoopToolNameRecoveryTest.java). Both sides must accept the same shapes
+ * or a call resolves in one place and dies in the other.
+ *
+ * Tool names are NOT namespaced any more, so the catalogue below is exactly what
+ * a run advertises: bare local names.
+ */
+const CATALOG: any = {
+    insertAtBlockId: tool('在指定 blockId 的块之前或之后插入内容'),
+    insertNear: tool('在匹配文本附近插入内容'),
+    searchPages: tool('搜索页面'),
+    createPage: tool('创建页面'),
+    editPage: tool('切换离屏编辑目标'),
+}
+
+function checkResolveToolName(): void {
+    // The literal name always wins.
+    assert.equal(resolveToolName('insertAtBlockId', CATALOG), 'insertAtBlockId')
+    assert.equal(resolveToolName('createPage', CATALOG), 'createPage')
+
+    // Separator and case variation of a real name.
+    assert.equal(resolveToolName('insert_at_block_id', CATALOG), 'insertAtBlockId')
+    assert.equal(resolveToolName('InsertAtBlockID', CATALOG), 'insertAtBlockId')
+
+    // A prefix the model invents still reaches the tool it meant.
+    assert.equal(resolveToolName('editor_insertBlocks', CATALOG), 'insertAtBlockId')
+    assert.equal(resolveToolName('editor__insertBlocks', CATALOG), 'insertAtBlockId')
+    assert.equal(resolveToolName('plugin_editor_insertBlocks', CATALOG), 'insertAtBlockId')
+
+    // A name the model remembers from an older, namespaced catalogue still
+    // routes (in-flight conversations survive the de-namespacing).
+    assert.equal(resolveToolName('kn_plugin-main__searchPages', CATALOG), 'searchPages')
+
+    // Unrelated names never resolve, and ambiguity is refused rather than guessed.
+    assert.equal(resolveToolName('web_search', CATALOG), null)
+    assert.equal(resolveToolName('', CATALOG), null)
+    assert.equal(resolveToolName('editor_totallyMadeUp', CATALOG), null)
+    // Two plugins claiming the same local name is now the collision case: the
+    // bare name is ambiguous and must not be guessed.
+    const collision: any = { write_page: tool('a'), writePage: tool('b') }
+    assert.equal(resolveToolName('writePageX', collision), null)
+    assert.equal(resolveToolName('writePage', collision), 'writePage')
+}
+
 function main(): void {
     checkEditDistance()
     checkSignature()
@@ -145,6 +191,7 @@ function main(): void {
     checkNoFalseConfidence()
     checkErrorMessage()
     checkIgnoresNonExecutable()
+    checkResolveToolName()
     console.log('tool-name-recovery checks passed')
 }
 

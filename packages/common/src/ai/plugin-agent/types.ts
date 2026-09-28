@@ -58,7 +58,11 @@ export type AgentToolExecutor = (
 ) => any
 
 export interface AgentToolDefinition {
-    /** Local (unqualified) tool name. Namespaced on the wire unless disabled. */
+    /**
+     * The tool's name, exactly as the model must call it. Never rewritten or
+     * prefixed: the catalogue, the system prompt and the executor all use this
+     * one string.
+     */
     name: string
     description: string
     inputSchema: any
@@ -66,9 +70,8 @@ export interface AgentToolDefinition {
     /** Defaults to `['any']`. */
     scope?: AgentScope | AgentScope[]
     /**
-     * When false, the tool keeps its bare `name` on the wire. Reserved for the
-     * legacy adapter, which must not rename tools the model already knows.
-     * New declarations should leave this unset (namespaced).
+     * @deprecated Namespacing was removed. Setting this logs a warning and is
+     * otherwise ignored — the bare `name` is what reaches the model either way.
      */
     namespace?: boolean
     /**

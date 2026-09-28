@@ -136,7 +136,7 @@ destroyIdle(pageId)                                            // OffscreenEdito
 
 | 层 | 职责 | 禁止 |
 |---|---|---|
-| **契约** `plugin-agent/` | 类型、命名空间、注册表、适配器、scope 过滤 | 依赖 `@kn/ui` / `@kn/core` |
+| **契约** `plugin-agent/` | 类型、工具命名（裸名，见 §35）、注册表、适配器、scope 过滤 | 依赖 `@kn/ui` / `@kn/core` |
 | **内核** `kernel/` | target/pane 状态、产物集合推导、renderer 解析、桥 | 认识任何业务 kind；依赖 `@kn/ui` |
 | **宿主** `@kn/core` | 分栏外壳（`@kn/ui`）、Sheet→pane 的 chrome、bridge 注册 | 业务 UI |
 | **插件** | `artifactFromResult` / `toolRenderers` / `artifactRenderers`；卡片与分栏内容 | 直接写内核状态 |

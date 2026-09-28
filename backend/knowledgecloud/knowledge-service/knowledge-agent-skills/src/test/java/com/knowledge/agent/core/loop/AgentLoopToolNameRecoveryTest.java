@@ -10,6 +10,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -39,6 +40,81 @@ class AgentLoopToolNameRecoveryTest {
     private static ToolSpec spec(String name, String description) {
         ToolSpec spec = ToolSpec.of(name, description, null, ToolKind.BACKEND, false, "builtin");
         return spec;
+    }
+
+    /**
+     * What a run advertises now: bare local names only. Plugin tools used to
+     * arrive as `{pluginKey}__{localName}`; that is what made a registered tool
+     * unreachable behind a prefix nobody ever wrote.
+     */
+    private static List<ToolSpec> mixedCatalog() {
+        return Arrays.asList(
+                spec("insertAtBlockId", "insert"),
+                spec("insertNear", "insert near"),
+                spec("applyEdits", "batch"),
+                spec("getDocumentStructure", "outline"),
+                spec("searchPages", "搜索页面"),
+                spec("createPage", "创建页面"),
+                spec("openPageSide", "侧边打开"),
+                spec("editPage", "切换离屏编辑目标"));
+    }
+
+    @Test
+    void literalNamesAlwaysWin() {
+        assertEquals("searchPages", AgentLoop.resolveToolName("searchPages", mixedCatalog()));
+        assertEquals("createPage", AgentLoop.resolveToolName("createPage", mixedCatalog()));
+        assertEquals("insertAtBlockId", AgentLoop.resolveToolName("insertAtBlockId", mixedCatalog()));
+    }
+
+    @Test
+    void mangledSeparatorsAndCaseResolve() {
+        assertEquals("insertAtBlockId", AgentLoop.resolveToolName("insert_at_block_id", mixedCatalog()));
+        assertEquals("insertAtBlockId", AgentLoop.resolveToolName("InsertAtBlockID", mixedCatalog()));
+        assertEquals("editPage", AgentLoop.resolveToolName("edit_page", mixedCatalog()));
+    }
+
+    @Test
+    void namespacedNameFromAnOlderCatalogueStillRoutes() {
+        // In-flight conversations recorded names under the retired scheme.
+        assertEquals("searchPages", AgentLoop.resolveToolName("kn_plugin-main__searchPages", mixedCatalog()));
+        assertEquals("createPage", AgentLoop.resolveToolName("kn-plugin-main_createPage", mixedCatalog()));
+    }
+
+    @Test
+    void inventedNamespaceStillLands() {
+        // The names actually observed in the UI.
+        assertEquals("insertAtBlockId", AgentLoop.resolveToolName("editor_insertBlocks", mixedCatalog()));
+        assertEquals("insertAtBlockId", AgentLoop.resolveToolName("editor__insertBlocks", mixedCatalog()));
+        assertEquals("insertAtBlockId", AgentLoop.resolveToolName("plugin_editor_insertBlocks", mixedCatalog()));
+    }
+
+    @Test
+    void unrelatedAndAmbiguousNamesNeverResolve() {
+        assertNull(AgentLoop.resolveToolName("web_search", mixedCatalog()));
+        assertNull(AgentLoop.resolveToolName("", mixedCatalog()));
+        assertNull(AgentLoop.resolveToolName(null, mixedCatalog()));
+        assertNull(AgentLoop.resolveToolName("editor_totallyMadeUp", mixedCatalog()));
+        // Two plugins claiming the same local name is the real collision now.
+        List<ToolSpec> collision = Arrays.asList(
+                spec("write_page", "a"),
+                spec("writePage", "b"));
+        assertNull(AgentLoop.resolveToolName("write_page_x", collision));
+        assertEquals("writePage", AgentLoop.resolveToolName("writePage", collision));
+    }
+
+    @Test
+    void routingRewritesOnlyCorrectableNames() {
+        List<com.knowledge.agent.core.llm.ToolCallRequest> calls = Arrays.asList(
+                com.knowledge.agent.core.llm.ToolCallRequest.of("1", "searchPages", "{}"),
+                com.knowledge.agent.core.llm.ToolCallRequest.of("2", "editor_insertBlocks", "{}"),
+                com.knowledge.agent.core.llm.ToolCallRequest.of("3", "web_search", "{}"),
+                com.knowledge.agent.core.llm.ToolCallRequest.of("4", "insert_at_block_id", "{}"));
+        // routeToolCallNames is instance-private; the resolver is what is asserted
+        // here, call by call, mirroring the loop's rewrite rule.
+        assertEquals("searchPages", AgentLoop.resolveToolName(calls.get(0).getName(), mixedCatalog()));
+        assertEquals("insertAtBlockId", AgentLoop.resolveToolName(calls.get(1).getName(), mixedCatalog()));
+        assertNull(AgentLoop.resolveToolName(calls.get(2).getName(), mixedCatalog()));
+        assertEquals("insertAtBlockId", AgentLoop.resolveToolName(calls.get(3).getName(), mixedCatalog()));
     }
 
     @Test

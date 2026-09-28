@@ -1,19 +1,34 @@
 /**
- * Agent tool namespacing.
+ * Agent tool naming.
  *
- * Wire name = `{namespace}__{toolName}`. Double underscore, not colon: the
- * OpenAI / Anthropic function-name grammar is `^[a-zA-Z0-9_-]{1,64}$`, so a
- * colon is rejected outright and the total length must stay within 64 chars.
+ * **Tools are NOT namespaced.** A plugin's tool reaches the model under its bare
+ * local name (`insertChart`, `searchPages`), the same name the plugin declared,
+ * the same name the system prompt uses, and the same name the executor is keyed
+ * by. There is exactly one name to write down.
+ *
+ * This replaced the `{namespace}__{toolName}` scheme (see git history). That
+ * scheme kept two plugins from colliding on a local name, but it made every
+ * plugin tool reachable only through a name no human or prompt ever spelled:
+ * the model had to reconstruct `<pluginKey>__` prefixes it never saw written,
+ * and when it guessed wrong (`editor_insertBlocks`) a perfectly registered tool
+ * answered `TOOL_NOT_FOUND`. The collision it prevented is handled instead where
+ * it actually happens: a duplicate local name overwrites with a warning
+ * (see PluginManager's tool instantiation).
+ *
+ * The helpers below remain because they are still the normaliser the routing
+ * fallback uses, and because `toAgentWireName` must keep its exported shape for
+ * external callers.
  */
 
+/** Joins the parts of a historical namespaced name. Kept for the fallback parser. */
 export const AGENT_TOOL_NAMESPACE_SEPARATOR = '__'
 
-/** Provider hard limit for a function name. */
+/** Provider hard limit for a function name (`^[a-zA-Z0-9_-]{1,64}$`). */
 export const AGENT_TOOL_WIRE_NAME_MAX = 64
 
 /**
- * Turn an arbitrary plugin key into a wire-safe namespace segment:
- * lowercase, `[a-z0-9_-]` only, collapsed separators, bounded length.
+ * Normalise an arbitrary string into a wire-safe token: lowercase,
+ * `[a-z0-9_-]` only, collapsed separators, bounded length.
  */
 export function sanitizeNamespaceSegment(input: string): string {
     const cleaned = (input || '')
@@ -24,26 +39,26 @@ export function sanitizeNamespaceSegment(input: string): string {
     return cleaned || 'plugin'
 }
 
-/** Resolve a plugin's namespace segment (idempotent). */
+/** @deprecated Tools are no longer namespaced; returns the sanitised input. */
 export function agentNamespace(pluginKey: string): string {
     return sanitizeNamespaceSegment(pluginKey).slice(0, 24)
 }
 
 /**
- * Build the model-facing tool name. `localName` is assumed already safe; it is
- * truncated only if the namespace leaves no room.
+ * The model-facing name of a plugin tool: **the bare local name**.
+ *
+ * @deprecated The identity of `localName` — kept so external callers that still
+ * pass a plugin key keep compiling. Read the module comment: namespacing was
+ * removed because it made tools reachable only by a name nobody ever wrote.
  */
-export function toAgentWireName(pluginKey: string, localName: string): string {
-    const ns = agentNamespace(pluginKey)
-    const budget = AGENT_TOOL_WIRE_NAME_MAX - ns.length - AGENT_TOOL_NAMESPACE_SEPARATOR.length
-    const safeLocal = (localName || 'tool').slice(0, Math.max(1, budget))
-    return `${ns}${AGENT_TOOL_NAMESPACE_SEPARATOR}${safeLocal}`
+export function toAgentWireName(_pluginKey: string, localName: string): string {
+    return (localName || 'tool').slice(0, AGENT_TOOL_WIRE_NAME_MAX)
 }
 
 /**
- * Map a list of tool names through a plugin's local→wire table. Names that are
+ * Map a list of tool names through a plugin's local→name table. Names that are
  * not local to the plugin pass through unchanged, so cross-plugin references
- * (already-qualified wire names) survive.
+ * (already-qualified names) survive.
  */
 export function resolveAgentToolNames(
     names: string[] | undefined,

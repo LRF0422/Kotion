@@ -44,12 +44,13 @@ function checkNamespaceSanitizes(): void {
 }
 
 function checkWireName(): void {
-    const wire = toAgentWireName('@kn/plugin-studio', 'listPluginProjects')
-    assert.equal(wire, 'kn_plugin-studio__listPluginProjects')
-    assert.ok(wire.length <= 64)
-    // Long namespaces still yield a valid function name (<= 64 chars).
-    const longWire = toAgentWireName('a'.repeat(80), 'x'.repeat(80))
-    assert.ok(longWire.length <= 64, 'wire name must respect the provider limit')
+    // Namespacing was removed: a plugin's tool reaches the model under its bare
+    // local name, whatever plugin key is passed.
+    assert.equal(toAgentWireName('@kn/plugin-studio', 'listPluginProjects'), 'listPluginProjects')
+    assert.equal(toAgentWireName('chart-plugin', 'insertChart'), 'insertChart')
+    // The provider's function-name limit still applies.
+    const longName = toAgentWireName('ignored', 'x'.repeat(80))
+    assert.equal(longName.length, 64, 'a tool name must respect the provider limit')
 }
 
 function checkScopes(): void {
@@ -86,14 +87,14 @@ function checkLegacyAdapter(): void {
     // The migration helper — legacy editor-bound tools lifted into the agent
     // contract. This is what a plugin moving to `agent.agents[]` calls.
     const contribution: AgentContribution = {
-        tools: liftLegacyTools(ext.tools, { scope: 'page', namespace: false }),
+        tools: liftLegacyTools(ext.tools, { scope: 'page' }),
         skills: liftLegacySkills(ext.skills),
     }
     assert.equal(contribution.tools?.length, 1)
     const tool = contribution.tools![0]
+    // The declared name IS the model-facing name — nothing prefixes it.
     assert.equal(tool.name, 'legacyDoThing')
-    // Legacy names must NOT change: the model may already know them.
-    assert.equal(tool.namespace, false)
+    assert.equal(tool.namespace, undefined, 'namespacing was removed from the contract')
     // Legacy extension tools are DOCUMENT tools: page scope only, so a
     // workspace run can never advertise one with an undefined editor.
     assert.deepEqual(normalizeAgentScopes(tool.scope), ['page'])

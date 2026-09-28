@@ -1000,8 +1000,23 @@ export class PluginManager {
         return this._pluginMeta.get(plugin.name)?.pluginKey || plugin.pluginKey || plugin.name
     }
 
+    /**
+     * The model-facing name of one plugin tool: its bare local name.
+     *
+     * Tools used to be namespaced (`{pluginKey}__{name}`); that is gone because
+     * it made a plugin's tools reachable only through a prefix nobody ever wrote
+     * — not the plugin author, not the system prompt, not the model. A local-name
+     * collision between two plugins is resolved by last-registration-wins with a
+     * warning (see the instantiation below).
+     */
     private agentWireNameFor(pluginKey: string, tool: AgentToolDefinition): string {
-        return tool.namespace === false ? tool.name : toAgentWireName(pluginKey, tool.name)
+        if (tool.namespace === false) {
+            logger.warn(
+                `Tool "${tool.name}" declares the retired \`namespace: false\` option `
+                + `(plugin ${pluginKey}); namespacing no longer exists, the option is ignored.`,
+            )
+        }
+        return toAgentWireName(pluginKey, tool.name)
     }
 
     /**
@@ -1478,7 +1493,6 @@ export class PluginManager {
         }
         const unclaimedByPlugin = new Map<string, string[]>()
         for (const tool of capabilities.tools) {
-            if (tool.namespace === false) continue
             if (claimed.has(tool.wireName)) continue
             const list = unclaimedByPlugin.get(tool.pluginName) ?? []
             list.push(tool.wireName)

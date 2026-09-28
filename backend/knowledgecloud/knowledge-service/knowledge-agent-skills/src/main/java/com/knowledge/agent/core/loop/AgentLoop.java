@@ -545,6 +545,15 @@ public class AgentLoop implements Runnable {
                 // next inference (and for crash recovery).
                 checkpoint.getMessages().add(buildAssistantMessage(result));
 
+                // Namespace-tolerant routing. Tools contributed by a plugin reach
+                // the model under a wire name (`kn_plugin-main__searchPages`),
+                // while the system prompt and the model's own habits use the bare
+                // local name (`searchPages`). A dropped or invented prefix then
+                // makes a perfectly valid tool unreachable (observed:
+                // `editor_insertBlocks`, `searchPages`). Resolve the call to the
+                // tool the run actually has before routing it.
+                routeToolCallNames(result.getToolCalls(), knownToolSpecs(), checkpoint.getRunId());
+
                 List<ToolCallRequest> backendCalls = new ArrayList<>();
                 List<ToolCallRequest> frontendCalls = new ArrayList<>();
                 List<ToolCallRequest> planCalls = new ArrayList<>();
@@ -793,6 +802,246 @@ public class AgentLoop implements Runnable {
                 RunEvents.toolRequested(call.getId(), call.getName(), call.getArguments()));
         emit(RunEvents.TOOL_COMPLETED,
                 RunEvents.toolCompleted(call.getId(), call.getName(), false, null, error, 0));
+    }
+
+    /**
+     * Rewrite invented or namespace-less tool names to the canonical name the run
+     * can route. Pure bookkeeping: mutates each call's name in place and logs the
+     * correction. Loop-intercepted names (`delegate`, `wait_for_children`,
+     * `present_plan`) are never touched.
+     */
+    private void routeToolCallNames(List<ToolCallRequest> calls, List<ToolSpec> known, String runId) {
+        if (calls == null || calls.isEmpty()) {
+            return;
+        }
+        for (ToolCallRequest call : calls) {
+            if (call == null || call.getName() == null) {
+                continue;
+            }
+            String wanted = call.getName();
+            String resolved = resolveToolName(wanted, known);
+            if (resolved == null || resolved.equals(wanted)) {
+                continue;
+            }
+            call.setName(resolved);
+            log.info("run {}: tool call {} resolved to {} (namespace-less or mangled name)",
+                    runId, wanted, resolved);
+        }
+    }
+
+    /**
+     * Map a model-supplied tool name onto the run's canonical tool name.
+     *
+     * <p>Motivation: a plugin's tools are namespaced on the wire
+     * ({@code {pluginKey}__{localName}}, see the client's
+     * {@code toAgentWireName}), but the system prompt and the model's own habits
+     * refer to them bare ({@code searchPages}, {@code createPage}). When the model
+     * drops the separator ({@code search_pages}), mangles it, or bolts on a
+     * plausible namespace of its own ({@code editor_insertBlocks}), the exact-match
+     * lookup misses and a perfectly callable tool becomes
+     * {@code TOOL_NOT_FOUND}. This resolves such a name instead of rejecting it.
+     *
+     * <p>Resolution order, most literal first:
+     * <ol>
+     *   <li>exact name;</li>
+     *   <li>a name that normalises to exactly one tool ({@code InsertAtBlockID});</li>
+     *   <li>the longest trailing segment that normalises to exactly one tool, so a
+     *       dropped namespace ({@code kn_plugin-main__searchPages} →
+     *       {@code searchPages}) or an invented prefix
+     *       ({@code editor_insertBlocks} → {@code insertAtBlockId}) still lands.</li>
+     * </ol>
+     * Ambiguity (two tools share the segment) never resolves — guessing between
+     * two real tools is worse than failing.
+     *
+     * <p>Package-private and static so the ranking is unit-testable.
+     */
+    static String resolveToolName(String wanted, List<ToolSpec> known) {
+        if (wanted == null || wanted.trim().isEmpty() || known == null || known.isEmpty()) {
+            return null;
+        }
+        java.util.List<String> names = new ArrayList<>();
+        java.util.Map<String, String> byKey = new java.util.LinkedHashMap<>();
+        for (ToolSpec spec : known) {
+            if (spec == null || spec.getName() == null || spec.getName().trim().isEmpty()) {
+                continue;
+            }
+            String name = spec.getName();
+            if (names.contains(name)) {
+                continue;
+            }
+            names.add(name);
+            String key = normalizeToolName(name);
+            // Two tools sharing a normalised key make that key unusable.
+            if (!key.isEmpty() && byKey.putIfAbsent(key, name) != null) {
+                byKey.put(key, null);
+            }
+        }
+
+        String trimmed = wanted.trim();
+        for (String name : names) {
+            if (name.equals(trimmed)) {
+                return name; // literal match always wins
+            }
+        }
+        String key = normalizeToolName(trimmed);
+        if (key.isEmpty()) {
+            return null;
+        }
+        String exact = byKey.get(key);
+        if (exact != null) {
+            return exact;
+        }
+        // The name carries a namespace of its own (real or invented). Compare the
+        // remainder after dropping each leading segment: `searchPages` must reach
+        // `kn_plugin-main__searchPages`, and `editor_insertBlocks` must reach
+        // `insertAtBlockId`. A remainder that matches exactly one tool is safe to
+        // route; two matches is a coin flip, so it fails instead.
+        for (String remainder : toolNameRemainders(trimmed)) {
+            String remainderKey = normalizeToolName(remainder);
+            if (remainderKey.isEmpty()) {
+                continue;
+            }
+            String unique = uniqueToolFor(remainderKey, byKey);
+            if (unique != null) {
+                return unique;
+            }
+        }
+        // Last resort: the invented name's words must account for a real tool's
+        // words (`editor_insertBlocks` is scored on insert + blocks, which are an
+        // ordered subset of insert, at, block, id). Strict by design: it matches
+        // one tool or nothing.
+        return uniqueSubsequenceMatch(trimmed, names);
+    }
+
+    /**
+     * The name with leading namespace segments stripped, longest first
+     * ({@code plugin_editor_insertBlocks} → editor_insertBlocks →
+     * insertBlocks).
+     */
+    private static List<String> toolNameRemainders(String name) {
+        String[] segments = TOOL_NAME_TOKEN_SPLIT.split(name);
+        List<String> remainders = new ArrayList<>();
+        for (int start = 1; start < segments.length; start++) {
+            StringBuilder remainder = new StringBuilder();
+            for (int i = start; i < segments.length; i++) {
+                remainder.append(segments[i]);
+            }
+            remainders.add(remainder.toString());
+        }
+        return remainders;
+    }
+
+    /**
+     * The tool whose normalised name equals {@code key}. {@code null} covers both
+     * "no such tool" and "two tools share that key" — neither is routable.
+     */
+    private static String uniqueToolFor(String key, java.util.Map<String, String> byKey) {
+        return byKey.get(key);
+    }
+
+    /**
+     * The single tool that best accounts for the wanted name's words.
+     *
+     * <p>Reached only after exact / normalised / namespace-strip lookups failed,
+     * so the leading words here are namespace noise the model invented and are
+     * dropped progressively: {@code editor_insertBlocks} is scored on
+     * {@code insert} + {@code blocks} (an ordered subset of
+     * {@code insert, at, block, id}) rather than on {@code editor}, which no tool
+     * has. The winner must account for most of its own name; a tie means two
+     * tools fit the words and nothing resolves.
+     *
+     * <p>Mirrors the client's {@code resolveToolName} in
+     * {@code @kn/common/src/ai/agent/tool-name-recovery.ts}; the two must accept
+     * the same shapes or a call resolves in one place and dies in the other.
+     */
+    private static String uniqueSubsequenceMatch(String wanted, List<String> names) {
+        String[] wantedWords = toolNameTokens(wanted);
+        if (wantedWords.length == 0) {
+            return null;
+        }
+        String match = null;
+        for (String name : names) {
+            String[] candidateWords = toolNameTokens(name);
+            if (candidateWords.length == 0) {
+                continue;
+            }
+            double best = 0;
+            for (int start = 1; start <= wantedWords.length; start++) {
+                String[] tail = java.util.Arrays.copyOfRange(wantedWords, start - 1, wantedWords.length);
+                if (!isOrderedSubset(tail, candidateWords)) {
+                    continue;
+                }
+                int tailChars = 0;
+                for (String word : tail) {
+                    tailChars += word.length();
+                }
+                double coverage = (double) tailChars / normalizeToolName(name).length();
+                // One shared word is not evidence: `web_search` shares `search`
+                // with `searchPages` but needs two words (or one that is
+                // essentially the whole name) to be the tool it meant.
+                if (tail.length == 1 && coverage < 0.6) {
+                    continue;
+                }
+                if (coverage > best) {
+                    best = coverage;
+                }
+            }
+            if (best < 0.5) {
+                continue;
+            }
+            if (match != null) {
+                return null; // ambiguous: two tools fit the words
+            }
+            match = name;
+        }
+        return match;
+    }
+
+    /**
+     * Whether every word of {@code wanted} can be matched, in order, by the
+     * candidate words, skipping candidates when needed — {@code blocks} skips
+     * {@code at} to reach {@code block}.
+     */
+    private static boolean isOrderedSubset(String[] wanted, String[] candidates) {
+        if (wanted.length == 0) {
+            return true;
+        }
+        String head = wanted[0];
+        String[] tail = java.util.Arrays.copyOfRange(wanted, 1, wanted.length);
+        for (int index = 0; index < candidates.length; index++) {
+            if (!strongWordMatch(head, candidates[index])) {
+                continue;
+            }
+            if (isOrderedSubset(tail, java.util.Arrays.copyOfRange(candidates, index + 1, candidates.length))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Two words refer to the same thing: equal, one a prefix of the other, or a
+     * shared stem. Deliberately strict — a loose "these letters appear in order"
+     * rule made {@code blocks} match {@code near}, so the real match came back
+     * ambiguous.
+     */
+    private static boolean strongWordMatch(String a, String b) {
+        if (a == null || b == null || a.isEmpty() || b.isEmpty()) {
+            return false;
+        }
+        if (a.equals(b)) {
+            return true;
+        }
+        String shorter = a.length() <= b.length() ? a : b;
+        String longer = a.length() <= b.length() ? b : a;
+        if (shorter.length() < 3) {
+            return false;
+        }
+        if (longer.startsWith(shorter)) {
+            return true;
+        }
+        return 1.0 - (double) editDistance(shorter, longer.substring(0, shorter.length()))
+                / shorter.length() >= 0.8;
     }
 
     /**

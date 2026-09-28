@@ -202,13 +202,20 @@ async function checkExecutorOwnerAndWriteLease(): Promise<void> {
     releaseWrite?.()
     assert.deepEqual(await write, { ok: true, result: 'written' })
 
-    // An invented tool name must come back with the closest real one, so the
-    // model corrects itself instead of guessing another prefix.
-    const invented = await executor.execute('x-1', 'editor_insertBlocks', {})
+    // A mangled/namespace-less name is ROUTED to the real tool rather than
+    // rejected — the backend does the same (AgentLoop#resolveToolName), otherwise
+    // a plugin tool is unreachable by its bare local name.
+    const rescued = await executor.execute('x-1', 'editor_insertBlocks', {})
+    assert.equal(rescued.ok, true, 'an invented namespace must not make a real tool unreachable')
+    assert.equal(rescued.result, 'inserted')
+
+    // A name that matches nothing is reported back with guidance (and, when a
+    // near match exists, the closest tool names + signatures — covered in
+    // tool-name-recovery.check.ts).
+    const invented = await executor.execute('x-2', 'editor_totallyMadeUp', {})
     assert.equal(invented.ok, false)
-    assert.match(String(invented.error), /editor_insertBlocks/, 'the invented name must be echoed back')
-    assert.match(String(invented.error), /insertAtBlockId\(blockId: string, markdown: string\)/,
-        'the closest executable tool with its signature must be named')
+    assert.match(String(invented.error), /editor_totallyMadeUp/, 'the invented name must be echoed back')
+    assert.match(String(invented.error), /tool catalog|Closest available/, 'the error must tell the model what to do')
 
     resetDocumentWriteLocks()
 }

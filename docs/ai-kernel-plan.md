@@ -167,10 +167,10 @@ PluginManager.resolveAgentCapabilities(): {
 
 - 只收录 **ACTIVE 且已安装** 的插件；`desktopOnly` 在 Web 端过滤；
 - 每个条目带 **provenance**（来源插件），UI 可展示「这个能力来自哪个插件」；
-- **命名空间（已定，决策 2）**：工具一律以命名空间暴露，杜绝同名覆盖。
-  - **线上名**（发给模型的 function name）：`{pluginKey}__{tool}`。**不能用冒号**——OpenAI / Anthropic 的 function name 约束是 `^[a-zA-Z0-9_-]{1,64}$`，`:` 非法，且总长必须 ≤64 字符（`pluginKey` 超长需截断 + 哈希兜底）。
-  - **显示名**（UI / 日志）：`pluginName / tool`，配合 provenance 显示来源。
-  - 内核维护 `wireName → (pluginKey, toolName)` 映射；`tool.requested` / `pendingTools` / `ToolCallRecord` 全程用 wireName。
+- **工具命名（决策 2，已改）**：~~工具一律以命名空间暴露~~。**命名空间已移除**：工具以**裸本地名**暴露（`searchPages`、`insertChart`），与插件声明、系统提示词、执行器键名完全一致，模型只需要写一个名字。
+  - 原因：`{pluginKey}__{tool}` 让每个插件工具只能通过一个"没人写过的名字"访问——插件作者、提示词、模型都没写过那个前缀；模型猜前缀（`editor_insertBlocks`）就让一个注册完好的工具回 `TOOL_NOT_FOUND`。
+  - 同名覆盖改为**后注册覆盖 + 警告**（原来由命名空间规避）。
+  - 旧名仍可路由：前后端各有一层容忍解析（`AgentLoop#resolveToolName` / `resolveToolName`），历史会话里的 `kn_plugin-main__createPage` 一类名字继续有效。
 
 ### 3.2 热更新
 
@@ -286,7 +286,7 @@ core/App.tsx:289   registerCoreToolFactories()          # core 启动时注册�
 
 1. **能力快照**：run 创建时冻结 `tools[]`。否则卸载插件会让在跑的 run 出现「工具不存在」，也违反前缀缓存不变量。
 2. **插件越权**：插件通过 `ctx.resolveService` 能碰 core 服务。**已定（决策 3）：走白名单**——`services` 白名单 + `context providers` 白名单。`agent.context` 默认不生效（它能读用户数据），必须宿主显式授权。
-3. **命名空间迁移**：命名空间化是 breaking change（模型已学到的旧工具名、历史 run 事件里的旧名）。对策：M0 适配器先保留旧名，新声明一律命名空间；历史事件按原样回放，不做重命名。
+3. **命名空间迁移**：（历史）命名空间化是 breaking change…对策是 M0 适配器先保留旧名。**该方向已反转**：命名空间现在是**去掉**的（见 §35），旧名由前后端的容忍解析兜住。
 4. **权限**：工作台检索必须复用服务端 ACL（现有 `SpacePageService` 已鉴权），不能「先取后判」。
 5. **上下文注入**：插件贡献的 context 一律走 TurnContext，**不进 system 前缀**。
 6. **desktopOnly / 平台差异**：Web 端过滤 desktopOnly 能力，插件安装时已有 `PLUGIN_INCOMPATIBLE` 事件可复用。
@@ -298,7 +298,7 @@ core/App.tsx:289   registerCoreToolFactories()          # core 启动时注册�
 | # | 决策 | 落地影响 |
 |---|---|---|
 | 1 | **工作台工具：core 实现 + plugin-main 声明** | 实现留在 core 的 `page-tools.ts`（依赖 `SpacePageService`），由 plugin-main 在 `agent.tools` 里按名挑选 + 收窄 scope。机制见 §3.4：复用既有 `tool-factory-registry`，**不迁代码、不新增依赖**。没有 plugin-main 声明 → 实现存在但能力不可用 |
-| 2 | **工具命名空间** | 线上名 `{pluginKey}__{tool}`（`__` 分隔，冒号非法且需 ≤64 字符）；内核维护 wireName ↔ (plugin, tool) 映射；UI 显示 `plugin / tool` |
+| 2 | ~~**工具命名空间**~~ → **已移除** | 工具直接用裸本地名（≤64 字符的 provider 约束仍由 `toAgentWireName` 保证）；同名由后注册覆盖并警告。见 §35 |
 | 3 | **context 走白名单** | `agent.context` 默认不生效，需宿主白名单显式授权；`services` 同样白名单 |
 | 4 | **run 内不允许切换模型** | model 在 run 创建时冻结；「Auto」= 创建时选型；UI 进行中禁用模型选择器。不改协议 |
 
@@ -321,6 +321,8 @@ core/App.tsx:289   registerCoreToolFactories()          # core 启动时注册�
 ## 11. 实现记录（M0 已落地）
 
 > 契约 + 注册表 + 适配器 + 首个验证案例。策略：**旧插件零改动**，新声明一律命名空间。
+>
+> ⚠️ **后续变更**：命名空间已整体移除（见 §35 与上面的「工具命名」决策），工具只用裸本地名。
 
 ### 11.1 新增：`packages/common/src/ai/plugin-agent/`
 
@@ -569,7 +571,7 @@ agent 调 createPage
   - `pageArtifactFromResult`：成功结果 → `{ kind:'page', id, title, spaceId, subtitle }`。
 - `registerCoreAgentTools()`（`ai/tools/register.ts`）在 `App.tsx` 启动时调用 `registerAgentToolImplementations(...)`。
 - `plugin-main/src/index.tsx` 声明 `agent.include`——**注册 ≠ 可用**：不声明就进不了 catalog。
-- 命名空间：plugin-main 的 pluginKey 是 `@kn/plugin-main` → 线上名 `kn_plugin-main__createPage`；工具 renderer 的 `tool:'createPage'` 由内核 local→wire 自动解析，插件写本地名即可。
+- 工具命名：plugin-main 的 `include` 让这些实现以**本地名**进 catalog（`createPage`、`searchPages`…），与系统提示词里的写法一致；工具 renderer 的 `tool:'createPage'` 也按本地名解析。（历史：这些名字曾是 `kn_plugin-main__createPage`，命名空间已移除。）
 
 ### 15.2 S2：页面卡片 + 只读预览 sheet（插件侧）
 
@@ -966,6 +968,49 @@ agent 工具编辑页面 → session-page-binding 路由到该页的编辑器（
 
 **仍在用**：`deferredTools`（技能自带工具的懒加载通道，后端与 `skills[].tools` 合并使用）、
 `subRunId` / `sub.*` 事件 / `SubAgentTree`（通用委派）。
+
+---
+
+## 36. 工具命名空间移除
+
+**决策**：插件工具不再以 `{pluginKey}__{tool}` 暴露，直接用插件声明的**裸本地名**。
+
+### 36.1 为什么
+
+命名空间解决的是"两个插件同名"，代价却是"**每个插件工具都只能通过一个没人写过的名字访问**"：
+
+- 插件作者写的是 `insertChart`；
+- 系统提示词写的是 `searchPages` / `createPage` / `editPage`（`CORE_EDITING_RULES`、`DOCUMENT_STRUCTURE_INFO`、`STANDARD_WORKFLOW`）；
+- 模型看到的却是 `kn_plugin-main__searchPages`。
+
+三方名字不一致，模型就开始**猜前缀**（实测：`insertBlocksAtPosition` → `plugin-editor …` → `plugin-doc …` → `editor_insertBlocks`）。猜错时后端回 `TOOL_NOT_FOUND`，一个注册完好的工具因此完全不可达。
+
+### 36.2 改了什么
+
+| 位置 | 变化 |
+|---|---|
+| `ai/plugin-agent/namespace.ts` | `toAgentWireName` 变成恒等（返回裸名，仍截断到 64 字符）；模块注释说明命名空间已移除 |
+| `AgentToolDefinition.namespace` | 标 `@deprecated`；设 `false` 只记一条警告，行为不变 |
+| `liftLegacyTools` | 不再写入 `namespace` 字段（所有插件因此零改动） |
+| `PluginManager` | `agentWireNameFor` 返回裸名；`resolveSkills` 不再按 `namespace: false` 过滤；`resolvePluginToolGroups` 保持"重名覆盖"（同名时实例化会 `logger.warn` 覆盖） |
+
+**同名冲突**（原来的主要顾虑）现在的处理：后注册覆盖先注册，并记警告。这在裸名方案下是可见的、可控的；同名本身应由作者避免。
+
+### 36.3 旧名兼容
+
+前后端各有一层容忍解析，历史会话/旧名字继续有效：
+
+- `AgentLoop#resolveToolName`（Java）与 `resolveToolName`（@kn/common）逐条对应，按"字面 → 归一化 → 丢命名空间段 → 词序子集"顺序解析，歧义不解析；
+- `kn_plugin-main__createPage`、`insert_at_block_id`、`editor_insertBlocks` 都能落到正确的工具上。
+
+两边的用例分别在 `AgentLoopToolNameRecoveryTest`（11 项）与 `tool-name-recovery.check.ts`，覆盖同一组形状。
+
+### 36.4 验证
+
+- `pnpm -F @kn/common check` 全绿（`check:plugin-agent` 断言裸名 + 64 字符上限）。
+- `@kn/common` / `@kn/core` / `@kn/plugin-ai` 改动文件 `tsc --noEmit` 0 错。
+- `@kn/common` build + plugin-main / chart / office / github / plugin-ai / core rollup 构建全部退出码 0。
+- 后端 `mvn -pl knowledge-service/knowledge-agent-skills -am test` → 192 tests, BUILD SUCCESS。
 
 ### 35.3 验证
 

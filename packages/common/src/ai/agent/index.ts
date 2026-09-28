@@ -37,7 +37,7 @@ export {
 export type { AgentPersistence, AgentRunStore, AgentTabLock } from './persistence'
 export { EditorToolExecutor } from './tool-executor'
 export type { EditorToolExecutorOptions, ToolExecutionResult } from './tool-executor'
-export { describeSignature, suggestToolNames, unknownToolError } from './tool-name-recovery'
+export { describeSignature, resolveToolName, suggestToolNames, unknownToolError } from './tool-name-recovery'
 export type { ToolSuggestion } from './tool-name-recovery'
 export { SubRunWorker, DEFAULT_MAX_PARALLEL_CALLS } from './sub-run-worker'
 export type { SubRunClient, SubRunSettlement, SubRunWorkerOptions } from './sub-run-worker'
