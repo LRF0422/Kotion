@@ -40,7 +40,7 @@ class PluginStudio extends KPlugin<PluginConfig> {}
 
 export const pluginStudio = new PluginStudio({
     name: 'PluginStudio',
-    status: 'ACTIVE',
+    status: '',
     desktopOnly: true,
     /**
      * The studio's tools + the authoring skill, declared at the top level of the

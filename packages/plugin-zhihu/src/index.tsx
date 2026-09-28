@@ -26,7 +26,7 @@ class ZhihuPlugin extends KPlugin<ZhihuKPluginConfig> {
 
 export const zhihu = new ZhihuPlugin({
     name: "zhihu",
-    status: "ACTIVE",
+    status: "",
     editorExtension: [ZhihuExtension],
     tools: liftLegacyTools(
         [
