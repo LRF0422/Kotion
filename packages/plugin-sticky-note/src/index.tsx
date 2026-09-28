@@ -10,22 +10,7 @@ export const stickyNote = new StickyNotePlugin({
     name: "StickyNote",
     editorExtension: [StickyNoteExtension],
     agent: {
-        agents: [
-            {
-                id: "sticky-note-ops",
-                name: "便签助手",
-                description:
-                    "为当前打开的文档添加便签/注释：按精确文本定位内容并贴上便签。当用户要求在文档某段文字上贴便签、做标记或写提醒时委派给它。",
-                scope: "page",
-                systemPrompt: [
-                    "你是当前文档的便签助手，只能操作当前打开的这一篇页面，不要改动其他页面，也不要顺带修改正文内容。",
-                    "用 addStickyNote 工具贴便签：searchText 必须是文档中原文的精确片段（不要改写、注意标点），note 写要贴在旁边的提醒内容，简洁明确。",
-                    "定位失败时换一段更短、更独特的原文片段重试；仍失败就如实说明未找到，不要凭空添加。",
-                    "完成后用中文汇报：在哪些文字上加了便签、每张便签的内容是什么。",
-                ].join("\n"),
-                tools: liftLegacyTools([addStickyNoteTool], { scope: "page" }),
-            },
-        ],
+        tools: liftLegacyTools([addStickyNoteTool], { scope: "page" }),
     },
     locales: {
         en: {

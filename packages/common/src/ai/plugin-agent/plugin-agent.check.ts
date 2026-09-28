@@ -1,9 +1,9 @@
 /**
- * Runtime checks for the plugin-agent contribution contract (M0).
+ * Runtime checks for the agent contribution contract (M0).
  *
  * Pure logic only — no React, no DOM, no live PluginManager. Covers
- * namespacing, scope selection, the legacy adapter and the core
- * implementation registry.
+ * namespacing, scope selection, the legacy adapter, the core implementation
+ * registry, catalog filtering, artifact collection and the context whitelist.
  */
 
 import { strict as assert } from 'node:assert'
@@ -29,7 +29,6 @@ import {
 } from './index'
 import { filterAgentCatalog } from '../kernel/filter-catalog'
 import { agentArtifactKey, collectAgentArtifacts } from '../kernel/agent-artifact-collect'
-import { describePluginAgents, toPluginAgentSpecs } from '../kernel/plugin-agents'
 
 function ctx(editor?: any, scope: AgentToolContext['scope'] = 'workspace'): AgentToolContext {
     return { scope, editor, resolveService: () => undefined }
@@ -160,10 +159,6 @@ function checkScopeFilter(): void {
         tools: [make('ws', 'workspace'), make('pg', 'page'), make('any', 'any'), make('unscoped', undefined)],
         context: [{ id: 'c', scope: 'workspace', load: () => ({}) }],
         actions: [{ id: 'a', label: 'A', prompt: 'p', scope: 'page' }],
-        agents: [
-            { id: 'page-agent', name: 'Page Agent', description: 'needs an editor', scope: 'page' },
-            { id: 'always-agent', name: 'Always Agent', description: 'always offered' },
-        ],
     }
 
     const workspace = filterContributionByScope(contribution, 'workspace')
@@ -175,11 +170,6 @@ function checkScopeFilter(): void {
     assert.deepEqual(page.tools?.map(t => t.name), ['pg', 'any', 'unscoped'])
     assert.equal(page.actions?.length, 1)
     assert.equal(page.context?.length, 0)
-
-    // Plugin agents are scope-gated like everything else: a page-scoped agent
-    // must not be offered to a workspace run (hybrid delegation model).
-    assert.deepEqual(workspace.agents?.map(a => a.id), ['always-agent'])
-    assert.deepEqual(page.agents?.map(a => a.id), ['page-agent', 'always-agent'])
 }
 
 function checkRegistry(): void {
@@ -269,40 +259,6 @@ function checkArtifactCollection(): void {
     assert.deepEqual(collectAgentArtifacts([], mappers), [])
 }
 
-function checkAgentDirectory(): void {
-    assert.equal(describePluginAgents(undefined), undefined)
-    assert.equal(describePluginAgents([]), undefined)
-
-    const agents = [{
-        id: 'kn_plugin-main__page-ops',
-        name: '页面操作',
-        description: '创建/重命名/移动页面',
-        systemPrompt: '你是页面操作员。',
-        toolNames: ['kn_plugin-main__createPage'],
-        skillNames: ['page-ops'],
-        pluginName: 'Basic plugin',
-        pluginKey: '@kn/plugin-main',
-    }] as any
-
-    const note = describePluginAgents(agents)!
-    assert.ok(note.includes('可委派的插件 Agent'))
-    assert.ok(note.includes('kn_plugin-main__page-ops'))
-    assert.ok(note.includes('页面操作'))
-    assert.ok(note.includes('它独有的工具：kn_plugin-main__createPage'))
-    assert.ok(note.includes('它带着的技能：page-ops'))
-    assert.ok(note.includes('delegate({ agentId: "kn_plugin-main__page-ops", task: "<你的任务>" })'))
-    // The prompt and tool subset travel with the RUN, not in the note: the
-    // backend resolves them from agentId, so repeating them per turn would be
-    // pure token waste — and would invite the model to paraphrase them.
-    assert.ok(!note.includes('你是页面操作员。'))
-
-    const specs = toPluginAgentSpecs(agents)
-    assert.equal(specs.length, 1)
-    assert.equal(specs[0].id, 'kn_plugin-main__page-ops')
-    assert.equal(specs[0].systemPrompt, '你是页面操作员。')
-    assert.deepEqual(specs[0].toolNames, ['kn_plugin-main__createPage'])
-}
-
 function checkContextWhitelist(): void {
     // Deny by default: declaring a provider is not authorizing it.
     clearAgentContextWhitelist()
@@ -334,7 +290,6 @@ function main(): void {
     checkToolNameResolution()
     checkCatalogFilter()
     checkArtifactCollection()
-    checkAgentDirectory()
     checkContextWhitelist()
     console.log('plugin-agent checks passed')
 }

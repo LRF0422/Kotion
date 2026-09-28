@@ -65,7 +65,7 @@
 
 ### agent：工具驱动
 
-插件向 agent 注册了 20 个工具（`editorExtension.tools`，见 `PluginManager.resolveTools`）：
+插件向 agent 注册了 18 个工具（`agent.tools`，见 `PluginManager.resolveAgentCapabilities`）：
 
 | 工具 | 作用 |
 | --- | --- |
@@ -84,8 +84,6 @@
 | `searchHostApi` | 在标准包源码里按名字搜索类型/接口（返回文件+行号） |
 | `readHostApiFile` | 读取标准包里的一个源码文件，查看真实接口定义 |
 | `installPluginDependencies` | 安装第三方 npm 包（调用 npm/pnpm/yarn 并写入 package.json） |
-| `listInstalledPlugins` | 列出宿主里已安装/激活的插件（来源 system/installed/dev、版本、是否可卸载） |
-| `uninstallInstalledPlugin` | 按运行时 name 卸载已安装插件（宿主自带 system 插件会拒绝） |
 | `listMyPlugins` | 列出我在市场上的提交/已上架插件（拿 pluginId、审核状态） |
 | `publishPluginProject` | 构建并上传产物，然后上架（提交审核）或发布新版本 |
 | `upgradePluginVersion` | 把已安装插件升级到市场里的目标版本 |
@@ -161,11 +159,11 @@ pnpm test:plugin-dev:electron
 | `project-files.test.mjs` | 10 | 工程文件枚举/搜索/过滤、跳过 node_modules、截断上报 |
 | `package-install.test.mjs` | 20 | 包名/版本校验、管理器探测、argv 构造、假 spawn 安装 |
 | `tailwind.test.mjs` | 9 | 用宿主配置编译插件工具类、去除 @keyframes、空工程 |
-| `studio-tools.test.mjs` | 111 | **agent 工具面**：名称/描述/schema、create→write→run→build→list→stop 的每次能力调用、失败装订、缺能力提示、失败不装旧产物 |
+| `studio-tools.test.mjs` | 104 | **agent 工具面**：名称/描述/schema、create→write→run→build→list→stop 的每次能力调用、失败装订、缺能力提示、失败不装旧产物、**不含插件注册表管理工具** |
 | `studio.smoke.mjs` | 25 | 真实 `PluginManager.installPluginFromSource` + Blob URL + 真实 loader；热更替换、单实例、坏代码不中断、恢复；**内置目录建工程并可直接构建** |
 | `electron.smoke.mjs` | 28 | 真实 preload 能力白名单、`dev.*` IPC、`ELECTRON_RUN_AS_NODE` 子进程、`desktop:event:dev` 推送、**无对话框 scaffold + list + 读写文件**、越界路径拒绝 |
 
-`pnpm test:plugin-dev` 合计 225 项检查；`pnpm test:plugin-dev:electron` 另有 28 项（需要先构建出 `out/preload/index.js`）。
+`pnpm test:plugin-dev` 合计 217 项检查；`pnpm test:plugin-dev:electron` 另有 28 项（需要先构建出 `out/preload/index.js`）。
 
 ## 能力清单（`desktop.dev.*`）
 
@@ -185,6 +183,8 @@ pnpm test:plugin-dev:electron
 
 配套宿主服务：`pluginHost.installFromSource()` / `uninstall()` / `subscribe()`
 （`packages/core/src/App.tsx` 注册，插件通过 `useOptionalService('pluginHost')` 使用）。
+热更是开发台唯一使用注册表的能力：**开发台不列举、也不卸载别人的插件**——那是插件管理器的职责，
+agent 工具面因此没有 `listInstalledPlugins` / `uninstallInstalledPlugin`。
 删除工程走桌面端的白名单 `fs.remove` 能力（内置工程目录位于 `userData`，已添加目录经文件夹对话框授权，均在白名单内）。
 
 ## 第三方依赖与 Tailwind
@@ -209,5 +209,5 @@ pnpm test:plugin-dev:electron
 3. **插件是可信代码**：本地构建产物在宿主窗口内执行，拥有与宿主相同的权限。只在开发机上使用。
 4. **文件路径白名单**：`dev.*` 的每个路径都经过与 `fs.*` 相同的 allowlist（标准用户目录 +
    对话框授予的目录）。内置工程目录位于 `userData`，本来就在白名单内。
-5. **agent 工具需要打开的编辑器**：插件的工具是通过 `editorExtension.tools` 贡献的
-   （`PluginManager.resolveTools(editor)` 需要有编辑器实例），与仓库里其他插件工具同一机制。
+5. **agent 工具不含插件注册表管理**：开发台只热更自己构建的产物；列举/卸载其他已安装插件属于插件管理器的能力，
+   不通过开发台的 `agent.tools` 暴露给 agent。

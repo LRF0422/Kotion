@@ -159,10 +159,9 @@ export interface ToolMetadata {
     source: 'builtin' | 'plugin'
     pluginName?: string   // 来源插件名称
     /**
-     * Callable but NOT advertised to the kernel agent: the tool belongs to a
-     * plugin agent's child run (docs/plugin-agents.md) and its schema must not
-     * inflate the kernel's tool list. It still travels with the run as a
-     * deferred tool so a delegated child can call it.
+     * Callable but NOT advertised with a full schema until the model calls it.
+     * It still travels with the run as a deferred tool, so the schema never
+     * inflates the per-turn tool list.
      */
     deferred?: boolean
 }

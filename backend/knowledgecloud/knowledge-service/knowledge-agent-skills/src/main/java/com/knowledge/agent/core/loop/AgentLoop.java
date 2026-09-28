@@ -87,16 +87,6 @@ public class AgentLoop implements Runnable {
         List<String> skillFragments();
 
         /**
-         * Plugin-agent directory for this run (see {@code PluginAgentSpec}).
-         * Frozen into the checkpoint so {@code delegate({ agentId })} resolves
-         * the child's prompt and tool subset from the declaration the parent
-         * saw, not from the model's copy of it.
-         */
-        default List<com.knowledge.agent.core.delegate.PluginAgentSpec> pluginAgents() {
-            return java.util.Collections.emptyList();
-        }
-
-        /**
          * Extra client system-prompt text (editor rules) appended after the
          * base prompt. Must reach the model on root runs too — historically it
          * was only merged for child runs, silently dropping the editor rules.
@@ -738,9 +728,6 @@ public class AgentLoop implements Runnable {
         }
         if (runInput != null && runInput.clientTools() != null) {
             cp.setClientTools(new ArrayList<>(runInput.clientTools()));
-        }
-        if (runInput != null && runInput.pluginAgents() != null) {
-            cp.setPluginAgents(new ArrayList<>(runInput.pluginAgents()));
         }
         if (runInput != null && runInput.savedSkillProvenance() != null) {
             cp.setSavedSkillProvenance(new ArrayList<>(runInput.savedSkillProvenance()));
@@ -1994,8 +1981,6 @@ public class AgentLoop implements Runnable {
         context.setDelegateDepth(checkpoint.getDelegateDepth());
         context.setClientTools(new ArrayList<>(clientToolSpecs.values()));
         context.setDeferredTools(new ArrayList<>(deferredToolSpecs.values()));
-        context.setPluginAgents(checkpoint.getPluginAgents() != null
-                ? new ArrayList<>(checkpoint.getPluginAgents()) : new ArrayList<>());
         context.setScratchpad(scratchpad);
         // Frozen creation context, so a delegated child inherits the parent's
         // editor rules / skill fragments / memory instead of a bare prompt.

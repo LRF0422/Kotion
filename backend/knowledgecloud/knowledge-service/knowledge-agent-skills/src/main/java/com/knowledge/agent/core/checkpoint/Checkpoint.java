@@ -2,7 +2,6 @@ package com.knowledge.agent.core.checkpoint;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.knowledge.agent.api.dto.ChatMessage;
-import com.knowledge.agent.core.delegate.PluginAgentSpec;
 import com.knowledge.agent.core.run.PendingToolCall;
 import com.knowledge.agent.core.savedskill.SavedSkillProvenance;
 import lombok.Data;
@@ -92,12 +91,6 @@ public class Checkpoint {
      * {@link #clientTools}.
      */
     private List<com.knowledge.agent.core.tool.ToolSpec> deferredTools = new ArrayList<>();
-
-    /**
-     * Plugin-agent directory frozen at run creation. A delegated child run is
-     * resolved from it by {@code agentId}, so the model only names the agent.
-     */
-    private List<PluginAgentSpec> pluginAgents = new ArrayList<>();
 
     /** Full conversation including system prefix and injected memory. */
     private List<ChatMessage> messages = new ArrayList<>();

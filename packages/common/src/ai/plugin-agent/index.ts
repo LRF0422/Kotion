@@ -13,7 +13,6 @@ import type {
     AgentArtifactProps,
     AgentContribution,
     AgentContextProviderDefinition,
-    PluginAgentDefinition,
     AgentScope,
     AgentSkillDefinition,
     AgentToolDefinition,
@@ -58,25 +57,6 @@ export interface ResolvedAgentAction extends AgentActionDefinition {
     pluginKey: string
 }
 
-export interface ResolvedPluginAgent
-    extends Omit<PluginAgentDefinition, 'tools' | 'include' | 'skills'> {
-    /**
-     * The agent's own tools, resolved to their wire names — this is the child
-     * run's tool subset (the kernel never advertises them on its own).
-     */
-    toolNames: string[]
-    /** Names of the skills that survived the agent-local tool check. */
-    skillNames: string[]
-    /**
-     * `systemPrompt` with every surviving skill's `systemPromptFragment`
-     * appended, in declaration order. Skills and tools share one owner, so the
-     * assembled prompt is always consistent with `toolNames`.
-     */
-    systemPrompt?: string
-    pluginName: string
-    pluginKey: string
-}
-
 export interface ResolvedAgentToolRenderer extends AgentToolRendererContribution {
     render: ComponentType<AgentToolResultProps>
     pluginName: string
@@ -94,7 +74,6 @@ export interface ResolvedAgentCapabilities {
     skills: ResolvedAgentSkill[]
     context: ResolvedAgentContextProvider[]
     actions: ResolvedAgentAction[]
-    agents: ResolvedPluginAgent[]
     /** Conversation cards by tool name (last registration wins). */
     toolRenderers: ResolvedAgentToolRenderer[]
     /** Side-sheet previews by artifact kind. */
@@ -113,7 +92,6 @@ export function filterContributionByScope(
         skills: contribution.skills,
         context: keep(contribution.context),
         actions: keep(contribution.actions),
-        agents: keep(contribution.agents),
         // Renderers are not scope-specific: whatever tool/artifact a run can
         // produce, its card is available in every scope.
         include: contribution.include,

@@ -73,7 +73,7 @@
 |---|---|
 | `agent.context` | 内核聚合了，**无消费者**；context 白名单也未落地 |
 | `agent.actions` | home 改用 `ChatEmptyState` 后**没有入口** |
-| `agent.agents` | **无 UI** |
+| ~~`agent.agents`~~ | **已移除**：插件自定义 agent 退役（见 ai-kernel-plan.md §35） |
 
 建议：排期接线，或明确标注为 `planned`/移除，避免「规范说支持、实际没有」。
 
@@ -132,9 +132,9 @@
    导致 `scope: 'any'` 的连接器（zhihu）在 workspace run 里被跳过，而内核目录
    仍在广告它。现改为按 scope 推导 `requiresEditor`（`page` 才强制），并可用
    `requiresEditor: true` 显式覆盖。
-2. **同一工具两处声明**：plugin-main 既在贡献级暴露页面工具，又交给 `page-ops` agent；
+2. **同一工具两处声明**：（历史）plugin-main 既在贡献级暴露页面工具，又交给 `page-ops` agent；
    若 agent 侧以 deferred 再注册一次，会把内核可见工具静默降级为 deferred。
-   现规定「贡献级声明优先」，去重后再分组。
+   现规定「贡献级声明优先」，去重后再分组；该冲突随插件自定义 agent 移除而消失。
 
 ### 5.2 仍然开放
 

@@ -26,44 +26,32 @@ export const github = new GitHubPlugin({
     name: 'GitHub',
     editorExtension: [GitHubExtension],
     /**
-     * Plugin agent (docs/plugin-agents.md): GitHub capabilities belong to this
-     * agent's child run — the kernel no longer sees them in its flat catalog.
-     *
      * Scope is `page` because several tools write the document
      * (insertGitHubIssue / createGitHubIssue / insertGitHubPR / insertGitHubRepo /
      * insertGitHubCodeSnippet / generateGitHubChangelog / generateGitHubProjectDoc /
      * generateGitHubReleaseNotes / createGitHubRelease / publishGitHubRelease).
      * liftLegacyTools requires a live editor for every lifted factory, so the
-     * read-only tools cannot be split into a second `any` agent without
+     * read-only tools cannot be split into a separate `any` group without
      * advertising tools that fail in a workspace run.
      */
     agent: {
-        agents: [
-            {
-                id: 'github-ops',
-                name: 'GitHub 运营助手',
-                description: '负责 GitHub 日常运营：查询仓库、代码、提交历史和 Issue/PR 状态，创建或更新 Issue、审查 PR、生成 changelog 或项目文档，以及创建 tag、发布和维护 Release。当用户需要读取 GitHub 仓库信息，或需要把 Issue/PR/代码/Release 卡片、变更日志、项目文档写入当前页面时，委派给它。',
-                scope: 'page',
-                systemPrompt: '你是 GitHub 运营助手，通过 GitHub API 处理 Issue、PR、仓库、代码、提交历史和 Release 工作流。你只能操作当前打开的页面（插入卡片、追加 Markdown），不得越权修改其他页面、空间或仓库设置。动手前先用只读工具（list/get/search/compare）核对 owner、repo、编号和版本区间，写操作必须有明确目标。发布、删除 Release 或覆盖已存在的 tag 之前，必须先向用户确认。完成后用一段话汇报执行的操作、改动的对象、在文档中插入或追加的内容，以及 GitHub 返回的警告（例如 generate-notes 权限不足时的回退）。',
-                tools: liftLegacyTools([
-                    ...issueTools,
-                    ...prTools,
-                    ...repoTools,
-                    ...codeTools,
-                    ...searchTools,
-                    ...historyTools,
-                    ...structureTools,
-                    ...releaseTools,
-                ], { scope: 'page' }),
-                skills: liftLegacySkills([
-                    githubProjectManagerSkill,
-                    githubCodeReviewerSkill,
-                    githubChangelogWriterSkill,
-                    githubProjectDocumenterSkill,
-                    githubReleaseManagerSkill,
-                ]),
-            },
-        ],
+        tools: liftLegacyTools([
+            ...issueTools,
+            ...prTools,
+            ...repoTools,
+            ...codeTools,
+            ...searchTools,
+            ...historyTools,
+            ...structureTools,
+            ...releaseTools,
+        ], { scope: 'page' }),
+        skills: liftLegacySkills([
+            githubProjectManagerSkill,
+            githubCodeReviewerSkill,
+            githubChangelogWriterSkill,
+            githubProjectDocumenterSkill,
+            githubReleaseManagerSkill,
+        ]),
     },
     settings: {
         key: 'github-settings',

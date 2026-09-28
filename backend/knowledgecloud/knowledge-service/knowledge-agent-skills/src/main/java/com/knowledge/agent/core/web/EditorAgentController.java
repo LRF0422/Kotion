@@ -83,7 +83,6 @@ public class EditorAgentController {
         cmd.setMode(request.getMode());
         cmd.setMessages(request.getMessages());
         cmd.setTools(request.getTools());
-        cmd.setPluginAgents(request.getPluginAgents());
         cmd.setTemperature(request.getTemperature());
         cmd.setMaxTokens(request.getMaxTokens());
         cmd.setSystemPrompt(request.getSystemPrompt());
@@ -99,8 +98,7 @@ public class EditorAgentController {
         // The deferred catalog is deduped against the always-on tools list and
         // kept out of `tools` on purpose: the loop registers these as callable,
         // but absent from the model's tool list until first use. Two sources:
-        // skill-owned tools, and the plugin agents' tools (which a delegated
-        // child run needs but the kernel agent must not see).
+        // skill-owned tools and the request's explicit deferredTools.
         java.util.Set<String> seenTools = new java.util.HashSet<>();
         for (ToolSpec spec : request.getTools() != null ? request.getTools() : new ArrayList<ToolSpec>()) {
             if (spec != null && spec.getName() != null) {

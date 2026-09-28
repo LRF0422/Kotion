@@ -31,8 +31,7 @@ import {
     isAgentContextAllowed,
     resolveAgentToolNames,
     toAgentWireName,
-} from "../ai/plugin-agent";
-import type {
+} from "../ai/plugin-agent";import type {
     AgentContribution,
     AgentScope,
     AgentToolContext,
@@ -68,18 +67,13 @@ export interface PluginSettingsConfig {
 }
 
 /**
- * One plugin's instantiated agent tools, split by who may see them.
- *
- * - `tools`: the plugin's kernel-facing tools (contribution-level
- *   `agent.tools` / `agent.include`). Advertised to the kernel agent.
- * - `agentTools`: tools owned by this plugin's AGENTS. Instantiated so a
- *   delegated child run can call them, registered as *deferred* so their
- *   schemas never inflate the kernel agent's tool list.
+ * One plugin's instantiated agent tools: the plugin's kernel-facing tools
+ * (contribution-level `agent.tools` / `agent.include`), advertised to the
+ * kernel agent.
  */
 export interface ResolvedPluginToolGroup {
     pluginName: string
     tools: Record<string, any>
-    agentTools: Record<string, any>
 }
 
 export interface PluginConfig {
@@ -1031,7 +1025,7 @@ export class PluginManager {
                     logger.warn(
                         `Plugin "${plugin.name}" still declares AI tools/skills on its editor `
                         + `extension "${ext.name}". That path was retired: move them into the `
-                        + 'plugin\'s `agent` declaration — see docs/plugin-agents.md.',
+                        + 'plugin\'s `agent` declaration (see liftLegacyTools / liftLegacySkills).',
                     )
                 }
             }
@@ -1056,7 +1050,7 @@ export class PluginManager {
      */
     resolveAgentCapabilities(runScope?: ResolvedAgentScope): ResolvedAgentCapabilities {
         const capabilities: ResolvedAgentCapabilities = {
-            tools: [], skills: [], context: [], actions: [], agents: [],
+            tools: [], skills: [], context: [], actions: [],
             toolRenderers: [], artifactRenderers: [],
         }
 
@@ -1154,78 +1148,6 @@ export class PluginManager {
                     pluginName: entry.pluginName, pluginKey: entry.pluginKey,
                 })
             }
-            // Plugin agents (hybrid delegation): the kernel only ever sees the
-            // directory entry; the tools are resolved to wire names so a
-            // delegated child run can be restricted to exactly them.
-            for (const agent of projected.agents ?? []) {
-                if (!agent || !agent.id || !agent.name) continue
-                if (runScope && !agentScopeMatches(agent.scope, runScope)) continue
-                // Agent-local name table. Skills are resolved against THIS map,
-                // never the plugin-wide one: a skill and the tools it names have
-                // the same owner, so the mismatch §33 patched cannot happen.
-                const agentTools = new Map<string, string>()
-                const toolNames: string[] = []
-                const addTool = (localName: string, wireName: string) => {
-                    agentTools.set(localName, wireName)
-                    if (!toolNames.includes(wireName)) toolNames.push(wireName)
-                }
-                for (const tool of agent.tools ?? []) {
-                    if (!tool || !tool.name) continue
-                    const wireName = this.agentWireNameFor(entry.pluginKey, tool)
-                    localToWire.set(tool.name, wireName)
-                    addTool(tool.name, wireName)
-                }
-                for (const raw of agent.include ?? []) {
-                    const ref = typeof raw === 'string' ? { name: raw } : raw
-                    const impl = getAgentToolImplementation(ref.name)
-                    if (!impl) continue
-                    const wireName = toAgentWireName(entry.pluginKey, impl.name)
-                    localToWire.set(impl.name, wireName)
-                    addTool(impl.name, wireName)
-                }
-
-                const skillNames: string[] = []
-                const skillFragments: string[] = []
-                for (const skill of agent.skills ?? []) {
-                    if (!skill || !skill.name) continue
-                    const resolve = (names?: string[]) =>
-                        (names ?? []).map(name => agentTools.get(name) ?? name)
-                    const required = resolve(skill.requiredTools)
-                    const missing = required.filter(name => !toolNames.includes(name))
-                    if (missing.length > 0) {
-                        // Not a kernel-scale reconciliation: this is one author's
-                        // own declaration disagreeing with itself. Drop the skill
-                        // and say so instead of shipping a prompt whose tools the
-                        // child run does not have.
-                        logger.warn(
-                            `Plugin agent ${agent.id}: skill "${skill.name}" requires unavailable `
-                            + `tools [${missing.join(', ')}], skipped`,
-                        )
-                        continue
-                    }
-                    skillNames.push(skill.name)
-                    if (skill.systemPromptFragment) {
-                        skillFragments.push(skill.systemPromptFragment)
-                    }
-                }
-
-                const systemPrompt = [agent.systemPrompt, ...skillFragments]
-                    .filter((part): part is string => !!part && part.trim().length > 0)
-                    .join('\n\n')
-
-                capabilities.agents.push({
-                    ...agent,
-                    // Namespaced like tools: two plugins may both declare
-                    // `page-ops`, and the model must be able to tell them apart.
-                    id: toAgentWireName(entry.pluginKey, agent.id),
-                    systemPrompt: systemPrompt || undefined,
-                    toolNames,
-                    skillNames,
-                    pluginName: entry.pluginName,
-                    pluginKey: entry.pluginKey,
-                })
-            }
-
             // Conversation cards / sheet previews. The tool key is resolved
             // through the same local→wire table as skills, so a plugin can name
             // its own tools by their local name.
@@ -1266,22 +1188,17 @@ export class PluginManager {
         for (const entry of this.resolveAgentContributions()) {
             const projected = filterContributionByScope(entry.contribution, scope)
             const record: Record<string, any> = {}
-            // Tools a plugin AGENT owns. They are instantiated (a delegated
-            // child must be able to call them) but registered as DEFERRED, so
-            // their schemas never enter the kernel agent's own tool list.
-            const agentRecord: Record<string, any> = {}
 
             const instantiate = (
                 wireName: string,
                 create: (ctx: AgentToolContext) => unknown,
                 def: { description: string; inputSchema: any; readOnly?: boolean },
-                target: Record<string, any> = record,
             ) => {
                 try {
                     const execute = create(ctx)
                     if (typeof execute !== 'function') return
-                    if (target[wireName]) logger.warn(`Tool ${wireName} already exists, overwriting`)
-                    target[wireName] = {
+                    if (record[wireName]) logger.warn(`Tool ${wireName} already exists, overwriting`)
+                    record[wireName] = {
                         description: def.description,
                         inputSchema: def.inputSchema,
                         readOnly: def.readOnly,
@@ -1310,36 +1227,8 @@ export class PluginManager {
                 instantiate(toAgentWireName(entry.pluginKey, impl.name), impl.create, impl)
             }
 
-            // Plugin-agent tools exist for their CHILD run: instantiate them so
-            // the client can execute a delegated call. filterContributionByScope
-            // already gated each agent by its own scope, so a page-scoped agent's
-            // tools never appear in a run without an editor.
-            for (const agent of projected.agents ?? []) {
-                for (const tool of agent.tools ?? []) {
-                    if (!tool || !tool.name) continue
-                    instantiate(this.agentWireNameFor(entry.pluginKey, tool), tool.create, tool, agentRecord)
-                }
-                for (const raw of agent.include ?? []) {
-                    const ref = typeof raw === 'string' ? { name: raw } : raw
-                    const impl = getAgentToolImplementation(ref.name)
-                    if (!impl) continue
-                    if (!agentScopeMatches(ref.scope ?? impl.scope, scope)) continue
-                    instantiate(toAgentWireName(entry.pluginKey, impl.name), impl.create, impl, agentRecord)
-                }
-            }
-
-            // A name declared BOTH ways (plugin-main exposes some page tools
-            // directly and also hands them to its `page-ops` agent) must stay
-            // kernel-visible. The contribution-level declaration is
-            // authoritative; leaving the duplicate in `agentTools` would
-            // re-register it as deferred and quietly remove it from the
-            // kernel's tool list.
-            for (const name of Object.keys(record)) {
-                if (agentRecord[name]) delete agentRecord[name]
-            }
-
-            if (Object.keys(record).length > 0 || Object.keys(agentRecord).length > 0) {
-                groups.push({ pluginName: entry.pluginName, tools: record, agentTools: agentRecord })
+            if (Object.keys(record).length > 0) {
+                groups.push({ pluginName: entry.pluginName, tools: record })
             }
         }
 
@@ -1574,13 +1463,8 @@ export class PluginManager {
     /**
      * Plugin skills for the frontend skill provider: the contribution-level
      * `agent.skills` (tool names already resolved to wire names), plus an
-     * auto-generated default skill for every agent tool no skill claims — in a
+     * auto-generated default skill for every plugin tool no skill claims — in a
      * skills-only catalog that default is the tool's only route to the backend.
-     *
-     * Agent-OWNED skills (`agent.agents[].skills`) are deliberately excluded:
-     * they belong to their plugin agent's child run, and PluginManager folds
-     * their prompt fragments into that agent's system prompt. Advertising them
-     * here as well would describe tools this run cannot call.
      */
     resolveSkills(): ResolvedAgentSkill[] {
         const capabilities = this.resolveAgentCapabilities()

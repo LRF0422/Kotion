@@ -294,9 +294,6 @@ public class DefaultRunSupervisor {
         if (cmd.getSkillTools() != null) {
             checkpoint.setDeferredTools(new ArrayList<>(cmd.getSkillTools()));
         }
-        if (cmd.getPluginAgents() != null) {
-            checkpoint.setPluginAgents(new ArrayList<>(cmd.getPluginAgents()));
-        }
         checkpoint.setTemperature(cmd.getTemperature());
         checkpoint.setMaxTokens(cmd.getMaxTokens());
         checkpoint.setNoTools(cmd.isNoTools());
@@ -668,11 +665,6 @@ public class DefaultRunSupervisor {
         @Override
         public List<ToolSpec> skillTools() {
             return cmd.getSkillTools();
-        }
-
-        @Override
-        public List<com.knowledge.agent.core.delegate.PluginAgentSpec> pluginAgents() {
-            return cmd.getPluginAgents();
         }
 
         @Override

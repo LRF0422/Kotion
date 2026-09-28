@@ -1,6 +1,5 @@
 package com.knowledge.agent.core.tool;
 
-import com.knowledge.agent.core.delegate.PluginAgentSpec;
 import com.knowledge.agent.core.savedskill.SavedSkillProvenance;
 import lombok.Data;
 
@@ -46,12 +45,6 @@ public class ToolContext {
 
     /** Deferred (skill-owned) tools of this run — inherited by sub-agents. */
     private java.util.List<com.knowledge.agent.core.tool.ToolSpec> deferredTools;
-
-    /**
-     * Plugin-agent directory frozen at run creation. {@code Delegator} resolves
-     * a delegated call's prompt/tool subset from it by {@code agentId}.
-     */
-    private List<PluginAgentSpec> pluginAgents = new ArrayList<>();
 
     /** Client system-prompt text frozen at run creation (child inheritance). */
     private String systemPrompt;

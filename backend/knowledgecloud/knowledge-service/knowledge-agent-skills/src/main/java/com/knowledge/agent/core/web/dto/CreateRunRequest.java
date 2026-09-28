@@ -1,7 +1,6 @@
 package com.knowledge.agent.core.web.dto;
 
 import com.knowledge.agent.api.dto.ChatMessage;
-import com.knowledge.agent.core.delegate.PluginAgentSpec;
 import com.knowledge.agent.core.tool.ToolSpec;
 import lombok.Data;
 
@@ -32,18 +31,11 @@ public class CreateRunRequest {
     private List<SkillInput> skills = new ArrayList<>();
 
     /**
-     * Tools that are callable but NOT advertised to this run's model — the
-     * plugin-agent tools. They reach the child run through the deferred
-     * catalog, so the kernel agent's own tool list stays small.
+     * Tools that are callable but NOT advertised to this run's model with a
+     * full schema — the skill-owned tools. They reach the run through the
+     * deferred catalog, so the model's tool list stays small.
      */
     private List<ToolSpec> deferredTools = new ArrayList<>();
-
-    /**
-     * Plugin agents this run may delegate to. The backend resolves
-     * {@code delegate({ agentId })} against this directory, so the kernel agent
-     * never has to restate a plugin agent's prompt or tool subset.
-     */
-    private List<PluginAgentSpec> pluginAgents = new ArrayList<>();
 
     private Double temperature;
 

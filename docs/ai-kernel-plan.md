@@ -889,9 +889,11 @@ agent 工具编辑页面 → session-page-binding 路由到该页的编辑器（
 
 ---
 
-## 34. P2：插件全量迁移 + 后端按 agentId 解析 + deferred 通道
+## 34. P2：插件全量迁移 + 后端按 agentId 解析 + deferred 通道（**已退役**）
 
-> 详细设计见 [docs/plugin-agents.md](plugin-agents.md) §12。本节记录「这一轮到底改了什么、什么还没做」。
+> ⚠️ **本节描述的插件自定义 agent 机制已整体移除**（见 §35）。保留本节仅作历史记录：
+> `agent.agents[]`、`describePluginAgents`、`pluginAgents` 随 run 下发、后端按 `agentId` 解析
+> 全部删除；原先挂在各插件 agent 上的工具/技能已回到插件贡献级 `agent.tools` / `agent.skills`。
 
 ### 34.1 改动
 
@@ -935,3 +937,39 @@ agent 工具编辑页面 → session-page-binding 路由到该页的编辑器（
   scope-aware 守卫断言）。
 - `tsc -p --noEmit`：@kn/common、plugin-ai 自身源码 0 错；14 个迁移插件自身源码 0 错。
 - 后端 `mvn -pl knowledge-service/knowledge-agent-skills -am compile` → BUILD SUCCESS。
+
+---
+
+## 35. 插件自定义 agent 退役
+
+**决策**：移除「每个插件可以声明自己的子 agent」这一层（`agent.agents[]` → 内核只广告目录、
+`delegate({ agentId })` 由后端按目录解析 prompt/工具子集、每个 agent 的工具走 deferred 通道）。
+**保留**通用委派：`delegate` / `wait_for_children` / 子 run / 子 agent 树 UI / per-owner 编辑器绑定
+（后端 `BASE_SYSTEM_PROMPT` 第 7 条仍要求模型把独立子任务委派出去）。
+
+### 35.1 为什么
+
+- 委派开销（每个插件操作一次子 run）换来的收益，需要模型准确挑 agent，实际表现为选错/空转。
+- 子 agent 的 persona 与内核 agent 的编辑规则叠在一起，反而更容易触发工具名臆造（`TOOL_NOT_FOUND`）。
+- 一层间接让「插件工具对内核不可见」，排障成本高于收益。
+
+### 35.2 改了什么
+
+| 位置 | 变化 |
+|---|---|
+| 契约 `ai/plugin-agent/types.ts` | 删除 `PluginAgentDefinition`、`AgentContribution.agents` |
+| `PluginManager` | `resolveAgentCapabilities` 不再投影 `agents[]`；`ResolvedAgentCapabilities.agents`、`ResolvedPluginAgent` 删除；`ResolvedPluginToolGroup.agentTools` 删除；`resolvePluginToolGroups` 只实例化贡献级工具 |
+| 内核目录 | 删除 `ai/kernel/plugin-agents.ts`（`describePluginAgents` / `toPluginAgentSpecs`）及其在 Chat / KernelHomePage / AIAssistantPanel 的注入 |
+| run 输入 | 删除 `AgentPluginAgentSpec` 与 `CreateRunInput.pluginAgents`（前后端一起删） |
+| 15 个插件 | `agents[0].tools/skills` 上提到贡献级 `agent.tools` / `agent.skills`（仍走 `liftLegacyTools` / `liftLegacySkills`），能力不减 |
+| 后端 Java | 删除 `PluginAgentSpec`、`CreateRunRequest/Command`、`Checkpoint`、`ToolContext`、`AgentLoop.RunInput`、`DefaultRunSupervisor` 的 `pluginAgents` 通路；`Delegator` 不再按 `agentId` 解析；`DelegateTool` 删掉 `agentId` 与已死的 `skills` 参数 |
+
+**仍在用**：`deferredTools`（技能自带工具的懒加载通道，后端与 `skills[].tools` 合并使用）、
+`subRunId` / `sub.*` 事件 / `SubAgentTree`（通用委派）。
+
+### 35.3 验证
+
+- `pnpm -F @kn/common check`（含 `check:plugin-agent`，已移除 agent 目录用例）→ 全绿。
+- `@kn/common` / `@kn/core` / `@kn/plugin-ai` 改动文件 `tsc --noEmit` 0 错。
+- 15 个插件 `pnpm build`（rollup）全部退出码 0。
+- 后端 `mvn -pl knowledge-service/knowledge-agent-skills -am test` → 179 tests, BUILD SUCCESS。

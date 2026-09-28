@@ -105,33 +105,6 @@ export const DefaultPluginInstance = new DefaultPlugin({
     artifactRenderers: [
       { kind: 'page', render: PagePreviewPane },
     ],
-    /**
-     * Plugin agent (hybrid delegation, docs/plugin-agents.md): the multi-step
-     * "research → land it as a page → show it" workflow gets its own agent with
-     * a focused persona, while the direct tools above stay available for
-     * one-shot actions.
-     */
-    agents: [
-      {
-        id: 'page-ops',
-        name: '页面操作员',
-        description: '需要跨多步在知识库里检索、整理并落地成页面时委派给它：搜索页面与正文、创建页面、把内容写进去、在侧边展示结果。',
-        systemPrompt: [
-          '你是知识库的页面操作员。',
-          '工作流：检索（searchPages / searchContent）→ 汇总 → 用 createPage 落地成页面并写入内容 → 用 openPageSide 展示给用户。',
-          '只做页面级操作，不要臆造不存在的工具；完成后用一段话汇报你创建或修改了哪些页面。',
-        ].join('\n'),
-        scope: 'any',
-        include: [
-          'searchPages',
-          'searchContent',
-          'createPage',
-          'openPageSide',
-          'getSpacePageTree',
-          'listSpaces',
-        ],
-      },
-    ],
   },
   // 主页功能引导:在 welcome 引导(priority 100)之后自动接续播放
   tours: [

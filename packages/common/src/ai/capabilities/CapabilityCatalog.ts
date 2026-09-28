@@ -51,10 +51,9 @@ export interface CapabilityCatalog {
     skills: SkillPayload[]
     tools: ToolPayload[]
     /**
-     * Tools that are CALLABLE but not advertised to the kernel agent: they
-     * belong to a plugin agent's child run (docs/plugin-agents.md). They travel
-     * as the backend's deferred catalog, so a delegated child can call them
-     * while their JSON Schemas stay out of the kernel's own tool list.
+     * Tools that are CALLABLE but not advertised to the model with a full
+     * schema until first use. They travel as the backend's deferred catalog, so
+     * their JSON Schemas stay out of every prompt.
      */
     deferredTools: ToolPayload[]
     /** Stable hash of (skills, tools, deferredTools). Sent as `capabilitiesVersion` so the backend can cache. */

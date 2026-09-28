@@ -30,10 +30,6 @@ const studioTools = createStudioTools({
         resolveOptionalService('pluginHost') as ReturnType<
             Parameters<typeof createStudioTools>[0]['getPluginHost']
         >,
-    getPluginManagement: () =>
-        resolveOptionalService('pluginManagement') as ReturnType<
-            NonNullable<Parameters<typeof createStudioTools>[0]['getPluginManagement']>
-        >,
     getMarketplace: () =>
         resolveOptionalService('pluginMarketplace') as ReturnType<
             NonNullable<Parameters<typeof createStudioTools>[0]['getMarketplace']>

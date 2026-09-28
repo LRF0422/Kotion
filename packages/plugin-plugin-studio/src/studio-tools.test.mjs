@@ -165,36 +165,6 @@ const pluginHost = {
     },
 }
 
-const managedPlugins = [
-    { name: 'PluginStudio', pluginKey: 'PluginStudio', source: 'system', desktopOnly: false },
-    { name: 'Agent Made', pluginKey: 'agent-made-plugin', version: 'dev.1', source: 'dev', desktopOnly: true },
-]
-const pluginManagement = {
-    async installFromSource(options) {
-        installs.push(options)
-        return true
-    },
-    list() {
-        return managedPlugins
-    },
-    get(name) {
-        return managedPlugins.find((plugin) => plugin.name === name)
-    },
-    has(name) {
-        return managedPlugins.some((plugin) => plugin.name === name)
-    },
-    getActiveNames() {
-        return managedPlugins.map((plugin) => plugin.name)
-    },
-    isRemovable(name) {
-        return name !== 'PluginStudio'
-    },
-    uninstall(name) {
-        calls.push(['uninstallInstalled', name])
-        return name !== 'PluginStudio'
-    },
-}
-
 const marketplace = {
     async listMine() {
         return [
@@ -224,7 +194,6 @@ const marketplace = {
 const tools = createStudioTools({
     getDev: () => dev,
     getPluginHost: () => pluginHost,
-    getPluginManagement: () => pluginManagement,
     getMarketplace: () => marketplace,
 })
 const names = Object.keys(tools)
@@ -241,8 +210,6 @@ const EXPECTED = [
     'listPluginProjectFiles',
     'searchPluginProject',
     'installPluginDependencies',
-    'listInstalledPlugins',
-    'uninstallInstalledPlugin',
     'listMyPlugins',
     'publishPluginProject',
     'upgradePluginVersion',
@@ -364,25 +331,22 @@ check(
     calls.some(([name, args]) => name === 'installDependencies' && args.packages?.[0] === 'date-fns@^3'),
 )
 
-/* Plugin management: list installed plugins and uninstall the removable ones. */
-const managed = await tools.listInstalledPlugins.execute({})
+/*
+ * Registry management is not a studio capability: the plugin manager owns the
+ * installed-plugin list, and exposing it here would hand every agent run the
+ * ability to uninstall arbitrary plugins. Assert the surface stays absent.
+ */
 check(
-    'managed: lists installed plugins with source',
-    managed.count === 2 && managed.plugins[0].source === 'system' && managed.plugins[1].source === 'dev',
-    JSON.stringify(managed.plugins),
+    'boundary: no plugin-registry management tools',
+    !names.includes('listInstalledPlugins')
+        && !names.includes('uninstallInstalledPlugin')
+        && !names.some((name) => /installedPlugin/i.test(name)),
+    names.join(', '),
 )
-const uninstalled = await tools.uninstallInstalledPlugin.execute({ name: 'Agent Made' })
 check(
-    'managed: uninstalls a removable plugin',
-    uninstalled.ok === true && calls.some(([name, arg]) => name === 'uninstallInstalled' && arg === 'Agent Made'),
+    'boundary: hot-install reaches pluginHost only',
+    typeof pluginHost.installFromSource === 'function' && calls.every(([name]) => name !== 'uninstallInstalled'),
 )
-let systemUninstall = ''
-try {
-    await tools.uninstallInstalledPlugin.execute({ name: 'PluginStudio' })
-} catch (error) {
-    systemUninstall = error.message
-}
-check('managed: refuses system plugins', /不可卸载/.test(systemUninstall), systemUninstall)
 
 /* Marketplace lifecycle: 上架 (submit) / 发布 (publish version) / 升级 (upgrade). */
 const mine = await tools.listMyPlugins.execute({})

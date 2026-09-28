@@ -19,7 +19,7 @@ import type {
 export type KernelScope = ResolvedAgentScope
 
 const EMPTY_CAPABILITIES: ResolvedAgentCapabilities = {
-    tools: [], skills: [], context: [], actions: [], agents: [],
+    tools: [], skills: [], context: [], actions: [],
     toolRenderers: [], artifactRenderers: [],
 }
 

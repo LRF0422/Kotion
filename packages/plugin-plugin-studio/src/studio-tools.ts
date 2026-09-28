@@ -6,9 +6,13 @@
  * directory, no folder dialog), write its source, build it, hot-install it for
  * preview, and iterate — without the user picking directories.
  *
- * The tools are editor-independent: nothing here touches the document. They are
- * still registered through `editorExtension` because that is the only tool
- * contribution point a plugin has (see PluginManager.resolveTools).
+ * The tools are editor-independent: nothing here touches the document, and they
+ * are contributed through the plugin's first-class `agent` point.
+ *
+ * Scope is deliberately narrow: scaffolding, building, reading the host API and
+ * hot-installing the project itself. The studio never enumerates or uninstalls
+ * other plugins — managing the host plugin registry is the plugin manager's job,
+ * not a plugin's.
  *
  * Services are injected rather than resolved here, which keeps this module
  * dependency-free at runtime: the plugin passes the real resolvers and tests
@@ -138,6 +142,12 @@ export interface StudioDevBridge {
     }): Promise<StudioInstallResult>
 }
 
+/**
+ * The single lifecycle operation the studio may perform on the host registry:
+ * install a freshly built bundle (the hot-reload preview). The studio
+ * deliberately has no view of, or control over, the rest of the installed
+ * plugin set — that is the plugin manager's surface, not the studio's.
+ */
 export interface StudioPluginHost {
     installFromSource(options: {
         code: string
@@ -147,24 +157,6 @@ export interface StudioPluginHost {
         replace?: boolean
         sourceLabel?: string
     }): Promise<boolean>
-}
-
-export interface StudioManagedPlugin {
-    name: string
-    pluginKey: string
-    version?: string
-    source: 'system' | 'installed' | 'dev'
-    desktopOnly: boolean
-}
-
-/** Full management surface; a superset of StudioPluginHost. */
-export interface StudioPluginManagement extends StudioPluginHost {
-    list(): StudioManagedPlugin[]
-    get(name: string): StudioManagedPlugin | undefined
-    isRemovable(name: string): boolean
-    uninstall(name: string): boolean
-    has(name: string): boolean
-    getActiveNames(): string[]
 }
 
 export interface StudioMarketplaceMine {
@@ -189,10 +181,8 @@ export interface StudioPluginMarketplace {
 export interface StudioToolDeps {
     /** The desktop bridge's dev surface, or undefined on a non-dev host. */
     getDev: () => StudioDevBridge | undefined
-    /** The host plugin registry, or undefined when the host did not register it. */
+    /** The host plugin registry's hot-install surface, or undefined when absent. */
     getPluginHost: () => StudioPluginHost | undefined
-    /** Full plugin-management service; optional for older hosts and tests. */
-    getPluginManagement?: () => StudioPluginManagement | undefined
     /** Plugin-marketplace lifecycle service; optional for older hosts and tests. */
     getMarketplace?: () => StudioPluginMarketplace | undefined
 }
@@ -212,21 +202,13 @@ const requireDev = (deps: StudioToolDeps): StudioDevBridge => {
 }
 
 /**
- * The narrow installer surface, preferring the full management service so a
- * hot-install goes through the same path as every other plugin install.
+ * The hot-install surface. Installing a build is the studio's only registry
+ * operation: it has no business listing or uninstalling the user's plugins.
  */
 const requirePluginHost = (deps: StudioToolDeps): StudioPluginHost => {
-    const management = deps.getPluginManagement?.()
-    if (management) return management
     const pluginHost = deps.getPluginHost()
-    if (!pluginHost) throw new Error('宿主未注册 pluginHost/pluginManagement 服务，无法热更插件')
+    if (!pluginHost) throw new Error('宿主未注册 pluginHost 服务，无法热更插件')
     return pluginHost
-}
-
-const requirePluginManagement = (deps: StudioToolDeps): StudioPluginManagement => {
-    const management = deps.getPluginManagement?.()
-    if (!management) throw new Error('宿主未注册 pluginManagement 服务，无法管理已安装插件')
-    return management
 }
 
 const requireMarketplace = (deps: StudioToolDeps): StudioPluginMarketplace => {
@@ -609,37 +591,6 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
                 output: result.output,
                 next: '现在可以在源码里 import 这些包；改完用 runPluginProject / buildPluginProject 验证。',
             }
-        },
-    },
-
-    listInstalledPlugins: {
-        description:
-            '列出当前宿主里已经安装/激活的插件（含宿主自带的 system 插件）。返回 name、pluginKey、来源（system/installed/dev）、' +
-            '版本、是否桌面专属、是否可卸载。管理已安装插件或排查冲突前先调用它。',
-        inputSchema: { type: 'object', properties: {} },
-        readOnly: true,
-        execute: async () => {
-            const management = requirePluginManagement(deps)
-            const plugins = management.list()
-            return { count: plugins.length, plugins }
-        },
-    },
-
-    uninstallInstalledPlugin: {
-        description:
-            '卸载一个已安装的插件（按运行时 name，来自 listInstalledPlugins）。宿主自带的 system 插件不可卸载，会直接报错。',
-        inputSchema: {
-            type: 'object',
-            properties: { name: { type: 'string', description: '插件的运行时名字。' } },
-            required: ['name'],
-        },
-        execute: async (args: { name: string }) => {
-            const management = requirePluginManagement(deps)
-            if (!management.isRemovable(args.name)) {
-                throw new Error('插件不可卸载（未安装，或为宿主自带）：' + args.name)
-            }
-            const removed = management.uninstall(args.name)
-            return { ok: removed, name: args.name }
         },
     },
 

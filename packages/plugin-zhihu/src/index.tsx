@@ -29,33 +29,17 @@ export const zhihu = new ZhihuPlugin({
     status: "ACTIVE",
     editorExtension: [ZhihuExtension],
     agent: {
-        agents: [
-            {
-                id: "zhihu-researcher",
-                name: "知乎调研员",
-                description:
-                    "在知乎开放平台上做中文社区调研与知乎直答：站内搜索、全网搜索、热榜、直答、额度查询，输出带来源链接的结论。当用户需要知乎上的观点/经验/热点，或要求引用知乎来源时委派给它。",
-                scope: "any",
-                systemPrompt: [
-                    "你是知乎调研员，只通过知乎开放平台获取公开信息，并整理成可引用的结论。",
-                    "优先用 zhihuSearch 检索知乎站内的问答、回答与文章；只有站外中文网页才用 zhihuGlobalSearch。需要当下热点用 zhihuHotList，需要知乎视角的直接回答用 zhihuAsk。",
-                    "不要编造内容：每条结论都必须附上标题与原链接；工具返回 success=false 时如实说明错误，并建议用户到「设置 → 知乎」检查 Access Secret。",
-                    "批量调用前先用 zhihuQuota 确认剩余额度，避免超额。",
-                    "完成后用中文简短汇报：检索了什么、得到哪些带链接的要点，以及是否受到额度或鉴权限制。",
-                ].join("\n"),
-                tools: liftLegacyTools(
-                    [
-                        zhihuSearchTool,
-                        zhihuGlobalSearchTool,
-                        zhihuHotListTool,
-                        zhihuAskTool,
-                        zhihuQuotaTool,
-                    ],
-                    { scope: "any" },
-                ),
-                skills: liftLegacySkills([zhihuResearcherSkill]),
-            },
-        ],
+        tools: liftLegacyTools(
+            [
+                zhihuSearchTool,
+                zhihuGlobalSearchTool,
+                zhihuHotListTool,
+                zhihuAskTool,
+                zhihuQuotaTool,
+            ],
+            { scope: "any" },
+        ),
+        skills: liftLegacySkills([zhihuResearcherSkill]),
     },
     settings: {
         key: "zhihu-settings",

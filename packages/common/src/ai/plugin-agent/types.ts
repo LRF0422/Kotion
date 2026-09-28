@@ -120,44 +120,6 @@ export interface AgentActionDefinition {
 }
 
 /**
- * A plugin-owned agent — the unit of the hybrid delegation model
- * (docs/plugin-agents.md). The kernel agent ORCHESTRATES: it sees only this
- * definition (id/name/description/scope) and delegates work; the tools and
- * skills below belong to the child run alone, so their scope, prompt and naming
- * can never drift from their owner.
- */
-export interface PluginAgentDefinition {
-    /** Stable id the kernel agent delegates to. */
-    id: string
-    /** Display name shown in the sub-agent tree. */
-    name: string
-    /**
-     * What this agent is for — this IS its interface: the kernel agent picks it
-     * from this text, so write it like a tool description.
-     */
-    description: string
-    /** The agent's own persona/rules (the child run's system prompt). */
-    systemPrompt?: string
-    /**
-     * When the agent is available: `page` needs a live editor, `workspace` is
-     * always offered, `any` is unrestricted. Defaults to `any`.
-     */
-    scope?: AgentScope | AgentScope[]
-    /** Tools that exist ONLY inside this agent's run. */
-    tools?: AgentToolDefinition[]
-    /**
-     * Core-registered implementations this agent exposes (same bridge as the
-     * contribution-level `include`). Lets a plugin agent own workspace tools
-     * whose implementation lives in core.
-     */
-    include?: AgentToolInclude[]
-    /** Skills that travel with those tools (same owner, so they always match). */
-    skills?: AgentSkillDefinition[]
-    /** Optional cheaper model for this agent's child run. */
-    model?: string
-}
-
-/**
  * A reference to a core-registered implementation (see ./registry.ts). The
  * plugin *declares* availability; the implementation stays in core. This is
  * what lets `plugin-main` expose workspace tools without importing @kn/core.
@@ -235,7 +197,6 @@ export interface AgentContribution {
     skills?: AgentSkillDefinition[]
     context?: AgentContextProviderDefinition[]
     actions?: AgentActionDefinition[]
-    agents?: PluginAgentDefinition[]
     /** Conversation cards for this plugin's (or core's) tool results. */
     toolRenderers?: AgentToolRendererContribution[]
     /** Side-sheet previews, keyed by artifact kind. */

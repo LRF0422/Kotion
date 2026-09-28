@@ -1,12 +1,13 @@
 /**
- * Migration bridge: `editorExtension[].tools / .skills` → the agent contract.
+ * Migration bridge: `editorExtension[].tools / .skills` → contribution-level
+ * `agent.tools / agent.skills`.
  *
- * Every in-tree plugin has moved its tools/skills into its own `agent`
- * declaration (docs/plugin-agents.md), so the kernel no longer aggregates
- * editor-extension tools. What remains is the conversion itself:
- * {@link liftLegacyTools} / {@link liftLegacySkills}, used by a plugin that is
- * migrating — it lifts the same definitions into `agent.agents[].tools/skills`,
- * where the owner (and therefore the scope, prompt and naming) is explicit.
+ * Every in-tree plugin now declares its tools/skills on its own `agent`
+ * contribution, so the kernel no longer aggregates editor-extension tools. What
+ * remains is the conversion itself: {@link liftLegacyTools} /
+ * {@link liftLegacySkills}, used by a plugin whose factories still come from
+ * Tiptap extensions — the lifted definitions carry the scope and the editor
+ * guard explicitly.
  *
  * Legacy tools come from Tiptap extensions, so the DEFAULT is `page` scope with
  * an eager editor guard: a factory that really needs the document must not be

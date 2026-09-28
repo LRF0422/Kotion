@@ -163,14 +163,8 @@ export function useCapabilityProviders(
     const perEditorToolsRef = useRef<WeakMap<object, ToolsRecord>>(new WeakMap())
 
     /**
-     * Plugin skills that live at PLUGIN level (\`agent.skills\`) are
-     * editor-independent, so register them whenever they change.
-     *
-     * Agent-OWNED skills (\`agent.agents[].skills\`) deliberately do not pass
-     * through here: they belong to their plugin agent's child run, and
-     * PluginManager folds their prompt fragments into that agent's system
-     * prompt. Putting them in the global catalog as well would advertise a
-     * prompt for tools the kernel agent cannot call.
+     * Plugin skills (`agent.skills`) are editor-independent, so register them
+     * whenever they change.
      */
     const registerPluginSkills = useCallback(() => {
         if (!pluginManager) return
@@ -219,18 +213,11 @@ export function useCapabilityProviders(
         perEditorToolsRef.current = new WeakMap()
 
         for (const group of collectPluginToolsByPlugin(nextEditor)) {
-            const kernelTools = Object.keys(group.tools).length
-            const agentTools = Object.keys(group.agentTools ?? {}).length
-            if (kernelTools + agentTools > 0) {
-                console.log(
-                    `[Agent] Registering ${kernelTools} tools + ${agentTools} agent-deferred tools `
-                    + `from plugin "${group.pluginName}"`,
-                )
+            const count = Object.keys(group.tools).length
+            if (count > 0) {
+                console.log(`[Agent] Registering ${count} tools from plugin "${group.pluginName}"`)
             }
             toolProvider.registerPluginTools(group.tools, group.pluginName)
-            // Agent-owned tools: callable in a delegated child run, invisible to
-            // the kernel agent's own tool list (see ToolMetadata.deferred).
-            toolProvider.registerPluginTools(group.agentTools ?? {}, group.pluginName, { deferred: true })
         }
         return toolProvider.getAllTools()
     }, [toolProvider, pluginManager, registerPluginSkills, collectPluginToolsByPlugin])
@@ -249,9 +236,6 @@ export function useCapabilityProviders(
         const record = toolProvider.buildToolsFor(targetEditor)
         for (const group of collectPluginToolsByPlugin(targetEditor)) {
             Object.assign(record, group.tools)
-            // A child agent's executor needs them too; the deferred flag only
-            // governs catalog advertisement, not executability.
-            Object.assign(record, group.agentTools ?? {})
         }
         perEditorToolsRef.current.set(targetEditor, record)
         return record

@@ -20,7 +20,6 @@ import { createAgentPersistence, type AgentRunStore, type AgentTabLock } from '.
 import type {
     AgentChatMessage,
     AgentEvent,
-    AgentPluginAgentSpec,
     AgentSkillInput,
     AgentToolSpec,
     ResumePayload,
@@ -68,16 +67,10 @@ export interface UseEditorAgentOptions {
     isReadOnlyTool?: (name: string) => boolean
     skills?: AgentSkillInput[]
     /**
-     * Plugin-agent tools: callable in a delegated child run, never advertised
-     * to this (kernel) run's model.
+     * Skill-owned tools: callable from the first turn, advertised by signature
+     * only until the model calls one, so their schemas stay out of the prompt.
      */
     deferredTools?: AgentToolSpec[]
-    /**
-     * Plugin-agent directory for this run (docs/plugin-agents.md). The backend
-     * freezes it into the checkpoint so `delegate({ agentId })` resolves the
-     * child's prompt and tool subset without the model copying them.
-     */
-    pluginAgents?: AgentPluginAgentSpec[]
     /**
      * Extra system-prompt text appended by the backend after its base prompt.
      * Hosts pass their editor rules here (the backend cannot import them).
@@ -131,7 +124,7 @@ export interface EditorAgentApi {
 
 export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
     const {
-        conversationId, tools, resolveTools, skills, deferredTools, pluginAgents, systemPrompt, spaceId, pageId, onToolExecution,
+        conversationId, tools, resolveTools, skills, deferredTools, systemPrompt, spaceId, pageId, onToolExecution,
         autoExecuteTools = true, persist = true, store: providedStore, lock: providedLock,
     } = options
     const isReadOnlyTool = options.isReadOnlyTool
@@ -282,7 +275,6 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
                     tools,
                     skills,
                     deferredTools: deferredTools && deferredTools.length > 0 ? deferredTools : undefined,
-                    pluginAgents: pluginAgents && pluginAgents.length > 0 ? pluginAgents : undefined,
                     systemPrompt: runSystemPrompt.length > 0 ? runSystemPrompt : undefined,
                     contextNote: opts.contextNote,
                     spaceId,

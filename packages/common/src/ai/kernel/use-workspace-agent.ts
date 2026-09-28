@@ -14,8 +14,6 @@ import { useCallback, useMemo } from 'react'
 import { useCapabilityProviders } from '../use-capability-providers'
 import { buildAgentRunInputs } from '../capabilities'
 import { filterAgentCatalog } from './filter-catalog'
-import { describePluginAgents, toPluginAgentSpecs } from './plugin-agents'
-import { useAgentCapabilities } from './use-agent-capabilities'
 import { useEditorAgent, type EditorAgentApi } from '../agent/use-editor-agent'
 import type { AgentChatMessage } from '../agent/types'
 import type { OnToolExecution } from '../types'
@@ -102,21 +100,11 @@ export function useWorkspaceAgent(options: WorkspaceAgentOptions = {}): Workspac
         [isAskMode, deferredTools],
     )
 
-    // Plugin-agent directory: published to the backend (agentId → prompt/tools)
-    // and to the model (see KernelHomePage, which appends describePluginAgents
-    // to each turn's contextNote).
-    const { agents: pluginAgentList } = useAgentCapabilities('workspace')
-    const pluginAgents = useMemo(
-        () => toPluginAgentSpecs(isAskMode ? [] : pluginAgentList),
-        [isAskMode, pluginAgentList],
-    )
-
     const agent = useEditorAgent({
         conversationId,
         tools: runTools,
         skills: runSkills,
         deferredTools: runDeferredTools,
-        pluginAgents,
         resolveTools: providers.resolveTools,
         isReadOnlyTool: providers.isReadOnlyTool,
         systemPrompt: options.systemPrompt ?? WORKSPACE_AGENT_PROMPT,

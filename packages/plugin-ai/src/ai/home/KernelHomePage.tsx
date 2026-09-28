@@ -9,8 +9,6 @@ import {
     toImageDataUrl,
     useAgentArtifacts,
     describeAgentTarget,
-    describePluginAgents,
-    useAgentCapabilities,
     useAgentPane,
     useCustomAgents,
     useTranslation,
@@ -114,10 +112,7 @@ export const KernelHomePage: React.FC = () => {
     // The working target is the conversation's focused artifact; the pane is
     // just its view. Closing the pane hides it but keeps the target.
     const targetNote = describeAgentTarget(pane.target)
-    // Workspace-scoped plugin agents the kernel can delegate to (hybrid model).
-    const workspaceAgents = useAgentCapabilities('workspace')
-    const agentNote = useMemo(() => describePluginAgents(workspaceAgents.agents), [workspaceAgents])
-    const contextNote = [targetNote, agentNote].filter(Boolean).join('\n\n') || undefined
+    const contextNote = targetNote || undefined
     const [paneWidth, setPaneWidth] = useState(() => {
         try {
             const stored = Number(window.localStorage.getItem(PANE_WIDTH_KEY))

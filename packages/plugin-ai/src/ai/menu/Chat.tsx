@@ -13,9 +13,6 @@ import {
     useEditorAgent,
     useCapabilityProviders,
     buildAgentRunInputs,
-    describePluginAgents,
-    toPluginAgentSpecs,
-    useAgentCapabilities,
     useAgentPane,
     AgentPaneHost,
     getAgentDocumentBridge,
@@ -418,18 +415,6 @@ export const ExpandableChatDemo: React.FC<{
 
     // ─── AgentCore driver ─────────────────────────────────────────
     const isAskMode = chatMode === 'ask'
-    // Plugin agents available in this scope (hybrid delegation, docs/plugin-agents.md).
-    const agentCapabilities = useAgentCapabilities('page')
-    const pluginAgentNote = useMemo(
-        () => describePluginAgents(agentCapabilities.agents),
-        [agentCapabilities],
-    )
-    // The same directory travels WITH the run so delegate({ agentId }) resolves
-    // the child's prompt/tools server-side (see CreateRunInput.pluginAgents).
-    const pluginAgents = useMemo(
-        () => toPluginAgentSpecs(isAskMode ? [] : agentCapabilities.agents),
-        [isAskMode, agentCapabilities],
-    )
 
     const { getCatalog, rebindEditor, resolveTools, isReadOnlyTool } = useCapabilityProviders(agentEditor, {
         onUserChoiceRequest: handleUserChoiceRequest,
@@ -652,7 +637,6 @@ export const ExpandableChatDemo: React.FC<{
         tools: isAskMode ? [] : toolSpecs,
         skills: isAskMode ? [] : skills,
         deferredTools: isAskMode ? [] : deferredTools,
-        pluginAgents,
         // Editor rules the backend cannot import; appended to its base prompt.
         // A selected custom agent's guidance rides behind them.
         systemPrompt: composeAgentSystemPrompt(
@@ -839,10 +823,7 @@ export const ExpandableChatDemo: React.FC<{
         const boundPageNote = runTarget
             ? t('ai.chat.boundPagePrefix', { title: runTarget.title })
             : undefined
-        // Volatile per-turn context: the plugin-agent directory rides with the
-        // bound-page note (append-only <context>, never the system prefix), so
-        // the kernel agent always knows which agents it can delegate to.
-        const contextNote = [boundPageNote, pluginAgentNote].filter(Boolean).join('\n\n') || undefined
+        const contextNote = boundPageNote || undefined
 
         // Conversation history is engine-owned (session model log); the client
         // only sends the new turn. Images ride as multimodal content parts so
@@ -869,7 +850,7 @@ export const ExpandableChatDemo: React.FC<{
         }
     }, [
         agent, generateMessageId, targetPage, currentPage, setTargetPage,
-        selectedModel, modelParams, setMessages, t, pluginAgentNote,
+        selectedModel, modelParams, setMessages, t,
     ])
 
     const handleSend = useCallback(() => {
