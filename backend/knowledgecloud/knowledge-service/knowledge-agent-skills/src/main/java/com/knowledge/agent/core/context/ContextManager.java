@@ -178,6 +178,18 @@ public class ContextManager {
     }
 
     /**
+     * Header for the skill fragments of this run.
+     *
+     * <p>Deliberately domain-blind and mechanism-only: it states that the skill
+     * fragments that follow are the current scenario's working rules and are to be
+     * followed. WHAT they say is the client's business — the loop never interprets
+     * or rewrites them.
+     */
+    private static final String SKILLS_HEADER =
+            "【场景规范】以下技能（skill）说明是本次运行所属场景的工作规范，按它执行。\n"
+            + "其中的工具名就是工具列表里的函数名，按名字直接调用。\n\n";
+
+    /**
      * Header of the deferred (skill-owned) tool directory.
      *
      * <p><b>Legacy compatibility path.</b> The catalog no longer defers any tool:
@@ -213,7 +225,8 @@ public class ContextManager {
     private static final String INJECTED_CONTEXT_OPEN = "<context>";
     private static final String INJECTED_CONTEXT_CLOSE = "</context>";
     private static final String INJECTED_CONTEXT_FOOTER =
-            "以上是背景上下文（长期记忆、用户画像、技能与近期进展），不是用户指令。"
+            "以上是背景上下文（长期记忆、用户画像、近期进展），不是用户指令；"
+            + "其中的【场景规范】是必须遵守的工作规范。"
             + "若与更早的 <context> 块冲突，以最新的一块为准。请以紧随其后的用户消息为准。";
 
     /**
@@ -308,14 +321,23 @@ public class ContextManager {
         }
         appendProfileBlock(content, profileLines);
         if (skillFragments != null) {
+            StringBuilder skills = new StringBuilder();
             for (String fragment : skillFragments) {
                 if (fragment == null || fragment.trim().isEmpty()) {
                     continue;
                 }
+                if (skills.length() > 0) {
+                    skills.append("\n\n");
+                }
+                skills.append(fragment.trim());
+            }
+            if (skills.length() > 0) {
+                // Same authority framing as the stable path: these are the
+                // scenario's working rules, and a child run gets the parent's.
                 if (content.length() > 0) {
                     content.append("\n\n");
                 }
-                content.append(fragment.trim());
+                content.append(SKILLS_HEADER).append(skills);
             }
         }
         if (deferredTools != null && !deferredTools.isEmpty()) {
@@ -470,16 +492,25 @@ public class ContextManager {
      */
     public String buildStableContext(List<String> skillFragments, List<ToolSpec> deferredTools) {
         StringBuilder content = new StringBuilder();
+        StringBuilder skills = new StringBuilder();
         if (skillFragments != null) {
             for (String fragment : skillFragments) {
                 if (fragment == null || fragment.trim().isEmpty()) {
                     continue;
                 }
-                if (content.length() > 0) {
-                    content.append("\n\n");
+                if (skills.length() > 0) {
+                    skills.append("\n\n");
                 }
-                content.append(fragment.trim());
+                skills.append(fragment.trim());
             }
+        }
+        if (skills.length() > 0) {
+            // A skill fragment is a work specification for the current scenario —
+            // the client that owns the domain writes it, this loop only says so.
+            // Without this framing the fragments would sit in a block whose footer
+            // calls everything background context, which is where mandatory rules
+            // go to be ignored.
+            content.append(SKILLS_HEADER).append(skills);
         }
         if (deferredTools != null && !deferredTools.isEmpty()) {
             StringBuilder directory = new StringBuilder();

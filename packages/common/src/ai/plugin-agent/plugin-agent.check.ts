@@ -493,6 +493,21 @@ function checkBuiltinSkillToolNamesExist(): void {
     for (const name of ['getDocumentStructure', 'replaceBlockById', 'insertAtBlockId', 'applyEdits']) {
         assert.ok(policy!.requiredTools.includes(name), `document-editing must require ${name}`)
     }
+
+    // The backend is domain-blind, so this fragment is the WHOLE editor prompt:
+    // it has to stay complete. A condensed copy loses rules silently — the last
+    // one (rule 7, "never end a turn with an unexecuted plan") is the canary.
+    const fragment = policy!.systemPromptFragment ?? ''
+    for (const section of ['# CRITICAL RULES', '# DOCUMENT STRUCTURE', '# WORKFLOW']) {
+        assert.ok(fragment.includes(section),
+            `the editor prompt must keep its ${section} section`)
+    }
+    assert.ok(fragment.includes('Never end a turn with an unexecuted plan'),
+        'the editor prompt must keep every critical rule')
+    assert.ok(fragment.includes("position: 'before'|'after'"),
+        'the editor prompt must keep the insertAtBlockId argument shape')
+    assert.ok(fragment.includes('buildLayout'),
+        'the editor prompt must keep the whole-page layout guidance')
 }
 
 function checkContextWhitelist(): void {
