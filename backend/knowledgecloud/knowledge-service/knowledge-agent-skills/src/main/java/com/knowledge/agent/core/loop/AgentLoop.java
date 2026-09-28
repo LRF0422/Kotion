@@ -187,6 +187,33 @@ public class AgentLoop implements Runnable {
     /** Parent-side suspend reason while parked on delegated children. */
     private static final String SUSPEND_REASON_CHILDREN = "children";
 
+    /**
+     * Word splitter for tool-name recovery: camelCase boundaries, separators and
+     * digit runs all start a new word ({@code insertAtBlockId},
+     * {@code insert_at_block_id}, {@code insert-blocks} → insert/at/block/id).
+     */
+    private static final java.util.regex.Pattern TOOL_NAME_TOKEN_SPLIT =
+            java.util.regex.Pattern.compile("(?<=[a-z0-9])(?=[A-Z])|[^A-Za-z0-9]+");
+
+    /**
+     * Namespace noise a model likes to prepend to a real tool name. Dropped from
+     * the word-overlap comparison so {@code editor_insertBlocks} is scored on
+     * "insert" + "blocks" rather than on "editor".
+     */
+    private static final java.util.Set<String> TOOL_NAME_STOPWORDS = new java.util.HashSet<>(
+            java.util.Arrays.asList(
+                    "editor", "plugin", "plugins", "tool", "tools", "page", "pages",
+                    "document", "doc", "the", "and", "for"));
+
+    /**
+     * A single shared word is not enough to suggest a tool: {@code editor} alone
+     * would otherwise drag in every editor-side tool. Two shared words, or one
+     * word long enough to be specific ({@code insertAtBlockId} for
+     * {@code insertBlocksAtPosition}), is evidence.
+     */
+    private static final int TOOL_NAME_MIN_MATCHED_WORDS = 2;
+    private static final int TOOL_NAME_SPECIFIC_WORD_LENGTH = 6;
+
     private volatile long lastExternalCancelCheckMs;
 
     private volatile boolean externallyCancelled;
@@ -565,8 +592,7 @@ public class AgentLoop implements Runnable {
                             frontendCalls.add(call);
                         }
                     } else {
-                        rejectToolCall(call,
-                                "TOOL_NOT_FOUND: 工具未注册，请检查工具名或改用可用工具");
+                        rejectToolCall(call, unknownToolMessage(call.getName(), knownToolSpecs()));
                     }
                 }
 
@@ -767,6 +793,242 @@ public class AgentLoop implements Runnable {
                 RunEvents.toolRequested(call.getId(), call.getName(), call.getArguments()));
         emit(RunEvents.TOOL_COMPLETED,
                 RunEvents.toolCompleted(call.getId(), call.getName(), false, null, error, 0));
+    }
+
+    /**
+     * Error text for a tool name the run does not know.
+     *
+     * <p>The model invents plausible names — typically a made-up namespace prefix
+     * plus a semantic suffix ({@code editor_insertBlocks} for
+     * {@code insertAtBlockId}) — and a bare "not registered" makes it guess again
+     * with a different prefix (three failed calls in a row before it gave up).
+     * Naming the closest real tools turns that into a single actionable turn.
+     *
+     * <p>Package-private and static so the ranking is unit-testable.
+     */
+    static String unknownToolMessage(String wanted, List<ToolSpec> candidates) {
+        StringBuilder message = new StringBuilder(
+                "TOOL_NOT_FOUND: 工具未注册，请检查工具名或改用可用工具");
+        List<String> nearest = nearestToolNames(wanted, candidates, 3);
+        if (!nearest.isEmpty()) {
+            message.append("\n最接近的可用工具：");
+            for (int i = 0; i < nearest.size(); i++) {
+                message.append(i == 0 ? "" : "、").append(nearest.get(i));
+            }
+            message.append("。请直接使用工具表里的确切名字与参数——不要臆造工具名或命名空间前缀。");
+        }
+        return message.toString();
+    }
+
+    /**
+     * Closest tool names to {@code wanted}, best first (at most {@code limit}).
+     *
+     * <p>Ranking is deliberately simple: an exact-ish normalised match wins, then
+     * containment (the candidate is a suffix of the invented name — the prefix is
+     * what the model made up), then edit distance. Names are normalised
+     * (lower-case, separators removed) so {@code insert_at_block_id} and
+     * {@code InsertAtBlockID} both hit.
+     */
+    static List<String> nearestToolNames(String wanted, List<ToolSpec> candidates, int limit) {
+        if (wanted == null || candidates == null || candidates.isEmpty() || limit <= 0) {
+            return java.util.Collections.emptyList();
+        }
+        String target = normalizeToolName(wanted);
+        if (target.isEmpty()) {
+            return java.util.Collections.emptyList();
+        }
+        // A name that already matches a registered tool is not a typo: the call
+        // was routed elsewhere (e.g. the client could not execute it), so
+        // suggesting a replacement would be actively misleading.
+        for (ToolSpec spec : candidates) {
+            if (spec != null && spec.getName() != null && normalizeToolName(spec.getName()).equals(target)) {
+                return java.util.Collections.emptyList();
+            }
+        }
+        java.util.Map<String, Double> scores = new java.util.LinkedHashMap<>();
+        for (ToolSpec spec : candidates) {
+            if (spec == null || spec.getName() == null) {
+                continue;
+            }
+            String candidate = normalizeToolName(spec.getName());
+            if (candidate.isEmpty()) {
+                continue;
+            }
+            double score = toolNameScore(target, toolNameTokens(wanted), candidate, toolNameTokens(spec.getName()));
+            if (score < 0.4) {
+                continue;
+            }
+            Double existing = scores.get(spec.getName());
+            if (existing == null || score > existing) {
+                scores.put(spec.getName(), score);
+            }
+        }
+        if (scores.isEmpty()) {
+            return java.util.Collections.emptyList();
+        }
+        List<Map.Entry<String, Double>> ranked = new ArrayList<>(scores.entrySet());
+        ranked.sort((a, b) -> {
+            int byScore = Double.compare(b.getValue(), a.getValue());
+            return byScore != 0 ? byScore : a.getKey().compareTo(b.getKey());
+        });
+        List<String> names = new ArrayList<>();
+        for (Map.Entry<String, Double> entry : ranked) {
+            if (names.size() >= limit) {
+                break;
+            }
+            names.add(entry.getKey());
+        }
+        return names;
+    }
+
+    private static double toolNameScore(String target, String[] targetTokens, String candidate, String[] candidateTokens) {
+        if (candidate.contains(target) || target.contains(candidate)) {
+            // Containment is the signature of an invented prefix/suffix.
+            return 0.9;
+        }
+        // Word overlap is the strongest signal for a made-up name: the model
+        // stacks real words from tool descriptions ("editor" + "insert" +
+        // "blocks" -> insertAtBlockId), so compare the invented words against the
+        // candidate's words with the same fuzzy matching.
+        double overlap = Math.max(
+                tokenOverlap(candidateTokens, targetTokens),
+                tokenOverlap(targetTokens, candidateTokens));
+        if (overlap >= 0.5) {
+            return 0.75 + overlap * 0.2;
+        }
+        return Math.min(0.65, 1.0 - (double) editDistance(target, candidate) / Math.max(target.length(), candidate.length()));
+    }
+
+    /**
+     * Fraction of {@code wantedTokens} matched by {@code candidateTokens},
+     * position-weighted: the first word of a made-up name is the verb the model
+     * wanted to perform ({@code insertAtBlockId}), later words are the object
+     * ({@code deleteBlocks} also has "blocks"). Matching the verb is what makes
+     * {@code editor_insertBlocks} land on the insert tool rather than on the
+     * delete one.
+     */
+    private static double tokenOverlap(String[] wantedTokens, String[] candidateTokens) {
+        List<String> wanted = filterToolNameTokens(wantedTokens);
+        if (wanted.isEmpty()) {
+            return 0;
+        }
+        List<String> candidates = filterToolNameTokens(candidateTokens);
+        double matchedWeight = 0;
+        double totalWeight = 0;
+        int matched = 0;
+        for (int i = 0; i < wanted.size(); i++) {
+            double weight = i == 0 ? 2.0 : 1.0;
+            totalWeight += weight;
+            for (String candidate : candidates) {
+                if (tokenMatches(wanted.get(i), candidate)) {
+                    matchedWeight += weight;
+                    matched++;
+                    break;
+                }
+            }
+        }
+        boolean evidence = matched >= TOOL_NAME_MIN_MATCHED_WORDS
+                || (matched == 1 && wanted.get(0).length() >= TOOL_NAME_SPECIFIC_WORD_LENGTH
+                    && matchedLongestWord(wanted, candidates));
+        return evidence ? matchedWeight / totalWeight : 0;
+    }
+
+    /** Whether the one matched word is long enough to be specific. */
+    private static boolean matchedLongestWord(List<String> wanted, List<String> candidates) {
+        for (String token : wanted) {
+            if (token.length() < TOOL_NAME_SPECIFIC_WORD_LENGTH) {
+                continue;
+            }
+            for (String candidate : candidates) {
+                if (tokenMatches(token, candidate)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static boolean tokenMatches(String a, String b) {
+        if (a.length() < 3 || b.length() < 3) {
+            return false;
+        }
+        if (a.startsWith(b) || b.startsWith(a)) {
+            return true;
+        }
+        return 1.0 - (double) editDistance(a, b) / Math.max(a.length(), b.length()) >= 0.6;
+    }
+
+    /** Drop generic namespace words and one/two-letter glue. */
+    private static List<String> filterToolNameTokens(String[] tokens) {
+        List<String> kept = new ArrayList<>();
+        for (String token : tokens) {
+            if (token == null || token.length() < 3) {
+                continue;
+            }
+            String lower = token.toLowerCase();
+            if (TOOL_NAME_STOPWORDS.contains(lower)) {
+                continue;
+            }
+            kept.add(lower);
+        }
+        return kept;
+    }
+
+    /**
+     * Words of a tool name. Split BEFORE normalising: the camelCase boundary is
+     * the only thing separating {@code insertAtBlockId} into insert/at/block/id.
+     */
+    private static String[] toolNameTokens(String name) {
+        if (name == null) {
+            return new String[0];
+        }
+        String[] raw = TOOL_NAME_TOKEN_SPLIT.split(name);
+        String[] normalized = new String[raw.length];
+        for (int i = 0; i < raw.length; i++) {
+            normalized[i] = normalizeToolName(raw[i]);
+        }
+        return normalized;
+    }
+
+    /** Lower-case and drop every non-alphanumeric character. */
+    private static String normalizeToolName(String name) {
+        StringBuilder out = new StringBuilder(name.length());
+        for (int i = 0; i < name.length(); i++) {
+            char c = Character.toLowerCase(name.charAt(i));
+            if (c >= 'a' && c <= 'z' || c >= '0' && c <= '9') {
+                out.append(c);
+            }
+        }
+        return out.toString();
+    }
+
+    private static int editDistance(String left, String right) {
+        int[] previousRow = new int[right.length() + 1];
+        int[] currentRow = new int[right.length() + 1];
+        for (int j = 0; j <= right.length(); j++) {
+            previousRow[j] = j;
+        }
+        for (int i = 1; i <= left.length(); i++) {
+            currentRow[0] = i;
+            for (int j = 1; j <= right.length(); j++) {
+                int cost = left.charAt(i - 1) == right.charAt(j - 1) ? 0 : 1;
+                currentRow[j] = Math.min(
+                        Math.min(previousRow[j] + 1, currentRow[j - 1] + 1),
+                        previousRow[j - 1] + cost);
+            }
+            int[] swap = previousRow;
+            previousRow = currentRow;
+            currentRow = swap;
+        }
+        return previousRow[right.length()];
+    }
+
+    /** Every tool name this run can resolve (backend, client and deferred). */
+    List<ToolSpec> knownToolSpecs() {
+        List<ToolSpec> specs = new ArrayList<>(toolGateway.backendSpecs());
+        specs.addAll(clientToolSpecs.values());
+        specs.addAll(deferredToolSpecs.values());
+        return specs;
     }
 
     /**

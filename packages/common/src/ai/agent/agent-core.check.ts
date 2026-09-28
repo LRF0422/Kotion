@@ -171,6 +171,15 @@ async function checkExecutorOwnerAndWriteLease(): Promise<void> {
                     inputSchema: {},
                     execute: async () => 'read',
                 },
+                insertAtBlockId: {
+                    description: '在指定 blockId 的块之前或之后插入内容',
+                    inputSchema: {
+                        type: 'object',
+                        properties: { blockId: { type: 'string' }, markdown: { type: 'string' } },
+                        required: ['blockId', 'markdown'],
+                    },
+                    execute: async () => 'inserted',
+                },
             }
         },
         isReadOnlyTool: name => name === 'readDocument',
@@ -192,6 +201,15 @@ async function checkExecutorOwnerAndWriteLease(): Promise<void> {
 
     releaseWrite?.()
     assert.deepEqual(await write, { ok: true, result: 'written' })
+
+    // An invented tool name must come back with the closest real one, so the
+    // model corrects itself instead of guessing another prefix.
+    const invented = await executor.execute('x-1', 'editor_insertBlocks', {})
+    assert.equal(invented.ok, false)
+    assert.match(String(invented.error), /editor_insertBlocks/, 'the invented name must be echoed back')
+    assert.match(String(invented.error), /insertAtBlockId\(blockId: string, markdown: string\)/,
+        'the closest executable tool with its signature must be named')
+
     resetDocumentWriteLocks()
 }
 

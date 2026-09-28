@@ -40,7 +40,7 @@ For simple edits (insert a line, fix a typo, delete a block) you can use tools d
 export const CORE_EDITING_RULES = `# CRITICAL RULES
 
 1. **ALWAYS read the document first** (getDocumentStructure) before making any changes
-2. **Prefer blockId addressing** — getDocumentStructure/searchInDocument return stable blockIds; use replaceBlockById/insertAtBlockId/applyEdits/deleteBlocks instead of raw positions (positions go stale after every edit, blockIds don't)
+2. **Prefer blockId addressing** — getDocumentStructure/searchInDocument return stable blockIds; use replaceBlockById/insertAtBlockId/applyEdits/deleteBlocks instead of raw positions (positions go stale after every edit, blockIds don't). **Inserting content is \`insertAtBlockId\`** (\`{ blockId, markdown, position: 'before'|'after' }\`): pass the anchor block's id. There is no \`insertBlocks\` / \`insertBlocksAtPosition\` / \`editor_*\` tool — never invent a tool name or a namespace prefix; use the exact names in your tool list.
 3. **Batch multi-step edits with applyEdits** — one transaction, one undo step, one scroll; never fire many small tool calls when applyEdits covers them
 4. **Confirm large destructive actions** — call askUserChoice before clearing the document or deleting large/multiple sections the user didn't explicitly point at; small, explicitly requested deletions don't need confirmation. Consider createCheckpoint before mass edits
 5. **Confirm with user** when the request is ambiguous

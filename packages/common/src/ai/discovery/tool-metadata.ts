@@ -254,6 +254,42 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
         loaded: false,
         source: 'builtin'
     },
+    {
+        name: 'buildLayout',
+        category: 'layout',
+        description: '一次性构建完整的多行多列页面布局（复刻网站骨架 hero/features/footer）。传入 rows 层级 JSON，同一行 widths 自动归一化，最多 1 层嵌套；布局构建首选工具',
+        priority: 9,
+        tags: ['columns', 'layout', 'build', 'compose', 'essential'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'setColumnWidths',
+        category: 'layout',
+        description: '批量设置某个分栏中所有列的宽度（百分比），自动归一化到总和 100（每列最少 5%）',
+        priority: 6,
+        tags: ['columns', 'width', 'layout'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'setColumnStyle',
+        category: 'layout',
+        description: '设置分栏中某一列的样式：背景色、内边距、垂直对齐',
+        priority: 6,
+        tags: ['columns', 'style', 'layout'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'setColumnsGap',
+        category: 'layout',
+        description: '设置分栏的列间距 (px)，传 null 恢复默认 12px',
+        priority: 6,
+        tags: ['columns', 'gap', 'layout'],
+        loaded: false,
+        source: 'builtin'
+    },
 
     // ===== Interaction Tools =====
     {

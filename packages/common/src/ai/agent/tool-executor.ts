@@ -13,6 +13,7 @@ import type { OnToolExecution, ToolDefinition, ToolsRecord } from '../types'
 import type { SessionPageBinding } from '../session-page-binding'
 import { AGENT_IMAGES_KEY } from '../image/agent-image-contract'
 import { withDocumentWrite } from './document-write-lock'
+import { unknownToolError } from './tool-name-recovery'
 
 /**
  * The wire result is what the backend needs (base64 included so the model can
@@ -149,7 +150,10 @@ export class EditorToolExecutor {
             const tools = await this.resolveTools(owner, { mutating })
             const definition: ToolDefinition | undefined = tools[toolName]
             if (!definition || typeof definition.execute !== 'function') {
-                outcome = { ok: false, error: 'Tool not available on frontend: ' + toolName }
+                // The model invented a name (usually a made-up namespace prefix
+                // plus a semantic suffix). Name the closest real tools so the
+                // next call lands, instead of letting it guess another prefix.
+                outcome = { ok: false, error: unknownToolError(toolName, tools) }
             } else {
                 // Do not race mutating editor operations against a timeout: the
                 // underlying promise cannot be cancelled and may commit later,
