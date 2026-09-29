@@ -526,6 +526,7 @@ export const KernelHomePage: React.FC = () => {
                                 artifact={paneDisplay}
                                 onClose={pane.close}
                                 onOpenInPage={pane.openInPage}
+                                canOpenInPage={pane.canOpenInPage(paneDisplay)}
                             />
                         </div>
                     </>

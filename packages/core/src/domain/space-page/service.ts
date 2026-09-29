@@ -45,6 +45,17 @@ const params = (value: object): Record<string, unknown> => value as Record<strin
 const serializePageContent = (content: unknown): unknown =>
     content !== null && typeof content === "object" ? JSON.stringify(content) : content;
 
+/**
+ * Whether a response body is a bare id scalar rather than a record.
+ *
+ * `POST /space` answers with just the new space's id. Reading that as a record
+ * would throw in `normalizeId` ("space.id must be …"), so the shape has to be
+ * recognized before normalizing: `{ id }` is a record, `7` / `"7"` is an id.
+ */
+const isIdScalar = (value: unknown): value is string | number | bigint =>
+    (typeof value === "string" || typeof value === "number" || typeof value === "bigint")
+    && String(value).trim() !== "";
+
 export const createSpacePageService = (
     transport: SpacePageTransport = createCommonSpacePageTransport()
 ): SpacePageService => {
@@ -89,7 +100,14 @@ export const createSpacePageService = (
         },
         async createSpace(request) {
             const raw = await execute(E.spaces.createOrUpdate, undefined, request);
-            const space = raw == null ? undefined : normalizeSpace(raw);
+            // The endpoint answers with the new space's id (a bare scalar). The
+            // full record still has to be read back, because only the id is
+            // returned and callers act on the created space immediately.
+            const space = isIdScalar(raw)
+                ? normalizeSpace(await execute(E.spaces.detail, { id: normalizeId(raw, "spaceId") }))
+                : raw == null
+                    ? undefined
+                    : normalizeSpace(raw);
             changes.emit("space.created", { space });
             return space;
         },

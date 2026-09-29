@@ -17,7 +17,7 @@ import {
  * Registered once from App.tsx (the contract lives in @kn/common, which cannot
  * import @kn/ui).
  */
-export const AgentPaneHostImpl: React.FC<AgentPaneHostProps> = ({ artifact, onClose, onOpenInPage }) => {
+export const AgentPaneHostImpl: React.FC<AgentPaneHostProps> = ({ artifact, onClose, onOpenInPage, canOpenInPage }) => {
     const { t } = useTranslation()
     const artifactRenderers = useAgentArtifactRenderers()
     const Renderer = artifactRenderers.get(artifact.kind)
@@ -27,15 +27,19 @@ export const AgentPaneHostImpl: React.FC<AgentPaneHostProps> = ({ artifact, onCl
         <div className="flex h-full min-h-0 flex-col">
             <div className="flex shrink-0 items-center gap-1.5 border-b px-3 py-2">
                 <span className="min-w-0 flex-1 truncate text-sm font-medium">{title}</span>
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 gap-1 px-2 text-xs text-muted-foreground"
-                    onClick={() => onOpenInPage(artifact)}
-                >
-                    <ExternalLink className="h-3.5 w-3.5" />
-                    {t('agentPane.openPage')}
-                </Button>
+                {/* Hidden when this surface cannot navigate there (no bridge, or an
+                    artifact kind with no route) — a dead button is worse than none. */}
+                {canOpenInPage && (
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 gap-1 px-2 text-xs text-muted-foreground"
+                        onClick={() => onOpenInPage(artifact)}
+                    >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        {t('agentPane.openPage')}
+                    </Button>
+                )}
                 <Button
                     variant="ghost"
                     size="icon"

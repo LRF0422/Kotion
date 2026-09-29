@@ -1,6 +1,6 @@
 import type { Editor } from "@kn/editor"
 import { z } from "@kn/ui"
-import type { ToolsRecord, ToolExecutionContext, SessionPageBinding } from "@kn/common"
+import type { ToolsRecord, ToolExecutionContext, SessionPageBinding, AgentArtifact } from "@kn/common"
 import {
     getPageNavigationBridge,
     getSessionPageBinding,
@@ -16,6 +16,35 @@ import {
 } from "./page-tree"
 
 const BRIDGE_MISSING = '页面服务不可用（当前可能不在页面编辑器中）'
+
+/**
+ * Map a successful `createSpace` result to a renderable artifact.
+ *
+ * Declared here rather than in workspace-tools (where the page mapper lives) on
+ * purpose: workspace-tools imports `createPageTools` from this module, so
+ * importing a mapper back from it would make the two files cyclic. The workspace
+ * registration picks this up through the shared tool record, exactly like
+ * `createPage` does.
+ */
+export function spaceArtifactFromResult(result: unknown): AgentArtifact | null {
+    const value = (result ?? {}) as {
+        success?: boolean
+        spaceId?: unknown
+        name?: unknown
+        type?: unknown
+    }
+    if (value.success === false) return null
+    const id = value.spaceId === undefined || value.spaceId === null ? '' : String(value.spaceId)
+    // No id means the space was created but cannot be addressed (older backend,
+    // ambiguous name). Offering an artifact we cannot open would be a dead card.
+    if (!id) return null
+    return {
+        kind: 'space',
+        id,
+        title: typeof value.name === 'string' ? value.name : undefined,
+        data: { type: typeof value.type === 'string' ? value.type : undefined },
+    }
+}
 
 /** The page the agent is working on: the off-screen edit target wins over the open page. */
 interface ActivePageContext {
@@ -129,6 +158,65 @@ export const createPageTools = (editor: Editor): ToolsRecord => ({
                 }
             } catch (error) {
                 return { error: `列出空间失败: ${error instanceof Error ? error.message : '未知错误'}` }
+            }
+        }
+    },
+
+    /**
+     * Create a space (knowledge base). Editor-free and `any`-scoped via
+     * `WORKSPACE_PAGE_TOOLS`: it is the entry point for "把这些内容单独归档到一个新空间",
+     * which a workbench run (no document yet) must be able to do.
+     */
+    createSpace: {
+        description: '新建一个空间（知识库），可指定名称、描述与类型（SPACE 普通空间 / COLLABORATION 团队协作空间）。用于把内容单独归档成新空间；创建后可用 createPage 指定 spaceId 往里面写页面',
+        inputSchema: z.object({
+            name: z.string().describe("空间名称（必填，不能为空）"),
+            description: z.string().optional().describe("空间描述（可选）"),
+            type: z.enum(['SPACE', 'COLLABORATION']).optional().describe("空间类型：SPACE 普通空间（默认）、COLLABORATION 团队协作空间")
+        }),
+        // The created space reaches the conversation card and the side pane.
+        artifactFromResult: spaceArtifactFromResult,
+        execute: async ({ name, description, type }: { name: string; description?: string; type?: 'SPACE' | 'COLLABORATION' }) => {
+            const trimmedName = typeof name === 'string' ? name.trim() : ''
+            if (!trimmedName) return { error: '空间名称不能为空' }
+            const spaceType = type ?? 'SPACE'
+            try {
+                const service = resolveService('spacePageService')
+                const created = await service.spaces.createSpace({
+                    name: trimmedName,
+                    ...(description ? { description } : {}),
+                    type: spaceType,
+                })
+
+                // `POST /space` answers with the new id, which the service turns
+                // back into the record. If an older backend returns no body, fall
+                // back to a name lookup and report the id as unknown rather than
+                // inventing one.
+                let spaceId = created?.id === undefined || created?.id === null
+                    ? undefined
+                    : String(created.id)
+                if (!spaceId) {
+                    try {
+                        const result = await service.spaces.querySpaces({ keyword: trimmedName })
+                        const matches = result.records.filter((space) => space.name === trimmedName)
+                        if (matches.length === 1) spaceId = String(matches[0].id)
+                    } catch {
+                        /* the space exists; only its id is unknown */
+                    }
+                }
+
+                return {
+                    success: true,
+                    created: true,
+                    name: trimmedName,
+                    type: spaceType,
+                    spaceId,
+                    ...(spaceId
+                        ? {}
+                        : { note: '空间已创建，但接口未返回其 id。需要往里面写页面时，先用 listSpaces 按名称查询 spaceId' }),
+                }
+            } catch (error) {
+                return { error: `新建空间失败: ${error instanceof Error ? error.message : '未知错误'}` }
             }
         }
     },

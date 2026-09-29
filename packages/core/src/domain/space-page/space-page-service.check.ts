@@ -239,6 +239,26 @@ async function main(): Promise<void> {
     assert(entered.contextId === "org-a", "entered context id is preserved verbatim", entered);
     assert(entered.permission === "WRITE", "entered permission is preserved", entered);
 
+    // ---- createSpace: the endpoint answers with the new space's bare id ----
+    // Reading that body as a record used to throw in normalizeId ("space.id must
+    // be …"), so the shape has to be recognized before normalizing.
+    fake.reply("/knowledge-wiki/space", 501);
+    fake.reply("/knowledge-wiki/space/:id/detail", { id: 501, name: "归档空间", type: "SPACE" });
+    const createdFromId = await service.spaces.createSpace({ name: "归档空间" });
+    const detailRequest = fake.requests.at(-1)!;
+    assert(detailRequest.endpoint.url === "/knowledge-wiki/space/:id/detail",
+        "a bare id response triggers a detail read for the full record", detailRequest.endpoint.url);
+    assert(detailRequest.params?.id === "501", "the detail read targets the returned id", detailRequest.params);
+    assert(createdFromId?.id === "501", "created space id normalizes to a string", createdFromId);
+
+    // A backend that echoes the whole record needs no second request.
+    const before = fake.requests.length;
+    fake.reply("/knowledge-wiki/space", { id: 502, name: "团队空间", type: "COLLABORATION" });
+    const createdFromRecord = await service.spaces.createSpace({ name: "团队空间", type: "COLLABORATION" });
+    assert(fake.requests.length === before + 1, "a record response must not trigger a detail read");
+    assert(createdFromRecord?.id === "502" && createdFromRecord?.name === "团队空间",
+        "record responses still normalize directly", createdFromRecord);
+
     console.log("core space-page service checks passed");
 }
 

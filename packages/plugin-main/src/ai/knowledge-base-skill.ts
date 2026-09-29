@@ -12,10 +12,11 @@
 export const knowledgeBaseSkill = {
     name: 'Knowledge Base Pages',
     description:
-        '知识库页面技能：在空间里找页面、找正文、建页面、看页面树、把页面展示给用户。'
+        '知识库页面技能：在空间里找页面、找正文、建空间、建页面、看页面树、把页面展示给用户。'
         + '新建的页面会默认成为本次对话的离屏编辑目标；已有页面用 editPage 切换编辑目标后即可编辑。',
     requiredTools: [
         'listSpaces',
+        'createSpace',
         'getSpacePageTree',
         'searchPages',
         'createPage',
@@ -39,6 +40,7 @@ export const knowledgeBaseSkill = {
 - \`searchContent\`：按关键词搜**正文**，返回命中的块文本与归属页面。找"具体信息在哪一页"用这个，找"哪一页叫什么"用 searchPages。
 
 ## 建
+- \`createSpace\`：**新建空间**（知识库本身）。把一批内容单独归档、开一个新的知识库、建一个团队协作空间时用它。只有 \`name\` 必填；\`type\` 默认 SPACE（普通空间），需要多人协作时传 COLLABORATION。空间建好后用 \`createPage\` + \`spaceId\` 往里写页面。
 - \`createPage\`：新建页面。用 \`relativeTo\` + \`position\`（child / sibling）或 \`parentId\` 决定位置，不传就是当前空间的根层级。
 - \`createPage\` 默认 \`bindToSession: true\`：**新页面会成为本次对话的离屏编辑目标**，之后的文档工具（读结构、插入块、插图表、多维表格……）都写它，用户界面不会被带走。要落地产出时就用这个顺序：先 createPage，再往这个页面里写。
 - 需要在参照页面里加一条指向新页面的链接时，用 \`linkInDocument\`。

@@ -1051,6 +1051,7 @@ export const ExpandableChatDemo: React.FC<{
                             artifact={inlinePaneArtifact}
                             onClose={pane.close}
                             onOpenInPage={pane.openInPage}
+                            canOpenInPage={pane.canOpenInPage(inlinePaneArtifact)}
                         />
                     </aside>
                 )}

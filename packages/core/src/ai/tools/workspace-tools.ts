@@ -27,12 +27,19 @@ import { createPageTools } from './page-tools'
  * carries no scope, the workspace filter drops it, and editing an existing page at
  * the workbench is impossible (`openPage` navigates the user away, which is not
  * what "edit this page" means).
+ *
+ * `createSpace` belongs here for the same reason as `listSpaces`: both are
+ * space-level (never document-level), and "把这些内容单独归档到一个新空间" is a
+ * natural FIRST step of a workbench run — the one moment the run definitely has
+ * no editor yet. Entity-creation carries no editor-scope semantics either, so
+ * forcing a document session first would be an arbitrary gate, not a safety one.
  */
 const WORKSPACE_PAGE_TOOLS = [
     'searchPages',
     'createPage',
     'editPage',
     'listSpaces',
+    'createSpace',
     'getSpacePageTree',
     'openPage',
 ] as const

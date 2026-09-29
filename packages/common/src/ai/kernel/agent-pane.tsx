@@ -34,6 +34,13 @@ export interface AgentPaneApi {
     openArtifact: (artifact: AgentArtifact) => void
     /** Leave the conversation to edit the artifact's page (clears the target). */
     openInPage: (artifact: AgentArtifact) => void
+    /**
+     * Whether {@link openInPage} can do anything for this artifact on the current
+     * surface. The pane chrome hides the action when it cannot, so an artifact
+     * kind with no navigation (a source list, or a space on a host that registered
+     * no space route) never renders a dead button.
+     */
+    canOpenInPage: (artifact: AgentArtifact | null | undefined) => boolean
     /** Hide the pane. The target is kept — the agent is still on it. */
     close: () => void
     /** Forget the target too (session switch / explicit reset). */
@@ -45,6 +52,7 @@ const NOOP_PANE_API: AgentPaneApi = {
     open: false,
     openArtifact: () => { /* no provider in this subtree */ },
     openInPage: () => { /* no navigation bridge available */ },
+    canOpenInPage: () => false,
     close: () => { /* nothing open */ },
     clearTarget: () => { /* nothing to clear */ },
 }
@@ -63,6 +71,8 @@ export interface AgentPaneHostProps {
     artifact: AgentArtifact
     onClose: () => void
     onOpenInPage: (artifact: AgentArtifact) => void
+    /** Render the "open" action only when the surface can actually navigate. */
+    canOpenInPage: boolean
 }
 
 /** The chrome (header/close/frame) is provided by @kn/core. */
@@ -109,12 +119,35 @@ export const AgentPaneProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setOpen(false)
     }, [])
     const openInPage = useCallback((next: AgentArtifact) => {
-        if (next.kind !== 'page') return
         const bridge = getPageNavigationBridge()
         if (!bridge) return
-        setTarget(null)
-        setOpen(false)
-        void bridge.openPage(next.id, next.spaceId)
+        if (next.kind === 'page') {
+            setTarget(null)
+            setOpen(false)
+            void bridge.openPage(next.id, next.spaceId)
+            return
+        }
+        // A space has no editor to bind, so "open" means leaving for its route.
+        if (next.kind === 'space' && bridge.openSpace) {
+            setTarget(null)
+            setOpen(false)
+            void bridge.openSpace(next.id)
+        }
+    }, [])
+
+    /**
+     * Answered against the LIVE bridge rather than from state: the bridge is a
+     * module singleton registered by whichever surface is mounted, so it is not
+     * reactive. Reading it here keeps the chrome honest — a navigation that is
+     * momentarily unavailable hides the button instead of failing silently — and
+     * every open/close re-renders the pane anyway.
+     */
+    const canOpenInPage = useCallback((artifact: AgentArtifact | null | undefined) => {
+        if (!artifact) return false
+        const bridge = getPageNavigationBridge()
+        if (!bridge) return false
+        if (artifact.kind === 'page') return true
+        return artifact.kind === 'space' && typeof bridge.openSpace === 'function'
     }, [])
 
     // Expose the opener to non-React callers (agent tools).
@@ -124,8 +157,8 @@ export const AgentPaneProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }, [openArtifact])
 
     const api = useMemo<AgentPaneApi>(
-        () => ({ target, open, openArtifact, openInPage, close, clearTarget }),
-        [target, open, openArtifact, openInPage, close, clearTarget],
+        () => ({ target, open, openArtifact, openInPage, canOpenInPage, close, clearTarget }),
+        [target, open, openArtifact, openInPage, canOpenInPage, close, clearTarget],
     )
 
     return <AgentPaneContext.Provider value={api}>{children}</AgentPaneContext.Provider>

@@ -449,6 +449,12 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
             }),
             openPage: (targetPageId, targetSpaceId) => {
                 navigator.go({ to: `/space-detail/${targetSpaceId ?? spaceId}/page/edit/${targetPageId}` })
+            },
+            // A space artifact has no editor to bind, so the side pane can only
+            // hand the user over to the space's own landing route. Without this
+            // the pane hides its "open" action for spaces.
+            openSpace: (targetSpaceId) => {
+                navigator.go({ to: `/space-detail/${targetSpaceId}` })
             }
         }
 

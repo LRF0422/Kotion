@@ -60,9 +60,11 @@ public class SpaceController {
     private SpaceApplication spaceApplication;
 
     @PostMapping
-    public R<?> ceate(@Valid @RequestBody SpaceDTO dto) {
-        spaceApplication.createSpace(dto);
-        return R.success();
+    public R<Long> ceate(@Valid @RequestBody SpaceDTO dto) {
+        // Return the created space id: the client uses it to keep operating on
+        // the new space (the agent's createSpace tool opens it / writes pages
+        // into it) instead of re-querying by name.
+        return R.data(spaceApplication.createSpace(dto));
     }
 
     @GetMapping("/personal")

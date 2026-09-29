@@ -172,7 +172,7 @@ public class SpaceApplication {
      *
      * @param dto space data transfer object
      */
-    public void createSpace(SpaceDTO dto) {
+    public Long createSpace(SpaceDTO dto) {
         log.info("Creating space: {}", dto.getName());
         Long currentUserId = SecurityContextUtil.getUserId();
         String currentContextId = SecurityContextUtil.getTenantId();
@@ -208,6 +208,9 @@ public class SpaceApplication {
         }
 
         log.info("Space created successfully: {}", dto.getName());
+        // Return the id so callers (the AI agent's createSpace tool) can act on
+        // the space they just created instead of re-querying it by name.
+        return savedSpace == null ? null : savedSpace.getId();
     }
 
     /** 空间数量配额：只统计用户自建的普通/协作空间，不含个人空间与模板。 */

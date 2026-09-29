@@ -17,6 +17,16 @@ export interface CurrentPageContext {
 export interface PageNavigationBridge {
     getCurrentPage: () => CurrentPageContext;
     openPage: (pageId: PageId, spaceId?: SpaceId) => Promise<void> | void;
+    /**
+     * Leave for a space's own route (its landing view).
+     *
+     * A space artifact is a container, not a document: it has no editor to embed
+     * in the side pane, so handing the user over to the real space route is the
+     * only meaningful "open". Optional, because a host that only knows pages is
+     * still a valid host — the pane hides the action instead of rendering a
+     * button that silently does nothing.
+     */
+    openSpace?: (spaceId: SpaceId) => Promise<void> | void;
 }
 
 let currentBridge: PageNavigationBridge | null = null;

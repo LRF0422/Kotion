@@ -14,6 +14,7 @@ import { LayoutGrid } from '@kn/icon'
 import "@kn/ui/globals.css"
 import { mainDockPanels } from './dock'
 import { PageArtifactCard, PagePreviewPane } from './ai/PageArtifact'
+import { SpaceArtifactCard, SpacePreviewPane } from './ai/SpaceArtifact'
 import { knowledgeBaseSkill } from './ai/knowledge-base-skill'
 import { PAGE_AGENT_INCLUDE } from './ai/agent-surface'
 // export * from "./service"
@@ -104,9 +105,13 @@ export const DefaultPluginInstance = new DefaultPlugin({
       { tool: 'createPage', render: PageArtifactCard },
       // Opening beside also leaves a card (jump back / open for editing).
       { tool: 'openPageSide', render: PageArtifactCard },
+      { tool: 'createSpace', render: SpaceArtifactCard },
     ],
     artifactRenderers: [
       { kind: 'page', render: PagePreviewPane },
+      // A space is a container, not a document: the preview is a read-only
+      // summary and links out to the real space route.
+      { kind: 'space', render: SpacePreviewPane },
     ],
   },
   // 主页功能引导:在 welcome 引导(priority 100)之后自动接续播放
@@ -152,6 +157,16 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "untitled": "未命名页面",
           "openBeside": "在侧边查看",
           "openPage": "打开页面"
+        },
+        spaceArtifact: {
+          "untitled": "未命名空间",
+          "openSpace": "前往空间",
+          "typeSpace": "普通空间",
+          "typeCollaboration": "协作空间",
+          "typePersonal": "个人空间",
+          "pageCount": "共 {{count}} 个页面",
+          "emptyPages": "这个空间还没有页面",
+          "loadFailed": "加载空间信息失败"
         },
         dock: {
           "graph": "关系图谱",
@@ -768,6 +783,16 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "untitled": "Untitled page",
           "openBeside": "Open beside",
           "openPage": "Open page"
+        },
+        spaceArtifact: {
+          "untitled": "Untitled space",
+          "openSpace": "Go to space",
+          "typeSpace": "Space",
+          "typeCollaboration": "Team space",
+          "typePersonal": "Personal space",
+          "pageCount": "{{count}} pages",
+          "emptyPages": "This space has no pages yet",
+          "loadFailed": "Failed to load the space"
         },
         dock: {
           "graph": "Relation Graph",

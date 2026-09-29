@@ -24,6 +24,11 @@ export const PAGE_AGENT_INCLUDE = [
     // document acquire an existing page's editor instead of navigating away.
     'editPage',
     'listSpaces',
+    // Space-level creation, editor-free like `listSpaces` (core registers an
+    // implementation for it via WORKSPACE_PAGE_TOOLS). "把这些内容单独归档到一个
+    // 新空间" is a workbench run's FIRST step — precisely when the run has no
+    // document yet — so leaving it undeclared makes that request unschedulable.
+    'createSpace',
     'getSpacePageTree',
     'openPage',
     'openPageSide',
