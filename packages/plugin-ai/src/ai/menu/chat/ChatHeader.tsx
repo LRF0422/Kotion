@@ -7,6 +7,7 @@ import {
     TooltipContent,
     TooltipProvider,
     TooltipTrigger,
+    cn,
     useChatContext,
 } from '@kn/ui'
 import { SessionSwitcher } from './SessionSwitcher'
@@ -20,6 +21,12 @@ interface ChatHeaderProps {
     onNewSession: () => void
     onDelete: (id: string) => void
     onClear: () => void
+    /**
+     * Paint the bottom divider. Hosts that already draw the divider on their own
+     * header row (e.g. the kernel home page, where the row also carries the
+     * artifacts shelf) pass `false` so the line is not painted twice.
+     */
+    divided?: boolean
 }
 
 /**
@@ -36,11 +43,15 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
     onNewSession,
     onDelete,
     onClear,
+    divided = true,
 }) => {
     const chatContext = useChatContext()
     const { t } = useTranslation()
     return (
-        <div className="flex w-full items-center justify-between gap-2 px-3 h-9 border-b bg-background/95 backdrop-blur-sm">
+        <div className={cn(
+            'flex w-full items-center justify-between gap-2 px-3 h-9 bg-background/95 backdrop-blur-sm',
+            divided && 'border-b',
+        )}>
             <SessionSwitcher
                 sessions={sessions}
                 activeSessionId={activeSessionId}

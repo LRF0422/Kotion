@@ -372,6 +372,9 @@ export const KernelHomePage: React.FC = () => {
                         onNewSession={handleNewSession}
                         onDelete={handleDeleteSession}
                         onClear={handleClearChat}
+                        // This row owns the divider so it can span the artifacts
+                        // shelf too; the header must not draw a second one.
+                        divided={false}
                     />
                 </div>
                 <ArtifactsShelf
