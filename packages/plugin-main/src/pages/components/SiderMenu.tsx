@@ -1,4 +1,4 @@
-import { useNavigator, GlobalState, useSpacePageService, clearTokens, useSelector } from "@kn/common";
+import { useNavigator, GlobalState, useSpacePageService, signOut, useSelector } from "@kn/common";
 import { CalendarCheck2, LayoutDashboard, LayoutGrid, PanelBottom, Power, Settings, ShoppingBag, Users, UserRoundPlus } from "@kn/icon";
 import React, { ReactNode } from "react";
 import { EmptyProps } from "@kn/ui";
@@ -44,9 +44,12 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini' }> = ({ size
     const service = useSpacePageService()
 
     const handleLogout = () => {
-        clearTokens()
-        navigator.go({
-            to: '/login'
+        // signOut() clears the tokens plus every remembered sign-in trace
+        // (account name, desktop keychain credentials) before we navigate.
+        void signOut().finally(() => {
+            navigator.go({
+                to: '/login'
+            })
         })
     }
 

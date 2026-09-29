@@ -6,11 +6,11 @@ import {
     OrganizationMember,
     OrganizationRole,
     clearContextSensitiveClientState,
-    clearTokens,
     getRefreshToken,
     normalizeTokenResponse,
     notifyContextChanged,
     saveTokens,
+    signOut,
     useApi,
     useSelector,
     useTranslation,
@@ -170,8 +170,10 @@ export const Member: React.FC = () => {
         if (!currentContext || !window.confirm(t("settings.members.leaveConfirm", { name: currentContext.name }))) return;
         await useApi(APIS.LEAVE_ORGANIZATION, { contextId: currentContext.id });
         clearContextSensitiveClientState();
-        clearTokens();
         notifyContextChanged("");
+        // Leaving the organization ends this sign-in; drop the remembered
+        // credentials with it.
+        await signOut();
         window.location.assign("/login");
     };
 

@@ -1,5 +1,5 @@
 import { Button } from "@kn/ui"
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@kn/ui"
+import { Checkbox, Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@kn/ui"
 import { Input } from "@kn/ui"
 import { useForm } from "@kn/ui"
 import { Link, useNavigate, useSearchParams } from "@kn/common"
@@ -9,12 +9,22 @@ import { useApi } from "@kn/common"
 import { APIS } from "@kn/common"
 import { clearContextSensitiveClientState, normalizeTokenResponse, notifyContextChanged, saveTokens } from "@kn/common"
 import { useTranslation } from "@kn/common"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Loader2, Eye, EyeOff, Check, ArrowRight } from "@kn/icon"
 import { ModeToggle } from "@kn/ui"
 import React from "react"
 import { LanguageToggle } from "../../locales/LanguageToggle"
 import { SparklesText } from "@kn/ui"
+import {
+    clearSavedCredentials,
+    forgetRememberedAccount,
+    getRememberedAccount,
+    hasCredentialStorage,
+    isCredentialStorageAvailable,
+    loadSavedCredentials,
+    saveCredentials,
+    saveRememberedAccount,
+} from "../../auth/saved-credentials"
 
 
 export function Login() {
@@ -22,6 +32,21 @@ export function Login() {
     const [loading, setLoading] = useState(false)
     const [loginSuccess, setLoginSuccess] = useState(false)
     const [showPassword, setShowPassword] = useState(false)
+    const [rememberPassword, setRememberPassword] = useState(true)
+    const [autoLogin, setAutoLogin] = useState(true)
+    // Passwords can only be remembered where the OS keychain is reachable
+    // (Electron); the option stays hidden on the web and on keyring-less hosts.
+    const [canRememberPassword, setCanRememberPassword] = useState(hasCredentialStorage())
+    const [autoLoginError, setAutoLoginError] = useState('')
+    // Whether a saved account/password exists on this machine, which the user
+    // must be able to discard. Seeded from localStorage so the escape hatch is
+    // available even before the keychain read resolves.
+    const [hasRememberedAccount, setHasRememberedAccount] = useState(
+        () => Boolean(getRememberedAccount()) || hasCredentialStorage()
+    )
+    // Set only while an automated submit is in flight, so a failure can be
+    // reported differently from a failure of the user's own submit.
+    const autoLoginAttempted = useRef(false)
     const navigate = useNavigate()
     const [searchParams] = useSearchParams()
     const { t } = useTranslation()
@@ -43,11 +68,42 @@ export function Login() {
         resolver: zodResolver(formSchema)
     })
 
+    // Relative targets are the only redirects honored (`?redirect=/path`), and
+    // never back to the login page itself — that would loop after a success.
+    const getRedirectTarget = () => {
+        const redirect = searchParams.get('redirect')
+        if (!redirect?.startsWith('/') || redirect.startsWith('//')) return '/'
+        const path = redirect.split(/[?#]/, 1)[0]
+        return path === '/login' ? '/' : redirect
+    }
 
-    const onSubmit = (value: z.infer<typeof formSchema>) => {
+    /** OAuth2 password grant body, matching the login form's hidden fields. */
+    const buildLoginBody = (account: string, password: string) => new URLSearchParams({
+        account,
+        password,
+        grantType: 'password',
+        audience: 'kotion-client',
+        type: 'account',
+        scope: 'all',
+    })
+
+    /** True when a rejected login means the credentials themselves were wrong. */
+    const isCredentialError = (error: any) => {
+        const code = error?.code ?? error?.httpStatus ?? error?.status
+        return code === 400 || code === 401
+    }
+
+    const onSubmit = async (value: z.infer<typeof formSchema>) => {
+        const isAutoAttempt = autoLoginAttempted.current
         setLoading(true)
-        const body = new URLSearchParams(Object.entries(value).map(([key, item]) => [key, String(item)]))
-        useApi(APIS.LOGIN, undefined, body, { 'Content-Type': 'application/x-www-form-urlencoded' }).then(res => {
+        setAutoLoginError('')
+        // Snapshot the options before the await: the user may toggle them while
+        // the request is in flight, but the login was issued under these.
+        const shouldRemember = rememberPassword && canRememberPassword
+        const account = value.account
+        const password = value.password
+        try {
+            const res: any = await useApi(APIS.LOGIN, undefined, buildLoginBody(account, password), { 'Content-Type': 'application/x-www-form-urlencoded' })
 
             const tokens = normalizeTokenResponse(res.data)
             if (!tokens.accessToken || !tokens.refreshToken) throw new Error('Missing login tokens')
@@ -56,18 +112,96 @@ export function Login() {
             notifyContextChanged("")
             localStorage.setItem("isLogin", "false")
 
+            // Only remember after the credentials are known to be valid, and
+            // only what the user actually asked for: unchecking "remember"
+            // clears both the keychain entry and the local account name.
+            if (shouldRemember) {
+                saveRememberedAccount(account)
+                await saveCredentials({
+                    account,
+                    password,
+                    autoLogin: autoLogin && shouldRemember,
+                })
+            } else {
+                await clearSavedCredentials()
+                forgetRememberedAccount()
+            }
+
             // Always enter the workspace. First-run onboarding is handled in-app by
             // TourHost (auto-starts the welcome tour for users who haven't seen it).
             setLoginSuccess(true)
-            // Honor ?redirect=<relative path> so flows like invitation links can
-            // resume where the user left off (only same-origin relative paths).
-            const redirect = searchParams.get('redirect')
-            const target = redirect && redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/'
             // Small delay so the overlay paints before React starts unmounting Login
-            setTimeout(() => navigate(target), 150)
-        }).catch(e => {
+            setTimeout(() => navigate(getRedirectTarget()), 150)
+        } catch (e: any) {
+            const credentialError = isCredentialError(e)
+            if (isAutoAttempt) {
+                // Surface auto-login failures inline: the user typed nothing, so
+                // the toast alone would be easy to miss. Auto-login is not left
+                // enabled with credentials the server just rejected.
+                setAutoLoginError(t('auth.login.autoLoginFailed'))
+                setAutoLogin(false)
+            }
+            // Only discard the password when it is what was rejected; a network
+            // or server failure should not make the user retype a valid one.
+            if (credentialError) {
+                form.setValue('password', '')
+            }
             setLoading(false)
-        })
+        } finally {
+            autoLoginAttempted.current = false
+        }
+    }
+
+    // Restore the remembered account (and password, when the OS keychain is
+    // available) and — if the user asked for it — sign in automatically.
+    useEffect(() => {
+        let cancelled = false
+        ;(async () => {
+            const rememberedAccount = getRememberedAccount()
+            const available = await isCredentialStorageAvailable()
+            const saved = available
+                ? await loadSavedCredentials()
+                : null
+            if (cancelled) return
+
+            setCanRememberPassword(available)
+
+            const remembered = saved?.account || rememberedAccount
+            setHasRememberedAccount(Boolean(remembered))
+
+            // Pre-fill, but never clobber something the user has already typed
+            // (the keychain read can be slow enough for that to happen).
+            const account = saved?.account || rememberedAccount
+            if (account && !form.getValues('account')) {
+                form.setValue('account', account)
+            }
+            if (saved?.password) form.setValue('password', saved.password)
+            if (saved) {
+                setRememberPassword(true)
+                setAutoLogin(saved.autoLogin)
+            }
+
+            if (!saved?.autoLogin || !saved.password) return
+            autoLoginAttempted.current = true
+            // Let the pre-filled form paint before the login overlay replaces it.
+            setTimeout(() => {
+                if (cancelled) return
+                // Route the automated submit through the same validated path as a
+                // manual one (handleSubmit builds the complete form value).
+                void form.handleSubmit(onSubmit)()
+            }, 200)
+        })()
+
+        // The auto-login attempt must survive the cleanup of StrictMode's
+        // throwaway first mount, so only the async state writes are guarded.
+        return () => { cancelled = true }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
+
+    /** Editing the fields invalidates "the saved password no longer works". */
+    const clearAutoLoginError = (event: React.ChangeEvent<HTMLInputElement>, onChange: (...event: any[]) => void) => {
+        if (autoLoginError) setAutoLoginError('')
+        onChange(event)
     }
 
 
@@ -249,8 +383,10 @@ export function Login() {
                                         <FormControl>
                                             <Input
                                                 placeholder={t("auth.common.emailPlaceholder")}
+                                                autoComplete="username"
                                                 className="h-10 bg-background border-border focus-visible:ring-1 focus-visible:ring-primary/30 transition-all"
                                                 {...field}
+                                                onChange={(event) => clearAutoLoginError(event, field.onChange)}
                                             />
                                         </FormControl>
                                         <FormMessage />
@@ -276,8 +412,10 @@ export function Login() {
                                                 <Input
                                                     type={showPassword ? 'text' : 'password'}
                                                     placeholder={t("auth.login.passwordPlaceholder")}
+                                                    autoComplete="current-password"
                                                     className="h-10 bg-background border-border pr-10 focus-visible:ring-1 focus-visible:ring-primary/30 transition-all"
                                                     {...field}
+                                                    onChange={(event) => clearAutoLoginError(event, field.onChange)}
                                                 />
                                                 <button
                                                     type="button"
@@ -290,9 +428,57 @@ export function Login() {
                                             </div>
                                         </FormControl>
                                         <FormMessage />
+                                        {autoLoginError && (
+                                            <p className="text-xs text-destructive">{autoLoginError}</p>
+                                        )}
                                     </FormItem>
                                 )}
                             />
+
+                            {/* Remember account / password / auto login.
+                                Each option is a single line so the labels stay
+                                flush with the fields above; the explanation is
+                                one shared footnote instead of a per-option
+                                second line that would wrap in this column. */}
+                            {canRememberPassword && (
+                                <div className="space-y-2.5 pt-0.5">
+                                    <label
+                                        htmlFor="login-remember-password"
+                                        className="flex cursor-pointer items-center gap-2.5 text-sm leading-none text-foreground select-none"
+                                    >
+                                        <Checkbox
+                                            id="login-remember-password"
+                                            checked={rememberPassword}
+                                            onCheckedChange={(checked) => {
+                                                const next = checked === true
+                                                setRememberPassword(next)
+                                                // Auto login needs a stored password.
+                                                if (!next) setAutoLogin(false)
+                                            }}
+                                        />
+                                        {t("auth.login.rememberPassword")}
+                                    </label>
+
+                                    <label
+                                        htmlFor="login-auto-login"
+                                        className={`flex items-center gap-2.5 text-sm leading-none text-foreground select-none ${
+                                            rememberPassword ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'
+                                        }`}
+                                    >
+                                        <Checkbox
+                                            id="login-auto-login"
+                                            checked={autoLogin && rememberPassword}
+                                            disabled={!rememberPassword}
+                                            onCheckedChange={(checked) => setAutoLogin(checked === true)}
+                                        />
+                                        {t("auth.login.autoLogin")}
+                                    </label>
+
+                                    <p className="text-xs leading-relaxed text-muted-foreground">
+                                        {t("auth.login.rememberHint")}
+                                    </p>
+                                </div>
+                            )}
 
                             <Button
                                 type="submit"
@@ -306,6 +492,27 @@ export function Login() {
                                 )}
                                 {!loading && <ArrowRight className="ml-1.5 h-4 w-4" />}
                             </Button>
+
+                            {/* Escape hatch: a remembered sign-in must never trap
+                                the user on the account it saved. */}
+                            {hasRememberedAccount && (
+                                <div className="text-center">
+                                    <button
+                                        type="button"
+                                        className="text-xs text-muted-foreground hover:text-foreground transition-colors underline-offset-4 hover:underline"
+                                        onClick={() => {
+                                            autoLoginAttempted.current = false
+                                            void clearSavedCredentials()
+                                            forgetRememberedAccount()
+                                            setHasRememberedAccount(false)
+                                            setAutoLoginError('')
+                                            form.reset({ account: '', password: '' })
+                                        }}
+                                    >
+                                        {t("auth.login.useAnotherAccount")}
+                                    </button>
+                                </div>
+                            )}
 
                             {/* Divider */}
                             <div className="relative my-3">

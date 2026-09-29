@@ -5,6 +5,7 @@
 
 import type { ContextTokenResponse, TokenContextState } from '../api/types'
 import { clearCachedPluginSecrets } from '../services/plugin-secrets'
+import { getBoundServiceRegistry } from '../services/service-resolver'
 
 const ACCESS_TOKEN_KEY = 'knowledge-access-token';
 const REFRESH_TOKEN_KEY = 'knowledge-refresh-token';
@@ -83,6 +84,45 @@ export function notifyContextChanged(contextId: string): void {
         localStorage.setItem(CONTEXT_CHANGE_KEY, JSON.stringify({ contextId, at: Date.now() }))
     } catch {
         // The initiating tab still performs a hard reload below.
+    }
+}
+
+/** Key under which the login page mirrors the account name it pre-fills. */
+const REMEMBERED_ACCOUNT_KEY = 'knowledge-remembered-account';
+
+/**
+ * Local sign-out: every logout affordance (side menu, mobile tab bar, account
+ * settings, leaving an organization) must go through this so no sign-in state
+ * survives for the next user of the machine.
+ *
+ * - auth tokens are cleared
+ * - the remembered account name is cleared
+ * - remembered credentials on the desktop app are cleared through the core
+ *   service the desktop bridge is registered under (keyed by name so @kn/common
+ *   does not need to import the desktop bridge itself)
+ *
+ * The caller remains responsible for revoking the server-side session /
+ * refresh token, and for navigating to the login page.
+ */
+export async function signOut(): Promise<void> {
+    clearTokens();
+    if (typeof localStorage !== 'undefined') {
+        try {
+            localStorage.removeItem(REMEMBERED_ACCOUNT_KEY);
+        } catch {
+            // Storage can be unavailable in privacy-restricted browser contexts.
+        }
+    }
+    try {
+        const registry = getBoundServiceRegistry();
+        const desktop = registry?.get('desktop' as never) as
+            | { has(capability: string): boolean; invoke(capability: string): Promise<unknown> }
+            | undefined;
+        if (desktop?.has('credentials.clear')) {
+            await desktop.invoke('credentials.clear');
+        }
+    } catch {
+        // Signing out locally must succeed even when the desktop bridge is gone.
     }
 }
 

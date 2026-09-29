@@ -5,6 +5,12 @@ import { join } from 'node:path';
 import * as dns from 'node:dns';
 import * as net from 'node:net';
 import { setupDevIpcHandlers } from './plugin-dev/index';
+import {
+  clearCredentials,
+  isEncryptionAvailable,
+  loadCredentials,
+  saveCredentials,
+} from './credentials';
 
 /**
  * Desktop capability IPC handlers.
@@ -419,6 +425,25 @@ export function setupIpcHandlers() {
       finalUrl: current,
     };
   });
+
+  // ==================== remembered login credentials ====================
+  // The password is encrypted with the OS keychain by `safeStorage`; see
+  // ./credentials.ts. The renderer may only read/write through these
+  // capabilities, so the ciphertext never lives in a renderer-visible store.
+  handle('credentials.available', () => isEncryptionAvailable());
+
+  handle('credentials.load', () => loadCredentials());
+
+  handle('credentials.save', (_event, raw) => {
+    const params = asRecord(raw);
+    return saveCredentials({
+      account: params.account,
+      password: params.password,
+      autoLogin: params.autoLogin,
+    });
+  });
+
+  handle('credentials.clear', () => clearCredentials());
 
   // ==================== dialog ====================
   handle('dialog.openFile', async (_event, raw) => {

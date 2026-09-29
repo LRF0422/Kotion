@@ -16,7 +16,7 @@ import { event } from "@kn/common";
 import { useUploadFile } from "@kn/common";
 import { LanguageToggle } from "../locales/LanguageToggle";
 import { MessageBox } from "./MessageBox";
-import { APIS, clearContextSensitiveClientState, clearTokens, getRefreshToken, notifyContextChanged, useApi } from "@kn/common";
+import { APIS, clearContextSensitiveClientState, getRefreshToken, notifyContextChanged, signOut, useApi } from "@kn/common";
 
 const GITHUB_URL = "https://github.com/LRF0422/knowledge-repo";
 
@@ -97,12 +97,15 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
 
     // Memoized handlers for better performance
     const handleLogout = useCallback(() => {
+        // Revoke the server session first, then wipe every local trace of the
+        // sign-in (tokens, remembered account, remembered desktop credentials).
         void useApi(APIS.LOGOUT, undefined, { refreshToken: getRefreshToken() || '' })
             .catch(() => undefined).finally(() => {
             clearContextSensitiveClientState()
-            clearTokens()
             notifyContextChanged("")
-            window.location.href = '/login'
+            void signOut().finally(() => {
+                window.location.href = '/login'
+            })
         })
     }, [])
 

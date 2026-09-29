@@ -37,6 +37,14 @@ const CAPABILITIES = [
   'window.setTrafficLights',
   'window.toggleDevTools',
   'app.quit',
+  // Remembered login credentials. The password is encrypted at rest with
+  // Electron safeStorage (OS keychain) in the main process, so the storage
+  // file never holds plaintext. `credentials.load` does hand the decrypted
+  // password to the app shell, so plugins must not read it opportunistically.
+  'credentials.available',
+  'credentials.load',
+  'credentials.save',
+  'credentials.clear',
   // Plugin development (plugin-studio). These validate every path in the main
   // process against the same fs allowlist as the fs.* capabilities, and the
   // only process they can start is the bundled plugin dev-server.

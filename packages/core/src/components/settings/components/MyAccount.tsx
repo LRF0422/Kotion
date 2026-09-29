@@ -4,8 +4,8 @@ import {
     UpdatePasswordBody,
     UpdateProfileBody,
     clearContextSensitiveClientState,
-    clearTokens,
     notifyContextChanged,
+    signOut,
     useApi,
     useDispatch,
     useSelector,
@@ -133,8 +133,10 @@ export const MyAccount: React.FC = () => {
             setPasswordOpen(false);
             toast.success(t("settings.account.passwordSaved"));
             clearContextSensitiveClientState();
-            clearTokens();
             notifyContextChanged("");
+            // The old password is now invalid: drop the remembered copy too so
+            // auto-login cannot retry it.
+            await signOut();
             window.location.assign('/login');
         } finally {
             setPasswordSaving(false);

@@ -39,6 +39,11 @@ export type DesktopCapability =
     | 'window.setTrafficLights'
     | 'window.toggleDevTools'
     | 'app.quit'
+    // ---- remembered login credentials (OS keychain via safeStorage) --------
+    | 'credentials.available'
+    | 'credentials.load'
+    | 'credentials.save'
+    | 'credentials.clear'
     // ---- plugin development (plugin-studio) --------------------------------
     | 'dev.start'
     | 'dev.stop'
@@ -138,6 +143,40 @@ export interface DesktopFileResult<T = never> {
 export interface DesktopTrafficLightPosition {
     x: number
     y: number
+}
+
+/* ------------------------------------------------------------------ *
+ * Remembered login credentials
+ *
+ * The password is encrypted by Electron's `safeStorage`, which is backed by
+ * the OS keychain (macOS Keychain / Windows DPAPI / Linux keyring), and only
+ * the ciphertext is written to the app's userData directory. The plaintext
+ * never reaches disk and never leaves the device.
+ *
+ * This is an at-rest guarantee, not a renderer-isolation boundary: callers of
+ * `credentials.load` receive the plaintext password, so treat the capability
+ * as available to the app shell as a whole (the desktop app also runs
+ * remote-fetched plugin bundles in that shell).
+ * ------------------------------------------------------------------ */
+
+/** Credentials the user asked the desktop app to remember between launches. */
+export interface DesktopSavedCredentials {
+    /** Login account (email / username). Always safe to display. */
+    account: string
+    /** Decrypted password, or `''` when only the account was remembered. */
+    password: string
+    /** Whether the login page should sign in automatically on startup. */
+    autoLogin: boolean
+    /** Epoch ms of the last write; absent when nothing has been saved yet. */
+    updatedAt?: number
+}
+
+/** What `credentials.save` accepts. */
+export interface DesktopSaveCredentialsInput {
+    account: string
+    /** `''` (or omitted) stores the account only, without a password. */
+    password?: string
+    autoLogin?: boolean
 }
 
 export type DesktopCaptureSourceType = 'screen' | 'window'
@@ -550,6 +589,17 @@ export interface DesktopCapabilityContract {
     'window.toggleDevTools': { params?: void; result: void }
     /** Quit the desktop app (the menu's 退出 action). */
     'app.quit': { params?: void; result: void }
+    /**
+     * True when this machine can encrypt at rest (OS keychain reachable, e.g.
+     * not a Linux box without a keyring daemon). The login page hides the
+     * "remember password" option when false.
+     */
+    'credentials.available': { params?: void; result: boolean }
+    /** Read the remembered credentials; null when nothing is stored. */
+    'credentials.load': { params?: void; result: DesktopSavedCredentials | null }
+    'credentials.save': { params: DesktopSaveCredentialsInput; result: DesktopSavedCredentials }
+    /** Forget the remembered credentials (also drops the file when empty). */
+    'credentials.clear': { params?: void; result: void }
     'dev.start': { params: DevStartOptions; result: DevSessionStatus }
     'dev.stop': { params: DevStopOptions; result: boolean }
     'dev.build': { params: DevBuildOptions; result: DevSessionStatus }

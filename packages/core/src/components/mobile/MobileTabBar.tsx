@@ -18,9 +18,9 @@ import {
     useUploadFile,
     APIS,
     clearContextSensitiveClientState,
-    clearTokens,
     getRefreshToken,
     notifyContextChanged,
+    signOut,
     useApi,
     event,
     TOGGLE_AI_ASSISTANT,
@@ -77,9 +77,12 @@ export const MobileTabBar: React.FC = () => {
         void useApi(APIS.LOGOUT, undefined, { refreshToken: getRefreshToken() || '' })
             .catch(() => undefined).finally(() => {
             clearContextSensitiveClientState();
-            clearTokens();
             notifyContextChanged("");
-            window.location.href = "/login";
+            // signOut() also clears the remembered account and the desktop
+            // keychain entry, so the next visitor does not get auto-logged in.
+            void signOut().finally(() => {
+                window.location.href = "/login";
+            });
         });
     }, []);
 

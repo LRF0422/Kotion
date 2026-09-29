@@ -744,6 +744,11 @@ export const resources = {
           forgotPassword: "忘记密码？",
           passwordPlaceholder: "请输入密码",
           submit: "继续",
+          rememberPassword: "记住账号和密码",
+          autoLogin: "自动登录",
+          rememberHint: "密码保存在本机系统钥匙串中并加密，不会上传；退出登录或被拒绝时会自动清除。",
+          autoLoginFailed: "自动登录失败，请手动输入密码",
+          useAnotherAccount: "使用其他账号登录",
           wechat: "使用微信登录",
           noAccount: "还没有账号？",
           signUpLink: "免费注册",
@@ -943,6 +948,9 @@ export const resources = {
           width: "当前列 · 宽度 (%)",
           widthPlaceholder: "留空使用预设",
           widthHint: "留空可回退到布局预设；设置后单列宽度独立生效。",
+        },
+        toolbar: {
+          more: "更多命令",
         },
         tooltip: {
           undo: "撤销",
@@ -2171,6 +2179,11 @@ export const resources = {
           forgotPassword: "Forgot password?",
           passwordPlaceholder: "Enter your password",
           submit: "Continue",
+          rememberPassword: "Remember account and password",
+          autoLogin: "Sign in automatically",
+          rememberHint: "The password is encrypted in your system keychain and never uploaded; it is cleared on sign-out or when rejected.",
+          autoLoginFailed: "Automatic sign-in failed, please enter your password",
+          useAnotherAccount: "Use a different account",
           wechat: "Sign in with WeChat",
           noAccount: "Don't have an account?",
           signUpLink: "Sign up free",
@@ -2372,6 +2385,9 @@ export const resources = {
           width: "Current column · Width (%)",
           widthPlaceholder: "Leave blank to use preset",
           widthHint: "Leave blank to use the layout preset; set a value to control this column independently.",
+        },
+        toolbar: {
+          more: "More commands",
         },
         tooltip: {
           undo: "Undo",
