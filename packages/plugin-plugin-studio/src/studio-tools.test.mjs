@@ -12,6 +12,7 @@
  */
 import { createStudioTools } from './studio-tools.ts'
 import { pluginAuthoringSkill } from './skills/plugin-authoring.ts'
+import * as iconArt from './icons/icon-art.ts'
 
 const results = []
 const check = (name, condition, detail = '') => {
@@ -177,6 +178,27 @@ const dev = {
     },
 }
 
+/** The host's icon namespace (a slice of @kn/icon) + the real icon art module. */
+const iconToolkit = {
+    iconNames: () => [
+        'ChartLine',
+        'ChartBar',
+        'ChartPie',
+        'Music',
+        'createLucideIcon',
+        'default',
+        'AiFillGithub',
+        'TbBrandGithub',
+    ],
+    filterIconNames: iconArt.filterIconNames,
+    suggestGlyphs: iconArt.suggestGlyphs,
+    railIconSnippets: iconArt.railIconSnippets,
+    applyIcon: iconArt.applyPluginIcon,
+    readDeclaredIcon: iconArt.readDeclaredIcon,
+    iconMimeType: iconArt.iconMimeType,
+    isUploadableIcon: iconArt.isUploadableIcon,
+}
+
 const pluginHost = {
     active: new Set(['Agent Made']),
     async installFromSource(options) {
@@ -231,8 +253,8 @@ const marketplace = {
         return []
     },
     async uploadArtifact(options) {
-        calls.push(['uploadArtifact', { fileName: options.fileName, bytes: options.data?.size ?? 0 }])
-        return { resourcePath: 'plugins/agent-made.js', integrity: 'sha256-abc' }
+        calls.push(['uploadArtifact', { fileName: options.fileName, bytes: options.data?.size ?? 0, type: options.data?.type ?? null }])
+        return { resourcePath: 'plugins/' + options.fileName, integrity: 'sha256-abc' }
     },
     async submit(input) {
         calls.push(['submit', input])
@@ -253,6 +275,7 @@ const tools = createStudioTools({
     getMarketplace: () => marketplace,
     getHostGlobals: () => hostGlobals,
     getServiceRegistry: () => serviceRegistry,
+    getIconToolkit: () => iconToolkit,
     focusArtifactResult: (tool, result, args) => {
         focused.push({ tool, result, args })
         return true
@@ -282,6 +305,8 @@ const EXPECTED = [
     'deletePluginProjectFile',
     'pluginProjectLogs',
     'listPluginServices',
+    'listPluginIcons',
+    'generatePluginIcon',
     'listHostGlobals',
     'listHostApiPackages',
     'searchHostApi',
@@ -523,6 +548,137 @@ check(
     'services: tolerates a registry without ownership',
     bareServices.count === 1 && bareServices.services[0].ownerType === 'unknown',
     JSON.stringify(bareServices.services),
+)
+
+/* ------------------------------------------------------------------ *
+ * Icons: pick a real rail icon name, then generate the marketplace image
+ * ------------------------------------------------------------------ */
+const iconNames = await tools.listPluginIcons.execute({ query: 'chart' })
+check(
+    'icons: only real, PascalCase component names come back',
+    iconNames.icons.length === 3
+        && iconNames.icons.every((entry) => /^[A-Z]/.test(entry.name))
+        && !iconNames.icons.some((entry) => entry.name === 'createLucideIcon' || entry.name === 'default'),
+    JSON.stringify(iconNames.icons.map((entry) => entry.name)),
+)
+check(
+    'icons: every hit is paste-ready (import + rail icon + jsx)',
+    iconNames.icons[0].importLine === "import { ChartLine } from '@kn/icon'"
+        && iconNames.icons[0].railIcon.includes('React.createElement(ChartLine')
+        && iconNames.icons[0].jsx === '<ChartLine className="h-4 w-4" />',
+    JSON.stringify(iconNames.icons[0]),
+)
+check(
+    'icons: reports the namespace size and emoji suggestions',
+    iconNames.totalAvailable === 8
+        && iconNames.emoji.some((entry) => entry.glyph === '📊'),
+    JSON.stringify({ total: iconNames.totalAvailable, emoji: iconNames.emoji }),
+)
+const untitledIcons = await tools.listPluginIcons.execute({})
+check('icons: no query lists names too', untitledIcons.icons.length > 0 && untitledIcons.count === untitledIcons.icons.length)
+
+/* Seed a scaffold-shaped project so the rail patch has something real to hit. */
+files.set(
+    `${ROOT}/package.json`,
+    JSON.stringify(
+        { name: 'agent-made-plugin', knPluginStudio: { pluginKey: 'agent-made-plugin', displayName: 'Agent Made', entry: 'src/index.tsx' } },
+        null,
+        2,
+    ),
+)
+files.set(
+    `${ROOT}/src/index.tsx`,
+    "import { KPlugin } from '@kn/common'\nimport React from 'react'\n\nexport const p = new KPlugin({\n    dockPanels: [\n        { id: 'p', title: 'P', icon: React.createElement('span', null, '🛠'), component: Panel },\n    ],\n})\n",
+)
+
+const generated = await tools.generatePluginIcon.execute({ root: ROOT, name: 'Agent Made', keywords: ['chart'] })
+check(
+    'icon: renders artwork and writes it where the manifest points',
+    generated.ok === true
+        && generated.relativePath === 'assets/icon.svg'
+        && generated.glyph === '📊'
+        && files.get(`${ROOT}/assets/icon.svg`) === generated.svg,
+    JSON.stringify({ relativePath: generated.relativePath, glyph: generated.glyph }),
+)
+check(
+    'icon: points the manifest at it, keeping the rest of the block',
+    JSON.parse(files.get(`${ROOT}/package.json`)).knPluginStudio.icon === 'assets/icon.svg'
+        && JSON.parse(files.get(`${ROOT}/package.json`)).knPluginStudio.pluginKey === 'agent-made-plugin',
+    files.get(`${ROOT}/package.json`).split('\n').filter((line) => line.includes('icon') || line.includes('pluginKey')).join(' '),
+)
+check(
+    'icon: swaps the scaffold rail icon so the app shows the same glyph',
+    generated.railIcon.updated === true
+        && generated.railIcon.status === 'updated'
+        && files.get(`${ROOT}/src/index.tsx`).includes("React.createElement('span', null, '📊')"),
+    files.get(`${ROOT}/src/index.tsx`).split('\n').find((line) => line.includes('icon:')),
+)
+check(
+    'icon: becomes the conversation artifact (and is focused)',
+    focused.some((entry) => entry.tool === 'generatePluginIcon') && generated.svg.includes('<svg'),
+    JSON.stringify(focused.map((entry) => entry.tool).slice(-2)),
+)
+check(
+    'icon: reached the dev bridge, not the filesystem directly',
+    calls.filter(([name]) => name === 'writeFile').length >= 3,
+    String(calls.filter(([name]) => name === 'writeFile').length),
+)
+const generatedAgain = await tools.generatePluginIcon.execute({ root: ROOT, glyph: '🚀', apply: false })
+check(
+    'icon: explicit glyph wins, apply:false leaves source alone',
+    generatedAgain.glyph === '🚀' && generatedAgain.railIcon.status === 'disabled',
+    JSON.stringify({ glyph: generatedAgain.glyph, rail: generatedAgain.railIcon.status }),
+)
+
+let noIconToolkit = ''
+try {
+    await createStudioTools({ getDev: () => dev, getPluginHost: () => pluginHost }).generatePluginIcon.execute({ root: ROOT })
+} catch (error) {
+    noIconToolkit = error.message
+}
+check('guard: missing icon toolkit reported', /图标/.test(noIconToolkit), noIconToolkit)
+
+/* Publishing carries the project's own icon: nobody uploads it by hand. */
+const uploadsBefore = calls.filter(([name]) => name === 'uploadArtifact').length
+const publishedWithIcon = await tools.publishPluginProject.execute({
+    root: ROOT,
+    version: '2.0.0',
+    description: 'Publishes with the generated icon',
+})
+const iconUploads = calls
+    .filter(([name]) => name === 'uploadArtifact')
+    .map(([, args]) => args)
+    .filter((args) => args.type === 'image/svg+xml')
+check(
+    'publish: uploads the manifest icon as an image',
+    publishedWithIcon.ok === true
+        && publishedWithIcon.icon === 'plugins/icon.svg'
+        && iconUploads.length === 1
+        && (calls.filter(([name]) => name === 'uploadArtifact').length === uploadsBefore + 2),
+    JSON.stringify({ icon: publishedWithIcon.icon, uploads: iconUploads }),
+)
+check(
+    'publish: submit carries the uploaded icon path',
+    (() => {
+        const submits = calls.filter(([name]) => name === 'submit')
+        const last = submits[submits.length - 1]?.[1]
+        return last?.icon === 'plugins/icon.svg' && /已上传工程图标/.test(String(publishedWithIcon.iconNote))
+    })(),
+    JSON.stringify(publishedWithIcon.iconNote),
+)
+
+/* An explicit, already-uploaded path is respected as-is. */
+const explicitIcon = await tools.publishPluginProject.execute({
+    root: ROOT,
+    version: '2.0.1',
+    description: 'Explicit icon path',
+    icon: 'oss/uploaded-by-hand.png',
+})
+check(
+    'publish: an explicit icon path skips the upload',
+    explicitIcon.icon === 'oss/uploaded-by-hand.png'
+        && calls.filter(([name]) => name === 'uploadArtifact').length === uploadsBefore + 3,
+    JSON.stringify({ icon: explicitIcon.icon, uploads: calls.filter(([name]) => name === 'uploadArtifact').length }),
 )
 
 /* ------------------------------------------------------------------ *

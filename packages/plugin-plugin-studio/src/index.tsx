@@ -24,11 +24,29 @@ import {
     type PluginConfig,
 } from '@kn/common'
 import { Wrench } from '@kn/icon'
+import * as KN_ICONS from '@kn/icon'
 import { StudioDockPanel } from './StudioDockPanel'
 import { createStudioTools } from './studio-tools'
+import * as iconArt from './icons/icon-art'
 import { STUDIO_ARTIFACT_MAPPERS } from './artifacts/surface'
 import { STUDIO_ARTIFACT_RENDERERS, STUDIO_TOOL_RENDERERS } from './artifacts'
 import { pluginAuthoringSkill } from './skills/plugin-authoring'
+
+/**
+ * The icon toolkit: deterministic SVG rendering + project wiring from
+ * `./icons/icon-art`, plus the host's real icon component names from `@kn/icon`
+ * (a host module, so this costs nothing in the bundle and never goes stale).
+ */
+const iconToolkit = {
+    iconNames: () => Object.keys(KN_ICONS),
+    filterIconNames: iconArt.filterIconNames,
+    suggestGlyphs: iconArt.suggestGlyphs,
+    railIconSnippets: iconArt.railIconSnippets,
+    applyIcon: iconArt.applyPluginIcon,
+    readDeclaredIcon: iconArt.readDeclaredIcon,
+    iconMimeType: iconArt.iconMimeType,
+    isUploadableIcon: iconArt.isUploadableIcon,
+}
 
 /**
  * Resolve through the globally bound resolver from @kn/common (bound in
@@ -58,6 +76,8 @@ const studioTools = createStudioTools({
             NonNullable<Parameters<typeof createStudioTools>[0]['getServiceRegistry']>
         >) : undefined
     },
+    /** Icon art + the host's icon namespace; see `./icons/icon-art`. */
+    getIconToolkit: () => iconToolkit,
     /**
      * A finished build becomes the conversation's working target, so the side
      * pane shows the artifact the agent just produced. `openAgentArtifact` is
@@ -192,6 +212,17 @@ export const pluginStudio = new PluginStudio({
                     pickFolderTitle: 'Select an existing plugin project folder',
                     nameRequired: 'Project name is required',
                     autoInstall: 'Auto hot-reload on save',
+                    generateIcon: 'Generate icon',
+                    generateIconHint:
+                        'Generate assets/icon.svg from the project name and swap the scaffold rail icon to the same glyph',
+                    iconGenerated: 'Icon generated: {{glyph}} · rail {{rail}}',
+                    iconRail: {
+                        updated: 'updated',
+                        'no-match': 'left as is',
+                        'no-entry': 'no entry file',
+                        disabled: 'skipped',
+                        unreadable: 'unreadable',
+                    },
                     pluginKeyLabel: 'pluginKey: ',
                     modulesLabel: 'Modules: ',
                     conventionsTitle: 'Project conventions',
@@ -287,6 +318,17 @@ export const pluginStudio = new PluginStudio({
                         hint:
                             'Services are the only formal channel between a plugin and the host / another plugin: call one with resolveOptionalService(name) (plain code) or useOptionalService(name) (inside a component). Signatures live in @kn/common src/core/types.ts → Services.',
                     },
+                    icon: {
+                        glyph: 'Glyph',
+                        initial: 'initial',
+                        manifest: 'Manifest',
+                        rail: 'Rail icon',
+                        railApplied: 'The app rail icon uses the same glyph.',
+                        railSkipped: 'The rail icon was left alone ({{status}}).',
+                        snippetHint: 'Paste this into src/index.tsx to use the same glyph in the rail:',
+                        publishHint:
+                            'The marketplace icon is this SVG file; publishing uploads it automatically.',
+                    },
                     state: {
                         watching: 'Watching',
                         starting: 'Building',
@@ -362,6 +404,16 @@ export const pluginStudio = new PluginStudio({
                     pickFolderTitle: '选择已有插件工程目录',
                     nameRequired: '工程名不能为空',
                     autoInstall: '保存后自动热更',
+                    generateIcon: '生成图标',
+                    generateIconHint: '按工程名生成 assets/icon.svg，并把脚手架那个 emoji 栏位图标换成同一字形',
+                    iconGenerated: '已生成图标：{{glyph}} · 栏位 {{rail}}',
+                    iconRail: {
+                        updated: '已同步',
+                        'no-match': '保留原样',
+                        'no-entry': '找不到入口文件',
+                        disabled: '未处理',
+                        unreadable: '入口文件读不到',
+                    },
                     pluginKeyLabel: 'pluginKey：',
                     modulesLabel: '模块：',
                     conventionsTitle: '工程约定',
@@ -454,6 +506,16 @@ export const pluginStudio = new PluginStudio({
                         unavailable: '当前宿主没有暴露服务注册表。',
                         hint:
                             '服务是插件与宿主/其他插件互调的唯一正式通道：非 React 代码用 resolveOptionalService(name)，组件里用 useOptionalService(name)。签名在 @kn/common 的 src/core/types.ts → Services。',
+                    },
+                    icon: {
+                        glyph: '字形',
+                        initial: '首字母兜底',
+                        manifest: '清单',
+                        rail: '栏位图标',
+                        railApplied: '应用里的栏位图标已用同一个字形。',
+                        railSkipped: '栏位图标未自动替换（{{status}}）。',
+                        snippetHint: '把这段粘进 src/index.tsx，栏位就用同一个字形：',
+                        publishHint: '市场图标就是这张 SVG；上架时 publishPluginProject 会自动上传它。',
                     },
                     state: {
                         watching: '监听中',

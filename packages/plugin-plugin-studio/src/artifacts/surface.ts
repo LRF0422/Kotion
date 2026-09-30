@@ -35,6 +35,7 @@ export type StudioArtifactMapper = (result: unknown, args: unknown) => StudioArt
 /** Artifact kinds the studio contributes. Pinned by the surface check. */
 export const PLUGIN_BUILD_KIND = 'plugin-build'
 export const PLUGIN_PROJECT_KIND = 'plugin-project'
+export const PLUGIN_ICON_KIND = 'plugin-icon'
 
 /**
  * Tools whose result is a build of a project (the artifact a dev loop produces).
@@ -45,6 +46,9 @@ export const BUILD_ARTIFACT_TOOLS = ['runPluginProject', 'buildPluginProject', '
 
 /** Tools whose result is a source project. */
 export const PROJECT_ARTIFACT_TOOLS = ['createPluginProject'] as const
+
+/** Tools whose result is the plugin's own icon. */
+export const ICON_ARTIFACT_TOOLS = ['generatePluginIcon'] as const
 
 /**
  * List payload caps. Artifacts travel inside the transcript and are copied into
@@ -94,6 +98,28 @@ export interface StudioProjectView {
     managed: boolean
     files: string[]
     fileCount: number
+}
+
+/** One `generatePluginIcon` result, normalized for rendering. */
+export interface StudioIconView {
+    ok: boolean
+    root: string
+    /** The emoji (or letter) that was drawn. */
+    glyph: string
+    isInitial: boolean
+    color?: string
+    /** Project-relative path of the generated artwork. */
+    relativePath: string
+    /** The SVG source, when the result carried it. */
+    svg?: string
+    /** Whether the source rail icon was swapped to the same glyph. */
+    railUpdated: boolean
+    /** Why it was not, when it was not. */
+    railStatus?: string
+    /** The snippet to paste when the source was not touched. */
+    railSnippet?: string
+    /** The icon the manifest declared before. */
+    previousIcon?: string | null
 }
 
 const readRecord = (value: unknown): Record<string, unknown> =>
@@ -185,6 +211,30 @@ export const readProjectView = (result: unknown, args?: unknown): StudioProjectV
 export const buildArtifactTitle = (view: StudioBuildView): string =>
     view.name ?? view.pluginKey ?? baseName(view.root)
 
+/** Parse a `generatePluginIcon` result. */
+export const readIconView = (result: unknown): StudioIconView | null => {
+    const value = readRecord(result)
+    const root = readString(value.root)
+    const glyph = readString(value.glyph)
+    const relativePath = readString(value.relativePath)
+    if (!root || !glyph || !relativePath) return null
+    const rail = readRecord(value.railIcon)
+    const manifest = readRecord(value.manifest)
+    return {
+        ok: value.ok === true,
+        root,
+        glyph,
+        isInitial: value.isInitial === true,
+        color: readString(value.color),
+        relativePath,
+        svg: readString(value.svg),
+        railUpdated: rail.updated === true,
+        railStatus: readString(rail.status),
+        railSnippet: readString(rail.snippet),
+        previousIcon: typeof manifest.previous === 'string' ? manifest.previous : null,
+    }
+}
+
 /* ------------------------------------------------------------------ *
  * Artifact mappers
  * ------------------------------------------------------------------ */
@@ -250,6 +300,39 @@ export const projectArtifactFromResult: StudioArtifactMapper = (result, args) =>
 }
 
 /**
+ * A generated icon becomes a `plugin-icon` artifact.
+ *
+ * One slot per project, like the build: regenerating the icon (a different
+ * glyph, a new colour) updates that slot instead of stacking images. The SVG
+ * travels in `data` so the shelf and the pane can show it without reading the
+ * file back from disk.
+ */
+export const iconArtifactFromResult: StudioArtifactMapper = (result, args) => {
+    const view = readIconView(result)
+    if (!view || !view.ok) return null
+
+    const name = readString(readRecord(args).name)
+    return {
+        kind: PLUGIN_ICON_KIND,
+        id: view.root,
+        title: name ?? baseName(view.root),
+        subtitle: view.glyph,
+        data: {
+            root: view.root,
+            glyph: view.glyph,
+            isInitial: view.isInitial,
+            color: view.color ?? null,
+            relativePath: view.relativePath,
+            svg: view.svg ?? null,
+            railUpdated: view.railUpdated,
+            railStatus: view.railStatus ?? null,
+            railSnippet: view.railSnippet ?? null,
+            previousIcon: view.previousIcon ?? null,
+        },
+    }
+}
+
+/**
  * The mapper table the tool definitions attach to.
  *
  * The plugin lifts it onto its tool defs in `index.tsx`, so the kernel keys each
@@ -260,10 +343,11 @@ export const STUDIO_ARTIFACT_MAPPERS: Record<string, StudioArtifactMapper> = {
     runPluginProject: buildArtifactFromResult,
     buildPluginProject: buildArtifactFromResult,
     publishPluginProject: buildArtifactFromResult,
+    generatePluginIcon: iconArtifactFromResult,
 }
 
 /** Artifact kinds the studio can render in the side pane. */
-export const STUDIO_ARTIFACT_KINDS = [PLUGIN_BUILD_KIND, PLUGIN_PROJECT_KIND] as const
+export const STUDIO_ARTIFACT_KINDS = [PLUGIN_BUILD_KIND, PLUGIN_PROJECT_KIND, PLUGIN_ICON_KIND] as const
 
 /**
  * The snapshot the mapper stored on an artifact, read back for the side pane.
@@ -294,6 +378,18 @@ export interface StudioArtifactSnapshot {
     managed?: boolean
     files: string[]
     fileCount: number
+    /** `plugin-icon` payload: the artwork and how it was applied. */
+    icon?: {
+        glyph: string
+        isInitial: boolean
+        color?: string
+        relativePath: string
+        svg?: string
+        railUpdated: boolean
+        railStatus?: string
+        railSnippet?: string
+        previousIcon: string | null
+    }
 }
 
 export const readArtifactSnapshot = (artifact: StudioArtifact | null | undefined): StudioArtifactSnapshot | null => {
@@ -334,6 +430,19 @@ export const readArtifactSnapshot = (artifact: StudioArtifact | null | undefined
         managed: typeof data.managed === 'boolean' ? data.managed : undefined,
         files: files.items,
         fileCount: files.total,
+        icon: readString(data.glyph) && readString(data.relativePath)
+            ? {
+                  glyph: readString(data.glyph) as string,
+                  isInitial: data.isInitial === true,
+                  color: readString(data.color),
+                  relativePath: readString(data.relativePath) as string,
+                  svg: readString(data.svg),
+                  railUpdated: data.railUpdated === true,
+                  railStatus: readString(data.railStatus),
+                  railSnippet: readString(data.railSnippet),
+                  previousIcon: typeof data.previousIcon === 'string' ? data.previousIcon : null,
+              }
+            : undefined,
     }
 }
 

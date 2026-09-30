@@ -16,7 +16,11 @@ import { Button } from '@kn/ui'
 import { CheckCircle2, FileCode2, PanelRight, TriangleAlert, Upload, Wrench } from '@kn/icon'
 import { useTranslation, type AgentToolResultProps } from '@kn/common'
 import { formatBytes } from '../studio-service'
-import { baseName, readBuildView, readProjectView, type StudioArtifact } from './surface'
+import { baseName, readBuildView, readIconView, readProjectView, type StudioArtifact } from './surface'
+
+/** Inline SVG as a data URL — no `dangerouslySetInnerHTML` for generated art. */
+export const svgDataUrl = (svg: string): string =>
+    `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
 
 /** The studio's cards open the artifact the tool's mapper produced. */
 const asStudioArtifact = (artifact: AgentToolResultProps['artifact']): StudioArtifact | null =>
@@ -131,6 +135,60 @@ export const PluginProjectCard: React.FC<AgentToolResultProps> = ({ result, args
                 <span>{t(`pluginStudio.template.${view.template}`)}</span>
                 <span>{t('pluginStudio.artifact.fileCount', { n: view.fileCount })}</span>
                 {view.managed ? <span>{t('pluginStudio.artifact.managedBadge')}</span> : null}
+            </div>
+        </div>
+    )
+}
+
+/** One generated icon: the artwork itself, plus how it was wired in. */
+export const PluginIconCard: React.FC<AgentToolResultProps> = ({ result, artifact, openArtifact }) => {
+    const { t } = useTranslation()
+    const view = readIconView(result)
+    if (!view) return null
+
+    const target = asStudioArtifact(artifact)
+    return (
+        <div className="mt-1.5 ml-[22px] rounded-lg border border-border/60 bg-card/40 p-2">
+            <div className="flex items-center gap-2">
+                {view.svg ? (
+                    <img
+                        src={svgDataUrl(view.svg)}
+                        alt=""
+                        className="h-8 w-8 shrink-0 rounded-md border border-border/50"
+                    />
+                ) : (
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-border/50 text-base">
+                        {view.glyph}
+                    </span>
+                )}
+                <div className="min-w-0 flex-1">
+                    <div className="truncate text-[12px] font-medium">{baseName(view.root)}</div>
+                    <div className="truncate font-mono text-[10.5px] text-muted-foreground">
+                        {view.relativePath}
+                        {view.color ? ` · ${view.color}` : ''}
+                    </div>
+                </div>
+                {target ? (
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 shrink-0 gap-1 px-2 text-[11px]"
+                        onClick={() => openArtifact(target)}
+                    >
+                        <PanelRight className="h-3 w-3" />
+                        {t('pluginStudio.artifact.openBeside')}
+                    </Button>
+                ) : null}
+            </div>
+            <div className="mt-1 flex items-center gap-1.5 text-[10.5px] text-muted-foreground">
+                {view.railUpdated ? (
+                    <>
+                        <CheckCircle2 className="h-3 w-3 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                        <span className="truncate">{t('pluginStudio.icon.railApplied')}</span>
+                    </>
+                ) : (
+                    <span className="truncate">{t('pluginStudio.icon.railSkipped', { status: view.railStatus ?? '' })}</span>
+                )}
             </div>
         </div>
     )

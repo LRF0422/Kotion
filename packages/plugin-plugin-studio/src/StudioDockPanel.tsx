@@ -31,6 +31,7 @@ import {
     CheckCircle2,
     FolderOpen,
     Loader2,
+    Palette,
     Play,
     Plus,
     RefreshCw,
@@ -55,8 +56,9 @@ import {
     formatBytes,
 } from './studio-service'
 import { usePublishProject } from './StudioMarketplacePanel'
+import { applyPluginIcon } from './icons/icon-art'
 
-type Busy = 'start' | 'stop' | 'build' | 'uninstall' | 'delete' | null
+type Busy = 'start' | 'stop' | 'build' | 'uninstall' | 'delete' | 'icon' | null
 
 /** Scaffold templates the host can generate; see the desktop bundler. */
 const SCAFFOLD_TEMPLATES = ['panel', 'page', 'settings', 'command', 'blank'] as const
@@ -126,6 +128,8 @@ export const StudioDockPanel: React.FC<DockPanelProps> = ({ close }) => {
     const [scaffoldTemplate, setScaffoldTemplate] = useState<ScaffoldTemplate>('panel')
     /** Project whose files are about to be deleted (confirm dialog). */
     const [deleteTarget, setDeleteTarget] = useState<StudioRow | null>(null)
+    /** Result of the last "generate icon" run: the artwork + how it was wired. */
+    const [iconResult, setIconResult] = useState<{ svg: string; glyph: string; rail: string } | null>(null)
 
     /** Managed projects first, then locally added folders, deduped by root. */
     const rows = useMemo<StudioRow[]>(() => {
@@ -295,6 +299,29 @@ export const StudioDockPanel: React.FC<DockPanelProps> = ({ close }) => {
             setError(String((cause as Error)?.message ?? cause))
         })
     }
+
+    /**
+     * Generate the plugin's own icon — the same deterministic art the agent tool
+     * uses (`./icons/icon-art`), so a human never has to ask the agent for one.
+     * It writes `assets/icon.svg`, points the manifest at it, and swaps the
+     * scaffold's emoji rail icon when it finds it.
+     */
+    const generateIcon = () =>
+        run('icon', async () => {
+            if (!capability || !selectedRoot) return
+            setIconResult(null)
+            const applied = await applyPluginIcon({
+                root: selectedRoot,
+                seed: selected?.pluginKey || selected?.label || selectedRoot,
+                title: selected?.label,
+                io: {
+                    readFile: (options) => capability.dev.readFile({ path: options.path }),
+                    writeFile: (options) => capability.dev.writeFile({ path: options.path, contents: options.contents }),
+                },
+            })
+            setIconResult({ svg: applied.svg, glyph: applied.glyph, rail: applied.railIcon.status })
+            await refreshManaged()
+        })
 
     const removeFromList = () => {
         if (!selectedRoot) return
@@ -610,6 +637,20 @@ export const StudioDockPanel: React.FC<DockPanelProps> = ({ close }) => {
                             <Button
                                 size="sm"
                                 variant="ghost"
+                                className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                                title={t('pluginStudio.generateIconHint')}
+                                onClick={generateIcon}
+                                disabled={busy !== null}
+                            >
+                                {busy === 'icon' ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                    <Palette className="h-3.5 w-3.5" />
+                                )}
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant="ghost"
                                 className="h-7 w-7 p-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                                 title={t('pluginStudio.deleteProjectHint')}
                                 onClick={() => setDeleteTarget(selected)}
@@ -639,6 +680,22 @@ export const StudioDockPanel: React.FC<DockPanelProps> = ({ close }) => {
                             <pre className="max-h-24 overflow-auto whitespace-pre-wrap rounded-md border border-destructive/20 bg-destructive/5 p-2 text-[10.5px] leading-relaxed text-destructive">
                                 {status?.error || error}
                             </pre>
+                        ) : null}
+
+                        {iconResult ? (
+                            <div className="flex items-center gap-2 rounded-md border bg-background/60 p-1.5">
+                                <img
+                                    src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(iconResult.svg)}`}
+                                    alt=""
+                                    className="h-9 w-9 shrink-0 rounded-md border"
+                                />
+                                <span className="min-w-0 flex-1 text-[10.5px] leading-snug text-muted-foreground">
+                                    {t('pluginStudio.iconGenerated', {
+                                        glyph: iconResult.glyph,
+                                        rail: t(`pluginStudio.iconRail.${iconResult.rail}`),
+                                    })}
+                                </span>
+                            </div>
                         ) : null}
                     </div>
                 ) : (

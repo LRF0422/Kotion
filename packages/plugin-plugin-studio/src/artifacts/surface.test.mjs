@@ -14,16 +14,20 @@
  */
 import {
     BUILD_ARTIFACT_TOOLS,
+    ICON_ARTIFACT_TOOLS,
     PLUGIN_BUILD_KIND,
+    PLUGIN_ICON_KIND,
     PLUGIN_PROJECT_KIND,
     PROJECT_ARTIFACT_TOOLS,
     STUDIO_ARTIFACT_KINDS,
     STUDIO_ARTIFACT_MAPPERS,
     baseName,
     buildArtifactFromResult,
+    iconArtifactFromResult,
     projectArtifactFromResult,
     readArtifactSnapshot,
     readBuildView,
+    readIconView,
     readProjectView,
 } from './surface.ts'
 import { createStudioTools } from '../studio-tools.ts'
@@ -47,13 +51,16 @@ check(
 )
 check(
     'surface: every producing tool has a mapper',
-    [...BUILD_ARTIFACT_TOOLS, ...PROJECT_ARTIFACT_TOOLS].every((name) => Boolean(STUDIO_ARTIFACT_MAPPERS[name])),
-    [...BUILD_ARTIFACT_TOOLS, ...PROJECT_ARTIFACT_TOOLS].filter((name) => !STUDIO_ARTIFACT_MAPPERS[name]).join(', '),
+    [...BUILD_ARTIFACT_TOOLS, ...PROJECT_ARTIFACT_TOOLS, ...ICON_ARTIFACT_TOOLS].every((name) => Boolean(STUDIO_ARTIFACT_MAPPERS[name])),
+    [...BUILD_ARTIFACT_TOOLS, ...PROJECT_ARTIFACT_TOOLS, ...ICON_ARTIFACT_TOOLS].filter((name) => !STUDIO_ARTIFACT_MAPPERS[name]).join(', '),
 )
 check(
     'surface: mapped tools are all carded',
     Object.keys(STUDIO_ARTIFACT_MAPPERS).every(
-        (name) => BUILD_ARTIFACT_TOOLS.includes(name) || PROJECT_ARTIFACT_TOOLS.includes(name),
+        (name) =>
+            BUILD_ARTIFACT_TOOLS.includes(name)
+            || PROJECT_ARTIFACT_TOOLS.includes(name)
+            || ICON_ARTIFACT_TOOLS.includes(name),
     ),
     Object.keys(STUDIO_ARTIFACT_MAPPERS).join(', '),
 )
@@ -62,7 +69,8 @@ check(
     STUDIO_ARTIFACT_MAPPERS.buildPluginProject({ ok: true, root: ROOT, pluginKey: 'k' })?.kind === PLUGIN_BUILD_KIND
         && STUDIO_ARTIFACT_MAPPERS.createPluginProject({ ok: true, root: ROOT })?.kind === PLUGIN_PROJECT_KIND
         && STUDIO_ARTIFACT_KINDS.includes(PLUGIN_BUILD_KIND)
-        && STUDIO_ARTIFACT_KINDS.includes(PLUGIN_PROJECT_KIND),
+        && STUDIO_ARTIFACT_KINDS.includes(PLUGIN_PROJECT_KIND)
+        && STUDIO_ARTIFACT_KINDS.includes(PLUGIN_ICON_KIND),
 )
 
 /* ------------------------------------------------------------------ *
@@ -142,6 +150,53 @@ check(
 )
 check('project: unknown template falls back to panel', readProjectView({ ok: true, root: ROOT }, {})?.template === 'panel')
 check('project: a failed create produces no artifact', projectArtifactFromResult({ ok: false, root: ROOT }, {}) === null)
+
+/* ------------------------------------------------------------------ *
+ * Icon results
+ * ------------------------------------------------------------------ */
+const iconResult = {
+    ok: true,
+    root: ROOT,
+    glyph: '📊',
+    isInitial: false,
+    color: '#0ea5e9',
+    relativePath: 'assets/icon.svg',
+    svg: '<svg xmlns="http://www.w3.org/2000/svg"/>',
+    manifest: { previous: null, block: 'knPluginStudio' },
+    railIcon: { updated: true, status: 'updated', snippet: "icon: React.createElement('span', null, '📊')," },
+}
+const iconArtifact = iconArtifactFromResult(iconResult, { root: ROOT, name: 'Agent Made' })
+check(
+    'icon: kind, identity and title',
+    iconArtifact?.kind === PLUGIN_ICON_KIND && iconArtifact?.id === ROOT && iconArtifact?.title === 'Agent Made',
+    JSON.stringify({ kind: iconArtifact?.kind, title: iconArtifact?.title }),
+)
+check(
+    'icon: the glyph is the subtitle and the SVG travels in the payload',
+    iconArtifact?.subtitle === '📊' && String(iconArtifact?.data.svg).includes('<svg'),
+    JSON.stringify(iconArtifact?.subtitle),
+)
+check(
+    'icon: regenerating keeps one identity per project',
+    iconArtifactFromResult({ ...iconResult, glyph: '🚀' }, { root: ROOT })?.id === iconArtifact?.id,
+)
+check('icon: a failed generation produces no artifact', iconArtifactFromResult({ ok: false, root: ROOT }, {}) === null)
+check(
+    'icon: incomplete results are rejected',
+    iconArtifactFromResult({ ok: true, root: ROOT, glyph: '📊' }, {}) === null,
+)
+const iconSnapshot = readArtifactSnapshot(iconArtifact)
+check(
+    'pane: reads the icon payload back',
+    iconSnapshot?.icon?.glyph === '📊'
+        && iconSnapshot?.icon?.relativePath === 'assets/icon.svg'
+        && iconSnapshot?.icon?.railUpdated === true,
+    JSON.stringify(iconSnapshot?.icon),
+)
+check(
+    'pane: a bare icon artifact still resolves its project root',
+    readArtifactSnapshot({ kind: PLUGIN_ICON_KIND, id: ROOT })?.root === ROOT,
+)
 
 /* ------------------------------------------------------------------ *
  * View readers and the pane snapshot

@@ -61,6 +61,7 @@
 - 列表自动显示内置目录里的所有工程（包括 **agent 创建的那些**）。
 - **开始监听** → 保存文件即自动热更；**构建一次 / 热更到当前窗口 / 停止监听**。
 - **删除工程**：确认后先停止监听、卸载仍在窗口里的热更版本，再把工程目录**连同磁盘文件一起删除**（不可恢复，宿主拒绝删除不是插件工程的目录）。内置目录与已添加目录都可删除；只想停止跟踪而不删文件时仍可用「移除」。
+- **生成图标**（调色板按钮）：按工程名/用途生成 `assets/icon.svg` 并把栏位图标换成同一字形——和 agent 用的是**同一个确定性生成器**，生成后按钮下方直接显示这张图。
 - 侧边栏面板显示当前工程的构建状态与日志。
 
 ### 人：工程模板
@@ -81,7 +82,7 @@
 
 ### agent：工具驱动
 
-插件向 agent 注册了 22 个工具（顶层 `tools`，见 `PluginManager.resolveAgentCapabilities`）：
+插件向 agent 注册了 24 个工具（顶层 `tools`，见 `PluginManager.resolveAgentCapabilities`）：
 
 | 工具 | 作用 |
 | --- | --- |
@@ -99,13 +100,15 @@
 | `deletePluginProjectFile` | **删除工程里的单个文件**（如遗留的旧组件）。只能删工程内的文件，拒绝 `package.json` 与入口文件；必须先 `readPluginProjectFile` 读过；返回被删正文，误删可粘回 |
 | `pluginProjectLogs` | 构建日志，用于排查编译错误 |
 | `listPluginServices` | **列出已注册的 service 及其提供者**（core=宿主 / 某个已安装插件）；可按 `owner`、`query` 过滤。开发时"要调用谁的能力"先查它 |
+| `listPluginIcons` | **查宿主真实存在的图标名**（`@kn/icon` 里的组件），返回 import + 可直接粘的栏位图标代码，以及按用途关键词的 emoji 建议。栏位图标别凭记忆拼名字 |
+| `generatePluginIcon` | **给工程生成图标**：按插件名/关键词选字形配色，离线渲染 SVG 写进 `assets/icon.svg`，把 `knPluginStudio.icon` 指向它，并尽量把源码里那个 emoji 栏位图标换成同一字形 |
 | `listHostGlobals` | 列出宿主通过 `window.__KN__` 暴露的全局模块（写 `externals` 前先查它） |
 | `listHostApiPackages` | 列出可查阅的标准宿主包与类型入口 |
 | `searchHostApi` | 在标准包源码里按名字搜索类型/接口（返回文件+行号） |
 | `readHostApiFile` | 读取标准包里的一个源码文件，查看真实接口定义 |
 | `installPluginDependencies` | 安装第三方 npm 包（调用 npm/pnpm/yarn 并写入 package.json） |
 | `listMyPlugins` | 列出我在市场上的提交/已上架插件（拿 pluginId、审核状态） |
-| `publishPluginProject` | 构建并上传产物，然后上架（提交审核）或发布新版本 |
+| `publishPluginProject` | 构建并上传产物，然后上架（提交审核）或发布新版本；**图标默认自动上传**（读清单里的 `knPluginStudio.icon`） |
 | `upgradePluginVersion` | 把已安装插件升级到市场里的目标版本 |
 
 所以你可以直接说：
@@ -187,6 +190,7 @@ await runPluginProject({ root, externals: ['svelte'] })
 | --- | --- | --- | --- |
 | `plugin-build` | `runPluginProject` / `buildPluginProject` / `publishPluginProject` | 工程根目录 | **实时渲染插件贡献的 UI** + 构建信息 |
 | `plugin-project` | `createPluginProject` | 工程根目录 | 同上（插件还没热更时显示"尚未运行"） |
+| `plugin-icon` | `generatePluginIcon` | 工程根目录 | 生成的图标本身 + 字形/配色/清单指向 + 栏位图标片段 |
 
 ### 预览：插件到底做了什么
 
@@ -255,6 +259,45 @@ ServiceRegistry（App.tsx 绑定） ──getBoundServiceRegistry()──┬─�
 > 边界要说清：开发台现在**只读地**探知能力（服务名与提供者），**不做注册表管理**——
 > 安装/卸载别的插件仍然只能通过插件管理器，`agent.tools` 里没有、也不会有卸载别人插件的工具。
 
+## 图标：两种，别混
+
+插件有两张图标，用途不同、形态不同，**不能互相替代**：
+
+| 图标 | 落在哪 | 形态 | 谁负责 |
+| --- | --- | --- | --- |
+| 应用里的**栏位图标** | `dockPanels[].icon` / `menus[].icon` | 源码里的 ReactNode | `listPluginIcons` 给出真实存在的图标名 + 可直接粘的代码 |
+| 清单/**市场图标** | `package.json` → `knPluginStudio.icon` | 工程内的**图片文件** | `generatePluginIcon` 生成 `assets/icon.svg` |
+
+为什么必须分开：市场列表用 `<img src={resolvePath(icon)}>` 渲染，emoji 字符串会直接变成坏图；
+而栏位图标是组件，磁盘上的图片文件在浏览器里拿不到（`assets/icon.svg` 不是可访问的 URL）。
+
+### 生成规则（确定性、离线、可测）
+
+- **字形**：显式 `glyph` → 用途关键词（`chart`→📊、`music`→🎵、`translate`→🌐…约 90 个）→ 插件名里包含的关键词 → 首字符兜底。
+- **配色**：显式 `color` → 插件名的稳定哈希 → 9 组调色板。**同一个插件永远得到同一张图**（可 diff、可评审）。
+- **产物**：512×512 圆角 + 渐变 + 居中字形的**自包含 SVG**——无外链、无字体文件、无 `<image>`，
+  因为市场是通过 `<img>` 加载它的，文档外的东西一个都解析不了。
+- **栏位同步**：生成时会顺手把源码里脚手架那个 emoji 栏位图标换成同一字形；
+  如果作者已经自己写好了图标（匹配不到那个模式），**绝不改**，只返回片段让人自己粘。
+- **零依赖**：不需要网络、不需要 API key、不需要图像编码器（仓库里唯一的 AI 出图在 plugin-ai 内部，
+  不是 service，这里刻意不复制它）。
+
+### 从生成到上架
+
+```
+generatePluginIcon({ root, keywords: ['chart'] })
+  ├─ assets/icon.svg                  ← 自包含 SVG（可在预览里看到）
+  ├─ package.json: knPluginStudio.icon = "assets/icon.svg"
+  └─ src/index.tsx: 栏位 emoji → 同一字形（或返回片段）
+publishPluginProject({ root, version })
+  └─ 自动读清单里的 icon 文件 → uploadArtifact(image/svg+xml) → submit({ icon: resourcePath })
+```
+
+- 生成结果本身是一件产物（`plugin-icon`，id=工程根目录）：重新生成只更新产物架里的那一格，
+  侧栏会直接把图画出来（不传 payload 时按清单回读文件）。
+- 已经有设计好的图？把 `knPluginStudio.icon` 直接指向那个文件即可，发布时同样会自动上传；
+  已经手工上传过的也可以用 `publishPluginProject({ icon: '<已上传路径>' })` 显式指定。
+
 ## 打包分发
 
 开发台的构建产物就是标准插件 UMD 包：
@@ -284,12 +327,13 @@ pnpm test:plugin-dev:electron
 | `project-files.test.mjs` | 10 | 工程文件枚举/搜索/过滤、跳过 node_modules、截断上报 |
 | `package-install.test.mjs` | 20 | 包名/版本校验、管理器探测、argv 构造、假 spawn 安装 |
 | `tailwind.test.mjs` | 12 | 用宿主配置编译插件工具类、去除 @keyframes、空工程 |
-| `studio-tools.test.mjs` | 156 | **agent 工具面**：名称/描述/schema、create→write→run→build→list→stop 的每次能力调用、**模板与 externals 透传和校验**、**删除工程与自卸载**、**删单个文件与「未读不许删」**、**service 发现（提供者归属/过滤/无注册表兜底）**、**产物聚焦（含 focus:false 与坏预览不拖垮构建）**、失败装订、缺能力提示、失败不装旧产物、**只读发现可以、注册表管理不在** |
-| `surface.test.mjs` | 24 | **产物声明**：mapper 与工具面一致、kind 与预览一致、构建/发布/工程的 payload、失败不产生产物、id 稳定（同工程重建只占一格）、`focusArtifact` 无 payload 路径、垃圾输入不抛 |
+| `studio-tools.test.mjs` | 176 | **agent 工具面**：名称/描述/schema、create→write→run→build→list→stop 的每次能力调用、**模板与 externals 透传和校验**、**删除工程与自卸载**、**删单个文件与「未读不许删」**、**service 发现（提供者归属/过滤/无注册表兜底）**、**产物聚焦（含 focus:false 与坏预览不拖垮构建）**、失败装订、缺能力提示、失败不装旧产物、**只读发现可以、注册表管理不在** |
+| `surface.test.mjs` | 31 | **产物声明**：mapper 与工具面一致、kind 与预览一致、构建/发布/工程/图标的 payload、失败不产生产物、id 稳定（同工程重建/重生成只占一格）、`focusArtifact` 无 payload 路径、垃圾输入不抛 |
+| `icon-art.test.mjs` | 30 | **图标**：同插件同图、关键词/显式字形/首字母兜底、配色哈希与显式色、SVG 自包含与转义、栏位片段、只改该改的文件（不动手写图标、兼容 legacy `knPlugin` 块）、清单读取与 mime/可上传判断 |
 | `studio.smoke.mjs` | 50 | 真实 `PluginManager.installPluginFromSource` + Blob URL + 真实 loader；热更替换、单实例、坏代码不中断、恢复；**内置目录建工程、五个模板都能构建、删除工程、工程内删文件**；**产物管线（mapper 按工具名注册、卡片/预览贡献、产物架从 transcript 派生）**、**把活的插件面板真的渲染成 markup**、**真实 ServiceRegistry 把服务归属到插件** |
 | `electron.smoke.mjs` | 36 | 真实 preload 能力白名单、`dev.*` IPC（含 `dev.remove` / `dev.deleteFile`）、`ELECTRON_RUN_AS_NODE` 子进程、`desktop:event:dev` 推送、**无对话框 scaffold + 模板 + list + 读写/删除文件**、越界路径拒绝 |
 
-`pnpm test:plugin-dev` 合计 376 项检查；`pnpm test:plugin-dev:electron` 另有 36 项（需要先构建出 `out/preload/index.js`）。
+`pnpm test:plugin-dev` 合计 433 项检查；`pnpm test:plugin-dev:electron` 另有 36 项（需要先构建出 `out/preload/index.js`）。
 
 ## 能力清单（`desktop.dev.*`）
 

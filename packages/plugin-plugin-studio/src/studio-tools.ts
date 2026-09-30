@@ -121,6 +121,55 @@ export interface StudioDeleteFileResult {
     truncated: boolean
 }
 
+/** What applying a generated icon to a project did. */
+export interface StudioApplyIconResult {
+    iconFile: string
+    relativePath: string
+    glyph: string
+    isInitial: boolean
+    color: string
+    colorTo: string
+    svg: string
+    manifest: { updated: boolean; previous: string | null; block: string }
+    railIcon: { updated: boolean; status: string; snippet: string }
+}
+
+/**
+ * Icon rendering + application, injected by the plugin entry
+ * (`./icons/icon-art`). Structural here for the same reason as every other
+ * injected shape: the tool layer stays free of relative imports, so its test can
+ * load it directly under Node.
+ */
+export interface StudioIconToolkit {
+    /** Every icon component name the host exposes (`@kn/icon`). */
+    iconNames: () => string[]
+    /** Pure name filter: PascalCase components matching a query. */
+    filterIconNames: (names: readonly string[], query: string, limit?: number) => string[]
+    /** Emoji suggestions for a purpose keyword. */
+    suggestGlyphs: (query: string, limit?: number) => Array<{ keyword: string; glyph: string }>
+    /** Source snippets that make a rail icon (`dockPanels[].icon`). */
+    railIconSnippets: (iconName: string, emoji?: string) =>
+        | { createElement: string; jsx: string; emoji: string; importLine: string }
+        | Record<string, string>
+    /** Render the artwork, write it, point the manifest at it, patch the rail icon. */
+    applyIcon: (input: {
+        root: string
+        seed: string
+        io: { readFile(o: { path: string }): Promise<string>; writeFile(o: { path: string; contents: string }): Promise<void> }
+        title?: string
+        glyph?: string
+        color?: string
+        keywords?: string[]
+        apply?: boolean
+    }) => Promise<StudioApplyIconResult>
+    /** The icon file a manifest declares, if any. */
+    readDeclaredIcon: (manifestText: string) => string | null
+    /** Content type for an icon file, by extension. */
+    iconMimeType: (fileName: string) => string
+    /** Whether a declared icon is a project file we can upload. */
+    isUploadableIcon: (icon: string | null) => boolean
+}
+
 /** Who registered one service: the host itself, or one plugin. */
 export interface StudioServiceOwner {
     type: 'core' | 'plugin'
@@ -253,6 +302,11 @@ export interface StudioToolDeps {
      */
     getServiceRegistry?: () => StudioServiceRegistry | undefined
     /**
+     * Icon rendering + application (`./icons/icon-art`), plus the host's icon
+     * namespace. Absent only on a host that exposes no `@kn/icon`.
+     */
+    getIconToolkit?: () => StudioIconToolkit | undefined
+    /**
      * Hand a produced artifact to the host as the conversation's working target
      * (the kernel side pane). The plugin entry resolves the artifact from the
      * result through its mapper table; the studio's tools only report "this call
@@ -341,6 +395,21 @@ const requireDeleteFile = (deps: StudioToolDeps): NonNullable<StudioDevBridge['d
     }
     return dev.deleteFile.bind(dev)
 }
+
+const requireIconToolkit = (deps: StudioToolDeps): StudioIconToolkit => {
+    const toolkit = deps.getIconToolkit?.()
+    if (!toolkit || typeof toolkit.applyIcon !== 'function') {
+        throw new Error('当前宿主没有提供图标工具（缺少 @kn/icon 命名空间），无法生成插件图标。')
+    }
+    return toolkit
+}
+
+/** Join a project-relative path onto a root, without importing path helpers. */
+const joinRoot = (root: string, relative: string): string =>
+    `${root.replace(/[\\/]+$/, '')}/${relative.replace(/^[\\/]+/, '')}`
+
+/** Last path segment; used when the caller only knows the project root. */
+const lastSegment = (value: string): string => value.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? value
 
 /**
  * Offer a produced artifact as the conversation's working target.
@@ -867,7 +936,7 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
                 description: { type: 'string', description: '插件描述（上架新插件必填，至少 10 字）。' },
                 category: { type: 'string', enum: ['APP', 'FEATURE', 'CONNECTOR'], description: '分类，默认 FEATURE。' },
                 tags: { type: 'array', items: { type: 'string' }, description: '可选标签，1-5 个。' },
-                icon: { type: 'string', description: '可选图标文件名（先上传得到）。' },
+                icon: { type: 'string', description: '可选图标：已上传的资源路径；省略时自动上传清单里的 knPluginStudio.icon 文件（见 generatePluginIcon）。' },
                 permissions: { type: 'array', items: { type: 'string' }, description: '可选能力声明，如 NETWORK / DESKTOP。' },
                 versionDescs: {
                     type: 'array',
@@ -907,6 +976,45 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
                 fileName: args.pluginKey ? args.pluginKey + '.js' : 'index.js',
                 data: new Blob([status.build.code], { type: 'text/javascript' }),
             })
+
+            /**
+             * The marketplace icon, when the project has one.
+             *
+             * A plugin's icon is a declared FILE (`knPluginStudio.icon`), which
+             * `generatePluginIcon` writes — but the catalogue wants an uploaded
+             * image, and the tool used to require the caller to have uploaded it
+             * by hand. Upload it here instead, unless the caller passed a path
+             * they already uploaded.
+             */
+            let icon = typeof args.icon === 'string' && args.icon ? args.icon : null
+            let iconNote: string | undefined
+            if (!icon) {
+                const toolkit = deps.getIconToolkit?.()
+                if (toolkit) {
+                    try {
+                        const manifestText = await dev.readFile({ path: joinRoot(args.root, 'package.json') })
+                        const declared = toolkit.readDeclaredIcon(manifestText)
+                        if (toolkit.isUploadableIcon(declared) && declared) {
+                            const svg = await dev.readFile({ path: joinRoot(args.root, declared) })
+                            const fileName = lastSegment(declared)
+                            const uploadedIcon = await marketplace.uploadArtifact({
+                                fileName,
+                                data: new Blob([svg], { type: toolkit.iconMimeType(fileName) }),
+                            })
+                            icon = uploadedIcon.resourcePath
+                            iconNote = `已上传工程图标 ${declared}。`
+                        } else if (declared) {
+                            icon = declared
+                            iconNote = `清单声明的图标 "${declared}" 不是工程内文件（URL/data URI），原样提交。`
+                        }
+                    } catch (error) {
+                        iconNote =
+                            `清单声明了图标但上传失败（${(error as Error)?.message ?? error}）：` +
+                            '可以先跑 generatePluginIcon 重新生成，或上架后到插件市场补图。'
+                    }
+                }
+            }
+
             if (args.pluginId !== undefined && args.pluginId !== null) {
                 await marketplace.publishVersion(args.pluginId, {
                     version: args.version,
@@ -921,6 +1029,7 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
                     version: args.version,
                     resourcePath: uploaded.resourcePath,
                     buildCount: status.buildCount,
+                    iconNote,
                 }
             }
             const name = args.name ?? status.plugin.name
@@ -934,7 +1043,7 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
                 resourcePath: uploaded.resourcePath,
                 integrity: uploaded.integrity,
                 tags: args.tags,
-                icon: args.icon ?? null,
+                icon,
                 permissions: args.permissions,
                 versionDescs: args.versionDescs,
             })
@@ -945,6 +1054,8 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
                 version: args.version,
                 resourcePath: uploaded.resourcePath,
                 buildCount: status.buildCount,
+                icon,
+                iconNote,
             }
         },
     },
@@ -1304,6 +1415,136 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
                     '运行时不校验名字，但 typecheck 与补全依赖它。自己对外提供服务用插件 config 的 services 字段（重名会注册失败，不要试图覆盖别人的）。' +
                     '只想看某个插件提供了什么，传 owner=<插件名>。',
             }
+        },
+    },
+
+    /**
+     * Icon discovery + generation. A plugin has two icons and they are not
+     * interchangeable: the app's rail icon is a ReactNode in source, the
+     * marketplace icon is an uploaded image. These two tools cover both.
+     */
+    listPluginIcons: {
+        description:
+            '查宿主真实的图标名（@kn/icon 里的组件，lucide + react-icons），用于挑插件栏位图标——不要凭记忆拼名字，写错了就是空白。' +
+            '返回可直接粘贴的代码片段（栏位 icon 用 railIcon 或 jsx，都需要 importLine），以及按用途关键词给出的 emoji 建议（emoji 不需要 import）。' +
+            '应用内栏位图标（dockPanels[].icon）只能写在源码里；市场/清单图标是图片，用 generatePluginIcon 生成。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                query: {
+                    type: 'string',
+                    description: '可选。按名字搜索，例如 "chart"、"github"、"translate"（大小写不敏感）。',
+                },
+                limit: { type: 'number', description: '可选。最多返回多少个图标名，默认 24，上限 48。' },
+            },
+        },
+        readOnly: true,
+        execute: async (args: { query?: string; limit?: number }) => {
+            const toolkit = deps.getIconToolkit?.()
+            const query = typeof args?.query === 'string' ? args.query : ''
+            const limit = Math.min(Math.max(Math.floor(args?.limit ?? 24) || 24, 1), 48)
+            const allNames = typeof toolkit?.iconNames === 'function' ? toolkit.iconNames() : []
+            const names = toolkit?.filterIconNames ? toolkit.filterIconNames(allNames, query, limit) : []
+            const snippets = toolkit?.railIconSnippets?.(names[0] ?? 'Wrench') ?? {}
+            const emoji = toolkit?.suggestGlyphs ? toolkit.suggestGlyphs(query, 8) : []
+
+            return {
+                count: names.length,
+                totalAvailable: allNames.length,
+                icons: names.map((name) => {
+                    const parts = toolkit?.railIconSnippets?.(name) ?? {}
+                    return {
+                        name,
+                        importLine: 'importLine' in parts ? parts.importLine : `import { ${name} } from '@kn/icon'`,
+                        railIcon: 'createElement' in parts ? parts.createElement : '',
+                        jsx: 'jsx' in parts ? parts.jsx : '',
+                    }
+                }),
+                emoji,
+                example: snippets,
+                hint:
+                    '栏位图标：把 importLine 加进 src/index.tsx，再把该面板的 icon 换成 railIcon（或组件里的 jsx）。' +
+                    '清单/市场图标：用 generatePluginIcon（生成 assets/icon.svg 并写进 knPluginStudio.icon，上架时自动上传）。' +
+                    '同一个插件两张图最好用同一个字形，看起来才是一套。',
+            }
+        },
+    },
+
+    generatePluginIcon: {
+        description:
+            '给插件工程生成一枚自己的图标并接好：按插件名与用途关键词（chart/music/translate…）选字形和配色，离线渲染一张 SVG 写进 assets/icon.svg，' +
+            '把 package.json 的 knPluginStudio.icon 指向它；如果源码里还是脚手架那个 emoji 栏位图标，会一并换成同一个字形（换不了就返回片段让你自己粘）。' +
+            '同一插件名永远得到同一张图。上架时 publishPluginProject 会自动上传这个文件作为市场图标。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                root: { type: 'string', description: '工程根目录。' },
+                name: { type: 'string', description: '可选。插件名/用途描述，用于选字形和配色（省略时用清单里的 pluginKey/displayName）。' },
+                glyph: { type: 'string', description: '可选。直接指定字形（一个 emoji），优先于关键词。' },
+                color: { type: 'string', description: '可选。主色 #rrggbb，省略时按插件名稳定哈希选一个。' },
+                keywords: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: '可选。用途关键词，如 ["chart","analytics"]；比 name 更能决定字形。',
+                },
+                apply: {
+                    type: 'boolean',
+                    description: '可选。是否同时替换源码里的 emoji 栏位图标，默认 true（只生成图片时传 false）。',
+                },
+                focus: {
+                    type: 'boolean',
+                    description: '可选。是否把生成结果设为当前工作目标并在右侧预览里展示，默认 true。',
+                },
+            },
+            required: ['root'],
+        },
+        execute: async (args: {
+            root: string
+            name?: string
+            glyph?: string
+            color?: string
+            keywords?: string[]
+            apply?: boolean
+            focus?: boolean
+        }) => {
+            const dev = requireDev(deps)
+            const toolkit = requireIconToolkit(deps)
+            const keywords = Array.isArray(args.keywords)
+                ? args.keywords.filter((keyword): keyword is string => typeof keyword === 'string' && keyword.trim().length > 0)
+                : undefined
+
+            const applied = await toolkit.applyIcon({
+                root: args.root,
+                seed: (typeof args.name === 'string' && args.name.trim()) || lastSegment(args.root),
+                title: typeof args.name === 'string' ? args.name : undefined,
+                glyph: typeof args.glyph === 'string' ? args.glyph : undefined,
+                color: typeof args.color === 'string' ? args.color : undefined,
+                keywords,
+                apply: args.apply !== false,
+                // The dev bridge already speaks the shape the toolkit needs.
+                io: {
+                    readFile: (options) => dev.readFile({ path: options.path }),
+                    writeFile: (options) => dev.writeFile({ path: options.path, contents: options.contents }),
+                },
+            })
+
+            const result = {
+                ok: true,
+                root: args.root,
+                iconFile: applied.iconFile,
+                relativePath: applied.relativePath,
+                glyph: applied.glyph,
+                isInitial: applied.isInitial,
+                color: applied.color,
+                manifest: applied.manifest,
+                railIcon: applied.railIcon,
+                svg: applied.svg,
+                next: applied.railIcon.updated
+                    ? '图标已生成并接到栏位图标上。工程在监听时会自动重建热更；上架时 publishPluginProject 会自动带上这张图。'
+                    : `图标已生成（${applied.relativePath}）。源码里的栏位图标没有自动替换（${applied.railIcon.status}），需要的话把这段粘进 src/index.tsx：${applied.railIcon.snippet}`,
+            }
+            if (args.focus !== false) focusProducedArtifact(deps, 'generatePluginIcon', result, args)
+            return result
         },
     },
 
