@@ -16,6 +16,7 @@
 import { useCallback, useMemo } from 'react'
 import { useCapabilityProviders } from '../use-capability-providers'
 import { buildAgentRunInputs } from '../capabilities'
+import { useLoadedSkills } from '../skills/use-loaded-skills'
 import { filterAgentCatalog } from './filter-catalog'
 import { useEditorAgent, type EditorAgentApi } from '../agent/use-editor-agent'
 import type { AgentChatMessage } from '../agent/types'
@@ -115,7 +116,14 @@ export function useWorkspaceAgent(options: WorkspaceAgentOptions = {}): Workspac
         () => filterAgentCatalog(providers.getCatalog(), isAvailableTool),
         [providers.getCatalog, isAvailableTool],
     )
-    const { tools, skills, deferredTools } = useMemo(() => buildAgentRunInputs(catalog), [catalog])
+    // What this conversation already discovered: the run ships those tools as
+    // callable-but-deferred instead of withholding them for a second `load_skill`
+    // round trip (see skills/loaded-skill-cache).
+    const loadedSkills = useLoadedSkills(conversationId)
+    const { tools, skills, deferredTools } = useMemo(
+        () => buildAgentRunInputs(catalog, { loadedSkills }),
+        [catalog, loadedSkills],
+    )
 
     // Ask mode ships no tools — a pure-text answer over whatever the model can
     // already see. Kept memoized so the tool arrays stay identity-stable.

@@ -99,11 +99,13 @@ public class EditorAgentController {
         cmd.setToken(SecurityContextUtil.getToken());
         cmd.setSkillFragments(new ArrayList<>());
         cmd.setSkillTools(new ArrayList<>());
-        // Overflow channel: the client advertises every callable tool in `tools`
-        // with its schema, and sends here only the surplus that the provider's
-        // tool ceiling cannot fit. Deduped against `tools` on purpose — a tool
-        // already advertised must not be re-registered as deferred, which would
-        // take its schema back out of the model's tool list.
+        // Deferred channel: the client advertises every callable tool in `tools`
+        // with its schema, and sends here what must stay CALLABLE but out of that
+        // array — the surplus the provider's ceiling cannot fit, plus the skills
+        // this conversation already discovered (letting the array grow mid-session
+        // would re-bill the whole cached prefix). Deduped against `tools` on
+        // purpose — a tool already advertised must not be re-registered as
+        // deferred, which would take its schema back out of the model's tool list.
         java.util.Set<String> seenTools = new java.util.HashSet<>();
         for (ToolSpec spec : request.getTools() != null ? request.getTools() : new ArrayList<ToolSpec>()) {
             if (spec != null && spec.getName() != null) {

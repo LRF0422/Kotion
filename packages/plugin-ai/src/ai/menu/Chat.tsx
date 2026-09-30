@@ -13,6 +13,7 @@ import {
     useEditorAgent,
     useCapabilityProviders,
     buildAgentRunInputs,
+    useLoadedSkills,
     useAgentPane,
     AgentPaneHost,
     getAgentDocumentBridge,
@@ -421,8 +422,14 @@ export const ExpandableChatDemo: React.FC<{
     const catalog = useMemo(() => getCatalog(), [getCatalog])
     // Every callable tool rides in tools[] with its schema; skills[] adds the
     // prompt fragments and the tool names each skill owns. Only what the
-    // provider's tool ceiling cannot fit comes back as deferredTools.
-    const { tools: toolSpecs, skills, deferredTools } = useMemo(() => buildAgentRunInputs(catalog), [catalog])
+    // provider's tool ceiling cannot fit comes back as deferredTools — plus the
+    // skills THIS conversation already loaded through `load_skill`: they stay
+    // callable on every following turn instead of being learned again.
+    const loadedSkills = useLoadedSkills(activeSessionId)
+    const { tools: toolSpecs, skills, deferredTools } = useMemo(
+        () => buildAgentRunInputs(catalog, { loadedSkills }),
+        [catalog, loadedSkills],
+    )
 
     // ─── Session page binding bridge ─────────────────────────────
     // Registered after the capability hook so editPage can rebind the live tool

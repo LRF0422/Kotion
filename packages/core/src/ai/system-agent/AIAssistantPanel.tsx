@@ -39,6 +39,7 @@ import {
     useEditorAgent,
     useCapabilityProviders,
     buildAgentRunInputs,
+    useLoadedSkills,
     getPageNavigationBridge,
     cacheHitRate,
     useTranslation,
@@ -179,8 +180,13 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
     const subAgentLabels = useMemo(() => buildSubAgentTreeLabels(t), [t])
     const catalog = useMemo(() => getCatalog(), [getCatalog])
     // 所有可执行工具都带完整 schema 下发；skills[] 只补提示词片段与各自拥有的工具名。
-    // 仅超出 provider 工具上限的部分回落到 deferredTools。
-    const { tools: toolSpecs, skills, deferredTools } = useMemo(() => buildAgentRunInputs(catalog), [catalog])
+    // 仅超出 provider 工具上限的部分回落到 deferredTools —— 外加**本会话已通过
+    // `load_skill` 加载过的技能**：它们的工具保持可调用，不需要再发现一次。
+    const loadedSkills = useLoadedSkills(conversationId)
+    const { tools: toolSpecs, skills, deferredTools } = useMemo(
+        () => buildAgentRunInputs(catalog, { loadedSkills }),
+        [catalog, loadedSkills],
+    )
     const currentPage = getPageNavigationBridge()?.getCurrentPage()
 
     // Custom agent selected for this panel. Its guidance rides in the per-turn

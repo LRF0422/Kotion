@@ -192,13 +192,13 @@ public class ContextManager {
     /**
      * Header of the deferred (skill-owned) tool directory.
      *
-     * <p><b>Legacy compatibility path.</b> The catalog no longer defers any tool:
-     * every callable tool reaches the model in the {@code tools} array with its
-     * full schema. This section is only rendered when a client still sends
-     * deferred tools (an older bundle) or a run resumes from a checkpoint that
-     * carries them. The wording matches what actually happens under
-     * {@code freeze-deferred-tools}: the schema comes back WITH the first call's
-     * result, it is never merged into the tool list.
+     * <p>A client sends deferred tools for two reasons: the provider's tool ceiling
+     * pushed the surplus out of the {@code tools} array, or the skill was already
+     * discovered in this conversation and the client re-sends it so the model does
+     * not pay a second discovery round trip (the schema is in the transcript from
+     * the {@code load_skill} result). Either way the wording matches what actually
+     * happens under {@code freeze-deferred-tools}: the schema comes back WITH the
+     * first call's result, it is never merged into the tool list.
      */
     private static final String DEFERRED_TOOLS_HEADER =
             "\n\n【按需工具】以下工具可直接调用；为节省上下文只给出名称与参数签名（`?` 表示可选），"

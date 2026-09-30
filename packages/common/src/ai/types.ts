@@ -121,6 +121,13 @@ export interface ToolDefinition {
 export interface ToolExecutionContext {
     owner?: string | null
     /**
+     * The conversation this call belongs to, when the surface has one. Discovery
+     * tools use it to remember what they loaded for the SESSION: a skill loaded on
+     * one turn stays callable on the next, which is a new run (see
+     * `skills/loaded-skill-cache`).
+     */
+    conversationId?: string | null
+    /**
      * Host edit-target binding for this call. Injected by the executor so tools
      * do not have to read the module-level registry; tools fall back to the
      * global for callers that predate the injection.

@@ -196,8 +196,12 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
             onExecution: onToolExecution,
             getSessionBinding,
             isToolAvailable: (name: string) => isToolAvailableRef.current?.(name) ?? true,
+            // Session memory for discovery: `load_skill` files what it loaded under
+            // this conversation, so the next turn's run can call those tools without
+            // loading them again (see skills/loaded-skill-cache).
+            conversationId,
         }),
-        [resolveTools, isReadOnlyTool, resolveDocumentId, onToolExecution, getSessionBinding]
+        [resolveTools, isReadOnlyTool, resolveDocumentId, onToolExecution, getSessionBinding, conversationId]
     )
 
     /**
@@ -339,7 +343,11 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
             startInFlightRef.current = tracked
             return tracked
         },
-        [client, conversationId, tools, skills, spaceId, pageId, persist, store, lock, executor, startStream]
+        // `deferredTools` belongs here even though `tools` usually changes with it:
+        // discovery can move a tool from "withheld" to "deferred" WITHOUT touching
+        // the advertised array (that is the whole point of the channel), and a
+        // stale closure would then drop it from the next request.
+        [client, conversationId, tools, skills, deferredTools, spaceId, pageId, persist, store, lock, executor, startStream]
     )
 
     // Frontend tool execution is its own concern (see ./use-pending-tools).

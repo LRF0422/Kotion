@@ -1,7 +1,12 @@
 /**
  * Capability payload types — the OpenAI-shaped skill/tool envelopes shipped
- * inline with every chat request. Nothing is deferred: every callable tool
- * travels with its schema.
+ * inline with every chat request.
+ *
+ * `tools[]` carries the callable catalogue of this run; a NON-CORE tool that a
+ * skill's fragment names is withheld from it and delivered on demand by
+ * `load_skill` (progressive discovery), and a skill this conversation already
+ * loaded rides `deferredTools` instead — callable from the first step, still out
+ * of the advertised array so the provider's cached prefix survives.
  *
  * These were previously defined in chat-client/types.ts; they moved here when
  * the legacy chat-client was removed so the CapabilityCatalog collector keeps a
@@ -11,10 +16,10 @@
 /**
  * Skill payload sent to the backend as part of the capability catalog.
  *
- * Carries the skill's prompt fragment and the names of the tools it owns; the
- * schemas of those tools travel in the catalog's top-level `tools[]` like every
- * other tool. There is no per-skill tool envelope and no deferred/activation
- * channel: the frontend performs no capability discovery.
+ * Carries the skill's prompt fragment and the names of the tools it owns. The
+ * schemas of those tools travel either in the catalog's top-level `tools[]` (the
+ * editor baseline) or through the discovery/deferred channel — a skill cannot
+ * embed them itself.
  */
 export interface SkillPayload {
     name: string

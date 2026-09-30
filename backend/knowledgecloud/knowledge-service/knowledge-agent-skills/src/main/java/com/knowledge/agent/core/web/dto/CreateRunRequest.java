@@ -31,11 +31,20 @@ public class CreateRunRequest {
     private List<SkillInput> skills = new ArrayList<>();
 
     /**
-     * Overflow past the provider's tool ceiling: CALLABLE, but not advertised to
-     * the model with a schema until its first call. Clients advertise every
-     * callable tool in {@link #tools} — a model cannot reliably call a function
-     * it never saw declared — so this list holds only what did not fit, and is
-     * empty whenever the catalog fits.
+     * Tools that are CALLABLE from the first step but not advertised to the model
+     * with a schema until their first call. Two sources feed it, both intentional:
+     *
+     * <ul>
+     *   <li><b>Overflow past the provider's tool ceiling</b> — the catalog
+     *       advertises every callable tool in {@link #tools}, so only what did not
+     *       fit lands here.</li>
+     *   <li><b>Skills this conversation already discovered</b> — the client
+     *       remembers what `load_skill` delivered (its tool result carries the specs
+     *       under {@code activateTools}) and re-sends them here on every later turn.
+     *       They are routable again without a second discovery round trip, while
+     *       {@link #tools} stays byte-identical and the provider's cached prefix
+     *       survives.</li>
+     * </ul>
      */
     private List<ToolSpec> deferredTools = new ArrayList<>();
 

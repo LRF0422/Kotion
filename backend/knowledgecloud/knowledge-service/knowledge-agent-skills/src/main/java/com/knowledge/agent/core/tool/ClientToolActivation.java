@@ -18,6 +18,11 @@ import java.util.Map;
  *
  * <p>Deliberately keyed on a result FIELD rather than a tool name: any client tool
  * may hand over specs, and the loop stays ignorant of which one discovered what.
+ *
+ * <p>This is the IN-RUN handover only. A client that remembers the load per
+ * conversation re-sends the same specs as {@code CreateRunRequest.deferredTools}
+ * on the following turns, so those tools stay routable without a second discovery
+ * round trip; the loop treats both arrivals identically.
  */
 public final class ClientToolActivation {
 

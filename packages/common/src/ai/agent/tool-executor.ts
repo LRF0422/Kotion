@@ -90,6 +90,12 @@ export interface EditorToolExecutorOptions {
      * the asking run rather than for the whole client.
      */
     isToolAvailable?: (name: string) => boolean
+    /**
+     * Conversation this executor's calls belong to. Discovery tools remember what
+     * they loaded per conversation, so a skill loaded on one turn stays callable on
+     * the next (a new run) instead of having to be loaded again.
+     */
+    conversationId?: string | null
 }
 
 export class EditorToolExecutor {
@@ -99,6 +105,7 @@ export class EditorToolExecutor {
     private readonly onExecution?: OnToolExecution
     private readonly getSessionBinding?: EditorToolExecutorOptions['getSessionBinding']
     private readonly isToolAvailable?: EditorToolExecutorOptions['isToolAvailable']
+    private readonly conversationId?: string | null
     /** Idempotency cache: callId → result (replays/reconnects reuse it). */
     private readonly cache = new Map<string, ToolExecutionResult>()
     /** In-flight calls share one promise so rerenders cannot repeat side effects. */
@@ -111,6 +118,7 @@ export class EditorToolExecutor {
         this.onExecution = options.onExecution
         this.getSessionBinding = options.getSessionBinding
         this.isToolAvailable = options.isToolAvailable
+        this.conversationId = options.conversationId
     }
 
     /** Execute a frontend tool call; cached/in-flight results are shared by callId. */
@@ -175,6 +183,7 @@ export class EditorToolExecutor {
                 // bound to the same document cannot interleave (lost updates).
                 const run = () => definition.execute(args, callId, {
                     owner,
+                    conversationId: this.conversationId ?? null,
                     sessionBinding: this.getSessionBinding?.() ?? null,
                     isToolAvailable: this.isToolAvailable,
                 })

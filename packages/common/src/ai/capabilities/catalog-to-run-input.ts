@@ -12,6 +12,10 @@
  *     page never costs a discovery round trip. Discovery is for capabilities the
  *     run may not need — a plugin's tools, an installed skill's tools — never for
  *     the editor itself (see also {@link ESSENTIAL_TOOL_NAMES}).
+ *     A skill this CONVERSATION already loaded is the exception to the exception:
+ *     it was discovered once, so its tools ship as *deferred* (callable from the
+ *     first step, listed by name + signature in the backend's directory) instead of
+ *     being withheld again — see {@link BuildAgentRunInputsOptions.loadedSkills}.
  *  2. **The provider ceiling** — only if a host set one; whatever does not fit goes
  *     to the deferred directory (name + signature, schema on first call).
  *
@@ -122,6 +126,28 @@ export interface AgentRunInputs {
     deferredTools: AgentToolSpec[]
 }
 
+export interface BuildAgentRunInputsOptions {
+    /**
+     * Skills THIS CONVERSATION already loaded through `load_skill` (see
+     * skills/loaded-skill-cache for why the client owns that memory).
+     *
+     * Their tools stop being "learn it on demand" and become callable now: they
+     * travel as {@link AgentRunInputs.deferredTools} — routable from the first
+     * step, listed in the backend's 【按需工具】 directory — while staying OUT of the
+     * `tools` array. That last part is the point: `tools` renders before the
+     * messages, so advertising a newly loaded skill there would re-bill the whole
+     * cached prefix for one turn. The schema is already in the transcript from the
+     * `load_skill` result, so nothing is lost.
+     *
+     * Names are matched against the filtered catalogue, and only tools that
+     * progressive discovery would otherwise withhold are affected — a tool that
+     * already ships (core, `scope: 'any'`, essential, or fragment-less skill) is
+     * never demoted to deferred, and a skill the scope cannot run contributes
+     * nothing.
+     */
+    loadedSkills?: Iterable<string>
+}
+
 function toToolSpec(tool: ToolPayload): AgentToolSpec {
     return {
         name: tool.function.name,
@@ -156,13 +182,33 @@ function toToolSpec(tool: ToolPayload): AgentToolSpec {
  * request payload stays byte-stable across turns and the provider's prefix cache
  * keeps hitting.
  */
-export function buildAgentRunInputs(catalog: AgentCapabilityCatalog): AgentRunInputs {
+export function buildAgentRunInputs(
+    catalog: AgentCapabilityCatalog,
+    options: BuildAgentRunInputsOptions = {},
+): AgentRunInputs {
     // Discovery is decided HERE, on the catalogue this scope can actually run.
     // `described` is also the ceiling's ranking signal (a tool the prompt talks
     // about is the one the model is most likely to call), so it stays available
     // even when discovery is switched off.
     const described = describedNames(catalog.skills)
     const discoverable = catalog.skillDiscovery === false ? new Set<string>() : described
+
+    // What progressive discovery withholds on this catalogue: a discoverable
+    // non-core tool that is not part of the editor baseline.
+    const withheld = new Set(
+        catalog.tools
+            .filter(tool => discoverable.has(tool.function.name)
+                && !isBaselineTool(tool))
+            .map(tool => tool.function.name),
+    )
+    // …minus what this CONVERSATION already discovered. Those tools were learned
+    // once (`load_skill` handed their schemas over, and the transcript still
+    // carries them); withholding them again is what forced a second discovery round
+    // trip on every new turn. They move to the callable channel below instead.
+    const cachedAndWithheld = new Set(
+        ownedToolNames(catalog.skills, options.loadedSkills).filter(name => withheld.has(name)),
+    )
+    const stillWithheld = new Set([...withheld].filter(name => !cachedAndWithheld.has(name)))
 
     // A NON-CORE tool a skill names ships as a NAME only: the fragment advertises
     // it and `load_skill` delivers its schema when the model asks for it.
@@ -173,20 +219,25 @@ export function buildAgentRunInputs(catalog: AgentCapabilityCatalog): AgentRunIn
     // regression this split exists to prevent — a model cannot reliably call a
     // function it was never shown declared, whatever the prompt says about it.
     // Protocol tools (`scope: 'any'`) and the pinned host names ship the same way.
-    const candidates = catalog.tools.filter(tool =>
-        tool.core === true
-        || tool.scope === 'any'
-        || ESSENTIAL_TOOL_NAMES.has(tool.function.name)
-        || !discoverable.has(tool.function.name))
+    const candidates = catalog.tools.filter(tool => !stillWithheld.has(tool.function.name))
 
-    const advertised = selectAdvertisedTools(candidates, described, catalog.toolBudget)
+    // Already-loaded tools never take part in the ceiling contest either: they were
+    // discovered under a previous request's budget, and dropping one now would put
+    // the model back to a discovery round trip mid-conversation.
+    const advertised = selectAdvertisedTools(
+        candidates.filter(tool => !cachedAndWithheld.has(tool.function.name)),
+        described,
+        catalog.toolBudget,
+    )
     const advertisedNames = new Set(advertised.map(tool => tool.function.name))
 
     return {
         tools: advertised.map(toToolSpec),
-        // Only a ceiling defers a tool (name + signature in the directory, schema on
-        // first call). A withheld-but-discoverable tool is NOT deferred: `load_skill`
-        // hands it over whole.
+        // Two reasons a tool ends up here: it did not fit the provider's ceiling
+        // (name + signature in the directory, schema on first call), or this
+        // conversation already loaded it — callable from the first step, with the
+        // schema already in the transcript. A withheld-but-undiscovered tool is
+        // NEITHER: `load_skill` still hands it over whole.
         deferredTools: candidates
             .filter(tool => !advertisedNames.has(tool.function.name))
             .map(toToolSpec),
@@ -224,6 +275,43 @@ function labelledFragment(name: string, fragment: string | undefined): string | 
     const text = fragment?.trim()
     if (!text) return fragment
     return `【技能名】${name}\n\n${text}`
+}
+
+/**
+ * Tools that never ride discovery: core editor tools, protocol tools registered
+ * for every scope, and the pinned host names.
+ */
+function isBaselineTool(tool: ToolPayload): boolean {
+    return tool.core === true
+        || tool.scope === 'any'
+        || ESSENTIAL_TOOL_NAMES.has(tool.function.name)
+}
+
+/**
+ * Tool names owned by the skills this conversation already loaded.
+ *
+ * Matched by the skill's own name — `loadedSkills` carries what `load_skill`
+ * resolved and echoed (`bundle.skill`), which is this same catalogue's name for the
+ * skill. A skill the current scope dropped (its document is gone, the plugin was
+ * uninstalled, the user deactivated it) simply contributes nothing: the live
+ * catalogue stays the only source of what can run.
+ */
+function ownedToolNames(
+    skills: AgentCapabilityCatalog['skills'],
+    loadedSkills?: Iterable<string>,
+): string[] {
+    const loaded = new Set<string>()
+    for (const name of loadedSkills ?? []) {
+        const trimmed = typeof name === 'string' ? name.trim() : ''
+        if (trimmed) loaded.add(trimmed)
+    }
+    if (loaded.size === 0) return []
+    const names: string[] = []
+    for (const skill of skills) {
+        if (!loaded.has(skill.name)) continue
+        names.push(...(skill.requiredTools ?? []), ...(skill.optionalTools ?? []))
+    }
+    return names
 }
 
 /**

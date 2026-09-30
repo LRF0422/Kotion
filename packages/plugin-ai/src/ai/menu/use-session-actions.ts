@@ -7,6 +7,7 @@
 
 import { useCallback } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
+import { forgetLoadedSkills } from '@kn/common'
 import type { ChatError } from './chat-types'
 
 export interface UseSessionActionsOptions {
@@ -37,7 +38,11 @@ export function useSessionActions(options: UseSessionActionsOptions): UseSession
         await abandonAgent()
         setError(null)
         clearActiveMessages()
-    }, [abandonAgent, clearActiveMessages, setError])
+        // The cleared transcript is the new context: the tool schemas a
+        // `load_skill` result had put in it are gone, so the remembered skills go
+        // with it (one `load_skill` call re-establishes both).
+        forgetLoadedSkills(activeSessionId)
+    }, [abandonAgent, activeSessionId, clearActiveMessages, setError])
 
     const handleNewSession = useCallback(async () => {
         await abandonAgent()
@@ -61,6 +66,7 @@ export function useSessionActions(options: UseSessionActionsOptions): UseSession
             setError(null)
         }
         deleteSession(id)
+        forgetLoadedSkills(id)
     }, [activeSessionId, abandonAgent, deleteSession, setError])
 
     return { handleClearChat, handleNewSession, handleSwitchSession, handleDeleteSession }

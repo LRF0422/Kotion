@@ -6,8 +6,8 @@
  * system-agent provider consume this so the provider/plugin/skill-registry
  * plumbing lives in exactly one place.
  *
- * The frontend ships the full catalog inline with every chat request — every
- * callable tool carrying its schema, no deferral and no discovery. This hook owns:
+ * The frontend owns the whole catalog and decides per run what the model is
+ * offered inline and what it must discover (see `buildAgentRunInputs`). This hook owns:
  *  - a {@link ToolProvider} (built-in + plugin tools, executable locally)
  *  - a {@link SkillProvider} (built-in + installed + plugin skills)
  *  - the skill-registry subscription and plugin (PLUGIN_CHANGED) wiring

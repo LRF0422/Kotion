@@ -47,7 +47,7 @@
 | **I10** | **一个页面同时只有一个 writer。** 当分栏/浮窗等**可见编辑器**展示某页时，它通过 `claimEditor(pageId, editor)` **认领**该页：该页的隐藏离屏会话被**立即销毁**，agent 的文档工具与 conversation target 一律解析到该编辑器。可见编辑器关闭时 `releaseEditor`，下次按需惰性重建离屏会话。 |
 | **I11** | 认领是**按页**、**幂等**的；同一页的多个可见编辑器之间由服务端写租约选举，落败方不写（并由 §29 的 reconcile 自愈兜底）。 |
 | **I12** | **能力归属插件（已退役）。** ~~插件把工具/技能声明在自己的 agent 上（`agent.agents[]`）；内核 agent 只看目录。~~ 插件自定义 agent 已移除：工具/技能回到插件贡献级 `agent.tools` / `agent.skills`，由内核 agent 直接调用。 |
-| **I13** | **deferred 通道。** 技能自带的工具以 deferred 注册（可执行、可路由，但首次调用前不进入模型工具表与 schema）。 |
+| **I13** | **deferred 通道。** 技能自带的工具以 deferred 注册（可执行、可路由，但首次调用前不进入模型工具表与 schema）。客户端按会话记住 `load_skill` 加载过的技能，在后续 run 里把它们的工具重新放进 deferred（而不是又藏起来），因此同一会话不必反复发现；`tools` 数组保持字节稳定，提示前缀缓存不被打断。 |
 | **I14** | **委派是通用的。** `delegate({ task, tools?, systemPrompt?, maxSteps?, timeoutSec? })` 创建子 run；prompt 与工具子集由调用方显式传入（不再有按 agentId 解析的插件 agent 目录）。 |
 | **I15** | **target 跨刷新存活。** target 随会话元数据持久化；刷新后恢复到同一对象，切换会话则清空（I7）。 |
 
