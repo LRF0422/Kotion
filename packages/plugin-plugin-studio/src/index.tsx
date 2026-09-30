@@ -17,6 +17,7 @@
 import React from 'react'
 import {
     KPlugin,
+    getBoundServiceRegistry,
     openAgentArtifact,
     resolveOptionalService,
     type AgentArtifact,
@@ -46,6 +47,17 @@ const studioTools = createStudioTools({
         resolveOptionalService('pluginMarketplace') as ReturnType<
             NonNullable<Parameters<typeof createStudioTools>[0]['getMarketplace']>
         >,
+    /**
+     * The live service registry (bound by App.tsx). This is what lets the agent
+     * answer "what can I call from here": every service name the host and the
+     * installed plugins registered, with its owner.
+     */
+    getServiceRegistry: () => {
+        const registry = getBoundServiceRegistry()
+        return registry ? (registry as unknown as ReturnType<
+            NonNullable<Parameters<typeof createStudioTools>[0]['getServiceRegistry']>
+        >) : undefined
+    },
     /**
      * A finished build becomes the conversation's working target, so the side
      * pane shows the artifact the agent just produced. `openAgentArtifact` is
@@ -260,11 +272,20 @@ export const pluginStudio = new PluginStudio({
                         editor: 'Editor',
                         tools: 'Agent tools',
                         skills: 'Skills',
+                        services: 'Services',
                         menus: 'Menus',
                         routes: 'Routes',
                         desktop: 'Platform',
                         desktopOnly: 'desktop only',
                         nothing: 'This plugin contributes no UI and no capabilities yet (blank plugin / background logic only).',
+                    },
+                    services: {
+                        title: 'Callable services',
+                        summary: '· {{core}} from the host · {{plugins}} from plugins',
+                        core: 'host (core)',
+                        unavailable: 'This host exposed no service registry.',
+                        hint:
+                            'Services are the only formal channel between a plugin and the host / another plugin: call one with resolveOptionalService(name) (plain code) or useOptionalService(name) (inside a component). Signatures live in @kn/common src/core/types.ts → Services.',
                     },
                     state: {
                         watching: 'Watching',
@@ -425,6 +446,14 @@ export const pluginStudio = new PluginStudio({
                         desktop: '平台',
                         desktopOnly: '仅桌面端',
                         nothing: '这个插件当前没有贡献任何 UI 或能力（空插件/仅后台逻辑）。',
+                    },
+                    services: {
+                        title: '可调用的服务',
+                        summary: '· 宿主 {{core}} 个 · 插件 {{plugins}} 个',
+                        core: '宿主（core）',
+                        unavailable: '当前宿主没有暴露服务注册表。',
+                        hint:
+                            '服务是插件与宿主/其他插件互调的唯一正式通道：非 React 代码用 resolveOptionalService(name)，组件里用 useOptionalService(name)。签名在 @kn/common 的 src/core/types.ts → Services。',
                     },
                     state: {
                         watching: '监听中',

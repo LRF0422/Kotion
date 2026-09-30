@@ -257,6 +257,9 @@ class Smoke extends KPlugin {
         { id: 'smoke-panel', title: 'Smoke', icon: React.createElement('span', null, 'S'), component: Panel },
       ],
       tools: [smokeTool],
+      /* A service this plugin publishes — what the studio's service discovery
+         reads, and what other plugins would call. */
+      services: { smokeService: { hello: () => 'smoke' } },
       agent: {
         toolRenderers: [{ tool: 'smokeTool', render: () => null }],
         artifactRenderers: [{ kind: 'smoke', render: () => null }],
@@ -380,8 +383,32 @@ try {
         panelMarkup.includes('panel-v1'),
         panelMarkup.slice(0, 120),
     )
+    check(
+        'preview: the instance exposes the services it registers',
+        Object.keys(livePlugin?.services ?? {}).includes('smokeService'),
+        JSON.stringify(Object.keys(livePlugin?.services ?? {})),
+    )
 
-    /* 2c) the artifact pipeline, through the real kernel registry: a producing
+    /* 2c) services: the cross-plugin call channel the studio can now discover.
+     *     Prove the real registry attributes a plugin's service to that plugin —
+     *     that attribution is exactly what `listPluginServices` / the pane show. */
+    const serviceOwner = pluginManager.serviceRegistry.getOwner('smokeService')
+    check(
+        'services: a plugin-registered service is attributed to it',
+        serviceOwner?.type === 'plugin' && serviceOwner.pluginName === 'Smoke Dev Plugin',
+        JSON.stringify(serviceOwner),
+    )
+    check(
+        'services: it is visible in the registry view',
+        Object.keys(pluginManager.serviceRegistry.getAll()).includes('smokeService'),
+        JSON.stringify(Object.keys(pluginManager.serviceRegistry.getAll())),
+    )
+    check(
+        'services: the registered value is the plugin object',
+        pluginManager.serviceRegistry.get('smokeService')?.hello?.() === 'smoke',
+    )
+
+    /* 2d) the artifact pipeline, through the real kernel registry: a producing
      *     tool keeps its mapper (keyed by the bare tool name) and the plugin's
      *     card / preview contributions survive, so the shelf can be derived. */
     const capabilities = pluginManager.resolveAgentCapabilities()

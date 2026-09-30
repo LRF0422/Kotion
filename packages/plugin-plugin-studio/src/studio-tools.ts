@@ -121,8 +121,27 @@ export interface StudioDeleteFileResult {
     truncated: boolean
 }
 
-export interface StudioDevBridge {
-    start(options: { root: string; watch?: boolean; writeToDisk?: boolean; externals?: string[] }): Promise<StudioSessionStatus>
+/** Who registered one service: the host itself, or one plugin. */
+export interface StudioServiceOwner {
+    type: 'core' | 'plugin'
+    pluginName?: string
+}
+
+/**
+ * Read-only view of the host's service registry.
+ *
+ * Structural (like every other injected shape here) so the tool layer needs no
+ * runtime dependency: the plugin entry passes `getBoundServiceRegistry()`, tests
+ * pass a fake.
+ */
+export interface StudioServiceRegistry {
+    /** Every registered service, keyed by name. */
+    getAll(): Record<string, unknown>
+    /** Who owns one service, when the host tracks ownership. */
+    getOwner?(name: string): StudioServiceOwner | undefined
+}
+
+export interface StudioDevBridge {    start(options: { root: string; watch?: boolean; writeToDisk?: boolean; externals?: string[] }): Promise<StudioSessionStatus>
     build(options: { root: string; writeToDisk?: boolean; watch?: boolean; externals?: string[] }): Promise<StudioSessionStatus>
     stop(options: { root: string }): Promise<boolean>
     status(options?: { root?: string }): Promise<StudioSessionStatus[]>
@@ -227,6 +246,12 @@ export interface StudioToolDeps {
      * do not need a host window.
      */
     getHostGlobals?: () => Record<string, unknown>
+    /**
+     * Read-only view of the host's service registry (`getBoundServiceRegistry`),
+     * for discovering what the installed plugins and the host expose. Absent on
+     * a host that bound no registry.
+     */
+    getServiceRegistry?: () => StudioServiceRegistry | undefined
     /**
      * Hand a produced artifact to the host as the conversation's working target
      * (the kernel side pane). The plugin entry resolves the artifact from the
@@ -1198,6 +1223,86 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
                     'react、react-dom 与 @kn/* 由宿主始终注入，不需要写 externals。' +
                     'externals 的名字取包名去掉 scope（@scope/pkg → pkg），声明后打包器会去 window.__KN__[名字]、再退到 window[名字] 查找；' +
                     '找不到时 runPluginProject / buildPluginProject 会直接报错而不是产出运行时才炸的产物。',
+            }
+        },
+    },
+
+    /**
+     * Service discovery. Services are how a plugin consumes anything the host or
+     * another plugin provides — the only cross-plugin call channel the runtime
+     * has — so a plugin author needs the exact names and owners before writing
+     * `resolveOptionalService(...)`.
+     */
+    listPluginServices: {
+        description:
+            '列出宿主里已经注册的 service（服务）以及每个服务由谁提供（core=宿主，或某个已安装插件的运行时名字）。' +
+            '开发插件要复用宿主/其他插件的能力时先查这里：拿到服务名后用 resolveOptionalService(name)（非 React 代码）或 useOptionalService(name)（组件里）调用，' +
+            '拿不到就说明宿主没注册或该插件没装。服务是插件之间唯一正式的互调通道；插件不能覆盖宿主或别的插件已注册的服务（重名注册会失败）。' +
+            '每个服务的 TS 签名在 @kn/common 的 src/core/types.ts 的 Services 接口里（先用 searchHostApi 搜 "Services"，再 readHostApiFile 读该文件）。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                owner: {
+                    type: 'string',
+                    description:
+                        '可选。只列某个提供者：传插件运行时名字（见 listPluginProjects / 宿主的已安装列表），或传 "core" 只看宿主注册的服务。',
+                },
+                query: { type: 'string', description: '可选。服务名子串过滤（大小写不敏感），例如 "page"、"upload"。' },
+            },
+        },
+        readOnly: true,
+        execute: async (args: { owner?: string; query?: string }) => {
+            const registry = deps.getServiceRegistry?.()
+            if (!registry || typeof registry.getAll !== 'function') {
+                throw new Error(
+                    '当前宿主没有暴露服务注册表（缺少 bound ServiceRegistry），无法列出服务。请升级 KN 宿主。',
+                )
+            }
+            const all = registry.getAll() ?? {}
+            const entries = Object.keys(all)
+                .sort()
+                .map((name) => {
+                    const owner = registry.getOwner?.(name)
+                    const ownerType = owner?.type ?? 'unknown'
+                    const ownerName = ownerType === 'plugin' ? (owner?.pluginName ?? 'plugin') : ownerType
+                    return { name, owner: ownerName, ownerType }
+                })
+
+            /** "这个插件有什么 service" — grouped by provider. */
+            const byPlugin: Record<string, string[]> = {}
+            const coreServices: string[] = []
+            for (const entry of entries) {
+                if (entry.ownerType === 'plugin') {
+                    const list = byPlugin[entry.owner] ?? (byPlugin[entry.owner] = [])
+                    list.push(entry.name)
+                } else if (entry.ownerType === 'core') {
+                    coreServices.push(entry.name)
+                }
+            }
+
+            const ownerFilter = typeof args?.owner === 'string' && args.owner.trim() ? args.owner.trim() : undefined
+            const needle = typeof args?.query === 'string' && args.query.trim() ? args.query.trim().toLowerCase() : undefined
+            const filtered = entries.filter((entry) => {
+                if (ownerFilter && entry.owner !== ownerFilter) return false
+                if (needle && !entry.name.toLowerCase().includes(needle)) return false
+                return true
+            })
+
+            return {
+                count: filtered.length,
+                total: entries.length,
+                services: filtered,
+                ...(ownerFilter ? {} : { byPlugin, coreServices }),
+                filters: { owner: ownerFilter ?? null, query: typeof args?.query === 'string' ? args.query : null },
+                callPattern: [
+                    "import { resolveOptionalService, useOptionalService } from '@kn/common'",
+                    "const svc = resolveOptionalService('spacePageService')   // 非 React 代码",
+                    "const svc = useOptionalService('fileService')           // 组件里（可为空，宿主没注册）",
+                ],
+                hint:
+                    '服务名必须先在 @kn/common 的 src/core/types.ts 的 Services 接口里声明才能带类型使用（插件工程通过宿主注入的 @kn/common 拿到这些类型）；' +
+                    '运行时不校验名字，但 typecheck 与补全依赖它。自己对外提供服务用插件 config 的 services 字段（重名会注册失败，不要试图覆盖别人的）。' +
+                    '只想看某个插件提供了什么，传 owner=<插件名>。',
             }
         },
     },

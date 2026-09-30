@@ -195,6 +195,32 @@ const pluginHost = {
 /** Host globals the studio may declare as `externals`. */
 const hostGlobals = { React: {}, ReactDOM: {}, common: {}, ui: {}, icon: {}, editor: {}, pluginApi: {}, svelte: {} }
 
+/** The host's service registry view (names + owners), as the studio reads it. */
+const serviceRegistry = {
+    services: {
+        spacePageService: {},
+        fileService: {},
+        uploadTaskService: {},
+        desktop: {},
+        pluginManagement: {},
+        'mermaid:render': {},
+    },
+    owners: {
+        spacePageService: { type: 'core' },
+        fileService: { type: 'core' },
+        uploadTaskService: { type: 'core' },
+        desktop: { type: 'core' },
+        pluginManagement: { type: 'core' },
+        'mermaid:render': { type: 'plugin', pluginName: 'Mermaid' },
+    },
+    getAll() {
+        return this.services
+    },
+    getOwner(name) {
+        return this.owners[name]
+    },
+}
+
 const marketplace = {
     async listMine() {
         return [
@@ -226,6 +252,7 @@ const tools = createStudioTools({
     getPluginHost: () => pluginHost,
     getMarketplace: () => marketplace,
     getHostGlobals: () => hostGlobals,
+    getServiceRegistry: () => serviceRegistry,
     focusArtifactResult: (tool, result, args) => {
         focused.push({ tool, result, args })
         return true
@@ -254,6 +281,7 @@ const EXPECTED = [
     'deletePluginProject',
     'deletePluginProjectFile',
     'pluginProjectLogs',
+    'listPluginServices',
     'listHostGlobals',
     'listHostApiPackages',
     'searchHostApi',
@@ -278,7 +306,8 @@ check(
     'surface: read-only tools flagged',
     tools.listPluginProjects.readOnly === true
         && tools.readPluginProjectFile.readOnly === true
-        && tools.listHostGlobals.readOnly === true,
+        && tools.listHostGlobals.readOnly === true
+        && tools.listPluginServices.readOnly === true,
 )
 check(
     'surface: create does not require a directory',
@@ -372,15 +401,17 @@ check(
 )
 
 /*
- * Registry management is not a studio capability: the plugin manager owns the
- * installed-plugin list, and exposing it here would hand every agent run the
- * ability to uninstall arbitrary plugins. Assert the surface stays absent.
+ * Registry MANAGEMENT is not a studio capability: the plugin manager owns the
+ * installed-plugin lifecycle, and exposing install/uninstall of arbitrary
+ * plugins here would hand every agent run the ability to remove them. Read-only
+ * capability discovery (services, contributions) is in scope — that is what
+ * authoring a plugin needs. Assert the boundary stays where it is.
  */
 check(
-    'boundary: no plugin-registry management tools',
+    'boundary: no registry management tools',
     !names.includes('listInstalledPlugins')
         && !names.includes('uninstallInstalledPlugin')
-        && !names.some((name) => /installedPlugin/i.test(name)),
+        && !names.some((name) => /uninstall/i.test(name)),
     names.join(', '),
 )
 check(
@@ -430,6 +461,69 @@ check('logs: returns entries', logs.count === 1 && logs.logs[0].level === 'info'
 
 const stopped = await tools.stopPluginProject.execute({ root: ROOT })
 check('stop: reports success', stopped.ok === true && stopped.stopped === true)
+
+/* ------------------------------------------------------------------ *
+ * Service discovery: "这个插件有什么 service" + "我能调什么"
+ * ------------------------------------------------------------------ */
+const services = await tools.listPluginServices.execute({})
+check(
+    'services: lists every registered service with its owner',
+    services.count === 6
+        && services.services.some((entry) => entry.name === 'spacePageService' && entry.owner === 'core')
+        && services.services.some((entry) => entry.name === 'mermaid:render' && entry.owner === 'Mermaid'),
+    JSON.stringify(services.services),
+)
+check(
+    'services: answers "what does that plugin provide"',
+    services.byPlugin.Mermaid?.length === 1 && services.byPlugin.Mermaid[0] === 'mermaid:render',
+    JSON.stringify(services.byPlugin),
+)
+check(
+    'services: separates host services from plugin services',
+    services.coreServices.includes('spacePageService') && !services.coreServices.includes('mermaid:render'),
+    JSON.stringify(services.coreServices),
+)
+check(
+    'services: teaches the call pattern and the contract location',
+    Array.isArray(services.callPattern)
+        && services.callPattern.some((line) => line.includes('resolveOptionalService'))
+        && /types\.ts/.test(String(services.hint)),
+    JSON.stringify(services.callPattern),
+)
+
+const owned = await tools.listPluginServices.execute({ owner: 'Mermaid' })
+check(
+    'services: filters by provider',
+    owned.count === 1 && owned.services[0].name === 'mermaid:render',
+    JSON.stringify(owned.services),
+)
+const searched = await tools.listPluginServices.execute({ query: 'PAGE' })
+check(
+    'services: filters by name, case-insensitively',
+    searched.count === 1 && searched.services[0].name === 'spacePageService',
+    JSON.stringify(searched.services),
+)
+
+let noRegistry = ''
+try {
+    await createStudioTools({ getDev: () => dev, getPluginHost: () => pluginHost }).listPluginServices.execute({})
+} catch (error) {
+    noRegistry = error.message
+}
+check('guard: missing service registry reported', /服务注册表/.test(noRegistry), noRegistry)
+
+/* A registry that does not track ownership still lists names. */
+const bareRegistry = createStudioTools({
+    getDev: () => dev,
+    getPluginHost: () => pluginHost,
+    getServiceRegistry: () => ({ getAll: () => ({ someService: {} }) }),
+})
+const bareServices = await bareRegistry.listPluginServices.execute({})
+check(
+    'services: tolerates a registry without ownership',
+    bareServices.count === 1 && bareServices.services[0].ownerType === 'unknown',
+    JSON.stringify(bareServices.services),
+)
 
 /* ------------------------------------------------------------------ *
  * Produced artifacts: a build becomes the conversation's working target, and the

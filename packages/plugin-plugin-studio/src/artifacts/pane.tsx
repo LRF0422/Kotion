@@ -22,10 +22,12 @@
  * Read-only by design: actions that spawn or stop a build live in the studio
  * panel, so a preview can never start a child process.
  */
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { ScrollArea } from '@kn/ui'
 import { FileCode2, TriangleAlert, Upload, Wrench } from '@kn/icon'
 import {
+    getBoundServiceRegistry,
+    usePluginState,
     useTranslation,
     type AgentArtifactProps,
     type DevLogEntry,
@@ -93,9 +95,60 @@ const ModuleList: React.FC<{ title: string; items: string[]; total: number; max:
     )
 }
 
+/**
+ * Every service the host and the installed plugins registered, with its owner.
+ *
+ * This is the "what can I call from this plugin" list: `resolveOptionalService`
+ * is the only cross-plugin call channel the runtime has, so the names have to be
+ * discoverable while authoring. Re-read when plugins change (a plugin's services
+ * are registered at install time), and cheap enough not to page.
+ */
+const useServiceCatalog = () => {
+    const { pluginVersion } = usePluginState()
+    /** Bumped by the registry's own change events (register/unregister). */
+    const [serviceVersion, setServiceVersion] = useState(0)
+
+    useEffect(() => {
+        const registry = getBoundServiceRegistry()
+        if (!registry?.subscribe) return undefined
+        // Re-read on registry changes, not just plugin ones: a host service can
+        // arrive after startup (e.g. the desktop bridge once the preload is up).
+        return registry.subscribe(() => setServiceVersion((value) => value + 1))
+    }, [pluginVersion])
+
+    return useMemo(() => {
+        const registry = getBoundServiceRegistry()
+        if (!registry) return { available: false as const, core: [] as string[], plugins: [] as Array<{ owner: string; names: string[] }> }
+        const all = registry.getAll() ?? {}
+        const core: string[] = []
+        const byOwner = new Map<string, string[]>()
+        for (const name of Object.keys(all).sort()) {
+            // The view is typed against the host's `Services` keys; names come
+            // from the registry itself, so the cast is only about the signature.
+            const owner = registry.getOwner?.(name as never)
+            if (owner?.type === 'plugin') {
+                const names = byOwner.get(owner.pluginName ?? 'plugin') ?? []
+                names.push(name)
+                byOwner.set(owner.pluginName ?? 'plugin', names)
+            } else {
+                core.push(name)
+            }
+        }
+        return {
+            available: true as const,
+            core,
+            plugins: [...byOwner.entries()]
+                .map(([owner, names]) => ({ owner, names }))
+                .sort((left, right) => left.owner.localeCompare(right.owner)),
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [pluginVersion, serviceVersion])
+}
+
 export const PluginArtifactPane: React.FC<AgentArtifactProps> = ({ artifact }) => {
     const { t } = useTranslation()
     const capability = useDevCapability()
+    const serviceCatalog = useServiceCatalog()
     const snapshot: StudioArtifactSnapshot | null = readArtifactSnapshot(artifact)
     const root = snapshot?.root
 
@@ -255,6 +308,57 @@ export const PluginArtifactPane: React.FC<AgentArtifactProps> = ({ artifact }) =
                                 ))}
                             </div>
                         ) : null}
+                    </div>
+
+                    {/* What this plugin can call: services are the only formal
+                        channel between a plugin and the host / another plugin. */}
+                    <div className="space-y-1.5">
+                        <div className="text-[10.5px] font-medium text-muted-foreground">
+                            {t('pluginStudio.services.title')}
+                            {serviceCatalog.available ? (
+                                <span className="ml-1 font-normal">
+                                    {t('pluginStudio.services.summary', {
+                                        core: serviceCatalog.core.length,
+                                        plugins: serviceCatalog.plugins.reduce((sum, group) => sum + group.names.length, 0),
+                                    })}
+                                </span>
+                            ) : null}
+                        </div>
+                        {!serviceCatalog.available ? (
+                            <div className="rounded-md border border-dashed border-border/70 px-2 py-1.5 text-[10.5px] text-muted-foreground">
+                                {t('pluginStudio.services.unavailable')}
+                            </div>
+                        ) : (
+                            <div className="space-y-1.5 rounded-md border border-border/60 bg-muted/20 p-2">
+                                {serviceCatalog.plugins.map((group) => (
+                                    <div key={group.owner} className="space-y-0.5">
+                                        <div className="truncate text-[10.5px] text-muted-foreground">
+                                            {group.owner}
+                                        </div>
+                                        {group.names.map((serviceName) => (
+                                            <div key={serviceName} className="truncate font-mono text-[10.5px]">
+                                                {serviceName}
+                                            </div>
+                                        ))}
+                                    </div>
+                                ))}
+                                {serviceCatalog.core.length > 0 ? (
+                                    <div className="space-y-0.5">
+                                        <div className="text-[10.5px] text-muted-foreground">
+                                            {t('pluginStudio.services.core')}
+                                        </div>
+                                        {serviceCatalog.core.map((serviceName) => (
+                                            <div key={serviceName} className="truncate font-mono text-[10.5px] text-muted-foreground">
+                                                {serviceName}
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : null}
+                                <p className="pt-0.5 text-[10px] leading-relaxed text-muted-foreground/80">
+                                    {t('pluginStudio.services.hint')}
+                                </p>
+                            </div>
+                        )}
                     </div>
                 </div>
             </ScrollArea>

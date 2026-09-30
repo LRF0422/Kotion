@@ -81,7 +81,7 @@
 
 ### agent：工具驱动
 
-插件向 agent 注册了 21 个工具（顶层 `tools`，见 `PluginManager.resolveAgentCapabilities`）：
+插件向 agent 注册了 22 个工具（顶层 `tools`，见 `PluginManager.resolveAgentCapabilities`）：
 
 | 工具 | 作用 |
 | --- | --- |
@@ -98,6 +98,7 @@
 | `deletePluginProject` | 停止监听、卸载窗口里的开发版本、**删除工程目录及磁盘文件**（不可恢复；宿主拒绝非工程目录） |
 | `deletePluginProjectFile` | **删除工程里的单个文件**（如遗留的旧组件）。只能删工程内的文件，拒绝 `package.json` 与入口文件；必须先 `readPluginProjectFile` 读过；返回被删正文，误删可粘回 |
 | `pluginProjectLogs` | 构建日志，用于排查编译错误 |
+| `listPluginServices` | **列出已注册的 service 及其提供者**（core=宿主 / 某个已安装插件）；可按 `owner`、`query` 过滤。开发时"要调用谁的能力"先查它 |
 | `listHostGlobals` | 列出宿主通过 `window.__KN__` 暴露的全局模块（写 `externals` 前先查它） |
 | `listHostApiPackages` | 列出可查阅的标准宿主包与类型入口 |
 | `searchHostApi` | 在标准包源码里按名字搜索类型/接口（返回文件+行号） |
@@ -227,6 +228,33 @@ await runPluginProject({ root, externals: ['svelte'] })
 样式注意：卡片与预览渲染在内核会话里（**不在** `[data-kn-plugin="PluginStudio"]` 作用域内），
 所以只用宿主已有的 Tailwind 工具类与 `@kn/ui` 组件，跟 `plugin-main` 的 `PageArtifactCard` 一致。
 
+## 探知已安装插件的能力：service
+
+插件之间、插件与宿主之间**唯一正式的互调通道是 service**。所以开发插件时要复用现成能力（文件、上传、页面、AI、桌面能力…），
+第一步是知道**有哪些服务、分别由谁提供**——开发台把这件事做成了只读的发现能力：
+
+```
+ServiceRegistry（App.tsx 绑定） ──getBoundServiceRegistry()──┬─▶ listPluginServices（agent 工具）
+                                                            ├─▶ 侧栏「可调用的服务」：名字 + 提供者（实时）
+                                                            └─▶ 插件预览「提供的服务」：该插件对外注册了哪些名字
+```
+
+- **agent**：`listPluginServices({ owner?, query? })` 返回 `services`（名字 + 提供者 + 提供者类型）、
+  `byPlugin`（插件名 → 它提供的服务名，直接回答「这个插件有什么 service」）、`coreServices`，
+  外加 `callPattern` 与契约位置提示。
+- **人**：侧栏预览下半部分「可调用的服务」按提供者分组列出全部服务名，插件热更/装卸时自动刷新；
+  插件预览里则显示**这个插件对外提供了哪些服务**。
+- **调用方式**：非 React 代码 `resolveOptionalService('name')`（可能为空，要判空）/ `resolveService('name')`（不存在即抛）；
+  组件里用 `useOptionalService` / `useService`。
+- **契约**：每个服务名的 TS 签名在 `@kn/common` 的 `src/core/types.ts` 的 `Services` 接口里——
+  用 `searchHostApi({ query: 'Services' })` 定位后 `readHostApiFile` 读。服务名必须在该接口里声明才能带类型使用；
+  运行时不校验名字，但 typecheck 与补全依赖它。
+- **所有权**：插件不能覆盖宿主或别的插件已注册的服务（`ServiceRegistry` 会拒绝重名注册）。
+  自己对外提供服务写在插件 config 的 `services` 字段里。
+
+> 边界要说清：开发台现在**只读地**探知能力（服务名与提供者），**不做注册表管理**——
+> 安装/卸载别的插件仍然只能通过插件管理器，`agent.tools` 里没有、也不会有卸载别人插件的工具。
+
 ## 打包分发
 
 开发台的构建产物就是标准插件 UMD 包：
@@ -256,12 +284,12 @@ pnpm test:plugin-dev:electron
 | `project-files.test.mjs` | 10 | 工程文件枚举/搜索/过滤、跳过 node_modules、截断上报 |
 | `package-install.test.mjs` | 20 | 包名/版本校验、管理器探测、argv 构造、假 spawn 安装 |
 | `tailwind.test.mjs` | 12 | 用宿主配置编译插件工具类、去除 @keyframes、空工程 |
-| `studio-tools.test.mjs` | 145 | **agent 工具面**：名称/描述/schema、create→write→run→build→list→stop 的每次能力调用、**模板与 externals 透传和校验**、**删除工程与自卸载**、**删单个文件与「未读不许删」**、**产物聚焦（含 focus:false 与坏预览不拖垮构建）**、失败装订、缺能力提示、失败不装旧产物、**不含插件注册表管理工具** |
+| `studio-tools.test.mjs` | 156 | **agent 工具面**：名称/描述/schema、create→write→run→build→list→stop 的每次能力调用、**模板与 externals 透传和校验**、**删除工程与自卸载**、**删单个文件与「未读不许删」**、**service 发现（提供者归属/过滤/无注册表兜底）**、**产物聚焦（含 focus:false 与坏预览不拖垮构建）**、失败装订、缺能力提示、失败不装旧产物、**只读发现可以、注册表管理不在** |
 | `surface.test.mjs` | 24 | **产物声明**：mapper 与工具面一致、kind 与预览一致、构建/发布/工程的 payload、失败不产生产物、id 稳定（同工程重建只占一格）、`focusArtifact` 无 payload 路径、垃圾输入不抛 |
-| `studio.smoke.mjs` | 46 | 真实 `PluginManager.installPluginFromSource` + Blob URL + 真实 loader；热更替换、单实例、坏代码不中断、恢复；**内置目录建工程、五个模板都能构建、删除工程、工程内删文件**；**产物管线（mapper 按工具名注册、卡片/预览贡献、产物架从 transcript 派生）**、**把活的插件面板真的渲染成 markup** |
+| `studio.smoke.mjs` | 50 | 真实 `PluginManager.installPluginFromSource` + Blob URL + 真实 loader；热更替换、单实例、坏代码不中断、恢复；**内置目录建工程、五个模板都能构建、删除工程、工程内删文件**；**产物管线（mapper 按工具名注册、卡片/预览贡献、产物架从 transcript 派生）**、**把活的插件面板真的渲染成 markup**、**真实 ServiceRegistry 把服务归属到插件** |
 | `electron.smoke.mjs` | 36 | 真实 preload 能力白名单、`dev.*` IPC（含 `dev.remove` / `dev.deleteFile`）、`ELECTRON_RUN_AS_NODE` 子进程、`desktop:event:dev` 推送、**无对话框 scaffold + 模板 + list + 读写/删除文件**、越界路径拒绝 |
 
-`pnpm test:plugin-dev` 合计 361 项检查；`pnpm test:plugin-dev:electron` 另有 36 项（需要先构建出 `out/preload/index.js`）。
+`pnpm test:plugin-dev` 合计 376 项检查；`pnpm test:plugin-dev:electron` 另有 36 项（需要先构建出 `out/preload/index.js`）。
 
 ## 能力清单（`desktop.dev.*`）
 
@@ -283,9 +311,10 @@ pnpm test:plugin-dev:electron
 
 配套宿主服务：`pluginHost.installFromSource()` / `uninstall()` / `subscribe()`
 （`packages/core/src/App.tsx` 注册，插件通过 `useOptionalService('pluginHost')` 使用）。
-热更与「卸载自己刚热更进去的那个开发版本」是开发台唯一使用注册表的能力：
-**开发台不列举、也不卸载别人的插件**——那是插件管理器的职责，
-agent 工具面因此没有 `listInstalledPlugins` / `uninstallInstalledPlugin`。
+热更与「卸载自己刚热更进去的那个开发版本」是开发台唯一会**改动**注册表的操作：
+能力**发现**是只读的（`listPluginServices` + 侧栏服务目录），但
+**开发台不安装/卸载别人的插件**——那是插件管理器的职责，
+agent 工具面因此没有 `listInstalledPlugins` / `uninstallInstalledPlugin` 这类管理工具。
 删除工程仍走同一个路径白名单（内置工程目录位于 `userData`，已添加目录经文件夹对话框授权），
 但会**拒绝**不是插件工程的目录，避免「删工程」变成「删用户目录」。
 
@@ -317,9 +346,9 @@ agent 工具面因此没有 `listInstalledPlugins` / `uninstallInstalledPlugin`�
 3. **插件是可信代码**：本地构建产物在宿主窗口内执行，拥有与宿主相同的权限。只在开发机上使用。
 4. **文件路径白名单**：`dev.*` 的每个路径都经过与 `fs.*` 相同的 allowlist（标准用户目录 +
    对话框授予的目录）。内置工程目录位于 `userData`，本来就在白名单内。
-5. **agent 工具不含插件注册表管理**：开发台只热更自己构建的产物，并且只卸载「自己刚热更进去的那个开发版本」
-   （删除工程时顺带清掉）；列举/卸载其他已安装插件属于插件管理器的能力，
-   不通过开发台的工具暴露给 agent。
+5. **只读发现 ≠ 注册表管理**：开发台会**读**已安装插件的能力（服务名与提供者、贡献点），
+   但只**改**自己构建的产物——热更，以及卸载「自己刚热更进去的那个开发版本」（删除工程时顺带清掉）。
+   安装/卸载其他已安装插件属于插件管理器的能力，不通过开发台的工具暴露给 agent。
 6. **托管外的东西不猜**：`externals` 只能声明宿主已暴露的全局模块（先 `listHostGlobals`），
    声明错的模块会**在构建前报错**；`@tiptap/core` 不在宿主注入清单里，
    所以没有「自带 Tiptap 节点」的模板——插件自带一份会注册到另一个 ProseMirror schema 实例上。

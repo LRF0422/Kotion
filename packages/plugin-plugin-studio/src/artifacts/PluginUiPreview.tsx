@@ -148,6 +148,10 @@ export const PluginUiPreview: React.FC<PluginUiPreviewProps> = ({ name, pluginKe
     const menus = plugin.menus ?? []
     // Only `routes` is exposed on the instance; `globalRoutes` has no getter.
     const routes = plugin.routes ?? []
+    // Services this plugin registers into the host registry: the callable
+    // surface it adds for everyone else (names only — the contract lives in
+    // @kn/common's `Services` interface).
+    const services = Object.keys(plugin.services ?? {}).sort()
     const cssKey = pluginKey || name || plugin.name
 
     const hasAnything =
@@ -159,6 +163,7 @@ export const PluginUiPreview: React.FC<PluginUiPreviewProps> = ({ name, pluginKe
         || skills.length > 0
         || menus.length > 0
         || routes.length > 0
+        || services.length > 0
 
     return (
         <div className="space-y-2">
@@ -262,6 +267,12 @@ export const PluginUiPreview: React.FC<PluginUiPreviewProps> = ({ name, pluginKe
             })}
             {tools.length > 0 ? (
                 <SummaryRow label={t('pluginStudio.preview.tools')} value={tools.map((tool) => tool.name).join('、')} />
+            ) : null}
+            {services.length > 0 ? (
+                <SummaryRow
+                    label={t('pluginStudio.preview.services')}
+                    value={services.join('、')}
+                />
             ) : null}
             {skills.length > 0 ? (
                 <SummaryRow label={t('pluginStudio.preview.skills')} value={skills.map((skill) => skill.name).join('、')} />
