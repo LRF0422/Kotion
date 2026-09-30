@@ -11,12 +11,37 @@
  */
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { mkdir, readFile, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises'
+import { basename, dirname, join, parse, relative, resolve, sep } from 'node:path'
+import { homedir } from 'node:os'
 import { fileURLToPath } from 'node:url'
-import { renderScaffold } from './bundler.mjs'
+import {
+    DEFAULT_SCAFFOLD_TEMPLATE,
+    SCAFFOLD_TEMPLATES,
+    readProjectManifest,
+    renderScaffold,
+} from './bundler.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
+
+/**
+ * Directory names `dev.remove` refuses to delete, whatever they contain.
+ *
+ * The fs allowlist already limits deletions to the user's standard directories,
+ * but those directories *are* allowed roots — so a stray `package.json` in
+ * `~/Documents` must not be enough to turn "delete this project" into "delete
+ * my documents".
+ */
+const PROTECTED_DIR_NAMES = new Set([
+    'documents',
+    'downloads',
+    'desktop',
+    'temp',
+    'userdata',
+    'library',
+    'home',
+    'users',
+])
 
 /**
  * Locate the dev-server entry the child process runs.
@@ -36,6 +61,8 @@ const resolveDevServer = () => {
 
 const MAX_LOG_ENTRIES = 400
 const INITIAL_BUILD_TIMEOUT_MS = 30_000
+/** How much of a deleted file's text `dev.deleteFile` echoes back for undo. */
+const MAX_DELETE_ECHO_BYTES = 200_000
 
 /** True when `dir` exists and has at least one entry (ENOENT => false). */
 const directoryHasEntries = async (dir) => {
@@ -46,6 +73,18 @@ const directoryHasEntries = async (dir) => {
         if (error.code === 'ENOENT') return false
         throw error
     }
+}
+
+/**
+ * Order-insensitive comparison of two externals lists, where an absent list
+ * counts as empty. Only used to decide whether an *explicit* list differs from
+ * the running session's; the undefined-vs-`[]` distinction is handled by the
+ * callers (omit = inherit, `[]` = clear).
+ */
+const sameExternals = (left, right) => {
+    const a = [...(left || [])].sort()
+    const b = [...(right || [])].sort()
+    return a.length === b.length && a.every((value, index) => value === b[index])
 }
 
 /** @typedef {import('./dev-server.mjs')} DevServerModule */
@@ -328,6 +367,13 @@ export class DevSessionManager {
         const existing = this.sessions.get(root)
         if (existing) {
             // Restart with the new options rather than leaking the old watcher.
+            // An *omitted* `externals` inherits what the project already had, so
+            // pressing "Watch" (or re-running without the argument) cannot
+            // silently drop declarations a caller made earlier; an explicit list
+            // — including `[]` — replaces them.
+            if (options.externals === undefined) {
+                options = { ...options, externals: existing.options.externals }
+            }
             existing.stop()
             this.sessions.delete(root)
         }
@@ -350,6 +396,15 @@ export class DevSessionManager {
         const session = this.sessions.get(options.root)
         if (!session) {
             return await this.start({ ...options, watch: false })
+        }
+        // The child process was spawned with a fixed externals list, and a
+        // rebuild over stdin cannot change that — so a *changed* externals list
+        // means the session has to be restarted for the new mapping to apply.
+        if (
+            Array.isArray(options.externals) &&
+            !sameExternals(options.externals, session.options.externals)
+        ) {
+            return await this.start({ ...options, watch: session.watching })
         }
         // A manual build is asynchronous over stdin: wait for the *next* build
         // so the caller gets the fresh status instead of the previous one.
@@ -375,10 +430,17 @@ export class DevSessionManager {
     }
 
     async scaffold(options) {
+        const template = options.template || DEFAULT_SCAFFOLD_TEMPLATE
+        if (!SCAFFOLD_TEMPLATES.includes(template)) {
+            throw new Error(
+                `dev.scaffold: unknown template "${template}". Expected one of: ${SCAFFOLD_TEMPLATES.join(', ')}`,
+            )
+        }
         const files = renderScaffold({
             name: options.name,
             pluginKey: options.pluginKey || options.name.replace(/^@[^/]+\//, ''),
             displayName: options.displayName,
+            template,
         })
         // `projectsDir` is the host's managed directory; an explicit `parentDir`
         // wins (adding an existing project that lives elsewhere).
@@ -403,8 +465,142 @@ export class DevSessionManager {
         return {
             root,
             pluginKey: options.pluginKey || options.name.replace(/^@[^/]+\//, ''),
+            template,
             files: written,
             managed: !options.parentDir,
+        }
+    }
+
+    /**
+     * Stop a project's session and delete its files.
+     *
+     * Destructive and irreversible, so it is guarded rather than trusting the
+     * caller: the target must be an actual plugin project and must not be one of
+     * the user's standard directories. The caller (IPC) has already validated
+     * the path against the fs allowlist.
+     */
+    async removeProject(options) {
+        const root = options.root
+        if (!root || dirname(root) === root || root === parse(root).root) {
+            throw new Error(`dev.remove: refusing to delete a filesystem root: ${root}`)
+        }
+        if (root === homedir() || PROTECTED_DIR_NAMES.has(basename(root).toLowerCase())) {
+            throw new Error(`dev.remove: refusing to delete the standard directory ${root}`)
+        }
+
+        let manifest
+        try {
+            manifest = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'))
+        } catch {
+            throw new Error(
+                `dev.remove: refusing to delete ${root} — it is not a plugin project (no readable package.json)`,
+            )
+        }
+
+        // Stop first: on Windows a live child handle makes the recursive delete
+        // fail, and a lingering session would keep reporting a project whose
+        // files are gone.
+        const session = this.sessions.get(root)
+        if (session) {
+            session.stop()
+            this.sessions.delete(root)
+        }
+        await rm(root, { recursive: true, force: true })
+
+        const studio = manifest.knPluginStudio || manifest.knPlugin || {}
+        return {
+            root,
+            removed: true,
+            pluginKey: studio.pluginKey || manifest.name || null,
+            name: studio.displayName || manifest.name || null,
+        }
+    }
+
+    /**
+     * Delete one file inside a plugin project.
+     *
+     * Deliberately narrower than a generic filesystem delete: the target must
+     * resolve (symlinks included) inside a real plugin project, and the manifest
+     * and the entry file are refused — deleting either turns a working project
+     * into one that cannot build, and the entry can only be replaced by editing
+     * `knPluginStudio.entry` first.
+     *
+     * The removed text is echoed back (up to {@link MAX_DELETE_ECHO_BYTES}) so a
+     * mistaken delete can be undone by writing the file again.
+     */
+    async deleteProjectFile(options) {
+        const root = options.root
+        const path = options.path
+        if (!root || !path) {
+            throw new Error('dev.deleteFile: "root" and "path" are required')
+        }
+
+        let manifest
+        try {
+            manifest = await readProjectManifest(root)
+        } catch (error) {
+            throw new Error(`dev.deleteFile: cannot read project ${root}: ${error.message}`)
+        }
+        // `readProjectManifest` falls back to a synthesized manifest, so the
+        // manifest has to be checked separately or any directory would qualify.
+        if (!existsSync(join(root, 'package.json'))) {
+            throw new Error(
+                `dev.deleteFile: refusing to delete inside ${root} — it is not a plugin project (no readable package.json)`,
+            )
+        }
+
+        let realRoot
+        try {
+            realRoot = await realpath(root)
+        } catch {
+            throw new Error(`dev.deleteFile: project root not found: ${root}`)
+        }
+        let realTarget
+        try {
+            realTarget = await realpath(path)
+        } catch {
+            throw new Error(`dev.deleteFile: file not found: ${path}`)
+        }
+        if (!realTarget.startsWith(realRoot + sep)) {
+            throw new Error(`dev.deleteFile: refusing to delete a file outside the project: ${path}`)
+        }
+        if (realTarget === join(realRoot, 'package.json')) {
+            throw new Error(
+                'dev.deleteFile: refusing to delete package.json — it is the project manifest; delete the whole project instead.',
+            )
+        }
+        if (manifest.entry) {
+            const realEntry = await realpath(manifest.entry).catch(() => undefined)
+            if (realEntry && realEntry === realTarget) {
+                throw new Error(
+                    `dev.deleteFile: refusing to delete the entry file (${manifest.entry}). Point knPluginStudio.entry at the replacement first, then delete this one.`,
+                )
+            }
+        }
+
+        const info = await stat(realTarget)
+        if (!info.isFile()) {
+            throw new Error(`dev.deleteFile: not a file: ${path}`)
+        }
+
+        const relativePath = relative(realRoot, realTarget).split(sep).join('/')
+        let content
+        let truncated = false
+        if (info.size <= MAX_DELETE_ECHO_BYTES) {
+            content = await readFile(realTarget, 'utf8').catch(() => undefined)
+        } else {
+            truncated = true
+        }
+        await rm(realTarget, { force: false })
+
+        return {
+            root,
+            path,
+            relativePath,
+            removed: true,
+            bytes: info.size,
+            content,
+            truncated,
         }
     }
 

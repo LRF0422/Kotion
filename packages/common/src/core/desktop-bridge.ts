@@ -57,6 +57,8 @@ export type DesktopCapability =
     | 'dev.hostApi'
     | 'dev.files'
     | 'dev.installDependencies'
+    | 'dev.remove'
+    | 'dev.deleteFile'
 
 export interface DesktopAppInfo {
     version: string
@@ -356,16 +358,80 @@ export interface DevScaffoldOptions {
     displayName?: string
     /** Registry key; defaults to a slug of `name`. */
     pluginKey?: string
+    /**
+     * Which contribution point the project starts from. Defaults to `panel`;
+     * every template must build as-is, so the choice only decides the starting
+     * shape, never whether the project works.
+     */
+    template?: DevScaffoldTemplate
     /** Overwrite an existing directory. Defaults to false. */
     overwrite?: boolean
 }
 
+/**
+ * Scaffold templates, one per contribution point.
+ *
+ * - `panel` — a side-dock panel
+ * - `page` — a whole-page renderer (`pageTypes`)
+ * - `settings` — a panel in the host's settings dialog
+ * - `command` — an editor slash-menu entry
+ * - `blank` — a valid plugin with no contributions yet
+ */
+export type DevScaffoldTemplate = 'panel' | 'page' | 'settings' | 'command' | 'blank'
+
 export interface DevScaffoldResult {
     root: string
     pluginKey: string
+    /** Template the project was generated from. */
+    template: DevScaffoldTemplate
     files: string[]
     /** True when the host chose the managed directory (no `parentDir` given). */
     managed: boolean
+}
+
+/** Delete a plugin project (its files and any running session). */
+export interface DevRemoveOptions {
+    /** Absolute project directory, validated against the fs allowlist. */
+    root: string
+}
+
+/** Result of {@link DevBridge.removeProject}. */
+export interface DevRemoveResult {
+    root: string
+    removed: boolean
+    /** Registry key read from the deleted manifest, when it declared one. */
+    pluginKey?: string | null
+    /** Display name read from the deleted manifest, when it declared one. */
+    name?: string | null
+}
+
+/** Delete one file inside a plugin project. */
+export interface DevDeleteFileOptions {
+    /** Absolute project root, validated against the fs allowlist. */
+    root: string
+    /** Absolute file to delete; must resolve inside `root`. */
+    path: string
+}
+
+/**
+ * Result of {@link DevBridge.deleteFile}.
+ *
+ * The removed text is echoed back so a mistaken delete can be undone, which is
+ * why a delete reports more than "ok".
+ */
+export interface DevDeleteFileResult {
+    root: string
+    /** The path that was requested. */
+    path: string
+    /** Project-relative path, for display and logs. */
+    relativePath: string
+    removed: boolean
+    /** Size of the deleted file in bytes. */
+    bytes: number
+    /** The deleted text, when it was small enough to echo back. */
+    content?: string
+    /** True when the file was too large to echo back. */
+    truncated: boolean
 }
 
 /** One plugin project the host can enumerate from disk. */
@@ -544,6 +610,16 @@ export interface DevBridge {
     /** Install npm packages into one project (runs the package manager). */
     installDependencies(options: DevInstallOptions): Promise<DevInstallResult>
     /**
+     * Stop a project's session and delete its files from disk. Irreversible;
+     * the host refuses anything that is not a plugin project.
+     */
+    removeProject(options: DevRemoveOptions): Promise<DevRemoveResult>
+    /**
+     * Delete one file inside a project. The host confines the file to the
+     * project root and refuses the manifest and the entry file.
+     */
+    deleteFile(options: DevDeleteFileOptions): Promise<DevDeleteFileResult>
+    /**
      * Subscribe to successful rebuilds. `root` filters to one project; omit to
      * receive every project's rebuilds. Returns an unsubscribe function.
      */
@@ -612,6 +688,8 @@ export interface DesktopCapabilityContract {
     'dev.hostApi': { params: DevHostApiOptions; result: DevHostApiResult }
     'dev.files': { params: DevFilesOptions; result: DevFilesResult }
     'dev.installDependencies': { params: DevInstallOptions; result: DevInstallResult }
+    'dev.remove': { params: DevRemoveOptions; result: DevRemoveResult }
+    'dev.deleteFile': { params: DevDeleteFileOptions; result: DevDeleteFileResult }
 }
 
 /**

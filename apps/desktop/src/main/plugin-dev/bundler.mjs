@@ -57,6 +57,30 @@ const VIRTUAL_ENTRY = 'kn-studio-entry'
 const SOURCE_EXTENSIONS = ['.tsx', '.ts', '.jsx', '.js', '.mjs']
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'release', 'out', '.turbo'])
 
+/**
+ * The host-namespace name a declared external resolves to.
+ *
+ * A declared external is a *host global*, so the name is the package's own
+ * name with any scope dropped — the same rule for `@kn/chart` and
+ * `@scope/pkg`, which both map to `chart` / `pkg`. The studio validates the
+ * name against the running host before building, so a wrong guess is reported
+ * instead of silently resolving to `{}`.
+ */
+export const hostNameForExternal = (specifier) => {
+    if (!specifier.startsWith('@')) return specifier
+    const slash = specifier.indexOf('/')
+    return slash === -1 ? specifier : specifier.slice(slash + 1)
+}
+
+/**
+ * Marks a host-module expression that is a *name* to look up rather than a path
+ * to walk: `__KNNAME__chart` reads `window.__KN__.chart`, then `globalThis.chart`.
+ *
+ * Declared externals use this form, so any specifier works — including scoped
+ * ones like `@scope/pkg`, which could never be spliced into a dotted path.
+ */
+export const HOST_NAME_PREFIX = '__KNNAME__'
+
 export const toPosix = (value) => value.split(sep).join('/')
 
 /**
@@ -142,6 +166,18 @@ function __knHost(expression, specifier) {
   var host = __knHostNamespace();
   if (expression === 'React') return host.React || (typeof globalThis !== 'undefined' && globalThis.React) || {};
   if (expression === 'ReactDOM') return host.ReactDOM || (typeof globalThis !== 'undefined' && globalThis.ReactDOM) || {};
+  /* Declared externals: look the NAME up on the host namespace first, then on
+     globalThis — so a library the host (or another script) publishes can be
+     shared instead of bundled. The prefix is a marker, not a path. */
+  if (expression.indexOf('${HOST_NAME_PREFIX}') === 0) {
+    var named = expression.slice(${HOST_NAME_PREFIX.length});
+    var fromNamespace = host ? host[named] : undefined;
+    if (fromNamespace !== undefined && fromNamespace !== null) return fromNamespace;
+    var fromGlobal = typeof globalThis !== 'undefined' ? Reflect.get(globalThis, named) : undefined;
+    if (fromGlobal !== undefined && fromGlobal !== null) return fromGlobal;
+    __knNoteMissing(specifier);
+    return {};
+  }
   var parts = expression.split('.');
   var value = host;
   for (var i = 0; i < parts.length; i++) {
@@ -149,12 +185,17 @@ function __knHost(expression, specifier) {
     value = value ? value[parts[i]] : undefined;
   }
   if (value === undefined || value === null) {
-    if (__knMissing.indexOf(specifier) === -1) __knMissing.push(specifier);
+    __knNoteMissing(specifier);
     return {};
   }
   return value;
 }
 var __knMissing = [];
+function __knNoteMissing(specifier) {
+  if (__knMissing.indexOf(specifier) !== -1) return;
+  __knMissing.push(specifier);
+  if (typeof console !== 'undefined') console.warn('[plugin-studio] host module not available: ' + specifier);
+}
 var __knFallbacks = [
 ${fallbacks}
 ];
@@ -168,10 +209,7 @@ function __knRequire(specifier) {
     var entry = __knFallbacks[i];
     if (specifier.indexOf(entry.specifier + '/') === 0) return __knHost(entry.expression, entry.specifier);
   }
-  if (__knMissing.indexOf(specifier) === -1) {
-    __knMissing.push(specifier);
-    if (typeof console !== 'undefined') console.warn('[plugin-studio] host module not available: ' + specifier);
-  }
+  __knNoteMissing(specifier);
   return {};
 }
 /* Flatten esbuild's CommonJS namespace and register it with the host.
@@ -203,6 +241,22 @@ function __knRegister(namespace, key, packageName) {
 }
 `
 }
+
+/**
+ * Scaffold templates.
+ *
+ * Each template is a working starting point for one contribution point, and
+ * every one of them must build as-is (the smoke test proves it) — an agent's
+ * first `createPluginProject` must never produce a project that looks broken.
+ *
+ * Deliberately no `editor` node template: `@tiptap/core` is not a host module,
+ * and a plugin that bundles its own copy would register ProseMirror nodes from
+ * a different schema instance than the host editor's. The `command` template
+ * therefore contributes a slash-menu entry only (`extendsion: []`).
+ */
+export const SCAFFOLD_TEMPLATES = ['panel', 'page', 'settings', 'command', 'blank']
+
+export const DEFAULT_SCAFFOLD_TEMPLATE = 'panel'
 
 /** Metadata collected from the project manifest. */
 export const readProjectManifest = async (root) => {
@@ -325,18 +379,49 @@ const escapeCssAttributeValue = (value) => String(value).replace(/\\/g, '\\\\').
 export const pluginCssScope = (pluginKey) =>
     `[data-kn-plugin="${escapeCssAttributeValue(pluginKey)}"]`
 
-/** Minimal single-file scaffold written by `dev.scaffold`. */
-export const renderScaffold = ({ name, pluginKey, displayName }) => {
+/** `my-kn-plugin` -> `myKnPlugin`; used for generated export/class names. */
+const toIdentifier = (value, fallback = 'devPlugin') => {
+    const safe = String(value).replace(/[^A-Za-z0-9]+(.)?/g, (_, c) => (c ? c.toUpperCase() : '')) || fallback
+    return safe.charAt(0).toLowerCase() + safe.slice(1)
+}
+
+/** A `/`-menu path segment derived from the registry key. */
+const toSlug = (value, fallback = 'command') =>
+    String(value)
+        .replace(/[^A-Za-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .toLowerCase() || fallback
+
+/**
+ * Render one template project.
+ *
+ * `template` selects the contribution point the project starts from, so an
+ * agent (or the New-project dialog) can produce a page renderer, a settings
+ * panel, a slash command or a bare plugin instead of always getting a dock
+ * panel. An unknown template is an error rather than a silent fallback: a typo
+ * must not quietly change what got created.
+ *
+ * Every template must build as-is; the studio's smoke test builds all of them.
+ */
+export const renderScaffold = ({ name, pluginKey, displayName, template }) => {
+    const chosen = template || DEFAULT_SCAFFOLD_TEMPLATE
+    if (!SCAFFOLD_TEMPLATES.includes(chosen)) {
+        throw new Error(
+            `Unknown scaffold template "${chosen}". Expected one of: ${SCAFFOLD_TEMPLATES.join(', ')}`,
+        )
+    }
+
     const title = displayName || name
-    const safeName = name.replace(/[^A-Za-z0-9]+(.)?/g, (_, c) => (c ? c.toUpperCase() : '')) || 'devPlugin'
-    const exportName = safeName.charAt(0).toLowerCase() + safeName.slice(1)
+    const exportName = toIdentifier(name)
+    const panelId = `${pluginKey}-panel`
+    const pageTypeId = `${pluginKey}:page`
 
     const packageJson = {
         name,
         version: '0.0.1',
         private: true,
         type: 'module',
-        knPluginStudio: { pluginKey, displayName: title, entry: 'src/index.tsx' },
+        knPluginStudio: { pluginKey, displayName: title, entry: 'src/index.tsx', template: chosen },
         peerDependencies: {
             react: '>=18',
             'react-dom': '>=18',
@@ -345,7 +430,11 @@ export const renderScaffold = ({ name, pluginKey, displayName }) => {
         },
     }
 
-    const index = `import { KPlugin, PluginConfig } from '@kn/common'
+    const files = { 'package.json': JSON.stringify(packageJson, null, 2) + '\n' }
+    let nextStep
+
+    if (chosen === 'panel') {
+        files['src/index.tsx'] = `import { KPlugin, PluginConfig } from '@kn/common'
 import React from 'react'
 import { DevPanel } from './DevPanel'
 
@@ -356,7 +445,7 @@ export const ${exportName} = new DevPlugin({
     status: 'ACTIVE',
     dockPanels: [
         {
-            id: ${JSON.stringify(pluginKey + '-panel')},
+            id: ${JSON.stringify(panelId)},
             title: ${JSON.stringify(title)},
             icon: React.createElement('span', null, '🛠'),
             component: DevPanel,
@@ -364,8 +453,7 @@ export const ${exportName} = new DevPlugin({
     ],
 })
 `
-
-    const panel = `import React, { useState } from 'react'
+        files['src/DevPanel.tsx'] = `import React, { useState } from 'react'
 
 /**
  * Contributed dock panel. Rendered by the host, so it must not import its own
@@ -389,24 +477,174 @@ export const DevPanel: React.FC = () => {
     )
 }
 `
+        nextStep = '编辑 src/DevPanel.tsx（面板内容）或 src/index.tsx（面板注册信息：id/title/order/position）。'
+    } else if (chosen === 'page') {
+        files['src/index.tsx'] = `import { KPlugin, PluginConfig } from '@kn/common'
+import React from 'react'
+import { CanvasPage } from './CanvasPage'
 
-    const readme = `# ${title}
+class PagePlugin extends KPlugin<PluginConfig> {}
 
-由插件开发台（plugin-studio）生成的插件工程。
+export const ${exportName} = new PagePlugin({
+    name: ${JSON.stringify(title)},
+    status: 'ACTIVE',
+    pageTypes: [
+        {
+            // Stable, namespaced id: the host resolves pages by it, so never
+            // change it once pages of this type exist.
+            id: ${JSON.stringify(pageTypeId)},
+            label: ${JSON.stringify(title)},
+            description: '整页视图，由插件渲染',
+            icon: React.createElement('span', null, '📄'),
+            defaultTitle: ${JSON.stringify(title)},
+            order: 100,
+            // type: 'component' — your React tree IS the page.
+            // Swap for { type: 'editor-component', createInitialDocument } to
+            // embed a node inside the standard editor instead.
+            renderer: { type: 'component', component: CanvasPage },
+        },
+    ],
+})
+`
+        files['src/CanvasPage.tsx'] = `import React from 'react'
+import type { PageRendererProps } from '@kn/common'
 
-- 清单：\`package.json\` 的 \`knPluginStudio\` 字段（pluginKey / entry / displayName）
-- 入口：\`src/index.tsx\`，默认导出一个 \`KPlugin\` 实例
+/**
+ * Whole-page renderer: the host mounts it for every page of this plugin's page
+ * type, in the editing view and in the read-only shared view.
+ */
+export const CanvasPage: React.FC<PageRendererProps> = ({ page, pageId, spaceId, active, readOnly, mode }) => (
+    <div className="flex h-full flex-col gap-3 overflow-auto p-6 text-sm">
+        <h1 className="text-lg font-semibold">{page?.title || 'Untitled'}</h1>
+        <p className="text-muted-foreground">
+            space: {spaceId} · page: {pageId} · mode: {mode}
+            {readOnly ? ' · read-only' : ''}
+            {active ? ' · active' : ''}
+        </p>
+        <p className="text-muted-foreground">编辑 src/CanvasPage.tsx 保存后会自动热更。</p>
+    </div>
+)
+`
+        nextStep = '编辑 src/CanvasPage.tsx 渲染页面内容；pageTypes 的 id 一经使用不要再改。'
+    } else if (chosen === 'settings') {
+        files['src/index.tsx'] = `import { KPlugin, PluginConfig } from '@kn/common'
+import { SettingsPanel } from './SettingsPanel'
+
+class SettingsPlugin extends KPlugin<PluginConfig> {}
+
+export const ${exportName} = new SettingsPlugin({
+    name: ${JSON.stringify(title)},
+    status: 'ACTIVE',
+    settings: {
+        key: ${JSON.stringify(`${pluginKey}:settings`)},
+        label: ${JSON.stringify(title)},
+        description: '插件设置',
+        component: SettingsPanel,
+    },
+})
+`
+        files['src/SettingsPanel.tsx'] = `import React, { useState } from 'react'
+import { Input, Label } from '@kn/ui'
+
+/**
+ * Rendered inside the host's settings dialog. The host passes the plugin's
+ * registry key, so one component can serve several panels if you want.
+ */
+export const SettingsPanel: React.FC<{ pluginKey?: string }> = ({ pluginKey }) => {
+    const [value, setValue] = useState('')
+    return (
+        <div className="flex flex-col gap-3 p-1 text-sm">
+            <div className="space-y-1.5">
+                <Label htmlFor="plugin-setting">示例配置</Label>
+                <Input
+                    id="plugin-setting"
+                    value={value}
+                    placeholder={pluginKey ? 'pluginKey: ' + pluginKey : 'example'}
+                    onChange={(event) => setValue(event.target.value)}
+                />
+            </div>
+            <p className="text-xs text-muted-foreground">
+                这里可以放插件自己的配置项；保存请走宿主的服务，不要直接写 localStorage 之外的存储。
+            </p>
+        </div>
+    )
+}
+`
+        nextStep = '编辑 src/SettingsPanel.tsx 放置真实配置项（设置对话框 → 你的插件分组）。'
+    } else if (chosen === 'command') {
+        const slug = toSlug(pluginKey)
+        files['src/index.tsx'] = `import { KPlugin, PluginConfig } from '@kn/common'
+import { slashCommandExtension } from './slash-command'
+
+class CommandPlugin extends KPlugin<PluginConfig> {}
+
+export const ${exportName} = new CommandPlugin({
+    name: ${JSON.stringify(title)},
+    status: 'ACTIVE',
+    editorExtension: [slashCommandExtension],
+})
+`
+        files['src/slash-command.ts'] = `import React from 'react'
+import type { ExtensionWrapper } from '@kn/common'
+
+/**
+ * Editor contribution: one entry in the editor's "/" slash menu.
+ *
+ * \`extendsion\` is empty on purpose — this entry only runs an editor command and
+ * contributes no node. To contribute a real Tiptap node, drop the extension in
+ * here AND make sure \`@tiptap/core\` comes from the host instead of the project:
+ * a plugin that bundles its own copy registers ProseMirror nodes built from a
+ * different schema instance, and the editor rejects them.
+ */
+export const slashCommandExtension: ExtensionWrapper = {
+    name: ${JSON.stringify(`${pluginKey}:command`)},
+    extendsion: [],
+    slashConfig: [
+        {
+            icon: React.createElement('span', { className: 'text-base leading-none' }, '📌'),
+            text: ${JSON.stringify(title)},
+            slash: ${JSON.stringify(`/${slug}`)},
+            action: (editor) => {
+                editor.chain().focus().insertContent('📌 ').run()
+            },
+        },
+    ],
+}
+`
+        nextStep = '编辑 src/slash-command.ts 的 text/slash/action（在编辑器里输入 “/” 即可看到）。'
+    } else {
+        files['src/index.tsx'] = `import { KPlugin, PluginConfig } from '@kn/common'
+
+class MyPlugin extends KPlugin<PluginConfig> {}
+
+/**
+ * A valid plugin that contributes nothing yet. Add contribution points to this
+ * config — dockPanels / pageTypes / settings / editorExtension / routes /
+ * menus / tools / skills — see README.md.
+ */
+export const ${exportName} = new MyPlugin({
+    name: ${JSON.stringify(title)},
+    status: 'ACTIVE',
+})
+`
+        nextStep = '在 src/index.tsx 里加入你要的贡献点（dockPanels、pageTypes、settings、editorExtension、tools…）。'
+    }
+
+    files['README.md'] = `# ${title}
+
+由插件开发台（plugin-studio）生成的插件工程，模板：\`${chosen}\`。
+
+- 清单：\`package.json\` 的 \`knPluginStudio\` 字段（pluginKey / entry / displayName / template）
+- 入口：\`src/index.tsx\`，导出一个 \`KPlugin\` 实例
 - 依赖 \`react\`、\`@kn/common\`、\`@kn/ui\` 等由宿主提供，不要打包进产物
+- 构建产物是标准插件 UMD 包，可直接上架插件市场
 
-在「插件开发台」侧边面板里把本目录加入工作区即可开始开发。
+下一步：${nextStep}
+
+在「插件开发台」侧边面板里选中本工程即可开始热更开发。
 `
 
-    return {
-        'package.json': JSON.stringify(packageJson, null, 2) + '\n',
-        'src/index.tsx': index,
-        'src/DevPanel.tsx': panel,
-        'README.md': readme,
-    }
+    return files
 }
 
 /** Files esbuild actually pulled into the bundle, project-relative, entry last. */
@@ -456,7 +694,9 @@ export const buildPlugin = async ({ root, entry, pluginKey, name, writeToDisk = 
 
     const hostModules = { ...DEFAULT_HOST_MODULES }
     for (const specifier of externals) {
-        if (!hostModules[specifier]) hostModules[specifier] = `__KN__.${specifier.replace(/^@kn\//, '')}`
+        if (!hostModules[specifier]) {
+            hostModules[specifier] = HOST_NAME_PREFIX + hostNameForExternal(specifier)
+        }
     }
 
     let esbuild

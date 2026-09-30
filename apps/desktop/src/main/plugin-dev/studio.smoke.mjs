@@ -20,11 +20,13 @@
  * Run: node apps/desktop/src/main/plugin-dev/studio.smoke.mjs
  */
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { tmpdir } from 'node:os'
 import { createRequire } from 'node:module'
 import { DevSessionManager } from './manager.mjs'
+import { SCAFFOLD_TEMPLATES } from './bundler.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const repoRoot = join(here, '..', '..', '..', '..', '..')
@@ -32,6 +34,8 @@ const require = createRequire(import.meta.url)
 
 /** Real React, not a stub: @kn/common's dependency graph builds classes from it. */
 const React = require('react')
+/** The side-pane preview mounts plugin components for real; so does this test. */
+const { renderToStaticMarkup } = require('react-dom/server')
 
 const results = []
 const check = (name, condition, detail = '') => {
@@ -162,6 +166,9 @@ const built = await esbuild.build({
     entryPoints: [
         join(repoRoot, 'packages', 'common', 'src', 'core', 'PluginManager.ts'),
         join(repoRoot, 'packages', 'common', 'src', 'utils', 'import-util.ts'),
+        // The kernel's pure artifact collector: the pipeline that turns a
+        // registered mapper + a transcript into the artifacts shelf.
+        join(repoRoot, 'packages', 'common', 'src', 'ai', 'kernel', 'agent-artifact-collect.ts'),
     ],
     outdir: tmpdir(),
     entryNames: 'kn-studio-[name]',
@@ -189,6 +196,9 @@ const entryPathFor = (suffix) => {
 const managerPath = entryPathFor('kn-studio-PluginManager.js')
 await Promise.all(built.outputFiles.map((output) => writeFile(output.path, output.text)))
 const { PluginManager, KPlugin } = await import(pathToFileURL(managerPath).href)
+const { collectAgentArtifacts } = await import(
+    pathToFileURL(entryPathFor('kn-studio-agent-artifact-collect.js')).href
+)
 
 hostNamespace.getPlugin = (key) => hostNamespace._registry?.get(key)
 hostNamespace.findPlugin = (key) => hostNamespace._registry?.get(key)
@@ -222,6 +232,22 @@ const writeIndex = (version) =>
 import React from 'react'
 import { Panel } from './Panel'
 
+/* Mirrors the studio's own shape: a producing tool carries its result → artifact
+   mapper, and the kernel contributions live under \`agent\`. The checks below
+   prove the real PluginManager keeps both, keyed by the bare tool name. */
+const smokeTool = {
+  name: 'smokeTool',
+  description: 'Produces a smoke artifact',
+  inputSchema: { type: 'object', properties: {} },
+  scope: 'any',
+  artifactFromResult: (result) => {
+    const value = result || {}
+    if (!value.id) return null
+    return { kind: 'smoke', id: String(value.id), title: 'Smoke artifact' }
+  },
+  create: () => () => ({ id: 'smoke-1' }),
+}
+
 class Smoke extends KPlugin {
   constructor() {
     super({
@@ -230,6 +256,11 @@ class Smoke extends KPlugin {
       dockPanels: [
         { id: 'smoke-panel', title: 'Smoke', icon: React.createElement('span', null, 'S'), component: Panel },
       ],
+      tools: [smokeTool],
+      agent: {
+        toolRenderers: [{ tool: 'smokeTool', render: () => null }],
+        artifactRenderers: [{ kind: 'smoke', render: () => null }],
+      },
     })
   }
 }
@@ -327,6 +358,75 @@ try {
         JSON.stringify(hostNamespace._registry.get('smoke-dev-plugin')?.meta),
     )
 
+    /* 2b) the live plugin instance is what the side-pane preview renders from:
+     *     `usePluginState().plugins` → the instance's own contribution getters.
+     *     Prove the component really is reachable and renderable, because the
+     *     whole "preview what the plugin does" feature rests on it. */
+    const livePlugin = pluginManager.getPlugin('Smoke Dev Plugin')
+    check(
+        'preview: live instance exposes its contributions',
+        typeof livePlugin?.dockPanels?.[0]?.component === 'function'
+            && livePlugin?.dockPanels?.[0]?.id === 'smoke-panel',
+        JSON.stringify({ panels: livePlugin?.dockPanels?.length }),
+    )
+    let panelMarkup = ''
+    try {
+        panelMarkup = renderToStaticMarkup(React.createElement(livePlugin.dockPanels[0].component))
+    } catch (renderError) {
+        panelMarkup = 'THREW: ' + renderError.message
+    }
+    check(
+        'preview: the contributed panel renders to markup',
+        panelMarkup.includes('panel-v1'),
+        panelMarkup.slice(0, 120),
+    )
+
+    /* 2c) the artifact pipeline, through the real kernel registry: a producing
+     *     tool keeps its mapper (keyed by the bare tool name) and the plugin's
+     *     card / preview contributions survive, so the shelf can be derived. */
+    const capabilities = pluginManager.resolveAgentCapabilities()
+    const smokeToolDef = capabilities.tools.find((tool) => tool.name === 'smokeTool')
+    check(
+        'artifact: producing tool survives with its mapper',
+        smokeToolDef?.wireName === 'smokeTool' && typeof smokeToolDef?.artifactFromResult === 'function',
+        JSON.stringify({ wireName: smokeToolDef?.wireName, mapper: typeof smokeToolDef?.artifactFromResult }),
+    )
+    check(
+        'artifact: mapper produces a renderable artifact',
+        smokeToolDef?.artifactFromResult({ id: 'a1' }, {})?.kind === 'smoke'
+            && smokeToolDef?.artifactFromResult({}, {}) === null,
+    )
+    check(
+        'artifact: conversation card is keyed by the tool name',
+        capabilities.toolRenderers.some((entry) => entry.tool === 'smokeTool' && typeof entry.render === 'function'),
+        JSON.stringify(capabilities.toolRenderers.map((entry) => entry.tool)),
+    )
+    check(
+        'artifact: side-pane preview is keyed by the artifact kind',
+        capabilities.artifactRenderers.some((entry) => entry.kind === 'smoke' && typeof entry.render === 'function'),
+        JSON.stringify(capabilities.artifactRenderers.map((entry) => entry.kind)),
+    )
+
+    /* The shelf is DERIVED from the transcript through those mappers. */
+    const mappers = new Map(
+        capabilities.tools
+            .filter((tool) => Boolean(tool.artifactFromResult))
+            .map((tool) => [tool.wireName, tool.artifactFromResult]),
+    )
+    const shelf = collectAgentArtifacts(
+        [
+            { tool: 'smokeTool', args: {}, result: { id: 'a1' } },
+            { tool: 'smokeTool', args: {}, result: { id: 'a1', title: 'again' } },
+            { tool: 'someReadTool', args: {}, result: { id: 'a2' } },
+        ],
+        mappers,
+    )
+    check(
+        'artifact: shelf collects produced artifacts and ignores reads',
+        shelf.length === 1 && shelf[0].kind === 'smoke' && shelf[0].id === 'a1',
+        JSON.stringify(shelf),
+    )
+
     /* 3) edit: watcher rebuilds, re-install hot-swaps. */
     await writeIndex('v2')
     const rebuilt = await waitFor((event, status) => event === 'build' && status.buildCount >= 2, 'rebuild #2')
@@ -399,6 +499,71 @@ try {
     check('managed: generated project builds', agentBuild.buildCount === 1 && Boolean(agentBuild.build?.code), agentBuild.error ?? `${agentBuild.build?.bytes} bytes`)
     check('managed: list marks the active session', (await manager.listProjects({ dir: projectsDir }))[0]?.active === true)
     manager.stop({ root: created.root })
+
+    /* Every template must build through the real session manager: an agent (or
+     * the New-project dialog) picks a starting point, and a template that does
+     * not compile would look like a broken host. */
+    for (const template of SCAFFOLD_TEMPLATES) {
+        const made = await manager.scaffold({
+            projectsDir,
+            name: 'smoke-' + template,
+            displayName: 'Smoke ' + template,
+            template,
+        })
+        check(`template ${template}: scaffold records the template`, made.template === template, String(made.template))
+        const templateBuild = await manager.build({ root: made.root })
+        check(
+            `template ${template}: buildable as generated`,
+            templateBuild.buildCount === 1 && Boolean(templateBuild.build?.code),
+            templateBuild.error ?? `${templateBuild.build?.bytes} bytes`,
+        )
+        manager.stop({ root: made.root })
+    }
+
+    let badTemplate = ''
+    try {
+        await manager.scaffold({ projectsDir, name: 'smoke-bad-template', template: 'not-a-template' })
+    } catch (error) {
+        badTemplate = error.message
+    }
+    check('template: unknown rejected by the manager', /unknown template/.test(badTemplate), badTemplate)
+
+    /* Deleting one file is confined to its project: a stray path cannot remove
+     * something the project does not own. */
+    const fileTarget = await manager.scaffold({ projectsDir, name: 'smoke-file', displayName: 'Smoke File' })
+    const stray = join(fileTarget.root, 'src', 'Stray.tsx')
+    await writeFile(stray, 'export const Stray = () => null\n')
+    const removedFile = await manager.deleteProjectFile({ root: fileTarget.root, path: stray })
+    check(
+        'deleteFile: removes a project file and echoes it',
+        removedFile.relativePath === 'src/Stray.tsx' && removedFile.content.includes('Stray') && !existsSync(stray),
+        JSON.stringify({ relativePath: removedFile.relativePath, bytes: removedFile.bytes }),
+    )
+    const outsideStray = join(projectsDir, 'outside-stray.ts')
+    await writeFile(outsideStray, 'export const outside = 1\n')
+    let outsideDeleteMessage = ''
+    try {
+        await manager.deleteProjectFile({ root: fileTarget.root, path: outsideStray })
+    } catch (error) {
+        outsideDeleteMessage = error.message
+    }
+    check(
+        'deleteFile: refuses a path outside the project',
+        /outside the project/.test(outsideDeleteMessage) && existsSync(outsideStray),
+        outsideDeleteMessage,
+    )
+
+    /* Removal takes the project and its session with it, and refuses anything
+     * that is not a plugin project. */
+    const removable = await manager.scaffold({ projectsDir, name: 'smoke-removable', displayName: 'Smoke Removable' })
+    await manager.start({ root: removable.root, watch: true })
+    const removed = await manager.removeProject({ root: removable.root })
+    check(
+        'remove: deletes a scaffolded project and stops its session',
+        removed.removed === true && removed.pluginKey === 'smoke-removable' && manager.status({ root: removable.root }).length === 0,
+        JSON.stringify(removed),
+    )
+
     await rm(projectsDir, { recursive: true, force: true })
 
     /* 6) stop releases the child. */

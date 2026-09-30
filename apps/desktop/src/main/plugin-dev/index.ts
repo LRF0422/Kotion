@@ -42,6 +42,18 @@ const requireString = (value: unknown, field: string): string => {
 }
 
 /**
+ * Normalize an `externals` parameter.
+ *
+ * Absent stays absent (rather than becoming `[]`), because "not mentioned" and
+ * "declare none" mean different things downstream: an omitted list keeps the
+ * declarations a project already has, an explicit `[]` clears them.
+ */
+const asExternals = (value: unknown): string[] | undefined =>
+    Array.isArray(value)
+        ? value.filter((entry): entry is string => typeof entry === 'string')
+        : undefined
+
+/**
  * Candidates for the monorepo root, most specific first. Dev runs from the
  * checkout; a packaged app ships no `packages/`, so resolution returns
  * undefined and the host-API reference reports itself as unavailable.
@@ -82,9 +94,7 @@ export function setupDevIpcHandlers({ assertAllowedPath }: DevIpcOptions): DevSe
             root: assertAllowedPath(params.root, 'root'),
             watch: params.watch !== false,
             writeToDisk: params.writeToDisk === true,
-            externals: Array.isArray(params.externals)
-                ? params.externals.filter((value: unknown): value is string => typeof value === 'string')
-                : [],
+            externals: asExternals(params.externals),
         })
     })
 
@@ -99,9 +109,7 @@ export function setupDevIpcHandlers({ assertAllowedPath }: DevIpcOptions): DevSe
             root: assertAllowedPath(params.root, 'root'),
             writeToDisk: params.writeToDisk === true,
             watch: false,
-            externals: Array.isArray(params.externals)
-                ? params.externals.filter((value: unknown): value is string => typeof value === 'string')
-                : [],
+            externals: asExternals(params.externals),
         })
     })
 
@@ -133,7 +141,25 @@ export function setupDevIpcHandlers({ assertAllowedPath }: DevIpcOptions): DevSe
             name,
             displayName: typeof params.displayName === 'string' ? params.displayName : undefined,
             pluginKey: typeof params.pluginKey === 'string' ? params.pluginKey : undefined,
+            template: typeof params.template === 'string' ? params.template : undefined,
             overwrite: params.overwrite === true,
+        })
+    })
+
+    // Destructive: stop the session and delete the project directory. The
+    // manager refuses anything that is not a plugin project (see removeProject).
+    handle('dev.remove', (_event, raw) => {
+        const params = asRecord(raw)
+        return manager.removeProject({ root: assertAllowedPath(params.root, 'root') })
+    })
+
+    // Delete one file inside a project. Both paths go through the allowlist and
+    // the manager additionally confines the file to the project root.
+    handle('dev.deleteFile', (_event, raw) => {
+        const params = asRecord(raw)
+        return manager.deleteProjectFile({
+            root: assertAllowedPath(params.root, 'root'),
+            path: assertAllowedPath(params.path, 'path'),
         })
     })
 

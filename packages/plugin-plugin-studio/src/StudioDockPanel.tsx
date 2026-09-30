@@ -20,6 +20,11 @@ import {
     Input,
     Label,
     ScrollArea,
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
     cn,
 } from '@kn/ui'
 import {
@@ -52,6 +57,10 @@ import {
 import { usePublishProject } from './StudioMarketplacePanel'
 
 type Busy = 'start' | 'stop' | 'build' | 'uninstall' | 'delete' | null
+
+/** Scaffold templates the host can generate; see the desktop bundler. */
+const SCAFFOLD_TEMPLATES = ['panel', 'page', 'settings', 'command', 'blank'] as const
+type ScaffoldTemplate = (typeof SCAFFOLD_TEMPLATES)[number]
 
 interface StudioRow {
     root: string
@@ -114,6 +123,7 @@ export const StudioDockPanel: React.FC<DockPanelProps> = ({ close }) => {
     const [scaffoldOpen, setScaffoldOpen] = useState(false)
     const [scaffoldName, setScaffoldName] = useState('my-kn-plugin')
     const [scaffoldDisplayName, setScaffoldDisplayName] = useState('My Plugin')
+    const [scaffoldTemplate, setScaffoldTemplate] = useState<ScaffoldTemplate>('panel')
     /** Project whose files are about to be deleted (confirm dialog). */
     const [deleteTarget, setDeleteTarget] = useState<StudioRow | null>(null)
 
@@ -337,6 +347,7 @@ export const StudioDockPanel: React.FC<DockPanelProps> = ({ close }) => {
             const created = await capability.dev.scaffold({
                 name,
                 displayName: scaffoldDisplayName.trim() || name,
+                template: scaffoldTemplate,
             })
             addProject({
                 root: created.root,
@@ -700,6 +711,29 @@ export const StudioDockPanel: React.FC<DockPanelProps> = ({ close }) => {
                                 onChange={(event) => setScaffoldDisplayName(event.target.value)}
                                 placeholder="My Plugin"
                             />
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label htmlFor="dock-studio-template" className="text-xs">
+                                {t('pluginStudio.templateLabel')}
+                            </Label>
+                            <Select
+                                value={scaffoldTemplate}
+                                onValueChange={(value) => setScaffoldTemplate(value as ScaffoldTemplate)}
+                            >
+                                <SelectTrigger id="dock-studio-template" className="h-9">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {SCAFFOLD_TEMPLATES.map((template) => (
+                                        <SelectItem key={template} value={template}>
+                                            {t(`pluginStudio.template.${template}`)}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <p className="text-[11px] leading-snug text-muted-foreground">
+                                {t(`pluginStudio.templateHint.${scaffoldTemplate}`)}
+                            </p>
                         </div>
                     </div>
                     <DialogFooter>

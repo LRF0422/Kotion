@@ -102,6 +102,25 @@ export interface StudioInstallResult {
     error?: string
 }
 
+/** Result of deleting a project: its files are gone, the session is stopped. */
+export interface StudioRemoveResult {
+    root: string
+    removed: boolean
+    pluginKey?: string | null
+    name?: string | null
+}
+
+/** Result of deleting one file: the path is gone, its text comes back for undo. */
+export interface StudioDeleteFileResult {
+    root: string
+    path: string
+    relativePath: string
+    removed: boolean
+    bytes: number
+    content?: string
+    truncated: boolean
+}
+
 export interface StudioDevBridge {
     start(options: { root: string; watch?: boolean; writeToDisk?: boolean; externals?: string[] }): Promise<StudioSessionStatus>
     build(options: { root: string; writeToDisk?: boolean; watch?: boolean; externals?: string[] }): Promise<StudioSessionStatus>
@@ -113,8 +132,9 @@ export interface StudioDevBridge {
         name: string
         displayName?: string
         pluginKey?: string
+        template?: string
         overwrite?: boolean
-    }): Promise<{ root: string; pluginKey: string; files: string[]; managed: boolean }>
+    }): Promise<{ root: string; pluginKey: string; template?: string; files: string[]; managed: boolean }>
     list(options?: { dir?: string }): Promise<StudioProjectEntry[]>
     readFile(options: { path: string }): Promise<string>
     writeFile(options: { path: string; contents?: string }): Promise<void>
@@ -140,13 +160,25 @@ export interface StudioDevBridge {
         manager?: string
         timeoutMs?: number
     }): Promise<StudioInstallResult>
+    /**
+     * Stop a project's session and delete its files from disk. The host refuses
+     * anything that is not a plugin project, so this cannot be used as a general
+     * filesystem delete.
+     */
+    removeProject(options: { root: string }): Promise<StudioRemoveResult>
+    /**
+     * Delete one file inside a project. The host confines the file to the
+     * project root and refuses the manifest and the entry file.
+     */
+    deleteFile(options: { root: string; path: string }): Promise<StudioDeleteFileResult>
 }
 
 /**
- * The single lifecycle operation the studio may perform on the host registry:
- * install a freshly built bundle (the hot-reload preview). The studio
- * deliberately has no view of, or control over, the rest of the installed
- * plugin set — that is the plugin manager's surface, not the studio's.
+ * The lifecycle operations the studio may perform on the host registry: install
+ * a freshly built bundle (the hot-reload preview), and drop that same preview
+ * again when the project behind it is deleted. The studio deliberately has no
+ * view of, or control over, the rest of the installed plugin set — that is the
+ * plugin manager's surface, not the studio's.
  */
 export interface StudioPluginHost {
     installFromSource(options: {
@@ -157,6 +189,10 @@ export interface StudioPluginHost {
         replace?: boolean
         sourceLabel?: string
     }): Promise<boolean>
+    /** Uninstall by runtime name; used only for the project's own dev preview. */
+    uninstall?(name: string): boolean
+    /** Whether a runtime plugin name is currently active. */
+    has?(name: string): boolean
 }
 
 export interface StudioMarketplaceMine {
@@ -185,6 +221,22 @@ export interface StudioToolDeps {
     getPluginHost: () => StudioPluginHost | undefined
     /** Plugin-marketplace lifecycle service; optional for older hosts and tests. */
     getMarketplace?: () => StudioPluginMarketplace | undefined
+    /**
+     * The host's published global namespace (`window.__KN__`), used to check
+     * whether a declared `externals` entry actually exists. Injectable so tests
+     * do not need a host window.
+     */
+    getHostGlobals?: () => Record<string, unknown>
+    /**
+     * Hand a produced artifact to the host as the conversation's working target
+     * (the kernel side pane). The plugin entry resolves the artifact from the
+     * result through its mapper table; the studio's tools only report "this call
+     * produced something" and never touch the kernel themselves.
+     *
+     * Returns true when a surface actually showed it. Absent on a host with no
+     * kernel pane, and best-effort otherwise.
+     */
+    focusArtifactResult?: (tool: string, result: unknown, args: unknown) => boolean
 }
 
 /* ------------------------------------------------------------------ *
@@ -245,6 +297,155 @@ const requireInstall = (deps: StudioToolDeps): NonNullable<StudioDevBridge['inst
     return dev.installDependencies.bind(dev)
 }
 
+const requireRemove = (deps: StudioToolDeps): NonNullable<StudioDevBridge['removeProject']> => {
+    const dev = requireDev(deps)
+    if (typeof dev.removeProject !== 'function') {
+        throw new Error(
+            '当前桌面端不支持删除插件工程（缺少 dev.remove 能力），请升级 KN 桌面客户端。',
+        )
+    }
+    return dev.removeProject.bind(dev)
+}
+
+const requireDeleteFile = (deps: StudioToolDeps): NonNullable<StudioDevBridge['deleteFile']> => {
+    const dev = requireDev(deps)
+    if (typeof dev.deleteFile !== 'function') {
+        throw new Error(
+            '当前桌面端不支持删除工程内文件（缺少 dev.deleteFile 能力），请升级 KN 桌面客户端。',
+        )
+    }
+    return dev.deleteFile.bind(dev)
+}
+
+/**
+ * Offer a produced artifact as the conversation's working target.
+ *
+ * Best-effort by construction: a host without the kernel pane, or a mapper that
+ * does not recognize this result, must never turn a successful build into a
+ * failed tool call.
+ */
+const focusProducedArtifact = (
+    deps: StudioToolDeps,
+    tool: string,
+    result: unknown,
+    args: unknown,
+): boolean => {
+    if (!deps.focusArtifactResult) return false
+    try {
+        return deps.focusArtifactResult(tool, result, args) === true
+    } catch {
+        return false
+    }
+}
+
+/* ------------------------------------------------------------------ *
+ * Scaffold templates
+ * ------------------------------------------------------------------ */
+
+/** Template ids; mirrors the desktop bundler's SCAFFOLD_TEMPLATES. */
+export const SCAFFOLD_TEMPLATES = ['panel', 'page', 'settings', 'command', 'blank'] as const
+
+export type ScaffoldTemplate = (typeof SCAFFOLD_TEMPLATES)[number]
+
+/** What each template already gives you, and what to edit next. */
+const TEMPLATE_NOTES: Record<ScaffoldTemplate, string> = {
+    panel: '侧边停靠面板：改 src/DevPanel.tsx 做面板内容，改 src/index.tsx 调面板注册信息（id/title/order/position）。',
+    page: '整页视图（pageTypes）：改 src/CanvasPage.tsx 渲染页面；pageTypes 的 id 用了就不要再改。',
+    settings: '设置面板：改 src/SettingsPanel.tsx，它会出现在宿主设置对话框里你的插件分组下。',
+    command: '编辑器斜杠命令：改 src/slash-command.ts 的 text/slash/action，在编辑器输入 “/” 即可看到。',
+    blank: '空白工程：在 src/index.tsx 里按需加贡献点（dockPanels、pageTypes、settings、editorExtension、tools…）。',
+}
+
+/* ------------------------------------------------------------------ *
+ * Host globals (externals)
+ * ------------------------------------------------------------------ */
+
+/** The host's published namespace, or `{}` when there is no host window. */
+const defaultHostGlobals = (): Record<string, unknown> => {
+    const namespace = (globalThis as { __KN__?: Record<string, unknown> }).__KN__
+    return namespace && typeof namespace === 'object' ? namespace : {}
+}
+
+const readHostGlobals = (deps: StudioToolDeps): Record<string, unknown> =>
+    (deps.getHostGlobals ?? defaultHostGlobals)()
+
+/**
+ * The host-namespace name a specifier resolves to.
+ *
+ * Mirrors the bundler's `hostNameForExternal`: a declared external is a *host
+ * global*, so the scope is dropped (`@scope/pkg` → `pkg`). Kept in sync by hand
+ * because this module is deliberately dependency-free at runtime.
+ */
+export const hostNameForExternal = (specifier: string): string => {
+    if (!specifier.startsWith('@')) return specifier
+    const slash = specifier.indexOf('/')
+    return slash === -1 ? specifier : specifier.slice(slash + 1)
+}
+
+/** Modules the host always injects, whether or not they show up as globals. */
+export const BUILTIN_HOST_MODULES = [
+    'react',
+    'react-dom',
+    'react/jsx-runtime',
+    '@kn/common',
+    '@kn/core',
+    '@kn/ui',
+    '@kn/icon',
+    '@kn/editor',
+    '@kn/plugin-api',
+]
+
+const BUILTIN_HOST_MODULE_SET = new Set(BUILTIN_HOST_MODULES)
+
+const normalizeExternals = (value: unknown): string[] => {
+    if (value === undefined || value === null) return []
+    if (!Array.isArray(value)) throw new Error('externals 必须是字符串数组')
+    const externals: string[] = []
+    for (const item of value) {
+        if (typeof item !== 'string' || !item.trim()) {
+            throw new Error('externals 的每一项都必须是非空字符串（要当成宿主全局的 import 名）')
+        }
+        if (!externals.includes(item.trim())) externals.push(item.trim())
+    }
+    if (externals.length > 24) throw new Error('externals 最多 24 项')
+    return externals
+}
+
+/**
+ * Refuse to build with an `externals` entry the running host cannot resolve.
+ *
+ * Without this, a typo compiles fine and the plugin dies at runtime with an
+ * empty module — the failure mode this feature exists to avoid. The check runs
+ * in the same window the bundle will run in, so its answer is authoritative.
+ * The standard host modules count as available whether or not they are listed
+ * in the namespace, because the bundler injects them unconditionally.
+ */
+const assertExternalsAvailable = (deps: StudioToolDeps, externals: string[]): string[] => {
+    if (externals.length === 0) return externals
+    const namespace = readHostGlobals(deps)
+    const isAvailable = (specifier: string): boolean => {
+        if (BUILTIN_HOST_MODULE_SET.has(specifier)) return true
+        const name = hostNameForExternal(specifier)
+        const fromNamespace = namespace[name]
+        if (fromNamespace !== undefined && fromNamespace !== null) return true
+        const fromGlobal = (globalThis as Record<string, unknown>)[name]
+        return fromGlobal !== undefined && fromGlobal !== null
+    }
+    const missing = externals.filter((specifier) => !isAvailable(specifier))
+    if (missing.length === 0) return externals
+
+    const available = Object.keys(namespace)
+        .filter((name) => namespace[name] !== undefined && namespace[name] !== null)
+        .sort()
+    throw new Error(
+        `externals 里这些模块在当前宿主里不存在：${missing.join('、')}。` +
+            `externals 只能声明宿主已经暴露的全局模块（名字是包名去掉 scope，如 @scope/pkg → pkg），` +
+            `可用的一共有：${available.join('、') || '（无）'}；` +
+            `react、react-dom 与 @kn/* 由宿主始终注入，不需要声明。` +
+            `第三方 npm 包请改用 installPluginDependencies 安装（打包时会打进产物），不要写成 externals。`,
+    )
+}
+
 /**
  * Absolute paths the agent has observed this session. DSH's fs-observation
  * policy: an edit is refused until the file has been read (or written), so
@@ -252,10 +453,10 @@ const requireInstall = (deps: StudioToolDeps): NonNullable<StudioDevBridge['inst
  */
 const observedFiles = new Set<string>()
 
-const requireObservation = (path: string): void => {
+const requireObservation = (path: string, action = '编辑'): void => {
     if (!observedFiles.has(path)) {
         throw new Error(
-            `请先调用 readPluginProjectFile({ path: "${path}" }) 查看当前内容再编辑；禁止未读就改。`,
+            `请先调用 readPluginProjectFile({ path: "${path}" }) 查看当前内容再${action}；禁止未读就${action}。`,
         )
     }
 }
@@ -347,8 +548,9 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
 
     createPluginProject: {
         description:
-            '在桌面端内置的插件工程目录里新建一个最小可运行的插件工程（生成 package.json、src/index.tsx、src/DevPanel.tsx、README.md）。' +
-            '不需要用户选择目录。创建后用 writePluginProjectFile 改写源码，再用 runPluginProject 热更预览。',
+            '在桌面端内置的插件工程目录里新建一个最小可运行的插件工程（生成 package.json、src/index.tsx、对应模板的组件、README.md）。' +
+            '不需要用户选择目录。template 决定工程从哪个贡献点起步（panel 侧边面板 / page 整页 / settings 设置面板 / command 编辑器斜杠命令 / blank 空白），默认 panel；每个模板都能直接构建通过。' +
+            '创建后用 writePluginProjectFile 改写源码，再用 runPluginProject 热更预览。',
         inputSchema: {
             type: 'object',
             properties: {
@@ -358,6 +560,12 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
                 },
                 displayName: { type: 'string', description: '可选。插件显示名，例如「我的插件」。' },
                 pluginKey: { type: 'string', description: '可选。宿主注册表的键，默认与 name 相同。' },
+                template: {
+                    type: 'string',
+                    enum: [...SCAFFOLD_TEMPLATES],
+                    description:
+                        '可选。工程模板，默认 panel。panel=侧边停靠面板；page=整页 pageType 渲染器；settings=设置对话框里的面板；command=编辑器 “/” 斜杠命令；blank=空白工程。',
+                },
                 parentDir: {
                     type: 'string',
                     description: '可选。只在用户明确要求放到某个已有目录时才传；省略则用内置目录（推荐）。',
@@ -370,13 +578,22 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
             name: string
             displayName?: string
             pluginKey?: string
+            template?: string
             parentDir?: string
             overwrite?: boolean
         }) => {
+            const template = args.template ?? 'panel'
+            if (!SCAFFOLD_TEMPLATES.includes(template as ScaffoldTemplate)) {
+                throw new Error(
+                    `未知的模板 "${String(args.template)}"；可选：${SCAFFOLD_TEMPLATES.join('、')}。`,
+                )
+            }
+            const chosen = template as ScaffoldTemplate
             const created = await requireDev(deps).scaffold({
                 name: args.name,
                 displayName: args.displayName,
                 pluginKey: args.pluginKey,
+                template: chosen,
                 parentDir: args.parentDir,
                 overwrite: args.overwrite,
             })
@@ -384,8 +601,10 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
                 ok: true,
                 root: created.root,
                 pluginKey: created.pluginKey,
+                template: created.template ?? chosen,
                 managed: created.managed,
                 files: created.files,
+                templateNote: TEMPLATE_NOTES[chosen],
                 next: `用 writePluginProjectFile 修改 ${created.root}/src/index.tsx，然后 runPluginProject({ root: "${created.root}" }) 热更预览。`,
             }
         },
@@ -732,11 +951,31 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
                 root: { type: 'string', description: '工程根目录（来自 listPluginProjects 或 createPluginProject）。' },
                 watch: { type: 'boolean', description: '可选。是否持续监听，默认 true。' },
                 autoInstall: { type: 'boolean', description: '可选。构建成功后是否自动热更，默认 true。' },
+                focus: {
+                    type: 'boolean',
+                    description:
+                        '可选。构建成功后是否把这个产物设为当前工作目标并在右侧预览里展示，默认 true。传 false 只构建、不打开预览。',
+                },
+                externals: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description:
+                        '可选。声明为“宿主全局模块”的 import 名，不打进产物。只用于宿主已经暴露的模块（名字是包名去掉 scope），' +
+                        '先用 listHostGlobals 查；react、react-dom 与 @kn/* 无需声明。第三方 npm 包应改用 installPluginDependencies。' +
+                        '省略表示沿用该工程上一次的声明，传 [] 才是清空。',
+                },
             },
             required: ['root'],
         },
-        execute: async (args: { root: string; watch?: boolean; autoInstall?: boolean }) => {
-            const status = await requireDev(deps).start({ root: args.root, watch: args.watch !== false })
+        execute: async (args: { root: string; watch?: boolean; autoInstall?: boolean; focus?: boolean; externals?: string[] }) => {
+            const externals = args.externals === undefined
+                ? undefined
+                : assertExternalsAvailable(deps, normalizeExternals(args.externals))
+            const status = await requireDev(deps).start({
+                root: args.root,
+                watch: args.watch !== false,
+                externals,
+            })
             const summary = summarize(status)
             if (!summary.ok || !status?.build) return summary
 
@@ -751,13 +990,18 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
                     sourceLabel: status.root,
                 })
             }
-            return {
+            const result = {
                 ...summary,
+                ...(externals ? { externals } : {}),
                 installed,
                 next: status.watching
                     ? '现在编辑源码即可自动热更；改完用 buildPluginProject 可主动重建。'
                     : undefined,
             }
+            // The build IS the artifact: make it the working target unless the
+            // caller asked for a silent build.
+            if (args.focus !== false) focusProducedArtifact(deps, 'runPluginProject', result, args)
+            return result
         },
     },
 
@@ -771,14 +1015,33 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
                 root: { type: 'string', description: '工程根目录。' },
                 install: { type: 'boolean', description: '可选。构建成功后是否热更，默认 true。' },
                 writeToDisk: { type: 'boolean', description: '可选。是否同时写 dist/index.js，默认 false。' },
+                focus: {
+                    type: 'boolean',
+                    description:
+                        '可选。构建成功后是否把这个产物设为当前工作目标并在右侧预览里展示，默认 true。传 false 只构建、不打开预览。',
+                },
+                externals: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description:
+                        '可选。声明为“宿主全局模块”的 import 名（同 runPluginProject）。省略表示沿用当前会话的声明；' +
+                        '传了但与会话不同时，宿主会重启该会话来生效。',
+                },
             },
             required: ['root'],
         },
-        execute: async (args: { root: string; install?: boolean; writeToDisk?: boolean }) => {
+        execute: async (args: { root: string; install?: boolean; writeToDisk?: boolean; focus?: boolean; externals?: string[] }) => {
             const dev = requireDev(deps)
+            const externals = args.externals === undefined
+                ? undefined
+                : assertExternalsAvailable(deps, normalizeExternals(args.externals))
             const [existing] = await dev.status({ root: args.root })
             const previous = existing?.buildCount ?? 0
-            const requested = await dev.build({ root: args.root, writeToDisk: args.writeToDisk === true })
+            const requested = await dev.build({
+                root: args.root,
+                writeToDisk: args.writeToDisk === true,
+                externals,
+            })
             const status =
                 requested.buildCount > previous || requested.state === 'failed' || requested.error
                     ? requested
@@ -797,7 +1060,83 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
                     sourceLabel: status.root,
                 })
             }
-            return { ...summary, installed }
+            const result = { ...summary, ...(externals ? { externals } : {}), installed }
+            if (args.focus !== false) focusProducedArtifact(deps, 'buildPluginProject', result, args)
+            return result
+        },
+    },
+
+    deletePluginProject: {
+        description:
+            '删除一个插件工程：停止它的监听、把它热更进窗口的开发版本卸载掉，然后删除工程目录及磁盘文件（不可恢复）。' +
+            '只在用户明确要求删除工程时调用；想保留文件只是停止监听，请用 stopPluginProject。' +
+            '宿主拒绝删除不是插件工程的目录（必须含可读的 package.json，且不能是系统标准目录）。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                root: { type: 'string', description: '工程根目录（来自 listPluginProjects）。' },
+            },
+            required: ['root'],
+        },
+        execute: async (args: { root: string }) => {
+            const dev = requireDev(deps)
+            // Read the descriptor first: once the files are gone the manifest is
+            // unreachable, and the preview in the window has to be dropped by name.
+            const [status] = await dev.status({ root: args.root })
+            const removed = await requireRemove(deps)({ root: args.root })
+
+            const pluginHost = deps.getPluginHost?.()
+            const name = status?.plugin?.name ?? removed.name ?? undefined
+            let uninstalled = false
+            if (pluginHost?.uninstall && pluginHost?.has && name && pluginHost.has(name)) {
+                uninstalled = pluginHost.uninstall(name)
+            }
+            return {
+                ok: true,
+                root: removed.root,
+                removed: removed.removed,
+                pluginKey: removed.pluginKey ?? status?.plugin?.pluginKey ?? null,
+                name: name ?? null,
+                uninstalled,
+                note: uninstalled
+                    ? '工程文件已删除，窗口里的开发版本也已卸载。'
+                    : '工程文件已删除；该插件在当前窗口里本来就没有运行中的版本。',
+            }
+        },
+    },
+
+    deletePluginProjectFile: {
+        description:
+            '删除插件工程里的一个文件（不可恢复）。用于清掉不再需要的文件（例如拆分后遗留的旧组件）。' +
+            '只能删工程目录内的文件：宿主拒绝工程外的路径、package.json 和入口文件（要换入口先改 knPluginStudio.entry 再删旧的）。' +
+            '删之前必须先 readPluginProjectFile 读过它（防止把路径写错删掉还在用的文件）。' +
+            '返回被删文件的正文（大文件会标记 truncated），误删可以用 writePluginProjectFile 把 content 粘回去。' +
+            '工程在监听时会自动重建；否则用 buildPluginProject 验证。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                root: { type: 'string', description: '工程根目录（来自 listPluginProjects）。' },
+                path: { type: 'string', description: '要删除的文件绝对路径（来自 listPluginProjectFiles）。' },
+            },
+            required: ['root', 'path'],
+        },
+        execute: async (args: { root: string; path: string }) => {
+            // Same observation rule as editing: a typo'd path must not delete a
+            // file the model never looked at.
+            requireObservation(args.path, '删除')
+            const removed = await requireDeleteFile(deps)({ root: args.root, path: args.path })
+            return {
+                ok: true,
+                root: removed.root,
+                path: removed.path,
+                relativePath: removed.relativePath,
+                bytes: removed.bytes,
+                content: removed.content ?? null,
+                truncated: Boolean(removed.truncated),
+                next:
+                    '工程在监听时会自动重建。如果这个文件被 import，构建会立刻报错，把引用一并改掉；' +
+                    '误删可以用 writePluginProjectFile 把上面的 content 写回去。',
+            }
         },
     },
 
@@ -830,6 +1169,35 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
             return {
                 count: logs.length,
                 logs: logs.map((entry) => ({ level: entry.level, message: entry.message })),
+            }
+        },
+    },
+
+    /**
+     * Discover what the host actually publishes to plugins. `externals` is only
+     * useful (and only accepted) for modules that exist here.
+     */
+    listHostGlobals: {
+        description:
+            '列出当前宿主通过 window.__KN__ 暴露给插件的全局模块（这才是“宿主注入依赖”的真正来源），以及宿主始终注入的标准包清单。' +
+            '只有当你要 import 的模块出现在这里（或挂在 window 上的同名全局）时，才能把它写进 runPluginProject / buildPluginProject 的 externals；否则请用 installPluginDependencies 安装成正常依赖。',
+        inputSchema: { type: 'object', properties: {} },
+        readOnly: true,
+        execute: async () => {
+            const namespace = readHostGlobals(deps)
+            const globals = Object.keys(namespace)
+                .filter((name) => namespace[name] !== undefined && namespace[name] !== null)
+                .sort()
+                .map((name) => ({ name, type: typeof namespace[name] }))
+            return {
+                namespace: 'window.__KN__',
+                count: globals.length,
+                globals,
+                builtinModules: BUILTIN_HOST_MODULES,
+                hint:
+                    'react、react-dom 与 @kn/* 由宿主始终注入，不需要写 externals。' +
+                    'externals 的名字取包名去掉 scope（@scope/pkg → pkg），声明后打包器会去 window.__KN__[名字]、再退到 window[名字] 查找；' +
+                    '找不到时 runPluginProject / buildPluginProject 会直接报错而不是产出运行时才炸的产物。',
             }
         },
     },

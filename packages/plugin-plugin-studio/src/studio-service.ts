@@ -92,10 +92,10 @@ export const useMarketplace = () => useOptionalService('pluginMarketplace')
  * Permanently delete a plugin project's files from disk.
  *
  * The studio's project list is only a pointer; this is the destructive half of
- * "delete plugin project" and goes through the desktop host's allowlisted
- * `fs.remove` capability (the managed projects directory and any folder the
- * user added through the dialog are already inside that allowlist). The caller
- * owns stopping the watcher and dropping the list entry first/after.
+ * "delete plugin project". It prefers the dev surface's `removeProject`, which
+ * stops the session and refuses anything that is not a plugin project; desktop
+ * builds that predate that capability fall back to the allowlisted `fs.remove`.
+ * The caller owns dropping the list entry.
  */
 export const useDeleteProject = () => {
     const desktop = useOptionalService('desktop')
@@ -103,6 +103,10 @@ export const useDeleteProject = () => {
         async (root: string): Promise<void> => {
             if (!desktop) {
                 throw new Error('当前宿主不是桌面客户端，无法删除工程文件')
+            }
+            if (desktop.has('dev.remove') && desktop.dev) {
+                await desktop.dev.removeProject({ root })
+                return
             }
             const result = await desktop.invoke('fs.remove', { path: root })
             if (result && result.success === false) {

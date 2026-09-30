@@ -16,6 +16,7 @@
  *     apps/desktop/src/main/plugin-dev/electron.smoke.mjs --no-sandbox
  */
 import { app, BrowserWindow, ipcMain } from 'electron'
+import { existsSync } from 'node:fs'
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -114,8 +115,16 @@ const run = async () => {
         manager.scaffold({
             name: params.name,
             displayName: params.displayName,
+            template: params.template,
             parentDir: params.parentDir ? assertAllowedPath(params.parentDir, 'parentDir') : undefined,
             projectsDir,
+        }),
+    )
+    handle('dev.remove', (params = {}) => manager.removeProject({ root: assertAllowedPath(params.root, 'root') }))
+    handle('dev.deleteFile', (params = {}) =>
+        manager.deleteProjectFile({
+            root: assertAllowedPath(params.root, 'root'),
+            path: assertAllowedPath(params.path, 'path'),
         }),
     )
     handle('dev.writeFile', async (params = {}) => {
@@ -159,6 +168,8 @@ const run = async () => {
         'dev.hostApi',
         'dev.files',
         'dev.installDependencies',
+        'dev.remove',
+        'dev.deleteFile',
     ]) {
         const name = capability === 'dev.devstatus' ? 'dev.status' : capability
         check(`bridge: capability ${name}`, capabilities?.includes(name) === true)
@@ -225,6 +236,66 @@ const run = async () => {
         buildManaged?.error ?? `${buildManaged?.build?.bytes} bytes`,
     )
     await invoke('dev.stop', { root: join(projectsDir, 'electron-managed-plugin') })
+
+    /* 4b) Templates and removal over the real IPC surface. */
+    const pageScaffold = await invoke('dev.scaffold', {
+        name: 'electron-page-plugin',
+        displayName: 'Electron Page',
+        template: 'page',
+    })
+    check(
+        'managed: scaffold honours the template',
+        pageScaffold?.template === 'page' && pageScaffold?.files?.includes('src/CanvasPage.tsx'),
+        JSON.stringify(pageScaffold?.files),
+    )
+    const pageBuild = await invoke('dev.start', { root: pageScaffold.root, watch: false })
+    check(
+        'managed: template project builds',
+        pageBuild?.state === 'watching' && Boolean(pageBuild?.build?.code),
+        pageBuild?.error ?? `${pageBuild?.build?.bytes} bytes`,
+    )
+    await invoke('dev.stop', { root: pageScaffold.root })
+
+    const removeResult = await invoke('dev.remove', { root: pageScaffold.root })
+    check(
+        'managed: dev.remove deletes the project',
+        removeResult?.removed === true && !existsSync(pageScaffold.root),
+        JSON.stringify(removeResult),
+    )
+
+    const notAProject = join(projectsDir, 'not-a-project')
+    await mkdir(notAProject, { recursive: true })
+    const refusedRemove = await invoke('dev.remove', { root: notAProject })
+        .then(() => 'allowed')
+        .catch((error) => error.message)
+    check(
+        'managed: dev.remove refuses a non-project',
+        typeof refusedRemove === 'string' && /not a plugin project/.test(refusedRemove),
+        String(refusedRemove),
+    )
+
+    /* 4c) Deleting one file inside a project, over the real IPC surface. */
+    const fileRoot = join(projectsDir, 'electron-managed-plugin')
+    const strayEntry = join(fileRoot, 'src', 'Stray.tsx')
+    await invoke('dev.writeFile', { path: strayEntry, contents: 'export const Stray = () => null\n' })
+    const deletedFile = await invoke('dev.deleteFile', { root: fileRoot, path: strayEntry })
+    check(
+        'managed: dev.deleteFile removes the file and echoes it',
+        deletedFile?.removed === true
+            && deletedFile?.relativePath === 'src/Stray.tsx'
+            && deletedFile?.content?.includes('Stray') === true
+            && !existsSync(strayEntry),
+        JSON.stringify({ relativePath: deletedFile?.relativePath, bytes: deletedFile?.bytes }),
+    )
+
+    const refusedDelete = await invoke('dev.deleteFile', { root: fileRoot, path: join(fileRoot, 'package.json') })
+        .then(() => 'allowed')
+        .catch((error) => error.message)
+    check(
+        'managed: dev.deleteFile refuses the manifest',
+        typeof refusedDelete === 'string' && /package\.json/.test(refusedDelete),
+        String(refusedDelete),
+    )
 
     check('security: outside-root project refused', typeof denied === 'string' && /allowed roots/.test(denied), String(denied))
 

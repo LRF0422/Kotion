@@ -24,6 +24,7 @@ const check = (name, condition, detail = '') => {
  * ------------------------------------------------------------------ */
 const calls = []
 const installs = []
+const focused = []
 const ROOT = '/managed/agent-made-plugin'
 const sessions = new Map()
 const files = new Map()
@@ -45,6 +46,7 @@ const dev = {
         return {
             root: ROOT,
             pluginKey: options.pluginKey ?? options.name,
+            template: options.template ?? 'panel',
             files: ['package.json', 'src/index.tsx'],
             managed: !options.parentDir,
         }
@@ -156,14 +158,42 @@ const dev = {
             output: 'added 1 package',
         }
     },
+    async removeProject(options = {}) {
+        calls.push(['removeProject', options])
+        return { root: options.root, removed: true, pluginKey: 'agent-made-plugin', name: 'Agent Made' }
+    },
+    async deleteFile(options = {}) {
+        calls.push(['deleteFile', options])
+        files.delete(options.path)
+        return {
+            root: options.root,
+            path: options.path,
+            relativePath: 'src/OldPanel.tsx',
+            removed: true,
+            bytes: 29,
+            content: 'export const OldPanel = () => null\n',
+            truncated: false,
+        }
+    },
 }
 
 const pluginHost = {
+    active: new Set(['Agent Made']),
     async installFromSource(options) {
         installs.push(options)
         return true
     },
+    has(name) {
+        return this.active.has(name)
+    },
+    uninstall(name) {
+        calls.push(['uninstall', name])
+        return this.active.delete(name)
+    },
 }
+
+/** Host globals the studio may declare as `externals`. */
+const hostGlobals = { React: {}, ReactDOM: {}, common: {}, ui: {}, icon: {}, editor: {}, pluginApi: {}, svelte: {} }
 
 const marketplace = {
     async listMine() {
@@ -195,6 +225,11 @@ const tools = createStudioTools({
     getDev: () => dev,
     getPluginHost: () => pluginHost,
     getMarketplace: () => marketplace,
+    getHostGlobals: () => hostGlobals,
+    focusArtifactResult: (tool, result, args) => {
+        focused.push({ tool, result, args })
+        return true
+    },
 })
 const names = Object.keys(tools)
 
@@ -216,7 +251,10 @@ const EXPECTED = [
     'runPluginProject',
     'buildPluginProject',
     'stopPluginProject',
+    'deletePluginProject',
+    'deletePluginProjectFile',
     'pluginProjectLogs',
+    'listHostGlobals',
     'listHostApiPackages',
     'searchHostApi',
     'readHostApiFile',
@@ -238,7 +276,9 @@ check(
 )
 check(
     'surface: read-only tools flagged',
-    tools.listPluginProjects.readOnly === true && tools.readPluginProjectFile.readOnly === true,
+    tools.listPluginProjects.readOnly === true
+        && tools.readPluginProjectFile.readOnly === true
+        && tools.listHostGlobals.readOnly === true,
 )
 check(
     'surface: create does not require a directory',
@@ -390,6 +430,234 @@ check('logs: returns entries', logs.count === 1 && logs.logs[0].level === 'info'
 
 const stopped = await tools.stopPluginProject.execute({ root: ROOT })
 check('stop: reports success', stopped.ok === true && stopped.stopped === true)
+
+/* ------------------------------------------------------------------ *
+ * Produced artifacts: a build becomes the conversation's working target, and the
+ * plugin entry (not the tool) decides how. Best-effort — a host without a pane
+ * must not turn a good build into a failed call.
+ * ------------------------------------------------------------------ */
+const focusedNames = () => focused.map((entry) => entry.tool)
+check(
+    'focus: a run offers its build as the working target',
+    focusedNames().includes('runPluginProject') && focused.every((entry) => typeof entry.result === 'object'),
+    JSON.stringify(focusedNames()),
+)
+check(
+    'focus: the offered result is the tool result itself',
+    focused.find((entry) => entry.tool === 'runPluginProject')?.result?.pluginKey === 'agent-made-plugin',
+    JSON.stringify(focused.find((entry) => entry.tool === 'runPluginProject')?.result),
+)
+check(
+    'focus: a build offers its artifact too',
+    focusedNames().includes('buildPluginProject'),
+    JSON.stringify(focusedNames()),
+)
+check(
+    'focus: reads never focus anything',
+    focused.every((entry) => !entry.tool.startsWith('list') && !entry.tool.startsWith('read')),
+    JSON.stringify(focusedNames()),
+)
+
+const focusedBefore = focused.length
+await tools.runPluginProject.execute({ root: ROOT, focus: false })
+check('focus: opt-out leaves the preview alone', focused.length === focusedBefore, String(focused.length))
+
+/* A throwing focus callback must never fail the build it just reported. */
+const tolerantTools = createStudioTools({
+    getDev: () => dev,
+    getPluginHost: () => pluginHost,
+    focusArtifactResult: () => {
+        throw new Error('pane exploded')
+    },
+})
+const tolerantRun = await tolerantTools.runPluginProject.execute({ root: ROOT })
+check(
+    'focus: a broken pane cannot fail a successful build',
+    tolerantRun.ok === true && tolerantRun.installed === true,
+    JSON.stringify({ ok: tolerantRun.ok, installed: tolerantRun.installed }),
+)
+
+/* ------------------------------------------------------------------ *
+ * Scaffold templates: the project starts from the contribution point asked for
+ * ------------------------------------------------------------------ */
+const ALL_TEMPLATES = ['panel', 'page', 'settings', 'command', 'blank']
+check(
+    'template: schema enumerates every template',
+    ALL_TEMPLATES.every((value) => tools.createPluginProject.inputSchema.properties.template.enum.includes(value)),
+    JSON.stringify(tools.createPluginProject.inputSchema.properties.template.enum),
+)
+
+const pageProject = await tools.createPluginProject.execute({ name: 'page-plugin', template: 'page' })
+check(
+    'template: forwarded to dev.scaffold',
+    calls.some(([name, args]) => name === 'scaffold' && args.name === 'page-plugin' && args.template === 'page'),
+)
+check('template: reported back', pageProject.template === 'page', JSON.stringify(pageProject.template))
+check(
+    'template: explains what to edit next',
+    typeof pageProject.templateNote === 'string' && pageProject.templateNote.includes('CanvasPage'),
+    String(pageProject.templateNote),
+)
+
+await tools.createPluginProject.execute({ name: 'plain-plugin' })
+check(
+    'template: defaults to panel',
+    calls.some(([name, args]) => name === 'scaffold' && args.name === 'plain-plugin' && args.template === 'panel'),
+)
+
+let badTemplate = ''
+try {
+    await tools.createPluginProject.execute({ name: 'bad-plugin', template: 'nope' })
+} catch (error) {
+    badTemplate = error.message
+}
+check('template: unknown value rejected', /未知的模板/.test(badTemplate) && /panel/.test(badTemplate), badTemplate)
+
+/* ------------------------------------------------------------------ *
+ * Host globals and declared externals
+ * ------------------------------------------------------------------ */
+const globals = await tools.listHostGlobals.execute({})
+check(
+    'globals: lists the host namespace',
+    globals.namespace === 'window.__KN__' && globals.globals.some((entry) => entry.name === 'svelte'),
+    JSON.stringify(globals.globals),
+)
+check(
+    'globals: names the always-injected modules',
+    globals.builtinModules.includes('@kn/common') && globals.builtinModules.includes('react'),
+    JSON.stringify(globals.builtinModules),
+)
+
+const withExternals = await tools.runPluginProject.execute({
+    root: ROOT,
+    externals: ['svelte', '@scope/svelte'],
+})
+check(
+    'externals: forwarded to dev.start',
+    calls.some(([name, args]) => name === 'start' && args.externals?.includes('svelte')),
+    JSON.stringify(calls.filter(([name]) => name === 'start').map(([, args]) => args.externals)),
+)
+check(
+    'externals: mirrors the scope-dropping rule',
+    Array.isArray(withExternals.externals) && withExternals.externals.length === 2,
+    JSON.stringify(withExternals.externals),
+)
+
+await tools.buildPluginProject.execute({ root: ROOT, externals: ['svelte'] })
+check(
+    'externals: forwarded to dev.build',
+    calls.some(([name, args]) => name === 'build' && args.externals?.includes('svelte')),
+)
+
+await tools.runPluginProject.execute({ root: ROOT })
+check(
+    'externals: omitted stays omitted (a restart then inherits)',
+    calls.some(([name, args]) => name === 'start' && args.externals === undefined),
+    JSON.stringify(calls.filter(([name]) => name === 'start').map(([, args]) => args.externals)),
+)
+
+const startsBefore = calls.filter(([name]) => name === 'start').length
+let unknownExternal = ''
+try {
+    await tools.runPluginProject.execute({ root: ROOT, externals: ['svelte', 'Nope'] })
+} catch (error) {
+    unknownExternal = error.message
+}
+check(
+    'externals: unknown module refused with a way forward',
+    /Nope/.test(unknownExternal) && /listHostGlobals|installPluginDependencies/.test(unknownExternal),
+    unknownExternal,
+)
+check(
+    'externals: refusal happens before the bridge call',
+    calls.filter(([name]) => name === 'start').length === startsBefore,
+)
+
+let badExternalsType = ''
+try {
+    await tools.buildPluginProject.execute({ root: ROOT, externals: 'svelte' })
+} catch (error) {
+    badExternalsType = error.message
+}
+check('externals: non-array rejected', /字符串数组/.test(badExternalsType), badExternalsType)
+
+const builtinExternals = await tools.runPluginProject.execute({ root: ROOT, externals: ['react', '@kn/common'] })
+check(
+    'externals: always-injected modules need no host global',
+    Array.isArray(builtinExternals.externals) && builtinExternals.externals.length === 2,
+    JSON.stringify(builtinExternals.externals),
+)
+
+/* ------------------------------------------------------------------ *
+ * Delete project: files, session and the project's own running preview
+ * ------------------------------------------------------------------ */
+const uninstallsBefore = calls.filter(([name]) => name === 'uninstall').length
+const deleted = await tools.deletePluginProject.execute({ root: ROOT })
+check(
+    'delete: reports the removal',
+    deleted.ok === true && deleted.removed === true && deleted.root === ROOT,
+    JSON.stringify(deleted),
+)
+check(
+    'delete: reaches dev.removeProject',
+    calls.some(([name, args]) => name === 'removeProject' && args.root === ROOT),
+)
+check(
+    'delete: drops its own running preview',
+    deleted.uninstalled === true && calls.filter(([name]) => name === 'uninstall').length === uninstallsBefore + 1,
+    JSON.stringify(calls.filter(([name]) => name === 'uninstall')),
+)
+check('delete: says what happened', typeof deleted.note === 'string' && deleted.note.includes('已删除'), String(deleted.note))
+
+/* Deleting one file: project-scoped, and only after the model has looked at it. */
+const oldPanelPath = `${ROOT}/src/OldPanel.tsx`
+let unobservedDelete = ''
+try {
+    await tools.deletePluginProjectFile.execute({ root: ROOT, path: oldPanelPath })
+} catch (error) {
+    unobservedDelete = error.message
+}
+check('deleteFile: refuses a file that was never read', /readPluginProjectFile/.test(unobservedDelete), unobservedDelete)
+
+await tools.readPluginProjectFile.execute({ path: oldPanelPath })
+const fileDeleted = await tools.deletePluginProjectFile.execute({ root: ROOT, path: oldPanelPath })
+check(
+    'deleteFile: reaches dev.deleteFile with root + path',
+    calls.some(([name, args]) => name === 'deleteFile' && args.root === ROOT && args.path === oldPanelPath),
+    JSON.stringify(calls.filter(([name]) => name === 'deleteFile')),
+)
+check(
+    'deleteFile: reports what was removed',
+    fileDeleted.ok === true && fileDeleted.relativePath === 'src/OldPanel.tsx' && fileDeleted.bytes === 29,
+    JSON.stringify(fileDeleted),
+)
+check(
+    'deleteFile: hands back the content for undo',
+    typeof fileDeleted.content === 'string' && fileDeleted.content.includes('OldPanel') && fileDeleted.truncated === false,
+    String(fileDeleted.content),
+)
+
+let noDeleteFile = ''
+try {
+    await createStudioTools({
+        getDev: () => ({ ...dev, deleteFile: undefined }),
+        getPluginHost: () => pluginHost,
+    }).deletePluginProjectFile.execute({ root: ROOT, path: `${ROOT}/src/index.tsx` })
+} catch (error) {
+    noDeleteFile = error.message
+}
+check('guard: missing dev.deleteFile reported', /dev\.deleteFile/.test(noDeleteFile), noDeleteFile)
+
+let noRemove = ''
+try {
+    await createStudioTools({
+        getDev: () => ({ ...dev, removeProject: undefined }),
+        getPluginHost: () => pluginHost,
+    }).deletePluginProject.execute({ root: ROOT })
+} catch (error) {
+    noRemove = error.message
+}
+check('guard: missing dev.remove reported', /dev\.remove/.test(noRemove), noRemove)
 
 /* A failing build must surface the compiler error, not throw. */
 const failingStatus = {

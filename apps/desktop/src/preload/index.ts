@@ -63,6 +63,10 @@ const CAPABILITIES = [
   'dev.files',
   // Install third-party npm packages into a plugin project.
   'dev.installDependencies',
+  // Stop a project's session and delete its files (refuses non-projects).
+  'dev.remove',
+  // Delete one file inside a project (confined to the project root).
+  'dev.deleteFile',
 ] as readonly string[]
 
 const knDesktop = {

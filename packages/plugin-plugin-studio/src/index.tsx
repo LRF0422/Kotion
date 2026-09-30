@@ -1,9 +1,13 @@
 /**
  * Plugin Studio — a plugin that builds plugins.
  *
- * Everything interesting lives behind one contribution point: a side-dock
- * panel (`StudioDockPanel`) that manages the user's dev projects (start/stop,
- * hot reload, publish) and installed plugins while they keep working.
+ * Two surfaces, one plugin:
+ *  - a side-dock panel (`StudioDockPanel`) that manages the user's dev projects
+ *    (start/stop, hot reload, publish) while they keep working;
+ *  - a kernel agent surface — the tools that let the agent scaffold, build and
+ *    hot-install a project on its own, plus the artifact contribution that makes
+ *    a finished build a real, openable artifact in the conversation (see
+ *    `./artifacts`).
  *
  * The plugin is desktop-only: `desktopOnly` is honest metadata here, because
  * bundling needs a Node child process, which only the Electron host provides.
@@ -11,10 +15,18 @@
  * surfaces render an explanation instead of failing.
  */
 import React from 'react'
-import { KPlugin, resolveOptionalService, type PluginConfig } from '@kn/common'
+import {
+    KPlugin,
+    openAgentArtifact,
+    resolveOptionalService,
+    type AgentArtifact,
+    type PluginConfig,
+} from '@kn/common'
 import { Wrench } from '@kn/icon'
 import { StudioDockPanel } from './StudioDockPanel'
 import { createStudioTools } from './studio-tools'
+import { STUDIO_ARTIFACT_MAPPERS } from './artifacts/surface'
+import { STUDIO_ARTIFACT_RENDERERS, STUDIO_TOOL_RENDERERS } from './artifacts'
 import { pluginAuthoringSkill } from './skills/plugin-authoring'
 
 /**
@@ -34,6 +46,17 @@ const studioTools = createStudioTools({
         resolveOptionalService('pluginMarketplace') as ReturnType<
             NonNullable<Parameters<typeof createStudioTools>[0]['getMarketplace']>
         >,
+    /**
+     * A finished build becomes the conversation's working target, so the side
+     * pane shows the artifact the agent just produced. `openAgentArtifact` is
+     * the kernel's imperative entry for agent tools and returns false when no
+     * surface has the pane mounted — a silent no-op, never an error.
+     */
+    focusArtifactResult: (tool, result, args) => {
+        const artifact = STUDIO_ARTIFACT_MAPPERS[tool]?.(result, args)
+        if (!artifact) return false
+        return openAgentArtifact(artifact as AgentArtifact)
+    },
 })
 
 class PluginStudio extends KPlugin<PluginConfig> {}
@@ -56,11 +79,25 @@ export const pluginStudio = new PluginStudio({
         inputSchema: tool.inputSchema,
         readOnly: Boolean((tool as { readOnly?: boolean }).readOnly),
         scope: 'any' as const,
+        // Result → artifact mapping for the tools that PRODUCE something (a
+        // build, a scaffolded project). The kernel keys this by the tool's wire
+        // name, so the mapper reaches the artifacts shelf and the side pane.
+        artifactFromResult: STUDIO_ARTIFACT_MAPPERS[name],
         create: () => tool.execute as (params: unknown) => unknown,
     })),
     // Teach the agent *how* to author a plugin. The skill names its tools, which
     // is also what lets their schemas be delivered on demand.
     skills: [pluginAuthoringSkill],
+    /**
+     * The presentation half of the artifact pipeline: conversation cards for the
+     * producing tools, and the side-pane preview for the studio's artifact
+     * kinds. Declared here (not nested under `tools`) because these are kernel
+     * contributions, not tool definitions.
+     */
+    agent: {
+        toolRenderers: STUDIO_TOOL_RENDERERS,
+        artifactRenderers: STUDIO_ARTIFACT_RENDERERS,
+    },
     dockPanels: [
         {
             id: 'plugin-studio-status',
@@ -122,6 +159,21 @@ export const pluginStudio = new PluginStudio({
                     createTitle: 'New plugin project',
                     packageName: 'Package name',
                     displayName: 'Display name',
+                    templateLabel: 'Starting point',
+                    template: {
+                        panel: 'Side dock panel',
+                        page: 'Full page (pageType)',
+                        settings: 'Settings panel',
+                        command: 'Editor slash command',
+                        blank: 'Blank plugin',
+                    },
+                    templateHint: {
+                        panel: 'A panel in the left/right dock. Edit src/DevPanel.tsx for its content.',
+                        page: 'A whole-page renderer registered as a page type. Edit src/CanvasPage.tsx.',
+                        settings: 'A section in the host settings dialog. Edit src/SettingsPanel.tsx.',
+                        command: 'An entry in the editor "/" menu. Edit src/slash-command.ts.',
+                        blank: 'A valid plugin with no contributions yet — add the points you need.',
+                    },
                     cancel: 'Cancel',
                     createAndWatch: 'Create & watch',
                     createAndStart: 'Create & start watching',
@@ -165,6 +217,55 @@ export const pluginStudio = new PluginStudio({
                     versionDescChangeLog: 'Change log (what changed in this version)',
                     versionDescRequired: 'Add at least one version note (Feature / Detail / ChangeLog).',
                     publishAction: 'Publish',
+                    artifact: {
+                        buildFailed: 'Build failed: {{name}}',
+                        installed: 'hot-reloaded',
+                        openBeside: 'Preview',
+                        moduleCount: '{{n}} modules',
+                        fileCount: '{{n}} files',
+                        publishedVersion: 'Published v{{version}}',
+                        submitted: 'Submitted for review',
+                        noSession: 'No dev session yet',
+                        watching: 'watched',
+                        build: 'Build',
+                        size: 'Size',
+                        time: 'Duration',
+                        modules: 'Modules',
+                        moduleList: 'Bundled modules',
+                        hotReload: 'Preview',
+                        files: 'Files',
+                        managed: 'Directory',
+                        managedBadge: 'Managed',
+                        path: 'Path',
+                        published: 'Published',
+                        desktopOnlyHint: 'Live state comes from the desktop dev bridge; this host has none.',
+                        paneHint: 'Watch, build and hot-reload from the Plugin Studio panel.',
+                    },
+                    preview: {
+                        liveHint: 'Live preview of what this plugin contributes — updates on hot reload.',
+                        notRunning:
+                            'This plugin is not running in the window yet. Build and hot-reload it first (runPluginProject / buildPluginProject), then reopen this preview.',
+                        left: 'left dock',
+                        right: 'right dock',
+                        crashed: '{{name}} failed to render',
+                        editorComponent:
+                            'This page type renders through an editor node, so it needs a real page — it cannot be mounted in the preview.',
+                        page: 'page type',
+                        settings: 'settings',
+                        slash: 'slash command {{list}}',
+                        toolbar: 'toolbar button',
+                        bubble: 'bubble menu',
+                        footer: 'page footer',
+                        floating: 'floating panel',
+                        editor: 'Editor',
+                        tools: 'Agent tools',
+                        skills: 'Skills',
+                        menus: 'Menus',
+                        routes: 'Routes',
+                        desktop: 'Platform',
+                        desktopOnly: 'desktop only',
+                        nothing: 'This plugin contributes no UI and no capabilities yet (blank plugin / background logic only).',
+                    },
                     state: {
                         watching: 'Watching',
                         starting: 'Building',
@@ -219,6 +320,21 @@ export const pluginStudio = new PluginStudio({
                     createTitle: '新建插件工程',
                     packageName: '包名',
                     displayName: '显示名',
+                    templateLabel: '工程模板',
+                    template: {
+                        panel: '侧边停靠面板',
+                        page: '整页视图（pageType）',
+                        settings: '设置面板',
+                        command: '编辑器斜杠命令',
+                        blank: '空白插件',
+                    },
+                    templateHint: {
+                        panel: '在左右侧边栏里停靠的面板，内容改 src/DevPanel.tsx。',
+                        page: '注册成 pageType 的整页渲染器，内容改 src/CanvasPage.tsx。',
+                        settings: '出现在宿主设置对话框里的分组，改 src/SettingsPanel.tsx。',
+                        command: '编辑器 “/” 菜单里的一项，改 src/slash-command.ts。',
+                        blank: '一个能装上的空插件，按需自己加贡献点。',
+                    },
                     cancel: '取消',
                     createAndWatch: '创建并监听',
                     createAndStart: '创建并开始监听',
@@ -262,6 +378,54 @@ export const pluginStudio = new PluginStudio({
                     versionDescChangeLog: '更新日志（这个版本改了什么）',
                     versionDescRequired: '至少填写一段版本说明（功能/细节/更新日志）。',
                     publishAction: '发布',
+                    artifact: {
+                        buildFailed: '构建失败：{{name}}',
+                        installed: '已热更',
+                        openBeside: '预览',
+                        moduleCount: '{{n}} 个模块',
+                        fileCount: '{{n}} 个文件',
+                        publishedVersion: '已发布 v{{version}}',
+                        submitted: '已提交审核',
+                        noSession: '还没有开发会话',
+                        watching: '监听中',
+                        build: '构建',
+                        size: '产物大小',
+                        time: '耗时',
+                        modules: '模块数',
+                        moduleList: '包含模块',
+                        hotReload: '预览',
+                        files: '文件',
+                        managed: '目录',
+                        managedBadge: '内置目录',
+                        path: '路径',
+                        published: '发布',
+                        desktopOnlyHint: '实时状态来自桌面端的开发能力；当前宿主没有。',
+                        paneHint: '监听、构建与热更在「插件开发台」侧边面板里操作。',
+                    },
+                    preview: {
+                        liveHint: '实时预览这个插件做了什么——热更后自动更新。',
+                        notRunning:
+                            '这个插件当前没有在窗口里运行。先构建并热更（runPluginProject / buildPluginProject），再打开本预览。',
+                        left: '左栏',
+                        right: '右栏',
+                        crashed: '{{name}} 渲染失败',
+                        editorComponent: '这个整页视图由编辑器节点渲染，需要真实页面数据，无法在预览里直接挂载。',
+                        page: '整页视图',
+                        settings: '设置面板',
+                        slash: '斜杠命令 {{list}}',
+                        toolbar: '工具栏按钮',
+                        bubble: '气泡菜单',
+                        footer: '页脚面板',
+                        floating: '浮动窗口',
+                        editor: '编辑器扩展',
+                        tools: 'Agent 工具',
+                        skills: '技能',
+                        menus: '菜单',
+                        routes: '路由',
+                        desktop: '平台',
+                        desktopOnly: '仅桌面端',
+                        nothing: '这个插件当前没有贡献任何 UI 或能力（空插件/仅后台逻辑）。',
+                    },
                     state: {
                         watching: '监听中',
                         starting: '构建中',

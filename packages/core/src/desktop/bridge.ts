@@ -22,6 +22,10 @@ import type {
     DevFilesResult,
     DevInstallOptions,
     DevInstallResult,
+    DevRemoveOptions,
+    DevRemoveResult,
+    DevDeleteFileOptions,
+    DevDeleteFileResult,
 } from '@kn/common'
 
 /**
@@ -55,6 +59,8 @@ const DEV_CAPABILITIES: DesktopCapability[] = [
     'dev.hostApi',
     'dev.files',
     'dev.installDependencies',
+    'dev.remove',
+    'dev.deleteFile',
 ]
 
 const createDevBridge = (
@@ -126,6 +132,14 @@ const createDevBridge = (
         installDependencies: (options: DevInstallOptions): Promise<DevInstallResult> => {
             requireCapability('dev.installDependencies')
             return invoke('dev.installDependencies', options)
+        },
+        removeProject: (options: DevRemoveOptions): Promise<DevRemoveResult> => {
+            requireCapability('dev.remove')
+            return invoke('dev.remove', options)
+        },
+        deleteFile: (options: DevDeleteFileOptions): Promise<DevDeleteFileResult> => {
+            requireCapability('dev.deleteFile')
+            return invoke('dev.deleteFile', options)
         },
         /**
          * The main process broadcasts one `dev` event channel; filtering by root

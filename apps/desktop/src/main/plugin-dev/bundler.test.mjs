@@ -8,9 +8,16 @@
  * Run: node apps/desktop/src/main/plugin-dev/bundler.test.mjs
  */
 import { mkdir, rm, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { buildPlugin, pluginCssScope, readProjectManifest } from './bundler.mjs'
+import {
+    SCAFFOLD_TEMPLATES,
+    buildPlugin,
+    hostNameForExternal,
+    pluginCssScope,
+    readProjectManifest,
+    renderScaffold,
+} from './bundler.mjs'
 
 const results = []
 const check = (name, condition, detail = '') => {
@@ -89,8 +96,10 @@ check('build: registration uses host registry', built.ok && built.code.includes(
 check('build: no bundled react source', built.ok && !built.code.includes('react.development'))
 
 /* Execute the bundle against a fake host window (the bundle declares `var
- * window`, so the fake must live on globalThis rather than be passed in). */
-const runBundle = (code) => {
+ * window`, so the fake must live on globalThis rather than be passed in).
+ * `extras.namespace` adds host globals to `__KN__`; `extras.globals` sets plain
+ * `globalThis` properties (the fallback path for declared externals). */
+const runBundle = (code, extras = {}) => {
     const calls = []
     const KN = {
         hostApiVersion: '2.1.0',
@@ -102,6 +111,7 @@ const runBundle = (code) => {
             calls.push({ key, exports, meta })
             KN.__exports = exports
         },
+        ...(extras.namespace || {}),
     }
     globalThis.window = { __KN__: KN }
     globalThis.React = {
@@ -110,10 +120,13 @@ const runBundle = (code) => {
         useState: (value) => [value, () => {}],
     }
     globalThis.ReactDOM = {}
+    const assigned = Object.keys(extras.globals || {})
+    for (const name of assigned) globalThis[name] = extras.globals[name]
     try {
         // eslint-disable-next-line no-new-func
-        new Function('console', code)(console)
+        new Function('console', code)(extras.console || console)
     } finally {
+        for (const name of assigned) delete globalThis[name]
         delete globalThis.window
         delete globalThis.React
         delete globalThis.ReactDOM
@@ -129,6 +142,148 @@ check(
     Object.values(registered[0]?.exports || {}).some((value) => value && value.name === 'Test Dev Plugin'),
     Object.keys(registered[0]?.exports || {}).join(','),
 )
+
+/* ------------------------------------------------------------------ *
+ * 1b. Scaffold templates: every generated project must build and register
+ *     untouched — an agent's first `createPluginProject` must not look broken.
+ * ------------------------------------------------------------------ */
+const templatesRoot = join(tmpdir(), 'kn-studio-bundler-templates')
+const writeScaffold = async (dir, files) => {
+    await rm(dir, { recursive: true, force: true })
+    for (const [relativePath, contents] of Object.entries(files)) {
+        const target = join(dir, relativePath)
+        await mkdir(dirname(target), { recursive: true })
+        await writeFile(target, contents)
+    }
+}
+
+check(
+    'template: default is panel',
+    JSON.parse(renderScaffold({ name: 'defaulted', pluginKey: 'defaulted', displayName: 'Defaulted' })['package.json'])
+        .knPluginStudio.template === 'panel',
+)
+
+for (const template of SCAFFOLD_TEMPLATES) {
+    const title = 'Probe ' + template
+    const files = renderScaffold({
+        name: 'probe-' + template,
+        pluginKey: 'probe-' + template,
+        displayName: title,
+        template,
+    })
+    const dir = join(templatesRoot, template)
+    await writeScaffold(dir, files)
+
+    const manifest = JSON.parse(files['package.json'])
+    check(`template ${template}: manifest records the template`, manifest.knPluginStudio.template === template)
+    check(`template ${template}: writes an entry and a README`, 'src/index.tsx' in files && 'README.md' in files)
+
+    const builtTemplate = await buildPlugin({
+        root: dir,
+        entry: join(dir, 'src/index.tsx'),
+        pluginKey: 'probe-' + template,
+        name: title,
+    })
+    check(`template ${template}: builds as-is`, builtTemplate.ok, (builtTemplate.errors || []).join(' | '))
+
+    const registeredTemplate = builtTemplate.ok ? runBundle(builtTemplate.code) : []
+    check(
+        `template ${template}: registers a KPlugin instance`,
+        registeredTemplate.length === 1
+            && Object.values(registeredTemplate[0]?.exports || {}).some((value) => value && value.name === title),
+        Object.keys(registeredTemplate[0]?.exports || {}).join(','),
+    )
+}
+
+let unknownTemplate = ''
+try {
+    renderScaffold({ name: 'x', pluginKey: 'x', displayName: 'X', template: 'not-a-template' })
+} catch (error) {
+    unknownTemplate = error.message
+}
+check(
+    'template: unknown rejected with the list',
+    /not-a-template/.test(unknownTemplate) && SCAFFOLD_TEMPLATES.every((name) => unknownTemplate.includes(name)),
+    unknownTemplate,
+)
+await rm(templatesRoot, { recursive: true, force: true })
+
+/* ------------------------------------------------------------------ *
+ * 1c. Declared externals resolve to host globals instead of being bundled
+ * ------------------------------------------------------------------ */
+check(
+    'externals: scope dropped for the host name',
+    hostNameForExternal('@scope/pkg') === 'pkg'
+        && hostNameForExternal('@kn/chart') === 'chart'
+        && hostNameForExternal('lodash') === 'lodash',
+)
+
+const externalsRoot = join(tmpdir(), 'kn-studio-bundler-externals')
+await rm(externalsRoot, { recursive: true, force: true })
+await mkdir(join(externalsRoot, 'src'), { recursive: true })
+await writeFile(
+    join(externalsRoot, 'package.json'),
+    JSON.stringify({ name: 'externals-plugin', knPluginStudio: { pluginKey: 'externals-plugin', entry: 'src/index.tsx' } }),
+)
+const writeExternalsIndex = (source) => writeFile(join(externalsRoot, 'src', 'index.tsx'), source)
+
+await writeExternalsIndex(`
+import { KPlugin } from '@kn/common'
+import SomeLib from 'SomeLib'
+import { helper } from '@scope/pkg'
+
+export const probe = new KPlugin({ name: 'Externals', status: 'ACTIVE' })
+export const fromNamespace = SomeLib.tag
+export const fromGlobal = helper()
+`)
+
+const externalsBuilt = await buildPlugin({
+    root: externalsRoot,
+    entry: join(externalsRoot, 'src/index.tsx'),
+    pluginKey: 'externals-plugin',
+    name: 'Externals',
+    externals: ['SomeLib', '@scope/pkg'],
+})
+check('externals: build succeeds with declared externals', externalsBuilt.ok, (externalsBuilt.errors || []).join(' | '))
+check(
+    'externals: not bundled into the output',
+    externalsBuilt.ok && !externalsBuilt.code.includes('SomeLib = {') && externalsBuilt.code.includes('__KNNAME__SomeLib'),
+)
+
+const externalsRuns = runBundle(externalsBuilt.code, {
+    namespace: { SomeLib: { tag: 'ns' } },
+    globals: { pkg: { helper: () => 'global' } },
+})
+const externalsExports = externalsRuns[0]?.exports || {}
+check('externals: resolved from the host namespace', externalsExports.fromNamespace === 'ns', String(externalsExports.fromNamespace))
+check('externals: falls back to the window global', externalsExports.fromGlobal === 'global', String(externalsExports.fromGlobal))
+
+/* A declared external the host does not publish degrades to `{}` — loudly, so
+ * the console points at the missing host module instead of failing later. */
+await writeExternalsIndex(`
+import { KPlugin } from '@kn/common'
+import Gone from 'Gone'
+
+export const probe = new KPlugin({ name: 'Externals', status: 'ACTIVE' })
+export const keys = Object.keys(Gone).length
+`)
+const missingBuilt = await buildPlugin({
+    root: externalsRoot,
+    entry: join(externalsRoot, 'src/index.tsx'),
+    pluginKey: 'externals-plugin',
+    name: 'Externals',
+    externals: ['Gone'],
+})
+const warnings = []
+runBundle(missingBuilt.code, {
+    console: { warn: (message) => warnings.push(message), error() {}, log() {} },
+})
+check(
+    'externals: a missing module warns exactly once',
+    warnings.filter((message) => message.includes('Gone')).length === 1,
+    JSON.stringify(warnings),
+)
+await rm(externalsRoot, { recursive: true, force: true })
 
 /* ------------------------------------------------------------------ *
  * 2. build failure is reported, not thrown
