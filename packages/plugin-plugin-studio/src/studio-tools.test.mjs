@@ -261,7 +261,7 @@ const marketplace = {
         return { id: 12 }
     },
     async publishVersion(id, input) {
-        calls.push(['publishVersion', { id }])
+        calls.push(['publishVersion', { id, input }])
         return { id }
     },
     async upgrade(versionId) {
@@ -668,6 +668,7 @@ check(
 )
 
 /* An explicit, already-uploaded path is respected as-is. */
+const uploadsBeforeExplicit = calls.filter(([name]) => name === 'uploadArtifact').length
 const explicitIcon = await tools.publishPluginProject.execute({
     root: ROOT,
     version: '2.0.1',
@@ -677,8 +678,54 @@ const explicitIcon = await tools.publishPluginProject.execute({
 check(
     'publish: an explicit icon path skips the upload',
     explicitIcon.icon === 'oss/uploaded-by-hand.png'
-        && calls.filter(([name]) => name === 'uploadArtifact').length === uploadsBefore + 3,
+        && calls.filter(([name]) => name === 'uploadArtifact').length === uploadsBeforeExplicit + 1,
     JSON.stringify({ icon: explicitIcon.icon, uploads: calls.filter(([name]) => name === 'uploadArtifact').length }),
+)
+
+/* Upgrading an existing plugin may rebrand it: the version carries the icon too. */
+const uploadsBeforeVersion = calls.filter(([name]) => name === 'uploadArtifact').length
+const iconUploadsBeforeVersion = calls
+    .filter(([name]) => name === 'uploadArtifact')
+    .map(([, args]) => args)
+    .filter((args) => args.type === 'image/svg+xml').length
+const versionedWithIcon = await tools.publishPluginProject.execute({
+    root: ROOT,
+    version: '2.1.0',
+    pluginId: 11,
+})
+const versionCall = calls.filter(([name]) => name === 'publishVersion').pop()?.[1]
+const iconUploadsAfterVersion = calls
+    .filter(([name]) => name === 'uploadArtifact')
+    .map(([, args]) => args)
+    .filter((args) => args.type === 'image/svg+xml').length
+check(
+    'version: uploads the project icon as an image',
+    versionedWithIcon.mode === 'version'
+        && iconUploadsAfterVersion === iconUploadsBeforeVersion + 1
+        && calls.filter(([name]) => name === 'uploadArtifact').length === uploadsBeforeVersion + 2,
+    JSON.stringify({ mode: versionedWithIcon.mode, icon: versionedWithIcon.icon, uploads: iconUploadsAfterVersion }),
+)
+check(
+    'version: the new version carries the replacement icon',
+    versionCall?.input?.icon === 'plugins/icon.svg'
+        && versionCall?.id === 11
+        && versionedWithIcon.icon === 'plugins/icon.svg',
+    JSON.stringify({ id: versionCall?.id, icon: versionCall?.input?.icon }),
+)
+
+/* Without a declared icon a version publish must not invent one. */
+const iconlessRoot = '/managed/plain-plugin'
+files.set(
+    `${iconlessRoot}/package.json`,
+    JSON.stringify({ name: 'plain-plugin', knPluginStudio: { pluginKey: 'plain-plugin' } }),
+)
+const versionCallsBefore = calls.filter(([name]) => name === 'publishVersion').length
+await tools.publishPluginProject.execute({ root: iconlessRoot, version: '1.0.1', pluginId: 12 })
+const iconlessCall = calls.filter(([name]) => name === 'publishVersion')[versionCallsBefore]?.[1]
+check(
+    'version: no declared icon means no icon in the payload',
+    iconlessCall?.input?.icon === undefined && iconlessCall?.input?.version === '1.0.1',
+    JSON.stringify(iconlessCall?.input),
 )
 
 /* ------------------------------------------------------------------ *

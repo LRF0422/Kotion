@@ -298,6 +298,20 @@ publishPluginProject({ root, version })
 - 已经有设计好的图？把 `knPluginStudio.icon` 直接指向那个文件即可，发布时同样会自动上传；
   已经手工上传过的也可以用 `publishPluginProject({ icon: '<已上传路径>' })` 显式指定。
 
+### 升版也能换图标
+
+图标不是"上架时定死"的：**发布新版本可以换图标**，链路上四段都改了。
+
+| 层 | 改动 |
+| --- | --- |
+| 后端 | `PluginVersionPublishDTO` 增加 `icon`（可选，≤512，走与上架相同的对象路径校验）；`createVersionInternal` 把**生效图标**记在候选版本上（省略 = 继承插件当前图标）；审批通过时把版本的图标提升到插件（`icon`/`iconMd`/`iconLg`/`iconXl` 四个槽位）——**版本审核通过前市场看到的仍是旧图标** |
+| 契约 | `PluginVersionInput` 增加 `icon?`（`@kn/common`） |
+| 宿主 UI | "发布新版本"对话框新增图标选择（PNG/JPEG、≤2 MB、正方形、≥120×120），显示"当前 vs 待替换"并可一键恢复；`openPublisher` 的 prefill 会把调用方已上传的图标带进去 |
+| 开发台 | `publishPluginProject` 升版模式同样上传并下发图标（清单没有图标就**不带该字段**，绝不凭空造）；面板发布也会先把工程图标上传好再交给向导 |
+
+顺带修掉一个错：`uploadArtifact` 以前把**所有**上传都强制标成 `text/javascript`，
+图标（`image/svg+xml`）会被错误标记；现在沿用调用方 Blob 的类型。
+
 ## 打包分发
 
 开发台的构建产物就是标准插件 UMD 包：
@@ -327,13 +341,15 @@ pnpm test:plugin-dev:electron
 | `project-files.test.mjs` | 10 | 工程文件枚举/搜索/过滤、跳过 node_modules、截断上报 |
 | `package-install.test.mjs` | 20 | 包名/版本校验、管理器探测、argv 构造、假 spawn 安装 |
 | `tailwind.test.mjs` | 12 | 用宿主配置编译插件工具类、去除 @keyframes、空工程 |
-| `studio-tools.test.mjs` | 176 | **agent 工具面**：名称/描述/schema、create→write→run→build→list→stop 的每次能力调用、**模板与 externals 透传和校验**、**删除工程与自卸载**、**删单个文件与「未读不许删」**、**service 发现（提供者归属/过滤/无注册表兜底）**、**产物聚焦（含 focus:false 与坏预览不拖垮构建）**、失败装订、缺能力提示、失败不装旧产物、**只读发现可以、注册表管理不在** |
+| `studio-tools.test.mjs` | 179 | **agent 工具面**：名称/描述/schema、create→write→run→build→list→stop 的每次能力调用、**模板与 externals 透传和校验**、**删除工程与自卸载**、**删单个文件与「未读不许删」**、**service 发现（提供者归属/过滤/无注册表兜底）**、**产物聚焦（含 focus:false 与坏预览不拖垮构建）**、失败装订、缺能力提示、失败不装旧产物、**只读发现可以、注册表管理不在** |
 | `surface.test.mjs` | 31 | **产物声明**：mapper 与工具面一致、kind 与预览一致、构建/发布/工程/图标的 payload、失败不产生产物、id 稳定（同工程重建/重生成只占一格）、`focusArtifact` 无 payload 路径、垃圾输入不抛 |
 | `icon-art.test.mjs` | 30 | **图标**：同插件同图、关键词/显式字形/首字母兜底、配色哈希与显式色、SVG 自包含与转义、栏位片段、只改该改的文件（不动手写图标、兼容 legacy `knPlugin` 块）、清单读取与 mime/可上传判断 |
 | `studio.smoke.mjs` | 50 | 真实 `PluginManager.installPluginFromSource` + Blob URL + 真实 loader；热更替换、单实例、坏代码不中断、恢复；**内置目录建工程、五个模板都能构建、删除工程、工程内删文件**；**产物管线（mapper 按工具名注册、卡片/预览贡献、产物架从 transcript 派生）**、**把活的插件面板真的渲染成 markup**、**真实 ServiceRegistry 把服务归属到插件** |
 | `electron.smoke.mjs` | 36 | 真实 preload 能力白名单、`dev.*` IPC（含 `dev.remove` / `dev.deleteFile`）、`ELECTRON_RUN_AS_NODE` 子进程、`desktop:event:dev` 推送、**无对话框 scaffold + 模板 + list + 读写/删除文件**、越界路径拒绝 |
 
-`pnpm test:plugin-dev` 合计 433 项检查；`pnpm test:plugin-dev:electron` 另有 36 项（需要先构建出 `out/preload/index.js`）。
+`pnpm test:plugin-dev` 合计 436 项检查
+后端（`backend/knowledgecloud`）：`mvn -o -pl knowledge-service/knowledge-wiki -am -Dtest=PluginApplicationTest test` —— 20 项，覆盖「升版带新图标记在版本上 / 不带则继承 / 审批通过后提升到插件」。
+；`pnpm test:plugin-dev:electron` 另有 36 项（需要先构建出 `out/preload/index.js`）。
 
 ## 能力清单（`desktop.dev.*`）
 

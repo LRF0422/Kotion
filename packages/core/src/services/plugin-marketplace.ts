@@ -53,7 +53,10 @@ export const createPluginMarketplaceService = (): PluginMarketplaceService => ({
         return asArray<PluginMarketplaceInstalled>((response as { data?: unknown })?.data)
     },
     async uploadArtifact({ fileName, data }) {
-        const file = new File([data], fileName, { type: 'text/javascript' })
+        // Keep the caller's content type: the same endpoint carries the bundle
+        // (text/javascript) and the plugin's icon (image/svg+xml, …). Forcing
+        // `text/javascript` on an image made the stored object mislabelled.
+        const file = new File([data], fileName, { type: data.type || 'text/javascript' })
         const response = await useApi(
             APIS.UPLOAD_PLUGIN_FILE,
             null,

@@ -61,6 +61,13 @@ class PluginApplicationTest {
     private IInstalledPluginService installedPluginService;
     @Mock
     private IPluginRatingService pluginRatingService;
+    /**
+     * `requirePublishEntitlement()` runs before every publish path; without this
+     * mock the gate field stays null and every version-publish test dies with an
+     * NPE instead of exercising the code under test.
+     */
+    @Mock
+    private com.knowledge.core.entitlement.EntitlementGate entitlementGate;
     @InjectMocks
     private PluginApplication application;
 
@@ -130,6 +137,97 @@ class PluginApplicationTest {
         assertEquals(PluginStatus.PENDING, candidate.getValue().getReviewStatus());
         assertEquals(PluginStatus.DONE, plugin.getStatus());
         verify(pluginService, never()).updateById(any(Plugin.class));
+    }
+
+    @Test
+    void laterVersionCanCarryANewIcon() {
+        authenticate(42L, "user");
+        Plugin plugin = new Plugin();
+        plugin.setId(7L);
+        plugin.setDeveloperId(42L);
+        plugin.setStatus(PluginStatus.DONE);
+        plugin.setIcon("oss/icons/old.svg");
+        PluginVersion active = new PluginVersion();
+        active.setId(8L);
+        active.setSubjectId(7L);
+        active.setVersion("1.0.0");
+        active.setStatus(VersionStatus.ACTIVE);
+
+        when(pluginService.getById(7L)).thenReturn(plugin);
+        when(pluginService.getByIdForUpdate(7L)).thenReturn(plugin);
+        when(pluginVersionService.getPendingVersion(7L)).thenReturn(null);
+        when(pluginVersionService.getRejectedCandidate(7L)).thenReturn(null);
+        when(pluginVersionService.versionExists(7L, "1.1.0", null)).thenReturn(false);
+        when(pluginVersionService.getCurrentActiveVersion(7L)).thenReturn(active);
+        when(pluginVersionService.save(any(PluginVersion.class))).thenReturn(true);
+        when(pluginTagService.listTagContents(7L)).thenReturn(Collections.emptyList());
+
+        PluginVersionPublishDTO dto = version("1.1.0");
+        dto.setIcon("oss/icons/new.svg");
+        application.publishVersion(7L, dto);
+
+        ArgumentCaptor<PluginVersion> candidate = ArgumentCaptor.forClass(PluginVersion.class);
+        verify(pluginVersionService).save(candidate.capture());
+        assertEquals("oss/icons/new.svg", candidate.getValue().getIcon());
+        // The plugin itself only changes once the version is approved.
+        assertEquals("oss/icons/old.svg", plugin.getIcon());
+    }
+
+    @Test
+    void laterVersionWithoutAnIconKeepsTheCurrentOne() {
+        authenticate(42L, "user");
+        Plugin plugin = new Plugin();
+        plugin.setId(7L);
+        plugin.setDeveloperId(42L);
+        plugin.setStatus(PluginStatus.DONE);
+        plugin.setIcon("oss/icons/old.svg");
+        PluginVersion active = new PluginVersion();
+        active.setId(8L);
+        active.setSubjectId(7L);
+        active.setVersion("1.0.0");
+        active.setStatus(VersionStatus.ACTIVE);
+
+        when(pluginService.getById(7L)).thenReturn(plugin);
+        when(pluginService.getByIdForUpdate(7L)).thenReturn(plugin);
+        when(pluginVersionService.getPendingVersion(7L)).thenReturn(null);
+        when(pluginVersionService.getRejectedCandidate(7L)).thenReturn(null);
+        when(pluginVersionService.versionExists(7L, "1.1.0", null)).thenReturn(false);
+        when(pluginVersionService.getCurrentActiveVersion(7L)).thenReturn(active);
+        when(pluginVersionService.save(any(PluginVersion.class))).thenReturn(true);
+        when(pluginTagService.listTagContents(7L)).thenReturn(Collections.emptyList());
+
+        application.publishVersion(7L, version("1.1.0"));
+
+        ArgumentCaptor<PluginVersion> candidate = ArgumentCaptor.forClass(PluginVersion.class);
+        verify(pluginVersionService).save(candidate.capture());
+        assertEquals("oss/icons/old.svg", candidate.getValue().getIcon());
+    }
+
+    @Test
+    void approvingAVersionPromotesItsIconToThePlugin() {
+        authenticate(1L, "admin");
+        Plugin plugin = plugin(7L, PluginStatus.DONE);
+        plugin.setIcon("oss/icons/old.svg");
+        PluginVersion active = pluginVersion(8L, 7L, "1.0.0", VersionStatus.ACTIVE, PluginStatus.DONE);
+        PluginVersion candidate = pluginVersion(9L, 7L, "1.1.0", VersionStatus.PENDING, PluginStatus.IN_PROGRESS);
+        candidate.setResourcePath("plugins/example-1.1.0.js");
+        candidate.setIntegrity("sha384-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+        candidate.setIcon("oss/icons/new.svg");
+        LambdaUpdateChainWrapper<PluginVersion> versionUpdate = successfulVersionUpdate();
+
+        when(pluginService.getById(7L)).thenReturn(plugin);
+        when(pluginVersionService.getPendingVersion(7L)).thenReturn(candidate, null);
+        when(pluginVersionService.getCurrentActiveVersion(7L)).thenReturn(active, candidate);
+        when(pluginVersionService.lambdaUpdate()).thenReturn(versionUpdate);
+        when(pluginVersionService.getRejectedCandidate(7L)).thenReturn(null);
+        when(pluginTagService.listTagContents(7L)).thenReturn(Collections.emptyList());
+
+        application.review(7L, review(PluginReviewDecision.APPROVE));
+
+        assertEquals("oss/icons/new.svg", plugin.getIcon());
+        assertEquals("oss/icons/new.svg", plugin.getIconMd());
+        assertEquals("oss/icons/new.svg", plugin.getIconLg());
+        assertEquals("oss/icons/new.svg", plugin.getIconXl());
     }
 
     @Test

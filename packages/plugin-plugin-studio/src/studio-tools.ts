@@ -921,7 +921,9 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
     publishPluginProject: {
         description:
             '把插件工程构建并发布到插件市场：先构建，再上传产物；新插件走“上架”（提交审核，不传 pluginId），' +
-            '已上架插件走“发布新版本”（传 pluginId，来自 listMyPlugins）。',
+            '已上架插件走“发布新版本”（传 pluginId，来自 listMyPlugins）。' +
+            '两种模式都会带上工程的图标（清单里的 knPluginStudio.icon，用 generatePluginIcon 生成）——' +
+            '升版时可以借它改图标，图标在版本审核通过后才对市场生效。',
         inputSchema: {
             type: 'object',
             properties: {
@@ -936,7 +938,11 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
                 description: { type: 'string', description: '插件描述（上架新插件必填，至少 10 字）。' },
                 category: { type: 'string', enum: ['APP', 'FEATURE', 'CONNECTOR'], description: '分类，默认 FEATURE。' },
                 tags: { type: 'array', items: { type: 'string' }, description: '可选标签，1-5 个。' },
-                icon: { type: 'string', description: '可选图标：已上传的资源路径；省略时自动上传清单里的 knPluginStudio.icon 文件（见 generatePluginIcon）。' },
+                icon: {
+                    type: 'string',
+                    description:
+                        '可选图标：已上传的资源路径；省略时自动上传清单里的 knPluginStudio.icon 文件（见 generatePluginIcon）。上架与升版都会用它。',
+                },
                 permissions: { type: 'array', items: { type: 'string' }, description: '可选能力声明，如 NETWORK / DESKTOP。' },
                 versionDescs: {
                     type: 'array',
@@ -1020,6 +1026,10 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
                     version: args.version,
                     resourcePath: uploaded.resourcePath,
                     integrity: uploaded.integrity,
+                    // A version may rebrand the plugin; the server keeps the
+                    // current icon when this is absent, and only shows the new
+                    // one once the version is approved.
+                    ...(icon ? { icon } : {}),
                     versionDescs: args.versionDescs,
                 })
                 return {
@@ -1029,6 +1039,7 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
                     version: args.version,
                     resourcePath: uploaded.resourcePath,
                     buildCount: status.buildCount,
+                    ...(icon ? { icon } : {}),
                     iconNote,
                 }
             }

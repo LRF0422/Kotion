@@ -29,6 +29,16 @@ public class PluginVersionPublishDTO implements Serializable {
     @Pattern(regexp = "^sha384-[A-Za-z0-9+/]{64}$", message = "资源完整性哈希必须是sha384 SRI格式")
     private String integrity;
 
+    /**
+     * Optional replacement icon for the plugin (an uploaded object path).
+     *
+     * A version may rebrand: leaving it blank keeps the plugin's current icon.
+     * Either way the candidate records the effective icon, and approval promotes
+     * it to the plugin — that is when it becomes visible in the catalogue.
+     */
+    @Size(max = 512, message = "图标路径长度不能超过512")
+    private String icon;
+
     @Size(max = 20, message = "能力声明不能超过20项")
     private List<String> permissions;
 

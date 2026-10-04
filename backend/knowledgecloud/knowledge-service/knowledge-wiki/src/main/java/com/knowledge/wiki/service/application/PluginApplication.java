@@ -651,6 +651,11 @@ public class PluginApplication {
         dto.setIntegrity(requireIntegrity ? PluginSubmissionValidator.requireIntegrity(dto.getIntegrity())
                 : StrUtil.trim(dto.getIntegrity()));
         dto.setPermissions(PluginSubmissionValidator.normalizePermissions(dto.getPermissions()));
+        // A version may republish the icon. Blank means "keep the current one",
+        // so the candidate always records the icon the version WILL have and
+        // approval can simply promote it (see approve()).
+        dto.setIcon(PluginSubmissionValidator.optionalObjectPath(dto.getIcon()));
+        String versionIcon = StrUtil.isNotBlank(dto.getIcon()) ? dto.getIcon() : plugin.getIcon();
         PluginSubmissionValidator.validateVersionDescriptions(dto.getVersionDescs());
         PluginVersion candidate = pluginVersionService.getRejectedCandidate(plugin.getId());
         assertVersionAvailable(plugin.getId(), dto.getVersion(), candidate == null ? null : candidate.getId());
@@ -659,6 +664,7 @@ public class PluginApplication {
         if (candidate == null) {
             candidate = candidate(plugin.getId(), dto.getVersion(), dto.getResourcePath(),
                     dto.getIntegrity(), dto.getPermissions(), dto.getVersionDescs());
+            applyVersionIcon(candidate, versionIcon);
             saveCandidate(candidate);
         } else {
             candidate.setVersion(dto.getVersion());
@@ -666,11 +672,22 @@ public class PluginApplication {
             candidate.setIntegrity(dto.getIntegrity());
             candidate.setPermissions(dto.getPermissions());
             candidate.setVersionDescription(dto.getVersionDescs());
+            applyVersionIcon(candidate, versionIcon);
             candidate.setStatus(VersionStatus.PENDING);
             candidate.setReviewStatus(PluginStatus.PENDING);
             clearReviewAudit(candidate.getId());
             pluginVersionService.updateById(candidate);
         }
+    }
+
+    /**
+     * The version's icon.
+     *
+     * The version entity stores one icon; the plugin keeps four slots (see
+     * {@link #applySubmission}), which approval fills from this single value.
+     */
+    private void applyVersionIcon(PluginVersion version, String icon) {
+        version.setIcon(icon);
     }
 
     private void startReview(Plugin plugin, String reason) {
@@ -796,6 +813,15 @@ public class PluginApplication {
             active.setStatus(VersionStatus.IN_ACTIVE);
             pluginVersionService.updateById(active);
             candidate.setLastVersionId(active.getId());
+        }
+        // Approval is where a new version's icon reaches the catalogue: the
+        // listing shows the plugin, so the plugin takes the version's icon (the
+        // candidate always carries the effective one — see createVersionInternal).
+        if (StrUtil.isNotBlank(candidate.getIcon())) {
+            plugin.setIcon(candidate.getIcon());
+            plugin.setIconMd(candidate.getIcon());
+            plugin.setIconLg(candidate.getIcon());
+            plugin.setIconXl(candidate.getIcon());
         }
         candidate.setStatus(VersionStatus.ACTIVE);
         candidate.setReviewStatus(PluginStatus.DONE);

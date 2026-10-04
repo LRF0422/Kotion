@@ -69,6 +69,13 @@ export interface PluginVersionInput {
     version: string
     resourcePath: string
     integrity?: string
+    /**
+     * Replacement icon for the plugin (an uploaded object path).
+     *
+     * A version may rebrand: omit it to keep the plugin's current icon. The icon
+     * only becomes visible in the catalogue once the version is approved.
+     */
+    icon?: string | null
     versionDescs?: PluginVersionDescriptionInput[]
 }
 

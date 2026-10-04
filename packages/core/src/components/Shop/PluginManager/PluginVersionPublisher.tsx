@@ -28,6 +28,7 @@ import { CollaborationEditor } from '@kn/editor'
 import { useTranslation } from '@kn/common'
 
 import { hasDocumentationContent } from '../plugin-model'
+import { pickImageFile, validateIcon } from '../PluginUploader/icon-file'
 
 interface PluginVersion {
     label: string
@@ -50,6 +51,11 @@ export interface PluginVersionPublisherProps {
     pluginId?: string | number
     /** Artifact already uploaded by the caller (dev build). */
     initialArtifact?: { resourcePath: string; integrity?: string }
+    /**
+     * Icon already uploaded by the caller (e.g. the studio generated one).
+     * Shown as the pending icon so a version can rebrand the plugin.
+     */
+    initialIcon?: string | null
     onPublished?: () => void
 }
 
@@ -106,14 +112,18 @@ export const PluginVersionPublisher: React.FC<PluginVersionPublisherProps> = ({
     onOpenChange,
     pluginId,
     initialArtifact,
+    initialIcon,
     onPublished,
 }) => {
     const { t } = useTranslation()
-    const { usePath, uploadPluginFile } = useUploadFile()
+    const { usePath, uploadPluginFile, uploadFile } = useUploadFile()
 
     const [plugin, setPlugin] = useState<PluginRecord | undefined>()
     const [file, setFile] = useState<{ name: string; originalName: string; integrity?: string } | undefined>()
     const [version, setVersion] = useState('1.0.0')
+    /** Pending icon for this version; undefined means "keep the current one". */
+    const [icon, setIcon] = useState<string | undefined>(initialIcon ?? undefined)
+    const [iconUploading, setIconUploading] = useState(false)
     const [descriptions, setDescriptions] = useState<PluginVersion[]>(DEFAULT_DESCRIPTIONS)
     const [activeTab, setActiveTab] = useState('Feature')
     const [addingTab, setAddingTab] = useState(false)
@@ -131,6 +141,7 @@ export const PluginVersionPublisher: React.FC<PluginVersionPublisherProps> = ({
                 ? { name: initialArtifact.resourcePath, originalName: 'bundle.js', integrity: initialArtifact.integrity }
                 : undefined,
         )
+        setIcon(initialIcon ?? undefined)
         useApi(APIS.GET_PLUGIN, { id: pluginId })
             .then((res: any) => {
                 if (cancelled) return
@@ -153,7 +164,32 @@ export const PluginVersionPublisher: React.FC<PluginVersionPublisherProps> = ({
         return () => {
             cancelled = true
         }
-    }, [open, pluginId, initialArtifact])
+    }, [open, pluginId, initialArtifact, initialIcon])
+
+    /**
+     * Pick + upload a replacement icon for this version.
+     *
+     * Same rules as the submit wizard (`icon-file`): PNG/JPEG, ≤2 MB, square,
+     * ≥120×120. The version dialog only had the *current* icon before, so
+     * rebranding required a whole re-submission.
+     */
+    const handleChooseIcon = useCallback(async () => {
+        const selected = await pickImageFile()
+        if (!selected) return
+        setIconUploading(true)
+        try {
+            await validateIcon(selected)
+            const uploaded = await uploadFile(selected)
+            setIcon(uploaded?.name || undefined)
+        } catch (error: any) {
+            const key = ['iconType', 'iconSize', 'iconSquare', 'iconDimensions'].includes(error?.message)
+                ? `pluginUploader.validation.${error.message}`
+                : 'pluginUploader.toast.iconUploadFailed'
+            toast.error(t(key))
+        } finally {
+            setIconUploading(false)
+        }
+    }, [t, uploadFile])
 
     const handleAddTab = useCallback(() => {
         const label = newTabName.trim()
@@ -218,6 +254,9 @@ export const PluginVersionPublisher: React.FC<PluginVersionPublisherProps> = ({
                 version,
                 resourcePath: file.name,
                 integrity: file.integrity,
+                // Only send it when it actually changes: an absent icon means
+                // "keep the current one" on the server.
+                ...(icon && icon !== plugin?.icon ? { icon } : {}),
                 versionDescs,
             })
             toast.success(t('pluginManager.publishSuccess'))
@@ -229,7 +268,7 @@ export const PluginVersionPublisher: React.FC<PluginVersionPublisherProps> = ({
         } finally {
             setPublishing(false)
         }
-    }, [pluginId, file, version, descriptions, onOpenChange, onPublished, t])
+    }, [pluginId, file, version, descriptions, icon, plugin?.icon, onOpenChange, onPublished, t])
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -267,6 +306,41 @@ export const PluginVersionPublisher: React.FC<PluginVersionPublisherProps> = ({
                             placeholder="1.0.0"
                             className="font-mono"
                         />
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label className="flex items-center gap-2">
+                            {t('pluginManager.icon')}
+                            <span className="text-xs text-muted-foreground">({t('pluginManager.optional')})</span>
+                        </Label>
+                        <div className="flex items-center gap-2">
+                            <Avatar className="h-10 w-10 shrink-0 rounded-md">
+                                <img src={usePath(icon || plugin?.icon || '')} alt={plugin?.name || ''} />
+                            </Avatar>
+                            <Button variant="outline" disabled={loading || iconUploading} onClick={handleChooseIcon}>
+                                {iconUploading ? (
+                                    <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
+                                ) : (
+                                    <UploadIcon className="mr-2 h-4 w-4" />
+                                )}
+                                {t('pluginUploader.fields.iconUpload')}
+                            </Button>
+                            {icon && icon !== plugin?.icon ? (
+                                <Button
+                                    variant="ghost"
+                                    className="text-muted-foreground"
+                                    onClick={() => setIcon(undefined)}
+                                >
+                                    <XIcon className="mr-2 h-4 w-4" />
+                                    {t('pluginUploader.fields.iconRevert')}
+                                </Button>
+                            ) : null}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                            {icon && icon !== plugin?.icon
+                                ? t('pluginManager.iconWillChange')
+                                : t('pluginManager.iconKeepCurrent')}
+                        </p>
                     </div>
 
                     <div className="space-y-2">

@@ -66,6 +66,7 @@ export const pluginAuthoringSkill = {
         "## 上架 / 发布 / 升级",
         "- 发布前先 listMyPlugins 拿 pluginId（新插件可省略）；版本号用语义化 1.2.3。",
         "- publishPluginProject({ root, version, pluginId? })：先构建、再上传产物；不含 pluginId 即“上架”（提交审核），含则“发布新版本”。",
+        "- 图标两种模式都会自动带上（读清单的 knPluginStudio.icon）：**升版也可以换图标**——先 generatePluginIcon 生成新图，再发布新版本即可。新图标要等版本审核通过才对市场生效（图标先记在版本上，通过时才替换插件当前的图标）。",
         "- upgradePluginVersion({ versionId })：把已安装插件升级到市场里的目标版本。",
         "",
         "## 第三方依赖、宿主全局与 Tailwind",

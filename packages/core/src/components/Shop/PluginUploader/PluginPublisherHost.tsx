@@ -56,6 +56,9 @@ export const PluginPublisherHost: React.FC = () => {
                 }}
                 pluginId={request.pluginId}
                 initialArtifact={request.artifact}
+                // A caller that already uploaded an icon (the studio generates
+                // one) offers it as this version's icon, so升版 can rebrand.
+                initialIcon={request.prefill?.icon ?? undefined}
                 onPublished={close}
             />
         )

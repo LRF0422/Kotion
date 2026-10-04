@@ -8,6 +8,7 @@
  */
 import { useCallback } from 'react'
 import { useDevCapability, useMarketplace } from './studio-service'
+import { iconMimeType, isUploadableIcon, readDeclaredIcon } from './icons/icon-art'
 
 export interface PublishProjectInput {
     root?: string
@@ -23,6 +24,7 @@ export const usePublishProject = () => {
             if (!capability) throw new Error('插件开发台不可用：当前宿主缺少 dev.* 能力')
             if (!marketplace) throw new Error('宿主未注册 pluginMarketplace 服务，无法发布')
             if (!input.root) throw new Error('请先选择一个插件工程')
+            const root = input.root.replace(/[\\/]+$/, '')
             const status = await capability.dev.build({ root: input.root })
             if (!status.build?.code) {
                 throw new Error(status.error ?? '构建失败，没有可发布的产物')
@@ -31,6 +33,34 @@ export const usePublishProject = () => {
                 fileName: (input.pluginKey || status.plugin.pluginKey || 'index') + '.js',
                 data: new Blob([status.build.code], { type: 'text/javascript' }),
             })
+
+            /**
+             * The project's icon, when it has one.
+             *
+             * Uploaded here so BOTH flows can carry it: a brand-new submission
+             * needs it, and a new version may now replace the plugin's icon as
+             * well — the host dialog shows it as the pending icon, and the
+             * studio's agent tool sends it on publishVersion.
+             */
+            let icon: string | undefined
+            try {
+                const manifest = await capability.dev.readFile({ path: `${root}/package.json` })
+                const declared = readDeclaredIcon(manifest)
+                if (isUploadableIcon(declared) && declared) {
+                    const svg = await capability.dev.readFile({
+                        path: `${root}/${declared.replace(/^[\\/]+/, '')}`,
+                    })
+                    const fileName = declared.split(/[\\/]/).pop() || 'icon.svg'
+                    const uploadedIcon = await marketplace.uploadArtifact({
+                        fileName,
+                        data: new Blob([svg], { type: iconMimeType(fileName) }),
+                    })
+                    icon = uploadedIcon.resourcePath
+                }
+            } catch {
+                // Publishing without an icon is fine; the wizard can still upload one.
+            }
+
             const mine = await marketplace.listMine().catch(() => [])
             const listed = input.pluginKey
                 ? mine.find((entry) => entry.pluginKey === input.pluginKey)
@@ -41,6 +71,7 @@ export const usePublishProject = () => {
                     name: input.name || status.plugin.name,
                     pluginKey: input.pluginKey || status.plugin.pluginKey,
                     version: '1.0.0',
+                    icon,
                 },
                 artifact: uploaded,
             })
