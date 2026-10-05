@@ -45,8 +45,16 @@ public class PluginVersion extends BaseVersion {
     @TableField(typeHandler = VersionDescListTypeHandler.class)
     private List<VersionDesc> versionDescription;
 
-    @TableField(exist = false)
+    /**
+     * Icon this version carries (an uploaded object path).
+     *
+     * A published version may rebrand the plugin: the icon is reviewed WITH the
+     * version and promoted to the plugin on approval (see
+     * {@code PluginApplication#approve}). Persisted — it used to be a
+     * display-only field, which silently dropped every write.
+     */
     private String icon;
+
     @TableField(exist = false)
     private String name;
     @TableField(exist = false)
