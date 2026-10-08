@@ -387,6 +387,50 @@ html[data-ui-style="modern"] #root {
   }
 }
 
+/* ---------------------------------------------------------------------------
+ * Shell title band — host chrome, hardened against runtime-injected CSS.
+ *
+ * The desktop window is frameless ('hiddenInset'), so macOS paints the native
+ * traffic lights over the top-left of the page. The band is not decoration: its
+ * height is what keeps the app menu / capture controls clear of those lights,
+ * and what keeps the rail and the space header out from under them.
+ *
+ * It has to survive CSS injected at runtime. Installed plugins ship their own
+ * Tailwind build and inject it *after* the host stylesheet, unlayered
+ * (packages/rollup-config runs postcssCascadeLayers, so @layer is flattened
+ * away). A plugin built against an older @kn/ui therefore carries an older copy
+ * of this theme whose
+ * `html[data-ui-style="modern"] .kn-app-shell { padding: … }` and
+ * `… .kn-shell-top-drag-region { height: var(--kn-app-shell-padding) }` outrank
+ * the host's plain rules and collapse the band to 8px: the app menu and capture
+ * buttons get cut off by the window's top edge and the space icon slides onto
+ * the green traffic light.
+ *
+ * So: unlayered, `!important` on the invariants, plus a var() fallback so an
+ * unset custom property can never compute to `height: auto` (= 0) either.
+ *
+ * `display` is pinned for the same reason and is not redundant: every theme copy
+ * made before 2026-09-24 starts with `.kn-shell-top-drag-region { display: none }`
+ * and only re-enables it for `html[data-ui-style="modern"]` / darwin (one variant
+ * even hides it again in fullscreen). Injected after the host sheet, that
+ * `display: none` wins over a plain `display: block` and removes the app menu and
+ * the capture control outright — while the padded reservation this block pins
+ * stays behind as an empty strip.
+ *
+ * Do not "clean up" the !important — it is what keeps installed plugins from
+ * moving (or hiding) the window controls' neighbourhood.
+ * ------------------------------------------------------------------------- */
+.kn-app-shell {
+  padding-top: var(--kn-titlebar-height, 40px) !important;
+}
+
+.kn-shell-top-drag-region {
+  display: block !important;
+  height: var(--kn-titlebar-height, 40px) !important;
+  /* Floor for the 28px controls the band hosts. */
+  min-height: 28px;
+}
+
 /* Tablet keeps real 44px touch targets while desktop retains the compact rail. */
 @media (min-width: 768px) and (max-width: 1023px) {
   html[data-ui-style="modern"] .kn-app-shell {
