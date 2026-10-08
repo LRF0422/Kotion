@@ -4,9 +4,10 @@
  * The icon is user-visible artwork that ends up in a marketplace listing, so the
  * things worth pinning are: it is deterministic (the same plugin always gets the
  * same image), it is valid standalone SVG (the listing renders it through
- * `<img src>`, where nothing outside the document resolves), text is escaped
- * (an unescaped `&` in a plugin name would produce a broken image), and applying
- * it touches exactly the files it claims to.
+ * `<img src>`, where nothing outside the document resolves), text is escaped and
+ * attributes never nest quotes (an unescaped `&` or a raw `"` in an attribute
+ * value produces a broken image instead of the icon), and applying it touches
+ * exactly the files it claims to.
  *
  * Run: node packages/plugin-plugin-studio/src/icons/icon-art.test.mjs
  */
@@ -26,6 +27,7 @@ import {
     renderPluginIconSvg,
     stableHash,
     suggestGlyphs,
+    writePluginIconSvg,
 } from './icon-art.ts'
 
 const results = []
@@ -65,13 +67,32 @@ check(
 check('art: an invalid colour falls back to the palette', pickColors({ seed: 'x', color: 'red' }).color.startsWith('#'))
 
 check(
-    'svg: is self-contained and well-formed',
+    'svg: is self-contained (no external refs)',
     art.svg.startsWith('<svg xmlns="http://www.w3.org/2000/svg"')
         && art.svg.includes('viewBox="0 0 512 512"')
         && art.svg.includes('<linearGradient')
         && art.svg.includes('<rect width="512" height="512"')
         && art.svg.trim().endsWith('</svg>')
         && !art.svg.includes('<image'),
+)
+
+/**
+ * Well-formedness probe for this document shape: after an attribute's closing
+ * quote must come whitespace, `/` or `>` — never a bare letter, which is what
+ * a nested quote leaves behind. `font-family=""Apple Color Emoji"…` was
+ * emitted once and made the SVG invalid XML, so the studio preview and the
+ * marketplace both showed a broken image.
+ */
+const attributesWellFormed = (svg) => !/[a-zA-Z-]+="[^"]*"[^\s/>]/.test(svg)
+check(
+    'svg: every attribute is a single quoted token (no nested quotes)',
+    attributesWellFormed(art.svg)
+        && attributesWellFormed(renderPluginIconSvg({ seed: 'gitlab' }).svg)
+        && attributesWellFormed(renderPluginIconSvg({ seed: 'a', title: 'A "quoted" & <odd> name' }).svg),
+)
+check(
+    'svg: declares the emoji font stack in single quotes',
+    art.svg.includes(`font-family="'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif"`),
 )
 check('svg: carries an accessible name', art.svg.includes('<title>Word Count</title>') && art.svg.includes('role="img"'))
 check('svg: draws the glyph', art.svg.includes(`>${art.glyph}</text>`))
@@ -205,6 +226,53 @@ try {
     refused = error.message
 }
 check('apply: refuses a directory without a manifest', /无法读取工程清单/.test(refused), refused)
+
+/* ------------------------------------------------------------------ *
+ * Applying externally designed artwork (the AI designer's output)
+ * ------------------------------------------------------------------ */
+const aiArtwork = [
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">',
+    '  <rect width="512" height="512" rx="112" fill="#6366f1"/>',
+    '  <circle cx="256" cy="256" r="96" fill="#ffffff" fill-opacity="0.9"/>',
+    '</svg>',
+].join('\n')
+
+/* Same file/manifest contract as the deterministic path, minus the rail swap. */
+reset({ name: 'ai-made', keep: true, knPluginStudio: { pluginKey: 'ai-made', displayName: 'AI Made', entry: 'src/index.tsx' } })
+const aiApplied = await writePluginIconSvg({ root: ROOT, io, svg: aiArtwork })
+const aiManifest = JSON.parse(files.get(manifestPath))
+check(
+    'ai: writes the artwork under the same file/manifest contract',
+    aiApplied.manifest.block === 'knPluginStudio'
+        && aiApplied.manifest.previous === null
+        && files.get(`${ROOT}/${PLUGIN_ICON_RELATIVE_PATH}`) === aiArtwork + '\n'
+        && aiManifest.knPluginStudio.icon === PLUGIN_ICON_RELATIVE_PATH
+        && aiManifest.knPluginStudio.pluginKey === 'ai-made'
+        && aiManifest.keep === true,
+    aiApplied.relativePath,
+)
+
+/* A legacy knPlugin block is updated where it lives, like applyPluginIcon. */
+reset({ name: 'legacy-ai', knPlugin: { pluginKey: 'legacy-ai' } }, undefined)
+const legacyAi = await writePluginIconSvg({ root: ROOT, io, svg: aiArtwork })
+check(
+    'ai: a legacy knPlugin project stays in its own block',
+    legacyAi.manifest.block === 'knPlugin'
+        && JSON.parse(files.get(manifestPath)).knPlugin.icon === PLUGIN_ICON_RELATIVE_PATH
+        && JSON.parse(files.get(manifestPath)).knPluginStudio === undefined,
+)
+check(
+    'ai: reports the icon it replaced',
+    (await writePluginIconSvg({ root: ROOT, io, svg: aiArtwork })).manifest.previous === PLUGIN_ICON_RELATIVE_PATH,
+)
+
+let refusedSvg = ''
+try {
+    await writePluginIconSvg({ root: ROOT, io, svg: '<div>not an svg</div>' })
+} catch (error) {
+    refusedSvg = error.message
+}
+check('ai: refuses an incomplete document', /图标 SVG 不完整/.test(refusedSvg), refusedSvg)
 
 /* ------------------------------------------------------------------ *
  * Publishing helpers

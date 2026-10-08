@@ -2,7 +2,7 @@
  * Plugin Studio — marketplace glue.
  *
  * The studio no longer contributes a settings panel: the publish action lives
- * on the dock's plugin rows. It builds the selected project, uploads the
+ * on the studio page's plugin rows. It builds the selected project, uploads the
  * artifact, then asks the host to open its own publish flow (the same wizard /
  * version dialog the plugin center uses) through the pluginMarketplace service.
  */

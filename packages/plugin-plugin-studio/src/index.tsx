@@ -2,8 +2,9 @@
  * Plugin Studio — a plugin that builds plugins.
  *
  * Two surfaces, one plugin:
- *  - a side-dock panel (`StudioDockPanel`) that manages the user's dev projects
- *    (start/stop, hot reload, publish) while they keep working;
+ *  - a standalone manager page (`StudioPage`) reached from the app rail's
+ *    Plugin Studio menu entry, which manages the user's dev projects
+ *    (start/stop, hot reload, publish);
  *  - a kernel agent surface — the tools that let the agent scaffold, build and
  *    hot-install a project on its own, plus the artifact contribution that makes
  *    a finished build a real, openable artifact in the conversation (see
@@ -20,17 +21,27 @@ import {
     getBoundServiceRegistry,
     openAgentArtifact,
     resolveOptionalService,
+    useTranslation,
     type AgentArtifact,
     type PluginConfig,
 } from '@kn/common'
 import { Wrench } from '@kn/icon'
 import * as KN_ICONS from '@kn/icon'
-import { StudioDockPanel } from './StudioDockPanel'
+import { StudioPage } from './StudioPage'
 import { createStudioTools } from './studio-tools'
 import * as iconArt from './icons/icon-art'
 import { STUDIO_ARTIFACT_MAPPERS } from './artifacts/surface'
 import { STUDIO_ARTIFACT_RENDERERS, STUDIO_TOOL_RENDERERS } from './artifacts'
 import { pluginAuthoringSkill } from './skills/plugin-authoring'
+
+/**
+ * The rail menu's label. The plugin config is static, so the name is a node
+ * that reads the live locale bundle at render time instead of a frozen string.
+ */
+const StudioMenuLabel: React.FC = () => {
+    const { t } = useTranslation()
+    return <>{t('pluginStudio.title')}</>
+}
 
 /**
  * The icon toolkit: deterministic SVG rendering + project wiring from
@@ -130,16 +141,23 @@ export const pluginStudio = new PluginStudio({
         toolRenderers: STUDIO_TOOL_RENDERERS,
         artifactRenderers: STUDIO_ARTIFACT_RENDERERS,
     },
-    dockPanels: [
+    /**
+     * The human surface: a standalone menu page, not a dock panel — the
+     * manager is a place you go to, not a tool that rides along inside the
+     * document. Installing the plugin adds the rail entry and the route;
+     * uninstalling removes both.
+     */
+    routes: [
+        { name: 'pluginStudio', path: '/plugin-studio', element: <StudioPage /> },
+    ],
+    menus: [
         {
-            id: 'plugin-studio-status',
-            title: 'pluginStudio.title',
-            icon: React.createElement(Wrench, { className: 'h-4 w-4' }),
-            position: 'right',
-            order: 120,
-            defaultWidth: 300,
-            hideHeader: true,
-            component: StudioDockPanel,
+            name: <StudioMenuLabel />,
+            key: '/plugin-studio',
+            id: '/plugin-studio',
+            icon: <Wrench className="h-5 w-5" />,
+            activePaths: ['/plugin-studio'],
+            attachTabs: true,
         },
     ],
     locales: {
@@ -179,7 +197,7 @@ export const pluginStudio = new PluginStudio({
                     deleteConfirmDesc:
                         'This permanently deletes {{path}} and everything inside it. This cannot be undone.',
                     deleteConfirmAction: 'Delete',
-                    noProjectsDock: 'No plugin projects yet. Create or add one below.',
+                    noProjects: 'No plugin projects yet. Create or add one below.',
                     selectOrCreate: 'Select or create a plugin project.',
                     emptyTitle: 'No plugin projects yet',
                     emptyHint:
@@ -188,6 +206,13 @@ export const pluginStudio = new PluginStudio({
                     addedGroup: 'Added folders',
                     buildLogs: 'Build log',
                     noLogs: 'No logs yet',
+                    files: 'Files',
+                    filesEmpty: 'No source files found',
+                    filesLoading: 'Loading files…',
+                    filesTruncated: 'Only the first {{n}} files are shown',
+                    filesUnavailable: 'This desktop build cannot list project files; update the desktop app',
+                    selectFile: 'Select a file to view its contents',
+                    projects: 'Projects',
                     createTitle: 'New plugin project',
                     packageName: 'Package name',
                     displayName: 'Display name',
@@ -216,6 +241,20 @@ export const pluginStudio = new PluginStudio({
                     generateIconHint:
                         'Generate assets/icon.svg from the project name and swap the scaffold rail icon to the same glyph',
                     iconGenerated: 'Icon generated: {{glyph}} · rail {{rail}}',
+                    aiIcon: 'AI icon',
+                    aiIconHint: 'Design the icon with the host AI model from a short brief',
+                    aiIconIntro:
+                        'The host model designs a 512×512 SVG for “{{name}}”: flat rounded tile, gradient, centered symbol, no text.',
+                    aiIconBriefLabel: 'Design brief (optional)',
+                    aiIconBriefPlaceholder: 'e.g. a data-sync plugin — two circular arrows, teal on dark',
+                    aiIconGenerate: 'Generate',
+                    aiIconGenerating: 'Designing… {{size}} received',
+                    aiIconFailed: 'Icon generation failed: {{error}}',
+                    aiIconNoSvg: 'the reply contained no complete SVG document',
+                    aiIconTooLong: 'the model reply grew past the size limit',
+                    aiIconNote:
+                        'The SVG is validated before writing; on success it replaces assets/icon.svg and knPluginStudio.icon, so the preview, publishing and the marketplace upload stay unchanged. The rail icon is left as is.',
+                    iconGeneratedAi: 'AI icon written to assets/icon.svg',
                     iconRail: {
                         updated: 'updated',
                         'no-match': 'left as is',
@@ -282,7 +321,7 @@ export const pluginStudio = new PluginStudio({
                         path: 'Path',
                         published: 'Published',
                         desktopOnlyHint: 'Live state comes from the desktop dev bridge; this host has none.',
-                        paneHint: 'Watch, build and hot-reload from the Plugin Studio panel.',
+                        paneHint: 'Watch, build and hot-reload from the Plugin Studio page (app sidebar menu).',
                     },
                     preview: {
                         liveHint: 'Live preview of what this plugin contributes — updates on hot reload.',
@@ -372,7 +411,7 @@ export const pluginStudio = new PluginStudio({
                     deleteConfirmTitle: '删除插件工程？',
                     deleteConfirmDesc: '将永久删除 {{path}} 及其中的全部文件，此操作不可撤销。',
                     deleteConfirmAction: '删除',
-                    noProjectsDock: '还没有插件工程，用下面的按钮新建或添加。',
+                    noProjects: '还没有插件工程，用下面的按钮新建或添加。',
                     selectOrCreate: '选择或新建一个插件工程。',
                     emptyTitle: '还没有插件工程',
                     emptyHint: '新建一个模板工程，或让 agent 直接创建；也可以添加磁盘上已有的插件目录',
@@ -380,6 +419,13 @@ export const pluginStudio = new PluginStudio({
                     addedGroup: '已添加的目录',
                     buildLogs: '构建日志',
                     noLogs: '暂无日志',
+                    files: '文件',
+                    filesEmpty: '没有找到源码文件',
+                    filesLoading: '正在读取文件…',
+                    filesTruncated: '仅显示前 {{n}} 个文件',
+                    filesUnavailable: '当前桌面版本不支持读取工程文件，请升级桌面客户端',
+                    selectFile: '选择左侧文件查看内容',
+                    projects: '插件工程',
                     createTitle: '新建插件工程',
                     packageName: '包名',
                     displayName: '显示名',
@@ -407,6 +453,18 @@ export const pluginStudio = new PluginStudio({
                     generateIcon: '生成图标',
                     generateIconHint: '按工程名生成 assets/icon.svg，并把脚手架那个 emoji 栏位图标换成同一字形',
                     iconGenerated: '已生成图标：{{glyph}} · 栏位 {{rail}}',
+                    aiIcon: 'AI 生成图标',
+                    aiIconHint: '用宿主 AI 模型按简短描述设计图标',
+                    aiIconIntro: '宿主模型会为「{{name}}」设计一个 512×512 的 SVG：扁平圆角底、渐变、居中符号、不含文字。',
+                    aiIconBriefLabel: '设计要求（可选）',
+                    aiIconBriefPlaceholder: '例如：数据同步插件，深色底上的青绿色双向循环箭头',
+                    aiIconGenerate: '开始生成',
+                    aiIconGenerating: '正在设计… 已接收 {{size}}',
+                    aiIconFailed: '图标生成失败：{{error}}',
+                    aiIconNoSvg: '回复里没有完整的 SVG 文档',
+                    aiIconTooLong: '模型回复超出长度上限',
+                    aiIconNote: 'SVG 先经过格式校验再写入；成功后覆盖 assets/icon.svg 与 knPluginStudio.icon，预览、发布与市场上传流程均不变，栏位图标保持原样。',
+                    iconGeneratedAi: 'AI 图标已写入 assets/icon.svg',
                     iconRail: {
                         updated: '已同步',
                         'no-match': '保留原样',
@@ -473,7 +531,7 @@ export const pluginStudio = new PluginStudio({
                         path: '路径',
                         published: '发布',
                         desktopOnlyHint: '实时状态来自桌面端的开发能力；当前宿主没有。',
-                        paneHint: '监听、构建与热更在「插件开发台」侧边面板里操作。',
+                        paneHint: '监听、构建与热更在「插件开发台」页面里操作（侧边菜单进入）。',
                     },
                     preview: {
                         liveHint: '实时预览这个插件做了什么——热更后自动更新。',

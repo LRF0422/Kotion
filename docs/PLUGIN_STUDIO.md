@@ -54,7 +54,7 @@
 
 ### 人：图形界面
 
-`pnpm desktop:dev` → **右侧边栏 → 插件开发台**：
+`pnpm desktop:dev` → **侧边菜单 → 插件开发台**：
 
 - **新建工程**：输入包名、选一个**工程模板**即可，**不弹目录选择器**，工程建在内置目录里。
 - **添加已有目录**：想开发磁盘上已有的工程时才用（这时才需要选目录）。
@@ -62,7 +62,8 @@
 - **开始监听** → 保存文件即自动热更；**构建一次 / 热更到当前窗口 / 停止监听**。
 - **删除工程**：确认后先停止监听、卸载仍在窗口里的热更版本，再把工程目录**连同磁盘文件一起删除**（不可恢复，宿主拒绝删除不是插件工程的目录）。内置目录与已添加目录都可删除；只想停止跟踪而不删文件时仍可用「移除」。
 - **生成图标**（调色板按钮）：按工程名/用途生成 `assets/icon.svg` 并把栏位图标换成同一字形——和 agent 用的是**同一个确定性生成器**，生成后按钮下方直接显示这张图。
-- 侧边栏面板显示当前工程的构建状态与日志。
+- **AI 生成图标**（星标按钮）：填一句设计要求（可留空），由宿主 AI 模型（`streamKnowledgeText`，与插件其它 AI 功能同一通道）流式设计 512×512 的 SVG，生成过程中可随时取消或改用修复轮。结果先过硬校验（XML 合法、单引号字体栈、无外链、根元素带 viewBox 或宽高），不合格自动给模型一轮修复机会；落盘仍是 `assets/icon.svg` + `knPluginStudio.icon` 同一套契约（预览、发布、市场上传全不变），栏位图标不参与。AI 通道不可用时，确定性生成器（调色板按钮）仍可离线兜底。
+- 页面显示当前工程的构建状态与日志；下方**「文件」页签**可直接浏览工程源码——目录树 + 带回行号的只读查看器（`dev.files` 枚举、`dev.readFile` 读取，跳过 node_modules/dist）。
 
 ### 人：工程模板
 
@@ -117,7 +118,7 @@
 
 agent 会：`createPluginProject({ name, template: 'panel' })` → `writePluginProjectFile` 写 `src/index.tsx` 和面板组件 →
 `runPluginProject` 热更 → 你立刻能看到效果 → 不满意就继续说，agent 改完重新 `runPluginProject` / `buildPluginProject` 热更
-（开发台面板打开时，保存文件会自动重建并热更）→
+（开发台页面打开时，保存文件会自动重建并热更）→
 `buildPluginProject({ writeToDisk: true })` 出 `dist/index.js`，可直接上传插件市场。
 试错用的工程用 `deletePluginProject` 清掉，不会在磁盘上留垃圾。
 
@@ -227,7 +228,7 @@ await runPluginProject({ root, externals: ['svelte'] })
 - **构建成功会自动聚焦**：`runPluginProject` / `buildPluginProject` 成功后把该产物设为当前工作目标，
   右侧立刻能看到它（内核会把目标写进每轮的 `contextNote`）；传 `focus: false` 可以只构建不打扰。
   宿主没挂载侧栏时 `openAgentArtifact` 返回 false，是一次静默 no-op，绝不会让成功的构建变成失败的调用。
-- **预览只读**：会拉起/停掉子进程的动作留在「插件开发台」面板里，会话卡片与预览都不会触发它们。
+- **预览只读**：会拉起/停掉子进程的动作留在「插件开发台」页面里，会话卡片与预览都不会触发它们。
 
 样式注意：卡片与预览渲染在内核会话里（**不在** `[data-kn-plugin="PluginStudio"]` 作用域内），
 所以只用宿主已有的 Tailwind 工具类与 `@kn/ui` 组件，跟 `plugin-main` 的 `PageArtifactCard` 一致。
@@ -307,7 +308,7 @@ publishPluginProject({ root, version })
 | 后端 | `PluginVersionPublishDTO` 增加 `icon`（可选，≤512，走与上架相同的对象路径校验）；`createVersionInternal` 把**生效图标**记在候选版本上（省略 = 继承插件当前图标）；审批通过时把版本的图标提升到插件（`icon`/`iconMd`/`iconLg`/`iconXl` 四个槽位）——**版本审核通过前市场看到的仍是旧图标** |
 | 契约 | `PluginVersionInput` 增加 `icon?`（`@kn/common`） |
 | 宿主 UI | "发布新版本"对话框新增图标选择（PNG/JPEG、≤2 MB、正方形、≥120×120），显示"当前 vs 待替换"并可一键恢复；`openPublisher` 的 prefill 会把调用方已上传的图标带进去 |
-| 开发台 | `publishPluginProject` 升版模式同样上传并下发图标（清单没有图标就**不带该字段**，绝不凭空造）；面板发布也会先把工程图标上传好再交给向导 |
+| 开发台 | `publishPluginProject` 升版模式同样上传并下发图标（清单没有图标就**不带该字段**，绝不凭空造）；开发台页面上的发布也会先把工程图标上传好再交给向导 |
 
 顺带修掉一个错：`uploadArtifact` 以前把**所有**上传都强制标成 `text/javascript`，
 图标（`image/svg+xml`）会被错误标记；现在沿用调用方 Blob 的类型。

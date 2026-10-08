@@ -15,9 +15,10 @@
  * same icon, which is what makes it reviewable, diffable and testable. No
  * network, no API key, no image encoder.
  *
- * It also owns applying that icon to a project (`applyPluginIcon`), with the
- * file operations injected so the agent tool, the dock panel and the tests all
- * run the same rules.
+ * It also owns applying an icon to a project (`applyPluginIcon` for this
+ * renderer's output, `writePluginIconSvg` for externally designed artwork such
+ * as the studio's AI icon), with the file operations injected so the agent
+ * tool, the dock panel and the tests all run the same rules.
  *
  * Deliberately free of imports: `icon-art.test.mjs` and `studio-tools.test.mjs`
  * import this file directly (Node cannot resolve an extensionless TS→TS import),
@@ -193,10 +194,17 @@ export const pickColors = (input: PluginIconInput): { color: string; colorTo: st
     return { color: entry.from, colorTo: entry.to }
 }
 
+/**
+ * Family names are single-quoted on purpose: the stack is embedded in a
+ * double-quoted XML attribute, and nested double quotes —
+ * `font-family=""Apple Color Emoji"…` — make the whole document invalid XML.
+ * That shipped once and every `<img src>` (studio preview, marketplace listing)
+ * rendered a broken image instead of the icon.
+ */
 const EMOJI_FONTS = [
-    '"Apple Color Emoji"',
-    '"Segoe UI Emoji"',
-    '"Noto Color Emoji"',
+    "'Apple Color Emoji'",
+    "'Segoe UI Emoji'",
+    "'Noto Color Emoji'",
     'sans-serif',
 ].join(', ')
 
@@ -325,16 +333,21 @@ const asRecord = (value: unknown): Record<string, unknown> | undefined =>
     value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined
 
 /**
- * Render the icon, write it to the project, point the manifest at it, and — when
- * the project still carries the scaffold's emoji rail icon — swap that glyph.
+ * Read the project's manifest and pick the block that owns the icon pointer.
  *
- * The rail patch is best-effort by design: a project whose icon the author
- * already hand-made gets the snippet to paste instead of a source rewrite.
+ * Shared by `applyPluginIcon` (this renderer's artwork) and `writePluginIconSvg`
+ * (externally designed artwork), so both write the pointer to the same place:
+ * prefer the studio block, keep a legacy `knPlugin` project in its own block.
  */
-export const applyPluginIcon = async (input: ApplyPluginIconInput): Promise<ApplyPluginIconResult> => {
-    const { root, io } = input
-    if (!root) throw new Error('插件工程根目录不能为空')
-
+const loadManifestTarget = async (
+    root: string,
+    io: PluginIconIo,
+): Promise<{
+    manifestPath: string
+    manifest: Record<string, unknown>
+    studioKey: string
+    block: Record<string, unknown>
+}> => {
     const manifestPath = joinProjectPath(root, 'package.json')
     let manifest: Record<string, unknown>
     try {
@@ -349,6 +362,21 @@ export const applyPluginIcon = async (input: ApplyPluginIconInput): Promise<Appl
     // its plugin metadata, so a legacy `knPlugin` project stays consistent.
     const studioKey = manifest.knPluginStudio ? 'knPluginStudio' : manifest.knPlugin ? 'knPlugin' : 'knPluginStudio'
     const block = asRecord(manifest[studioKey]) ?? {}
+    return { manifestPath, manifest, studioKey, block }
+}
+
+/**
+ * Render the icon, write it to the project, point the manifest at it, and — when
+ * the project still carries the scaffold's emoji rail icon — swap that glyph.
+ *
+ * The rail patch is best-effort by design: a project whose icon the author
+ * already hand-made gets the snippet to paste instead of a source rewrite.
+ */
+export const applyPluginIcon = async (input: ApplyPluginIconInput): Promise<ApplyPluginIconResult> => {
+    const { root, io } = input
+    if (!root) throw new Error('插件工程根目录不能为空')
+
+    const { manifestPath, manifest, studioKey, block } = await loadManifestTarget(root, io)
     const seed =
         input.seed
         || (typeof block.pluginKey === 'string' && block.pluginKey)
@@ -416,6 +444,58 @@ export const applyPluginIcon = async (input: ApplyPluginIconInput): Promise<Appl
         manifest: { updated: true, previous, block: studioKey },
         railIcon: { updated: railStatus === 'updated', status: railStatus, snippet: railSnippet },
     }
+}
+
+export interface WritePluginIconSvgInput {
+    /** Absolute project root. */
+    root: string
+    io: PluginIconIo
+    /** The full SVG document (an AI-designed artwork, or a hand-made one). */
+    svg: string
+}
+
+export interface WritePluginIconSvgResult {
+    /** Absolute path of the written artwork. */
+    iconFile: string
+    /** Project-relative path, also what the manifest now declares. */
+    relativePath: string
+    manifest: {
+        /** The icon value that was there before, if any. */
+        previous: string | null
+        /** Manifest block that was written (`knPluginStudio` / legacy `knPlugin`). */
+        block: string
+    }
+}
+
+/**
+ * Apply an artwork that was NOT rendered here — the studio's AI icon designer
+ * produces the SVG elsewhere. Same file and manifest contract as
+ * `applyPluginIcon` (`assets/icon.svg` + the icon pointer), so previews,
+ * publishing and the marketplace upload keep working unchanged.
+ *
+ * The rail icon is deliberately left alone: an arbitrary artwork carries no
+ * emoji glyph, so there is nothing sensible to swap in the source.
+ */
+export const writePluginIconSvg = async (input: WritePluginIconSvgInput): Promise<WritePluginIconSvgResult> => {
+    const { root, io } = input
+    if (!root) throw new Error('插件工程根目录不能为空')
+    const svg = input.svg.trim()
+    if (!svg.startsWith('<svg') || !svg.endsWith('</svg>')) {
+        throw new Error('图标 SVG 不完整（必须以 <svg 开头、以 </svg> 结尾）')
+    }
+
+    const { manifestPath, manifest, studioKey, block } = await loadManifestTarget(root, io)
+
+    // 1) the image the marketplace uploads.
+    const iconFile = joinProjectPath(root, PLUGIN_ICON_RELATIVE_PATH)
+    await io.writeFile({ path: iconFile, contents: svg + '\n' })
+
+    // 2) the manifest pointer.
+    const previous = typeof block.icon === 'string' ? block.icon : null
+    manifest[studioKey] = { ...block, icon: PLUGIN_ICON_RELATIVE_PATH }
+    await io.writeFile({ path: manifestPath, contents: JSON.stringify(manifest, null, 2) + '\n' })
+
+    return { iconFile, relativePath: PLUGIN_ICON_RELATIVE_PATH, manifest: { previous, block: studioKey } }
 }
 
 /** The manifest field `publishPluginProject` reads to find the icon file. */
