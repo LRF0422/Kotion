@@ -440,7 +440,19 @@ export const App: React.FC<AppProps> = (props) => {
             console.log('Creating router with', routes.length, 'plugin routes')
             const updatedRouter = createBrowserRouter(createRoutesFromElements(
                 [
-                    <Route path='/' element={<EntitlementsProvider><Layout onPluginsReady={setPluginsReady} /></EntitlementsProvider>} errorElement={<ErrorPage />}>
+                    <Route
+                        path='/'
+                        element={
+                            <>
+                                <EntitlementsProvider><Layout onPluginsReady={setPluginsReady} /></EntitlementsProvider>
+                                {/* Host-owned publish UI (pluginMarketplace.openPublisher):
+                                    its publish editors mount extension page footers that
+                                    call useNavigator, so it must sit inside the router. */}
+                                <PluginPublisherHost />
+                            </>
+                        }
+                        errorElement={<ErrorPage />}
+                    >
                         {routes}
                         {/* Standalone agent page: the fallback for entry points
                             outside a space, where no side dock is mounted. */}
@@ -501,8 +513,6 @@ export const App: React.FC<AppProps> = (props) => {
                 }
                 </AgentPaneProvider>
                 <Toaster />
-                {/* Host-owned publish UI; plugins open it via pluginMarketplace. */}
-                <PluginPublisherHost />
             </Provider>
             </ResponsiveProvider>
         </ThemeProvider>
