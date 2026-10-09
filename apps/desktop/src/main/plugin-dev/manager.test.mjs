@@ -218,6 +218,50 @@ try {
     )
     manager.stop({ root: externalsRoot })
 
+    /* ------------------------------------------------------------------ *
+     * A child that dies before its first `ready` must fail fast and explain
+     * itself. This is the packaged-app failure mode: esbuild was missing from
+     * the app bundle, the child crashed on import, and the studio page showed
+     * only "dev-server exited with code 1" with "No logs yet" — after a 30s wait.
+     * ------------------------------------------------------------------ */
+    const crashScript = join(tmpdir(), `kn-studio-crash-${process.pid}.mjs`)
+    await writeFile(
+        crashScript,
+        [
+            `process.stderr.write("[plugin-dev:error] build failed (initial): Bundler unavailable: Cannot find package 'esbuild'\\n")`,
+            'process.exit(1)',
+            '',
+        ].join('\n'),
+    )
+    // A dedicated manager: `devServer` is fixed when the session is created.
+    const crashManager = new DevSessionManager()
+    try {
+        const crashStartedAt = Date.now()
+        const crashed = await crashManager.start({ root, devServer: crashScript, watch: false })
+        const crashDurationMs = Date.now() - crashStartedAt
+        check('crash: reported as failed, not merely stopped', crashed.state === 'failed', crashed.state)
+        check(
+            'crash: the exit code is explained',
+            /exited with code 1/.test(String(crashed.error)),
+            String(crashed.error),
+        )
+        check(
+            'crash: stderr diagnostics are surfaced',
+            /Cannot find package 'esbuild'/.test(String(crashed.error)),
+            String(crashed.error).split('\n')[0],
+        )
+        check(
+            'crash: stderr is captured as session logs',
+            crashManager.logs({ root }).some((entry) => /esbuild/.test(entry.message)),
+            `${crashManager.logs({ root }).length} log entries`,
+        )
+        // The bug was waiting out INITIAL_BUILD_TIMEOUT_MS (30s) before reporting.
+        check('crash: fails fast instead of timing out', crashDurationMs < 8000, crashDurationMs + 'ms')
+    } finally {
+        crashManager.dispose()
+        await rm(crashScript, { force: true })
+    }
+
     await rm(projectsDir, { recursive: true, force: true })
 } catch (error) {
     check('manager test run completed', false, String((error && error.stack) || error))

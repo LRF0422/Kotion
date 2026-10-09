@@ -55,8 +55,10 @@ const asExternals = (value: unknown): string[] | undefined =>
 
 /**
  * Candidates for the monorepo root, most specific first. Dev runs from the
- * checkout; a packaged app ships no `packages/`, so resolution returns
- * undefined and the host-API reference reports itself as unavailable.
+ * checkout; a packaged app ships no `packages/`, so `afterPack` copies the host
+ * packages' source into `app.asar.unpacked/out/main/plugin-dev/host-api/` and
+ * the `../../..` entries below resolve to it (a packaged app *is* the app root,
+ * so there is no checkout to find).
  */
 const workspaceRootCandidates = (): Array<string | undefined> => [
     process.env.KN_WORKSPACE_ROOT,
@@ -64,9 +66,12 @@ const workspaceRootCandidates = (): Array<string | undefined> => [
     resolve(app.getAppPath(), '..'),
     app.getAppPath(),
     resolve(__dirname, '..', '..', '..', '..'),
-    process.cwd(),
+    // Packaged: `<Resources>/app.asar.unpacked/out/main/plugin-dev/host-api`.
+    // `__dirname` alone points inside app.asar, so name the unpacked mirror.
+    resolve(app.getAppPath(), '..', 'app.asar.unpacked', 'out', 'main', 'plugin-dev', 'host-api'),
     resolve(process.cwd(), '..'),
     resolve(process.cwd(), '..', '..'),
+    process.cwd(),
 ]
 
 export interface DevIpcOptions {

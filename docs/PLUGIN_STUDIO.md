@@ -337,18 +337,19 @@ pnpm test:plugin-dev:electron
 | --- | --- | --- |
 | `bundler.test.mjs` | 50 | 清单解析、esbuild 打包、宿主模块 shim、注册代码、构建错误上报、**五个模板逐个构建并注册**、**externals 解析（命名空间 / window 兜底 / 缺失告警）** |
 | `dev-server.test.mjs` | 10 | NDJSON 协议、文件监听重建、stdin 手动构建、错误隔离、干净退出 |
-| `manager.test.mjs` | 30 | **失败重建**立即释放等待、错误上报、会话存活、恢复；防回归「卡 30s」；**删除工程（拒绝非工程 / 拒绝标准目录 / 停止会话并删文件）**；**externals 的沿用与清空语义**；**删单个文件（越界 / manifest / 入口 / 目录 / 不存在全部拒绝，并回显正文）** |
+| `manager.test.mjs` | 35 | **失败重建**立即释放等待、错误上报、会话存活、恢复；防回归「卡 30s」；**子进程启动即崩（缺 esbuild 那种）被判为 failed、快速失败、并把 stderr 原文带进 error 与日志**；**删除工程（拒绝非工程 / 拒绝标准目录 / 停止会话并删文件）**；**externals 的沿用与清空语义**；**删单个文件（越界 / manifest / 入口 / 目录 / 不存在全部拒绝，并回显正文）** |
 | `host-api.test.mjs` | 14 | 标准包枚举/搜索/读取、越界与未知包拒绝 |
 | `project-files.test.mjs` | 10 | 工程文件枚举/搜索/过滤、跳过 node_modules、截断上报 |
 | `package-install.test.mjs` | 20 | 包名/版本校验、管理器探测、argv 构造、假 spawn 安装 |
 | `tailwind.test.mjs` | 12 | 用宿主配置编译插件工具类、去除 @keyframes、空工程 |
+| `packaged-studio-deps.test.mjs` | 18 | **打包布局回归**：用真实 `afterPack` 钩子物化依赖，然后在**没有源码树**的前提下跑子进程——esbuild 可解析、平台二进制可 spawn、tailwind/postcss 与宿主配置就位并**真的编译出插件 CSS**、宿主标准包可读 |
 | `studio-tools.test.mjs` | 179 | **agent 工具面**：名称/描述/schema、create→write→run→build→list→stop 的每次能力调用、**模板与 externals 透传和校验**、**删除工程与自卸载**、**删单个文件与「未读不许删」**、**service 发现（提供者归属/过滤/无注册表兜底）**、**产物聚焦（含 focus:false 与坏预览不拖垮构建）**、失败装订、缺能力提示、失败不装旧产物、**只读发现可以、注册表管理不在** |
 | `surface.test.mjs` | 31 | **产物声明**：mapper 与工具面一致、kind 与预览一致、构建/发布/工程/图标的 payload、失败不产生产物、id 稳定（同工程重建/重生成只占一格）、`focusArtifact` 无 payload 路径、垃圾输入不抛 |
 | `icon-art.test.mjs` | 30 | **图标**：同插件同图、关键词/显式字形/首字母兜底、配色哈希与显式色、SVG 自包含与转义、栏位片段、只改该改的文件（不动手写图标、兼容 legacy `knPlugin` 块）、清单读取与 mime/可上传判断 |
 | `studio.smoke.mjs` | 50 | 真实 `PluginManager.installPluginFromSource` + Blob URL + 真实 loader；热更替换、单实例、坏代码不中断、恢复；**内置目录建工程、五个模板都能构建、删除工程、工程内删文件**；**产物管线（mapper 按工具名注册、卡片/预览贡献、产物架从 transcript 派生）**、**把活的插件面板真的渲染成 markup**、**真实 ServiceRegistry 把服务归属到插件** |
 | `electron.smoke.mjs` | 36 | 真实 preload 能力白名单、`dev.*` IPC（含 `dev.remove` / `dev.deleteFile`）、`ELECTRON_RUN_AS_NODE` 子进程、`desktop:event:dev` 推送、**无对话框 scaffold + 模板 + list + 读写/删除文件**、越界路径拒绝 |
 
-`pnpm test:plugin-dev` 合计 436 项检查
+`pnpm test:plugin-dev` 合计 465 项检查
 后端（`backend/knowledgecloud`）：`mvn -o -pl knowledge-service/knowledge-wiki -am -Dtest=PluginApplicationTest test` —— 20 项，覆盖「升版带新图标记在版本上 / 不带则继承 / 审批通过后提升到插件」。
 ；`pnpm test:plugin-dev:electron` 另有 36 项（需要先构建出 `out/preload/index.js`）。
 
@@ -393,6 +394,8 @@ agent 工具面因此没有 `listInstalledPlugins` / `uninstallInstalledPlugin` 
 - **Tailwind**：直接在源码里写工具类即可。构建时 dev-server 会用宿主的 `@kn/ui/tailwind.config` 把你的类
   编译成 CSS，并用一个按 pluginKey 命名的 `<style>` 注入到宿主窗口（热更时替换，不会堆叠）。
   无需自己写 `@tailwind` 指令；宿主已注入的 `react`/`@kn/*` 依赖不要重复安装。
+  打包后的 app 没有 `@kn/ui` 可解析，所以那份配置由 `afterPack` 随包发出、并透过
+  `KN_TAILWIND_CONFIG` 传给子进程（见「打包后的运行时依赖」）。
 - **样式隔离**：插件用的是宿主的 Tailwind 配置，类名与宿主一致；如果把这些全局类规则直接注入，就会在加载时
   覆盖宿主自己的样式。因此编译产物会被限定在 `[data-kn-plugin="<pluginKey>"]` 作用域内，宿主渲染插件的
   侧边面板时会打上对应属性，插件样式只影响自己的 DOM，不会改到宿主。
@@ -400,16 +403,47 @@ agent 工具面因此没有 `listInstalledPlugins` / `uninstallInstalledPlugin` 
 ## 已知边界
 
 1. **主进程代码不能热更**：热更只覆盖窗口内的插件模块；改了 `apps/desktop/src/main/**` 仍需重启。
-2. **打包后的 app 需要带上 esbuild**：开发台在 `ELECTRON_RUN_AS_NODE` 子进程里用 esbuild 编译。
-   `pnpm desktop:dev` 与本地构建都能解析到它；若要让**已打包**的 app 在终端用户机器上也能编译插件，
-   需要在 `electron-builder` 的 `files` / `asarUnpack` 里带上 `esbuild` 及其平台二进制
-   （当前 `files` 只含 `out/**`）。开发台在缺少该能力时会给出提示，不会崩。
-3. **插件是可信代码**：本地构建产物在宿主窗口内执行，拥有与宿主相同的权限。只在开发机上使用。
-4. **文件路径白名单**：`dev.*` 的每个路径都经过与 `fs.*` 相同的 allowlist（标准用户目录 +
+2. **插件是可信代码**：本地构建产物在宿主窗口内执行，拥有与宿主相同的权限。只在开发机上使用。
+3. **文件路径白名单**：`dev.*` 的每个路径都经过与 `fs.*` 相同的 allowlist（标准用户目录 +
    对话框授予的目录）。内置工程目录位于 `userData`，本来就在白名单内。
-5. **只读发现 ≠ 注册表管理**：开发台会**读**已安装插件的能力（服务名与提供者、贡献点），
+4. **只读发现 ≠ 注册表管理**：开发台会**读**已安装插件的能力（服务名与提供者、贡献点），
    但只**改**自己构建的产物——热更，以及卸载「自己刚热更进去的那个开发版本」（删除工程时顺带清掉）。
    安装/卸载其他已安装插件属于插件管理器的能力，不通过开发台的工具暴露给 agent。
-6. **托管外的东西不猜**：`externals` 只能声明宿主已暴露的全局模块（先 `listHostGlobals`），
+5. **托管外的东西不猜**：`externals` 只能声明宿主已暴露的全局模块（先 `listHostGlobals`），
    声明错的模块会**在构建前报错**；`@tiptap/core` 不在宿主注入清单里，
    所以没有「自带 Tiptap 节点」的模板——插件自带一份会注册到另一个 ProseMirror schema 实例上。
+
+## 打包后的运行时依赖（build 完也要能用）
+
+开发台的编译能力跑在**子进程**里，需要的东西都不在 `out/**` 里，而 electron-builder 的
+`files` 只含 `out/**`（并排除 node_modules）。所以 `afterPack` 钩子
+[`apps/desktop/scripts/prepare-studio-deps.cjs`](../apps/desktop/scripts/prepare-studio-deps.cjs)
+会在打包时把三样东西物化到 `app.asar.unpacked/out/main/plugin-dev/`：
+
+| 装什么 | 谁用 | 缺了会怎样 |
+| --- | --- | --- |
+| `esbuild` + 目标平台二进制 | 编译插件源码（`bundler.mjs`） | 一构建就失败 —— 开发台**完全不可用** |
+| `tailwindcss` / `postcss` / 宿主 `tailwind.config` | 编译插件 CSS（`tailwind.mjs`） | 面板/页面**没有样式**（裸 DOM） |
+| 宿主标准包源码（`common`/`core`/`ui`/`icon`/`editor`/`plugin-api`） | agent 的 `searchHostApi` / `readHostApiFile` | AI 写插件时查不到真实接口 |
+
+两条硬约束（都是实测结论，改这里前先读）：
+
+1. **原生二进制必须在 asar 之外**。esbuild 要 `spawn` 平台二进制，而 asar 里的文件不是真实文件——
+   连 `spawn` 一个 shell 脚本都会拿到 `ENOTDIR`。所以资源落在 `app.asar.unpacked/` 下。
+2. **不能用 `NODE_PATH` 兜底**。ESM 解析器不认它（对 `import()` 无效），所以依赖必须放在
+   *从 `dev-server.mjs` 所在目录向上查找就能命中* 的位置——也就是它同层的 `node_modules/`。
+   `manager.mjs` 因此优先从 unpacked 目录运行子进程，并通过 `KN_TAILWIND_CONFIG` 把随包发出的
+   宿主 Tailwind 配置传给子进程。
+
+依赖按**真实 Node 解析结果**物化（每个包用它真实目录上的 resolver 解析自己的 dependencies），
+同名不同版本各自落在自己父包的解析范围内。**去重只能按解析范围做**：把某个包挪到别处复用会让它
+自己的依赖跟着失效（曾因此让 `@tailwindcss/typography` 的 `postcss-selector-parser` 找不到
+`cssesc`，宿主 Tailwind 配置直接加载失败）。
+
+回归测试：`packages/...` 之外，`pnpm test:plugin-dev` 里的
+[`packaged-studio-deps.test.mjs`](../apps/desktop/src/main/plugin-dev/packaged-studio-deps.test.mjs)
+会用真实钩子物化一份打包布局，然后在**没有源码树**的前提下把子进程跑起来，断言构建成功、CSS 编译出来、
+宿主标准包可读。跳过本机制：`KN_SKIP_STUDIO_DEPS=1`（打包仍成功，但开发台编译能力不可用）。
+
+子进程崩溃时会**快速失败并带上 stderr 原文**（例如缺 esbuild 的完整报错），不会被当成
+「已停止」而在页面上只显示一句 `dev-server exited with code 1`。

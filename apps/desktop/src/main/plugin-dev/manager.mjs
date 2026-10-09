@@ -25,6 +25,55 @@ import {
 const here = dirname(fileURLToPath(import.meta.url))
 
 /**
+ * The studio's runtime dependencies as shipped by `afterPack`, or null in dev.
+ *
+ * A packaged app cannot run the child from inside `app.asar`: esbuild must
+ * `spawn` a platform binary, and files inside an asar are not real files
+ * (spawning one fails with ENOTDIR). `afterPack`
+ * (apps/desktop/scripts/prepare-studio-deps.cjs) therefore materializes a
+ * self-contained tree under `app.asar.unpacked/out/main/plugin-dev/`, and
+ * Electron maps the asar path onto it. When that directory exists we run the
+ * child from there, which is what makes the module's own upward `node_modules`
+ * lookup find the shipped esbuild.
+ */
+const resolveShippedDevDir = () => {
+    const candidate = join(here, '..', '..', '..', '..', 'app.asar.unpacked', 'out', 'main', 'plugin-dev')
+    return existsSync(join(candidate, 'dev-server.mjs')) ? candidate : null
+}
+
+/**
+ * Locate the dev-server entry the child process runs.
+ *
+ * The build copies `dev-server.mjs` next to this module (`out/main/plugin-dev/`)
+ * because a child process needs a real file on disk — it is never part of the
+ * main bundle. Running from source (tests, `electron-vite dev`) uses the sibling
+ * in `src/main/plugin-dev/`. A packaged app prefers the unpacked copy (see
+ * {@link resolveShippedDevDir}) so the esbuild shipped beside it resolves.
+ */
+const resolveDevServer = () => {
+    const shipped = resolveShippedDevDir()
+    const candidates = [
+        shipped && join(shipped, 'dev-server.mjs'),
+        join(here, 'dev-server.mjs'),
+        join(here, '..', '..', 'src', 'main', 'plugin-dev', 'dev-server.mjs'),
+    ].filter(Boolean)
+    return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0]
+}
+
+/**
+ * The host Tailwind config shipped by `afterPack`, or null in dev.
+ *
+ * Without it the child compiles no CSS at all for a plugin, so a packaged studio
+ * renders plugin panels as unstyled DOM.
+ */
+const resolveShippedTailwindConfig = () => {
+    const shipped = resolveShippedDevDir()
+    if (!shipped) return null
+    const candidate = join(shipped, 'tailwind.config.cjs')
+    return existsSync(candidate) ? candidate : null
+}
+
+/**
  * Directory names `dev.remove` refuses to delete, whatever they contain.
  *
  * The fs allowlist already limits deletions to the user's standard directories,
@@ -43,23 +92,9 @@ const PROTECTED_DIR_NAMES = new Set([
     'users',
 ])
 
-/**
- * Locate the dev-server entry the child process runs.
- *
- * The build copies `dev-server.mjs` next to this module (`out/main/plugin-dev/`)
- * because a child process needs a real file on disk — it is never part of the
- * main bundle. Running from source (tests, `electron-vite dev`) uses the sibling
- * in `src/main/plugin-dev/`.
- */
-const resolveDevServer = () => {
-    const candidates = [
-        join(here, 'dev-server.mjs'),
-        join(here, '..', '..', 'src', 'main', 'plugin-dev', 'dev-server.mjs'),
-    ]
-    return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0]
-}
-
 const MAX_LOG_ENTRIES = 400
+/** How many stderr lines to keep for the "crashed before first build" report. */
+const MAX_STDERR_LINES = 40
 const INITIAL_BUILD_TIMEOUT_MS = 30_000
 /** How much of a deleted file's text `dev.deleteFile` echoes back for undo. */
 const MAX_DELETE_ECHO_BYTES = 200_000
@@ -96,8 +131,10 @@ class DevSession {
         this.emit = emit
         this.child = null
         // Resolved once: a child process needs a real file on disk, and the
-        // entry differs between source runs and built output.
-        this.devServer = resolveDevServer()
+        // entry differs between source runs and built output. Tests override it
+        // (`options.devServer`) to exercise a child that dies on startup.
+        this.devServer = options.devServer || resolveDevServer()
+        this.tailwindConfig = resolveShippedTailwindConfig()
         this.state = 'idle'
         this.plugin = { pluginKey: null, name: root }
         this.build = null
@@ -108,6 +145,10 @@ class DevSession {
         this.logs = []
         this.readyWaiters = []
         this.buildWaiters = []
+        // Set once the child has reported `ready`. Used to tell "never came up"
+        // (a crash, e.g. a missing esbuild) from "died after working".
+        this.ready = false
+        this.stderrTail = []
     }
 
     status() {
@@ -190,6 +231,7 @@ class DevSession {
             case 'ready':
                 this.plugin = event.plugin || this.plugin
                 this.state = 'starting'
+                this.ready = true
                 break
             case 'watching':
                 this.watching = true
@@ -256,7 +298,13 @@ class DevSession {
         // so the studio needs no separately installed Node on the user's machine.
         const child = spawn(process.execPath, args, {
             cwd: this.root,
-            env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+            env: {
+                ...process.env,
+                ELECTRON_RUN_AS_NODE: '1',
+                // Packaged builds ship the host Tailwind config next to the
+                // child; dev resolves `@kn/ui/tailwind.config` from the checkout.
+                ...(this.tailwindConfig ? { KN_TAILWIND_CONFIG: this.tailwindConfig } : {}),
+            },
             stdio: ['pipe', 'pipe', 'pipe'],
         })
         this.child = child
@@ -280,14 +328,29 @@ class DevSession {
             }
         })
 
+        // Diagnostics that are not NDJSON come out on stderr. They used to be
+        // dropped into the *main process console*, which is invisible from the
+        // studio UI — so a crashed child left the page with a bare
+        // "dev-server exited with code 1" and "No logs yet". Keep the tail and
+        // surface it as session logs, which is what the page renders.
+        this.stderrTail = []
         child.stderr.setEncoding('utf8')
         child.stderr.on('data', (chunk) => {
             const text = String(chunk).trim()
-            if (text) console.log('[plugin-dev]', text)
+            if (!text) return
+            console.log('[plugin-dev]', text)
+            for (const line of text.split('\n')) {
+                const trimmed = line.trim()
+                if (!trimmed) continue
+                this.stderrTail.push(trimmed)
+                if (this.stderrTail.length > MAX_STDERR_LINES) this.stderrTail.shift()
+                this.pushLog('error', trimmed)
+            }
         })
 
         child.on('error', (error) => {
             this.error = error.message
+            this.pushLog('error', `failed to spawn dev-server: ${error.message}`)
             this.state = 'failed'
             this.child = null
             this.settleReadyWaiters()
@@ -297,10 +360,27 @@ class DevSession {
             this.child = null
             this.watching = false
             if (this.state !== 'stopped') {
-                this.state = this.state === 'failed' ? 'failed' : 'stopped'
-                if (code !== 0 && !this.error) this.error = `dev-server exited with code ${code}`
+                // A child that dies before its first `ready` never built
+                // anything: it *failed*, it did not merely stop. Reporting
+                // 'stopped' here is what made a crash look like an idle
+                // session, and the status quo also made the caller wait out the
+                // full initial-build timeout.
+                this.state = this.ready ? (this.state === 'failed' ? 'failed' : 'stopped') : 'failed'
+                if (!this.ready) {
+                    // Prefer the child's own diagnostics: "Cannot find package
+                    // 'esbuild'" is actionable, a bare exit code is not.
+                    const detail = this.stderrTail.join('\n')
+                    const summary = `dev-server exited with code ${code} before the first build`
+                    this.error = detail ? `${summary}:\n${detail}` : summary
+                    this.emit('build-error', this.status())
+                } else {
+                    if (code !== 0 && !this.error) this.error = `dev-server exited with code ${code}`
+                    this.pushLog('warn', `dev-server exited with code ${code}`)
+                }
             }
             this.settleReadyWaiters()
+            // A dead child can never satisfy a pending one-shot build().
+            this.settleBuildWaiters(true)
         })
     }
 
