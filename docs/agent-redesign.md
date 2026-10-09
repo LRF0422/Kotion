@@ -406,9 +406,33 @@ bean-definition-overriding 兜底，无副作用。守卫断言已加入 `AgentC
 表现为 `/runs/{id}/resume` 400：`Unexpected character ... was expecting comma to separate Object entries`
 （引用链停在 `toolResults[i].result`）。
 
+清洗并不只是转义：对白名单标签（`a`/`img`/`b`/`strong`/`i`/`em`）它会**重建标签并给属性补引号**。
+工具结果里只要有 `<a href={url}>`（JSX/Handlebars 模板，或任何未加引号的属性），过滤后就成了
+`<a href="{url}">` —— 裸 `"` 被插进 JSON 字符串内部，紧随其后的信封 `{` 正好落在 Jackson
+「值之后应该有逗号」的位置，于是报出上面那条错，引用链停在 `toolResults[0].result`；
+`<img src={cover} alt={title}>` 同理。已用平台自己的 `XssHtmlFilter` + jackson 复现该报错，
+`AgentRequestBodyXssExclusionTest` 用的就是这个 body。
+
 已在 `knowledge-agent-skills/application.yml` 配置 `knowledge.xss.skip-url: /api/agent/**`，与
 `knowledge-wiki` 对结构化文档端点的既有做法一致；回归测试见
 `AgentRequestBodyXssExclusionTest`（对照 `PageDocXssExclusionTest`）。
+
+#### 15.1.1 「明明配了 skip 还报错」：先查运行时生效的配置
+
+skip 只取决于**运行时生效的** `knowledge.xss.skip-url`，与仓库里写了什么无关：
+
+1. **Nacos / 共享配置会整体替换 list**（Spring 的 list 绑定不合并）。若 `knowledge-agent-skills-{profile}.yaml`
+   或某份共享配置里定义了 `knowledge.xss`，本模块 `application.yml` 的 `/api/agent/**` 就会被丢掉——
+   两边都要有。同理，若实际生效的是平台 jar 里的老前缀，那要按 jar 的前缀配。
+2. **进程/镜像早于修复**：长驻的本地实例、以及早先构建的 jar/镜像都还带着旧配置，改完必须重启/重建，
+   否则日志里会一直复现同一条 400。
+3. **启动自检**：`AgentXssSkipCheck` 在 `ApplicationReadyEvent` 打印生效的 skip 列表；未覆盖
+   `/api/agent/**` 时直接 ERROR，并说明「list 会被替换 / 旧实例仍是旧值」。
+4. **线上探针**：带有效 token 对 `/api/agent/v1/runs/{任意 id}/resume` POST 一份带 `<a href={x}>` 的小 body——
+   返回 `JSON parse error ... was expecting comma` = 过滤器仍然生效；返回 run 不存在/业务错误 = 已跳过。
+   （不带 token 只会拿到 401：安全过滤器在解析 body 之前就返回了。）
+5. 回归测试现在用的 body 会真的触发该错误，并额外断言「这个 body 过一遍 `XssHtmlFilter`
+   必然让 Jackson 报上面那条错」，所以 skip 一旦丢失，测试直接复现线上症状（不是只比类型）。
 
 注意：跳过 XSS 后 body 仍会过 `KnowledgeHttpServletRequestWrapper`，它会去掉**裸换行**并按平台默认
 编码重编码（`new String(bytes, UTF-8).getBytes()`）——客户端只发紧凑 JSON（换行已转义），所以安全；

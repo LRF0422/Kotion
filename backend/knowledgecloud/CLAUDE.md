@@ -80,6 +80,9 @@ make clean
 > 注意：不要修改 knowledge-core-* 基础架构模块（组件扫描等机制由平台自行管理）；
 > agent 模块对平台安全栈的依赖只有一个 `@ConditionalOnMissingBean` 的
 > `JwtTokenProvider` 兜底 Bean（见 `AgentCoreAutoConfiguration`），绝不覆盖平台注册。
+> 另有只读启动自检 `AgentXssSkipCheck`（读 `knowledge.xss`/`knowledge.request` 配置，
+> 只打日志）——它不注册、不覆盖任何 Bean，用来暴露「agent body 没跳过 XSS 过滤」的部署问题
+> （见 `docs/agent-redesign.md` §15.1）。
 
 - **Run（一次执行单元）**：状态机 QUEUED→RUNNING⇄WAITING_TOOLS/SUSPENDED→COMPLETED|FAILED|CANCELLED；
   supervisor 负责生命周期/租约/配额，loop（同步驱动、每 run 一线程）负责执行。
