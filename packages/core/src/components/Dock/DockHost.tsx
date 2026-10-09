@@ -4,8 +4,6 @@ import {
     ResolvedDockPanel,
     dockRuntime,
     useTranslation,
-    DOCK_PANEL_RUNNING,
-    event,
 } from "@kn/common"
 import {
     Button,
@@ -36,22 +34,34 @@ export interface DockHostProps {
 const DockRail: React.FC<{
     panels: ResolvedDockPanel[]
     activeId: string | null
-    runningIds: Set<string>
+    runningIds: ReadonlySet<string>
+    /**
+     * Panel locked open by a running job. Every rail control is disabled while
+     * it is set: clicking an icon must neither hide the running conversation nor
+     * switch away from it.
+     */
+    pinnedId?: string | null
     onToggle: (id: string) => void
     title: (panel: ResolvedDockPanel) => string
     runningText: string
+    lockedText: string
     side: 'left' | 'right'
-}> = ({ panels, activeId, runningIds, onToggle, title, runningText, side }) => (
+}> = ({ panels, activeId, runningIds, pinnedId, onToggle, title, runningText, lockedText, side }) => (
     <TooltipProvider delayDuration={300}>
         <div className={cn(
             "kn-dock-rail flex h-full w-11 flex-shrink-0 flex-col items-center gap-1 bg-muted/40 py-2 lg:w-10",
             side === 'right' ? "border-l" : "border-r"
-        )}>
+        )}
+            data-locked={pinnedId ? 'true' : undefined}
+        >
             {panels.map(panel => {
                 const label = title(panel)
                 const isActive = activeId === panel.id
                 const isRunning = runningIds.has(panel.id)
-                const statusLabel = isRunning ? `${label} · ${runningText}` : label
+                const isPinned = pinnedId === panel.id
+                const statusLabel = isPinned
+                    ? `${label} · ${lockedText}`
+                    : isRunning ? `${label} · ${runningText}` : label
                 return (
                     <Tooltip key={panel.id}>
                         <TooltipTrigger asChild>
@@ -61,13 +71,19 @@ const DockRail: React.FC<{
                                 size="icon"
                                 data-active={isActive}
                                 data-tone={panel.id === 'agent' ? 'ai' : undefined}
+                                data-pinned={isPinned || undefined}
                                 className="kn-rail-control relative h-11 w-11 rounded-lg lg:h-7 lg:w-7"
                                 aria-label={statusLabel}
                                 aria-pressed={isActive}
                                 aria-busy={isRunning || undefined}
+                                // Locked while a panel runs: the rail stays a
+                                // status indicator instead of a control. Kept
+                                // clickable (not `disabled`) so its tooltip still
+                                // explains why; the toggle itself is a no-op.
+                                aria-disabled={pinnedId ? true : undefined}
                                 onClick={() => onToggle(panel.id)}
                             >
-                                {isRunning && (
+                                {(isRunning || isPinned) && (
                                     <span
                                         aria-hidden
                                         className="kn-rail-running-dot pointer-events-none absolute right-1 top-1 h-1.5 w-1.5 rounded-full animate-pulse motion-reduce:animate-none"
@@ -106,6 +122,8 @@ export const DockHost: React.FC<DockHostProps> = ({
         panels,
         activePanel,
         activeId,
+        pinnedId,
+        runningIds,
         context,
         width,
         minWidth,
@@ -153,22 +171,10 @@ export const DockHost: React.FC<DockHostProps> = ({
         resizeTo(nextWidth)
     }, [maxWidth, minWidth, position, resizeTo, width])
 
-    // Track which panels are currently running (e.g. the agent streaming a
-    // response) so the rail can show a compact status indicator. Panels emit
-    // DOCK_PANEL_RUNNING; the host listens and flips the matching id in/out.
-    const [runningIds, setRunningIds] = React.useState<Set<string>>(new Set)
-    React.useEffect(() => {
-        const handler = ({ id, running }: { id: string; running: boolean }) => {
-            setRunningIds(prev => {
-                const next = new Set(prev)
-                if (running) next.add(id)
-                else next.delete(id)
-                return next
-            })
-        }
-        event.on(DOCK_PANEL_RUNNING, handler)
-        return () => { event.off(DOCK_PANEL_RUNNING, handler) }
-    }, [])
+    // Which panels are running (e.g. the agent streaming a response) comes from
+    // the shared dock runtime: the same snapshot pins the running panel open and
+    // drives the rail's status dot, and it survives this host unmounting (a
+    // route without the shell) so a run is never lost track of.
 
     // Mount each panel the first time it becomes active and KEEP it mounted
     // afterwards (just hidden). Unmounting the Agent panel would abort its
@@ -189,10 +195,22 @@ export const DockHost: React.FC<DockHostProps> = ({
     // component directly.
     const PanelComponent = activePanel?.component
 
+    // A running panel keeps its sheet open: the backdrop, Esc and the close
+    // button must not dismiss the conversation that is streaming into it (on
+    // mobile the sheet body is the only mounted copy, so dismissing it would
+    // tear the run down).
+    const locked = !!pinnedId
+
     if (isMobile) {
         return (
-            <Sheet open={!!activePanel} onOpenChange={(open) => { if (!open) close() }}>
-                <SheetContent side="right" className="w-full p-0 flex flex-col gap-0">
+            <Sheet open={!!activePanel} onOpenChange={(open) => { if (!open && !locked) close() }}>
+                <SheetContent
+                    side="right"
+                    className="w-full p-0 flex flex-col gap-0"
+                    hideClose={locked}
+                    onInteractOutside={(e) => { if (locked) e.preventDefault() }}
+                    onEscapeKeyDown={(e) => { if (locked) e.preventDefault() }}
+                >
                     {activePanel?.hideHeader ? (
                         /* Keep the title for Radix a11y, just not visible — the
                            panel's own header bar takes over on screen. */
@@ -272,7 +290,10 @@ export const DockHost: React.FC<DockHostProps> = ({
                                         variant="ghost"
                                         size="icon"
                                         className="h-6 w-6 text-muted-foreground"
-                                        aria-label={t('dock.collapse', 'Collapse panel')}
+                                        aria-label={locked && isPanelActive
+                                            ? t('dock.locked', 'Running — panel stays open')
+                                            : t('dock.collapse', 'Collapse panel')}
+                                        aria-disabled={locked && isPanelActive ? true : undefined}
                                         onClick={close}
                                     >
                                         <X className="h-3.5 w-3.5" />
@@ -321,9 +342,11 @@ export const DockHost: React.FC<DockHostProps> = ({
                 panels={panels}
                 activeId={activeId}
                 runningIds={runningIds}
+                pinnedId={pinnedId}
                 onToggle={toggle}
                 title={panelTitle}
                 runningText={t('dock.running', 'Running')}
+                lockedText={t('dock.locked', 'Running — panel stays open')}
                 side={position}
             />
         </div>

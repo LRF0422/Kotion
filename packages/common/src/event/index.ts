@@ -1,13 +1,34 @@
-import { EventEmitter } from "./event";
+import { EventEmitter, type PluginChangeSource } from "./event";
 
 
 export const event = new EventEmitter()
 
+export type { PluginChangeSource } from "./event";
 
 // --- Typed event names ---
 
 /** Emitted when the plugin set changes (install, uninstall, update, init, refresh) */
 export const PLUGIN_CHANGED = "PLUGIN_CHANGED"
+
+/**
+ * `PLUGIN_CHANGED` sources that can change the *server's* installed-plugin list.
+ *
+ * Only these justify re-fetching the installed list and re-running
+ * `PluginManager.init()`. Any other source (notably `refresh`) is a UI-only
+ * change: menus and routes recompute from the live registry, while a re-init
+ * would rebuild that registry from the server's list — dropping plugins that
+ * only exist in this runtime, such as the plugin studio's hot-reloaded builds.
+ */
+export const REMOTE_PLUGIN_CHANGE_SOURCES: readonly PluginChangeSource[] = [
+  'install',
+  'uninstall',
+  'update',
+  'delete',
+  'bulk',
+  'enable',
+  'disable',
+  'init',
+]
 
 /** Emitted after Layout successfully initializes plugins from the server */
 export const PLUGIN_INIT_SUCCESS = "PLUGIN_INIT_SUCCESS"

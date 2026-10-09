@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type MouseEvent as ReactMouseEvent } from "react"
 import {
     DOCK_DEFAULT_WIDTH,
     DOCK_MAX_WIDTH,
@@ -7,10 +7,12 @@ import {
     DockPosition,
     ResolvedDockPanel,
     TOGGLE_DOCK_PANEL,
+    dockRuntime,
     event,
     useActiveEditor,
     useDockPanels,
 } from "@kn/common"
+import { resolveDockPin } from "./dock-pinning"
 
 const storageKey = (position: DockPosition, key: string) => `kn:dock:${position}:${key}`
 
@@ -65,6 +67,19 @@ export const useDockState = ({ position, spaceId, pageId, restoreActive = true }
         [allPanels, context]
     )
 
+    /**
+     * Panels running background work. While one runs, that panel is pinned:
+     * forced open and immune to every "hide the dock" click (rail toggle, panel
+     * close, toolbar/shortcut entry points, mobile sheet dismissal). The
+     * conversation the user is watching must not disappear mid-run, and hiding
+     * the panel must never tear the run down.
+     */
+    const runningIds = useSyncExternalStore(
+        dockRuntime.subscribeRunning,
+        dockRuntime.runningIds,
+        dockRuntime.runningIds,
+    )
+
     const [activeId, setActiveId] = useState<string | null>(() => restoreActive ? readStored(position, 'active') : null)
     const [width, setWidth] = useState<number>(() => {
         const stored = Number(readStored(position, 'width'))
@@ -72,12 +87,23 @@ export const useDockState = ({ position, spaceId, pageId, restoreActive = true }
     })
     const [resizing, setResizing] = useState(false)
 
+    // While something runs, the pin overrides the stored preference: the panel
+    // of the running conversation is the expanded one, whatever the user (or a
+    // rail click, or the mobile sheet's backdrop) asked for.
+    const panelIds = useMemo(() => panels.map(panel => panel.id), [panels])
+    const pin = useMemo(
+        () => resolveDockPin({ panelIds, runningIds }, activeId),
+        [panelIds, runningIds, activeId]
+    )
+    const pinnedId = pin.pinnedId
+    const expandedId = pin.activeId
+
     // A panel whose plugin was uninstalled (or that opted out of the current
     // context) simply renders as collapsed; the preference is kept so the panel
     // reappears expanded once it is available again.
     const activePanel = useMemo(
-        () => panels.find(panel => panel.id === activeId),
-        [panels, activeId]
+        () => panels.find(panel => panel.id === expandedId),
+        [panels, expandedId]
     )
     const minWidth = activePanel?.minWidth ?? DOCK_MIN_WIDTH
     const maxWidth = activePanel?.maxWidth ?? DOCK_MAX_WIDTH
@@ -87,11 +113,25 @@ export const useDockState = ({ position, spaceId, pageId, restoreActive = true }
         writeStored(position, 'active', id)
     }, [position])
 
-    const toggle = useCallback((id: string) => {
-        activate(activeId === id ? null : id)
-    }, [activate, activeId])
+    // Anyone may ask the dock to open a panel; nobody may dismiss the pinned
+    // one. Re-opening the pinned panel is what keeps the pin idempotent.
+    const requestActive = useCallback((id: string | null) => {
+        if (pinnedId && id !== pinnedId) return
+        activate(id)
+    }, [activate, pinnedId])
 
-    const close = useCallback(() => activate(null), [activate])
+    const toggle = useCallback((id: string) => {
+        if (pinnedId) return
+        activate(activeId === id ? null : id)
+    }, [activate, activeId, pinnedId])
+
+    const close = useCallback(() => requestActive(null), [requestActive])
+
+    // Adopt the pin into the stored preference, so the panel stays open when the
+    // run finishes instead of snapping shut the moment the agent stops.
+    useEffect(() => {
+        if (pinnedId && activeId !== pinnedId) activate(pinnedId)
+    }, [pinnedId, activeId, activate])
 
     // Imperative entry points (sidebar menu, editor toolbar, mobile tab bar).
     useEffect(() => {
@@ -163,7 +203,18 @@ export const useDockState = ({ position, spaceId, pageId, restoreActive = true }
     return {
         panels,
         activePanel,
-        activeId,
+        /**
+         * The panel the dock is actually showing (the pin, when one is active).
+         * The rail marks this one as current.
+         */
+        activeId: expandedId,
+        /**
+         * Panel that is pinned open because it is running work, or null. The
+         * host uses it to lock the rail and to refuse sheet dismissal.
+         */
+        pinnedId,
+        /** Panels reporting running work; drives the rail's status dot. */
+        runningIds,
         context,
         width,
         minWidth,

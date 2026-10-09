@@ -42,6 +42,8 @@ export const resources = {
       },
       dock: {
         agent: "AI 助手",
+        running: "运行中",
+        locked: "运行中，面板保持打开",
       },
       uploadTasks: {
         title: "上传任务",
@@ -1461,6 +1463,8 @@ export const resources = {
       },
       dock: {
         agent: "AI Assistant",
+        running: "Running",
+        locked: "Running — panel stays open",
       },
       uploadTasks: {
         title: "Uploads",

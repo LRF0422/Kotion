@@ -398,8 +398,12 @@ export const KernelHomePage: React.FC = () => {
                             </div>
                         )}
 
+                        {/* Center the hero in the message viewport instead of
+                            pinning it to the top of the scroll area. */}
                         {isEmpty && (
-                            <ChatEmptyState mode={chatMode} onSubmit={handleQuickSubmit} />
+                            <div className="flex flex-1 flex-col justify-center">
+                                <ChatEmptyState mode={chatMode} onSubmit={handleQuickSubmit} />
+                            </div>
                         )}
 
                         {messages.map(message => (

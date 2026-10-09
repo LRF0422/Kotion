@@ -216,6 +216,22 @@
   box-shadow: 0 0 0 1.5px hsl(var(--background));
 }
 
+/* A running panel pins the dock open: the rail is a status indicator, not a
+   control, so the other icons dim and nothing invites a click that would hide
+   the running conversation. */
+.kn-dock-rail[data-locked="true"] .kn-rail-control {
+  cursor: not-allowed;
+}
+
+.kn-dock-rail[data-locked="true"] .kn-rail-control:not([data-pinned]) {
+  opacity: 0.45;
+}
+
+.kn-dock-rail[data-locked="true"] .kn-rail-control:not([data-pinned]):hover {
+  color: hsl(var(--sidebar-foreground) / 0.68);
+  background: transparent;
+}
+
 .kn-rail-utilities button {
   color: hsl(var(--sidebar-foreground) / 0.68);
   border-color: transparent;

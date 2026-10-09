@@ -414,7 +414,9 @@ const ChatMessageList = React.forwardRef<HTMLDivElement, ChatMessageListProps>(
           onTouchMove={disableAutoScroll}
           {...props}
         >
-          <div className="flex flex-col gap-1">{children}</div>
+          {/* Grows with the viewport so a lone child (e.g. an empty-state
+              hero) can center itself; message stacks still start at the top. */}
+          <div className="flex flex-col gap-1 grow">{children}</div>
         </div>
 
         {!isAtBottom && (

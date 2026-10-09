@@ -1,9 +1,28 @@
 /**
+ * Every reason the plugin set can change.
+ *
+ * `refresh` is deliberately the odd one out: it means "re-read what is already
+ * here" — the marketplace reloading its own list, or a plugin announcing that it
+ * finished registering itself — and never changes the server's installed set.
+ * See `REMOTE_PLUGIN_CHANGE_SOURCES` in this module.
+ */
+export type PluginChangeSource =
+  | 'install'
+  | 'uninstall'
+  | 'update'
+  | 'init'
+  | 'refresh'
+  | 'enable'
+  | 'disable'
+  | 'delete'
+  | 'bulk'
+
+/**
  * Type-safe event map.
  * Each key is an event name; the value is the payload type (undefined for no payload).
  */
 export interface EventMap {
-  PLUGIN_CHANGED: { source: 'install' | 'uninstall' | 'update' | 'init' | 'refresh' | 'enable' | 'disable' | 'delete' | 'bulk' }
+  PLUGIN_CHANGED: { source: PluginChangeSource }
   PLUGIN_INIT_SUCCESS: undefined
   PLUGIN_INCOMPATIBLE: { name: string; apiVersion?: string }
   ON_MESSAGE: any

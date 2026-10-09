@@ -5,7 +5,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { TourHost } from "./components/Tour/TourHost"
 import { ChevronLeft } from "@kn/icon"
 import { MobileTabBar } from "./components/mobile/MobileTabBar"
-import { useApi, APIS, useAsyncEffect, useLocation, Outlet, useNavigator, useUploadFile, getAccessToken, getRefreshToken, getTokenContextState, clearContextSensitiveClientState, clearTokens, normalizeTokenResponse, notifyContextChanged, saveTokens, useDispatch, AppContext, event, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS, TOGGLE_AI_ASSISTANT, TOGGLE_DOCK_PANEL, dockRuntime, logger, useDesktop } from "@kn/common"
+import { useApi, APIS, useAsyncEffect, useLocation, Outlet, useNavigator, useUploadFile, getAccessToken, getRefreshToken, getTokenContextState, clearContextSensitiveClientState, clearTokens, normalizeTokenResponse, notifyContextChanged, saveTokens, useDispatch, AppContext, event, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS, REMOTE_PLUGIN_CHANGE_SOURCES, type PluginChangeSource, TOGGLE_AI_ASSISTANT, TOGGLE_DOCK_PANEL, dockRuntime, logger, useDesktop } from "@kn/common"
 import { toast } from "@kn/ui"
 import React from "react"
 import { MobilePageHeaderProvider, useMobilePageHeader } from "@kn/common"
@@ -101,6 +101,11 @@ export function Layout({ onPluginsReady }: LayoutProps) {
     const navigator = useNavigator()
     const location = useLocation()
     const isWorkspaceRoute = location.pathname.startsWith('/space-detail/')
+    /**
+     * Public share viewer: no agent, so no dock — a visitor must not get the
+     * workspace's side panels (or its running conversations) injected.
+     */
+    const isShareRoute = location.pathname.startsWith('/share/')
     // Space / page the shell dock renders against. Parsed from the route so the
     // dock can live in the app shell instead of the workspace page subtree.
     const workspaceMatch = location.pathname.match(/^\/space-detail\/([^/]+)(?:\/page\/edit\/([^/]+))?/)
@@ -162,9 +167,20 @@ export function Layout({ onPluginsReady }: LayoutProps) {
     const [requestPlugin, setRequestPlugin] = useState<any>()
     const { usePath } = useUploadFile()
 
-    // Plugin loading logic: listen for PLUGIN_CHANGED to trigger reinit
+    // Plugin loading logic: re-init only when the server's installed list may
+    // have changed (install / uninstall / update / …). Every other
+    // PLUGIN_CHANGED — the marketplace re-reading its own list, a plugin
+    // announcing it finished registering itself — is a UI-only change that
+    // SiderMenu and App already pick up from this same event. Re-initing there
+    // rebuilt the whole registry from the server list and dropped the plugins
+    // that list can never contain: the plugin studio's hot-reloaded dev builds.
     useEffect(() => {
-        const handlePluginChange = () => {
+        const handlePluginChange = (payload?: { source?: PluginChangeSource }) => {
+            const source = payload?.source
+            if (source && !REMOTE_PLUGIN_CHANGE_SOURCES.includes(source)) {
+                logger.debug(`PLUGIN_CHANGED(${source}) does not change the installed list; skipping plugin re-init`)
+                return
+            }
             setRefreshFlag(f => f + 1)
         }
         event.on(PLUGIN_CHANGED, handlePluginChange)
@@ -473,8 +489,13 @@ export function Layout({ onPluginsReady }: LayoutProps) {
                         {/* Right dock — a core shell feature. Rendered by the app
                             shell (not the workspace page) so it spans full height
                             and meets the top shell; mobile uses DockHost's own
-                            sheet branch. */}
-                        {isWorkspaceRoute && (
+                            sheet branch. Mounted on EVERY app route, not just the
+                            workspace: navigating away (Home, the AI page, the
+                            plugin hub, …) used to unmount the host and tear an
+                            in-flight agent run down. The panels tolerate a missing
+                            page context (no editor bound, workspace-scope tools),
+                            and the running panel pins itself open on top of that. */}
+                        {!isShareRoute && (
                             <DockHost
                                 position="right"
                                 spaceId={workspaceSpaceId}

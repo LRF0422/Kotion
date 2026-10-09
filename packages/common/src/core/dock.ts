@@ -1,5 +1,6 @@
 import { Editor } from "@tiptap/core"
 import { ComponentType, ReactNode } from "react"
+import { event, DOCK_PANEL_RUNNING } from "../event"
 
 /**
  * Dock panels — the side-dock contribution point.
@@ -88,6 +89,21 @@ export const DOCK_MAX_WIDTH = 720
  */
 const mountedDocks = new Set<DockPosition>()
 
+/**
+ * Panels that reported running background work (`DOCK_PANEL_RUNNING`).
+ *
+ * The snapshot is replaced on every change so it can be consumed with
+ * `useSyncExternalStore`, and the registry outlives any single dock host: a run
+ * must stay observable — and its panel stay pinned open — even when the shell
+ * that renders the dock is unmounted and mounted again (navigation).
+ */
+let runningPanels: ReadonlySet<string> = new Set<string>()
+const runningListeners = new Set<() => void>()
+
+const notifyRunning = () => {
+    for (const listener of [...runningListeners]) listener()
+}
+
 export const dockRuntime = {
     markMounted(position: DockPosition) {
         mountedDocks.add(position)
@@ -96,4 +112,30 @@ export const dockRuntime = {
     isMounted(position: DockPosition = 'right') {
         return mountedDocks.has(position)
     },
+    /** Record that a dock panel started or stopped running work. */
+    markRunning(id: string, running: boolean) {
+        if (!id || runningPanels.has(id) === running) return
+        const next = new Set(runningPanels)
+        if (running) next.add(id)
+        else next.delete(id)
+        runningPanels = next
+        notifyRunning()
+    },
+    /** Current snapshot of running panel ids (stable between changes). */
+    runningIds(): ReadonlySet<string> {
+        return runningPanels
+    },
+    /**
+     * Subscribe to running-panel changes. The event bus is wired at module load
+     * (below), so the registry is always current — no window where a panel is
+     * running but nothing has reported it yet.
+     */
+    subscribeRunning(listener: () => void) {
+        runningListeners.add(listener)
+        return () => { runningListeners.delete(listener) }
+    },
 }
+
+// Kept for the app lifetime: the registry must outlive any dock host, so a run
+// started before the shell mounts (or continued across navigation) is known.
+event.on(DOCK_PANEL_RUNNING, ({ id, running }) => dockRuntime.markRunning(id, running))

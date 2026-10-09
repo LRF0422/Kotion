@@ -271,6 +271,27 @@ export interface PluginInitResult {
     incompatiblePlugins: PluginApiIncompatibility[]
 }
 
+/**
+ * Install metadata for one active plugin.
+ *
+ * `source` is what decides whether a plugin can outlive a re-init: `system` and
+ * `dev` plugins exist only in this runtime (host bundles and the plugin studio's
+ * hot-reloaded builds), while `installed` plugins are entries in the server's
+ * installed list and are replaced wholesale by it.
+ */
+interface ActivePluginMeta {
+    pluginKey: string
+    version?: string
+    source: PluginSource
+    desktopOnly: boolean
+}
+
+/** A runtime-local plugin plus the metadata a re-init must carry across. */
+interface LocalPluginEntry {
+    plugin: KPlugin<any>
+    meta: ActivePluginMeta
+}
+
 export class PluginManager {
 
     plugins: KPlugin<any>[] = []
@@ -303,13 +324,14 @@ export class PluginManager {
     private _cacheAgentContributions: ResolvedAgentContribution[] | null = null
     private _pluginMap: Map<string, KPlugin<any>> = new Map()
     /** Install metadata per active plugin; drives the pluginManagement service. */
-    private _pluginMeta = new Map<string, {
-        pluginKey: string
-        version?: string
-        source: PluginSource
-        desktopOnly: boolean
-    }>()
+    private _pluginMeta = new Map<string, ActivePluginMeta>()
     private _incompatiblePlugins = new Map<string, PluginApiIncompatibility>()
+    /**
+     * Runtime names the server's installed list contained at the end of the last
+     * init. Together with the incoming list it tells {@link _runtimeLocalEntries}
+     * which registry entries the server never supplied.
+     */
+    private _remotePluginNames = new Set<string>()
 
     // Built-in dock panels contributed by the host itself (e.g. the AI agent
     // panel). Same contract as plugin-contributed panels; they simply cannot be
@@ -374,6 +396,67 @@ export class PluginManager {
 
     private _isInitialPluginKey(pluginKey?: string): boolean {
         return Boolean(pluginKey && this._initialPlugins.some(plugin => plugin.pluginKey === pluginKey))
+    }
+
+    /**
+     * Registry entries the server never supplied: the plugin studio's
+     * hot-reloaded dev builds, and plugins an install activated while an init
+     * was still in flight. Neither is in `_initialPlugins` nor in the server's
+     * installed list, so a re-init that rebuilt the registry from that list
+     * could never bring them back — it has to carry them across.
+     *
+     * A `dev` build is authoritative for its runtime name (it shadows the
+     * published artifact the developer is iterating on). An `installed` entry
+     * is only runtime-local while the server has never listed it: once it does,
+     * the server owns that name and the next init reloads it from there.
+     *
+     * @param incomingNames names in the installed list this init is about to load.
+     */
+    private _runtimeLocalEntries(incomingNames: ReadonlySet<string> = new Set()): LocalPluginEntry[] {
+        const hostNames = new Set(this._initialPlugins.map(plugin => plugin.name))
+        const local: LocalPluginEntry[] = []
+        this._pluginMap.forEach((plugin, name) => {
+            if (hostNames.has(name)) return
+            const meta = this._pluginMeta.get(name)
+            if (!meta || meta.source === 'system') return
+            if (meta.source === 'installed' && (this._remotePluginNames.has(name) || incomingNames.has(name))) {
+                return
+            }
+            local.push({ plugin, meta })
+        })
+        return local
+    }
+
+    /** Put a preserved runtime-local plugin back into the registry and its metadata. */
+    private _restoreLocalPlugins(localPlugins: LocalPluginEntry[]) {
+        localPlugins.forEach(({ plugin, meta }) => {
+            this._pluginMap.set(plugin.name, plugin)
+            this._pluginMeta.set(plugin.name, meta)
+        })
+    }
+
+    /**
+     * The active runtime plugin list: host plugins, runtime-local (dev) plugins
+     * no remote list can restore, then this round's remote plugins. First
+     * registration wins, so a dev build shadows the published artifact of the
+     * same runtime name until it is explicitly uninstalled.
+     */
+    private _composeActivePlugins(
+        remotePlugins: KPlugin<any>[],
+        localPlugins: LocalPluginEntry[] = [],
+    ): KPlugin<any>[] {
+        const seen = new Set<string>()
+        const active: KPlugin<any>[] = []
+        for (const plugin of [
+            ...this._initialPlugins,
+            ...localPlugins.map(entry => entry.plugin),
+            ...remotePlugins,
+        ]) {
+            if (seen.has(plugin.name)) continue
+            seen.add(plugin.name)
+            active.push(plugin)
+        }
+        return active
     }
 
     /**
@@ -544,17 +627,32 @@ export class PluginManager {
         // Determine if we are re-initializing (already initialized before)
         const isReinit = this._init
 
+        // Names this init is about to load from the server. Derived before the
+        // reset so the snapshot below can tell "the server owns this name" from
+        // "this runtime installed it and the server has never heard of it".
+        const incomingNames = new Set(
+            (remotePlugins ?? []).flatMap(input => {
+                const plugin = normalizeRemotePluginDescriptor(input)
+                return plugin ? [plugin.name] : []
+            }),
+        )
+        // Snapshot the runtime-local plugins *before* the reset clears the
+        // registry: nothing in `remotePlugins` can restore them afterwards.
+        const localPlugins = this._runtimeLocalEntries(incomingNames)
+
         try {
             // Reset state if reinitializing to ensure clean state
             if (isReinit) {
                 logger.info('PluginManager already initialized, resetting state for reinitialization');
                 this._init = false;
-                // Keep initial plugins but clear remote plugins
-                this.plugins = [...this._initialPlugins];
-                // Rebuild plugin map with only initial plugins
+                // Keep host plugins and runtime-local plugins; the remote set is
+                // what is being reloaded here, not uninstalled.
+                this.plugins = this._composeActivePlugins([], localPlugins);
+                // Rebuild plugin map with only the kept plugins
                 this._pluginMap.clear();
                 this._pluginMeta.clear();
                 this._buildPluginMap(this._initialPlugins);
+                this._restoreLocalPlugins(localPlugins);
                 this._rebuildServices();
 
                 // Invalidate script cache so remote plugins are freshly loaded
@@ -562,15 +660,30 @@ export class PluginManager {
             }
 
             if (!remotePlugins || remotePlugins.length === 0) {
-                this.plugins = ([...(this._initialPlugins || [])])
+                // No installed list to sync against: the host's own plugins plus
+                // whatever this runtime installed locally stay active, and
+                // everything the server previously supplied stops being active —
+                // registry and active list are rebuilt together so that
+                // `hasPlugin()` cannot outlive the menu entries it backs.
+                this.plugins = this._composeActivePlugins([], localPlugins)
+                this._pluginMap.clear()
+                this._pluginMeta.clear()
+                this._buildPluginMap(this._initialPlugins)
+                this._restoreLocalPlugins(localPlugins)
                 const conflicts = this._rebuildServices()
                 if (conflicts.size > 0) {
                     this.plugins = this.plugins.filter(plugin => !conflicts.has(plugin.name))
                     this._pluginMap.clear()
                     this._pluginMeta.clear()
                     this._buildPluginMap(this.plugins)
+                    // `_buildPluginMap` labels every surviving plugin `system`;
+                    // put the preserved plugins' real metadata back.
+                    this._restoreLocalPlugins(
+                        localPlugins.filter(({ plugin }) => !conflicts.has(plugin.name)),
+                    )
                     this._rebuildServices()
                 }
+                this._remotePluginNames = new Set()
                 this._incompatiblePlugins = new Map()
                 this._notifyChange()
                 this._init = true
@@ -634,7 +747,12 @@ export class PluginManager {
             const incompatiblePlugins = new Map<string, PluginApiIncompatibility>()
             const successfulPlugins: KPlugin<any>[] = []
             const activatedPluginKeys = new Set<string>()
-            const seenPluginNames = new Set(this._initialPlugins.map(plugin => plugin.name))
+            const seenPluginNames = new Set([
+                ...this._initialPlugins.map(plugin => plugin.name),
+                // A locally hot-reloaded dev build shadows the published
+                // artifact of the same runtime name until it is uninstalled.
+                ...localPlugins.map(({ plugin }) => plugin.name),
+            ])
             loadableRemotePlugins.forEach((plugin, index) => {
                 const outcome = loadOutcomes.get(index)
                 if (!outcome || !('registration' in outcome)) return
@@ -671,8 +789,25 @@ export class PluginManager {
                 }
             }
 
-            this.plugins = [...this._initialPlugins, ...successfulPlugins]
+            // Snapshot again rather than reusing the pre-reset one: a plugin may
+            // have been installed from source while the remote scripts were
+            // still loading, and that install has to end up in the list too.
+            this.plugins = this._composeActivePlugins(
+                successfulPlugins,
+                this._runtimeLocalEntries(incomingNames),
+            )
             this._buildPluginMap(successfulPlugins)
+
+            // The registry is the source of truth for "what is active"; this pair
+            // of lines is what a re-init used to break (plugin present in the map,
+            // missing from the list). Kept at debug so a support session can
+            // confirm the two agree without spamming the console.
+            logger.debug(
+                'init →',
+                this.plugins.map(plugin => plugin.name),
+                'registry →',
+                [...this._pluginMap.keys()],
+            )
 
             const serviceConflicts = this._rebuildServices()
             if (serviceConflicts.size > 0) {
@@ -691,6 +826,9 @@ export class PluginManager {
             }
 
             this._incompatiblePlugins = incompatiblePlugins
+            // Remember what the server listed, so a later init can tell its own
+            // entries apart from the ones this runtime installed.
+            this._remotePluginNames = incomingNames
             this._notifyChange()
             this._init = true
 
@@ -709,10 +847,12 @@ export class PluginManager {
             }
         } catch (error) {
             logger.error('Fatal error during plugin initialization:', error)
-            this.plugins = [...this._initialPlugins]
+            const preserved = this._runtimeLocalEntries(incomingNames)
+            this.plugins = this._composeActivePlugins([], preserved)
             this._pluginMap.clear()
             this._pluginMeta.clear()
             this._buildPluginMap(this._initialPlugins)
+            this._restoreLocalPlugins(preserved)
             this._rebuildServices()
             this._incompatiblePlugins = new Map()
             this._notifyChange()
