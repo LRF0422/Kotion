@@ -79,7 +79,10 @@ export const FeaturesStep = ({
       <Tabs value={active?.id} onValueChange={onActiveIdChange}>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0 overflow-x-auto pb-1">
-            <TabsList className="h-11 w-max justify-start">
+            {/* h-auto, not h-11: the triggers below are 44px touch targets, and
+                a fixed h-11 list (44px minus its own p-1) would be shorter than
+                its own tabs, so the active pill spilled out of the track. */}
+            <TabsList className="h-auto w-max justify-start">
               {descriptions.map((item) => (
                 <TabsTrigger
                   key={item.id}

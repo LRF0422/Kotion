@@ -20,7 +20,12 @@ export const PluginHubTopBar: React.FC<PluginHubTopBarProps> = ({
   const isDetail = pathname.startsWith("/plugin-hub/");
 
   return (
-    <header className="titlebar-drag-region relative z-[60] flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border/70 bg-background px-3 md:px-4 lg:px-5">
+    // No z-index here on purpose: the shell already reserves the top band
+    // (`--kn-titlebar-height`) so the absolutely positioned drag band can never
+    // cover this header, and anything above z-50 would paint on top of the
+    // body-portalled Dialog/AlertDialog overlays — leaving this bar bright and
+    // undimmed while the rest of the page is behind the modal scrim.
+    <header className="titlebar-drag-region relative flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border/70 bg-background px-3 md:px-4 lg:px-5">
       <div className="titlebar-no-drag flex min-w-0 items-center gap-1.5">
         {isDetail ? (
           <>

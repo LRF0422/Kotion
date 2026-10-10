@@ -393,7 +393,14 @@ export const PluginUploader: React.FC<PluginUploaderProps> = ({
                 />
 
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                  <ScrollArea className="min-h-0 flex-1">
+                  {/* Force the Radix viewport's inner wrapper from display:table
+                      to block. As a table it grows to the widest child's
+                      max-content width, so every `w-full` block here (the doc
+                      tip card, the tabs row, the editor) was laid out wider than
+                      the viewport and its right edge — including the "Add
+                      section" button — got clipped by the dialog's
+                      overflow-hidden. Same fix as MessageBox. */}
+                  <ScrollArea className="min-h-0 flex-1 [&_[data-radix-scroll-area-viewport]>div]:!block">
                     <div className="mx-auto w-full max-w-3xl space-y-4 px-4 py-5 sm:px-6">
                       {stepError && currentStep !== 2 && (
                         <Alert variant="destructive">
