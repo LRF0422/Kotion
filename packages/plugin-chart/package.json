@@ -25,6 +25,9 @@
   ],
   "author": "",
   "license": "ISC",
+  "knPluginStudio": {
+    "icon": "assets/icon.svg"
+  },
   "devDependencies": {
     "@kn/rollup-config": "workspace:*"
   }

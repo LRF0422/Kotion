@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Chart">
+  <title>Chart</title>
+  <!--
+    Kotion plugin icon — same brand tile as the app icon
+    (apps/vite/public/favicon.svg: #fb923c → #ec4899 diagonal gradient,
+    rounded square, white rounded glyph), with a bar + trend chart glyph.
+  -->
+  <defs>
+    <linearGradient id="kn-brand" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fb923c"/>
+      <stop offset="100%" stop-color="#ec4899"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="113" fill="url(#kn-brand)"/>
+  <rect x="6" y="6" width="500" height="500" rx="107" fill="none" stroke="#000000" stroke-opacity="0.10" stroke-width="12"/>
+  <rect x="120" y="296" width="64" height="104" rx="32" fill="#ffffff"/>
+  <rect x="224" y="240" width="64" height="160" rx="32" fill="#ffffff"/>
+  <rect x="328" y="184" width="64" height="216" rx="32" fill="#ffffff"/>
+  <path d="M152 232 L360 120" fill="none" stroke="#ffffff" stroke-width="34" stroke-linecap="round"/>
+</svg>
