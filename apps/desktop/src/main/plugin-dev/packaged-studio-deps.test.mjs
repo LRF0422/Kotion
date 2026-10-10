@@ -86,14 +86,14 @@ const root = join(tmpdir(), 'kn-studio-packaged-test')
 const appOutDir = join(root, 'release')
 const resourcesDir = join(appOutDir, 'KN Desktop.app', 'Contents', 'Resources')
 const projectRoot = join(root, 'project')
-const unpackedDevDir = join(resourcesDir, 'app.asar.unpacked', 'out', 'main', 'plugin-dev')
-const modulesDir = join(unpackedDevDir, 'node_modules')
+/** Where `afterPack` puts the runtime: a plain dir under Resources. */
+const runtimeDir = join(resourcesDir, 'kn-studio-runtime')
+const modulesDir = join(runtimeDir, 'node_modules')
 /**
  * `__dirname` as the packaged manager sees it: *inside* app.asar.
  *
- * The manager decides "did afterPack ship the dev-server?" from this path, so
- * the test has to use it — not the unpacked one — or it cannot catch a layout
- * where the entry scripts never left the asar (which is exactly what broke).
+ * The manager must NOT resolve the runtime from here — that is the bug this
+ * guards. Kept so the test can assert the resolution ignores it.
  */
 const unpackedAsarDevDir = join(resourcesDir, 'app.asar', 'out', 'main', 'plugin-dev')
 
@@ -121,7 +121,7 @@ try {
     // `existsSync` reports them missing at runtime, the manager then falls back
     // to the asar copy, and the spawned Node process dies with MODULE_NOT_FOUND.
     for (const file of ['dev-server.mjs', 'bundler.mjs', 'tailwind.mjs']) {
-        check(`hook: ${file} shipped outside the asar`, await exists(join(unpackedDevDir, file)))
+        check(`hook: ${file} shipped outside the asar`, await exists(join(runtimeDir, file)))
     }
 
     const esbuildDir = join(modulesDir, 'esbuild')
@@ -153,10 +153,10 @@ try {
     /* -------------------------------------------------------------- *
      * 3. Host Tailwind config + host package sources shipped
      * -------------------------------------------------------------- */
-    const tailwindConfig = join(unpackedDevDir, 'tailwind.config.cjs')
+    const tailwindConfig = join(runtimeDir, 'tailwind.config.cjs')
     check('hook: host tailwind config shipped', await exists(tailwindConfig))
 
-    const hostApiRoot = join(unpackedDevDir, 'host-api')
+    const hostApiRoot = join(runtimeDir, 'host-api')
     check('hook: host-api tree shipped', await exists(join(hostApiRoot, 'packages', 'common', 'package.json')))
     check('hook: host-api source shipped', await exists(join(hostApiRoot, 'packages', 'common', 'src', 'index.ts')))
 
@@ -185,18 +185,26 @@ try {
     )
 
     // The hook already put the child assets there; assert what the manager will
-    // actually pick, replaying its own resolution against this layout.
-    const resolution = describeDevResolution(unpackedAsarDevDir)
+    // actually pick, replaying its own resolution against this layout. The
+    // runtime must resolve from `Resources/`, NOT from an asar-adjacent path —
+    // resolving relative to app.asar is what made the child die with
+    // MODULE_NOT_FOUND.
+    const resolution = describeDevResolution({ resourcesPath: resourcesDir, moduleDir: unpackedAsarDevDir })
     check(
-        'manager: picks the unpacked dev-server, not the asar copy',
-        resolution.shippedServerExists && resolution.shippedServer === join(unpackedDevDir, 'dev-server.mjs'),
+        'manager: resolves the runtime from Resources, not from inside the asar',
+        resolution.shippedServerExists && resolution.shippedServer === join(runtimeDir, 'dev-server.mjs'),
         JSON.stringify(resolution),
+    )
+    check(
+        'manager: the resolved path contains no app.asar segment',
+        Boolean(resolution.shippedServer) && !resolution.shippedServer.includes('app.asar'),
+        resolution.shippedServer,
     )
 
     const devServer = run(
         process.execPath,
         [
-            join(unpackedDevDir, 'dev-server.mjs'),
+            join(runtimeDir, 'dev-server.mjs'),
             '--root', projectRoot,
             '--watch', 'false',
             '--writeToDisk', 'false',

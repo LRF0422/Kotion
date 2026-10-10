@@ -342,14 +342,14 @@ pnpm test:plugin-dev:electron
 | `project-files.test.mjs` | 10 | 工程文件枚举/搜索/过滤、跳过 node_modules、截断上报 |
 | `package-install.test.mjs` | 20 | 包名/版本校验、管理器探测、argv 构造、假 spawn 安装 |
 | `tailwind.test.mjs` | 12 | 用宿主配置编译插件工具类、去除 @keyframes、空工程 |
-| `packaged-studio-deps.test.mjs` | 22 | **打包布局回归**：用真实 `afterPack` 钩子物化依赖，然后在**没有源码树**的前提下跑子进程——入口 `.mjs` 与 esbuild 都在 asar 外且可解析、平台二进制可 spawn、tailwind/postcss 与宿主配置就位并**真的编译出插件 CSS**、宿主标准包可读、**manager 选中的是 unpacked 那份而不是 asar 内那份** |
+| `packaged-studio-deps.test.mjs` | 23 | **打包布局回归**：用真实 `afterPack` 钩子物化依赖，然后在**没有源码树**的前提下跑子进程——入口 `.mjs` 与 esbuild 都在 asar 外且可解析、平台二进制可 spawn、tailwind/postcss 与宿主配置就位并**真的编译出插件 CSS**、宿主标准包可读、**manager 从 `Resources/` 解析运行时且解析出的路径不含 `app.asar`** |
 | `studio-tools.test.mjs` | 179 | **agent 工具面**：名称/描述/schema、create→write→run→build→list→stop 的每次能力调用、**模板与 externals 透传和校验**、**删除工程与自卸载**、**删单个文件与「未读不许删」**、**service 发现（提供者归属/过滤/无注册表兜底）**、**产物聚焦（含 focus:false 与坏预览不拖垮构建）**、失败装订、缺能力提示、失败不装旧产物、**只读发现可以、注册表管理不在** |
 | `surface.test.mjs` | 31 | **产物声明**：mapper 与工具面一致、kind 与预览一致、构建/发布/工程/图标的 payload、失败不产生产物、id 稳定（同工程重建/重生成只占一格）、`focusArtifact` 无 payload 路径、垃圾输入不抛 |
 | `icon-art.test.mjs` | 30 | **图标**：同插件同图、关键词/显式字形/首字母兜底、配色哈希与显式色、SVG 自包含与转义、栏位片段、只改该改的文件（不动手写图标、兼容 legacy `knPlugin` 块）、清单读取与 mime/可上传判断 |
 | `studio.smoke.mjs` | 50 | 真实 `PluginManager.installPluginFromSource` + Blob URL + 真实 loader；热更替换、单实例、坏代码不中断、恢复；**内置目录建工程、五个模板都能构建、删除工程、工程内删文件**；**产物管线（mapper 按工具名注册、卡片/预览贡献、产物架从 transcript 派生）**、**把活的插件面板真的渲染成 markup**、**真实 ServiceRegistry 把服务归属到插件** |
 | `electron.smoke.mjs` | 36 | 真实 preload 能力白名单、`dev.*` IPC（含 `dev.remove` / `dev.deleteFile`）、`ELECTRON_RUN_AS_NODE` 子进程、`desktop:event:dev` 推送、**无对话框 scaffold + 模板 + list + 读写/删除文件**、越界路径拒绝 |
 
-`pnpm test:plugin-dev` 合计 469 项检查
+`pnpm test:plugin-dev` 合计 470 项检查
 后端（`backend/knowledgecloud`）：`mvn -o -pl knowledge-service/knowledge-wiki -am -Dtest=PluginApplicationTest test` —— 20 项，覆盖「升版带新图标记在版本上 / 不带则继承 / 审批通过后提升到插件」。
 ；`pnpm test:plugin-dev:electron` 另有 36 项（需要先构建出 `out/preload/index.js`）。
 
@@ -418,7 +418,8 @@ agent 工具面因此没有 `listInstalledPlugins` / `uninstallInstalledPlugin` 
 开发台的编译能力跑在**子进程**里，需要的东西都不在 `out/**` 里，而 electron-builder 的
 `files` 只含 `out/**`（并排除 node_modules）。所以 `afterPack` 钩子
 [`apps/desktop/scripts/prepare-studio-deps.cjs`](../apps/desktop/scripts/prepare-studio-deps.cjs)
-会在打包时把三样东西物化到 `app.asar.unpacked/out/main/plugin-dev/`：
+会在打包时把运行时装到 **`Contents/Resources/kn-studio-runtime/`**（一个**普通目录**，
+不是 `app.asar.unpacked`）：
 
 | 装什么 | 谁用 | 缺了会怎样 |
 | --- | --- | --- |
@@ -427,18 +428,20 @@ agent 工具面因此没有 `listInstalledPlugins` / `uninstallInstalledPlugin` 
 | `tailwindcss` / `postcss` / 宿主 `tailwind.config` | 编译插件 CSS（`tailwind.mjs`） | 面板/页面**没有样式**（裸 DOM） |
 | 宿主标准包源码（`common`/`core`/`ui`/`icon`/`editor`/`plugin-api`） | agent 的 `searchHostApi` / `readHostApiFile` | AI 写插件时查不到真实接口 |
 
-两条硬约束（都是实测结论，改这里前先读）：
+三条硬约束（都是实测踩出来的，改这里前先读）：
 
 1. **子进程要读的东西必须物理落在 asar 外**。不只是原生二进制——asar 里的 `.mjs`
-   在打包运行时的 `existsSync` 判定下是「不存在」的（实测：`fs.existsSync` 对
-   `app.asar.unpacked/.../dev-server.mjs` 返回 false，而对 asar 内那份返回 true）。
-   所以入口脚本也要一起复制出去，否则 manager 会回退到 asar 内那份，
+   在打包运行时 `existsSync` 判定为「不存在」（实测对 asar 内那份返回 true、
+   对 `app.asar.unpacked` 下的那份返回 false），于是 manager 会回退去 asar 里取，
    子进程在真正的 Node 里一加载就 `MODULE_NOT_FOUND`。
-2. **不能用 `NODE_PATH` 兜底**。ESM 解析器不认它（对 `import()` 无效），所以依赖必须放在
+2. **运行时要放在一个「不用反推」的普通目录里**。前两版都栽在这里：
+   先是用 `..` 层数反推 `app.asar.unpacked`（层数随 bundle 深度变化，差一层就去找
+   `out/main/dev-server.mjs`），改成重写 `app.asar` 段之后，打包主进程里
+   `existsSync` 仍然对那个位置返回 false。现在直接放 `Resources/kn-studio-runtime/`，
+   manager 用 **`process.resourcesPath`** 定位——既天然在 asar 外，也不需要任何路径反推。
+3. **不能用 `NODE_PATH` 兜底**。ESM 解析器不认它（对 `import()` 无效），所以依赖必须放在
    *从 `dev-server.mjs` 所在目录向上查找就能命中* 的位置——也就是它同层的 `node_modules/`。
-   `manager.mjs` 因此优先从 unpacked 目录运行子进程，并通过 `KN_TAILWIND_CONFIG` 把随包发出的
-   宿主 Tailwind 配置传给子进程。asar 路径到 unpacked 的换算用 **`app.asar` 段重写**，
-   不要用 `..` 层数（层数随 bundle 深度变化，曾因此差一层而去找 `out/main/dev-server.mjs`）。
+   `manager.mjs` 通过 `KN_TAILWIND_CONFIG` 把随包发出的宿主 Tailwind 配置传给子进程。
 
 依赖按**真实 Node 解析结果**物化（每个包用它真实目录上的 resolver 解析自己的 dependencies），
 同名不同版本各自落在自己父包的解析范围内。**去重只能按解析范围做**：把某个包挪到别处复用会让它

@@ -82,6 +82,18 @@ const HOST_PACKAGE_DIRS = ['common', 'core', 'ui', 'icon', 'editor', 'plugin-api
 /** 宿主 tailwind 配置在仓库里的相对位置（相对 workspace 根）。 */
 const HOST_TAILWIND_CONFIG = ['packages', 'ui', 'tailwind.config.js']
 
+/**
+ * Directory under `Resources/` that holds the studio's packaged runtime.
+ *
+ * Deliberately a plain directory (not `app.asar.unpacked`): it sits outside the
+ * asar by construction and needs no path reconstruction, so the main process can
+ * `existsSync` it reliably. `manager.mjs` finds it via `process.resourcesPath`.
+ */
+const STUDIO_RUNTIME_DIR_NAME = 'kn-studio-runtime'
+
+/** Child-process entry scripts; they must live outside the asar. */
+const CHILD_ASSETS = ['dev-server.mjs', 'bundler.mjs', 'tailwind.mjs']
+
 /** 依赖树规模上限，防止异常清单把打包拖死。 */
 const MAX_PACKAGES = 5000
 
@@ -306,17 +318,19 @@ module.exports = async function prepareStudioDependencies(context) {
         throw new Error(`[prepare-studio-deps] 找不到 Resources 目录 (appOutDir=${context.appOutDir})`)
     }
 
-    // 关键：资源必须落在 app.asar.unpacked 下，esbuild 才能 spawn 平台二进制。
-    const dest = path.join(resources, 'app.asar.unpacked', 'out', 'main', 'plugin-dev')
+    // 运行时放在 Resources 下的**普通目录**里，不放在 app.asar.unpacked 里。
+    //
+    // 为什么不用 app.asar.unpacked：那里紧贴 app.asar，路径要靠「asar 内路径反推
+    // 兄弟目录」得到，而 manager 判断「随包那份在不在」用的是 existsSync ——
+    // 打包运行时对 app.asar.unpacked 下的路径它并不可靠（实测返回 false），
+    // 于是 manager 回退到 asar 内那份，子进程一加载就 MODULE_NOT_FOUND。
+    // 放在 Resources 下的普通目录，既天然在 asar 外，路径也不依赖任何反推。
+    const dest = path.join(resources, STUDIO_RUNTIME_DIR_NAME)
     fs.mkdirSync(dest, { recursive: true })
 
-    /* ---- 1a. 子进程入口脚本（物理落在 asar 外） ---- */
-    // 这一步不能省：打包运行时 asar 里的 `.mjs` 不是真实文件，manager 的
-    // existsSync 会判为不存在，于是回退到 asar 内的那份，子进程一加载就
-    // MODULE_NOT_FOUND。复制源在 out/main/plugin-dev（electron-vite 的构建产物）。
+    /* ---- 1a. 子进程入口脚本（必须在 asar 外） ---- */
     const sourceDir = resolveBuiltPluginDevDir(context)
-    const childAssets = ['dev-server.mjs', 'bundler.mjs', 'tailwind.mjs']
-    for (const file of childAssets) {
+    for (const file of CHILD_ASSETS) {
         const from = path.join(sourceDir, file)
         if (!fs.existsSync(from)) {
             throw new Error(
@@ -328,11 +342,10 @@ module.exports = async function prepareStudioDependencies(context) {
     }
 
     /* ---- 1b. 依赖树（esbuild 平台包 + CSS 工具链） ---- */
-    // node_modules 放在 Resources/app.asar.unpacked/out/main/plugin-dev/，与上面那份
-    // dev-server.mjs 同层 —— 子进程从自己的真实路径向上查找即可命中。
-    const modulesDir = path.join(resources, 'app.asar.unpacked', 'out', 'main', 'plugin-dev', 'node_modules')
+    // node_modules 与入口脚本同层：子进程从自己的真实路径向上查找即可命中。
+    const modulesDir = path.join(dest, 'node_modules')
     const { placed, skipped } = materializeDependencies(
-        path.join(resources, 'app.asar.unpacked', 'out', 'main', 'plugin-dev'),
+        dest,
         [...BUILD_PACKAGES, ...platformPackages, ...CSS_PACKAGES],
         modulesDir,
     )
