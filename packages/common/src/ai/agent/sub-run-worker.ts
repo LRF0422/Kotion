@@ -54,6 +54,15 @@ export const DEFAULT_MAX_PARALLEL_CALLS = 4
 const STREAM_RETRY_BASE_MS = 500
 const STREAM_RETRY_MAX_MS = 8_000
 
+/**
+ * Backoff for re-submitting a child's own `tool_results` after the resume
+ * request failed in flight. The payload stays queued until the server accepts
+ * it, so the retry rate only needs bounding — never a give-up path, because
+ * dropping the results strands the child (see {@link SubRunWorker.consumeOnce}).
+ */
+const RESUME_RETRY_BASE_MS = 500
+const RESUME_RETRY_MAX_MS = 8_000
+
 export type SubRunSettlement = 'completed' | 'failed' | 'cancelled' | 'detached'
 
 export interface SubRunWorkerOptions {
@@ -94,6 +103,8 @@ interface ChildState {
     paused: boolean
     /** Payload to POST before reopening the stream. */
     resumePayload: ResumePayload | null
+    /** Failed resume attempts for the queued payload (backoff; reset on accept). */
+    resumeAttempts: number
     abort: AbortController
     settled: boolean
     streamRetry: number
@@ -141,6 +152,7 @@ export class SubRunWorker {
             queue: [],
             paused: false,
             resumePayload: null,
+            resumeAttempts: 0,
             abort: new AbortController(),
             settled: false,
             streamRetry: 0,
@@ -203,22 +215,60 @@ export class SubRunWorker {
     /**
      * One stream round-trip: resume when a payload is queued, otherwise tail the
      * child's log. Returns on terminal, on pause, or when the stream ends.
+     *
+     * The queued payload is consumed ONLY once the server has accepted the
+     * resume (response headers arrived). A resume that fails in flight used to
+     * clear the payload first and then silently degrade to a tail-only stream:
+     * the child stayed parked in WAITING_TOOLS server-side forever, its tool
+     * calls kept spinning in the UI, and a parent parked in `wait_for_children`
+     * never returned. Children run in parallel, so a burst of simultaneous
+     * resumes (each an SSE connection on top of the live tails) is exactly when
+     * such a failure happens.
      */
     private async consumeOnce(state: ChildState): Promise<void> {
         const payload = state.resumePayload
-        state.resumePayload = null
         // Delegated runs are 'child' streams: the stream budget lets the
         // conversation through even when many sub-runs are live.
         const streamOptions: AgentStreamOptions = { priority: 'child' }
-        const events = payload
-            ? await this.client.resume(state.runId, payload, state.lastSeq, state.abort.signal, streamOptions)
-            : this.client.streamEvents(state.runId, state.lastSeq, state.abort.signal, streamOptions)
+        let events: AsyncGenerator<AgentEvent>
+        if (payload) {
+            try {
+                events = await this.client.resume(
+                    state.runId, payload, state.lastSeq, state.abort.signal, streamOptions
+                )
+            } catch (error) {
+                // Keep the results queued and retry: the run cannot move on
+                // without them and nobody else can deliver them.
+                await this.retryResume(state, error)
+                return
+            }
+            state.resumePayload = null
+            state.resumeAttempts = 0
+        } else {
+            events = this.client.streamEvents(state.runId, state.lastSeq, state.abort.signal, streamOptions)
+        }
 
         for await (const event of events) {
             if (state.settled || this.stopped) return
             this.handleEvent(state, event)
             if (state.settled || state.paused || state.resumePayload) return
         }
+    }
+
+    /**
+     * Pace the retry of a failed resume. The payload stays queued, so `drive()`
+     * re-attempts it after this backoff; a permanent failure therefore keeps
+     * retrying (loudly) rather than dropping the child's results on the floor.
+     */
+    private async retryResume(state: ChildState, error: unknown): Promise<void> {
+        state.resumeAttempts += 1
+        const message = error instanceof Error ? error.message : String(error)
+        const delay = Math.min(RESUME_RETRY_MAX_MS, RESUME_RETRY_BASE_MS * 2 ** (state.resumeAttempts - 1))
+        console.warn(
+            `[agent] 子 agent 工具结果提交失败（run ${state.runId}，第 ${state.resumeAttempts} 次，`
+            + `${Math.round(delay / 1000)}s 后重试）: ${message}`
+        )
+        await new Promise(resolve => setTimeout(resolve, delay))
     }
 
     private handleEvent(state: ChildState, event: AgentEvent): void {

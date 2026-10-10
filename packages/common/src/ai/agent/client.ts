@@ -261,6 +261,16 @@ export class AgentClient {
         signal?: AbortSignal,
         options?: AgentStreamOptions,
     ): Promise<AsyncGenerator<AgentEvent>> {
+        const priority = options?.priority ?? 'root'
+        // Take the stream slot BEFORE issuing the POST. The resume response body
+        // IS the long-lived run stream, so its connection must be budgeted from
+        // the moment it is opened: the POST used to run unbudgeted and the slot
+        // was only taken when the body was first read, so several children
+        // resuming at once exceeded the client budget (and the browser's
+        // ~6-connection cap) — ordinary API calls starved, the resume itself
+        // timed out, and the child's tool results were at risk. Every failure
+        // path below releases the slot.
+        const release = await acquireAgentStreamSlot(priority, signal)
         const controller = new AbortController()
         const forwardAbort = () => controller.abort()
         if (signal?.aborted) controller.abort()
@@ -277,6 +287,7 @@ export class AgentClient {
             })
         } catch (error) {
             signal?.removeEventListener('abort', forwardAbort)
+            release()
             if (controller.signal.aborted && !signal?.aborted) {
                 throw new Error('Resume request timed out before response headers')
             }
@@ -286,26 +297,25 @@ export class AgentClient {
         }
         if (!response.ok) {
             signal?.removeEventListener('abort', forwardAbort)
+            release()
             throw new Error('Resume failed (' + response.status + ')')
         }
         if (!response.body) {
             signal?.removeEventListener('abort', forwardAbort)
+            release()
             throw new Error('Resume response body is null')
         }
         const events = this.streamFromBody(response.body, afterSeq)
-        const priority = options?.priority ?? 'root'
         return (async function* () {
-            // The resume POST resolves once response headers arrive; the body is
-            // the long-lived stream, so the slot is taken for its lifetime (not
-            // the request/response header round-trip).
-            let release: (() => void) | null = null
+            // The slot taken for the POST is handed over to the body stream; it
+            // is released exactly once, when the stream is closed (by iteration
+            // end, terminal event, abort, or an explicit return()).
             try {
-                release = await acquireAgentStreamSlot(priority, signal)
                 yield* events
             } finally {
                 signal?.removeEventListener('abort', forwardAbort)
                 controller.abort()
-                release?.()
+                release()
             }
         })()
     }

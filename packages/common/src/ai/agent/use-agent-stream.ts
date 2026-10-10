@@ -138,7 +138,15 @@ export function useAgentStream(options: UseAgentStreamOptions): UseAgentStreamAp
                         if (firstTimer) clearTimeout(firstTimer)
                     })
                     : await events.next()
-                if (controller.signal.aborted || generation !== generationRef.current) return
+                if (controller.signal.aborted || generation !== generationRef.current) {
+                    // This generation lost the race for the run: close the resume
+                    // stream we already opened, otherwise its budgeted stream slot
+                    // is never released and permanently shrinks the budget for
+                    // every later run/child (which shows up as tool calls that
+                    // never execute).
+                    void events.return(undefined).catch(() => undefined)
+                    return
+                }
                 if (first.done) {
                     startStream(runId, cursor, generation)
                     return

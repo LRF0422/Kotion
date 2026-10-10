@@ -370,6 +370,56 @@ async function checkSubRunWorkersRunInParallel(): Promise<void> {
     worker.dispose()
 }
 
+async function checkChildResumeFailureKeepsToolResults(): Promise<void> {
+    // A child's resume POST can fail in flight (gateway 5xx, connection
+    // starvation, header timeout) while the child is parked in WAITING_TOOLS.
+    // Its tool results must stay queued and be re-submitted — dropping them
+    // stranded the child forever: the call kept spinning in the UI and a parent
+    // parked in `wait_for_children` never returned.
+    let resumeAttempts = 0
+    let toolExecutions = 0
+    const settled: string[] = []
+
+    const fakeClient = {
+        // A tail from afterSeq >= 2 has nothing new to replay: the child is
+        // parked server-side waiting for the tool results.
+        streamEvents(_runId: string, afterSeq = 0): AsyncGenerator<AgentEvent> {
+            return (async function* () {
+                if (afterSeq >= 2) return
+                yield { seq: 1, type: 'tool.requested', callId: 'call-a', tool: 'writeDocument', args: '{"markdown":"x"}' } as AgentEvent
+                yield { seq: 2, type: 'run.suspended', reason: 'waiting_tools', pendingCallIds: ['call-a'] } as AgentEvent
+            })()
+        },
+        async resume(): Promise<AsyncGenerator<AgentEvent>> {
+            resumeAttempts += 1
+            if (resumeAttempts === 1) throw new Error('Resume failed (502)')
+            return (async function* () {
+                yield { seq: 3, type: 'run.completed', finishReason: 'stop' } as AgentEvent
+            })()
+        },
+        async getRun() {
+            return { pendingTools: [{ callId: 'call-a', tool: 'writeDocument', argsJson: '{"markdown":"x"}' }] }
+        },
+    }
+
+    const worker = new SubRunWorker({
+        client: fakeClient as any,
+        executeTool: async () => {
+            toolExecutions += 1
+            return { ok: true, result: { done: true } }
+        },
+        onSettled: (runId, settlement) => { settled.push(`${runId}:${settlement}`) },
+    })
+
+    worker.attach('child-a')
+    await waitFor(() => settled.length === 1, 8000)
+
+    assert.ok(resumeAttempts >= 2, 'a failed resume must be retried, not dropped')
+    assert.equal(toolExecutions, 1, 'the retry must not re-execute the tool')
+    assert.deepEqual(settled, ['child-a:completed'], 'the child must still reach its terminal state')
+    worker.dispose()
+}
+
 async function waitFor(predicate: () => boolean, timeoutMs: number): Promise<void> {
     const deadline = Date.now() + timeoutMs
     while (Date.now() < deadline) {
@@ -389,6 +439,7 @@ async function main(): Promise<void> {
     await checkDocumentWriteSerialization()
     await checkExecutorOwnerAndWriteLease()
     await checkSubRunWorkersRunInParallel()
+    await checkChildResumeFailureKeepsToolResults()
     checkMergeRefusesToClobber()
     console.log('agent-core checks passed')
 }
