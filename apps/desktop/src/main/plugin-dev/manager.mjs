@@ -25,6 +25,48 @@ import {
 const here = dirname(fileURLToPath(import.meta.url))
 
 /**
+ * Map a module directory inside `app.asar` to its `app.asar.unpacked` sibling.
+ *
+ * Exported for {@link describeDevResolution} so the packaged layout can be
+ * checked without building a real asar.
+ */
+export const unpackedSiblingDir = (moduleDir) => {
+    const marker = `${sep}app.asar${sep}`
+    const index = moduleDir.indexOf(marker)
+    if (index === -1) return null
+    // Keep everything below `app.asar` and re-root it under the sibling.
+    const below = moduleDir.slice(index + marker.length)
+    return join(moduleDir.slice(0, index), 'app.asar.unpacked', ...below.split(sep))
+}
+
+/**
+ * What the manager resolves for a given module directory (diagnostics + tests).
+ *
+ * `resolveDevServer` prefers the copy inside `app.asar` when the shipped tree is
+ * absent, which cannot work in a packaged app — this reports both so the
+ * difference is visible instead of showing up as a bare MODULE_NOT_FOUND.
+ */
+export const describeDevResolution = (moduleDir) => {
+    const where = moduleDir || here
+    const shipped = unpackedSiblingDir(where)
+    const shippedServer = shipped && join(shipped, 'dev-server.mjs')
+    return {
+        moduleDir: where,
+        shippedDir: shipped,
+        shippedServer,
+        shippedServerExists: Boolean(shippedServer) && existsSync(shippedServer),
+        asarServer: join(where, 'dev-server.mjs'),
+        asarServerExists: existsSync(join(where, 'dev-server.mjs')),
+    }
+}
+
+/** Resolve what `afterPack` shipped, based on an arbitrary module dir. */
+const resolveShippedFor = (moduleDir) => {
+    const shipped = unpackedSiblingDir(moduleDir)
+    return shipped && existsSync(join(shipped, 'dev-server.mjs')) ? shipped : null
+}
+
+/**
  * The studio's runtime dependencies as shipped by `afterPack`, or null in dev.
  *
  * A packaged app cannot run the child from inside `app.asar`: esbuild must
@@ -35,28 +77,36 @@ const here = dirname(fileURLToPath(import.meta.url))
  * Electron maps the asar path onto it. When that directory exists we run the
  * child from there, which is what makes the module's own upward `node_modules`
  * lookup find the shipped esbuild.
+ *
+ * `app.asar.unpacked` is a **sibling of `app.asar`**, so the path is derived by
+ * rewriting the `app.asar` segment rather than counting `..` hops — that hop
+ * count depends on the bundle depth and was off by one, which made the studio
+ * look for `out/main/dev-server.mjs` and fail with MODULE_NOT_FOUND.
  */
-const resolveShippedDevDir = () => {
-    const candidate = join(here, '..', '..', '..', '..', 'app.asar.unpacked', 'out', 'main', 'plugin-dev')
-    return existsSync(join(candidate, 'dev-server.mjs')) ? candidate : null
-}
+const resolveShippedDevDir = () => resolveShippedFor(here)
 
 /**
  * Locate the dev-server entry the child process runs.
  *
+ * Resolution order matters: the **shipped unpacked copy must win**, because only
+ * it sits next to the materialized `node_modules` that the child resolves
+ * esbuild from. Falling back to the copy inside `app.asar` would spawn a child
+ * whose dependencies cannot be found.
+ *
  * The build copies `dev-server.mjs` next to this module (`out/main/plugin-dev/`)
  * because a child process needs a real file on disk — it is never part of the
  * main bundle. Running from source (tests, `electron-vite dev`) uses the sibling
- * in `src/main/plugin-dev/`. A packaged app prefers the unpacked copy (see
- * {@link resolveShippedDevDir}) so the esbuild shipped beside it resolves.
+ * in `src/main/plugin-dev/`.
  */
 const resolveDevServer = () => {
     const shipped = resolveShippedDevDir()
+    const shippedServer = shipped && join(shipped, 'dev-server.mjs')
+    if (shippedServer && existsSync(shippedServer)) return shippedServer
+
     const candidates = [
-        shipped && join(shipped, 'dev-server.mjs'),
         join(here, 'dev-server.mjs'),
         join(here, '..', '..', 'src', 'main', 'plugin-dev', 'dev-server.mjs'),
-    ].filter(Boolean)
+    ]
     return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0]
 }
 

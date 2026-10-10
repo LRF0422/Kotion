@@ -29,10 +29,16 @@
  * ## 产物布局
  *
  *     app.asar.unpacked/out/main/plugin-dev/
- *     ├── dev-server.mjs / bundler.mjs / tailwind.mjs
+ *     ├── dev-server.mjs / bundler.mjs / tailwind.mjs   ← 子进程入口（必须在 asar 外）
  *     ├── tailwind.config.cjs          ← 宿主 @kn/ui 的 tailwind 配置
  *     ├── node_modules/                ← 自包含依赖树（esbuild / tailwind / postcss …）
  *     └── host-api/packages/<name>/    ← 宿主标准包源码（只读参考）
+ *
+ * 为什么要连 `.mjs` 一起复制：`manager.mjs` 判断「随包发的那份 dev-server 是否可用」
+ * 用的是 `existsSync`。在打包运行时，**asar 内的 `.mjs` 不是真实文件**——
+ * `existsSync(.../app.asar.unpacked/.../dev-server.mjs)` 会返回 false（实测），
+ * 于是 manager 回退去 asar 里取，子进程在真正的 Node 里一加载就 MODULE_NOT_FOUND。
+ * 所以子进程会读到的文件必须**物理落在 asar 外**。
  *
  * 依赖按 **真实的 Node 解析结果** 物化：从入口包出发，用该包真实目录上的 resolver
  * 解析它的 dependencies，递归收集；同名不同版本才嵌套到父包的 node_modules 下。
@@ -124,8 +130,9 @@ const copyTree = (from, to) => {
  * 解析用的是**每个包真实目录上的 resolver**，拿到的就是这个包在真实安装布局里
  * 实际依赖的那一份 —— 不会被镜像目录本身误导。
  */
-const materializeDependencies = (dest, roots) => {
-    const modulesDir = path.join(dest, 'node_modules')
+const materializeDependencies = (dest, roots, modulesDir = path.join(dest, 'node_modules')) => {
+    // Dependencies go to `modulesDir`; `dest` is only the boundary that
+    // visibility walking stops at (per-scope `node_modules` are nested under it).
     fs.rmSync(modulesDir, { recursive: true, force: true })
     fs.mkdirSync(modulesDir, { recursive: true })
 
@@ -226,6 +233,27 @@ const resolveResourcesDir = (context) =>
         path.join(context.appOutDir, 'resources'),
     ].find((candidate) => fs.existsSync(candidate))
 
+/**
+ * The built child-process scripts (`out/main/plugin-dev/*.mjs`).
+ *
+ * electron-vite copies them there; afterPack runs after that build, so they are
+ * on disk under the app directory.
+ */
+const resolveBuiltPluginDevDir = (context) => {
+    for (const base of resolutionBases()) {
+        for (const candidate of [
+            path.join(base, 'out', 'main', 'plugin-dev'),
+            path.join(base, '..', 'out', 'main', 'plugin-dev'),
+        ]) {
+            if (fs.existsSync(path.join(candidate, 'dev-server.mjs'))) return candidate
+        }
+    }
+    throw new Error(
+        `[prepare-studio-deps] 找不到 out/main/plugin-dev/dev-server.mjs` +
+            `（appOutDir=${context.appOutDir}）。请先跑 electron-vite build。`,
+    )
+}
+
 /** 找到仓库根（含 packages/）。 */
 const resolveWorkspaceRoot = () => {
     for (const base of resolutionBases()) {
@@ -282,15 +310,35 @@ module.exports = async function prepareStudioDependencies(context) {
     const dest = path.join(resources, 'app.asar.unpacked', 'out', 'main', 'plugin-dev')
     fs.mkdirSync(dest, { recursive: true })
 
-    /* ---- 1. 依赖树（esbuild 平台包 + CSS 工具链） ---- */
-    const { placed, skipped } = materializeDependencies(dest, [
-        ...BUILD_PACKAGES,
-        ...platformPackages,
-        ...CSS_PACKAGES,
-    ])
+    /* ---- 1a. 子进程入口脚本（物理落在 asar 外） ---- */
+    // 这一步不能省：打包运行时 asar 里的 `.mjs` 不是真实文件，manager 的
+    // existsSync 会判为不存在，于是回退到 asar 内的那份，子进程一加载就
+    // MODULE_NOT_FOUND。复制源在 out/main/plugin-dev（electron-vite 的构建产物）。
+    const sourceDir = resolveBuiltPluginDevDir(context)
+    const childAssets = ['dev-server.mjs', 'bundler.mjs', 'tailwind.mjs']
+    for (const file of childAssets) {
+        const from = path.join(sourceDir, file)
+        if (!fs.existsSync(from)) {
+            throw new Error(
+                `[prepare-studio-deps] 缺少构建产物 ${from}。` +
+                    '请先跑 electron-vite build（apps/desktop:out/main/plugin-dev/*.mjs）。',
+            )
+        }
+        fs.copyFileSync(from, path.join(dest, file))
+    }
+
+    /* ---- 1b. 依赖树（esbuild 平台包 + CSS 工具链） ---- */
+    // node_modules 放在 Resources/app.asar.unpacked/out/main/plugin-dev/，与上面那份
+    // dev-server.mjs 同层 —— 子进程从自己的真实路径向上查找即可命中。
+    const modulesDir = path.join(resources, 'app.asar.unpacked', 'out', 'main', 'plugin-dev', 'node_modules')
+    const { placed, skipped } = materializeDependencies(
+        path.join(resources, 'app.asar.unpacked', 'out', 'main', 'plugin-dev'),
+        [...BUILD_PACKAGES, ...platformPackages, ...CSS_PACKAGES],
+        modulesDir,
+    )
 
     for (const name of platformPackages) {
-        const binary = path.join(dest, 'node_modules', ...name.split('/'), platformSubpath(platform))
+        const binary = path.join(modulesDir, ...name.split('/'), platformSubpath(platform))
         if (!fs.existsSync(binary)) {
             throw new Error(`[prepare-studio-deps] ${name} 的二进制没有落盘: ${binary}`)
         }

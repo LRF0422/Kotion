@@ -17,7 +17,7 @@
  * Run: node apps/desktop/src/main/plugin-dev/packaged-studio-deps.test.mjs
  */
 import { spawnSync } from 'node:child_process'
-import { access, copyFile, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { access, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { constants } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
@@ -28,6 +28,7 @@ const here = dirname(fileURLToPath(import.meta.url))
 const APP_DIR = join(here, '..', '..', '..')
 const WORKSPACE_ROOT = join(APP_DIR, '..', '..')
 const require = createRequire(import.meta.url)
+const { describeDevResolution } = await import('./manager.mjs')
 
 const results = []
 const check = (name, condition, detail = '') => {
@@ -87,6 +88,14 @@ const resourcesDir = join(appOutDir, 'KN Desktop.app', 'Contents', 'Resources')
 const projectRoot = join(root, 'project')
 const unpackedDevDir = join(resourcesDir, 'app.asar.unpacked', 'out', 'main', 'plugin-dev')
 const modulesDir = join(unpackedDevDir, 'node_modules')
+/**
+ * `__dirname` as the packaged manager sees it: *inside* app.asar.
+ *
+ * The manager decides "did afterPack ship the dev-server?" from this path, so
+ * the test has to use it — not the unpacked one — or it cannot catch a layout
+ * where the entry scripts never left the asar (which is exactly what broke).
+ */
+const unpackedAsarDevDir = join(resourcesDir, 'app.asar', 'out', 'main', 'plugin-dev')
 
 await rm(root, { recursive: true, force: true })
 await mkdir(resourcesDir, { recursive: true })
@@ -107,6 +116,13 @@ try {
      * 1. The hook materializes a self-contained dependency tree
      * -------------------------------------------------------------- */
     await prepareStudioDependencies(context)
+
+    // The child-process entry scripts must be OUTSIDE the asar. Inside an asar
+    // `existsSync` reports them missing at runtime, the manager then falls back
+    // to the asar copy, and the spawned Node process dies with MODULE_NOT_FOUND.
+    for (const file of ['dev-server.mjs', 'bundler.mjs', 'tailwind.mjs']) {
+        check(`hook: ${file} shipped outside the asar`, await exists(join(unpackedDevDir, file)))
+    }
 
     const esbuildDir = join(modulesDir, 'esbuild')
     const manifest = JSON.parse(await readFile(join(esbuildDir, 'package.json'), 'utf8').catch(() => 'null'))
@@ -168,10 +184,14 @@ try {
         ].join('\n'),
     )
 
-    // Copy the child-process assets the way `electron.vite.config.ts` does.
-    for (const file of ['dev-server.mjs', 'bundler.mjs', 'tailwind.mjs']) {
-        await copyFile(join(here, file), join(unpackedDevDir, file))
-    }
+    // The hook already put the child assets there; assert what the manager will
+    // actually pick, replaying its own resolution against this layout.
+    const resolution = describeDevResolution(unpackedAsarDevDir)
+    check(
+        'manager: picks the unpacked dev-server, not the asar copy',
+        resolution.shippedServerExists && resolution.shippedServer === join(unpackedDevDir, 'dev-server.mjs'),
+        JSON.stringify(resolution),
+    )
 
     const devServer = run(
         process.execPath,
