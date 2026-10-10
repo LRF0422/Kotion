@@ -32,6 +32,20 @@ export interface PluginVersionRecord {
   permissions?: string[];
 }
 
+/**
+ * The identifier to hand the registry for *this* plugin.
+ *
+ * The registry's identity is the `pluginKey`; a record's `name` is a label, and it
+ * routinely differs from the name the running bundle declares (a translated
+ * `name`, a package name, a legacy record that predates `pluginKey`). Passing the
+ * key is what makes "uninstall this plugin" address the plugin that is actually
+ * running — passing the label used to resolve to nothing and silently leave the
+ * plugin (and its sidebar entry) in place.
+ */
+export const pluginRuntimeIdentity = (
+  plugin: { pluginKey?: string; name?: string } | null | undefined,
+): string => plugin?.pluginKey?.trim() || plugin?.name?.trim() || '';
+
 export interface PluginVersionDescription {
   label?: string;
   content?: JSONContent | string | null;

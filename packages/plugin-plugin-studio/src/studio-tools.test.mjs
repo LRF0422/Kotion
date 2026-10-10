@@ -199,18 +199,29 @@ const iconToolkit = {
     isUploadableIcon: iconArt.isUploadableIcon,
 }
 
+/**
+ * The registry stub.
+ *
+ * Held by **pluginKey**, like the real registry, and resolved leniently for a
+ * name — the same two properties the manager guarantees, and the reason the studio
+ * now uninstalls by key: a manifest `name` is a label, not the entry's identity.
+ */
+const REGISTRY_KEY = 'agent-made-plugin'
 const pluginHost = {
-    active: new Set(['Agent Made']),
+    active: new Set([REGISTRY_KEY]),
     async installFromSource(options) {
         installs.push(options)
         return true
     },
-    has(name) {
-        return this.active.has(name)
+    has(identifier) {
+        return this.active.has(identifier)
+            || (identifier === 'Agent Made' && this.active.has(REGISTRY_KEY))
     },
-    uninstall(name) {
-        calls.push(['uninstall', name])
-        return this.active.delete(name)
+    uninstall(identifier) {
+        calls.push(['uninstall', identifier])
+        if (this.active.has(identifier)) return this.active.delete(identifier)
+        if (identifier === 'Agent Made') return this.active.delete(REGISTRY_KEY)
+        return false
     },
 }
 
@@ -269,9 +280,43 @@ const marketplace = {
     },
 }
 
+/**
+ * The host's dev-session binding, as the tools see it.
+ *
+ * When it is present the tools drive *it* instead of installing bundles
+ * themselves: the binding belongs to the host, so a watched project keeps
+ * hot-reloading the window while nobody is looking at the studio page.
+ */
+const devHost = {
+    watched: [],
+    buildCalls: [],
+    unwatched: [],
+    /** What the next install reports. */
+    outcome: { ok: true, mode: 'installed', key: 'agent-made-plugin', name: 'Agent Made' },
+    async watch(project) {
+        this.watched.push(project)
+        return { ...project, buildCount: 1, lastRejected: this.outcome.ok === false, outcome: this.outcome }
+    },
+    unwatch(root) {
+        this.unwatched.push(root)
+    },
+    async build(options) {
+        this.buildCalls.push(options)
+        // Delegate to the same fake session the tools use, so the whole suite
+        // exercises the host path (a status plus an outcome) rather than a stub.
+        const status = await dev.build({
+            root: options.root,
+            writeToDisk: options.writeToDisk,
+            externals: options.externals,
+        })
+        return { status, outcome: this.outcome }
+    },
+}
+
 const tools = createStudioTools({
     getDev: () => dev,
     getPluginHost: () => pluginHost,
+    getDevHost: () => devHost,
     getMarketplace: () => marketplace,
     getHostGlobals: () => hostGlobals,
     getServiceRegistry: () => serviceRegistry,
@@ -467,15 +512,50 @@ check('market: upgrades a version', upgraded.ok === true && calls.some(([name, v
 
 const ran = await tools.runPluginProject.execute({ root: ROOT })
 check('run: starts a watching session', ran.state === 'watching' && ran.ok === true, JSON.stringify({ state: ran.state }))
-check('run: hot-installs the build', ran.installed === true && installs.length === 1)
+/* The host binding, not a direct install: the tools hand the *project* over, and
+   the host service owns "install this project's builds" from then on. That is what
+   lets the window keep hot-reloading while no studio page is open. */
 check(
-    'run: install uses replace semantics',
-    installs[0]?.replace === true && installs[0]?.pluginKey === 'agent-made-plugin' && installs[0]?.code.includes('v'),
+    'run: binds the project in the host',
+    ran.installed === true
+        && devHost.watched.length === 1
+        && devHost.watched[0].root === ROOT
+        && devHost.watched[0].pluginKey === 'agent-made-plugin',
+    JSON.stringify(devHost.watched),
+)
+check(
+    'run: the host installs, the tools do not',
+    installs.length === 0 && ran.next?.includes('热更'),
+    JSON.stringify({ installs: installs.length, next: ran.next }),
 )
 
 const built = await tools.buildPluginProject.execute({ root: ROOT })
 check('build: returns a fresh build', built.buildCount >= 2, `#${built.buildCount}`)
-check('build: installs by default', built.installed === true && installs.length === 2)
+check(
+    'build: installs by default (through the host)',
+    built.installed === true && devHost.buildCalls.length === 1 && devHost.buildCalls[0].root === ROOT,
+    JSON.stringify(devHost.buildCalls),
+)
+
+/* A refused reload has to reach the model with the host's own reason: otherwise
+   `installed: false` reads as a footnote to a successful build, and the agent
+   describes a preview that did not change. */
+devHost.outcome = { ok: false, key: 'agent-made-plugin', reason: 'the bundle threw while being evaluated: boom' }
+const refused = await tools.buildPluginProject.execute({ root: ROOT })
+check(
+    'build: a refused reload is reported with its reason',
+    refused.installed === false
+        && refused.reloadRejected === true
+        && String(refused.reloadNote).includes('boom'),
+    JSON.stringify({ installed: refused.installed, note: refused.reloadNote }),
+)
+devHost.outcome = { ok: true, mode: 'reloaded', key: 'agent-made-plugin', name: 'Agent Made' }
+
+/* Stopping or deleting a project must unbind it first, or the still-watching
+   session would install the build straight back (and, for a delete, after the
+   files are gone). */
+await tools.stopPluginProject.execute({ root: ROOT })
+check('stop: unbinds the project', devHost.unwatched.includes(ROOT), JSON.stringify(devHost.unwatched))
 
 const listed = await tools.listPluginProjects.execute({})
 check('list: reports the project', listed.count === 1 && listed.projects[0].pluginKey === 'agent-made-plugin')
@@ -898,6 +978,11 @@ check(
 check(
     'delete: reaches dev.removeProject',
     calls.some(([name, args]) => name === 'removeProject' && args.root === ROOT),
+)
+check(
+    'delete: addresses the registry by pluginKey',
+    calls.some(([name, arg]) => name === 'uninstall' && arg === REGISTRY_KEY),
+    JSON.stringify(calls.filter(([name]) => name === 'uninstall')),
 )
 check(
     'delete: drops its own running preview',

@@ -84,7 +84,7 @@ export interface SetupGlobalNamespaceOptions {
  * mutable through `definePlugin`.
  */
 /** Strip scope, 'plugin-' prefix and separators for loose key matching. */
-const normalizePluginName = (value: string): string =>
+export const normalizePluginName = (value: string): string =>
     value
         .toLowerCase()
         .replace(/^@[^/]+\//, '')

@@ -31,6 +31,25 @@ export interface LoadOptions {
 }
 
 /**
+ * The registration the host currently holds for one registry key.
+ *
+ * A bundle publishes itself through `window.__KN__.definePlugin` while it is
+ * being evaluated, so this is also the way to tell a *successful* reload from a
+ * bundle that threw before it registered anything: the second case leaves the
+ * previous registration in place, and a loader that simply reads it back would
+ * report the stale plugin as a fresh install.
+ */
+export const peekPluginRegistration = (packageName: string): PluginRegistration | undefined => {
+    const host = (typeof window !== 'undefined' ? window : globalThis) as unknown as
+        Record<string, unknown> & { __KN__?: KnGlobalNamespace }
+    return host.__KN__?.getPlugin?.(packageName)
+        ?? host.__KN__?.findPlugin?.(packageName)
+        ?? (host[packageName]
+            ? { exports: host[packageName] as Record<string, unknown>, meta: {} }
+            : undefined)
+}
+
+/**
  * Robust plugin script loader.
  *
  * Improvements over the previous IIFE-based loader:
@@ -109,6 +128,25 @@ export class PluginScriptLoader {
             let timer: ReturnType<typeof setTimeout> | undefined
 
             /**
+             * Errors the bundle throws while it is being evaluated.
+             *
+             * A classic script that throws still fires `load` — the resource
+             * loaded, the *code* failed — so without this the only thing a caller
+             * can report is "not found in window scope", which says nothing about
+             * the actual bug. The listener is scoped to this load (installed
+             * before the tag and removed in `cleanup`) and only ever *explains* a
+             * failure: a bundle that registers itself is unaffected.
+             */
+            const evalErrors: string[] = []
+            const captureEvalError = (event: ErrorEvent) => {
+                const thrown = event?.error
+                const message = thrown instanceof Error ? thrown.message : (event?.message ?? 'unknown error')
+                if (message) evalErrors.push(String(message))
+            }
+            const capturing = typeof window !== 'undefined' && typeof window.addEventListener === 'function'
+            if (capturing) window.addEventListener('error', captureEvalError, true)
+
+            /**
              * Detach the script node and stop listening. Removing the node also
              * aborts a request that is still in flight (or queued behind the
              * browser's per-host connection limit), so a host that gives up on a
@@ -118,6 +156,7 @@ export class PluginScriptLoader {
                 if (timer !== undefined) clearTimeout(timer)
                 script.removeEventListener('load', onLoad)
                 script.removeEventListener('error', onError)
+                if (capturing) window.removeEventListener('error', captureEvalError, true)
                 if (script.parentNode) script.parentNode.removeChild(script)
             }
 
@@ -138,14 +177,15 @@ export class PluginScriptLoader {
                 finish(() => {
                     // New bundles register themselves via window.__KN__.definePlugin;
                     // legacy bundles only expose their exports on window[packageName].
-                    const registration: PluginRegistration | undefined =
-                        window.__KN__?.getPlugin?.(packageName)
-                        ?? window.__KN__?.findPlugin?.(packageName)
-                        ?? ((window as any)[packageName]
-                            ? { exports: (window as any)[packageName], meta: {} }
-                            : undefined)
+                    const registration = peekPluginRegistration(packageName)
                     if (!registration) {
-                        reject(new Error(`Plugin ${packageName} not found in window scope`))
+                        const thrown = evalErrors[evalErrors.length - 1]
+                        reject(new Error(
+                            thrown
+                                ? `Plugin ${packageName} did not register itself: its bundle threw while `
+                                    + `being evaluated — ${thrown}`
+                                : `Plugin ${packageName} not found in window scope`,
+                        ))
                         return
                     }
                     // Always cache under the original URL key (without timestamp)

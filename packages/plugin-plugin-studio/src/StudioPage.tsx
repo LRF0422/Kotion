@@ -55,7 +55,9 @@ import {
     useDeleteProject,
     useDevCapability,
     useHasDesktop,
+    describeInstallOutcome,
     useInstallBundle,
+    usePluginDevHost,
     useProjects,
     formatBytes,
 } from './studio-service'
@@ -154,6 +156,12 @@ export const StudioPage: React.FC = () => {
     const pluginHost = useOptionalService('pluginHost')
     const pluginManagement = useOptionalService('pluginManagement')
     const installBundle = useInstallBundle()
+    /**
+     * The host's dev-session binding, when the host publishes it. Present in every
+     * desktop build of this plugin's era; the page keeps its own install path for
+     * a host that predates the service.
+     */
+    const devHost = usePluginDevHost()
     const deleteFiles = useDeleteProject()
     const { projects, addProject, removeProject, touchProject } = useProjects()
     const publish = usePublishProject()
@@ -364,19 +372,29 @@ export const StudioPage: React.FC = () => {
     const fileTree = useMemo(() => buildFileTree(files), [files])
 
     /**
-     * Hot-install a successfully built bundle, at most once per (root, build).
-     * A failed rebuild is skipped, so the previous (stale) build is never
-     * re-installed on top of the user's broken edit.
+     * Install a build.
+     *
+     * When the host publishes the dev-session service, that service is doing the
+     * installing already — it is bound to the *project*, not to this page, so the
+     * window hot-reloads even while the developer is looking at the plugin rather
+     * than at this page. The page then only reports what the host decided; the
+     * direct path below is the fallback for a desktop build without the service.
+     *
+     * Either way, a rejected reload is never swallowed: it says why, and the next
+     * build (or an explicit "Hot reload") retries it.
      */
     const maybeInstall = useCallback(
         async (next: DevSessionStatus | undefined) => {
             if (!next?.build?.code || next.error) return false
+            if (devHost) return true
             const previous = installedBuildRef.current
             if (previous.root === next.root && previous.count === next.buildCount) return false
-            installedBuildRef.current = { root: next.root, count: next.buildCount }
-            return installBundle(next)
+            const outcome = await installBundle(next)
+            if (outcome.ok) installedBuildRef.current = { root: next.root, count: next.buildCount }
+            else setError(describeInstallOutcome(outcome))
+            return outcome.ok
         },
-        [installBundle],
+        [devHost, installBundle],
     )
 
     const onBuild = useCallback(
@@ -385,18 +403,33 @@ export const StudioPage: React.FC = () => {
             setStatus(next)
             void refreshLogs()
             void refreshManaged()
-            // Saving a file in a watched project hot-reloads it, which is the
-            // point of the studio. maybeInstall dedupes the first build against
-            // the explicit start path and skips failed rebuilds.
-            if (next.watching) {
+            // With the host service bound, the install has already happened by the
+            // time this event reaches us; the fallback path installs here.
+            if (next.watching && !devHost) {
                 void maybeInstall(next).catch((cause) =>
                     setError(String((cause as Error)?.message ?? cause)),
                 )
             }
         },
-        [maybeInstall, refreshLogs, refreshManaged, selectedRoot],
+        [devHost, maybeInstall, refreshLogs, refreshManaged, selectedRoot],
     )
     useBuildEvents(onBuild, selectedRoot)
+
+    /**
+     * What the host service did with the selected project's builds.
+     *
+     * Its refusals are the studio's error banner: the host is the only party that
+     * knows *why* (the bundle threw while being evaluated, its service is owned,
+     * it asked for another plugin API version…).
+     */
+    useEffect(() => {
+        if (!devHost) return undefined
+        const unsubscribe = devHost.subscribe(() => {
+            const binding = devHost.list().find(entry => entry.root === selectedRoot)
+            setError(binding?.outcome ? describeInstallOutcome(binding.outcome) : null)
+        })
+        return unsubscribe
+    }, [devHost, selectedRoot])
 
     const run = async (kind: Busy, action: () => Promise<void>) => {
         setBusy(kind)
@@ -415,13 +448,25 @@ export const StudioPage: React.FC = () => {
             if (!capability || !selectedRoot) return
             const next = await capability.dev.start({ root: selectedRoot, watch: true })
             setStatus(next)
-            await maybeInstall(next)
+            if (devHost) {
+                // Bind the project: from here on its builds hot-reload the window on
+                // their own, whatever page is open.
+                const binding = await devHost.watch({
+                    root: next.root,
+                    pluginKey: next.plugin.pluginKey,
+                    name: next.plugin.name,
+                })
+                setError(describeInstallOutcome(binding.outcome))
+            } else {
+                await maybeInstall(next)
+            }
             await Promise.all([refreshStatus(), refreshManaged()])
         })
 
     const stopWatching = () =>
         run('stop', async () => {
             if (!capability || !selectedRoot) return
+            devHost?.unwatch(selectedRoot)
             await capability.dev.stop({ root: selectedRoot })
             await Promise.all([refreshStatus(), refreshManaged()])
         })
@@ -429,16 +474,25 @@ export const StudioPage: React.FC = () => {
     const buildAndInstall = () =>
         run('build', async () => {
             if (!capability || !selectedRoot) return
-            const next = await capability.dev.build({ root: selectedRoot })
-            setStatus(next)
-            await maybeInstall(next)
+            if (devHost) {
+                const { status: next, outcome } = await devHost.build({ root: selectedRoot })
+                if (next) setStatus(next)
+                setError(describeInstallOutcome(outcome))
+            } else {
+                const next = await capability.dev.build({ root: selectedRoot })
+                setStatus(next)
+                await maybeInstall(next)
+            }
             await refreshStatus()
         })
 
     const uninstallRunning = () =>
         run('uninstall', async () => {
             if (!pluginHost || !status?.plugin) return
-            pluginHost.uninstall(status.plugin.name)
+            // Unbind first: otherwise the next build of a still-watching session
+            // would install the plugin straight back.
+            devHost?.unwatch(status.root)
+            pluginHost.uninstall(status.plugin.pluginKey || status.plugin.name)
             await refreshStatus()
         })
 

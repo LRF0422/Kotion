@@ -11,7 +11,14 @@
  * behind the `dev.*` capabilities, which the web host does not have.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useOptionalService, type DevBridge, type DevSessionStatus } from '@kn/common'
+import {
+    useOptionalService,
+    type DevBridge,
+    type DevSessionStatus,
+    type PluginBundle,
+    type PluginDevHostService,
+    type PluginInstallOutcome,
+} from '@kn/common'
 
 const STORAGE_KEY = 'kn.plugin-studio.projects.v1'
 
@@ -53,17 +60,25 @@ export const useHasDesktop = (): boolean => Boolean(useOptionalService('desktop'
 /**
  * Install a built bundle into the running plugin manager.
  *
- * Uses the `pluginHost` core service rather than importing `PluginManager`, so
- * the studio stays a normal plugin. `replace: true` makes it a hot reload: any
- * plugin with the same runtime name is uninstalled first.
+ * Uses the `pluginHost`/`pluginManagement` core service rather than importing
+ * `PluginManager`, so the studio stays a normal plugin.
+ *
+ * The host decides what the install *is*: a first activation, a hot reload of the
+ * entry with that registry key, or a dev build shadowing a published artifact of
+ * the same plugin. The studio no longer guesses — it used to ask whether a plugin
+ * "was running" under the manifest's `displayName`, which is a **label**, not an
+ * identity: a bundle may translate its own `name` (`name: t('API Client')`), so
+ * that question answered "no" for a plugin that was running, turned a reload into
+ * a colliding fresh install, and failed silently for a whole project.
+ *
+ * Returns what the host reports: `mode` says whether the previous instance was
+ * replaced (state preserved) and `reason` says why nothing happened.
  */
 export const useInstallBundle = () => {
     const pluginManagement = useOptionalService('pluginManagement')
     const pluginHost = useOptionalService('pluginHost')
     return useCallback(
-        async (status: DevSessionStatus): Promise<boolean> => {
-            // Prefer the full management service; pluginHost is the older,
-            // narrower surface kept for hosts that predate it.
+        async (status: DevSessionStatus): Promise<PluginInstallOutcome> => {
             const installer = pluginManagement ?? pluginHost
             if (!installer) {
                 throw new Error('pluginManagement/pluginHost service is unavailable in this host')
@@ -72,18 +87,57 @@ export const useInstallBundle = () => {
             if (!build?.code) {
                 throw new Error('This project has no successful build yet')
             }
-            return installer.installFromSource({
+            const bundle: PluginBundle = {
                 code: build.code,
+                // Part of the transaction: the host applies it on commit and puts
+                // the previous stylesheet back if it refuses the build.
+                css: build.css,
                 pluginKey: status.plugin.pluginKey,
                 name: status.plugin.name,
                 version: `dev.${status.buildCount}`,
-                replace: true,
                 sourceLabel: status.root,
+            }
+
+            // Typed path when the host has it (it is the contract now); the older
+            // boolean surface is still accepted so the studio keeps working on a
+            // host that has not been rebuilt.
+            if (installer.installBundle) return installer.installBundle(bundle)
+
+            let reason = ''
+            const installed = await installer.installFromSource({
+                ...bundle,
+                replace: true,
+                onRejected: (why) => { reason = why },
             })
+            return installed
+                ? { ok: true, mode: 'installed', key: bundle.pluginKey, name: bundle.name, version: bundle.version }
+                : { ok: false, key: bundle.pluginKey, reason: reason || '宿主没有说明原因' }
         },
         [pluginManagement, pluginHost],
     )
 }
+
+/**
+ * The outcome as a one-line message for the studio UI.
+ *
+ * `undefined` (nothing built yet) is not an error; a refusal is, and it carries
+ * the host's own words.
+ */
+export const describeInstallOutcome = (outcome: PluginInstallOutcome | undefined): string | null => {
+    if (!outcome || outcome.ok) return null
+    return `热更被拒绝：${outcome.reason}（窗口里仍是上一个可用版本）`
+}
+
+/**
+ * The host's dev-session binding service, when it is registered.
+ *
+ * This is what installs a project's builds: the binding lives in the host, so a
+ * watched project keeps hot-reloading the window while the developer is looking
+ * at the plugin instead of at the studio page. `undefined` means an older desktop
+ * host, in which case the page falls back to installing build events itself.
+ */
+export const usePluginDevHost = (): PluginDevHostService | undefined =>
+    useOptionalService('pluginDevHost')
 
 /** The plugin-marketplace (catalogue lifecycle) service, when registered. */
 export const useMarketplace = () => useOptionalService('pluginMarketplace')

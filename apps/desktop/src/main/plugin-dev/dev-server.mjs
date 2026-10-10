@@ -120,6 +120,7 @@ const main = async () => {
                 modules: result.modules,
                 plugin: lastMeta,
                 code: result.code,
+                css: result.css,
             })
         } catch (error) {
             log('error', `build crashed: ${error && error.stack ? error.stack : String(error)}`)

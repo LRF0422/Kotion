@@ -3,6 +3,7 @@ import {
     DockPosition,
     ResolvedDockPanel,
     dockRuntime,
+    resolveMountedPanels,
     useTranslation,
 } from "@kn/common"
 import {
@@ -191,6 +192,21 @@ export const DockHost: React.FC<DockHostProps> = ({
         ))
     }, [activePanel])
 
+    /**
+     * What the kept-alive panels actually render.
+     *
+     * `mountedPanels` is a *snapshot*: the dock keeps a panel mounted after its
+     * first activation, so the entry (and the component function inside it) is
+     * whatever it was at that moment. Re-resolving against the live contribution
+     * list is what makes a plugin-studio hot reload visible — otherwise the dock
+     * keeps rendering the code the panel was opened with, and the developer's
+     * edit only appears after the whole window is reloaded.
+     */
+    const renderedPanels = React.useMemo(
+        () => resolveMountedPanels(mountedPanels, panels),
+        [mountedPanels, panels]
+    )
+
     // Mobile uses a single-panel Sheet, so it still resolves the active
     // component directly.
     const PanelComponent = activePanel?.component
@@ -261,7 +277,7 @@ export const DockHost: React.FC<DockHostProps> = ({
                     // The 0-width viewport already clips the content from view.
                 }}
             >
-                {mountedPanels.map(panel => {
+                {renderedPanels.map(panel => {
                     const PanelComponent = panel.component
                     const isPanelActive = activePanel?.id === panel.id
                     return (

@@ -8,6 +8,7 @@
  * callers already depend on.
  */
 import type { RemotePluginInput } from './plugin-runtime'
+import type { PluginBundle, PluginInstallOutcome } from './plugin-bundle'
 
 /** Where an active plugin came from. */
 export type PluginSource = 'system' | 'installed' | 'dev'
@@ -32,10 +33,20 @@ export interface PluginSourceInstallOptions {
     pluginKey: string
     name: string
     version?: string
-    /** Uninstall an active plugin with the same runtime name first. */
+    /**
+     * `false` keeps the legacy "install, do not touch what is running" meaning:
+     * an active registry key is refused instead of reloaded. Omit (or `true`) and
+     * the registry decides — an existing key is a reload.
+     */
     replace?: boolean
     /** Label used in logs. */
     sourceLabel?: string
+    /**
+     * Why the install was refused, verbatim: a boolean return cannot distinguish
+     * a bundle that threw while being evaluated from a name collision, and the
+     * caller is the one that has to tell a developer which it was.
+     */
+    onRejected?: (reason: string) => void
 }
 
 /** Service surface for managing the runtime plugin set. */
@@ -49,7 +60,18 @@ export interface PluginManagementService {
     getActiveNames(): string[]
     /** Install a remote artifact through the standard activation path. */
     install(input: RemotePluginInput): Promise<boolean>
-    /** Install an in-memory bundle (a local build). */
+    /**
+     * Install an in-memory bundle (a local build) and report what happened.
+     *
+     * The typed entry point: `mode` says whether a first install or a reload
+     * happened (i.e. whether the previous panel state survived), and `reason`
+     * says why nothing changed. Prefer it over `installFromSource`.
+     */
+    installBundle(bundle: PluginBundle): Promise<PluginInstallOutcome>
+    /**
+     * @deprecated Boolean view of {@link installBundle}, kept for callers written
+     * against the older contract.
+     */
     installFromSource(options: PluginSourceInstallOptions): Promise<boolean>
     /** Uninstall by runtime name. Returns false when not active or removable. */
     uninstall(name: string): boolean

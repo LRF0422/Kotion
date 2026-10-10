@@ -1,6 +1,7 @@
 import type { SpacePageService } from "../domain/space-page/operations";
 import type { DesktopBridge } from "./desktop-bridge";
 import type { PluginHostService } from "./plugin-host";
+import type { PluginDevHostService } from "./plugin-dev-host";
 import type { PluginManagementService } from "./plugin-management";
 import type { PluginMarketplaceService } from "./plugin-marketplace";
 
@@ -313,6 +314,12 @@ export interface Services {
      * to hot-install a locally built bundle.
      */
     pluginHost?: PluginHostService;
+    /**
+     * Dev-session binding: which project's builds are the code of which registry
+     * entry. Registered by the host application (see `plugin-dev-host.ts`); it is
+     * what makes a plugin studio hot reload independent of the studio page.
+     */
+    pluginDevHost?: PluginDevHostService;
     /**
      * Full plugin-management surface (list active plugins with source/version,
      * install from URL or in-memory source, uninstall). Registered by the host;

@@ -12,7 +12,7 @@ import {
     pluginServiceOwner,
     CORE_SERVICE_OWNER,
 } from "./ServiceRegistry";
-import { PluginMeta, PluginRegistration } from "./global-namespace";
+import { normalizePluginName, PluginMeta, PluginRegistration } from "./global-namespace";
 import {
     getRemotePluginInputName,
     normalizeRemotePluginDescriptor,
@@ -20,7 +20,9 @@ import {
     type RemotePluginInput,
 } from "./plugin-runtime";
 import type { PluginManagementEntry, PluginSource } from "./plugin-management";
-import { pluginScriptLoader } from "../utils/import-util";
+import { pluginScriptLoader, peekPluginRegistration } from "../utils/import-util";
+import { HotComponentRegistry } from "./plugin-hot-component";
+import type { PluginBundle, PluginInstallOutcome } from "./plugin-bundle";
 import { logger } from "../utils/logger";
 import { event, PLUGIN_INCOMPATIBLE } from "../event";
 import { Editor } from "@tiptap/core";
@@ -231,6 +233,135 @@ export class KPlugin<T extends PluginConfig> {
         return this._agent
     }
 
+    /**
+     * Rewrite every component this plugin contributes through `mapper`.
+     *
+     * **The one place that knows which parts of a config are components.** The
+     * host uses it at activation to hand React a *stable* function per
+     * contribution (see `plugin-hot-component.tsx`): the new implementation is
+     * swapped behind an identity React already mounted, so a hot reload
+     * re-renders a panel instead of unmounting it.
+     *
+     * Doing it here — once, generically — is what makes the coverage complete and
+     * future-proof: a contribution point added below is wrapped automatically,
+     * whereas the previous design wrapped at each `resolve*()` call site and had
+     * silently missed the agent renderers and every editor-extension component.
+     *
+     * `kind` + the contribution's own id form the slot key, so identity is stable
+     * across reloads *and* across a project renaming itself.
+     */
+    mapComponents(mapper: (kind: string, id: string, component: unknown) => unknown): void {
+        const mapList = <I>(
+            kind: string,
+            items: I[] | undefined,
+            id: (item: I) => string,
+            read: (item: I) => unknown,
+            write: (item: I, value: unknown) => void,
+        ): void => {
+            for (const item of items ?? []) {
+                const component = read(item)
+                if (!component) continue
+                write(item, mapper(kind, id(item), component))
+            }
+        }
+        // Dock panels: the developer's most-used contribution.
+        mapList('dockPanel', this._dockPanels, panel => panel.id, panel => panel.component,
+            (panel, value) => { panel.component = value as DockPanelConfig['component'] })
+
+        // Page renderers (only the `component` flavour owns a React component).
+        mapList('pageType', this._pageTypes, pageType => pageType.id,
+            pageType => (pageType.renderer?.type === 'component' ? pageType.renderer.component : undefined),
+            (pageType, value) => {
+                if (pageType.renderer?.type === 'component') pageType.renderer.component = value as never
+            })
+
+        // The settings panel (one per plugin).
+        if (this._settings?.component) {
+            this._settings.component = mapper('settings', this._settings.key, this._settings.component) as never
+        }
+
+        // Conversation cards and side-sheet previews contributed by the plugin.
+        mapList('toolRenderer', this._agent?.toolRenderers, renderer => renderer.tool,
+            renderer => renderer.render, (renderer, value) => { renderer.render = value as never })
+        mapList('artifactRenderer', this._agent?.artifactRenderers, renderer => renderer.kind,
+            renderer => renderer.render, (renderer, value) => { renderer.render = value as never })
+
+        /**
+         * Routes contribute an *element* (`element: <Page />`), not a component, so
+         * the stable identity has to be installed on the element's `type`. Spreading
+         * is safe: React elements are frozen in development, and the spread keeps
+         * `$$typeof`, `key` and `props` — the result is the same element with a
+         * different component.
+         *
+         * One wrapper per component: a plugin may point several routes at one page
+         * (the API client points two paths at `ApiClientPage`), and each route
+         * getting its own identity would remount the page when navigating between
+         * them.
+         */
+        const routeIdentity = new WeakMap<object, unknown>()
+        const wrapRouteElement = (element: unknown, path: string): unknown => {
+            if (!element || typeof element !== 'object') return element
+            const candidate = element as { $$typeof?: unknown; type?: unknown }
+            // Only plain function components: an element's `type` is legitimately a
+            // host tag, a Fragment or a context provider, and a component wrapper is
+            // invalid for those.
+            if (typeof candidate.type !== 'function') return element
+            const original = candidate.type as object
+            let wrapped = routeIdentity.get(original)
+            if (wrapped === undefined) {
+                wrapped = mapper('route', path, candidate.type)
+                routeIdentity.set(original, wrapped)
+            }
+            return wrapped === candidate.type ? element : { ...element, type: wrapped }
+        }
+        const mapRouteElements = (routes: RouteConfig[] | undefined): void => {
+            for (const route of routes ?? []) {
+                if (route.element) route.element = wrapRouteElement(route.element, route.path) as never
+                if (route.children?.length) mapRouteElements(route.children)
+            }
+        }
+        mapRouteElements(this._routes)
+        mapRouteElements(this._globalRoutes)
+
+        // Editor-extension components: slash/menu surfaces, bubbles, floating UI
+        // and page footers. Tiptap extensions themselves are not components.
+        for (const extension of this._editorExtension ?? []) {
+            const name = extension.name || 'extension'
+            const scalar: Array<[string, keyof ExtensionWrapper]> = [
+                ['editorBubble', 'bubbleMenu'],
+                ['editorFloating', 'floatingUI'],
+                ['editorFooter', 'pageFooter'],
+            ]
+            for (const [kind, field] of scalar) {
+                const current = extension[field] as unknown
+                if (!current) continue
+                if (Array.isArray(current)) {
+                    extension[field] = current.map((entry, index) =>
+                        mapper(kind, `${name}[${index}]`, entry)) as never
+                } else {
+                    extension[field] = mapper(kind, name, current) as never
+                }
+            }
+            for (const [kind, field] of [
+                ['editorMenu', 'menuConfig'],
+                ['editorFloatingMenu', 'flotMenuConfig'],
+            ] as Array<[string, keyof ExtensionWrapper]>) {
+                const entries = extension[field] as Array<Record<string, unknown>> | undefined
+                if (!Array.isArray(entries)) continue
+                entries.forEach((entry, index) => {
+                    const key = kind === 'editorMenu' ? 'menu' : undefined
+                    if (key && entry[key]) entry[key] = mapper(kind, `${name}[${index}]`, entry[key])
+                })
+            }
+            const slash = extension.slashConfig as Array<Record<string, unknown>> | undefined
+            if (Array.isArray(slash)) {
+                slash.forEach((entry, index) => {
+                    if (entry && entry.render) entry.render = mapper('editorSlash', `${name}[${index}]`, entry.render)
+                })
+            }
+        }
+    }
+
 }
 
 export interface PluginManagerOptions {
@@ -271,6 +402,9 @@ export interface PluginInitResult {
     incompatiblePlugins: PluginApiIncompatibility[]
 }
 
+// The bundle/outcome contract lives in its own module: the core services and the
+// studio both describe bundles, and neither should have to import the registry.
+export type { PluginBundle, PluginInstallOutcome } from "./plugin-bundle";
 /**
  * Install metadata for one active plugin.
  *
@@ -280,20 +414,69 @@ export interface PluginInitResult {
  * installed list and are replaced wholesale by it.
  */
 interface ActivePluginMeta {
+    /** Registry key. Duplicated from the entry so a metadata read is self-contained. */
+    key: string
+    /**
+     * The name the *bundle* declared. Display only: it may be translated, so it
+     * is never an identity (see `ActivePlugin.key`).
+     */
+    name: string
+    /** The artifact/package key the plugin was declared with. */
     pluginKey: string
     version?: string
     source: PluginSource
     desktopOnly: boolean
+    /** Dev builds: the project root, so a reload matches its own session. */
+    sourceLabel?: string
 }
 
-/** A runtime-local plugin plus the metadata a re-init must carry across. */
-interface LocalPluginEntry {
+/**
+ * The registration the host namespace currently holds for one registry key.
+ *
+ * Never throws: a host without the global namespace (Node checks, SSR) simply
+ * has no previous registration, which disables the stale-bundle detection.
+ */
+const previousPluginRegistration = (pluginKey: string): PluginRegistration | undefined => {
+    try {
+        return peekPluginRegistration(pluginKey)
+    } catch {
+        return undefined
+    }
+}
+
+/** One active plugin: the instance, its identity, and its install metadata. */
+interface ActivePlugin {
+    /** Registry key (`pluginKey`) — the plugin's stable identity, everywhere. */
+    key: string
     plugin: KPlugin<any>
     meta: ActivePluginMeta
 }
 
+/** One candidate that could not be activated, and why (a sentence for the caller). */
+interface EntryConflict {
+    key: string
+    reason: string
+}
+
+/** What one commit changed: what left, and which candidates could not activate. */
+interface CommitResult {
+    /** Keys the commit removed. */
+    removedKeys: string[]
+    /** Candidates that were dropped (or kept without their services) and why. */
+    conflicts: EntryConflict[]
+    /** False when the commit was a no-op (same set, same instances). */
+    changed: boolean
+}
+
 export class PluginManager {
 
+    /**
+     * The active plugin instances, in order.
+     *
+     * **Derived**: rebuilt by {@link _commit} from `_entries`. React consumers
+     * read it (`usePluginState().plugins`) and its identity changing is what tells
+     * them the registry moved.
+     */
     plugins: KPlugin<any>[] = []
     _initialPlugins: KPlugin<any>[] = []
     private _serviceRegistry: ServiceRegistry
@@ -322,21 +505,52 @@ export class PluginManager {
     private _cacheDockPanels: ResolvedDockPanel[] | null = null
     private _cachePageTypes: ResolvedPageType[] | null = null
     private _cacheAgentContributions: ResolvedAgentContribution[] | null = null
-    private _pluginMap: Map<string, KPlugin<any>> = new Map()
-    /** Install metadata per active plugin; drives the pluginManagement service. */
-    private _pluginMeta = new Map<string, ActivePluginMeta>()
+
+    /**
+     * The registry — the *only* place the active set lives.
+     *
+     * Keyed by registry key (`pluginKey`), because that is the plugin's stable
+     * identity: a bundle may translate its `name` (so one plugin has two strings
+     * depending on the UI language) and a project's manifest carries a third. The
+     * old design kept three parallel views (a list plus a by-name plugin map and
+     * a by-name metadata map) that every lifecycle path had to update in step,
+     * which is how "present in the map, missing from the list" states — and the
+     * silent hot-reload failure where the studio asked for a plugin by a name it
+     * was not running under — became possible.
+     */
+    private _entries = new Map<string, ActivePlugin>()
+    /** Instance → key, so a resolve pass does not have to scan for it. */
+    private _keyByInstance = new WeakMap<KPlugin<any>, string>()
+    /**
+     * The stylesheet each plugin last committed, so a *rejected* reload can put
+     * it back. The bundle applies its own CSS while it is being evaluated (a
+     * published UMD has to be self-contained), which is earlier than the commit —
+     * this is what makes the style part of the transaction as well.
+     */
+    private _committedCss = new Map<string, string>()
+
     private _incompatiblePlugins = new Map<string, PluginApiIncompatibility>()
     /**
-     * Runtime names the server's installed list contained at the end of the last
+     * Registry keys the server's installed list contained at the end of the last
      * init. Together with the incoming list it tells {@link _runtimeLocalEntries}
-     * which registry entries the server never supplied.
+     * which entries the server never supplied.
      */
-    private _remotePluginNames = new Set<string>()
+    private _remotePluginKeys = new Set<string>()
 
     // Built-in dock panels contributed by the host itself (e.g. the AI agent
     // panel). Same contract as plugin-contributed panels; they simply cannot be
     // uninstalled. Keyed by panel id, insertion-ordered.
     private _coreDockPanels: Map<string, DockPanelConfig> = new Map()
+
+    /**
+     * Stable component identities for hot-reloaded contributions.
+     *
+     * Every component a plugin contributes is handed to React through this
+     * registry, so a reload swaps the implementation behind an identity React
+     * already knows instead of mounting a different component. See
+     * `plugin-hot-component.tsx` for why that is what preserves panel state.
+     */
+    private _hotComponents = new HotComponentRegistry()
 
     constructor(options: PluginManagerOptions, initalPlugins: KPlugin<any>[]) {
         this._resolveUrl = options.resolveUrl
@@ -352,8 +566,245 @@ export class PluginManager {
             subscribe: (listener: (name: string) => void) => this._serviceRegistry.subscribe(listener),
         })
         this._initialPlugins = initalPlugins
-        this._buildPluginMap(initalPlugins)
-        logger.debug('Initial plugins loaded:', this._initialPlugins);
+        // Host plugins are part of the app from the first render, so their entries
+        // exist before any lifecycle call. Committing here (rather than only
+        // filling a map) keeps every view of the registry consistent from boot.
+        const initial = new Map<string, ActivePlugin>()
+        for (const plugin of initalPlugins) {
+            initial.set(this._identityOf(plugin), {
+                key: this._identityOf(plugin),
+                plugin,
+                meta: {
+                    key: this._identityOf(plugin),
+                    name: plugin.name,
+                    pluginKey: plugin.pluginKey || this._identityOf(plugin),
+                    source: 'system',
+                    desktopOnly: plugin.desktopOnly,
+                },
+            })
+        }
+        this._commit(initial, 'boot', { silent: true })
+        logger.debug('Initial plugins loaded:', this._initialPlugins)
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Identity
+     * ------------------------------------------------------------------ */
+
+    /**
+     * The registry key of an instance: its declared `pluginKey`, else its name.
+     *
+     * A bundle's descriptor key always wins at activation (the manager is told it);
+     * this is the fallback for host-bundled plugins, which only declare a name.
+     */
+    private _identityOf(plugin: KPlugin<any>): string {
+        return plugin.pluginKey || plugin.name
+    }
+
+    /** Registry key for an instance already in the registry (O(1)). */
+    private _keyOf(plugin: KPlugin<any>): string {
+        return this._keyByInstance.get(plugin) ?? this._identityOf(plugin)
+    }
+
+    /**
+     * Resolve a public identifier to a registry key.
+     *
+     * The key is the identity, but names are still accepted everywhere a caller
+     * could pass one (a published plugin calling `pluginHost.uninstall(name)`, the
+     * plugin manager UI, `getPlugin('PluginMain')`): key first, then the running
+     * display name. Ambiguity is impossible in practice — a duplicate display name
+     * is exactly the situation shadowing removes.
+     */
+    private _keyFor(identifier: string | undefined): string | undefined {
+        if (!identifier) return undefined
+        if (this._entries.has(identifier)) return identifier
+
+        // Exact matches first: the runtime name the bundle declared, the name it
+        // is filed under, and the artifact key.
+        for (const [key, entry] of this._entries) {
+            if (entry.meta.name === identifier || entry.plugin.name === identifier) return key
+            if (entry.meta.pluginKey === identifier || entry.plugin.pluginKey === identifier) return key
+        }
+
+        /**
+         * Then loosely, the same way the plugin loader resolves a registration
+         * key: `@scope/plugin-api-client`, `plugin-api-client` and `api-client`
+         * all name one plugin, and callers pass whichever one they happen to
+         * have — a marketplace record's `name`, a package name, a menu key.
+         *
+         * This matters most for *uninstall*: the caller is a human clicking a
+         * button, and silently refusing because the record's name is not the name
+         * the bundle declared reads as "the plugin won't go away" (it stays active
+         * with its menu, and the next install then collides with itself).
+         */
+        const target = normalizePluginName(identifier)
+        if (!target) return undefined
+        for (const [key, entry] of this._entries) {
+            const candidates = [
+                key,
+                entry.meta.name,
+                entry.meta.pluginKey,
+                entry.plugin.name,
+                entry.plugin.pluginKey,
+            ]
+            if (candidates.some(value => value && normalizePluginName(value) === target)) return key
+        }
+        return undefined
+    }
+
+    private _entryFor(identifier: string | undefined): ActivePlugin | undefined {
+        const key = this._keyFor(identifier)
+        return key ? this._entries.get(key) : undefined
+    }
+
+    /** Host-owned keys: part of the app, never installed from a bundle. */
+    private _isInitialPluginKey(pluginKey?: string): boolean {
+        return Boolean(pluginKey && this._initialPlugins.some(plugin => this._identityOf(plugin) === pluginKey))
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Plan → commit
+     * ------------------------------------------------------------------ */
+
+    /**
+     * Service registrations for a candidate entry set, in render order.
+     *
+     * Ownership is by registry key, so a reload of one plugin can never look like
+     * a foreign owner taking over its own services.
+     */
+    private _serviceRegistrations(entries: Map<string, ActivePlugin>) {
+        return [...entries.values()]
+            .filter(entry => entry.plugin.services)
+            .map(entry => ({
+                owner: pluginServiceOwner(entry.key, entry.plugin.name),
+                services: entry.plugin.services!,
+            }))
+    }
+
+    /**
+     * Decide which candidate entries can actually activate.
+     *
+     * Pure, and the only place that answers "may this plugin run at all". Two
+     * rules, both checked **before** anything is committed, so the registry can
+     * never hold a plugin that is half-registered:
+     *
+     * 1. **One entry per plugin.** Two candidates may not describe the same plugin
+     *    under two registry keys. They can: an artifact installed under a
+     *    name-derived key, then offered again by the server with its `pluginKey`;
+     *    or a key the developer edited in the manifest. Left alone, both activate —
+     *    two instances of one plugin and two copies of its sidebar menu — and then
+     *    `uninstall(name)` resolves to only one of them, which is exactly the
+     *    "uninstalling does nothing, the menu keeps coming back" report. The first
+     *    candidate wins, in render order (host → dev build → server list), which is
+     *    also how a dev build shadows the published artifact.
+     * 2. **Every declared service can be published.** A plugin whose service an
+     *    earlier owner already holds is not activated (host plugins included), and
+     *    that is reported: "active but missing its services" is the other
+     *    half-committed state this plan exists to prevent.
+     */
+    private _planEntries(candidates: Map<string, ActivePlugin>): {
+        accepted: Map<string, ActivePlugin>
+        conflicts: EntryConflict[]
+    } {
+        const rejected = new Map<string, string>()
+
+        /* -- rule 1: one entry per plugin ---------------------------------- *
+         * Two candidates are the same plugin when they declare the same runtime
+         * name, or the same `pluginKey`. Exact comparison, deliberately: the
+         * *lookup* path is lenient (a caller may hand over any of a plugin's
+         * names), but identity must not be — normalizing here would merge two
+         * genuinely different plugins whose names differ only in punctuation or
+         * non-ASCII characters. The first candidate in render order wins
+         * (host → dev build → server list), and the loser is reported.
+         */
+        const survivors = new Map<string, ActivePlugin>()
+        const namesTaken = new Map<string, ActivePlugin>()
+        const keysTaken = new Map<string, ActivePlugin>()
+        for (const entry of candidates.values()) {
+            const name = (entry.meta.name || entry.plugin.name || '').trim()
+            const declaredKey = (entry.meta.pluginKey || entry.plugin.pluginKey || '').trim()
+            const owner = (name ? namesTaken.get(name) : undefined)
+                ?? (declaredKey ? keysTaken.get(declaredKey) : undefined)
+            if (owner && owner.key !== entry.key) {
+                rejected.set(
+                    entry.key,
+                    `it is the same plugin as "${owner.meta.name}" (pluginKey "${owner.key}"), `
+                    + 'which is already active',
+                )
+                continue
+            }
+            if (name) namesTaken.set(name, entry)
+            if (declaredKey) keysTaken.set(declaredKey, entry)
+            survivors.set(entry.key, entry)
+        }
+
+        /* -- rule 2: every declared service can be published --------------- */
+        const plan = this._serviceRegistry.planPluginServices(this._serviceRegistrations(survivors))
+        for (const conflict of plan.conflicts) {
+            const names = conflict.names.map(String).join(', ')
+            rejected.set(
+                conflict.owner.pluginKey,
+                `its service ${names} is already owned by another plugin`,
+            )
+        }
+
+        const accepted = new Map([...survivors].filter(([key]) => !rejected.has(key)))
+        const conflicts: EntryConflict[] = []
+        for (const [key, reason] of rejected) {
+            logger.error(`Plugin ${key} will not activate: ${reason}`)
+            conflicts.push({ key, reason })
+        }
+        return { accepted, conflicts }
+    }
+
+    /**
+     * The single mutation point of the plugin registry.
+     *
+     * Writes every derived view (the instance list, the key→instance index, the
+     * metadata map users ask about, the render identity index), the plugin-owned
+     * services, the resolve caches, the version counter and the listeners — in one
+     * place, from one candidate set. Every lifecycle operation is therefore
+     * "build the candidate entries, plan, commit"; there is no path that can
+     * update one view and forget another, and no path that half-applies (an
+     * entry that would lose its services is dropped by the plan first).
+     */
+    private _commit(
+        next: Map<string, ActivePlugin>,
+        reason: string,
+        options: { silent?: boolean } = {},
+    ): CommitResult {
+        const { accepted, conflicts } = this._planEntries(next)
+
+        const removedKeys: string[] = []
+        for (const key of this._entries.keys()) {
+            if (!accepted.has(key)) removedKeys.push(key)
+        }
+
+        const nextEntries = new Map(accepted)
+        const nextPlugins = [...accepted.values()].map(entry => entry.plugin)
+        const changed = !options.silent
+            && (removedKeys.length > 0
+                || nextEntries.size !== this._entries.size
+                || nextPlugins.some((plugin, index) => this.plugins[index] !== plugin))
+
+        this._entries = nextEntries
+        this.plugins = nextPlugins
+        this._keyByInstance = new WeakMap()
+        for (const [key, entry] of nextEntries) this._keyByInstance.set(entry.plugin, key)
+
+        this._serviceRegistry.applyPluginServices(
+            this._serviceRegistry.planPluginServices(this._serviceRegistrations(nextEntries)),
+        )
+
+        // A removed plugin's render identities go with it: installing it again is
+        // a mount, not a reload, so its state should start over.
+        for (const key of removedKeys) this._hotComponents.release(key)
+
+        if (!options.silent) {
+            logger.debug(`plugin registry committed (${reason}): ${nextEntries.size} plugin(s)`)
+            this._notifyChange()
+        }
+        return { removedKeys, conflicts, changed }
     }
 
     /**
@@ -369,6 +820,22 @@ export class PluginManager {
         return [...this._incompatiblePlugins.values()]
     }
 
+    /** Registry keys of every active plugin — the identity-bearing list. */
+    getAllPluginKeys(): string[] {
+        return [...this._entries.keys()]
+    }
+
+    /**
+     * Live stable component identities, one per hot-reloadable contribution
+     * (`generation` counts the implementations that identity has carried).
+     *
+     * Diagnostics: the studio and its tests use it to prove that a reload kept a
+     * panel's identity instead of mounting a new component.
+     */
+    getHotComponentStats() {
+        return this._hotComponents.stats()
+    }
+
     /**
      * Subscribe to plugin state changes.
      * The listener is called every time the plugin list changes (init, install, uninstall, remove).
@@ -379,25 +846,6 @@ export class PluginManager {
         return () => { this._changeListeners.delete(listener) }
     }
 
-    private _buildPluginMap(plugins: KPlugin<any>[], source: PluginSource = 'system') {
-        plugins.forEach(plugin => {
-            this._pluginMap.set(plugin.name, plugin)
-            // The remote-install path records metadata (with the version) before
-            // this runs, so only label plugins that do not have an entry yet.
-            if (!this._pluginMeta.has(plugin.name)) {
-                this._pluginMeta.set(plugin.name, {
-                    pluginKey: plugin.pluginKey || plugin.name,
-                    source,
-                    desktopOnly: plugin.desktopOnly,
-                })
-            }
-        })
-    }
-
-    private _isInitialPluginKey(pluginKey?: string): boolean {
-        return Boolean(pluginKey && this._initialPlugins.some(plugin => plugin.pluginKey === pluginKey))
-    }
-
     /**
      * Registry entries the server never supplied: the plugin studio's
      * hot-reloaded dev builds, and plugins an install activated while an init
@@ -405,58 +853,23 @@ export class PluginManager {
      * installed list, so a re-init that rebuilt the registry from that list
      * could never bring them back — it has to carry them across.
      *
-     * A `dev` build is authoritative for its runtime name (it shadows the
-     * published artifact the developer is iterating on). An `installed` entry
-     * is only runtime-local while the server has never listed it: once it does,
-     * the server owns that name and the next init reloads it from there.
+     * A `dev` entry is authoritative for its registry key (it shadows the
+     * published artifact the developer is iterating on). An `installed` entry is
+     * only runtime-local while the server has never listed it: once it does, the
+     * server owns that key and the next init reloads it from there.
      *
-     * @param incomingNames names in the installed list this init is about to load.
+     * @param incomingKeys keys in the installed list this init is about to load.
      */
-    private _runtimeLocalEntries(incomingNames: ReadonlySet<string> = new Set()): LocalPluginEntry[] {
-        const hostNames = new Set(this._initialPlugins.map(plugin => plugin.name))
-        const local: LocalPluginEntry[] = []
-        this._pluginMap.forEach((plugin, name) => {
-            if (hostNames.has(name)) return
-            const meta = this._pluginMeta.get(name)
-            if (!meta || meta.source === 'system') return
-            if (meta.source === 'installed' && (this._remotePluginNames.has(name) || incomingNames.has(name))) {
+    private _runtimeLocalEntries(incomingKeys: ReadonlySet<string> = new Set()): ActivePlugin[] {
+        const local: ActivePlugin[] = []
+        this._entries.forEach((entry, key) => {
+            if (entry.meta.source === 'system') return
+            if (entry.meta.source === 'installed' && (this._remotePluginKeys.has(key) || incomingKeys.has(key))) {
                 return
             }
-            local.push({ plugin, meta })
+            local.push(entry)
         })
         return local
-    }
-
-    /** Put a preserved runtime-local plugin back into the registry and its metadata. */
-    private _restoreLocalPlugins(localPlugins: LocalPluginEntry[]) {
-        localPlugins.forEach(({ plugin, meta }) => {
-            this._pluginMap.set(plugin.name, plugin)
-            this._pluginMeta.set(plugin.name, meta)
-        })
-    }
-
-    /**
-     * The active runtime plugin list: host plugins, runtime-local (dev) plugins
-     * no remote list can restore, then this round's remote plugins. First
-     * registration wins, so a dev build shadows the published artifact of the
-     * same runtime name until it is explicitly uninstalled.
-     */
-    private _composeActivePlugins(
-        remotePlugins: KPlugin<any>[],
-        localPlugins: LocalPluginEntry[] = [],
-    ): KPlugin<any>[] {
-        const seen = new Set<string>()
-        const active: KPlugin<any>[] = []
-        for (const plugin of [
-            ...this._initialPlugins,
-            ...localPlugins.map(entry => entry.plugin),
-            ...remotePlugins,
-        ]) {
-            if (seen.has(plugin.name)) continue
-            seen.add(plugin.name)
-            active.push(plugin)
-        }
-        return active
     }
 
     /**
@@ -493,6 +906,13 @@ export class PluginManager {
         logger.info(`Plugin script cache invalidated for URL: ${url}`)
     }
 
+    /**
+     * Shape check for a plugin instance or descriptor.
+     *
+     * Collisions are *not* checked here any more: whether an incoming bundle is a
+     * new plugin, a reload of one already active, or a shadowing dev build is a
+     * question about the registry, answered by the plan (see {@link _planEntries}).
+     */
     private _validatePlugin(plugin: { name?: string } | null | undefined): boolean {
         if (!plugin) {
             logger.error('Plugin is null or undefined')
@@ -500,10 +920,6 @@ export class PluginManager {
         }
         if (!plugin.name) {
             logger.error('Plugin must have a name')
-            return false
-        }
-        if (this._pluginMap.has(plugin.name)) {
-            logger.warn(`Plugin ${plugin.name} is already installed`)
             return false
         }
         return true
@@ -621,91 +1037,79 @@ export class PluginManager {
     }
 
     public async init(remotePlugins: readonly RemotePluginInput[]): Promise<PluginInitResult> {
-        logger.info('Initializing remote plugins:', remotePlugins);
-        logger.info('Current init status:', this._init);
+        logger.info('Initializing remote plugins:', remotePlugins)
+        logger.info('Current init status:', this._init)
 
-        // Determine if we are re-initializing (already initialized before)
         const isReinit = this._init
 
-        // Names this init is about to load from the server. Derived before the
-        // reset so the snapshot below can tell "the server owns this name" from
+        // Keys this init is about to load from the server. Derived before the
+        // reset so the preserved set can tell "the server owns this key" from
         // "this runtime installed it and the server has never heard of it".
-        const incomingNames = new Set(
+        const incomingKeys = new Set(
             (remotePlugins ?? []).flatMap(input => {
                 const plugin = normalizeRemotePluginDescriptor(input)
-                return plugin ? [plugin.name] : []
+                return plugin ? [plugin.pluginKey] : []
             }),
         )
-        // Snapshot the runtime-local plugins *before* the reset clears the
-        // registry: nothing in `remotePlugins` can restore them afterwards.
-        const localPlugins = this._runtimeLocalEntries(incomingNames)
+        // Snapshot the runtime-local entries *before* the reset: nothing in
+        // `remotePlugins` can restore them afterwards.
+        const localEntries = this._runtimeLocalEntries(incomingKeys)
+
+        const failedPlugins = new Set<string>()
+        const incompatiblePlugins = new Map<string, PluginApiIncompatibility>()
+
+        const normalizedRemotePlugins = (remotePlugins ?? []).flatMap(input => {
+            const plugin = normalizeRemotePluginDescriptor(input)
+            if (plugin) return [plugin]
+            const name = getRemotePluginInputName(input)
+            failedPlugins.add(name)
+            logger.warn(`Skipping remote plugin ${name}: missing name or resourcePath`)
+            return []
+        })
+        const loadableRemotePlugins = normalizedRemotePlugins.filter(plugin => {
+            if (!this._isInitialPluginKey(plugin.pluginKey)) return true
+            logger.info(`Skipping remote plugin ${plugin.pluginKey}: already provided by the host`)
+            return false
+        })
 
         try {
-            // Reset state if reinitializing to ensure clean state
             if (isReinit) {
-                logger.info('PluginManager already initialized, resetting state for reinitialization');
-                this._init = false;
-                // Keep host plugins and runtime-local plugins; the remote set is
-                // what is being reloaded here, not uninstalled.
-                this.plugins = this._composeActivePlugins([], localPlugins);
-                // Rebuild plugin map with only the kept plugins
-                this._pluginMap.clear();
-                this._pluginMeta.clear();
-                this._buildPluginMap(this._initialPlugins);
-                this._restoreLocalPlugins(localPlugins);
-                this._rebuildServices();
-
-                // Invalidate script cache so remote plugins are freshly loaded
+                logger.info('PluginManager already initialized, resetting state for reinitialization')
+                this._init = false
+                // Remote plugins are being reloaded, not uninstalled: host plugins
+                // and runtime-local entries stay active throughout, so the window
+                // never flickers through an empty registry.
+                this._remotePluginKeys = new Set()
+                this._commit(
+                    new Map(this._runtimeLocalEntries(new Set()).map(entry => [entry.key, entry])),
+                    'reinit',
+                )
+                // Remote plugins must be fetched again, not served from the cache.
                 this.clearPluginCache()
             }
 
-            if (!remotePlugins || remotePlugins.length === 0) {
-                // No installed list to sync against: the host's own plugins plus
-                // whatever this runtime installed locally stay active, and
-                // everything the server previously supplied stops being active —
-                // registry and active list are rebuilt together so that
-                // `hasPlugin()` cannot outlive the menu entries it backs.
-                this.plugins = this._composeActivePlugins([], localPlugins)
-                this._pluginMap.clear()
-                this._pluginMeta.clear()
-                this._buildPluginMap(this._initialPlugins)
-                this._restoreLocalPlugins(localPlugins)
-                const conflicts = this._rebuildServices()
-                if (conflicts.size > 0) {
-                    this.plugins = this.plugins.filter(plugin => !conflicts.has(plugin.name))
-                    this._pluginMap.clear()
-                    this._pluginMeta.clear()
-                    this._buildPluginMap(this.plugins)
-                    // `_buildPluginMap` labels every surviving plugin `system`;
-                    // put the preserved plugins' real metadata back.
-                    this._restoreLocalPlugins(
-                        localPlugins.filter(({ plugin }) => !conflicts.has(plugin.name)),
-                    )
-                    this._rebuildServices()
+            if (loadableRemotePlugins.length === 0) {
+                // Nothing to sync against: the host's own plugins plus whatever
+                // this runtime installed locally stay active, and everything the
+                // server previously supplied stops being active. Registry and
+                // active list are rebuilt by the same commit, so `hasPlugin()`
+                // cannot outlive the menu entries it backs.
+                const next = new Map<string, ActivePlugin>()
+                for (const plugin of this._initialPlugins) {
+                    next.set(this._identityOf(plugin), this._entryForPlugin(plugin, 'system'))
                 }
-                this._remotePluginNames = new Set()
+                for (const entry of localEntries) next.set(entry.key, entry)
+                const result = this._commit(next, 'init')
+                this._remotePluginKeys = new Set()
                 this._incompatiblePlugins = new Map()
-                this._notifyChange()
                 this._init = true
-                logger.info('Plugins loaded:', this.plugins.length);
-                logger.debug('Services loaded:', this._serviceRegistry.getAll());
-                return { failedPlugins: [...conflicts], incompatiblePlugins: [] }
+                logger.info('Plugins loaded:', this.plugins.length)
+                logger.debug('Services loaded:', this._serviceRegistry.getAll())
+                return {
+                    failedPlugins: [...failedPlugins, ...result.conflicts.map(c => c.key)],
+                    incompatiblePlugins: [],
+                }
             }
-
-            const failedPlugins = new Set<string>()
-            const normalizedRemotePlugins = remotePlugins.flatMap(input => {
-                const plugin = normalizeRemotePluginDescriptor(input)
-                if (plugin) return [plugin]
-                const name = getRemotePluginInputName(input)
-                failedPlugins.add(name)
-                logger.warn(`Skipping remote plugin ${name}: missing name or resourcePath`)
-                return []
-            })
-            const loadableRemotePlugins = normalizedRemotePlugins.filter(plugin => {
-                if (!this._isInitialPluginKey(plugin.pluginKey)) return true
-                logger.info(`Skipping remote plugin ${plugin.pluginKey}: already provided by the host`)
-                return false
-            })
 
             // Plugin boot is bounded and failure-isolated: a script that errors,
             // never answers, or exceeds its budget is reported through
@@ -730,8 +1134,6 @@ export class PluginManager {
             await this._settleWithin(loadPromises, this._bootstrapTimeoutMs)
             loadableRemotePlugins.forEach((plugin, index) => {
                 const outcome = loadOutcomes.get(index)
-                // Script/registration failures were already logged where they
-                // were captured; they are reported, not fatal.
                 if (outcome) {
                     if ('error' in outcome) failedPlugins.add(plugin.name || plugin.pluginKey || 'unknown')
                     return
@@ -744,15 +1146,35 @@ export class PluginManager {
                 )
             })
 
-            const incompatiblePlugins = new Map<string, PluginApiIncompatibility>()
-            const successfulPlugins: KPlugin<any>[] = []
-            const activatedPluginKeys = new Set<string>()
-            const seenPluginNames = new Set([
-                ...this._initialPlugins.map(plugin => plugin.name),
-                // A locally hot-reloaded dev build shadows the published
-                // artifact of the same runtime name until it is uninstalled.
-                ...localPlugins.map(({ plugin }) => plugin.name),
-            ])
+            /**
+             * The candidate registry: host plugins, then the runtime-local
+             * entries no remote list can restore, then this round's remote
+             * plugins. Insertion order is render order, and an existing key wins —
+             * which is exactly how a dev build shadows the published artifact of
+             * the same plugin until it is uninstalled.
+             */
+            const candidates = new Map<string, ActivePlugin>()
+            for (const plugin of this._initialPlugins) {
+                candidates.set(this._identityOf(plugin), this._entryForPlugin(plugin, 'system'))
+            }
+            const localForInit = this._runtimeLocalEntries(incomingKeys)
+            for (const entry of localForInit) {
+                candidates.set(entry.key, entry)
+            }
+            /**
+             * Names a dev build is running under.
+             *
+             * A dev build shadows the published artifact of the same plugin by
+             * *registry key* — and, deliberately, by display name too: the key the
+             * studio passes comes from the project manifest, which the developer
+             * may have edited (or published under an older one), and a published
+             * copy must never end up fighting the build someone is iterating on.
+             */
+            const devNames = new Set(
+                localForInit.filter(entry => entry.meta.source === 'dev').map(entry => entry.meta.name),
+            )
+
+            const activatedKeys = new Set<string>()
             loadableRemotePlugins.forEach((plugin, index) => {
                 const outcome = loadOutcomes.get(index)
                 if (!outcome || !('registration' in outcome)) return
@@ -768,72 +1190,36 @@ export class PluginManager {
                     failedPlugins.add(plugin.name || plugin.pluginKey)
                     return
                 }
-                if (seenPluginNames.has(instance.name)) {
-                    logger.info(`Skipping plugin ${instance.name}: a plugin with the same runtime name is already active`)
+                const key = plugin.pluginKey || this._identityOf(instance)
+                if (candidates.has(key) || devNames.has(instance.name)) {
+                    logger.info(
+                        `Skipping plugin ${instance.name}: ${candidates.has(key) ? `${key} is already active` : 'a dev build is running under that name'}`,
+                    )
                     return
                 }
-                seenPluginNames.add(instance.name)
-                successfulPlugins.push(instance)
-                this._pluginMeta.set(instance.name, {
-                    pluginKey: plugin.pluginKey,
-                    version: plugin.version,
-                    source: 'installed',
-                    desktopOnly: instance.desktopOnly || plugin.desktopOnly === true,
-                })
-                if (plugin.pluginKey) activatedPluginKeys.add(plugin.pluginKey)
+                candidates.set(key, this._entryForInstance(instance, 'installed', plugin))
+                activatedKeys.add(key)
             })
 
-            for (const [key, issue] of incompatiblePlugins) {
-                if (issue.pluginKey && activatedPluginKeys.has(issue.pluginKey)) {
-                    incompatiblePlugins.delete(key)
-                }
+            // A plugin that failed as *incompatible* but then activated from a
+            // local entry of the same key is not incompatible after all.
+            for (const [id, issue] of incompatiblePlugins) {
+                if (issue.pluginKey && activatedKeys.has(issue.pluginKey)) incompatiblePlugins.delete(id)
             }
 
-            // Snapshot again rather than reusing the pre-reset one: a plugin may
-            // have been installed from source while the remote scripts were
-            // still loading, and that install has to end up in the list too.
-            this.plugins = this._composeActivePlugins(
-                successfulPlugins,
-                this._runtimeLocalEntries(incomingNames),
-            )
-            this._buildPluginMap(successfulPlugins)
-
-            // The registry is the source of truth for "what is active"; this pair
-            // of lines is what a re-init used to break (plugin present in the map,
-            // missing from the list). Kept at debug so a support session can
-            // confirm the two agree without spamming the console.
-            logger.debug(
-                'init →',
-                this.plugins.map(plugin => plugin.name),
-                'registry →',
-                [...this._pluginMap.keys()],
-            )
-
-            const serviceConflicts = this._rebuildServices()
-            if (serviceConflicts.size > 0) {
-                const initialNames = new Set(this._initialPlugins.map(plugin => plugin.name))
-                const rejectedRemoteNames = [...serviceConflicts].filter(name => !initialNames.has(name))
-                if (rejectedRemoteNames.length > 0) {
-                    const rejected = new Set(rejectedRemoteNames)
-                    this.plugins = this.plugins.filter(plugin => !rejected.has(plugin.name))
-                    rejectedRemoteNames.forEach(name => {
-                        this._pluginMap.delete(name)
-                        this._pluginMeta.delete(name)
-                        failedPlugins.add(name)
-                    })
-                    this._rebuildServices()
-                }
+            const result = this._commit(candidates, isReinit ? 'reinit' : 'init')
+            for (const conflict of result.conflicts) {
+                failedPlugins.add(conflict.key)
             }
 
             this._incompatiblePlugins = incompatiblePlugins
             // Remember what the server listed, so a later init can tell its own
             // entries apart from the ones this runtime installed.
-            this._remotePluginNames = incomingNames
-            this._notifyChange()
+            this._remotePluginKeys = incomingKeys
             this._init = true
 
-            logger.info(`All plugins loaded: ${this.plugins.length} (${successfulPlugins.length} remote)`);
-            logger.debug('Services loaded:', this._serviceRegistry.getAll());
+            logger.info(`All plugins loaded: ${this.plugins.length}`)
+            logger.debug('Services loaded:', this._serviceRegistry.getAll())
 
             if (failedPlugins.size > 0) {
                 logger.warn(`${failedPlugins.size} plugins failed to load or activate`)
@@ -847,176 +1233,191 @@ export class PluginManager {
             }
         } catch (error) {
             logger.error('Fatal error during plugin initialization:', error)
-            const preserved = this._runtimeLocalEntries(incomingNames)
-            this.plugins = this._composeActivePlugins([], preserved)
-            this._pluginMap.clear()
-            this._pluginMeta.clear()
-            this._buildPluginMap(this._initialPlugins)
-            this._restoreLocalPlugins(preserved)
-            this._rebuildServices()
+            const preserved = new Map(
+                this._runtimeLocalEntries(incomingKeys).map(entry => [entry.key, entry]),
+            )
+            for (const plugin of this._initialPlugins) {
+                preserved.set(this._identityOf(plugin), this._entryForPlugin(plugin, 'system'))
+            }
+            this._commit(preserved, 'init-failed')
             this._incompatiblePlugins = new Map()
-            this._notifyChange()
             this._init = true
             throw error
         }
     }
 
-    private _rebuildServices(): Set<string> {
-        const conflicts = this._serviceRegistry.replacePluginServices(
-            this.plugins
-                .filter(plugin => plugin.services)
-                .map(plugin => ({
-                    owner: pluginServiceOwner(plugin.name),
-                    services: plugin.services!,
-                }))
-        )
-        conflicts.forEach(name => {
-            logger.error(`Plugin ${name} service registration rejected: a service key is already owned`)
-        })
-        return conflicts
+    /* ------------------------------------------------------------------ *
+     * Entry construction
+     * ------------------------------------------------------------------ */
+
+    /** The registry entry for a plugin instance, with the given provenance. */
+    private _entryForInstance(
+        plugin: KPlugin<any>,
+        source: PluginSource,
+        descriptor?: RemotePluginDescriptor,
+        sourceLabel?: string,
+    ): ActivePlugin {
+        const key = descriptor?.pluginKey || this._identityOf(plugin)
+        return {
+            key,
+            plugin,
+            meta: {
+                key,
+                name: plugin.name,
+                pluginKey: descriptor?.pluginKey || plugin.pluginKey || key,
+                version: descriptor?.version,
+                source,
+                desktopOnly: plugin.desktopOnly || descriptor?.desktopOnly === true,
+                ...(sourceLabel ? { sourceLabel } : {}),
+            },
+        }
     }
 
-    uninstallPlugin(key: string) {
-        logger.info('pluginStore ', this._pluginMap);
-        const plugin = this._pluginMap.get(key)
-        const clearedIncompatibility = this._clearPluginIncompatibility({ name: key })
-        if (!plugin && !clearedIncompatibility) {
-            logger.warn(`Plugin ${key} not found, cannot uninstall`)
-            return false
-        }
-
-        if (plugin) {
-            this.plugins = this.plugins.filter(it => it.name !== key)
-            this._pluginMap.delete(key)
-            this._pluginMeta.delete(key)
-        }
-
-        // Invalidate the script cache so that if the plugin is re-installed,
-        // it will be freshly loaded instead of using the stale cached version
-        this.clearPluginCache()
-
-        // Atomically rebuild plugin-owned services from the remaining plugins.
-        if (plugin) this._rebuildServices()
-
-        logger.info('Plugin uninstalled:', key);
-        // Notify listeners (does NOT emit global events – callers do that)
-        this._notifyChange()
-        return true
-    }
-
-    async installPlugin(input: RemotePluginInput, callBack?: () => void) {
-        const plugin = normalizeRemotePluginDescriptor(input)
-        if (!plugin) {
-            logger.error(`Plugin ${getRemotePluginInputName(input)} is missing required runtime metadata`)
-            return false
-        }
-
-        try {
-            if (this._isInitialPluginKey(plugin.pluginKey)) {
-                logger.warn(`Plugin ${plugin.pluginKey} is provided by the host and cannot be installed remotely`)
-                return false
-            }
-
-            if (!this._validatePlugin(plugin)) {
-                logger.error('Plugin validation failed')
-                return false
-            }
-
-            // Use bustCache to ensure we get the latest version of the plugin script
-            const path = this._buildPluginUrl(plugin)
-            const registration = await pluginScriptLoader.load(path, plugin.pluginKey, plugin.name, {
-                bustCache: true,
-                integrity: plugin.integrity || undefined,
-                timeout: this._loadTimeoutMs,
-            })
-
-            if (!registration) {
-                logger.error(`Failed to load plugin instance for ${plugin.name}`)
-                return false
-            }
-
-            return this._activateRegistration(registration, plugin, callBack)
-        } catch (error) {
-            logger.error(`Error installing plugin ${plugin?.name}:`, error)
-            return false
+    private _entryForPlugin(plugin: KPlugin<any>, source: PluginSource): ActivePlugin {
+        const key = this._identityOf(plugin)
+        return {
+            key,
+            plugin,
+            meta: {
+                key,
+                name: plugin.name,
+                pluginKey: plugin.pluginKey || key,
+                source,
+                desktopOnly: plugin.desktopOnly,
+            },
         }
     }
 
     /**
-     * Install a plugin from JavaScript source that is already in hand, instead
-     * of from a URL.
+     * Uninstall by registry key — or by name, for callers that only have one
+     * (a published plugin calling `pluginHost.uninstall(name)`).
      *
-     * The plugin studio builds a project's bundle in a child process and holds
-     * the code in memory; it should not have to publish that bundle to an
-     * origin first. The source is loaded through an object URL, so it goes
-     * through exactly the same activation path as a remote artifact — API
-     * version handshake, `KPlugin` extraction, service registration.
-     *
-     * Pass `replace: true` for hot reload: any active plugin with the same name
-     * is uninstalled first, and a stale object URL is never reused.
+     * Removing a plugin drops its render identities with it: installing it again
+     * is a mount, not a reload, so its contributions start from fresh state. That
+     * is now the *only* thing an uninstall does to identities — a bundle that
+     * renames itself is no longer an uninstall + install, because the identity is
+     * the registry key, which does not change when a name does.
      */
-    async installPluginFromSource(
-        options: {
-            /** JavaScript previously produced by the dev bundler. */
-            code: string
-            /** Registry key the bundle registered itself under. */
-            pluginKey: string
-            /** Human-readable name, used for logs and the incompatible list. */
-            name: string
-            version?: string
-            /** Uninstall an active plugin with the same runtime name first. */
-            replace?: boolean
-            /** Label for logs; defaults to the plugin name. */
-            sourceLabel?: string
-        },
-        callBack?: () => void,
-    ): Promise<boolean> {
-        const { code, pluginKey, name } = options
-        if (!code || !pluginKey || !name) {
-            logger.error('installPluginFromSource requires code, pluginKey and name')
-            return false
-        }
-
-        const plugin: RemotePluginDescriptor = {
-            pluginKey,
-            name,
-            version: options.version,
-            resourcePath: `inline://${options.sourceLabel ?? name}`,
-        }
-
-        if (this._isInitialPluginKey(pluginKey)) {
-            logger.warn(`Plugin ${pluginKey} is provided by the host and cannot be installed from source`)
-            return false
-        }
-
-        if (options.replace) {
-            const active = this._pluginMap.get(name)
-            if (active) {
-                // Safe: the reload is about to install a fresh instance.
-                this.uninstallPlugin(name)
+    uninstallPlugin(identifier: string): boolean {
+        const key = this._keyFor(identifier)
+        const clearedIncompatibility = this._clearPluginIncompatibility({
+            pluginKey: key ? this._entries.get(key)?.meta.pluginKey : undefined,
+            name: identifier,
+        })
+        if (!key) {
+            if (!clearedIncompatibility) {
+                logger.warn(`Plugin ${identifier} not found, cannot uninstall`)
+                return false
             }
+            this._notifyChange()
+            return true
         }
 
-        if (!this._validatePlugin(plugin)) {
-            logger.error('Plugin validation failed')
-            return false
+        const next = new Map(this._entries)
+        next.delete(key)
+        // Invalidate the script cache so a re-install re-fetches the bundle
+        // instead of serving the removed one from memory.
+        this.clearPluginCache()
+        this._commit(next, `uninstall:${key}`)
+        this._forgetPluginCss(key)
+        logger.info('Plugin uninstalled:', key)
+        return true
+    }
+
+    /**
+     * Install a plugin bundle that is already in hand (a dev build, or any
+     * locally produced artifact).
+     *
+     * This is the studio's whole interaction with the registry, and the arrival
+     * of the *new* registry design shows why: whether the bundle is a first
+     * install, a hot reload, a rename, or a dev build shadowing a published
+     * artifact is not a flag the caller passes — it is a question about the
+     * registry, answered by the plan below. The caller says what it built; the
+     * manager decides what that means.
+     */
+    async installBundle(bundle: PluginBundle, callBack?: () => void): Promise<PluginInstallOutcome> {
+        const key = bundle.pluginKey || bundle.name
+        const reject = (reason: string): PluginInstallOutcome => {
+            logger.error(`installBundle(${bundle.name}): ${reason}`)
+            return { ok: false, key, reason }
         }
+
+        if (!bundle.code || !bundle.name) {
+            return reject('code and name are required')
+        }
+        if (this._isInitialPluginKey(bundle.pluginKey)) {
+            return reject(`"${bundle.pluginKey}" is provided by the host itself and cannot be installed from a bundle`)
+        }
+
+        /**
+         * What the registry held *before* this load.
+         *
+         * A bundle that throws while it is being evaluated never calls
+         * `definePlugin`, so the loader reads back this same, stale registration.
+         * Treating it as a result would report the previous version as a
+         * successful reload (or activate a plugin the bundle never produced).
+         */
+        const previousRegistration = previousPluginRegistration(bundle.pluginKey)
+        const descriptor: RemotePluginDescriptor = {
+            pluginKey: bundle.pluginKey,
+            name: bundle.name,
+            version: bundle.version,
+            resourcePath: `inline://${bundle.sourceLabel ?? bundle.name}`,
+        }
+
+        /**
+         * The entry this bundle is a new build *of*.
+         *
+         * Three ways to be the same plugin, in order of certainty:
+         *
+         * 1. the same registry key;
+         * 2. the same project root — how a build finds its own entry after the
+         *    manifest's `pluginKey` was edited;
+         * 3. the same plugin under *another* name or key. This is not hypothetical:
+         *    an artifact installed from a legacy marketplace record (no
+         *    `pluginKey`) is filed under a key derived from its name, so
+         *    `pluginKey: "apiclient"` in the manifest does not match its key
+         *    `"API Client"` — and without this the build would look like a *second*
+         *    plugin, which the plan then refuses as a duplicate. A new build of a
+         *    plugin must **replace** the running copy, whatever it is filed under.
+         */
+        const target = this._entries.get(bundle.pluginKey)
+            ?? (bundle.sourceLabel
+                ? [...this._entries.values()].find(entry =>
+                    entry.meta.source === 'dev' && entry.meta.sourceLabel === bundle.sourceLabel)
+                : undefined)
+            ?? this._entryFor(bundle.pluginKey)
+            ?? this._entryFor(bundle.name)
 
         let objectUrl: string | undefined
         try {
-            objectUrl = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }))
-            const registration = await pluginScriptLoader.load(objectUrl, pluginKey, name, {
-                bustCache: true,
-                timeout: this._loadTimeoutMs,
-            })
-            if (!registration) {
-                logger.error(`Failed to load plugin instance for ${name}`)
-                return false
+            objectUrl = URL.createObjectURL(new Blob([bundle.code], { type: 'text/javascript' }))
+            const registration = await pluginScriptLoader.load(
+                objectUrl,
+                bundle.pluginKey,
+                bundle.name,
+                { bustCache: true, timeout: this._loadTimeoutMs },
+            )
+            if (!registration) return reject('the loader returned no registration for this bundle')
+            if (previousRegistration && registration === previousRegistration) {
+                return reject(
+                    'the bundle did not register itself: it threw while being evaluated '
+                    + 'and the host namespace still holds the previous registration',
+                )
             }
-            return this._activateRegistration(registration, plugin, callBack, 'dev')
+            const outcome = this._activate(descriptor, registration, {
+                source: 'dev',
+                sourceLabel: bundle.sourceLabel,
+                css: bundle.css,
+                replaceKey: target?.key,
+            })
+            if (outcome.ok) callBack?.()
+            return outcome
         } catch (error) {
-            logger.error(`Error installing plugin from source ${name}:`, error)
-            return false
+            return reject(
+                `the bundle could not be loaded or evaluated: `
+                + `${error instanceof Error ? error.message : String(error)}`,
+            )
         } finally {
             // The registration is cached in memory; the URL itself is not needed.
             if (objectUrl) URL.revokeObjectURL(objectUrl)
@@ -1024,108 +1425,303 @@ export class PluginManager {
     }
 
     /**
-     * Shared tail of every install path: version handshake, `KPlugin`
-     * extraction, service registration and change notification.
+     * Install a plugin from JavaScript source held in memory.
+     *
+     * Back-compat wrapper over {@link installBundle} for the `pluginHost` /
+     * `pluginManagement` services, which are a published contract. New callers
+     * should take the typed outcome: a boolean cannot say *why* a bundle was
+     * refused, which is the part a developer needs to see.
      */
-    private _activateRegistration(
-        registration: PluginRegistration,
-        plugin: RemotePluginDescriptor,
+    async installPluginFromSource(
+        options: {
+            code: string
+            pluginKey: string
+            name: string
+            version?: string
+            /** Hot reload: swap an active entry in place. Omit to install fresh. */
+            replace?: boolean
+            /** Label for logs; also how a dev build finds its own project. */
+            sourceLabel?: string
+            /** Compiled CSS, applied atomically with the code. */
+            css?: string
+            /** Why the install was refused, verbatim (legacy diagnostic channel). */
+            onRejected?: (reason: string) => void
+        },
         callBack?: () => void,
-        source: PluginSource = 'installed',
-    ): boolean {
-        const incompatibility = this._getApiIncompatibility(registration.meta, plugin)
+    ): Promise<boolean> {
+        if (options.replace === false) {
+            // The legacy contract: an explicit "install, do not touch what is
+            // running". A bundle path with no `replace` intent still *installs*
+            // when its key is new — this only preserves the old refusal.
+            const active = this._keyFor(options.pluginKey) ?? this._keyFor(options.name)
+            if (active) {
+                const reason = `"${active}" is already active; uninstall it first or replace it`
+                options.onRejected?.(reason)
+                logger.error(`installPluginFromSource(${options.name}): ${reason}`)
+                return false
+            }
+        }
+
+        const outcome = await this.installBundle({
+            code: options.code,
+            pluginKey: options.pluginKey,
+            name: options.name,
+            version: options.version,
+            sourceLabel: options.sourceLabel,
+            css: options.css,
+        }, callBack)
+        // `=== false`, not `!outcome.ok`: the check compiles run without
+        // `strictNullChecks`, and a falsy test does not narrow a
+        // boolean-discriminated union there.
+        if (outcome.ok === false) options.onRejected?.(outcome.reason)
+        return outcome.ok
+    }
+
+    /**
+     * Install a remote artifact (an entry from the server's installed list).
+     *
+     * Refused when its registry key is already active: the server's list is the
+     * authority for `installed` plugins, so a *reload* only happens through a
+     * re-init or through a bundle. A dev build that shadows the same key keeps
+     * winning, which is what `_runtimeLocalEntries` carries across a re-init.
+     */
+    async installPlugin(input: RemotePluginInput, callBack?: () => void) {
+        const descriptor = normalizeRemotePluginDescriptor(input)
+        if (!descriptor) {
+            logger.error(`Plugin ${getRemotePluginInputName(input)} is missing required runtime metadata`)
+            return false
+        }
+        if (this._isInitialPluginKey(descriptor.pluginKey)) {
+            logger.warn(`Plugin ${descriptor.pluginKey} is provided by the host and cannot be installed remotely`)
+            return false
+        }
+
+        try {
+            const path = this._buildPluginUrl(descriptor)
+            const registration = await pluginScriptLoader.load(path, descriptor.pluginKey, descriptor.name, {
+                bustCache: true,
+                integrity: descriptor.integrity || undefined,
+                timeout: this._loadTimeoutMs,
+            })
+            if (!registration) {
+                logger.error(`Failed to load plugin instance for ${descriptor.name}`)
+                return false
+            }
+            const outcome = this._activate(descriptor, registration, { source: 'installed' })
+            if (outcome.ok) callBack?.()
+            return outcome.ok
+        } catch (error) {
+            logger.error(`Error installing plugin ${descriptor?.name}:`, error)
+            return false
+        }
+    }
+
+    /*
+     * The activation pipeline, shared by every install path: version handshake,
+     * `KPlugin` extraction, component-identity wrapping, plan, commit.
+     *
+     * Nothing here mutates the registry except through `_commit`, and the plan is
+     * checked *before* the commit, so a `false`/`ok:false` result always means
+     * "nothing changed" — the previous version is still running, with its services
+     * and its CSS intact.
+     */
+    private _activate(
+        descriptor: RemotePluginDescriptor,
+        registration: PluginRegistration,
+        options: {
+            source: PluginSource
+            /** Key of the entry this activation replaces (a reload/shadow). */
+            replaceKey?: string
+            sourceLabel?: string
+            css?: string
+        },
+    ): PluginInstallOutcome {
+        const key = descriptor.pluginKey || descriptor.name
+        const reject = (reason: string): PluginInstallOutcome => {
+            logger.error(`Cannot activate ${descriptor.name}: ${reason}`)
+            return { ok: false, key, reason }
+        }
+
+        const incompatibility = this._getApiIncompatibility(registration.meta, descriptor)
         if (incompatibility) {
-            this._clearPluginIncompatibility(plugin)
-            this._incompatiblePlugins.set(this._pluginIdentity(plugin), incompatibility)
+            // Clearing the running plugin's incompatibility bookkeeping would be a
+            // side effect of a *rejected* reload, so it only happens when there is
+            // no entry being replaced.
+            if (!options.replaceKey) this._clearPluginIncompatibility(descriptor)
+            this._incompatiblePlugins.set(this._pluginIdentity(descriptor), incompatibility)
             this._notifyChange()
-            return false
-        }
-
-        const loadedPlugin = this._extractPlugin(registration)
-        if (!loadedPlugin) {
-            logger.error(`Invalid plugin structure for ${plugin.name}`)
-            return false
-        }
-        if (!this._validatePlugin(loadedPlugin)) {
-            logger.error(`Plugin ${loadedPlugin.name} conflicts with an active runtime plugin`)
-            return false
-        }
-
-        if (loadedPlugin.services) {
-            this._serviceRegistry.registerAll(
-                loadedPlugin.services,
-                pluginServiceOwner(loadedPlugin.name)
+            return reject(
+                `it was built for plugin API ${incompatibility.apiVersion}, `
+                + `this host implements ${incompatibility.hostApiVersion}`,
             )
         }
 
-        this.plugins = [...this.plugins, loadedPlugin]
-        this._pluginMap.set(loadedPlugin.name, loadedPlugin)
-        this._pluginMeta.set(loadedPlugin.name, {
-            pluginKey: plugin.pluginKey,
-            version: plugin.version,
-            source,
-            desktopOnly: loadedPlugin.desktopOnly || plugin.desktopOnly === true,
-        })
-        this._clearPluginIncompatibility(plugin)
-
-        logger.info(`Plugin ${loadedPlugin.name} installed successfully`)
-        // Notify listeners (does NOT emit global events – callers do that)
-        this._notifyChange()
-        callBack && callBack()
-        return true
-    }
-
-    remove(name: string) {
-        const plugin = this._pluginMap.get(name)
-        const existed = Boolean(plugin)
-        if (plugin) {
-            this.plugins = this.plugins.filter(it => it.name !== name)
-            this._pluginMap.delete(name)
-            this._pluginMeta.delete(name)
-            this._rebuildServices()
-            logger.debug(`Plugin ${name} removed from manager`)
-            this._notifyChange()
+        const instance = this._extractPlugin(registration)
+        if (!instance) {
+            return reject('the bundle exports no KPlugin instance (check the entry file\'s exports)')
         }
-        return existed
+        if (!this._validatePlugin(instance)) {
+            return reject('the bundle exports a plugin without a name')
+        }
+
+        const existing = options.replaceKey ? this._entries.get(options.replaceKey) : undefined
+        if (!existing && this._entries.has(key)) {
+            const active = this._entries.get(key)!
+            return reject(
+                `"${key}" is already active as "${active.meta.name}" `
+                + `(source: ${active.meta.source}); uninstall it first or install a new build of it`,
+            )
+        }
+        if (!existing && options.source === 'installed') {
+            // The mirror of the init rule (see `_planEntries`): a published artifact
+            // must not start running next to any other build of the same plugin,
+            // dev or otherwise. The plan refuses it a step from here; this is the
+            // message that says what to do about it.
+            const shadowing = [...this._entries.values()].find(entry =>
+                normalizePluginName(entry.meta.name) === normalizePluginName(instance.name))
+            if (shadowing) {
+                return reject(
+                    `a plugin named "${instance.name}" is already active under pluginKey `
+                    + `"${shadowing.key}" (source: ${shadowing.meta.source}); stop or uninstall it first`,
+                )
+            }
+        }
+
+        // Component identity is adopted *here*, once, for every contribution
+        // point — not at each resolve site (see `KPlugin.mapComponents`).
+        instance.mapComponents((kind, id, component) =>
+            this._hotComponents.resolve(key, `${kind}:${id}`, component))
+
+        const entry = this._entryForInstance(instance, options.source, descriptor, options.sourceLabel)
+        const next = new Map(this._entries)
+        if (existing && existing.key !== key) next.delete(existing.key)
+        next.set(key, entry)
+
+        const { conflicts } = this._planEntries(next)
+        const own = conflicts.find(conflict => conflict.key === key)
+        if (own) return reject(own.reason)
+
+        const result = this._commit(next, existing ? `reload:${key}` : `install:${key}`)
+        if (options.css !== undefined) this._applyPluginCss(key, options.css)
+        if (!result.changed && existing) {
+            // Same instances, same set: nothing to tell anyone about.
+            logger.debug(`Plugin ${key} re-committed without a change`)
+        }
+        logger.info(
+            existing
+                ? `Plugin ${instance.name} hot-swapped successfully (${descriptor.version ?? 'dev'})`
+                : `Plugin ${instance.name} installed successfully`,
+        )
+        return {
+            ok: true,
+            mode: existing ? 'reloaded' : 'installed',
+            key,
+            name: instance.name,
+            version: descriptor.version,
+            ...(existing && existing.meta.source !== 'dev' ? { shadowed: true } : {}),
+        }
     }
 
-    getPlugin(name: string): KPlugin<any> | undefined {
-        return this._pluginMap.get(name)
+    /**
+     * Apply a bundle's compiled CSS to the host document.
+     *
+     * Bundles carry their own CSS (a published UMD must be self-contained), so
+     * this is the *same* stylesheet written to the same per-plugin `<style>` tag.
+     * Doing it at commit time is what makes it part of the transaction: a rejected
+     * reload restores the previous stylesheet instead of leaving the developer's
+     * panel styled by code that never ran.
+     */
+    private _applyPluginCss(key: string, css: string): void {
+        this._committedCss.set(key, css)
+        if (typeof document === 'undefined') return
+        try {
+            const selector = `style[data-kn-plugin-style="${key}"]`
+            let tag = document.querySelector(selector) as HTMLStyleElement | null
+            if (!tag) {
+                tag = document.createElement('style')
+                tag.setAttribute('data-kn-plugin-style', key)
+                ;(document.head || document.documentElement).appendChild(tag)
+            }
+            tag.textContent = css
+        } catch (error) {
+            logger.warn(`Plugin ${key}: could not apply its stylesheet`, error)
+        }
     }
 
-    hasPlugin(name: string): boolean {
-        return this._pluginMap.has(name)
+    /** Put back the last stylesheet this plugin committed, if any. */
+    private _restorePluginCss(key: string): void {
+        const css = this._committedCss.get(key)
+        if (css === undefined) this._forgetPluginCss(key)
+        else this._applyPluginCss(key, css)
     }
 
+    private _forgetPluginCss(key: string): void {
+        this._committedCss.delete(key)
+        if (typeof document === 'undefined') return
+        try {
+            const tag = document.querySelector(`style[data-kn-plugin-style="${key}"]`)
+            tag?.parentNode?.removeChild(tag)
+        } catch {
+            /* best effort */
+        }
+    }
+
+    /** Alias of {@link uninstallPlugin}: removing *is* uninstalling. */
+    remove(identifier: string): boolean {
+        return this.uninstallPlugin(identifier)
+    }
+
+    /** The active instance for a registry key or a runtime name. */
+    getPlugin(identifier: string): KPlugin<any> | undefined {
+        return this._entryFor(identifier)?.plugin
+    }
+
+    hasPlugin(identifier: string): boolean {
+        return this._keyFor(identifier) !== undefined
+    }
+
+    /** Display names of the active plugins, in render order. */
     getAllPluginNames(): string[] {
-        return Array.from(this._pluginMap.keys())
+        return [...this._entries.values()].map(entry => entry.meta.name)
     }
 
     /**
      * Active plugins with their install metadata. Backs the `pluginManagement`
      * core service so management UIs (and the plugin studio) do not need to
      * reach into the manager.
+     *
+     * `pluginKey` is the identity here; `name` is what a human sees. Callers that
+     * need to address a plugin (reload it, check whether it is running) must use
+     * the key — a name can differ between builds of one plugin.
      */
     getPluginEntries(): PluginManagementEntry[] {
-        return Array.from(this._pluginMap.values()).map(plugin => {
-            const meta = this._pluginMeta.get(plugin.name)
-            return {
-                name: plugin.name,
-                pluginKey: meta?.pluginKey ?? plugin.pluginKey ?? plugin.name,
-                version: meta?.version,
-                source: meta?.source ?? 'system',
-                desktopOnly: meta?.desktopOnly ?? plugin.desktopOnly,
-            }
-        })
+        return [...this._entries.values()].map(entry => ({
+            name: entry.meta.name,
+            pluginKey: entry.meta.pluginKey,
+            version: entry.meta.version,
+            source: entry.meta.source,
+            desktopOnly: entry.meta.desktopOnly,
+        }))
     }
 
-    getPluginEntry(name: string): PluginManagementEntry | undefined {
-        return this.getPluginEntries().find(entry => entry.name === name)
+    /** Resolve an entry by registry key, or by the name it is running under. */
+    getPluginEntry(identifier: string): PluginManagementEntry | undefined {
+        const key = this._keyFor(identifier)
+        if (!key) return undefined
+        const meta = this._entries.get(key)!.meta
+        return {
+            name: meta.name,
+            pluginKey: meta.pluginKey,
+            version: meta.version,
+            source: meta.source,
+            desktopOnly: meta.desktopOnly,
+        }
     }
 
     /** Host-owned (system) plugins are part of the app and cannot be removed. */
-    isPluginRemovable(name: string): boolean {
-        return this._pluginMap.has(name) && this._pluginMeta.get(name)?.source !== 'system'
+    isPluginRemovable(identifier: string): boolean {
+        const entry = this._entryFor(identifier)
+        return Boolean(entry) && entry!.meta.source !== 'system'
     }
 
     get initStatus() {
@@ -1134,16 +1730,66 @@ export class PluginManager {
 
     // ---- Resolve methods (correctly spelled) ----
 
+    /**
+     * Every plugin route, in plugin order.
+     *
+     * Validated and de-duplicated by path (first wins), like the other resolve
+     * methods: a route without a usable `path`, or a second route claiming a path
+     * another plugin already registered, is dropped with a warning instead of being
+     * handed to the router — where a duplicate would silently shadow the first and
+     * a malformed path would break navigation for that plugin alone.
+     *
+     * The *host* renders these live (see `usePluginRoutes`), so a route exists as
+     * soon as its plugin does, and a hot reload can change a route's code without
+     * rebuilding the router.
+     */
     resolveRoutes(): RouteConfig[] {
         if (this._cacheRoutes) {
             return this._cacheRoutes
         }
 
         const routes: RouteConfig[] = []
-        for (const plugin of this.plugins) {
-            if (plugin.routes && plugin.routes.length > 0) {
-                routes.push(...plugin.routes)
+        const seen = new Set<string>()
+        const collect = (configs: RouteConfig[] | undefined, owner: string): void => {
+            for (const config of configs ?? []) {
+                if (!config || typeof config.path !== 'string' || !config.path.trim()) {
+                    logger.warn(`Invalid route from ${owner}, skipping`)
+                    continue
+                }
+                if (seen.has(config.path)) {
+                    logger.warn(`Route ${config.path} already registered, skipping duplicate from ${owner}`)
+                    continue
+                }
+                seen.add(config.path)
+                routes.push({
+                    ...config,
+                    children: config.children?.length
+                        ? (() => {
+                            // Children are part of the same route entry: validate and
+                            // keep them, but remember their paths so a later plugin
+                            // cannot register the same child path twice either.
+                            const children: RouteConfig[] = []
+                            for (const child of config.children ?? []) {
+                                if (!child || typeof child.path !== 'string' || !child.path.trim()) {
+                                    logger.warn(`Invalid child route of ${config.path}, skipping`)
+                                    continue
+                                }
+                                if (seen.has(child.path)) {
+                                    logger.warn(`Route ${child.path} already registered, skipping duplicate`)
+                                    continue
+                                }
+                                seen.add(child.path)
+                                children.push(child)
+                            }
+                            return children
+                        })()
+                        : undefined,
+                })
             }
+        }
+
+        for (const plugin of this.plugins) {
+            collect(plugin.routes, plugin.name)
         }
 
         this._cacheRoutes = routes
@@ -1170,7 +1816,7 @@ export class PluginManager {
     }
 
     private agentPluginKey(plugin: KPlugin<any>): string {
-        return this._pluginMeta.get(plugin.name)?.pluginKey || plugin.pluginKey || plugin.name
+        return this._keyOf(plugin)
     }
 
     /**
@@ -1503,10 +2149,7 @@ export class PluginManager {
         const settings: Array<PluginSettingsConfig & { pluginName: string }> = []
         for (const plugin of this.plugins) {
             if (plugin.settings) {
-                settings.push({
-                    ...plugin.settings,
-                    pluginName: plugin.name
-                })
+                settings.push({ ...plugin.settings, pluginName: plugin.name })
             }
         }
         return settings
@@ -1592,6 +2235,10 @@ export class PluginManager {
                     return
                 }
                 seen.add(panel.id)
+                // `panel.component` already carries its stable identity: the
+                // wrapper is adopted once, at activation (KPlugin.mapComponents),
+                // so this stays a pure projection and every contribution point
+                // gets the same treatment without this method knowing about it.
                 panels.push({ ...panel, source, owner, pluginKey })
             }
 
@@ -1599,7 +2246,7 @@ export class PluginManager {
             for (const plugin of this.plugins) {
                 // The runtime name is what the host renders under; the registry
                 // key is what the plugin's injected CSS is scoped to.
-                const pluginKey = this._pluginMeta.get(plugin.name)?.pluginKey || plugin.pluginKey || plugin.name
+                const pluginKey = this._keyOf(plugin)
                 for (const panel of plugin.dockPanels) {
                     collect(panel, 'plugin', plugin.name, pluginKey)
                 }
@@ -1649,6 +2296,7 @@ export class PluginManager {
                         continue
                     }
                     seen.add(pageType.id)
+                    const pluginKey = this._keyOf(plugin)
                     pageTypes.push({
                         value: { ...pageType, source: 'plugin', owner: plugin.name },
                         index: index++,

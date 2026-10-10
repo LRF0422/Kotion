@@ -17,7 +17,7 @@ import { PluginUploader } from "../PluginUploader";
 
 import { CollaborationEditor } from "@kn/editor";
 import { useTranslation } from "@kn/common";
-import { hasDocumentationContent, toRemotePluginDescriptor } from "../plugin-model";
+import { hasDocumentationContent, pluginRuntimeIdentity, toRemotePluginDescriptor } from "../plugin-model";
 
 interface PluginStatus {
     code: string;
@@ -314,14 +314,14 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
 
     const handleBulkDisable = useCallback(
         () => runBulk(APIS.DISABLE_PLUGIN, 'pluginManager.bulkDisableSuccess', p => {
-            void pluginManager?.uninstallPlugin(p.name)
+            void pluginManager?.uninstallPlugin(pluginRuntimeIdentity(p))
         }),
         [runBulk, pluginManager]
     );
 
     const handleBulkDelete = useCallback(
         () => runBulk(APIS.DELETE_INSTALLED_PLUGIN, 'pluginManager.bulkDeleteSuccess', p => {
-            void pluginManager?.uninstallPlugin(p.name)
+            void pluginManager?.uninstallPlugin(pluginRuntimeIdentity(p))
         }),
         [runBulk, pluginManager]
     );
@@ -367,7 +367,7 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
         try {
             if (isActive) {
                 await useApi(APIS.DISABLE_PLUGIN, { versionId: plugin.currentVersionId });
-                pluginManager?.uninstallPlugin(plugin.name);
+                pluginManager?.uninstallPlugin(pluginRuntimeIdentity(plugin));
                 event.emit(PLUGIN_CHANGED, { source: 'disable' });
                 toast.success(t('pluginManager.disableSuccess'));
             } else {
@@ -406,7 +406,7 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
         }
         try {
             await useApi(APIS.DELETE_INSTALLED_PLUGIN, { versionId: pluginToDelete.currentVersionId });
-            pluginManager?.uninstallPlugin(pluginToDelete.name);
+            pluginManager?.uninstallPlugin(pluginRuntimeIdentity(pluginToDelete));
             event.emit(PLUGIN_CHANGED, { source: 'delete' });
             toast.success(t('pluginManager.deleteSuccess'));
             props.onRefresh?.();

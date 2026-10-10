@@ -266,6 +266,15 @@ export type DevSessionState = 'idle' | 'starting' | 'watching' | 'failed' | 'sto
 export interface DevBuildOutput {
     /** Bundled, host-runtime-ready JavaScript (UMD-ish IIFE). */
     code: string
+    /**
+     * Compiled CSS for this build (already scoped to the plugin's own DOM).
+     *
+     * The bundle embeds it too — a published artifact must be self-contained —
+     * and the host re-applies this copy when it commits the bundle, so a rejected
+     * reload restores the previous stylesheet instead of leaving the panel
+     * styled by code that never ran.
+     */
+    css?: string
     /** Absolute path of the bundle on disk, when it was written. */
     outFile?: string
     /** Size of `code` in bytes. */

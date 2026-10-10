@@ -9,6 +9,14 @@ export interface CoreServiceOwner {
 
 export interface PluginServiceOwner {
     type: "plugin";
+    /**
+     * The plugin's **registry key** — its stable identity, and what ownership is
+     * decided by. A plugin's display `name` is not an identity: two builds of one
+     * plugin can declare different names (a translated `name`, an edited
+     * `displayName`), and they must still be the same owner.
+     */
+    pluginKey: string;
+    /** Display name, for humans reading the registry (dashboards, discovery). */
     pluginName: string;
 }
 
@@ -16,13 +24,17 @@ export type ServiceOwner = CoreServiceOwner | PluginServiceOwner;
 
 export const CORE_SERVICE_OWNER: CoreServiceOwner = Object.freeze({ type: "core" });
 
-export const pluginServiceOwner = (pluginName: string): PluginServiceOwner => ({
+export const pluginServiceOwner = (
+    pluginKey: string,
+    pluginName: string = pluginKey,
+): PluginServiceOwner => ({
     type: "plugin",
+    pluginKey,
     pluginName,
 });
 
 const ownerKey = (owner: ServiceOwner): string =>
-    owner.type === "core" ? "core" : `plugin:${owner.pluginName}`;
+    owner.type === "core" ? "core" : `plugin:${owner.pluginKey}`;
 
 const ownerLabel = (owner: ServiceOwner): string =>
     owner.type === "core" ? "core" : `plugin "${owner.pluginName}"`;
@@ -41,9 +53,25 @@ export class ServiceRegistrationError extends Error {
     }
 }
 
-interface ServiceEntry<K extends keyof Services = keyof Services> {
+export interface ServiceEntry<K extends keyof Services = keyof Services> {
     service: Services[K];
     owner: ServiceOwner;
+}
+
+/**
+ * What the service table would look like after a plugin set change.
+ *
+ * Planning is separated from applying so a registry change can be **rejected
+ * before it happens**: the plugin manager plans the whole next state, refuses the
+ * activation if the incoming plugin would lose its services to an existing owner,
+ * and only then commits. Without the split, "the plugin is active but its
+ * services were silently dropped" was a reachable half-committed state.
+ */
+export interface PluginServicePlan {
+    /** The complete table the registry would hold. */
+    entries: Map<keyof Services, ServiceEntry>;
+    /** Owners whose whole registration was skipped, and the names they wanted. */
+    conflicts: Array<{ owner: PluginServiceOwner; names: Array<keyof Services> }>;
 }
 
 export interface ServiceRegistryView {
@@ -124,43 +152,60 @@ export class ServiceRegistry {
         return removed;
     }
 
-    /** Atomically replace all plugin-owned services while preserving core services. */
-    replacePluginServices(
+    /**
+     * Compute the plugin-owned service table for a candidate plugin set.
+     *
+     * Pure: nothing is registered, nothing is notified. Core services are
+     * preserved. A registration is skipped **whole** when any of its names is
+     * already held by a different owner (a plugin can never take over another
+     * plugin's service), and that skip is *reported* rather than applied.
+     */
+    planPluginServices(
         registrations: Array<{ owner: PluginServiceOwner; services: Partial<Services> }>
-    ): Set<string> {
-        const nextEntries = new Map<keyof Services, ServiceEntry>();
+    ): PluginServicePlan {
+        const entries = new Map<keyof Services, ServiceEntry>();
         for (const [name, entry] of this._entries) {
-            if (entry.owner.type === "core") nextEntries.set(name, entry);
+            if (entry.owner.type === "core") entries.set(name, entry);
         }
 
-        const conflicts = new Set<string>();
+        const conflicts: PluginServicePlan["conflicts"] = [];
         for (const { owner, services } of registrations) {
-            const entries = Object.entries(services)
+            const wanted = Object.entries(services)
                 .filter(([, service]) => service !== undefined) as Array<
                     [keyof Services, Services[keyof Services]]
                 >;
-            const conflict = entries.some(([name]) => {
-                const existing = nextEntries.get(name);
+            const conflict = wanted.some(([name]) => {
+                const existing = entries.get(name);
                 return existing && ownerKey(existing.owner) !== ownerKey(owner);
             });
             if (conflict) {
-                conflicts.add(owner.pluginName);
+                conflicts.push({ owner, names: wanted.map(([name]) => name) });
                 continue;
             }
-            for (const [name, service] of entries) {
-                nextEntries.set(name, { service, owner } as ServiceEntry);
+            for (const [name, service] of wanted) {
+                entries.set(name, { service, owner } as ServiceEntry);
             }
         }
 
+        return { entries, conflicts };
+    }
+
+    /**
+     * Install a planned table and notify exactly the names that changed.
+     *
+     * The only mutation point for plugin-owned services, so "plan → validate →
+     * apply" is the single path (see {@link PluginServicePlan}).
+     */
+    applyPluginServices(plan: PluginServicePlan): void {
         const previousEntries = this._entries;
+        this._entries = plan.entries;
         const changed = new Set<keyof Services>([
             ...previousEntries.keys(),
-            ...nextEntries.keys(),
+            ...plan.entries.keys(),
         ]);
-        this._entries = nextEntries;
         for (const name of changed) {
             const previous = previousEntries.get(name);
-            const next = nextEntries.get(name);
+            const next = plan.entries.get(name);
             if (
                 previous?.service !== next?.service
                 || (!previous && !!next)
@@ -170,7 +215,18 @@ export class ServiceRegistry {
                 this._notify(name);
             }
         }
-        return conflicts;
+    }
+
+    /**
+     * Atomically replace all plugin-owned services while preserving core
+     * services. Returns the plugin keys whose registration was skipped.
+     */
+    replacePluginServices(
+        registrations: Array<{ owner: PluginServiceOwner; services: Partial<Services> }>
+    ): Set<string> {
+        const plan = this.planPluginServices(registrations);
+        this.applyPluginServices(plan);
+        return new Set(plan.conflicts.map(({ owner }) => owner.pluginKey));
     }
 
     get<K extends keyof Services>(name: K): Services[K] | undefined {

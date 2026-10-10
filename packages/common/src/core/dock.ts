@@ -80,6 +80,42 @@ export const DOCK_MIN_WIDTH = 240
 export const DOCK_MAX_WIDTH = 720
 
 /**
+ * Re-resolve the panels a dock is still rendering against the *current*
+ * contribution list.
+ *
+ * A dock host keeps a panel mounted once it has been opened — switching panels
+ * must not abort the work running in one — which means it holds a
+ * `ResolvedDockPanel` snapshot rather than the live resolution. That snapshot is
+ * what a hot reload silently defeats: the plugin's contribution is replaced, the
+ * dock keeps rendering the component function it captured, and the new code
+ * stays invisible until the panel is unmounted (i.e. until the window reloads).
+ *
+ * Re-resolving by id hands React the live definition while keeping the mount
+ * itself, so a reloaded plugin's panel shows its new implementation — and, given
+ * a stable component identity (see `plugin-hot-component.tsx`), keeps its state.
+ * A panel whose plugin vanished (uninstalled while it was running) keeps its
+ * snapshot so the in-flight panel survives.
+ *
+ * Returns the input array itself when nothing changed, so callers can memoize on
+ * it without invalidating their subtree on every render.
+ */
+export const resolveMountedPanels = (
+    mounted: ResolvedDockPanel[],
+    live: ResolvedDockPanel[],
+): ResolvedDockPanel[] => {
+    if (mounted.length === 0 || live.length === 0) return mounted
+    const byId = new Map(live.map(panel => [panel.id, panel]))
+    let changed = false
+    const resolved = mounted.map(entry => {
+        const current = byId.get(entry.id)
+        if (!current || current === entry) return entry
+        changed = true
+        return current
+    })
+    return changed ? resolved : mounted
+}
+
+/**
  * Which dock positions currently have a host mounted.
  *
  * The dock is a core shell feature rendered by the app shell on workspace

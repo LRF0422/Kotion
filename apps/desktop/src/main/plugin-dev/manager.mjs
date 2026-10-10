@@ -277,6 +277,9 @@ class DevSession {
             case 'build':
                 this.build = {
                     code: event.code,
+                    // Handed to the host so it can commit the stylesheet with the
+                    // code (and restore the previous one if the reload is refused).
+                    css: event.css,
                     outFile: event.outFile,
                     bytes: event.bytes,
                     durationMs: event.durationMs,

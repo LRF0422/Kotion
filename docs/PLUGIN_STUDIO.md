@@ -33,7 +33,7 @@
                                  │ 开发台 UI（用户） │                    │ agent 工具（AI）    │
                                  └────────┬────────┘                    └──────────┬─────────┘
                                           └──────────────┬──────────────────────────┘
-                                                         │ pluginHost.installFromSource()
+                                                         │ pluginHost.installBundle()
                                                   ┌──────▼───────┐
                                                   │ 宿主窗口热更   │
                                                   └──────────────┘
@@ -45,7 +45,7 @@
 | --- | --- |
 | 构建跑在**子进程**，不是渲染进程 | 编译是 CPU 密集的；插件代码写坏了不能把整个知识库应用拖死（实测构建失败 1–2ms 内返回，会话存活） |
 | 用 `ELECTRON_RUN_AS_NODE` 复用 Electron 自带的 Node | 用户机器上不需要单独装 Node |
-| 产物通过 **Blob URL** 走 `installPluginFromSource()` | 不需要给插件产物找 HTTP 源；且复用与远程插件**完全相同**的激活路径（apiVersion 握手、`KPlugin` 提取、服务注册） |
+| 产物通过 **Blob URL** 走 `installBundle()` | 不需要给插件产物找 HTTP 源；且复用与远程插件**完全相同**的激活路径（apiVersion 握手、`KPlugin` 提取、服务注册） |
 | 工程默认放在 **`userData/plugin-projects`** | 该目录本来就在 fs 白名单里 → 建工程**不需要目录对话框**，agent 才能全自动完成；同时 esbuild 就在 app 旁边，更容易解析 |
 | 开发台是普通插件 | 可卸载、可随市场分发；不往 core 里塞开发工具 |
 | 工具层**依赖注入** | `studio-tools.ts` 运行时不依赖 `@kn/common`，测试不需要加载整棵 React 树 |
@@ -94,8 +94,8 @@
 | `editPluginProjectFile` | 精确替换（`oldString`→`newString`，唯一性校验；改代码优先用它） |
 | `listPluginProjectFiles` | 列出工程内源码文件（跳过 node_modules/dist） |
 | `searchPluginProject` | 在工程源码里搜索（返回文件+行号） |
-| `runPluginProject` | 开始监听 + 把首个构建热更进当前窗口（**实时预览**入口）；可传 `externals` / `focus` |
-| `buildPluginProject` | 一次性构建 + 热更；可传 `externals`（与会话不同时会重启会话）/ `focus` |
+| `runPluginProject` | 开始监听 + 把首个构建热更进当前窗口（**实时预览**入口）；可传 `externals` / `focus`。热更被拒绝时返回 `reloadRejected`（正在运行的版本保留） |
+| `buildPluginProject` | 一次性构建 + 热更；可传 `externals`（与会话不同时会重启会话）/ `focus`；同样会返回 `reloadRejected` |
 | `stopPluginProject` | 停止监听、回收子进程 |
 | `deletePluginProject` | 停止监听、卸载窗口里的开发版本、**删除工程目录及磁盘文件**（不可恢复；宿主拒绝非工程目录） |
 | `deletePluginProjectFile` | **删除工程里的单个文件**（如遗留的旧组件）。只能删工程内的文件，拒绝 `package.json` 与入口文件；必须先 `readPluginProjectFile` 读过；返回被删正文，误删可粘回 |
@@ -213,7 +213,8 @@ await runPluginProject({ root, externals: ['svelte'] })
 - **每个组件独立错误边界**：预览的对象**就是**开发中的代码；某个组件抛错只会变成一个红色的坏框，
   不会把会话/侧栏整棵树带崩（侧栏宿主本身并没有包 boundary）。
 - **热更即刷新**：`usePluginState` 在每次插件变更时重渲染，所以 agent 改代码 → watcher 重建 →
-  开发台热更 → 预览自动换成新组件（面板没打开时不会自动热更，用 `buildPluginProject` 触发）。
+  开发台热更 → 预览自动换成新组件。**真正的面板**（不是这个预览）也走同一条路，
+  且换的是实现、不是组件身份——见下一节。
 
 关键取舍：
 
@@ -232,6 +233,143 @@ await runPluginProject({ root, externals: ['svelte'] })
 
 样式注意：卡片与预览渲染在内核会话里（**不在** `[data-kn-plugin="PluginStudio"]` 作用域内），
 所以只用宿主已有的 Tailwind 工具类与 `@kn/ui` 组件，跟 `plugin-main` 的 `PageArtifactCard` 一致。
+
+## 真正的热更：一个身份、一次提交、一条绑定
+
+热更走过三版，把结论先放这儿：**它不是「安装」的一个选项，而是注册表的一种状态变化**。
+把这句话落实，前面所有的补丁（`replace` 旗标、按名字找目标、`onRejected` 回调）就都不需要了。
+
+### 旧的病灶（都改掉了）
+
+| 病灶 | 后果 |
+| --- | --- |
+| **身份二元**：注册表/元数据/服务归属按 `name` 索引，而稳定身份是 `pluginKey` | 产物把 `name` 做了 i18n（`name: tt('API 客户端')` → 英文下 `'API Client'`），开发台按清单 `displayName` 找「在不在跑 / 换谁」→ 找不到 → 退化成全新安装 → 撞上已上架的同一插件 → **整个工程一次都没热更成功，且没有任何提示** |
+| **没有单一提交点**：install/reload/init/uninstall 各自改 5 处状态 | 半提交态（插件在册、服务被丢）只能靠人肉避免 |
+| **槽位包装散在 3 个 `resolve*()` 里** | agent 卡片渲染器、编辑器扩展的组件位**没被覆盖**，纯属"忘了包" |
+| **宿主不知道哪个 dev 会话拥有哪个注册项** | 自动热更被绑死在「开发台页面必须开着」，去重/校验/错误文案全在 UI 层 |
+| **CSS 由产物在求值时注入** | 一次被拒绝的热更会留下新版样式（面板被"没跑过的代码"重新排版） |
+
+### 现在的结构
+
+```
+                    ┌── 身份：pluginKey（唯一注册键；name 只是展示名）──┐
+插件工程 ─构建─▶ bundle ─▶ PluginManager.installBundle()                  │
+                              │                                          │
+                              │  ① 加载 + 校验（注册表还没动）             │
+                              │  ② KPlugin.mapComponents() 一次性认领组件身份
+                              │  ③ _planEntries()：服务冲突先判、可拒绝    │
+                              │  ④ _commit()：列表/索引/元数据/服务/缓存/版本/监听器
+                              ▼                                          │
+        ┌──────────── PluginDevHostService（宿主持有）────────────┐        │
+        │  订阅 desktop:event:dev，把「这个工程的构建」绑到        │        │
+        │  「那个 pluginKey 的注册项」上——**与页面是否打开无关**   │        │
+        └──────────────────────────────────────────────────────────┘        │
+                              ▼                                          │
+   resolveDockPanels/PageTypes/Settings/…（纯投影，不再包装）◀──────────────┘
+```
+
+**四条不变量**（回归测试逐条断言，见下）：
+
+1. **身份只有 `pluginKey`**。注册表、服务归属（`PluginServiceOwner.pluginKey`）、组件槽位、dev 会话绑定全用它；
+   `name` 是展示名，可以随语言、随构建变化。公开 API 仍接受名字（`getPlugin('PluginMain')`、`uninstall(name)`），
+   内部先解析成 key。
+2. **只有 `_commit()` 改注册表**。install / reload / init / uninstall 都是「构造候选条目 → plan → commit」：
+   服务冲突在 plan 阶段判定（**拒绝整个安装**，而不是"装上了但服务没了"），失败一律不改变现状。
+3. **组件身份在激活期认领一次**。`KPlugin.mapComponents()` 是**唯一**知道"配置里哪些字段是组件"的地方
+   （dockPanels、pageTypes、settings、agent 卡片/侧栏渲染器、编辑器扩展的 bubble/floating/footer/menu/slash）；
+   新增贡献点只加一行，热更身份、错误隔离、状态保留自动覆盖。`resolve*()` 因此回到纯投影——
+   配置里的组件 **就是** React 拿到的那个函数（预览、dock、管理器三边不会漂移）。
+4. **CSS 与代码同一次提交**。产物自带的 CSS 仍随 UMD 发布（必须自包含），宿主另外在提交时写入同一份；
+   被拒绝时回滚到上一版样式。
+5. **一个插件永远不会变成两个注册项**，而**同一个插件的新构建永远是"替换"而不是"重复"**。
+   plan 阶段按「同一声明名 **或** 同一 pluginKey」判定重复：同名/同键的候选只留一个
+   （渲染顺序在先者胜：宿主 → 开发版 → 服务器列表），落选者带原因上报；
+   而开发版在提交前会先按「注册键 → 工程根 → 宽松身份（名字/pluginKey 归一化）」找到**自己那个旧注册项**并替换它
+   ——所以老记录（没有 `pluginKey`）留下的名字派生键不会把热更挡在门外。
+   这条正是在修一个真实事故：一个插件先以「名字派生的键」装上（老记录没有 `pluginKey`），后来服务器
+   记录带上了 `pluginKey` → **两个注册项、侧边栏菜单两份**，而 `uninstall(名字)` 只会命中其中一个 →
+   "卸载没反应、菜单还在"。同时**查找变得宽松**：`uninstallPlugin()` / `getPlugin()` / `hasPlugin()`
+   接受注册键、运行时名字、artifact key，并按 loader 那套归一化（`@scope/plugin-api-client` ≡
+   `api-client`），所以「用市场记录里的名字去卸载」也能命中正在运行的那个。
+
+### 身份、遮蔽与命名
+
+- **改名不再是卸载+安装**：runtime 名字变了？注册键没变，那就是同一个条目的一次 reload
+  （面板身份、状态都保住）。
+- **开发版遮蔽同 pluginKey 的已安装版本**；若清单的 pluginKey 被改过，还会按**工程根目录**（`sourceLabel`）
+  找到自己的旧条目，而不是与它并存。按**名字**遮蔽也保留（已发布版本不能和开发者手上那个打架）。
+- 卸载会释放该插件的槽位，所以「删了再装」是全新挂载（状态理应重来）。
+
+### 一条绑定，与页面无关
+
+`createPluginDevHost()`（`packages/common/src/core/plugin-dev-host.ts`，由 `App.tsx` 注册成核心服务
+`pluginDevHost`）在宿主启动时订阅整个 `desktop:event:dev`：
+
+- 开发台页面 / agent 工具只做**驱动**（start/stop 会话、显式 build 一次）与**读取**结果，不再自己安装；
+- 绑定按 build **身份**（`buildCount@updatedAt`）去重——同一个构建会经由「`dev.build` 的返回值」和
+  「广播的 build 事件」到达两次，而**会话重启后 build 号会从 1 重来**，所以不能拿 `>` 比大小；
+- 每个工程一条串行队列，避免两次到达并发安装同一构建；
+- 渲染层重载（dev 下刷新窗口）会把**仍在监听的会话重新绑定并装回**，开发版不会因为刷新而消失；
+- 失败原因按工程记在绑定上，页面与 agent 都读同一个字段。
+
+于是「必须开着开发台页面才会自动热更」这条边界**没有了**。
+
+### 调用方按身份寻址
+
+开发台页面、插件管理器、agent 工具与卸载相关的调用**一律传 `pluginKey`**（`pluginRuntimeIdentity(record)`），
+而不是记录里的 `name`：`name` 是标签，可能随语言、随发布记录变化，而注册项的身份是键。
+宿主侧的宽松查找是兜底（老调用方仍然只传名字），不是让新代码继续传标签的理由。
+
+### 失败一定要说明白
+
+`installBundle()` 返回**类型化结果**：
+
+```ts
+{ ok: true,  mode: 'installed' | 'reloaded', key, name, version?, shadowed? }
+{ ok: false, key, reason }   // 宿主自己的原话：抛了什么 / API 要几 / 服务被谁占 / 没注册自己
+```
+
+- 拒绝发生在**提交之前**，所以「返回失败」= 什么都没变（旧版本、服务、样式都在）；
+- 求值期抛错的原文由 loader 捕获（**脚本抛错仍会触发 `load` 事件**，只听 `load` 只知道"没注册"）；
+- 开发台页面直接显示这句话；agent 工具落到 `reloadRejected` + `reloadNote`；被拒绝的构建**不会**被记成"已安装"。
+
+### 什么东西会重挂（状态不保）
+
+| 情况 | 行为 |
+| --- | --- |
+| 组件的 **hook 形状变了**（中间加了 `useState`、挪了 hook） | React 抛「more hooks than during the previous render」。每个贡献点外层有独立错误边界，会**自动重挂一次**（丢掉该项状态，新代码立刻可见），不会炸面板也不会死循环 |
+| 贡献的是 **class 组件 / `memo` / `forwardRef`** | 走 `createElement`（不能内联调用），实例重建：看得到新实现，状态不保 |
+| 面板**卸载后重装**（停止会话 + 删除工程、换 pluginKey 且无工程根可匹配） | 槽位已释放，全新挂载——这是对的 |
+| 编辑器扩展 | 组件位现在**也被包装**；但编辑器本身会随插件变更重配置，所以仍以重挂为主 |
+| 路由（`routes[]`） | 组件身份**也保住了**（包装装在 element 的 `type` 上），而且路由**按注册表实时解析**，新增路由不需要重建路由器：见「路由：注册与热更」 |
+
+## 路由：注册与热更
+
+路由是这个体系里唯一**不在 React 渲染树里按 render 解析**的贡献点——它要进路由器。
+原本的做法是「启动时把 `resolveRoutes()` 的结果`createBrowserRouter` 进去」，只在 `PLUGIN_CHANGED`
+时重建。两个后果（都是实测踩到的）：
+
+- **开发版的路由永远不会注册**：开发台热更走 `pluginManager.installBundle()`，**不发** `PLUGIN_CHANGED`
+  （故意的：每保存一次就重建路由器＝整个窗口重挂）。于是侧边栏菜单出来了，点进去 404 / 错误页。
+- 同理，任何"启动之后才活跃"的插件（安装、启用）在路由上也只等到下一次远程变更才生效。
+
+现在的结构是两条路并存：
+
+```
+路由器（启动时建一次，保持稳定）
+└─ "/" 外壳路由
+   ├─ 启动时活跃的插件路由（烘焙进树；element 的 type 带稳定身份 → 热更就地更新，不重挂）
+   └─ path="*" → <LivePluginRoutes/>   ← 实时解析：usePluginRoutes() + useRoutes()
+        ├─ 命中：现在活跃的插件路由（新出现的路由立刻可用，不需要重建路由器）
+        └─ 未命中：pluginsReady 之前是 Loading，之后是 ErrorPage
+```
+
+- 静态路径永远优先于 `*`，所以烘焙过的路由匹配不变，实时出口只处理树里没有的路径。
+- **路由元素也参与组件身份**：`KPlugin.mapComponents()` 把稳定包装装到 element 的 `type` 上
+  （只对函数组件；宿主标签/Fragment/Context Provider 原样保留），所以热更时页面**就地更新、不重挂**；
+  同一个组件挂多条路由时共享一个身份（API 客户端就把两个 path 指向同一个页面）。
+- `resolveRoutes()` 现在**校验并去重**：没有合法 `path` 的路由、以及别人已注册的同名路径，都会被跳过并告警，
+  而不是交给路由器去静默遮蔽。
 
 ## 探知已安装插件的能力：service
 
@@ -343,13 +481,21 @@ pnpm test:plugin-dev:electron
 | `package-install.test.mjs` | 20 | 包名/版本校验、管理器探测、argv 构造、假 spawn 安装 |
 | `tailwind.test.mjs` | 12 | 用宿主配置编译插件工具类、去除 @keyframes、空工程 |
 | `packaged-studio-deps.test.mjs` | 23 | **打包布局回归**：用真实 `afterPack` 钩子物化依赖，然后在**没有源码树**的前提下跑子进程——入口 `.mjs` 与 esbuild 都在 asar 外且可解析、平台二进制可 spawn、tailwind/postcss 与宿主配置就位并**真的编译出插件 CSS**、宿主标准包可读、**manager 从 `Resources/` 解析运行时且解析出的路径不含 `app.asar`** |
-| `studio-tools.test.mjs` | 179 | **agent 工具面**：名称/描述/schema、create→write→run→build→list→stop 的每次能力调用、**模板与 externals 透传和校验**、**删除工程与自卸载**、**删单个文件与「未读不许删」**、**service 发现（提供者归属/过滤/无注册表兜底）**、**产物聚焦（含 focus:false 与坏预览不拖垮构建）**、失败装订、缺能力提示、失败不装旧产物、**只读发现可以、注册表管理不在** |
+| `studio-tools.test.mjs` | 182 | **agent 工具面**：名称/描述/schema、create→write→run→build→list→stop 的每次能力调用、**模板与 externals 透传和校验**、**删除工程与自卸载**、**删单个文件与「未读不许删」**、**service 发现（提供者归属/过滤/无注册表兜底）**、**产物聚焦（含 focus:false 与坏预览不拖垮构建）**、失败装订、缺能力提示、失败不装旧产物、**只读发现可以、注册表管理不在** |
 | `surface.test.mjs` | 31 | **产物声明**：mapper 与工具面一致、kind 与预览一致、构建/发布/工程/图标的 payload、失败不产生产物、id 稳定（同工程重建/重生成只占一格）、`focusArtifact` 无 payload 路径、垃圾输入不抛 |
-| `icon-art.test.mjs` | 30 | **图标**：同插件同图、关键词/显式字形/首字母兜底、配色哈希与显式色、SVG 自包含与转义、栏位片段、只改该改的文件（不动手写图标、兼容 legacy `knPlugin` 块）、清单读取与 mime/可上传判断 |
-| `studio.smoke.mjs` | 50 | 真实 `PluginManager.installPluginFromSource` + Blob URL + 真实 loader；热更替换、单实例、坏代码不中断、恢复；**内置目录建工程、五个模板都能构建、删除工程、工程内删文件**；**产物管线（mapper 按工具名注册、卡片/预览贡献、产物架从 transcript 派生）**、**把活的插件面板真的渲染成 markup**、**真实 ServiceRegistry 把服务归属到插件** |
+| `icon-art.test.mjs` | 36 | **图标**：同插件同图、关键词/显式字形/首字母兜底、配色哈希与显式色、SVG 自包含与转义、栏位片段、只改该改的文件（不动手写图标、兼容 legacy `knPlugin` 块）、清单读取与 mime/可上传判断 |
+| `studio.smoke.mjs` | 63 | 真实 `PluginManager.installPluginFromSource` + Blob URL + 真实 loader；热更替换、单实例、坏代码不中断、恢复；**热更保身份（同一 dock 面板组件跨两次重建仍是同一个函数）、换实现可见（同一身份渲染出 `panel-v3`）、求值即抛的产物被拒绝、不动正在运行的版本、且拒绝原因里带着产物抛出的原文（`boom at eval`）**；**内置目录建工程、五个模板都能构建、删除工程、工程内删文件**；**产物管线（mapper 按工具名注册、卡片/预览贡献、产物架从 transcript 派生）**、**把活的插件面板真的渲染成 markup**、**真实 ServiceRegistry 把服务归属到插件** |
 | `electron.smoke.mjs` | 36 | 真实 preload 能力白名单、`dev.*` IPC（含 `dev.remove` / `dev.deleteFile`）、`ELECTRON_RUN_AS_NODE` 子进程、`desktop:event:dev` 推送、**无对话框 scaffold + 模板 + list + 读写/删除文件**、越界路径拒绝 |
 
-`pnpm test:plugin-dev` 合计 470 项检查
+`pnpm test:plugin-dev` 合计 486 项检查。
+
+热更机制自己还有一组纯 Node 断言（`packages/common`，`pnpm check` 的一部分，不进 `test:plugin-dev`）：
+
+| 检查 | 数量 | 覆盖 |
+| --- | --- | --- |
+| `plugin-hot-swap.check.ts` | 98 | **稳定身份**（重新解析拿到同一个函数、同一实现不计数、换实现只 +1、按 pluginKey 归档、release 后重新挂载、非组件贡献原样透传）、**内联调用**（host 直接调用返回实现的值，而不是一个 element）、**hooks 归属**（带 `useState` 的实现经稳定包装能正常渲染；class 组件走 React 实例化）、**钩子形状判决**（只重挂一次、普通错误只报不重挂）、**已挂载面板重解析**（换贡献→用新的、消失→留快照、无变化→数组不变）、**manager 原子性**（身份跨 reload 不变 + 渲染出新实现、只留一个实例、服务不丢、求值抛错 / 从未注册自己 / API 不匹配一律回滚、改 displayName 换名不留双份、卸载释放槽位）、**一个插件不会变成两个注册项**（同名或同 pluginKey 只留一个、菜单只贡献一次、按记录的 label 也能卸载、重复安装不叠加、老记录用名字派生键时开发版是"替换"而不是被当成重复拒绝）、**路由**（插件一活跃即可解析、element 的 type 是稳定身份且两条同组件的路由共享它、热更后同一身份渲染出新页面、重复路径只留一条）、**拒绝时说明原因**（loader 抛错原文 / 没注册自己 / API 版本双方 / 名字已被占用，逐条断言措辞）、**同 pluginKey 的已安装版本被遮蔽**（名字不同也认得出、只留一个、身份不变） |
+| `plugin-dev-host.check.ts` | 26 | **宿主侧 dev 绑定**：watch 立刻装当前构建、后续构建**无需任何页面**自动安装、同一构建的两次到达（`dev.build` 返回值 + 广播事件）只装一次、失败重建不安装、被拒绝的构建记录原因并可在下一次恢复、unwatch 后不再安装、会话重启后 build 号从 1 重来仍会安装、显式 build 转发 writeToDisk/externals 且只装一次、渲染层重载会重新绑定仍在监听的会话、没有桌面 dev 能力时是惰性的 |
+
 后端（`backend/knowledgecloud`）：`mvn -o -pl knowledge-service/knowledge-wiki -am -Dtest=PluginApplicationTest test` —— 20 项，覆盖「升版带新图标记在版本上 / 不带则继承 / 审批通过后提升到插件」。
 ；`pnpm test:plugin-dev:electron` 另有 36 项（需要先构建出 `out/preload/index.js`）。
 
@@ -371,8 +517,13 @@ pnpm test:plugin-dev:electron
 | `dev.remove` | 停止会话并**删除工程目录**；拒绝没有可读 `package.json` 的目录与用户标准目录（Documents/Downloads/Desktop/temp/userData） |
 | `dev.deleteFile` | **删除工程内的单个文件**（`root` + `path`）：`realpath` 限定在工程内，拒绝 `package.json`、入口文件、目录与不存在的文件；返回被删正文（≤200 KB）供撤销 |
 
-配套宿主服务：`pluginHost.installFromSource()` / `uninstall()` / `subscribe()`
-（`packages/core/src/App.tsx` 注册，插件通过 `useOptionalService('pluginHost')` 使用）。
+配套宿主服务（都在 `packages/core/src/App.tsx` 注册，插件用 `useOptionalService(...)` 取）：
+
+| 服务 | 作用 |
+| --- | --- |
+| `pluginHost` / `pluginManagement` | 注册表视图与生命周期。**`installBundle(bundle) → PluginInstallOutcome`** 是热更入口（类型化：`mode` 说明这是首次安装还是热替换、`reason` 说明为什么被拒绝）；`installFromSource()` 是它的布尔前身，保留兼容 |
+| `pluginDevHost` | **dev 会话绑定**：宿主订阅 `desktop:event:dev`，把「某个工程的构建」绑到「某个 pluginKey 的注册项」。开发台页面与 agent 工具只驱动它（watch / unwatch / build）并读结果——所以**关掉开发台页面也会继续热更** |
+
 热更与「卸载自己刚热更进去的那个开发版本」是开发台唯一会**改动**注册表的操作：
 能力**发现**是只读的（`listPluginServices` + 侧栏服务目录），但
 **开发台不安装/卸载别人的插件**——那是插件管理器的职责，
@@ -403,13 +554,20 @@ agent 工具面因此没有 `listInstalledPlugins` / `uninstallInstalledPlugin` 
 ## 已知边界
 
 1. **主进程代码不能热更**：热更只覆盖窗口内的插件模块；改了 `apps/desktop/src/main/**` 仍需重启。
-2. **插件是可信代码**：本地构建产物在宿主窗口内执行，拥有与宿主相同的权限。只在开发机上使用。
-3. **文件路径白名单**：`dev.*` 的每个路径都经过与 `fs.*` 相同的 allowlist（标准用户目录 +
+2. **hook 形状变了会丢掉那一个组件的 state**：给组件中间加/挪 hook，React 无法复用旧 hook 列表，
+   边界会**自动重挂一次**（新代码立刻可见，状态从零开始）——与 React Fast Refresh 的处理相同。
+   class 组件 / `memo` / `forwardRef` 贡献同理：能看到新实现，但实例会重建。
+3. **会话本身不跨应用重启**：宿主绑定是内存态（重新启动客户端要重新「开始监听」）。
+   但**渲染层重载**（dev 下刷新窗口）会重新绑定仍在监听的会话并装回开发版。
+4. **一个插件不能发布别人已占用的 service**：这种情况下它**不会被激活**（宿主拒绝半提交），
+   原因会回给调用方；宿主自带的插件冲突也按同一条规则处理（在 `failedPlugins` 里报出来）。
+5. **插件是可信代码**：本地构建产物在宿主窗口内执行，拥有与宿主相同的权限。只在开发机上使用。
+6. **文件路径白名单**：`dev.*` 的每个路径都经过与 `fs.*` 相同的 allowlist（标准用户目录 +
    对话框授予的目录）。内置工程目录位于 `userData`，本来就在白名单内。
-4. **只读发现 ≠ 注册表管理**：开发台会**读**已安装插件的能力（服务名与提供者、贡献点），
+7. **只读发现 ≠ 注册表管理**：开发台会**读**已安装插件的能力（服务名与提供者、贡献点），
    但只**改**自己构建的产物——热更，以及卸载「自己刚热更进去的那个开发版本」（删除工程时顺带清掉）。
    安装/卸载其他已安装插件属于插件管理器的能力，不通过开发台的工具暴露给 agent。
-5. **托管外的东西不猜**：`externals` 只能声明宿主已暴露的全局模块（先 `listHostGlobals`），
+8. **托管外的东西不猜**：`externals` 只能声明宿主已暴露的全局模块（先 `listHostGlobals`），
    声明错的模块会**在构建前报错**；`@tiptap/core` 不在宿主注入清单里，
    所以没有「自带 Tiptap 节点」的模板——插件自带一份会注册到另一个 ProseMirror schema 实例上。
 

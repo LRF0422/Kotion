@@ -28,6 +28,7 @@ import { registerPageEditWindow } from "./components/PageEditWindowImpl"
 import { toast, AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel, Button, Input, Label } from "@kn/ui"
 import { Loader2, Eye, EyeOff } from "@kn/icon"
 import { ErrorPage } from "./components/ErrorPage";
+import { LivePluginRoutes } from "./routing/LivePluginRoutes";
 import { PluginErrorBoundary } from "./components/PluginErrorBoundary";
 import ReactDOM from "react-dom";
 import { PLUGIN_API_VERSION } from "@kn/plugin-api";
@@ -37,6 +38,7 @@ import { OrganizationInvitationAccept } from "./components/settings/Organization
 import { createSpacePageService } from "./domain/space-page";
 import { uploadTaskService } from "./services/upload/upload-task-service";
 import { createPluginMarketplaceService } from "./services/plugin-marketplace";
+import { createPluginDevHost } from "@kn/common";
 import { PluginPublisherHost } from "./components/Shop/PluginUploader/PluginPublisherHost";
 
 const { createBrowserRouter,
@@ -334,6 +336,7 @@ export const App: React.FC<AppProps> = (props) => {
         // The plugin studio (and any future tooling plugin) hot-installs local
         // bundles through this narrow surface instead of importing the manager.
         manager.registerCoreService('pluginHost', {
+            installBundle: (bundle) => manager.installBundle(bundle),
             installFromSource: (options) => manager.installPluginFromSource(options),
             uninstall: (name: string) => manager.uninstallPlugin(name),
             has: (name: string) => manager.hasPlugin(name),
@@ -349,6 +352,7 @@ export const App: React.FC<AppProps> = (props) => {
             has: (name) => manager.hasPlugin(name),
             getActiveNames: () => manager.getAllPluginNames(),
             install: (input) => manager.installPlugin(input),
+            installBundle: (bundle) => manager.installBundle(bundle),
             installFromSource: (options) => manager.installPluginFromSource(options),
             uninstall: (name) => manager.uninstallPlugin(name),
             isRemovable: (name) => manager.isPluginRemovable(name),
@@ -357,6 +361,13 @@ export const App: React.FC<AppProps> = (props) => {
         // Catalogue lifecycle (submit / publish a version / upgrade), shared
         // by the Shop UI and the plugin studio's publish flow.
         manager.registerCoreService('pluginMarketplace', createPluginMarketplaceService())
+        // Dev-session binding. Owned by the host, not by the studio page: a
+        // project's builds keep hot-reloading the window while the developer is
+        // looking at the plugin they are developing (or at anything else).
+        manager.registerCoreService('pluginDevHost', createPluginDevHost({
+            manager,
+            dev: desktop?.dev,
+        }))
         return manager
     }, [])
     const [pluginsReady, setPluginsReady] = useState(false)
@@ -461,6 +472,14 @@ export const App: React.FC<AppProps> = (props) => {
                             <Route path="/plugin-hub" element={<Marketplace />} />
                             <Route path="/plugin-hub/:id" element={<PluginDetail />} />
                         </Route>
+                        {/*
+                          Everything the router's tree does not know about, resolved
+                          live: a plugin activated *after* this router was built (the
+                          studio's dev build above all) has routes only the registry
+                          knows. Static routes above still win, so this is purely the
+                          fallback — see LivePluginRoutes.
+                        */}
+                        <Route path="*" element={<LivePluginRoutes ready={pluginsReady} />} />
                     </Route>,
                     <Route path='/login' element={<Login />} />,
                     <Route path='/sign-up' element={<SignUpForm />} />,

@@ -40,7 +40,7 @@ import React, {
 } from "react";
 import { InstalledExtensionsSidebar } from "./InstalledExtensionsSidebar";
 import { PluginHubTopBar } from "./PluginHubTopBar";
-import { PluginVersionRecord } from "./plugin-model";
+import { PluginVersionRecord, pluginRuntimeIdentity } from "./plugin-model";
 
 const SIDEBAR_STORAGE_KEY = "kn:plugin-sidebar-collapsed";
 const pluginVersionKey = (plugin: PluginVersionRecord) =>
@@ -182,8 +182,7 @@ export const Shop: React.FC = () => {
     try {
       // silent: the failure toast below already carries the backend's reason.
       await useApi(APIS.UNINSTALL_PLUGIN, { versionId: pluginToUninstall.id }, undefined, undefined, true);
-      if (pluginToUninstall.name)
-        pluginManager?.uninstallPlugin(pluginToUninstall.name);
+      pluginManager?.uninstallPlugin(pluginRuntimeIdentity(pluginToUninstall));
       await loadInstalled(true);
       suppressNextPluginEventRef.current = true;
       event.emit(PLUGIN_CHANGED, { source: "uninstall" });

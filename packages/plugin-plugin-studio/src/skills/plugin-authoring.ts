@@ -100,6 +100,7 @@ export const pluginAuthoringSkill = {
         "",
         "## 入口契约",
         "入口文件由 package.json 的 knPluginStudio.entry 指定（默认 src/index.tsx），必须导出一个 KPlugin 实例；宿主从产物 exports 里找它注册。注册键来自 knPluginStudio.pluginKey。",
+        "**name 用稳定字符串，不要做 i18n**：`name: tt('API 客户端')` 会让同一个插件在中英文下有两个身份（宿主按 pluginKey 兜得住，但「在不在跑 / 换没换成功」的判断会绕远路）。面向用户的标题交给 locales 与各贡献点的 title/label；工程显示名用 package.json 的 displayName。",
         "```tsx",
         "import { KPlugin, type PluginConfig } from '@kn/common'",
         "import React from 'react'",

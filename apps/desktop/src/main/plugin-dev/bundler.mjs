@@ -811,6 +811,11 @@ return __knRegister(__knNamespace, ${JSON.stringify(pluginKey)}, ${JSON.stringif
         return {
             ok: true,
             code,
+            // The same stylesheet the bundle injects on evaluation, handed to the
+            // host as well: the host re-applies it when it *commits* the bundle, so
+            // a refused reload can put the previous styles back (the bundle's own
+            // injection happens while it is being evaluated, i.e. too early).
+            css: cssResult.css || undefined,
             outFile: writeToDisk ? outFile : undefined,
             modules,
             warnings,

@@ -153,10 +153,26 @@ const esbuild = await import('esbuild')
 const tiptapStub = join(tmpdir(), 'kn-studio-tiptap-stub.js')
 await writeFile(tiptapStub, 'export class Editor {}\nexport default { Editor }\n')
 
+/**
+ * React reaches `@kn/common`'s host code as a real import (the hot-reload
+ * component wrapper builds elements), but this bundle lives in tmp and cannot
+ * resolve a bare `react` from there. Re-export the very instance this test
+ * loaded — a *bundled* copy would be a second React, and hooks only work when
+ * the component and the renderer share one dispatcher.
+ */
+const reactShim = join(tmpdir(), 'kn-studio-react-shim.mjs')
+await writeFile(
+    reactShim,
+    'const React = globalThis.React;\n'
+    + 'export default React;\n'
+    + 'export const { Children, Component, Fragment, StrictMode, Suspense, cloneElement, createContext, createElement, forwardRef, isValidElement, memo, useCallback, useContext, useDeferredValue, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore, useTransition } = React;\n',
+)
+
 const builderPlugin = {
-    name: 'tiptap-stub',
+    name: 'studio-fixture-stubs',
     setup(build) {
         build.onResolve({ filter: /^@tiptap\/core$/ }, () => ({ path: tiptapStub }))
+        build.onResolve({ filter: /^react$/ }, () => ({ path: reactShim }))
     },
 }
 
@@ -383,6 +399,38 @@ try {
         panelMarkup.includes('panel-v1'),
         panelMarkup.slice(0, 120),
     )
+
+    /* 2b-bis) the dock's own view of the panel.
+     *
+     * `resolveDockPanels()` is what DockHost renders, and its `component` is the
+     * element type React keys the panel's fiber by. The hot-reload checks below
+     * rest on that identity: same type ⇒ same fiber ⇒ the panel keeps its state
+     * (and is not even unmounted) while the code behind it changes. */
+    const dockPanelOf = () =>
+        pluginManager.resolveDockPanels('right').find((panel) => panel.id === 'smoke-panel')
+    const dockMarkupOf = (panel) => {
+        try {
+            return renderToStaticMarkup(React.createElement(panel.component))
+        } catch (renderError) {
+            return 'THREW: ' + renderError.message
+        }
+    }
+    const resolvedV1 = dockPanelOf()
+    check(
+        'hot reload: the dock resolves the panel with a renderable component',
+        typeof resolvedV1?.component === 'function',
+        JSON.stringify({ id: resolvedV1?.id, type: typeof resolvedV1?.component }),
+    )
+    check(
+        'hot reload: the dock view renders build v1',
+        dockMarkupOf(resolvedV1).includes('panel-v1'),
+        dockMarkupOf(resolvedV1).slice(0, 80),
+    )
+    check(
+        'hot reload: config and resolve path share one identity',
+        livePlugin.dockPanels[0].component === resolvedV1.component,
+        'the wrapper is adopted at activation, so every view hands React the same function',
+    )
     check(
         'preview: the instance exposes the services it registers',
         Object.keys(livePlugin?.services ?? {}).includes('smokeService'),
@@ -474,6 +522,66 @@ try {
     )
     check('hot reload: v2 active', versionOf('smoke-dev-plugin') === 'v2', String(versionOf('smoke-dev-plugin')))
 
+    /* 3b) the reload must be a *swap*, not a remount: the panel keeps the very
+     *     component the dock already mounted. The bundle was rebuilt from
+     *     scratch, so its `Panel` is a new function object — the host is what
+     *     carries the identity across, which is what preserves the panel's state
+     *     (and what makes the dock re-render instead of showing stale code). */
+    const resolvedV2 = dockPanelOf()
+    check(
+        'hot reload: the dock panel keeps its component identity',
+        resolvedV2?.component === resolvedV1?.component,
+        `v1=${typeof resolvedV1?.component} v2=${typeof resolvedV2?.component} same=${resolvedV2?.component === resolvedV1?.component}`,
+    )
+    check(
+        'hot reload: the kept identity still renders',
+        dockMarkupOf(resolvedV2).includes('panel-v1'),
+        dockMarkupOf(resolvedV2).slice(0, 80),
+    )
+    check(
+        'hot reload: the swap is recorded once',
+        pluginManager
+            .getHotComponentStats()
+            .filter((stat) => stat.slotKey === 'dockPanel:smoke-panel')
+            .every((stat) => stat.generation === 1),
+        JSON.stringify(pluginManager.getHotComponentStats()),
+    )
+
+    /* 3c) a bundle that throws while it is being evaluated must not take the
+     *     running version down. This is the case the old path could not survive:
+     *     it uninstalled first, so a broken *runtime* (not a broken build) left
+     *     the window with no plugin at all.
+     *
+     *     The refusal also has to explain itself — the loader's `load` event fires
+     *     for a script that threw, so the only way to know *why* is the error the
+     *     evaluation produced. */
+    const versionBeforeRollback = pluginManager.getPluginEntry('Smoke Dev Plugin')?.version
+    const rollbackReasons = []
+    const rolledBack = await pluginManager.installPluginFromSource({
+        code: 'throw new Error("boom at eval")',
+        pluginKey: 'smoke-dev-plugin',
+        name: 'Smoke Dev Plugin',
+        version: 'dev.broken',
+        replace: true,
+        onRejected: (reason) => rollbackReasons.push(reason),
+    })
+    check('hot reload: a bundle that throws at eval is rejected', rolledBack === false)
+    check(
+        'hot reload: the refusal carries the bundle error',
+        rollbackReasons.join(' | ').includes('boom at eval'),
+        rollbackReasons.join(' | ') || '(no reason reported)',
+    )
+    check(
+        'hot reload: the running version survives the rejection',
+        pluginManager.getPluginEntry('Smoke Dev Plugin')?.version === versionBeforeRollback,
+        `${pluginManager.getPluginEntry('Smoke Dev Plugin')?.version} (expected ${versionBeforeRollback})`,
+    )
+    check(
+        'hot reload: the rejected reload left the panel intact',
+        dockPanelOf()?.component === resolvedV1?.component && versionOf('smoke-dev-plugin') === 'v2',
+        String(versionOf('smoke-dev-plugin')),
+    )
+
     /* 4) broken edit must not kill the session, and must recover. */
     await writeFile(
         join(root, 'src', 'Panel.tsx'),
@@ -493,6 +601,28 @@ try {
     )
     const recovered = await waitFor((event, status) => event === 'build' && status.buildCount >= 3, 'recovery build #3')
     check('errors: recovery after fix', recovered.build.code.includes('panel-v3'))
+
+    /* 4b) the recovery has to be *observable*: the same panel identity React has
+     *     mounted must now render the new code. This is the whole point of the
+     *     state-preserving swap — new implementation, same fiber. */
+    const recoveredInstall = await pluginManager.installPluginFromSource({
+        code: recovered.build.code,
+        pluginKey: recovered.plugin.pluginKey,
+        name: recovered.plugin.name,
+        version: `dev.${recovered.buildCount}`,
+        replace: true,
+    })
+    check('hot reload: the recovered build hot-swaps', recoveredInstall === true)
+    const resolvedV3 = dockPanelOf()
+    check(
+        'hot reload: the panel still has the identity React mounted',
+        resolvedV3?.component === resolvedV1?.component,
+    )
+    check(
+        'hot reload: the kept identity renders the new code',
+        dockMarkupOf(resolvedV3).includes('panel-v3'),
+        dockMarkupOf(resolvedV3).slice(0, 80),
+    )
 
 
     /* 5) managed projects: scaffolding needs no directory dialog, and the

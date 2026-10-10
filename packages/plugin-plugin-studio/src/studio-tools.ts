@@ -256,11 +256,30 @@ export interface StudioPluginHost {
         version?: string
         replace?: boolean
         sourceLabel?: string
+        /** Why the install was refused, verbatim (the host's own explanation). */
+        onRejected?: (reason: string) => void
     }): Promise<boolean>
     /** Uninstall by runtime name; used only for the project's own dev preview. */
     uninstall?(name: string): boolean
     /** Whether a runtime plugin name is currently active. */
     has?(name: string): boolean
+}
+
+/**
+ * The host dev-session service as the tools use it.
+ *
+ * Structural on purpose: the tools must not import `@kn/common` (they run in
+ * tests without the host), so they describe the two calls they need.
+ */
+export interface StudioDevHost {
+    watch(project: { root: string; pluginKey: string; name: string }): Promise<{
+        outcome?: { ok: boolean; reason?: string }
+    }>
+    unwatch(root: string): void
+    build(options: { root: string; writeToDisk?: boolean; externals?: string[] }): Promise<{
+        status?: StudioSessionStatus
+        outcome?: { ok: boolean; reason?: string }
+    }>
 }
 
 export interface StudioMarketplaceMine {
@@ -287,6 +306,14 @@ export interface StudioToolDeps {
     getDev: () => StudioDevBridge | undefined
     /** The host plugin registry's hot-install surface, or undefined when absent. */
     getPluginHost: () => StudioPluginHost | undefined
+    /**
+     * The host's dev-session binding, when it publishes one.
+     *
+     * Preferred over driving installs from here: the binding belongs to the host
+     * and outlives this page, so a project keeps hot-reloading the window while
+     * the developer (or the model) looks at something else.
+     */
+    getDevHost?: () => StudioDevHost | undefined
     /** Plugin-marketplace lifecycle service; optional for older hosts and tests. */
     getMarketplace?: () => StudioPluginMarketplace | undefined
     /**
@@ -580,6 +607,18 @@ const waitForFreshBuild = async (
     const [status] = await dev.status({ root })
     return status
 }
+
+/**
+ * What to tell a caller whose reload was *rejected*.
+ *
+ * The host loads and validates the new bundle before it touches the registry, so
+ * a bundle that throws while being evaluated leaves the previous version running.
+ * The caller has to hear that — and *why*: `installed: false` on its own reads as
+ * a detail of a successful build, and the model would then describe a preview
+ * that did not actually change. `reason` is the host's own explanation.
+ */
+const rejectedReloadNote = (name: string, reason: string): string =>
+    `⚠️ 热更被拒绝（${name}）：${reason || '宿主没有说明原因'}。窗口里仍是上一个可用版本。`
 
 const summarize = (status: StudioSessionStatus | undefined) => {
     if (!status) return { ok: false, error: '没有找到该工程的会话' }
@@ -1127,22 +1166,47 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
             if (!summary.ok || !status?.build) return summary
 
             let installed = false
+            let reloadReason = ''
             if (args.autoInstall !== false) {
-                installed = await requirePluginHost(deps).installFromSource({
-                    code: status.build.code,
-                    pluginKey: status.plugin.pluginKey,
-                    name: status.plugin.name,
-                    version: `dev.${status.buildCount}`,
-                    replace: true,
-                    sourceLabel: status.root,
-                })
+                const devHost = deps.getDevHost?.()
+                if (devHost) {
+                    // Bind the project in the *host*: every later build hot-reloads
+                    // the window on its own, whether or not this page — or any page —
+                    // is open. This is the difference the studio used to have to
+                    // document as a limitation.
+                    const binding = await devHost.watch({
+                        root: status.root,
+                        pluginKey: status.plugin.pluginKey,
+                        name: status.plugin.name,
+                    })
+                    installed = binding.outcome?.ok !== false && Boolean(binding.outcome)
+                    reloadReason = binding.outcome?.reason ?? ''
+                } else {
+                    installed = await requirePluginHost(deps).installFromSource({
+                        code: status.build.code,
+                        pluginKey: status.plugin.pluginKey,
+                        name: status.plugin.name,
+                        version: `dev.${status.buildCount}`,
+                        replace: true,
+                        sourceLabel: status.root,
+                        onRejected: (reason) => { reloadReason = reason },
+                    })
+                }
             }
+            const reloadNote = rejectedReloadNote(status.plugin.name, reloadReason)
             const result = {
                 ...summary,
                 ...(externals ? { externals } : {}),
                 installed,
+                // `installed: false` after a *successful* build is not a success:
+                // say why the window kept the previous version.
+                ...(args.autoInstall !== false && !installed
+                    ? { reloadRejected: true, reloadNote }
+                    : {}),
                 next: status.watching
-                    ? '现在编辑源码即可自动热更；改完用 buildPluginProject 可主动重建。'
+                    ? (args.autoInstall !== false && !installed
+                        ? reloadNote
+                        : '现在编辑源码即可自动热更；改完用 buildPluginProject 可主动重建。')
                     : undefined,
             }
             // The build IS the artifact: make it the working target unless the
@@ -1182,6 +1246,32 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
             const externals = args.externals === undefined
                 ? undefined
                 : assertExternalsAvailable(deps, normalizeExternals(args.externals))
+
+            const devHost = deps.getDevHost?.()
+            if (devHost) {
+                // The host owns "wait for the fresh build, then install it": it has
+                // to, because that is the same path an ordinary file-save takes.
+                const { status, outcome } = await devHost.build({
+                    root: args.root,
+                    writeToDisk: args.writeToDisk === true,
+                    externals,
+                })
+                const summary = summarize(status)
+                if (!summary.ok || !status?.build) return summary
+                const installed = args.install === false ? false : outcome?.ok !== false && Boolean(outcome)
+                const reloadNote = rejectedReloadNote(status.plugin.name, outcome?.reason ?? '')
+                const result = {
+                    ...summary,
+                    ...(externals ? { externals } : {}),
+                    installed,
+                    ...(args.install !== false && !installed
+                        ? { reloadRejected: true, reloadNote }
+                        : {}),
+                }
+                if (args.focus !== false) focusProducedArtifact(deps, 'buildPluginProject', result, args)
+                return result
+            }
+
             const [existing] = await dev.status({ root: args.root })
             const previous = existing?.buildCount ?? 0
             const requested = await dev.build({
@@ -1197,6 +1287,7 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
             if (!summary.ok || !status?.build) return summary
 
             let installed = false
+            let reloadReason = ''
             if (args.install !== false) {
                 installed = await requirePluginHost(deps).installFromSource({
                     code: status.build.code,
@@ -1205,9 +1296,17 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
                     version: `dev.${status.buildCount}`,
                     replace: true,
                     sourceLabel: status.root,
+                    onRejected: (reason) => { reloadReason = reason },
                 })
             }
-            const result = { ...summary, ...(externals ? { externals } : {}), installed }
+            const result = {
+                ...summary,
+                ...(externals ? { externals } : {}),
+                installed,
+                ...(args.install !== false && !installed
+                    ? { reloadRejected: true, reloadNote: rejectedReloadNote(status.plugin.name, reloadReason) }
+                    : {}),
+            }
             if (args.focus !== false) focusProducedArtifact(deps, 'buildPluginProject', result, args)
             return result
         },
@@ -1227,16 +1326,25 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
         },
         execute: async (args: { root: string }) => {
             const dev = requireDev(deps)
+            // Unbind first: the session must not hot-reload a project that is about
+            // to be deleted (nor re-install it a moment after the uninstall below).
+            deps.getDevHost?.()?.unwatch(args.root)
             // Read the descriptor first: once the files are gone the manifest is
             // unreachable, and the preview in the window has to be dropped by name.
             const [status] = await dev.status({ root: args.root })
             const removed = await requireRemove(deps)({ root: args.root })
 
             const pluginHost = deps.getPluginHost?.()
-            const name = status?.plugin?.name ?? removed.name ?? undefined
+            // Address the registry by its identity (pluginKey): the manifest name
+            // is a label, and a bundle may declare yet another one.
+            const name = status?.plugin?.pluginKey
+                ?? status?.plugin?.name
+                ?? removed.pluginKey
+                ?? removed.name
+                ?? undefined
             let uninstalled = false
-            if (pluginHost?.uninstall && pluginHost?.has && name && pluginHost.has(name)) {
-                uninstalled = pluginHost.uninstall(name)
+            if (pluginHost?.uninstall && pluginHost?.has && name) {
+                uninstalled = pluginHost.has(name) && pluginHost.uninstall(name)
             }
             return {
                 ok: true,
@@ -1295,6 +1403,9 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
             required: ['root'],
         },
         execute: async (args: { root: string }) => {
+            // Unbind before stopping: a session that keeps its last build must not
+            // re-install it after it was explicitly stopped.
+            deps.getDevHost?.()?.unwatch(args.root)
             const stopped = await requireDev(deps).stop({ root: args.root })
             return { ok: stopped, root: args.root, stopped }
         },
