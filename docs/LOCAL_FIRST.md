@@ -183,6 +183,7 @@ pnpm --filter @kn/core check:local-first
 pnpm test:local-first
 ```
 
+`check:local-first` 会先用真实的 `@kn/common` 类型检查一遍这些源码（`tsc --noEmit`），再跑运行时用例；
 `check:domain` 复用 `check:storage` 的 ABI 约定：二进制不匹配时打印 SKIP 并退出 0，不伪装通过。
 `pnpm --filter @kn/desktop test:storage:electron` 还会走真实 preload → IPC → SQLite，
 同时覆盖 `storage.*` 与 `spacepage.*`（含 claimOutbox 与墓碑/换绑的落盘结果）。

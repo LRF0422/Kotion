@@ -96,11 +96,19 @@ export function createSpacePageBridge(
     ): Promise<DesktopCapabilityContract[C]['result']> =>
         host.invoke(capability, params) as Promise<DesktopCapabilityContract[C]['result']>
 
+    // `info()` is what the main process actually knows about the backend; the
+    // contract only promises `durable` for backends that survive a restart.
+    let cachedInfo: LocalStoreInfo | undefined
+
     const store: SpacePageLocalStore = {
-        durable: true,
+        get durable(): boolean {
+            return cachedInfo?.durable ?? true
+        },
 
         async info(): Promise<LocalStoreInfo> {
-            return unwrap(await invoke('spacepage.info'), 'spacepage.info')
+            if (cachedInfo) return cachedInfo
+            cachedInfo = unwrap(await invoke('spacepage.info'), 'spacepage.info')
+            return cachedInfo
         },
 
         async getSpace(spaceId: SpaceId): Promise<LocalSpaceRecord | null> {
