@@ -1396,7 +1396,9 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
     },
 
     stopPluginProject: {
-        description: '停止插件工程的监听并回收构建进程。用户说"先不要了/停掉"时调用。',
+        description:
+            '停止插件工程的监听、回收构建进程，并把窗口里的开发版本卸载掉（磁盘文件保留，' +
+            '"开始监听/热更"可以再装回来）。用户说"先不要了/停掉"时调用。',
         inputSchema: {
             type: 'object',
             properties: { root: { type: 'string', description: '工程根目录。' } },
@@ -1406,8 +1408,19 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
             // Unbind before stopping: a session that keeps its last build must not
             // re-install it after it was explicitly stopped.
             deps.getDevHost?.()?.unwatch(args.root)
+            // Read the descriptor before stopping — once the session is gone the
+            // manifest is unreachable, and the window's copy has to be dropped by the
+            // identity the registry filed it under (`pluginKey`; the name is a label).
+            const [status] = await requireDev(deps).status({ root: args.root })
             const stopped = await requireDev(deps).stop({ root: args.root })
-            return { ok: stopped, root: args.root, stopped }
+
+            const pluginHost = deps.getPluginHost?.()
+            const key = status?.plugin?.pluginKey ?? status?.plugin?.name
+            const uninstalled = Boolean(
+                pluginHost?.uninstall && pluginHost?.has && key && pluginHost.has(key)
+                && pluginHost.uninstall(key) !== false,
+            )
+            return { ok: stopped, root: args.root, stopped, uninstalled }
         },
     },
 

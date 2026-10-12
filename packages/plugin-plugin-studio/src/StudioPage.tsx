@@ -529,8 +529,22 @@ export const StudioPage: React.FC = () => {
     const stopWatching = () =>
         run('stop', async () => {
             if (!capability || !selectedRoot) return
+            // Unbind first: a session that kept its last build would install the
+            // plugin straight back after the uninstall below.
             devHost?.unwatch(selectedRoot)
             await capability.dev.stop({ root: selectedRoot })
+            /**
+             * Stopping **is** leaving the window.
+             *
+             * The development session is over, so the dev version goes with it —
+             * leaving it running was the old behaviour, and it read as "stop did
+             * nothing": the plugin's menu, panel and routes stayed in the app until
+             * the window was reloaded. Files on disk are untouched; "热更" or
+             * "开始监听" brings it back.
+             */
+            if (pluginHost && status?.plugin) {
+                pluginHost.uninstall(status.plugin.pluginKey || status.plugin.name)
+            }
             await Promise.all([refreshStatus(), refreshManaged()])
         })
 
@@ -1040,6 +1054,9 @@ export const StudioPage: React.FC = () => {
                                         className="h-8 gap-1.5 px-3 text-[11px]"
                                         onClick={watching ? stopWatching : startWatching}
                                         disabled={busy !== null}
+                                        title={watching
+                                            ? t('pluginStudio.stopHint', 'Stop watching and uninstall the dev version from the window (files on disk are kept)')
+                                            : t('pluginStudio.watchHint', 'Watch the project: every save hot-reloads the window')}
                                     >
                                         {busy === 'start' || busy === 'stop' ? (
                                             <Loader2 className="h-3.5 w-3.5 animate-spin" />

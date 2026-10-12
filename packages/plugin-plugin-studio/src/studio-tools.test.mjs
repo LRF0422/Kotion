@@ -554,8 +554,23 @@ devHost.outcome = { ok: true, mode: 'reloaded', key: 'agent-made-plugin', name: 
 /* Stopping or deleting a project must unbind it first, or the still-watching
    session would install the build straight back (and, for a delete, after the
    files are gone). */
-await tools.stopPluginProject.execute({ root: ROOT })
+const unbound = await tools.stopPluginProject.execute({ root: ROOT })
 check('stop: unbinds the project', devHost.unwatched.includes(ROOT), JSON.stringify(devHost.unwatched))
+
+/* Stopping *is* leaving the window: the development session is over, so the dev
+ * version goes with it. Leaving it running made "stop" look like a no-op — the
+ * plugin's menu/panel/routes stayed in the app until the window was reloaded. */
+check(
+    'stop: takes the dev version out of the window',
+    unbound.uninstalled === true
+        && calls.some(([name, arg]) => name === 'uninstall' && arg === REGISTRY_KEY),
+    JSON.stringify({ uninstalled: unbound.uninstalled, calls: calls.filter(([n]) => n === 'uninstall') }),
+)
+check('stop: keeps the files on disk', !calls.some(([n]) => n === 'remove' || n === 'delete'), 'stop must not touch disk')
+
+/* The sections below assume a running dev version, which the stop above just took
+   out of the window — put it back the way "开始监听" would. */
+pluginHost.active.add(REGISTRY_KEY)
 
 const listed = await tools.listPluginProjects.execute({})
 check('list: reports the project', listed.count === 1 && listed.projects[0].pluginKey === 'agent-made-plugin')
@@ -565,7 +580,12 @@ const logs = await tools.pluginProjectLogs.execute({ root: ROOT, limit: 10 })
 check('logs: returns entries', logs.count === 1 && logs.logs[0].level === 'info')
 
 const stopped = await tools.stopPluginProject.execute({ root: ROOT })
-check('stop: reports success', stopped.ok === true && stopped.stopped === true)
+check(
+    'stop: reports success and is idempotent',
+    stopped.ok === true && stopped.stopped === true && stopped.uninstalled === true,
+    JSON.stringify(stopped),
+)
+pluginHost.active.add(REGISTRY_KEY)
 
 /* ------------------------------------------------------------------ *
  * Service discovery: "这个插件有什么 service" + "我能调什么"
