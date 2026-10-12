@@ -4,6 +4,7 @@
  * electron-builder 只允许在 build 配置里写**一个** afterPack，所以这里串两件事：
  *
  * 1. **装入开发台运行时依赖**（所有平台）—— 见 ./prepare-studio-deps.cjs。
+ *    并装入存储层的 SQLite 原生模块 —— 见 ./prepare-storage-deps.cjs。
  *    开发台的编译跑在子进程里，需要 esbuild（含平台二进制）、Tailwind/PostCSS 工具链
  *    和宿主标准包源码；而本项目的 electron-builder `files` 只包含 out 目录、且排除了
  *    node_modules。不装入它们，打包后的「插件开发台」构建失败、没有样式、agent 也查不到
@@ -47,6 +48,7 @@ const { execFile } = require('node:child_process')
 const path = require('node:path')
 const { promisify } = require('node:util')
 const prepareStudioDependencies = require('./prepare-studio-deps.cjs')
+const prepareStorageDependencies = require('./prepare-storage-deps.cjs')
 
 const execFileAsync = promisify(execFile)
 const MAX_BUFFER = 64 * 1024 * 1024
@@ -81,6 +83,7 @@ const adhocSign = async (context) => {
 module.exports = async function afterPack(context) {
     // 先落资源，再签名 —— 否则 unpacked 出来的依赖不在签名封印里。
     await prepareStudioDependencies(context)
+    await prepareStorageDependencies(context)
 
     if (context.electronPlatformName !== 'darwin') return
     await adhocSign(context)

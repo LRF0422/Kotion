@@ -10,6 +10,18 @@
  * contract + host validation, not an enforced permission boundary.
  */
 
+import type {
+    StorageBatchOperation,
+    StorageBatchResult,
+    StorageEntry,
+    StorageErrorCode,
+    StorageInfo,
+    StorageListOptions,
+    StorageListResult,
+    StorageService,
+    StorageSetOptions,
+} from '../storage/types'
+
 export type DesktopPlatform = 'darwin' | 'win32' | 'linux' | 'other'
 
 /** Every desktop capability exposed to plugins. */
@@ -59,6 +71,27 @@ export type DesktopCapability =
     | 'dev.installDependencies'
     | 'dev.remove'
     | 'dev.deleteFile'
+    // ---- durable storage (SQLite in the main process) ----------------------
+    | 'storage.info'
+    | 'storage.get'
+    | 'storage.getMany'
+    | 'storage.set'
+    | 'storage.delete'
+    | 'storage.keys'
+    | 'storage.list'
+    | 'storage.count'
+    | 'storage.clear'
+    | 'storage.batch'
+    | 'storage.namespaces'
+
+/**
+ * Storage capabilities answer with an envelope instead of throwing: Electron
+ * flattens a rejected `invoke` into a message string, which would lose the
+ * {@link StorageErrorCode} the renderer needs in order to degrade.
+ */
+export type DesktopStorageEnvelope<T> =
+    | { ok: true; value: T }
+    | { ok: false; code: StorageErrorCode; message: string }
 
 export interface DesktopAppInfo {
     version: string
@@ -699,6 +732,41 @@ export interface DesktopCapabilityContract {
     'dev.installDependencies': { params: DevInstallOptions; result: DevInstallResult }
     'dev.remove': { params: DevRemoveOptions; result: DevRemoveResult }
     'dev.deleteFile': { params: DevDeleteFileOptions; result: DevDeleteFileResult }
+    'storage.info': { params?: void; result: DesktopStorageEnvelope<StorageInfo> }
+    'storage.get': {
+        params: { namespace: string; key: string }
+        result: DesktopStorageEnvelope<StorageEntry | null>
+    }
+    'storage.getMany': {
+        params: { namespace: string; keys: string[] }
+        result: DesktopStorageEnvelope<StorageEntry[]>
+    }
+    'storage.set': {
+        params: { namespace: string; key: string; value: unknown } & StorageSetOptions
+        result: DesktopStorageEnvelope<StorageEntry>
+    }
+    'storage.delete': {
+        params: { namespace: string; key: string }
+        result: DesktopStorageEnvelope<boolean>
+    }
+    'storage.keys': {
+        params: { namespace: string; prefix?: string }
+        result: DesktopStorageEnvelope<string[]>
+    }
+    'storage.list': { params: StorageListOptions; result: DesktopStorageEnvelope<StorageListResult> }
+    'storage.count': {
+        params: { namespace: string; prefix?: string }
+        result: DesktopStorageEnvelope<number>
+    }
+    'storage.clear': {
+        params: { namespace: string; prefix?: string }
+        result: DesktopStorageEnvelope<number>
+    }
+    'storage.batch': {
+        params: { operations: StorageBatchOperation[] }
+        result: DesktopStorageEnvelope<StorageBatchResult>
+    }
+    'storage.namespaces': { params?: void; result: DesktopStorageEnvelope<string[]> }
 }
 
 /**
@@ -722,4 +790,11 @@ export interface DesktopBridge {
      * studio runtime; undefined elsewhere. Feature-detect before using it.
      */
     readonly dev?: DevBridge
+    /**
+     * Durable storage, backed by SQLite in the main process. Present on desktop
+     * builds that expose the `storage.*` capabilities; `@kn/core` registers a
+     * `StorageService` either way, so prefer `useStorage()` over reaching for
+     * this field.
+     */
+    readonly storage?: StorageService
 }

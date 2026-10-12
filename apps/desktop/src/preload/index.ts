@@ -45,6 +45,21 @@ const CAPABILITIES = [
   'credentials.load',
   'credentials.save',
   'credentials.clear',
+  // Durable key-value storage, backed by SQLite in the main process. Answers
+  // with a `{ok, value} | {ok, code, message}` envelope so failure codes
+  // survive the boundary; the renderer turns them back into StorageError.
+  // Callers must stay inside their own namespace (`app.*`, `plugin.<key>.*`).
+  'storage.info',
+  'storage.get',
+  'storage.getMany',
+  'storage.set',
+  'storage.delete',
+  'storage.keys',
+  'storage.list',
+  'storage.count',
+  'storage.clear',
+  'storage.batch',
+  'storage.namespaces',
   // Plugin development (plugin-studio). These validate every path in the main
   // process against the same fs allowlist as the fs.* capabilities, and the
   // only process they can start is the bundled plugin dev-server.

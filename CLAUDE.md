@@ -54,10 +54,13 @@ pnpm clean:packages         # Clean all dist directories
 - `src/store/` - Redux 状态管理
 - `src/services/` - 核心服务
 - `src/context/` - React Context（如 MobilePageHeaderContext）
+- `src/storage/` - 存储服务装配（选择后端并注册 `storage` 服务）+ 旧 localStorage 迁移
 
 **packages/common** - 基础工具，被所有包依赖：
 - `src/core/PluginManager.ts` - 插件管理器
 - `src/core/editor.ts` - 编辑器类型定义（ExtensionWrapper）
+- `src/core/desktop-bridge.ts` - 桌面能力契约（含 `storage.*`）
+- `src/storage/` - 存储契约 + 通用 KV 引擎 + 内存/localStorage 后端
 - HTTP 客户端、Logger、工具函数
 
 **packages/plugin-main** - 主应用插件，提供页面路由：
@@ -81,6 +84,18 @@ pnpm clean:packages         # Clean all dist directories
 | 特定编辑器扩展 | packages/plugin-xxx |
 | 应用页面路由 | packages/plugin-main/pages |
 | 工具函数/类型 | packages/common |
+
+### 本地存储（重要）
+
+应用与插件都用 **`@kn/common` 的 `StorageService`** 读写本地数据，不要直接写 localStorage：
+桌面端由主进程 SQLite 实现（`storage.*` 能力），Web 端回退 localStorage。
+用 `useStorage()` / `useStorageScope(namespace)` / `resolveStorage()`；插件命名空间用
+`pluginStorageNamespace(pluginKey)`，应用用 `app.<area>`。
+
+详细语义、打包与原生模块 ABI 注意事项见 **[docs/STORAGE.md](docs/STORAGE.md)**。
+改动存储契约时，`packages/common/src/storage/storage.check.ts` 与
+`apps/desktop/src/main/storage/sqlite-store.check.ts` 的用例要一起更新。
+
 
 ### Plugin System
 

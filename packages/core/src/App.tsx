@@ -3,6 +3,9 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Layout } from "./Layout";
 import { ThemeProvider, Toaster, ResponsiveProvider } from "@kn/ui";
 import { store } from '@kn/common'
+import { logger } from '@kn/common'
+import { createAppStorage } from './storage/app-storage'
+import { importLegacyLocalStorage } from './storage/legacy-local-storage'
 import { Login } from "./components/Login";
 import { SignUpForm } from "./components/SignUp";
 import { Welcome } from "./components/Welcome";
@@ -321,6 +324,7 @@ export const App: React.FC<AppProps> = (props) => {
         // Desktop capabilities are registered as a core service on Electron and
         // stay absent on the web, so plugins use useOptionalService("desktop").
         const desktop = createDesktopBridge()
+        const storage = createAppStorage(desktop)
         const manager = new common.PluginManager({
             // Plugin artifacts are served from the public (no-auth) plugin endpoint
             // so script tags need no Authorization query param and SRI/CORS work.
@@ -368,6 +372,16 @@ export const App: React.FC<AppProps> = (props) => {
             manager,
             dev: desktop?.dev,
         }))
+        // Durable storage, registered on every platform: SQLite through the
+        // desktop bridge, `localStorage` on the web, memory as the last resort.
+        // Always present, so consumers never need a null check for it.
+        manager.registerCoreService('storage', storage)
+        // Move pre-storage localStorage data into the durable store, once per
+        // database. Fire-and-forget on purpose: it is housekeeping, and the
+        // marker + "never overwrite" rules make a duplicate run harmless.
+        void importLegacyLocalStorage(storage).catch((error) => {
+            logger.warn('storage: legacy localStorage import failed', error)
+        })
         return manager
     }, [])
     const [pluginsReady, setPluginsReady] = useState(false)

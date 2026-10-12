@@ -4,6 +4,7 @@ import type { PluginHostService } from "./plugin-host";
 import type { PluginDevHostService } from "./plugin-dev-host";
 import type { PluginManagementService } from "./plugin-management";
 import type { PluginMarketplaceService } from "./plugin-marketplace";
+import type { StorageService } from "../storage/types";
 
 export type KeysWithTypeOf<T, Type> = { [P in keyof T]: T[P] extends Type ? P : never }[keyof T];
 export type ValuesOf<T> = T[keyof T];
@@ -332,4 +333,11 @@ export interface Services {
      * drives 上架/发布/升级 through it.
      */
     pluginMarketplace?: PluginMarketplaceService;
+    /**
+     * Durable key-value storage. Registered by the host application on every
+     * platform: SQLite via the desktop capability bridge on Electron,
+     * `localStorage` on the web, memory as the last resort. Plugins must stay
+     * inside their own `plugin.<key>` namespace — use `useStorageScope`.
+     */
+    storage?: StorageService;
 }

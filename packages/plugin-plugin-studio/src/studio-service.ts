@@ -10,9 +10,11 @@
  * The studio is desktop-only by design: bundling runs in a Node child process
  * behind the `dev.*` capabilities, which the web host does not have.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+    logger,
     useOptionalService,
+    useStorage,
     type DevBridge,
     type DevSessionStatus,
     type PluginBundle,
@@ -20,7 +22,11 @@ import {
     type PluginInstallOutcome,
 } from '@kn/common'
 
+/** Legacy `localStorage` key; imported into the storage service at startup. */
 const STORAGE_KEY = 'kn.plugin-studio.projects.v1'
+/** Where the project list lives durably (`storage.get('projects')`). */
+const STORAGE_NAMESPACE = 'plugin.plugin-studio'
+const STORAGE_PROJECTS_KEY = 'projects'
 
 export interface StudioProject {
     /** Absolute path of the plugin source project. */
@@ -184,42 +190,102 @@ export const useBuildEvents = (
     }, [dev, handler, root])
 }
 
-const readProjects = (): StudioProject[] => {
+/** Coerce whatever is stored into a usable project list. */
+const normalizeProjects = (value: unknown): StudioProject[] => {
+    if (!Array.isArray(value)) return []
+    return value
+        .filter((entry) => entry && typeof (entry as StudioProject).root === 'string')
+        .map((entry) => {
+            const item = entry as StudioProject
+            return {
+                root: item.root,
+                label: item.label || item.root.split(/[\\/]/).pop() || item.root,
+                pluginKey: item.pluginKey,
+                lastOpenedAt: Number(item.lastOpenedAt) || 0,
+            }
+        })
+        .sort((left, right) => right.lastOpenedAt - left.lastOpenedAt)
+}
+
+/**
+ * Seed the first render from the legacy key.
+ *
+ * The durable read is async, and an empty project list for one frame looks like
+ * data loss; the seed costs nothing and the effect below replaces it as soon as
+ * the store answers.
+ */
+const readLegacyProjects = (): StudioProject[] => {
     try {
         const raw = window.localStorage.getItem(STORAGE_KEY)
-        if (!raw) return []
-        const parsed = JSON.parse(raw) as StudioProject[]
-        if (!Array.isArray(parsed)) return []
-        return parsed
-            .filter((entry) => entry && typeof entry.root === 'string')
-            .map((entry) => ({
-                root: entry.root,
-                label: entry.label || entry.root.split(/[\\/]/).pop() || entry.root,
-                pluginKey: entry.pluginKey,
-                lastOpenedAt: Number(entry.lastOpenedAt) || 0,
-            }))
-            .sort((left, right) => right.lastOpenedAt - left.lastOpenedAt)
+        return raw ? normalizeProjects(JSON.parse(raw)) : []
     } catch {
         return []
     }
 }
 
-const writeProjects = (projects: StudioProject[]): void => {
-    try {
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(projects))
-    } catch {
-        // Storage is best-effort; the studio still works for this session.
-    }
-}
-
-/** The studio's project list, persisted in localStorage. */
+/**
+ * The studio's project list.
+ *
+ * Durable in the storage service (SQLite on desktop), with `localStorage` kept
+ * as a compatibility mirror: an older build of the app, or a host whose durable
+ * write failed, still sees the list. The mirror goes away once every consumer
+ * reads the store.
+ */
 export const useProjects = () => {
-    const [projects, setProjects] = useState<StudioProject[]>(() => readProjects())
+    const storageService = useStorage()
+    const storage = useMemo(
+        () => storageService?.scope(STORAGE_NAMESPACE),
+        [storageService],
+    )
+    const [projects, setProjects] = useState<StudioProject[]>(() => readLegacyProjects())
+    const latest = useRef(projects)
+    latest.current = projects
 
-    const persist = useCallback((next: StudioProject[]) => {
-        setProjects(next)
-        writeProjects(next)
-    }, [])
+    const write = useCallback(
+        (next: StudioProject[]) => {
+            try {
+                window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+            } catch {
+                // Best-effort mirror; the durable write below is the real one.
+            }
+            void storage?.set(STORAGE_PROJECTS_KEY, next).catch((error) => {
+                logger.warn('plugin-studio: could not persist the project list', error)
+            })
+        },
+        [storage],
+    )
+
+    useEffect(() => {
+        if (!storage) return undefined
+        let cancelled = false
+        void (async () => {
+            try {
+                const entry = await storage.get<StudioProject[]>(STORAGE_PROJECTS_KEY)
+                if (cancelled) return
+                if (entry) {
+                    setProjects(normalizeProjects(entry.value))
+                    return
+                }
+                // Nothing stored yet: seed it from whatever the legacy key (or
+                // a still-running older build) gave us, so the first run of this
+                // version does not lose the list.
+                if (latest.current.length) write(latest.current)
+            } catch (error) {
+                logger.warn('plugin-studio: could not read the project list from storage', error)
+            }
+        })()
+        return () => {
+            cancelled = true
+        }
+    }, [storage, write])
+
+    const persist = useCallback(
+        (next: StudioProject[]) => {
+            setProjects(next)
+            write(next)
+        },
+        [write],
+    )
 
     const addProject = useCallback(
         (project: Omit<StudioProject, 'lastOpenedAt'> & { lastOpenedAt?: number }) => {
@@ -230,31 +296,31 @@ export const useProjects = () => {
             }
             setProjects((current) => {
                 const next = [entry, ...current.filter((item) => item.root !== entry.root)]
-                writeProjects(next)
+                write(next)
                 return next
             })
             return entry
         },
-        [],
+        [write],
     )
 
     const removeProject = useCallback((root: string) => {
         setProjects((current) => {
             const next = current.filter((item) => item.root !== root)
-            writeProjects(next)
+            write(next)
             return next
         })
-    }, [])
+    }, [write])
 
     const touchProject = useCallback((root: string, patch: Partial<StudioProject> = {}) => {
         setProjects((current) => {
             const next = current.map((item) =>
                 item.root === root ? { ...item, ...patch, lastOpenedAt: Date.now() } : item,
             )
-            writeProjects(next)
+            write(next)
             return next
         })
-    }, [])
+    }, [write])
 
     return { projects, addProject, removeProject, touchProject, persist }
 }

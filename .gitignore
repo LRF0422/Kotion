@@ -96,6 +96,10 @@ Thumbs.db
 # Electron dev artifacts #
 .electron-cache
 .kn-desktop-user-data
+# Scratch dirs of the desktop storage layer (electron smoke, prebuild cache)
+.tmp-electron-userdata/
+.tmp-npm-cache/
+.electron-gyp/
 
 # TypeScript incremental build info #
 *.tsbuildinfo

@@ -13,11 +13,16 @@
         "package:win": "NODE_OPTIONS='--max-old-space-size=16384' electron-vite build && electron-builder --win",
         "package:mac": "NODE_OPTIONS='--max-old-space-size=16384' electron-vite build && electron-builder --mac",
         "package:linux": "NODE_OPTIONS='--max-old-space-size=16384' electron-vite build && electron-builder --linux",
+        "rebuild:native": "node scripts/rebuild-sqlite.cjs",
+        "rebuild:native:node": "node scripts/rebuild-sqlite.cjs --node",
+        "check:storage": "rm -rf .tmp-check/storage && tsc --noEmitOnError src/main/storage/sqlite-store.check.ts --rootDir src/main/storage --outDir .tmp-check/storage --module commonjs --target ES2020 --lib ES2020,DOM --types node --esModuleInterop --skipLibCheck --strict && node .tmp-check/storage/sqlite-store.check.js",
+        "test:storage:electron": "ELECTRON_RUN_AS_NODE= electron src/main/storage/electron.smoke.cjs --no-sandbox --disable-gpu --user-data-dir=.tmp-check/electron-userdata",
         "lint": "eslint . --ext .js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix"
     },
     "devDependencies": {
         "@electron-toolkit/preload": "^3.0.1",
         "@electron-toolkit/utils": "^3.0.0",
+        "@electron/rebuild": "^4.2.1",
         "@kn/chart-plugin": "workspace:*",
         "@kn/core": "workspace:*",
         "@kn/file-manager": "workspace:*",
@@ -33,6 +38,7 @@
         "@kn/plugin-theme": "workspace:*",
         "@kn/plugin-zhihu": "workspace:*",
         "@kn/ui": "workspace:*",
+        "@types/better-sqlite3": "^9.6.0",
         "@types/fs-extra": "^11.0.4",
         "@types/node": "^22.7.4",
         "@types/react": "^18.3.23",
@@ -90,5 +96,8 @@
             "oneClick": false,
             "allowToChangeInstallationDirectory": true
         }
+    },
+    "dependencies": {
+        "better-sqlite3": "^12.11.1"
     }
 }

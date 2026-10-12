@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import * as dns from 'node:dns';
 import * as net from 'node:net';
 import { setupDevIpcHandlers } from './plugin-dev/index';
+import { setupStorageHandlers } from './storage/index';
 import {
   clearCredentials,
   isEncryptionAvailable,
@@ -141,6 +142,15 @@ export function setupIpcHandlers() {
   // The manager owns the dev-server child processes and nothing else calls
   // dispose(), so reap them on quit instead of leaving orphaned watchers.
   app.on('will-quit', () => devManager.dispose());
+
+  // ==================== durable storage (SQLite) ====================
+  // The main process is the database's only writer; the renderer reaches it
+  // through the `storage.*` capability group (see ./storage). Opening here (and
+  // never throwing) means a corrupt, locked or read-only file degrades to
+  // `STORAGE_UNAVAILABLE` — the renderer falls back to localStorage — instead of
+  // taking the window down with it.
+  const storageRuntime = setupStorageHandlers();
+  app.on('will-quit', () => storageRuntime.dispose());
 
   // ==================== system ====================
   handle('system.info', () => ({

@@ -1,4 +1,5 @@
 import { DESKTOP_BRIDGE_VERSION } from '@kn/plugin-api'
+import { createStorageBridge, type StorageHostBridge } from './storage-bridge'
 import type {
     DesktopBridge,
     DesktopCapability,
@@ -165,6 +166,7 @@ export const createDesktopBridge = (): DesktopBridge | undefined => {
 
     const capabilities = (host.capabilities ?? []) as DesktopCapability[]
     const dev = createDevBridge(host, capabilities)
+    const storage = createStorageBridge(host, capabilities)
 
     return {
         version: DESKTOP_BRIDGE_VERSION,
@@ -178,5 +180,6 @@ export const createDesktopBridge = (): DesktopBridge | undefined => {
         onFullScreenChange: (listener) =>
             host.on('fullscreen', (value) => listener(Boolean(value))),
         ...(dev ? { dev } : {}),
+        ...(storage ? { storage } : {}),
     }
 }

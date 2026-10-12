@@ -33,10 +33,16 @@ export default defineConfig({
     // `esbuild` is excluded for the opposite reason: the plugin studio's
     // dev-server child needs the real package (its JS + platform binary), not a
     // bundled copy, and it is resolved from the app's node_modules at runtime.
+    //
+    // `better-sqlite3` is external for the same reason: it is a native addon
+    // (`build/Release/better_sqlite3.node`) that must be loaded from disk by
+    // `require`, and `prepare-storage-deps.cjs` copies it into the packaged app.
+    // It is also a `dependency`, so `externalizeDepsPlugin` already externalizes
+    // it — listing it keeps that true if the manifest ever changes.
     plugins: [
       externalizeDepsPlugin({
         exclude: ['@electron-toolkit/utils', 'fs-extra'],
-        include: ['esbuild'],
+        include: ['esbuild', 'better-sqlite3'],
       }),
       copyPluginDevAssets(),
     ],

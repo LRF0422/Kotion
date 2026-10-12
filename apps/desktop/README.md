@@ -49,6 +49,30 @@ apps/desktop/
 pnpm install
 ```
 
+### 本地存储层（SQLite）
+
+主进程持有一个 SQLite 数据库（`<userData>/storage/kotion.db`，WAL 模式），渲染进程与插件
+通过 `storage.*` 能力读写；渲染端拿到的是 `@kn/common` 的 `StorageService` 契约
+（`useStorage()` / `useStorageScope(ns)`），Web 端自动回退 `localStorage`。
+
+完整设计、语义、命名空间规则、旧 localStorage 迁移与打包细节见
+**[docs/STORAGE.md](../../docs/STORAGE.md)**。
+
+存储层依赖 `better-sqlite3`（经典 V8 addon，按 ABI 编译），所以**跑桌面端之前**要确保
+二进制是为 Electron 编译的；`pnpm install` 后默认是宿主 Node 版本：
+
+```bash
+# 为 Electron 编译（dev / 打包前；优先下载预编译包，无编译器也可）
+pnpm --filter @kn/desktop rebuild:native
+
+# 还原为宿主 Node 版本（跑 node 版存储检查）
+pnpm --filter @kn/desktop rebuild:native:node
+
+# 存储层自测
+pnpm test:storage                 # 契约（@kn/common）+ SQLite 实现（需 Node 版二进制）
+pnpm test:storage:electron        # 真实 preload → IPC → SQLite 端到端（需 Electron 版二进制）
+```
+
 ### 启动开发服务器
 
 ```bash

@@ -21,6 +21,7 @@ export * from "./core/tour-registry"
 export * from "./core/use-tour-registry"
 export * from "./event"
 export * from "./locales"
+export * from "./storage"
 // Services type is exported for module augmentation by plugins
 export type {
     KeysWithTypeOf, ValuesOf,

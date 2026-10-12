@@ -7,3 +7,4 @@ export * from "./plugin-secrets";
 export * from "./define-service";
 export * from "./service-resolver";
 export * from "./desktop";
+export * from "./storage";
