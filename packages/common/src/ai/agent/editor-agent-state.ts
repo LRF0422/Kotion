@@ -135,6 +135,7 @@ export type Action =
     | { type: 'sub-event'; subRunId: string; event: AgentEvent }
     | { type: 'sub-merged'; subRunId: string; report: SubRunRecord['merge'] }
     | { type: 'tool-result'; callId: string; ok: boolean; result?: unknown; error?: string }
+    | { type: 'ack-pending'; callIds: string[] }
     | { type: 'transport-error'; error: string }
     | { type: 'connection-stopped'; error: string }
     | { type: 'transport-restored' }
@@ -181,6 +182,19 @@ export function reducer(state: EditorAgentState, action: Action): EditorAgentSta
                     : call
             )
             return { ...state, toolCalls }
+        }
+        case 'ack-pending': {
+            // The server is no longer waiting for these calls (verified against
+            // its run view): stop treating them as outstanding. The tape keeps its
+            // own record until the durable tool.completed event arrives.
+            const pendingToolIds = state.pendingToolIds.filter(id => !action.callIds.includes(id))
+            return {
+                ...state,
+                pendingToolIds,
+                phase: state.phase === 'waiting-tools' && pendingToolIds.length === 0
+                    ? 'streaming'
+                    : state.phase,
+            }
         }
         case 'transport-error':
             return { ...state, error: action.error }

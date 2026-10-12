@@ -11,10 +11,20 @@ import type { AgentClient } from './client'
 import { AgentControlError } from './events'
 import type { EditorToolExecutor, ToolExecutionResult } from './tool-executor'
 import type { AgentRunStore } from './persistence'
-import { createPendingToolBatch, matchesPendingToolBatch, type PendingToolBatch } from './tool-batch'
+import { createPendingToolBatch, decidePendingAck, matchesPendingToolBatch, type PendingToolBatch } from './tool-batch'
 import { parseToolArgs, type ResumePayload } from './types'
 import { MAX_TOOL_RESUME_RETRIES, isPermanentTransportError } from './retry-policy'
 import type { Action, EditorAgentState } from './editor-agent-state'
+
+/** Quiet period before re-submitting a batch the server never acknowledged. */
+const PENDING_ACK_BASE_MS = 3_000
+const PENDING_ACK_MAX_MS = 20_000
+/**
+ * Watchdog passes to wait for the editor/target gate before executing a batch it
+ * never submitted (3s + 6s + 12s ≈ 21s). A page switch settles long before that,
+ * while the server's own tool timeout is 600s.
+ */
+const PENDING_ACK_FORCE_ATTEMPT = 3
 
 export interface UsePendingToolExecutionOptions {
     client: AgentClient
@@ -54,6 +64,10 @@ export function usePendingToolExecution(
     const toolRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const toolRetryAttemptRef = useRef(0)
     const toolRetryKeyRef = useRef('')
+    /** True while executePendingTools is mid-flight (the watchdog stays off). */
+    const submittingRef = useRef(false)
+    const ackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const ackAttemptsRef = useRef(0)
 
     const retryPendingTools = useCallback(() => {
         toolBatchRef.current = null
@@ -92,6 +106,7 @@ export function usePendingToolExecution(
             return
         }
         toolBatchRef.current = createPendingToolBatch(current.runId, callIds)
+        submittingRef.current = true
 
         try {
             const missing = callIds.filter(callId =>
@@ -195,6 +210,8 @@ export function usePendingToolExecution(
                     dispatch({ type: 'retry-pending-tools' })
                 }
             }, 2000)
+        } finally {
+            submittingRef.current = false
         }
     }, [client, executor, resumeWith, store])
 
@@ -246,11 +263,125 @@ export function usePendingToolExecution(
         void executePendingTools()
     }, [autoExecuteTools, state.phase, state.pendingToolIds, state.lastSeq, state.toolRetryToken, executePendingTools])
 
+    /**
+     * Watchdog for the conversation's OWN tool batch. It covers the two ways a
+     * parent-run batch strands forever while the server waits:
+     *
+     *  1. it was never submitted at all — `autoExecuteTools`
+     *     (`targetToolsReady && !!agentEditor`) stayed false because the edit
+     *     target/editor is not ready (user navigated away, plugin page without a
+     *     document, offscreen session released). Nothing else re-evaluates the
+     *     batch, so the run parks until its tool timeout with every call spinning
+     *     in the UI and no tool ever running;
+     *  2. it was submitted but the server never acknowledged it — the backend can
+     *     accept a resume with a 200 and still drop the payload (its pause
+     *     announcement races its published state).
+     *
+     * Either way the fix is the same: after a quiet period, submit/re-submit from
+     * the tape. Editor-independent tools (file/studio/plugin tools, which is most
+     * of them) then just work; a tool that truly needs the missing editor fails
+     * with its own error result, which the model can react to — far better than a
+     * guaranteed ten-minute hang. Results come from the executor cache / journal,
+     * so nothing is executed twice.
+     */
+    const checkPendingAck = useCallback(async () => {
+        const current = stateRef.current
+        if (!mountedRef.current || submittingRef.current || !current.runId) return
+        if (current.phase !== 'waiting-tools' || current.pendingToolIds.length === 0) return
+        const pendingIds = [...current.pendingToolIds]
+
+        if (!current.runId || !toolBatchRef.current) {
+            // Never submitted (case 1). Give a page switch / offscreen re-acquire
+            // a generous moment — the retries back off 3s→20s — then submit anyway:
+            // an editor-independent tool (file / studio / plugin tools, which is
+            // most of the catalog) just works, and one that truly needs the editor
+            // fails with its own error result instead of hanging the run until its
+            // ten-minute tool timeout.
+            if (ackAttemptsRef.current < PENDING_ACK_FORCE_ATTEMPT) {
+                ackAttemptsRef.current += 1
+                console.warn(
+                    `[agent] 前端工具调用尚未提交（autoExecuteTools=${autoExecuteTools}，`
+                    + `第 ${ackAttemptsRef.current} 次等待）: ${pendingIds.join(', ')}`
+                )
+                return
+            }
+            ackAttemptsRef.current += 1
+            console.warn(
+                `[agent] 前端工具调用长时间未提交，直接执行以免挂起`
+                + `（autoExecuteTools=${autoExecuteTools}）: ${pendingIds.join(', ')}`
+            )
+            void executePendingTools()
+            return
+        }
+
+        const generation = generationRef.current
+        let view: { status: string; pendingTools?: Array<{ callId: string }> } | null = null
+        try {
+            view = await client.getRun(current.runId)
+        } catch {
+            view = null
+        }
+        if (!mountedRef.current || generation !== generationRef.current) return
+        const decision = decidePendingAck(view, pendingIds)
+        if (decision === 'wait') return
+        if (decision === 'ack') {
+            // The server is not waiting for these anymore: settle locally instead
+            // of re-submitting a batch it already applied.
+            dispatch({ type: 'ack-pending', callIds: pendingIds })
+            ackAttemptsRef.current = 0
+            return
+        }
+        ackAttemptsRef.current += 1
+        console.warn(
+            `[agent] 工具结果未被服务端确认，重新提交（第 ${ackAttemptsRef.current} 次）`
+            + ` run ${current.runId} calls ${pendingIds.join(', ')}`
+        )
+        toolBatchRef.current = null
+        void executePendingTools()
+    }, [autoExecuteTools, client, dispatch, executePendingTools])
+
+    useEffect(() => {
+        if (state.phase !== 'waiting-tools'
+            || state.pendingToolIds.length === 0
+            || state.lastSeq < attachReplayThroughRef.current) {
+            ackAttemptsRef.current = 0
+            if (ackTimerRef.current) {
+                clearTimeout(ackTimerRef.current)
+                ackTimerRef.current = null
+            }
+            return
+        }
+        // Any event (lastSeq) or new batch re-arms this: the watchdog only fires
+        // after a quiet period, so a server that is still streaming is left alone.
+        if (ackTimerRef.current) clearTimeout(ackTimerRef.current)
+        const delay = Math.min(
+            PENDING_ACK_BASE_MS * 2 ** Math.min(ackAttemptsRef.current, 3),
+            PENDING_ACK_MAX_MS
+        )
+        ackTimerRef.current = setTimeout(() => {
+            ackTimerRef.current = null
+            void checkPendingAck()
+        }, delay)
+        return () => {
+            if (ackTimerRef.current) {
+                clearTimeout(ackTimerRef.current)
+                ackTimerRef.current = null
+            }
+        }
+    }, [
+        autoExecuteTools, state.phase, state.pendingToolIds, state.lastSeq,
+        state.toolRetryToken, attachReplayThroughRef, checkPendingAck,
+    ])
+
     // Timers are owned here; clear them on unmount.
     useEffect(() => () => {
         if (toolRetryTimerRef.current) {
             clearTimeout(toolRetryTimerRef.current)
             toolRetryTimerRef.current = null
+        }
+        if (ackTimerRef.current) {
+            clearTimeout(ackTimerRef.current)
+            ackTimerRef.current = null
         }
     }, [])
 

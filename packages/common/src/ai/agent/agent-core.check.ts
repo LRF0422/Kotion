@@ -5,7 +5,7 @@ import {
     AgentSequenceGapError,
     readSseDataLines,
 } from './events'
-import { createPendingToolBatch, matchesPendingToolBatch } from './tool-batch'
+import { createPendingToolBatch, decidePendingAck, matchesPendingToolBatch } from './tool-batch'
 import { EditorToolExecutor, ensureSerializableToolResult } from './tool-executor'
 import { resetDocumentWriteLocks, withDocumentWrite } from './document-write-lock'
 import { SubRunWorker } from './sub-run-worker'
@@ -591,6 +591,34 @@ async function checkLostSuspendFrameStillServes(): Promise<void> {
     worker.dispose()
 }
 
+function checkPendingAckDecision(): void {
+    // The parent-path watchdog decides whether an unacknowledged batch must be
+    // re-submitted; the run view is the authority (same rule as the child worker).
+    assert.equal(decidePendingAck(null, ['c1']), 'wait', 'an unknown view must not settle the batch')
+    assert.equal(
+        decidePendingAck({ status: 'WAITING_TOOLS', pendingTools: [{ callId: 'c1' }] }, ['c1']),
+        'resubmit',
+        'still parked on our call → re-submit'
+    )
+    assert.equal(
+        decidePendingAck({ status: 'WAITING_TOOLS', pendingTools: [] }, ['c1']),
+        'ack',
+        'nothing pending server-side → the batch was applied'
+    )
+    assert.equal(
+        decidePendingAck({ status: 'RUNNING', pendingTools: [{ callId: 'c1' }] }, ['c1']),
+        'ack',
+        'a run that is not parked is not waiting for us'
+    )
+    assert.equal(
+        decidePendingAck({ status: 'SUSPENDED', pendingTools: [{ callId: 'c2' }] }, ['c1']),
+        'ack',
+        'another call pending means ours was applied'
+    )
+    assert.equal(decidePendingAck({ status: 'WAITING_TOOLS' }, ['c1']), 'ack')
+    assert.equal(decidePendingAck({ status: 'WAITING_TOOLS', pendingTools: [{ callId: 'c1' }] }, []), 'ack')
+}
+
 async function waitFor(predicate: () => boolean, timeoutMs: number): Promise<void> {
     const deadline = Date.now() + timeoutMs
     while (Date.now() < deadline) {
@@ -603,6 +631,7 @@ async function waitFor(predicate: () => boolean, timeoutMs: number): Promise<voi
 async function main(): Promise<void> {
     await checkExecutorSingleFlight()
     checkToolBatchSnapshot()
+    checkPendingAckDecision()
     checkSerializableResults()
     checkStreamSequenceRules()
     await checkCrlfSseFrames()
