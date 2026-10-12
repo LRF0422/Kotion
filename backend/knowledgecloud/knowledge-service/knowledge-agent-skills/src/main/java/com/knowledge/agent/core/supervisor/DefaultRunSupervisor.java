@@ -414,11 +414,12 @@ public class DefaultRunSupervisor {
                 || RunStatus.SUSPENDED.name().equals(run.getStatus());
 
         LoopHandle handle = handles.get(runId);
+        Checkpoint checkpoint = null;
         if (handle == null) {
             if (lease.isHeld(runId)) {
                 return false; // alive on another instance
             }
-            Checkpoint checkpoint = checkpointStore.load(runId);
+            checkpoint = checkpointStore.load(runId);
             if (checkpoint == null) {
                 markFailed(run, "unrecoverable", "无法恢复：缺少断点快照");
                 return false;
@@ -428,10 +429,29 @@ public class DefaultRunSupervisor {
                 return false;
             }
         }
+        if (!waiting) {
+            // The run's hot status can lag the event that announced the pause
+            // (the loop publishes `run.suspended` only once the pause is saved),
+            // so a resume arriving in that window must not be swallowed: the
+            // durable checkpoint still lists the calls the loop is waiting for.
+            if (checkpoint == null) {
+                checkpoint = checkpointStore.load(runId);
+            }
+            waiting = checkpoint != null && checkpoint.getPendingToolCalls() != null
+                    && !checkpoint.getPendingToolCalls().isEmpty();
+        }
         if (waiting) {
             return handle.gate.offer(payload);
         }
-        return true;
+        if ("tool_results".equals(payload.getAction())) {
+            // Not parked and nothing is pending: the batch was already applied
+            // (the client re-submits after a lost acknowledgement). Acknowledge it
+            // so the retry loop stops.
+            return true;
+        }
+        // Nobody is waiting for this payload. Reporting success here is what let
+        // an approval / budget grant vanish silently; the caller retries instead.
+        return false;
     }
 
     /** Idempotent cancel — authoritative terminal marking happens here. */

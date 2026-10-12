@@ -1374,22 +1374,38 @@ public class AgentLoop implements Runnable {
             checkpoint.getPendingToolCalls().add(
                     PendingToolCall.of(call.getId(), call.getName(), call.getArguments(), now));
             pendingIds.add(call.getId());
+        }
+        // Publish the run's pending set BEFORE announcing the calls: a client
+        // that reacts to `tool.requested` reads it back through GET /runs/{id},
+        // and must never see a request it cannot see the pending call for.
+        run.setPendingToolCalls(new ArrayList<>(checkpoint.getPendingToolCalls()));
+        for (ToolCallRequest call : frontendCalls) {
             emit(RunEvents.TOOL_REQUESTED,
                     RunEvents.toolRequested(call.getId(), call.getName(), call.getArguments()));
         }
-        run.setPendingToolCalls(new ArrayList<>(checkpoint.getPendingToolCalls()));
         return pendingIds;
     }
 
-    /** Mark the run WAITING_TOOLS and durably checkpoint the pause point. */
+    /**
+     * Mark the run WAITING_TOOLS, durably publish that state, and only then
+     * announce the pause.
+     *
+     * The order matters: the client reacts to {@code run.suspended} immediately
+     * by reading the run back (its `pendingTools` decide which calls to execute)
+     * and by POSTing their results. Publishing after the emit left a window as
+     * long as this write — the whole checkpoint plus the run's MySQL upsert — in
+     * which the pause was announced but invisible, so the client dropped the
+     * batch and a resume could be swallowed as a no-op. The run then sat in
+     * WAITING_TOOLS until its tool timeout while the UI showed the call running.
+     */
     private void pauseForPendingTools(List<String> pendingIds) {
         run.setPendingToolCalls(new ArrayList<>(checkpoint.getPendingToolCalls()));
         run.setStatus(RunStatus.WAITING_TOOLS.name());
         run.touch();
-        emit(RunEvents.RUN_SUSPENDED, RunEvents.runSuspended("waiting_tools", pendingIds));
         saveCheckpoint();
         persist();
         saveHot(true);
+        emit(RunEvents.RUN_SUSPENDED, RunEvents.runSuspended("waiting_tools", pendingIds));
     }
 
     /**
@@ -1431,6 +1447,11 @@ public class AgentLoop implements Runnable {
         run.setStatus(RunStatus.RUNNING.name());
         run.setSuspendReason(null);
         run.touch();
+        // Publish the end of the pause: leaving the hot state claiming
+        // WAITING_TOOLS made a later GET (and a resume's own waiting check) read
+        // calls that were already answered.
+        persist();
+        saveHot(false);
         return true;
     }
 
