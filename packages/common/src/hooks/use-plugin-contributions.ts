@@ -1,6 +1,6 @@
 import { useContext, useEffect, useMemo, useState } from "react"
 import { AppContext } from "../core/AppContext"
-import type { SiderMenuItemProps } from "../core/menu"
+import type { ResolvedSiderMenuItem } from "../core/menu"
 import type { PluginSettingsConfig } from "../core/PluginManager"
 import type { TourConfig } from "../core/tour"
 import { i18n } from "../locales"
@@ -21,7 +21,7 @@ import { usePluginState } from "./use-plugin-state"
  * (Dock panels, page types, routes and agent cards already had their own reactive
  * hooks; the shell-facing ones were the ones still reading the manager directly.)
  */
-export function usePluginMenus(): SiderMenuItemProps[] {
+export function usePluginMenus(): ResolvedSiderMenuItem[] {
     const { pluginManager } = useContext(AppContext)
     const { pluginVersion } = usePluginState()
 

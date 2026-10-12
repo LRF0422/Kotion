@@ -17,7 +17,7 @@ import { Marketplace } from "./components/Shop/Marketplace";
 
 import { resources } from "./locales/resources"
 import { merge } from "lodash";
-import { AgentPaneProvider, usePluginLocales, useI18nInitialized, clearContextSensitiveClientState, normalizeTokenResponse, notifyContextChanged, setRequestToast, setSessionExpiredHandler, resetSessionExpiredGuard, setEntitlementRequiredHandler, setAgentContextWhitelist, subscribeToContextChanges, useAsyncEffect, useSafeState, useTranslation, useApi, useUploadFile, APIS, saveTokens } from "@kn/common"
+import { AgentPaneProvider, useRegistryVersion, useI18nInitialized, clearContextSensitiveClientState, normalizeTokenResponse, notifyContextChanged, setRequestToast, setSessionExpiredHandler, resetSessionExpiredGuard, setEntitlementRequiredHandler, setAgentContextWhitelist, subscribeToContextChanges, useAsyncEffect, useSafeState, useTranslation, useApi, useUploadFile, APIS, saveTokens } from "@kn/common"
 import { registerCoreAgentTools, registerCoreToolFactories } from "./ai/tools/register"
 import { registerOffscreenEditorBridge, setMaxOffscreenSessions } from "./ai/offscreen"
 import { registerAgentDocumentBridge } from "./ai/agentdoc"
@@ -404,17 +404,33 @@ export const App: React.FC<AppProps> = (props) => {
      * attempt a silent no-op that never retried — every plugin string then
      * rendered as its key (`pluginStudio.title` in the page header).
      */
-    const pluginLocales = usePluginLocales()
+    /**
+     * Read through **the manager this component owns**, never through
+     * `AppContext`: `App` is the component that provides that context, and a
+     * component never sees its own provider's value. Using the context hook here
+     * (`usePluginLocales()`) silently yielded `{}` — no plugin translation was ever
+     * registered, and every `t('pluginStudio.*')` in the studio rendered as its key.
+     */
+    const registryVersion = useRegistryVersion(pluginManager)
+    const pluginLocales = useMemo(
+        () => (pluginManager?.resolveLocales() ?? {}) as Record<string, unknown>,
+        [pluginManager, registryVersion],
+    )
     const i18nReady = useI18nInitialized()
     useMemo(() => {
         if (!i18nReady) return
-        const res = merge(resources, pluginLocales)
-        if (i18n.isInitialized) {
-            Object.keys(res).forEach(it => {
-                i18n.addResourceBundle(it, "translation", res[it], true, true)
-            })
+        // One `addResourceBundle` per (language, namespace) with the *bundle* — not
+        // the whole `{ translation: {...} }` wrapper. Passing the wrapper registered
+        // `en.translation.translation.*`, which "worked" only because the merge
+        // mutated the very object i18next holds by reference.
+        const res = merge({}, resources, pluginLocales) as Record<string, Record<string, unknown>>
+        for (const lng of Object.keys(res)) {
+            const namespaces = res[lng] ?? {}
+            for (const ns of Object.keys(namespaces)) {
+                i18n.addResourceBundle(lng, ns, namespaces[ns] as never, true, true)
+            }
         }
-    }, [pluginLocales, i18nReady])
+    }, [pluginLocales, i18nReady, registryVersion])
 
     // Wire up toast for the request module
     setRequestToast((msg, opts) => toast.error(msg))

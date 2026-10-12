@@ -49,7 +49,15 @@ import {
     X,
 } from '@kn/icon'
 import type { DevLogEntry, DevProjectEntry, DevSessionStatus } from '@kn/common'
-import { streamKnowledgeText, useOptionalService, useTranslation } from '@kn/common'
+import {
+    streamKnowledgeText,
+    useDockPanels,
+    useOptionalService,
+    usePluginMenus,
+    usePluginRoutes,
+    usePluginState,
+    useTranslation,
+} from '@kn/common'
 import {
     useBuildEvents,
     useDeleteProject,
@@ -237,6 +245,61 @@ export const StudioPage: React.FC = () => {
         () => rows.find((row) => row.root === selectedRoot),
         [rows, selectedRoot],
     )
+
+    /**
+     * What the selected project contributes to the shell **right now**.
+     *
+     * Read from the same registry the rail, the router and the dock read, so a
+     * missing entry becomes a two-second question instead of an investigation:
+     * "does the studio see it?" If this says `menus 1` and the rail shows nothing,
+     * the loss is between the registry and the rail; if it says `menus 0`, it is
+     * between the build and the registry.
+     */
+    const { pluginVersion } = usePluginState()
+    const pluginMenus = usePluginMenus()
+    const pluginRoutes = usePluginRoutes()
+    const dockPanelsRight = useDockPanels('right')
+    /** See `hostCapabilities`: does this host's resolveRoutes() carry provenance? */
+    const routeProvenance = pluginRoutes.length === 0
+        || pluginRoutes.every(route => Boolean((route as { pluginKey?: string }).pluginKey))
+    const dockPanelsLeft = useDockPanels('left')
+    const runningEntry = useMemo(() => {
+        const key = selected?.pluginKey
+        if (!key || !pluginManagement) return undefined
+        return pluginManagement.list().find(entry => entry.pluginKey === key)
+    }, [pluginManagement, selected?.pluginKey, pluginVersion])
+    /**
+     * Which host capabilities this build is talking to.
+     *
+     * Deliberately derived from the *running host*, not from a version string
+     * someone has to keep in sync: `typed-install` means the host publishes the
+     * typed `installBundle`, `menu-provenance` means resolved menus carry the
+     * contributing `pluginKey` (this build's registry). When a symptom is
+     * "it still does not work", this line says in one glance whether the window is
+     * actually running the code under discussion — which, in this project, has been
+     * the single most expensive ambiguity.
+     */
+    const hostCapabilities = useMemo(() => {
+        const marks: string[] = []
+        if (typeof (pluginManagement as { installBundle?: unknown } | undefined)?.installBundle === 'function') {
+            marks.push('typed-install')
+        }
+        if (pluginMenus.length === 0 || pluginMenus.every(menu => Boolean(menu.pluginKey))) {
+            marks.push('menu-provenance')
+        }
+        if (devHost) marks.push('dev-host')
+        if (routeProvenance) marks.push('route-provenance')
+        return marks.join(' · ') || 'legacy-host'
+    }, [pluginManagement, pluginMenus, devHost, routeProvenance])
+    const shellContribution = useMemo(() => {
+        const key = selected?.pluginKey
+        if (!key) return undefined
+        return {
+            menus: pluginMenus.filter(menu => menu.pluginKey === key),
+            routes: pluginRoutes.filter(route => route.pluginKey === key),
+            panels: [...dockPanelsRight, ...dockPanelsLeft].filter(panel => panel.pluginKey === key),
+        }
+    }, [selected?.pluginKey, pluginMenus, pluginRoutes, dockPanelsRight, dockPanelsLeft])
 
     /** List groups: host-managed projects first, then locally added folders. */
     const managedRows = useMemo(() => rows.filter((row) => row.managed), [rows])
@@ -937,6 +1000,38 @@ export const StudioPage: React.FC = () => {
                                             </span>
                                         ) : null}
                                     </div>
+                                </div>
+
+                                {/* Registry truth for this project: whether it is
+                                    running, and what the shell would get from it. */}
+                                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[10px] leading-relaxed text-muted-foreground">
+                                    <span>{t('pluginStudio.shellTitle', 'In the window')}</span>
+                                    <span className={cn(!runningEntry && 'text-amber-600 dark:text-amber-500')}>
+                                        {runningEntry
+                                            ? `${runningEntry.pluginKey} · ${runningEntry.source}`
+                                                + (runningEntry.version ? ` · ${runningEntry.version}` : '')
+                                            : t('pluginStudio.shellNotRunning', 'not running')}
+                                    </span>
+                                    <span aria-hidden>·</span>
+                                    <span className="text-muted-foreground/70">{hostCapabilities}</span>
+                                    {shellContribution ? (
+                                        <>
+                                            <span aria-hidden>·</span>
+                                            <span>{t('pluginStudio.shellContributions', 'contributes')}</span>
+                                            <span>
+                                                {t('pluginStudio.shellMenus', 'menus')}{' '}
+                                                <b className="tabular-nums">{shellContribution.menus.length}</b>
+                                            </span>
+                                            <span>
+                                                {t('pluginStudio.shellRoutes', 'routes')}{' '}
+                                                <b className="tabular-nums">{shellContribution.routes.length}</b>
+                                            </span>
+                                            <span>
+                                                {t('pluginStudio.shellPanels', 'panels')}{' '}
+                                                <b className="tabular-nums">{shellContribution.panels.length}</b>
+                                            </span>
+                                        </>
+                                    ) : null}
                                 </div>
 
                                 <div className="flex flex-wrap items-center gap-1.5">

@@ -1,6 +1,6 @@
 import { useContext, useMemo } from "react"
 import { AppContext } from "../core/AppContext"
-import type { RouteConfig } from "../core/route"
+import type { ResolvedRouteConfig } from "../core/route"
 import { usePluginState } from "./use-plugin-state"
 
 /**
@@ -17,7 +17,7 @@ import { usePluginState } from "./use-plugin-state"
  * as its plugin does — and what lets a hot reload change a route's *code* without
  * touching the router at all.
  */
-export function usePluginRoutes(): RouteConfig[] {
+export function usePluginRoutes(): ResolvedRouteConfig[] {
     const { pluginManager } = useContext(AppContext)
     const { pluginVersion } = usePluginState()
 

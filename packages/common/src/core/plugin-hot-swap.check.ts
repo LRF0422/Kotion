@@ -40,6 +40,8 @@ import type { ResolvedDockPanel } from "./dock";
 import type { PluginRegistration } from "./global-namespace";
 import { pluginScriptLoader } from "../utils/import-util";
 import { logger } from "../utils/logger";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 let checks = 0;
 
@@ -751,6 +753,40 @@ const routeChecks = async (): Promise<void> => {
     );
     assert(renderRoute(0) === "<div>page-v2</div>", `the kept identity must render the new page: ${renderRoute(0)}`);
 
+    /* -- a host plugin is never a replace target, however alike the name ---- */
+    // `@kn/plugin-api-client` is a host plugin named "API Client" in dev; its
+    // registry key is that name. A studio project whose `pluginKey` is `apiclient`
+    // normalizes to the same string — and treating it as "the same plugin" would
+    // silently replace the host plugin (losing its editor block and locales)
+    // instead of installing alongside it.
+    const hostNamed = new PluginManager({ resolveUrl: (path) => path, hostApiVersion: "2.0.0" }, [
+      new KPlugin({ name: "API Client", status: "ACTIVE" } as any),
+    ]);
+    pluginScriptLoader.load = async () => registration(new KPlugin({
+      name: "apiclient",
+      status: "ACTIVE",
+      menus: [{ name: "API", key: "/apiclient", icon: null, id: "apiclient-menu" }],
+    } as any));
+    const alongside = await hostNamed.installBundle({
+      code: "export default {}",
+      pluginKey: "apiclient",
+      name: "apiclient",
+      version: "dev.1",
+      sourceLabel: "/tmp/apiclient",
+    });
+    assert(
+      alongside.ok === true && alongside.mode === "installed",
+      `a dev build must install next to a similarly-named host plugin: ${JSON.stringify(alongside)}`,
+    );
+    assert(
+      hostNamed.hasPlugin("API Client") && hostNamed.hasPlugin("apiclient"),
+      `both must stay active: ${JSON.stringify(hostNamed.getAllPluginKeys())}`,
+    );
+    assert(
+      hostNamed.resolveMenus().map((menu) => menu.id).join() === "apiclient-menu",
+      "the dev build contributes its menu; the host plugin keeps its own contributions",
+    );
+
     /* -- a duplicate path is dropped, not silently shadowed --------------- */
     const copycat = new PluginManager({ resolveUrl: (path) => path, hostApiVersion: "2.0.0" }, []);
     pluginScriptLoader.load = async () => registration(new KPlugin({
@@ -936,6 +972,159 @@ const notificationChecks = async (): Promise<void> => {
   }
 };
 
+/* ------------------------------------------------------------------ *
+ * 10. The stylesheet is part of the transaction
+ *
+ * A bundle applies its own CSS while it is being *evaluated* — the published UMD
+ * has to be self-contained — which is earlier than the commit. So a refusal has to
+ * put the previously committed stylesheet back, or a developer's rejected save
+ * leaves the panel styled by code that never ran. This was dead code until this
+ * check existed.
+ * ------------------------------------------------------------------ */
+const cssChecks = async (): Promise<void> => {
+  const originalLoad = pluginScriptLoader.load;
+  const originalDocument = (globalThis as { document?: unknown }).document;
+
+  /** A minimal document: one <style> per pluginKey. */
+  const tags = new Map<string, { key: string; textContent: string; parentNode: unknown }>();
+  const documentStub = {
+    createElement: () => {
+      const element = {
+        key: "",
+        textContent: "",
+        parentNode: null as unknown,
+        setAttribute(name: string, value: string) {
+          if (name === "data-kn-plugin-style") element.key = value;
+        },
+      };
+      return element;
+    },
+    head: {
+      appendChild(element: { key: string; parentNode: unknown }) {
+        element.parentNode = documentStub.head;
+        tags.set(element.key, element as never);
+        return element;
+      },
+      removeChild(element: { key: string }) {
+        tags.delete(element.key);
+        return element;
+      },
+    },
+    documentElement: {},
+    // Returns the *stored* element (a real DOM returns the element itself, not a
+    // copy) — the manager writes `tag.textContent`, and a copy would swallow it.
+    querySelector: (selector: string) => {
+      const match = /data-kn-plugin-style="([^"]+)"/.exec(selector);
+      return (match ? tags.get(match[1]) : undefined) ?? null;
+    },
+  };
+  (globalThis as { document?: unknown }).document = documentStub;
+  /** What the bundle's own CSS injection would have left behind. */
+  const bundleAppliesCss = (key: string, css: string) => {
+    const existing = tags.get(key);
+    if (existing) existing.textContent = css;
+    else tags.set(key, { key, textContent: css, parentNode: documentStub.head });
+  };
+  const tagCss = (key: string) => tags.get(key)?.textContent;
+
+  let served = registration(new KPlugin({ name: "Styled Plugin", status: "ACTIVE" }));
+  pluginScriptLoader.load = async () => served;
+  const manager = new PluginManager({ resolveUrl: (path) => path, hostApiVersion: "2.0.0" }, []);
+  const installBuild = (version: string, css: string) => manager.installBundle({
+    code: "export default {}",
+    pluginKey: "styled-plugin",
+    name: "Styled Plugin",
+    version,
+    sourceLabel: "/tmp/styled",
+    css,
+  });
+
+  try {
+    const first = await installBuild("dev.1", ".v1 { color: red }");
+    assert(first.ok === true, "the first build must install");
+    assert(tagCss("styled-plugin") === ".v1 { color: red }", `the stylesheet must be applied: ${tagCss("styled-plugin")}`);
+
+    /* -- the bundle evaluates (applying its new CSS) and then fails --------- */
+    pluginScriptLoader.load = async () => {
+      bundleAppliesCss("styled-plugin", ".v2 { color: blue }");
+      throw new Error("boom after css");
+    };
+    const rejected = await installBuild("dev.2", ".v2 { color: blue }");
+    assert(rejected.ok === false, "the reload must be refused");
+    assert(
+      tagCss("styled-plugin") === ".v1 { color: red }",
+      `a refused reload must restore the previous stylesheet: ${tagCss("styled-plugin")}`,
+    );
+
+    /* -- a bundle that evaluates, registers, and is refused by the plan ----- */
+    pluginScriptLoader.load = async () => {
+      bundleAppliesCss("styled-plugin", ".v3 { color: green }");
+      return registration(new KPlugin({ name: "", status: "ACTIVE" } as never));
+    };
+    const refused = await installBuild("dev.3", ".v3 { color: green }");
+    assert(refused.ok === false, "a bundle without a usable plugin must be refused");
+    assert(
+      tagCss("styled-plugin") === ".v1 { color: red }",
+      `that refusal must restore the stylesheet too: ${tagCss("styled-plugin")}`,
+    );
+
+    /* -- a build that compiles to no CSS clears the old rules --------------- */
+    pluginScriptLoader.load = async () => {
+      const fresh = registration(new KPlugin({ name: "Styled Plugin", status: "ACTIVE" }));
+      return fresh;
+    };
+    const cleared = await installBuild("dev.4", "");
+    assert(cleared.ok === true, "a CSS-less build must still install");
+    assert(tagCss("styled-plugin") === "", `an empty build must clear the rules: ${JSON.stringify(tagCss("styled-plugin"))}`);
+
+    /* -- uninstall removes it ---------------------------------------------- */
+    manager.uninstallPlugin("styled-plugin");
+    assert(tagCss("styled-plugin") === undefined, "uninstalling must remove the plugin's stylesheet");
+  } finally {
+    pluginScriptLoader.load = originalLoad;
+    if (originalDocument === undefined) delete (globalThis as { document?: unknown }).document;
+    else (globalThis as { document?: unknown }).document = originalDocument;
+  }
+};
+
+/* ------------------------------------------------------------------ *
+ * 11. `App` reads the registry through the manager it owns
+ *
+ * The bug this guards: `App` builds the `PluginManager` and then **provides**
+ * `AppContext`. A component never sees its own provider's value, so the
+ * context-based hooks are dead inside `App` — `usePluginLocales()` returned `{}`,
+ * no plugin translation was ever registered, and every studio string rendered as
+ * its key (`pluginStudio.title` in the page header). Nothing about the manager was
+ * wrong; the wiring was, and only a *rendered* app could notice.
+ *
+ * A structural assertion is the honest guard here: the hook-level behaviour cannot
+ * be exercised by this Node harness, and the mistake is a one-word omission (a
+ * missing argument) that typechecks.
+ * ------------------------------------------------------------------ */
+const appWiringChecks = (): void => {
+  const appSource = readFileSync(join(__dirname, "..", "..", "..", "..", "core", "src", "App.tsx"), "utf8");
+  // Comments in App *explain* this bug (they name the hook that was misused), so
+  // the checks read code only.
+  const code = appSource
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "");
+
+  assert(
+    /useRegistryVersion\(pluginManager\)/.test(code),
+    "App must subscribe to the registry through the manager it owns",
+  );
+  assert(
+    !/\busePlugin(State|Menus|Routes|Tours|Settings|Locales)\s*\(\s*\)/.test(code),
+    "App must not read the registry through the context hooks it provides "
+    + "(a component never sees its own provider's value)",
+  );
+  assert(
+    /i18n\.addResourceBundle\(lng, ns,/.test(code),
+    "plugin translations must be registered per (language, namespace) bundle, "
+    + "not as a `{ translation: {...} }` wrapper",
+  );
+};
+
 const run = async (): Promise<void> => {
   registryChecks();
   hookOwnershipChecks();
@@ -946,6 +1135,9 @@ const run = async (): Promise<void> => {
   await routeChecks();
   await projectionChecks();
   await notificationChecks();
+  await cssChecks();
+  await routeChecks();
+  appWiringChecks();
   logger.info(`plugin hot-swap checks passed (${checks} assertions)`);
 };
 

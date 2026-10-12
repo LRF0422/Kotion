@@ -1,6 +1,6 @@
 import { useContext, useMemo, useSyncExternalStore } from "react"
 import { AppContext } from "../core/AppContext"
-import type { KPlugin, PluginApiIncompatibility } from "../core/PluginManager"
+import type { KPlugin, PluginApiIncompatibility, PluginManager } from "../core/PluginManager"
 
 /**
  * Reactive hook for tracking plugin state changes.
@@ -35,14 +35,20 @@ import type { KPlugin, PluginApiIncompatibility } from "../core/PluginManager"
  *    use this as a useMemo/useEffect dependency when you need to recompute
  *    derived data after plugins change.
  */
-export function usePluginState(): {
-    plugins: KPlugin<any>[]
-    loadedPluginNames: Set<string>
-    incompatiblePlugins: PluginApiIncompatibility[]
-    pluginVersion: number
-} {
-    const { pluginManager } = useContext(AppContext)
-
+/**
+ * The registry version of a manager you already hold.
+ *
+ * For the component that **owns** the manager. `App` builds the `PluginManager`
+ * and then provides `AppContext` — and a component never sees its own provider's
+ * value, so every context-based hook (this module's and the projections built on
+ * it) is dead *inside App*: `pluginManager` is `undefined` there, not "the one I
+ * just created". That is not a subtlety worth remembering; it shipped once as
+ * "plugin translations are never registered, every studio string renders as its
+ * key", because `App` read locales through `usePluginLocales()`.
+ *
+ * Callers inside the provider keep using {@link usePluginState}.
+ */
+export function useRegistryVersion(pluginManager: PluginManager | undefined): number {
     const subscribe = useMemo(
         () => (onStoreChange: () => void) => pluginManager?.onChange(onStoreChange) ?? (() => undefined),
         [pluginManager]
@@ -51,7 +57,17 @@ export function usePluginState(): {
         () => () => pluginManager?.version ?? 0,
         [pluginManager]
     )
-    const version = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+    return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+}
+
+export function usePluginState(): {
+    plugins: KPlugin<any>[]
+    loadedPluginNames: Set<string>
+    incompatiblePlugins: PluginApiIncompatibility[]
+    pluginVersion: number
+} {
+    const { pluginManager } = useContext(AppContext)
+    const version = useRegistryVersion(pluginManager)
 
     const loadedPluginNames = useMemo(() =>
         new Set(pluginManager?.plugins.map(p => p.name) ?? []),

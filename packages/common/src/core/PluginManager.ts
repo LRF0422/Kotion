@@ -2,9 +2,9 @@ import { merge } from "lodash";
 import { ExtensionWrapper } from "./editor";
 import { DockPanelConfig, DockPosition, ResolvedDockPanel } from "./dock";
 import { PageTypeConfig, ResolvedPageType } from "./page-type";
-import { SiderMenuItemProps } from "./menu";
+import { ResolvedSiderMenuItem, SiderMenuItemProps } from "./menu";
 import { TourConfig } from "./tour";
-import { RouteConfig } from "./route";
+import { ResolvedRouteConfig, RouteConfig } from "./route";
 import { Services } from "./types";
 import {
     ServiceRegistry,
@@ -497,8 +497,8 @@ export class PluginManager {
     private _changeListeners = new Set<() => void>()
 
     // Cache for resolved plugin data to improve performance
-    private _cacheRoutes: RouteConfig[] | null = null
-    private _cacheMenus: SiderMenuItemProps[] | null = null
+    private _cacheRoutes: ResolvedRouteConfig[] | null = null
+    private _cacheMenus: ResolvedSiderMenuItem[] | null = null
     private _cacheExtensions: ExtensionWrapper[] | null = null
     private _cacheLocales: any | null = null
     private _cacheTours: TourConfig[] | null = null
@@ -1386,8 +1386,23 @@ export class PluginManager {
                 ? [...this._entries.values()].find(entry =>
                     entry.meta.source === 'dev' && entry.meta.sourceLabel === bundle.sourceLabel)
                 : undefined)
-            ?? this._entryFor(bundle.pluginKey)
-            ?? this._entryFor(bundle.name)
+            /**
+             * Same plugin under another name or key: a legacy record that had no
+             * `pluginKey` is filed under a key derived from its name, and the
+             * project manifest uses the real one.
+             *
+             * **Host plugins are excluded.** They are the application, not an
+             * artifact a bundle may take over — and the lenient match makes them
+             * look like candidates: the host-bundled `@kn/plugin-api-client` is
+             * named `API Client`, whose normalized form is exactly the studio
+             * project's `pluginKey` (`apiclient`). Replacing it would silently
+             * remove the host plugin and everything it contributes (its `/api`
+             * editor block, its locales) — a dev build must be *added* next to it
+             * instead. `_isInitialPluginKey` already refuses the same *key*; this
+             * closes the same hole for the replace path.
+             */
+            ?? [this._entryFor(bundle.pluginKey), this._entryFor(bundle.name)]
+                .find(entry => entry && entry.meta.source !== 'system')
 
         let objectUrl: string | undefined
         try {
@@ -1398,8 +1413,13 @@ export class PluginManager {
                 bundle.name,
                 { bustCache: true, timeout: this._loadTimeoutMs },
             )
-            if (!registration) return reject('the loader returned no registration for this bundle')
+            if (!registration) {
+                this._restorePluginCss(bundle.pluginKey)
+                return reject('the loader returned no registration for this bundle')
+            }
             if (previousRegistration && registration === previousRegistration) {
+                // The bundle may have replaced the stylesheet before it threw.
+                this._restorePluginCss(bundle.pluginKey)
                 return reject(
                     'the bundle did not register itself: it threw while being evaluated '
                     + 'and the host namespace still holds the previous registration',
@@ -1411,9 +1431,14 @@ export class PluginManager {
                 css: bundle.css,
                 replaceKey: target?.key,
             })
-            if (outcome.ok) callBack?.()
+            if (outcome.ok === false) this._restorePluginCss(bundle.pluginKey)
+            else callBack?.()
             return outcome
         } catch (error) {
+            // Evaluating a bundle applies its stylesheet *before* the commit, so a
+            // failure has to put the previous one back — otherwise a rejected save
+            // leaves the panel styled by code that never ran.
+            this._restorePluginCss(bundle.pluginKey)
             return reject(
                 `the bundle could not be loaded or evaluated: `
                 + `${error instanceof Error ? error.message : String(error)}`,
@@ -1508,9 +1533,12 @@ export class PluginManager {
                 return false
             }
             const outcome = this._activate(descriptor, registration, { source: 'installed' })
-            if (outcome.ok) callBack?.()
+            if (outcome.ok === false) this._restorePluginCss(descriptor.pluginKey || descriptor.name)
+            else callBack?.()
             return outcome.ok
         } catch (error) {
+            // The artifact's stylesheet was applied while its script was evaluated.
+            this._restorePluginCss(descriptor.pluginKey || descriptor.name)
             logger.error(`Error installing plugin ${descriptor?.name}:`, error)
             return false
         }
@@ -1539,6 +1567,9 @@ export class PluginManager {
         const key = descriptor.pluginKey || descriptor.name
         const reject = (reason: string): PluginInstallOutcome => {
             logger.error(`Cannot activate ${descriptor.name}: ${reason}`)
+            // The bundle has already been evaluated (and applied its stylesheet) by
+            // the time anything here can refuse it.
+            this._restorePluginCss(key)
             return { ok: false, key, reason }
         }
 
@@ -1602,6 +1633,8 @@ export class PluginManager {
         if (own) return reject(own.reason)
 
         const result = this._commit(next, existing ? `reload:${key}` : `install:${key}`)
+        // `''` is meaningful: the build compiled to no CSS at all, and the previous
+        // rules must not survive.
         if (options.css !== undefined) this._applyPluginCss(key, options.css)
         if (!result.changed && existing) {
             // Same instances, same set: nothing to tell anyone about.
@@ -1743,14 +1776,18 @@ export class PluginManager {
      * soon as its plugin does, and a hot reload can change a route's code without
      * rebuilding the router.
      */
-    resolveRoutes(): RouteConfig[] {
+    resolveRoutes(): ResolvedRouteConfig[] {
         if (this._cacheRoutes) {
             return this._cacheRoutes
         }
 
-        const routes: RouteConfig[] = []
+        const routes: ResolvedRouteConfig[] = []
         const seen = new Set<string>()
-        const collect = (configs: RouteConfig[] | undefined, owner: string): void => {
+        const collect = (
+            configs: RouteConfig[] | undefined,
+            owner: string,
+            pluginKey: string,
+        ): void => {
             for (const config of configs ?? []) {
                 if (!config || typeof config.path !== 'string' || !config.path.trim()) {
                     logger.warn(`Invalid route from ${owner}, skipping`)
@@ -1763,6 +1800,9 @@ export class PluginManager {
                 seen.add(config.path)
                 routes.push({
                     ...config,
+                    source: 'plugin',
+                    owner,
+                    pluginKey,
                     children: config.children?.length
                         ? (() => {
                             // Children are part of the same route entry: validate and
@@ -1789,7 +1829,7 @@ export class PluginManager {
         }
 
         for (const plugin of this.plugins) {
-            collect(plugin.routes, plugin.name)
+            collect(plugin.routes, plugin.name, this._keyOf(plugin))
         }
 
         this._cacheRoutes = routes
@@ -2125,15 +2165,41 @@ export class PluginManager {
         return editorExtensions
     }
 
-    resolveMenus(): SiderMenuItemProps[] {
+    /**
+     * Every plugin menu entry, in plugin order, with its provenance.
+     *
+     * De-duplicated by entry id (first wins, warned), like dock panels: two
+     * plugins claiming one rail slot would otherwise render two buttons with the
+     * same React key. Each entry reports the plugin it came from, so a caller (the
+     * studio above all) can answer "what does this plugin contribute to the shell
+     * right now" without guessing, and a missing entry can be traced to the
+     * registry rather than to the rail.
+     */
+    resolveMenus(): ResolvedSiderMenuItem[] {
         if (this._cacheMenus) {
             return this._cacheMenus
         }
 
-        const menus: SiderMenuItemProps[] = []
+        const menus: ResolvedSiderMenuItem[] = []
+        const seen = new Set<string>()
         for (const plugin of this.plugins) {
-            if (plugin.menus && plugin.menus.length > 0) {
-                menus.push(...plugin.menus)
+            const pluginKey = this._keyOf(plugin)
+            for (const menu of plugin.menus ?? []) {
+                if (!menu) {
+                    logger.warn(`Invalid menu entry from ${plugin.name}, skipping`)
+                    continue
+                }
+                // De-duplicate only when the entry actually has an identifier: an
+                // entry without `id`/`key` still renders (the rail falls back to an
+                // index key), and silently dropping it would hide a plugin's menu
+                // for no reason.
+                const id = menu.id || menu.key
+                if (id && seen.has(id)) {
+                    logger.warn(`Menu entry ${id} already registered, skipping duplicate from ${plugin.name}`)
+                    continue
+                }
+                if (id) seen.add(id)
+                menus.push({ ...menu, source: 'plugin', owner: plugin.name, pluginKey })
             }
         }
 
