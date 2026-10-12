@@ -420,6 +420,177 @@ async function checkChildResumeFailureKeepsToolResults(): Promise<void> {
     worker.dispose()
 }
 
+async function checkStaleRunViewDoesNotDropPendingCalls(): Promise<void> {
+    // The backend emits run.suspended BEFORE the new pending list is visible
+    // through GET /runs/{id} (the run's hot state is written after the event).
+    // A view older than the suspend must not prune the batch: dropping it left
+    // the call "running" until the server's 10-minute tool timeout.
+    const resumes: any[] = []
+    const settled: string[] = []
+    let executions = 0
+
+    const fakeClient = {
+        streamEvents(_runId: string, afterSeq = 0): AsyncGenerator<AgentEvent> {
+            return (async function* () {
+                if (afterSeq >= 2) return
+                yield { seq: 1, type: 'tool.requested', callId: 'call-a', tool: 'readFile', args: '{}' } as AgentEvent
+                yield { seq: 2, type: 'run.suspended', reason: 'waiting_tools', pendingCallIds: ['call-a'] } as AgentEvent
+            })()
+        },
+        async resume(_runId: string, payload: any): Promise<AsyncGenerator<AgentEvent>> {
+            resumes.push(payload)
+            return (async function* () {
+                yield { seq: 3, type: 'run.completed', finishReason: 'stop' } as AgentEvent
+            })()
+        },
+        // Stale: the pause at seq 2 is not visible yet, and no call is listed.
+        async getRun() {
+            return { status: 'RUNNING', lastSeq: 0, pendingTools: [] }
+        },
+    }
+
+    const worker = new SubRunWorker({
+        client: fakeClient as any,
+        executeTool: async () => { executions += 1; return { ok: true, result: 'contents' } },
+        onSettled: (runId, settlement) => { settled.push(`${runId}:${settlement}`) },
+    })
+
+    worker.attach('child-a')
+    await waitFor(() => settled.length === 1, 5000)
+
+    assert.equal(executions, 1, 'a stale run view must not suppress a batch the suspend announced')
+    assert.equal(resumes.length, 1, 'the child must still be resumed with its result')
+    assert.deepEqual(
+        resumes[0].toolResults.map((r: any) => r.callId),
+        ['call-a']
+    )
+    worker.dispose()
+}
+
+async function checkParkedChildWatchdogRecovers(): Promise<void> {
+    // Nothing follows the suspend on the stream, and the first view still claims
+    // no pending call. The watchdog must re-check later and answer the call once
+    // the server reports it, instead of waiting for the tool timeout.
+    let viewReads = 0
+    const settled: string[] = []
+    const resumes: any[] = []
+
+    const fakeClient = {
+        streamEvents(_runId: string, afterSeq = 0): AsyncGenerator<AgentEvent> {
+            return (async function* () {
+                if (afterSeq >= 2) return
+                yield { seq: 1, type: 'tool.requested', callId: 'call-b', tool: 'readFile', args: '{}' } as AgentEvent
+                yield { seq: 2, type: 'run.suspended', reason: 'waiting_tools', pendingCallIds: ['call-b'] } as AgentEvent
+            })()
+        },
+        async getRun() {
+            viewReads += 1
+            return viewReads === 1
+                // Contradiction: parked, yet nothing listed (the race window).
+                ? { status: 'WAITING_TOOLS', lastSeq: 2, pendingTools: [] }
+                : {
+                    status: 'WAITING_TOOLS',
+                    lastSeq: 2,
+                    pendingTools: [{ callId: 'call-b', tool: 'readFile', argsJson: '{}' }],
+                }
+        },
+        async resume(_runId: string, payload: any): Promise<AsyncGenerator<AgentEvent>> {
+            resumes.push(payload)
+            return (async function* () {
+                yield { seq: 3, type: 'run.completed', finishReason: 'stop' } as AgentEvent
+            })()
+        },
+    }
+
+    const worker = new SubRunWorker({
+        client: fakeClient as any,
+        executeTool: async () => ({ ok: true, result: 'contents' }),
+        onSettled: (runId, settlement) => { settled.push(`${runId}:${settlement}`) },
+    })
+
+    worker.attach('child-a')
+    await waitFor(() => settled.length === 1, 15000)
+
+    assert.ok(viewReads >= 2, 'the parked child must be re-checked, not left tailing a silent stream')
+    assert.equal(resumes.length, 1)
+    assert.deepEqual(settled, ['child-a:completed'])
+    worker.dispose()
+}
+
+async function checkSettledChildIsNotRedriven(): Promise<void> {
+    // A settled child must never be driven again: attach() would replay its whole
+    // log from seq 0, and the parent's sub.completed is withheld while it parks
+    // on children — so the old code replayed every finished child on every event
+    // of every other child (holding the child stream slots the live runs need).
+    let streams = 0
+    const settled: string[] = []
+    const fakeClient = {
+        streamEvents(): AsyncGenerator<AgentEvent> {
+            streams += 1
+            return (async function* () {
+                yield { seq: 1, type: 'run.completed', finishReason: 'stop' } as AgentEvent
+            })()
+        },
+        async resume(): Promise<AsyncGenerator<AgentEvent>> {
+            return (async function* () { /* unused */ })()
+        },
+        async getRun() {
+            return { status: 'COMPLETED', lastSeq: 1, pendingTools: [] }
+        },
+    }
+    const worker = new SubRunWorker({
+        client: fakeClient as any,
+        executeTool: async () => ({ ok: true }),
+        onSettled: (runId, settlement) => { settled.push(`${runId}:${settlement}`) },
+    })
+
+    worker.attach('child-a')
+    await waitFor(() => settled.length === 1, 3000)
+    worker.attach('child-a')
+    await new Promise(resolve => setTimeout(resolve, 150))
+
+    assert.equal(streams, 1, 'a terminal child must not be re-attached and replayed')
+    assert.deepEqual(worker.activeRunIds, [])
+    worker.dispose()
+}
+
+async function checkLostSuspendFrameStillServes(): Promise<void> {
+    // Only the tool.requested frame arrives (the suspend frame was lost and the
+    // stream closed). The request alone must leave the child watched, so the run
+    // view drives the call instead of a silent tail.
+    const settled: string[] = []
+    const resumes: any[] = []
+    const fakeClient = {
+        streamEvents(_runId: string, afterSeq = 0): AsyncGenerator<AgentEvent> {
+            return (async function* () {
+                if (afterSeq >= 1) return
+                yield { seq: 1, type: 'tool.requested', callId: 'call-c', tool: 'readFile', args: '{}' } as AgentEvent
+            })()
+        },
+        async getRun() {
+            return { status: 'RUNNING', lastSeq: 0, pendingTools: [] }
+        },
+        async resume(_runId: string, payload: any): Promise<AsyncGenerator<AgentEvent>> {
+            resumes.push(payload)
+            return (async function* () {
+                yield { seq: 2, type: 'run.completed', finishReason: 'stop' } as AgentEvent
+            })()
+        },
+    }
+    const worker = new SubRunWorker({
+        client: fakeClient as any,
+        executeTool: async () => ({ ok: true, result: 'contents' }),
+        onSettled: (runId, settlement) => { settled.push(`${runId}:${settlement}`) },
+    })
+
+    worker.attach('child-a')
+    await waitFor(() => settled.length === 1, 15000)
+
+    assert.equal(resumes.length, 1, 'a request whose suspend frame was lost must still be served')
+    assert.deepEqual(resumes[0].toolResults.map((r: any) => r.callId), ['call-c'])
+    worker.dispose()
+}
+
 async function waitFor(predicate: () => boolean, timeoutMs: number): Promise<void> {
     const deadline = Date.now() + timeoutMs
     while (Date.now() < deadline) {
@@ -440,6 +611,10 @@ async function main(): Promise<void> {
     await checkExecutorOwnerAndWriteLease()
     await checkSubRunWorkersRunInParallel()
     await checkChildResumeFailureKeepsToolResults()
+    await checkStaleRunViewDoesNotDropPendingCalls()
+    await checkParkedChildWatchdogRecovers()
+    await checkSettledChildIsNotRedriven()
+    await checkLostSuspendFrameStillServes()
     checkMergeRefusesToClobber()
     console.log('agent-core checks passed')
 }

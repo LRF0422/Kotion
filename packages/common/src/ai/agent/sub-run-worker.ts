@@ -63,6 +63,16 @@ const STREAM_RETRY_MAX_MS = 8_000
 const RESUME_RETRY_BASE_MS = 500
 const RESUME_RETRY_MAX_MS = 8_000
 
+/**
+ * Watchdog cadence for a child the server reports as parked on its frontend
+ * calls. The backend emits nothing while it waits, so a batch whose pending
+ * list was not yet visible when the client asked (the run's own pause is
+ * published before its state is) would otherwise strand the child until its
+ * `tool_timeout`. Polling the run view re-derives the work instead.
+ */
+const PARK_RECHECK_BASE_MS = 3_000
+const PARK_RECHECK_MAX_MS = 30_000
+
 export type SubRunSettlement = 'completed' | 'failed' | 'cancelled' | 'detached'
 
 export interface SubRunWorkerOptions {
@@ -105,6 +115,12 @@ interface ChildState {
     resumePayload: ResumePayload | null
     /** Failed resume attempts for the queued payload (backoff; reset on accept). */
     resumeAttempts: number
+    /** Seq of the newest `waiting_tools` suspend consumed (run-view staleness). */
+    suspendSeq: number
+    /** The server said it is parked on this child's frontend calls. */
+    parked: boolean
+    /** Watchdog passes since the current park began (backoff). */
+    parkChecks: number
     abort: AbortController
     settled: boolean
     streamRetry: number
@@ -119,6 +135,8 @@ export class SubRunWorker {
     private readonly maxParallelCalls: number
 
     private readonly children = new Map<string, ChildState>()
+    /** Runs this worker already drove to a terminal state. */
+    private readonly finished = new Set<string>()
     private stopped = false
     /** Counting semaphore: frontend tool executions in flight. */
     private runningCalls = 0
@@ -142,9 +160,17 @@ export class SubRunWorker {
         return this.children.has(runId)
     }
 
-    /** Start driving a child run (idempotent). */
+    /**
+     * Start driving a child run (idempotent).
+     *
+     * A run this worker already saw reach a terminal state is never driven
+     * again: re-attaching replays its whole log from seq 0, and the parent's
+     * `sub.completed` is withheld while it is parked on other children — so a
+     * settled child would otherwise be replayed (and re-settled) on every event
+     * of every other child, burning the child stream slots the live runs need.
+     */
     attach(runId: string): void {
-        if (this.stopped || this.children.has(runId)) return
+        if (this.stopped || this.finished.has(runId) || this.children.has(runId)) return
         const state: ChildState = {
             runId,
             lastSeq: 0,
@@ -153,6 +179,9 @@ export class SubRunWorker {
             paused: false,
             resumePayload: null,
             resumeAttempts: 0,
+            suspendSeq: 0,
+            parked: false,
+            parkChecks: 0,
             abort: new AbortController(),
             settled: false,
             streamRetry: 0,
@@ -189,6 +218,27 @@ export class SubRunWorker {
 
     private async drive(state: ChildState): Promise<void> {
         while (!state.settled && !this.stopped) {
+            // Serve first: a pause (or a watchdog re-check) must not wait behind
+            // another stream round-trip — the parked run's stream stays open, so
+            // consuming it first would block the check forever.
+            if (state.paused) {
+                state.paused = false
+                await this.servePending(state)
+                if (state.settled || this.stopped) return
+                continue
+            }
+            if (state.parked && !state.resumePayload) {
+                // The server says it is waiting for this child's frontend calls
+                // but we have nothing to send: re-derive the work from its run
+                // view instead of tailing a silent stream. This is what makes a
+                // race in the pause window self-healing rather than a
+                // `tool_timeout` ten minutes later.
+                await this.parkWait(state)
+                if (state.settled || this.stopped) return
+                state.paused = true
+                continue
+            }
+
             let cut = false
             try {
                 await this.consumeOnce(state)
@@ -198,18 +248,33 @@ export class SubRunWorker {
                 cut = true
             }
             if (state.settled || this.stopped) return
+            if (state.paused || state.resumePayload) continue
 
-            if (state.paused) {
-                state.paused = false
-                await this.servePending(state)
-                if (state.settled || this.stopped) return
-                continue
-            }
             // Stream ended without a terminal event (proxy cut, dead socket).
             state.streamRetry = cut ? state.streamRetry + 1 : 1
             const delay = Math.min(STREAM_RETRY_MAX_MS, STREAM_RETRY_BASE_MS * 2 ** (state.streamRetry - 1))
             await new Promise(resolve => setTimeout(resolve, delay))
         }
+    }
+
+    /**
+     * Backoff between parked-children run-view re-checks. Never gives up: the
+     * only alternatives are a spinner until the server's tool timeout, and the
+     * server emits no further request for a batch it is still waiting on.
+     */
+    private async parkWait(state: ChildState): Promise<void> {
+        state.parkChecks += 1
+        const delay = Math.min(
+            PARK_RECHECK_MAX_MS,
+            PARK_RECHECK_BASE_MS * 2 ** Math.min(state.parkChecks - 1, 5)
+        )
+        if (state.parkChecks === 1 || state.parkChecks % 10 === 0) {
+            console.warn(
+                `[agent] 子 agent ${state.runId} 仍在前端工具等待中，重新检查运行状态`
+                + `（第 ${state.parkChecks} 次，${Math.round(delay / 1000)}s 后）`
+            )
+        }
+        await new Promise(resolve => setTimeout(resolve, delay))
     }
 
     /**
@@ -244,6 +309,10 @@ export class SubRunWorker {
             }
             state.resumePayload = null
             state.resumeAttempts = 0
+            // Accepted: the server is no longer waiting on our queued batch (it
+            // re-parks, with a fresh suspend event, for the next one).
+            state.parked = false
+            state.parkChecks = 0
         } else {
             events = this.client.streamEvents(state.runId, state.lastSeq, state.abort.signal, streamOptions)
         }
@@ -279,6 +348,13 @@ export class SubRunWorker {
             case 'tool.requested':
                 state.knownCalls.set(event.callId, { tool: event.tool, args: safeParse(event.args) })
                 if (!state.queue.includes(event.callId)) state.queue.push(event.callId)
+                // The request itself is an announcement: an older run view cannot
+                // prune this call (the backend publishes the request before the
+                // run state it belongs to), and if the following suspend frame is
+                // lost the watchdog still drives the call from the run view.
+                state.suspendSeq = Math.max(state.suspendSeq, event.seq)
+                state.parked = true
+                state.parkChecks = 0
                 break
             case 'sub.spawned':
                 // Nested delegation: grandchildren are ordinary child runs on
@@ -292,6 +368,13 @@ export class SubRunWorker {
                     for (const callId of ids) {
                         if (!state.queue.includes(callId)) state.queue.push(callId)
                     }
+                    // Remember how new the pause is: a run view older than this
+                    // seq may legitimately not list these calls yet (the backend
+                    // publishes the pause before its state does), so it must not
+                    // be used to prune them.
+                    state.suspendSeq = Math.max(state.suspendSeq, event.seq)
+                    state.parked = true
+                    state.parkChecks = 0
                     if (ids.length > 0 || state.queue.length > 0) state.paused = true
                 } else if (event.reason === 'budget') {
                     // Children have their own budget; nobody else will grant it.
@@ -318,31 +401,64 @@ export class SubRunWorker {
         state.settled = true
         state.abort.abort()
         this.children.delete(state.runId)
+        this.finished.add(state.runId)
         this.onSettled?.(state.runId, settlement)
     }
 
-    /** Execute this child's outstanding calls, then queue its resume payload. */
+    /**
+     * Execute this child's outstanding calls, then queue its resume payload.
+     *
+     * The run view is used to prune HISTORICAL calls (a re-attached child
+     * replays its whole log, including suspends for calls that were answered
+     * long ago), but it is only trusted while it is at least as new as the
+     * suspend that queued them: the backend emits `run.suspended` BEFORE the new
+     * pending list is durably visible, so a racing view legitimately misses the
+     * very calls we were just asked to run. Dropping them (the old
+     * `pendingIds.length === 0` early return, after `state.queue` had already
+     * been cleared) stranded the child until its `tool_timeout`, while the UI
+     * kept showing the call as running.
+     */
     private async servePending(state: ChildState): Promise<void> {
         if (state.settled || this.stopped || state.resumePayload) return
-        const ids = [...state.queue]
-        state.queue = []
-        await this.ensureCallsKnown(state, ids)
+        const queued = [...state.queue]
+        const view = await this.fetchPendingView(state)
+        if (view) {
+            // A call we never saw on the stream (lost frame, compacted replay)
+            // can only be executed if its tool + args come from the view.
+            for (const [callId, call] of view.calls) {
+                if (!state.knownCalls.has(callId)) state.knownCalls.set(callId, call)
+            }
+        }
+        const trusted = view !== null
+            && (view.terminal || state.suspendSeq === 0 || view.lastSeq >= state.suspendSeq)
 
-        // A re-attached child replays its whole log from seq 0, which includes
-        // HISTORICAL run.suspended events. Only execute calls the child still
-        // considers pending, otherwise an old editor mutation is repeated.
-        const currentPending = await this.fetchPendingCallIds(state)
-        const pendingIds = currentPending
-            ? ids.filter(callId => currentPending.has(callId))
-            : ids
-        if (pendingIds.length === 0) {
-            // Nothing actually outstanding: keep streaming instead of sending a
-            // stale resume.
+        const targets: string[] = []
+        for (const callId of queued) {
+            // Untrusted view → the event is the only authority: run what we were
+            // told to run. Trusted view → keep only calls it still waits for.
+            if (!trusted || view!.callIds.has(callId)) targets.push(callId)
+        }
+        if (trusted) {
+            for (const callId of view!.callIds) {
+                if (!targets.includes(callId)) targets.push(callId)
+            }
+        }
+        if (targets.length === 0) {
+            // Everything queued was provably already answered: drop those ids.
+            // Only stop watching when the view also says the run is no longer
+            // parked on tools — a WAITING_TOOLS run with an empty list is a
+            // contradiction we keep re-checking rather than trust.
+            if (trusted) {
+                state.queue = []
+                state.parked = view!.status === 'WAITING_TOOLS' || view!.status === 'SUSPENDED'
+                if (!state.parked) state.parkChecks = 0
+            }
             return
         }
+        state.queue = queued.filter(callId => !targets.includes(callId))
 
         const toolResults: Array<{ callId: string; ok: boolean; result?: unknown; error?: string }> = []
-        for (const callId of pendingIds) {
+        for (const callId of targets) {
             if (state.settled || this.stopped) return
             const call = state.knownCalls.get(callId)
             if (!call || !call.tool) {
@@ -358,33 +474,34 @@ export class SubRunWorker {
     }
 
     /**
-     * The child's currently outstanding frontend calls, per the server. Used to
-     * prune historical (already answered) calls replayed from seq 0.
+     * The child's outstanding frontend calls plus the freshness of the view that
+     * reports them (status/lastSeq decide whether it can be trusted to prune).
      */
-    private async fetchPendingCallIds(state: ChildState): Promise<Set<string> | null> {
+    private async fetchPendingView(state: ChildState): Promise<{
+        callIds: Set<string>
+        calls: Map<string, ChildCall>
+        lastSeq: number
+        status: RunView['status']
+        terminal: boolean
+    } | null> {
         try {
             const view = await this.client.getRun(state.runId)
-            return new Set((view.pendingTools ?? []).map(pending => pending.callId))
-        } catch {
-            return null
-        }
-    }
-
-    /** Re-attached children: fetch outstanding calls from the run view. */
-    private async ensureCallsKnown(state: ChildState, ids: string[]): Promise<void> {
-        if (ids.every(callId => state.knownCalls.has(callId))) return
-        try {
-            const view = await this.client.getRun(state.runId)
+            const calls = new Map<string, ChildCall>()
             for (const pending of view.pendingTools ?? []) {
-                if (!state.knownCalls.has(pending.callId)) {
-                    state.knownCalls.set(pending.callId, {
-                        tool: pending.tool,
-                        args: safeParse(pending.argsJson),
-                    })
-                }
+                calls.set(pending.callId, { tool: pending.tool, args: safeParse(pending.argsJson) })
+            }
+            const lastSeq = Number(view.lastSeq ?? 0)
+            return {
+                callIds: new Set(calls.keys()),
+                calls,
+                lastSeq: Number.isFinite(lastSeq) ? lastSeq : 0,
+                status: view.status,
+                terminal: view.status === 'COMPLETED'
+                    || view.status === 'FAILED'
+                    || view.status === 'CANCELLED',
             }
         } catch {
-            // Unknown calls are answered with an explicit error in servePending.
+            return null
         }
     }
 

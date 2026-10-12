@@ -41,6 +41,8 @@ export function useSubRuns(options: UseSubRunsOptions): UseSubRunsApi {
 
     /** Delegated agents seen in this turn, so their editor targets can be freed. */
     const ownedAgentIdsRef = useRef<Set<string>>(new Set())
+    /** Children the worker already drove to a terminal state (never re-attach). */
+    const settledRunsRef = useRef<Set<string>>(new Set())
 
     const releaseOwnerTarget = useCallback((owner: string, opts?: { commit?: boolean }) => {
         ownedAgentIdsRef.current.delete(owner)
@@ -75,6 +77,7 @@ export function useSubRuns(options: UseSubRunsOptions): UseSubRunsApi {
             // its tool-result journal, and merge its private document — but only
             // when it finished normally (a cancelled/timed-out child's partial
             // edits are discarded rather than written into the page).
+            settledRunsRef.current.add(runId)
             ownedAgentIdsRef.current.delete(runId)
             void Promise.resolve(
                 getSessionBinding()?.releaseOwner?.(runId, { commit: settlement === 'completed' })
@@ -97,10 +100,16 @@ export function useSubRuns(options: UseSubRunsOptions): UseSubRunsApi {
     useEffect(() => {
         for (const sub of subRuns) {
             if (sub.status === 'running') {
+                // The child's own terminal event already settled it in the
+                // worker, while the parent's `sub.completed` is withheld until it
+                // stops parking on children. Re-attaching here replayed the whole
+                // child log from seq 0 — on every event of every other child.
+                if (settledRunsRef.current.has(sub.subRunId)) continue
                 ownedAgentIdsRef.current.add(sub.subRunId)
                 subRunWorker.attach(sub.subRunId)
                 continue
             }
+            settledRunsRef.current.delete(sub.subRunId)
             if (!ownedAgentIdsRef.current.has(sub.subRunId)) continue
             const stillRunning = toolCalls.some(
                 call => call.subRunId === sub.subRunId && call.status === 'running'

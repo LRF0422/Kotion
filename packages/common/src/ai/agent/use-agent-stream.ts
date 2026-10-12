@@ -110,7 +110,14 @@ export function useAgentStream(options: UseAgentStreamOptions): UseAgentStreamAp
     const resumeWith = useCallback(
         async (runId: string, payload: ResumePayload, generation = generationRef.current) => {
             const current = stateRef.current
-            if (current.runId !== runId || generation !== generationRef.current) return
+            if (current.runId !== runId || generation !== generationRef.current) {
+                // Nobody consumed this payload. Reporting success here (the old
+                // silent return) told the caller its tool results were delivered
+                // while the run stayed parked until its tool timeout — so fail
+                // instead: the caller retries, then surfaces the stall. A cancel
+                // that bumped the generation quietens the result itself.
+                throw new Error('运行状态已变化，工具结果未能提交')
+            }
             // The resume POST re-opens the event stream (replay from lastSeq +
             // live tail); abort the previous stream first so only one consumer
             // applies events.

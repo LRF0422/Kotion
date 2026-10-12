@@ -374,9 +374,44 @@ function applySubRunEvent(state: EditorAgentState, subRunId: string, event: Agen
                     : [...next.toolCalls, completed],
             }
         }
+        // The child's own run ended. A tool call still marked running will never
+        // receive its `tool.completed` (the backend does not synthesize one for
+        // calls it stopped waiting on), so stop its spinner instead of showing
+        // "running" forever.
+        case 'run.completed':
+        case 'run.failed':
+        case 'run.cancelled':
+            return {
+                ...next,
+                toolCalls: finishRunningCalls(
+                    next.toolCalls,
+                    subRunId,
+                    event.type === 'run.cancelled' ? '子 agent 已取消' : '子 agent 运行结束，未返回该工具结果'
+                ),
+            }
         default:
             return next
     }
+}
+
+/**
+ * Mark still-running tool calls as failed. `subRunId === null` selects the
+ * parent's own calls, a sub-run id selects exactly that child's, and
+ * `undefined` selects every call (a terminal run).
+ */
+function finishRunningCalls(
+    calls: ToolCallRecord[],
+    subRunId: string | null | undefined,
+    error: string,
+): ToolCallRecord[] {
+    let changed = false
+    const updated = calls.map(call => {
+        if (call.status !== 'running') return call
+        if (subRunId !== undefined && (call.subRunId ?? null) !== subRunId) return call
+        changed = true
+        return { ...call, status: 'error' as ToolCallRecord['status'], error: call.error ?? error }
+    })
+    return changed ? updated : calls
 }
 
 function appendToCurrentStep(
@@ -562,6 +597,12 @@ function applyEvent(state: EditorAgentState, event: AgentEvent): EditorAgentStat
                 subRuns: next.subRuns.map(sub =>
                     sub.subRunId === event.subRunId ? { ...sub, status: 'failed', error: event.error } : sub
                 ),
+                // The child is done and will never report its outstanding call.
+                toolCalls: finishRunningCalls(
+                    next.toolCalls,
+                    event.subRunId,
+                    event.error ?? '子 agent 失败，未返回该工具结果'
+                ),
             }
         case 'plan.proposed':
             return {
@@ -595,6 +636,12 @@ function applyEvent(state: EditorAgentState, event: AgentEvent): EditorAgentStat
                 phase: 'failed',
                 answerStepId: resolveAnswerStepId(next),
                 error: event.error ?? event.code ?? 'unknown error',
+                // The run failed with calls still outstanding: mark every one of
+                // them (parent and children) so nothing spins forever.
+                toolCalls: finishRunningCalls(next.toolCalls, undefined, event.error ?? '运行失败，未返回该工具结果'),
+                subRuns: next.subRuns.map(sub =>
+                    sub.status === 'running' ? { ...sub, status: 'failed', error: event.error } : sub
+                ),
             }
         case 'run.cancelled':
             return {
@@ -603,6 +650,7 @@ function applyEvent(state: EditorAgentState, event: AgentEvent): EditorAgentStat
                 answerStepId: resolveAnswerStepId(next),
                 // Cancelling the parent cascades to children server-side; stop
                 // their spinners immediately instead of showing "running" forever.
+                toolCalls: finishRunningCalls(next.toolCalls, undefined, '已取消，未返回该工具结果'),
                 subRuns: next.subRuns.map(sub =>
                     sub.status === 'running' ? { ...sub, status: 'cancelled' } : sub
                 ),
