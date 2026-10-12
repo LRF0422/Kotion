@@ -773,6 +773,84 @@ const routeChecks = async (): Promise<void> => {
   }
 };
 
+/* ------------------------------------------------------------------ *
+ * 8. Shell contributions of a dev build are visible immediately
+ *
+ * The reported failure: hot reload worked, but the plugin's **sidebar menu**
+ * never appeared. Menus, settings panels, tours and locales are all projections of
+ * the registry, and the shell read them from a memo (or refreshed them on the
+ * global `PLUGIN_CHANGED`) — which a dev install never emits. The projections
+ * themselves must therefore reflect a commit at once, and be re-read on the
+ * manager's version (which is what the reactive hooks do).
+ * ------------------------------------------------------------------ */
+const projectionChecks = async (): Promise<void> => {
+  const originalLoad = pluginScriptLoader.load;
+  const shellPlugin = (label: string): KPlugin<any> => new KPlugin({
+    name: "Shell Plugin",
+    status: "ACTIVE",
+    menus: [{ name: label, key: `/shell-${label}`, icon: null, id: `/shell-${label}` }],
+    settings: { key: "shell", label: `Settings ${label}`, component: () => null },
+    tours: [{ id: "shell-tour", name: `Tour ${label}`, steps: [] }],
+    locales: { en: { translation: { shell: label } } },
+  } as any);
+
+  let served = registration(shellPlugin("v1"));
+  pluginScriptLoader.load = async () => served;
+  const manager = new PluginManager({ resolveUrl: (path) => path, hostApiVersion: "2.0.0" }, []);
+  const installBuild = (version: string) => manager.installBundle({
+    code: "export default {}",
+    pluginKey: "shell-plugin",
+    name: "Shell Plugin",
+    version,
+    sourceLabel: "/tmp/shell-plugin",
+  });
+
+  try {
+    assert((await installBuild("dev.1")).ok === true, "the shell plugin must install");
+    assert(
+      manager.resolveMenus().some((menu) => menu.id === "/shell-v1"),
+      `a dev build's menu must be resolvable at once: ${JSON.stringify(manager.resolveMenus().map((m) => m.id))}`,
+    );
+    assert(
+      manager.resolvePluginSettings()[0]?.label === "Settings v1",
+      `its settings panel too: ${JSON.stringify(manager.resolvePluginSettings().map((s) => s.label))}`,
+    );
+    assert(
+      manager.resolveTours().some((tour) => tour.name === "Tour v1"),
+      `and its tours: ${JSON.stringify(manager.resolveTours().map((t) => t.name))}`,
+    );
+    assert(
+      (manager.resolveLocales() as any).en?.translation?.shell === "v1",
+      `and its translations: ${JSON.stringify(manager.resolveLocales())}`,
+    );
+
+    /* -- every projection follows the next build (nothing is left cached) -- */
+    served = registration(shellPlugin("v2"));
+    const versionBefore = manager.version;
+    assert((await installBuild("dev.2")).ok === true, "the second build must reload");
+    assert(manager.version !== versionBefore, "a commit must bump the registry version (the hooks' dependency)");
+    assert(
+      manager.resolveMenus().some((menu) => menu.id === "/shell-v2")
+        && !manager.resolveMenus().some((menu) => menu.id === "/shell-v1"),
+      `the menu must follow the new build: ${JSON.stringify(manager.resolveMenus().map((m) => m.id))}`,
+    );
+    assert(
+      manager.resolvePluginSettings()[0]?.label === "Settings v2",
+      "the settings panel must follow it too",
+    );
+    assert(
+      manager.resolveTours().some((tour) => tour.name === "Tour v2"),
+      "the tours must follow it too",
+    );
+    assert(
+      (manager.resolveLocales() as any).en?.translation?.shell === "v2",
+      "the translations must follow it too",
+    );
+  } finally {
+    pluginScriptLoader.load = originalLoad;
+  }
+};
+
 const run = async (): Promise<void> => {
   registryChecks();
   hookOwnershipChecks();
@@ -781,6 +859,7 @@ const run = async (): Promise<void> => {
   await managerChecks();
   await registrationChecks();
   await routeChecks();
+  await projectionChecks();
   logger.info(`plugin hot-swap checks passed (${checks} assertions)`);
 };
 

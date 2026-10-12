@@ -27,7 +27,7 @@ import {
     START_TOUR,
     WELCOME_TOUR_ID,
 } from "@kn/common";
-import { useUploadFile, useTranslation } from "@kn/common";
+import { useUploadFile, useTranslation, usePluginSettings } from "@kn/common";
 import { MyAccount } from "./components/MyAccount";
 import { MySetting } from "./components/MySetting";
 import { MyProfile } from "./components/MyProfile";
@@ -95,9 +95,17 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
         }, 250);
     };
 
-    const pluginSettings: PluginSettingsWithMeta[] = useMemo(() => {
-        return (pluginManager?.resolvePluginSettings() as PluginSettingsWithMeta[]) || [];
-    }, [pluginManager?.plugins]);
+    // A projection of the registry, so it is read through the registry
+    // subscription: a dev build installed by the plugin studio never emits
+    // `PLUGIN_CHANGED`, and this dialog used to keep the panel list it had
+    // rendered last (`pluginManager?.plugins` was not even a real dependency —
+    // the array identity only changes when the manager commits, which does not
+    // re-render this component on its own).
+    const resolvedPluginSettings = usePluginSettings();
+    const pluginSettings: PluginSettingsWithMeta[] = useMemo(
+        () => (resolvedPluginSettings as PluginSettingsWithMeta[]) || [],
+        [resolvedPluginSettings],
+    );
 
     // 导航分组（已清理死链接、去重账号入口；通知/语言并入「偏好设置」）。
     const navGroups: NavGroup[] = useMemo(() => {

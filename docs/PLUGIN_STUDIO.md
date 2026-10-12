@@ -343,6 +343,30 @@ await runPluginProject({ root, externals: ['svelte'] })
 | 编辑器扩展 | 组件位现在**也被包装**；但编辑器本身会随插件变更重配置，所以仍以重挂为主 |
 | 路由（`routes[]`） | 组件身份**也保住了**（包装装在 element 的 `type` 上），而且路由**按注册表实时解析**，新增路由不需要重建路由器：见「路由：注册与热更」 |
 
+## 外壳贡献点也是订阅来的
+
+热更本身没问题、但**侧边栏菜单不出现**——同一类 bug 的最后一处：外壳（菜单、设置面板、新手引导、
+翻译资源）原来是从 `pluginManager.plugins` 读一次、或在全局 `PLUGIN_CHANGED` 上重读一次。
+而开发台热更**故意不发**这个事件（发了就会重建路由器、每次保存都重挂窗口），所以开发版插件的
+外壳贡献点永远不出现——尽管它的面板早就随热更刷新了。
+
+现在这四个都改成**读注册表的响应式投影**（`use-plugin-contributions.ts`）：
+
+| 贡献点 | 钩子 | 原来的读法 |
+| --- | --- | --- |
+| `menus[]` | `usePluginMenus()` | `pluginManager.resolveMenus()` + `PLUGIN_CHANGED`（`SiderMenu`） |
+| `settings` | `usePluginSettings()` | memo 依赖 `pluginManager?.plugins`（设置对话框） |
+| `tours[]` | `usePluginTours()` | `resolveTours()` + `PLUGIN_INIT_SUCCESS`（TourHost） |
+| `locales` | `usePluginLocales()` | 在路由 effect 里（App，同样只被 `PLUGIN_CHANGED` 触发） |
+
+两条实现细节值得记下来：
+
+- **插件的翻译在渲染期注册，不在 effect 里**。实测 i18next 的 `addResourceBundle` **不触发任何事件**，
+  所以晚一步注册的文案永远不会触发重渲染（会一直躺在 store 里没人用）。注册是幂等的
+  （`overwrite: true`），渲染期重复执行无害。
+- 判定标准：**任何"读注册表的 UI"都必须通过订阅它的 hook**。`usePluginState()` 就是那个订阅；
+  直接读 `pluginManager.*` 或依赖全局事件，都会漏掉开发版热更。
+
 ## 路由：注册与热更
 
 路由是这个体系里唯一**不在 React 渲染树里按 render 解析**的贡献点——它要进路由器。
@@ -493,7 +517,7 @@ pnpm test:plugin-dev:electron
 
 | 检查 | 数量 | 覆盖 |
 | --- | --- | --- |
-| `plugin-hot-swap.check.ts` | 98 | **稳定身份**（重新解析拿到同一个函数、同一实现不计数、换实现只 +1、按 pluginKey 归档、release 后重新挂载、非组件贡献原样透传）、**内联调用**（host 直接调用返回实现的值，而不是一个 element）、**hooks 归属**（带 `useState` 的实现经稳定包装能正常渲染；class 组件走 React 实例化）、**钩子形状判决**（只重挂一次、普通错误只报不重挂）、**已挂载面板重解析**（换贡献→用新的、消失→留快照、无变化→数组不变）、**manager 原子性**（身份跨 reload 不变 + 渲染出新实现、只留一个实例、服务不丢、求值抛错 / 从未注册自己 / API 不匹配一律回滚、改 displayName 换名不留双份、卸载释放槽位）、**一个插件不会变成两个注册项**（同名或同 pluginKey 只留一个、菜单只贡献一次、按记录的 label 也能卸载、重复安装不叠加、老记录用名字派生键时开发版是"替换"而不是被当成重复拒绝）、**路由**（插件一活跃即可解析、element 的 type 是稳定身份且两条同组件的路由共享它、热更后同一身份渲染出新页面、重复路径只留一条）、**拒绝时说明原因**（loader 抛错原文 / 没注册自己 / API 版本双方 / 名字已被占用，逐条断言措辞）、**同 pluginKey 的已安装版本被遮蔽**（名字不同也认得出、只留一个、身份不变） |
+| `plugin-hot-swap.check.ts` | 109 | **稳定身份**（重新解析拿到同一个函数、同一实现不计数、换实现只 +1、按 pluginKey 归档、release 后重新挂载、非组件贡献原样透传）、**内联调用**（host 直接调用返回实现的值，而不是一个 element）、**hooks 归属**（带 `useState` 的实现经稳定包装能正常渲染；class 组件走 React 实例化）、**钩子形状判决**（只重挂一次、普通错误只报不重挂）、**已挂载面板重解析**（换贡献→用新的、消失→留快照、无变化→数组不变）、**manager 原子性**（身份跨 reload 不变 + 渲染出新实现、只留一个实例、服务不丢、求值抛错 / 从未注册自己 / API 不匹配一律回滚、改 displayName 换名不留双份、卸载释放槽位）、**一个插件不会变成两个注册项**（同名或同 pluginKey 只留一个、菜单只贡献一次、按记录的 label 也能卸载、重复安装不叠加、老记录用名字派生键时开发版是"替换"而不是被当成重复拒绝）、**路由**（插件一活跃即可解析、element 的 type 是稳定身份且两条同组件的路由共享它、热更后同一身份渲染出新页面、重复路径只留一条）、**外壳贡献点即时可见**（菜单/设置面板/引导/翻译在开发版装好后即可解析，且下一次构建全部跟着换新）、**拒绝时说明原因**（loader 抛错原文 / 没注册自己 / API 版本双方 / 名字已被占用，逐条断言措辞）、**同 pluginKey 的已安装版本被遮蔽**（名字不同也认得出、只留一个、身份不变） |
 | `plugin-dev-host.check.ts` | 26 | **宿主侧 dev 绑定**：watch 立刻装当前构建、后续构建**无需任何页面**自动安装、同一构建的两次到达（`dev.build` 返回值 + 广播事件）只装一次、失败重建不安装、被拒绝的构建记录原因并可在下一次恢复、unwatch 后不再安装、会话重启后 build 号从 1 重来仍会安装、显式 build 转发 writeToDisk/externals 且只装一次、渲染层重载会重新绑定仍在监听的会话、没有桌面 dev 能力时是惰性的 |
 
 后端（`backend/knowledgecloud`）：`mvn -o -pl knowledge-service/knowledge-wiki -am -Dtest=PluginApplicationTest test` —— 20 项，覆盖「升版带新图标记在版本上 / 不带则继承 / 审批通过后提升到插件」。

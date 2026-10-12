@@ -2,9 +2,9 @@ import React, { useCallback, useContext, useEffect, useRef, useState } from "rea
 import {
     AppContext,
     event,
-    PLUGIN_INIT_SUCCESS,
     START_TOUR,
     useNavigator,
+    usePluginTours,
     useTourRegistry,
     type TourConfig,
     type TourStepConfig,
@@ -55,18 +55,14 @@ export const TourHost: React.FC = () => {
 
     activeTourRef.current = activeTour;
 
-    // Register core + plugin tours (re-run when plugins change).
+    // Register core + plugin tours. The plugin half is a registry projection, so it
+    // is read through the subscription rather than re-read on `PLUGIN_INIT_SUCCESS`
+    // — a dev build never emits that, and its tours simply never registered.
+    // `registry.register` upserts by tour id, so re-running is idempotent.
+    const pluginTours = usePluginTours();
     useEffect(() => {
-        const registerAll = () => {
-            const pluginTours = pluginManager?.resolveTours() ?? [];
-            registry.register([...BUILTIN_TOURS, ...pluginTours]);
-        };
-        registerAll();
-        event.on(PLUGIN_INIT_SUCCESS, registerAll);
-        return () => {
-            event.off(PLUGIN_INIT_SUCCESS, registerAll);
-        };
-    }, [registry, pluginManager]);
+        registry.register([...BUILTIN_TOURS, ...pluginTours]);
+    }, [registry, pluginTours]);
 
     const startTour = useCallback((tourId: string) => {
         const tour = registry.getTour(tourId);

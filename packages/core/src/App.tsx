@@ -17,7 +17,7 @@ import { Marketplace } from "./components/Shop/Marketplace";
 
 import { resources } from "./locales/resources"
 import { merge } from "lodash";
-import { AgentPaneProvider, clearContextSensitiveClientState, normalizeTokenResponse, notifyContextChanged, setRequestToast, setSessionExpiredHandler, resetSessionExpiredGuard, setEntitlementRequiredHandler, setAgentContextWhitelist, subscribeToContextChanges, useAsyncEffect, useSafeState, useTranslation, useApi, useUploadFile, APIS, saveTokens } from "@kn/common"
+import { AgentPaneProvider, usePluginLocales, clearContextSensitiveClientState, normalizeTokenResponse, notifyContextChanged, setRequestToast, setSessionExpiredHandler, resetSessionExpiredGuard, setEntitlementRequiredHandler, setAgentContextWhitelist, subscribeToContextChanges, useAsyncEffect, useSafeState, useTranslation, useApi, useUploadFile, APIS, saveTokens } from "@kn/common"
 import { registerCoreAgentTools, registerCoreToolFactories } from "./ai/tools/register"
 import { registerOffscreenEditorBridge, setMaxOffscreenSessions } from "./ai/offscreen"
 import { registerAgentDocumentBridge } from "./ai/agentdoc"
@@ -384,6 +384,30 @@ export const App: React.FC<AppProps> = (props) => {
         }
     }, [pluginManager])
 
+    /**
+     * Plugin translations, registered as soon as the contributing plugin is active.
+     *
+     * This used to happen inside the router effect, i.e. only when a
+     * `PLUGIN_CHANGED` arrived — which a dev build never emits, so a studio
+     * plugin's strings never landed at all.
+     *
+     * Applied during render (not in an effect) on purpose: i18next's
+     * `addResourceBundle` emits **no** event (verified), so a registration that
+     * lands after the plugin's first paint would never re-render anything — the
+     * strings would sit in the store unused until some unrelated state change. The
+     * call is idempotent (`overwrite: true`), so re-running it on a re-render or in
+     * StrictMode is harmless.
+     */
+    const pluginLocales = usePluginLocales()
+    useMemo(() => {
+        const res = merge(resources, pluginLocales)
+        if (i18n.isInitialized) {
+            Object.keys(res).forEach(it => {
+                i18n.addResourceBundle(it, "translation", res[it], true, true)
+            })
+        }
+    }, [pluginLocales])
+
     // Wire up toast for the request module
     setRequestToast((msg, opts) => toast.error(msg))
 
@@ -438,14 +462,6 @@ export const App: React.FC<AppProps> = (props) => {
         console.log('Router useEffect triggered. pluginsReady:', pluginsReady, 'refreshFlag:', refreshFlag);
 
         if (pluginsReady && pluginManager) {
-            const pluginLocales = pluginManager.resolveLocales()
-            const res = merge(resources, pluginLocales)
-            if (i18n.isInitialized) {
-                Object.keys(res).forEach(it => {
-                    i18n.addResourceBundle(it, "translation", res[it], true, true)
-                })
-            }
-
             const routeConfigs = pluginManager.resolveRoutes()
             const routes = routeConfigs.map(it => reslove(it))
             console.log('Creating router with', routes.length, 'plugin routes')

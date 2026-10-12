@@ -1,6 +1,6 @@
 import { useNavigator } from "@kn/common";
 import { Blocks, LayoutDashboard, Power, Settings, UserRoundPlus, Github } from "@kn/icon";
-import React, { useContext, useEffect, useMemo, useState, useCallback, memo } from "react";
+import React, { useContext, useMemo, useCallback, memo } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider, useIsMobile, Button } from "@kn/ui";
 import { useLocation } from "@kn/common";
 import { cn } from "@kn/ui";
@@ -11,8 +11,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { Badge } from "@kn/ui";
 import { SettingDlg } from "./settings/SeetingDlg";
 import { ModeToggle } from "@kn/ui";
-import { AppContext, SiderMenuItemProps, PLUGIN_CHANGED } from "@kn/common";
-import { event } from "@kn/common";
+import { AppContext, SiderMenuItemProps, usePluginMenus } from "@kn/common";
 import { useUploadFile } from "@kn/common";
 import { LanguageToggle } from "../locales/LanguageToggle";
 import { MessageBox } from "./MessageBox";
@@ -92,7 +91,6 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
     const location = useLocation()
     const { userInfo } = useSelector((state: GlobalState) => state)
     const { pluginManager } = useContext(AppContext)
-    const [flag, setFlag] = useState(0)
     const { usePath } = useUploadFile()
 
     // Memoized handlers for better performance
@@ -118,20 +116,18 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
         // })
     }, []);
 
-    // Handle plugin change events
-    useEffect(() => {
-        const handlePluginChange = () => setFlag(f => f + 1);
-        event.on(PLUGIN_CHANGED, handlePluginChange);
-        return () => {
-            event.off(PLUGIN_CHANGED, handlePluginChange);
-        }
-    }, [])
 
+    // Memoized menus construction.
+    //
+    // The plugin entries come from the registry subscription, not from a
+    // `pluginManager.plugins` read plus the global `PLUGIN_CHANGED`: a dev build
+    // installed by the plugin studio never emits that event, so the sidebar used to
+    // keep showing the menu set it had rendered last (the dev plugin's entry only
+    // appeared after an unrelated plugin change or a window reload) — even though
+    // its dock panel had already hot-reloaded.
+    const pluginMenus = usePluginMenus()
 
-    // Memoized menus construction
     const menus: SiderMenuItemProps[] = useMemo(() => {
-        const pluginMenus = pluginManager?.resolveMenus() || [];
-
         return [
             ...pluginMenus as SiderMenuItemProps[],
             {
@@ -163,7 +159,7 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
                 onClick: () => { }
             }
         ]
-    }, [pluginManager?.plugins, flag])
+    }, [pluginMenus])
 
     // Memoized click handler
     const handleMenuClick = useCallback((item: SiderMenuItemProps) => {
