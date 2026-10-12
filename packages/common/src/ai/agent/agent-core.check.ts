@@ -10,7 +10,9 @@ import {
     decidePendingAck,
     matchesPendingToolBatch,
     pendingBatchIsEditorIndependent,
+    pendingCallIdCandidates,
 } from './tool-batch'
+import { initialState, reducer } from './editor-agent-state'
 import { EditorToolExecutor, ensureSerializableToolResult } from './tool-executor'
 import { resetDocumentWriteLocks, withDocumentWrite } from './document-write-lock'
 import { SubRunWorker } from './sub-run-worker'
@@ -653,6 +655,50 @@ function checkEditorIndependentBatchRunsWithoutGate(): void {
     )
 }
 
+function checkPendingCandidatesComeFromTheTapeToo(): void {
+    // A cut stream can drop the run.suspended frame: the tape then shows the calls
+    // as running while pendingToolIds stays empty. Keying the batch on
+    // pendingToolIds alone left those calls spinning until the server's tool
+    // timeout, so the candidate set must cover both sources.
+    const calls = [
+        { callId: 'c1', status: 'running' },
+        { callId: 'c2', status: 'success' },
+        { callId: 'c3', status: 'running', subRunId: 'child-a' },
+    ]
+    assert.deepEqual(
+        pendingCallIdCandidates(['c4'], calls).sort(),
+        ['c1', 'c4'],
+        'tape-running parent calls join the suspended batch (children and answered calls do not)'
+    )
+    assert.deepEqual(pendingCallIdCandidates([], []), [])
+}
+
+function checkAckPendingSettlesTheTape(): void {
+    // After the server stops waiting for a call, nothing will ever emit its
+    // tool.completed: the local record must stop spinning, and only the named
+    // calls may be touched.
+    const base = {
+        ...initialState,
+        phase: 'waiting-tools' as const,
+        runId: 'run-1',
+        pendingToolIds: ['c1', 'c2'],
+        toolCalls: [
+            { callId: 'c1', tool: 'readFile', args: {}, status: 'running' as const },
+            { callId: 'c2', tool: 'readFile', args: {}, status: 'running' as const },
+        ],
+    }
+    const next = reducer(base, { type: 'ack-pending', callIds: ['c1'] })
+    assert.deepEqual(next.pendingToolIds, ['c2'])
+    assert.equal(next.phase, 'waiting-tools', 'other calls are still outstanding')
+    assert.equal(next.toolCalls[0].status, 'error', 'the acked call stops running')
+    assert.match(next.toolCalls[0].error ?? '', /未回执/)
+    assert.equal(next.toolCalls[1].status, 'running', 'an unacked call keeps its state')
+
+    const done = reducer({ ...next, pendingToolIds: ['c2'] }, { type: 'ack-pending', callIds: ['c2'] })
+    assert.deepEqual(done.pendingToolIds, [])
+    assert.equal(done.phase, 'streaming', 'with nothing outstanding the phase leaves waiting-tools')
+}
+
 async function waitFor(predicate: () => boolean, timeoutMs: number): Promise<void> {
     const deadline = Date.now() + timeoutMs
     while (Date.now() < deadline) {
@@ -667,6 +713,8 @@ async function main(): Promise<void> {
     checkToolBatchSnapshot()
     checkPendingAckDecision()
     checkEditorIndependentBatchRunsWithoutGate()
+    checkPendingCandidatesComeFromTheTapeToo()
+    checkAckPendingSettlesTheTape()
     checkSerializableResults()
     checkStreamSequenceRules()
     await checkCrlfSseFrames()

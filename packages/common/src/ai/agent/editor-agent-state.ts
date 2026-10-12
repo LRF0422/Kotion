@@ -185,15 +185,28 @@ export function reducer(state: EditorAgentState, action: Action): EditorAgentSta
         }
         case 'ack-pending': {
             // The server is no longer waiting for these calls (verified against
-            // its run view): stop treating them as outstanding. The tape keeps its
-            // own record until the durable tool.completed event arrives.
+            // its run view): stop treating them as outstanding, and stop their
+            // spinners too — no durable tool.completed is coming for a call the
+            // server already applied or abandoned.
             const pendingToolIds = state.pendingToolIds.filter(id => !action.callIds.includes(id))
+            const acked = new Set(action.callIds)
+            let settled = false
+            const ackedCalls = state.toolCalls.map(call => {
+                if (call.status !== 'running' || !acked.has(call.callId)) return call
+                settled = true
+                return {
+                    ...call,
+                    status: 'error' as ToolCallRecord['status'],
+                    error: call.error ?? '结果未回执（服务端已不再等待该调用）',
+                }
+            })
             return {
                 ...state,
                 pendingToolIds,
                 phase: state.phase === 'waiting-tools' && pendingToolIds.length === 0
                     ? 'streaming'
                     : state.phase,
+                toolCalls: settled ? ackedCalls : state.toolCalls,
             }
         }
         case 'transport-error':

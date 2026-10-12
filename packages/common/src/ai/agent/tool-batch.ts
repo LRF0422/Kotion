@@ -68,3 +68,21 @@ export function decidePendingAck(
     if (!waiting || pendingCallIds.every(callId => !onServer.has(callId))) return 'ack'
     return 'resubmit'
 }
+
+/**
+ * The frontend calls a run still owes the server: the batch named by
+ * `run.suspended` plus every parent call the tape still shows as running. The
+ * second source matters because a lost/cut suspend frame leaves the UI showing
+ * the calls as running with no pending id to execute — the batch then sits until
+ * the server's tool timeout unless something re-derives it from the tape.
+ */
+export function pendingCallIdCandidates(
+    pendingToolIds: string[],
+    toolCalls: Array<{ callId: string; status: string; subRunId?: string }>,
+): string[] {
+    const ids = new Set(pendingToolIds)
+    for (const call of toolCalls) {
+        if (!call.subRunId && call.status === 'running') ids.add(call.callId)
+    }
+    return [...ids]
+}
