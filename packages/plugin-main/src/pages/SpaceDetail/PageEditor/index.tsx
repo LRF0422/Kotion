@@ -8,7 +8,7 @@ import {
     AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@kn/ui";
 import {
-    CollaborationEditor, exportToPDF, usePageSave, useHostPresence,
+    CollaborationEditor, exportToPDF, usePageSave, useHostPresence, readPageIdentity,
     HOST_AWARENESS_FIELD, HOST_AWARENESS_HOST, TiptapCollabProvider, chooseSeed, toRev,
 } from "@kn/editor";
 import type { BlockStoreRead } from "@kn/editor";
@@ -650,6 +650,11 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         // the server's; only a whole-document reconcile is safe from here.
         reconcileOnly: syncTimedOut && !syncStatus,
         documents: documentOps,
+        // Title/icon/cover/tags live on the document's `title` node. Describing
+        // them on every write is what lets a store that has no server-side
+        // derivation (the local SQLite medium) keep the page row in step with
+        // the body the user just saved.
+        pageIdentity: () => readPageIdentity(editor.current),
         onSaved: notifySaved,
     })
     const { saving, dirty, error: saveError, progress: saveProgress, behindServer, session, saveNow } = pageSave
@@ -838,7 +843,13 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
             }
 
             try {
-                await documentOps.createPageCheckpoint(pageId, clientId)
+                // The medium decides what to do with the snapshot: the cloud
+                // already holds the document, the local store needs it to make
+                // the checkpoint self-contained (and to work offline).
+                await documentOps.createPageCheckpoint(pageId, clientId, undefined, {
+                    doc: editor.current?.state.doc.toJSON(),
+                    metadata: readPageIdentity(editor.current),
+                })
                 toast.success(t('editor.version.checkpointSuccess', 'Checkpoint created'))
             } catch (err) {
                 console.error('Failed to create page checkpoint:', err)

@@ -21,6 +21,8 @@ import type {
     LocalBlockQuery,
     LocalBlockRecord,
     LocalDocumentRecord,
+    LocalHistoryDraft,
+    LocalHistoryRecord,
     LocalMutationCount,
     LocalOutboxDraft,
     LocalOutboxEntity,
@@ -33,6 +35,7 @@ import type {
     LocalSpaceRecord,
     LocalStoreErrorCode,
     LocalStoreInfo,
+    Revision,
     PageId,
     SpaceId,
     SpacePageLocalStore,
@@ -57,6 +60,11 @@ const SPACEPAGE_CAPABILITIES: DesktopCapability[] = [
     'spacepage.remapPage',
     'spacepage.getDocument',
     'spacepage.upsertDocument',
+    'spacepage.appendHistory',
+    'spacepage.listHistory',
+    'spacepage.getHistoryDocument',
+    'spacepage.markHistorySynced',
+    'spacepage.deleteHistory',
     'spacepage.getBlock',
     'spacepage.listBlocks',
     'spacepage.countBlocks',
@@ -154,6 +162,35 @@ export function createSpacePageBridge(
         },
         async upsertDocument(record: LocalDocumentRecord): Promise<void> {
             return unwrap(await invoke('spacepage.upsertDocument', { record }), 'spacepage.upsertDocument')
+        },
+
+        async appendHistory(input: LocalHistoryDraft): Promise<LocalHistoryRecord> {
+            return unwrap(await invoke('spacepage.appendHistory', input as never), 'spacepage.appendHistory')
+        },
+        async listHistory(pageId: PageId, limit?: number): Promise<LocalHistoryRecord[]> {
+            return unwrap(
+                await invoke('spacepage.listHistory', limit === undefined ? { pageId } : { pageId, limit }),
+                'spacepage.listHistory',
+            )
+        },
+        async getHistoryDocument(pageId: PageId, rev: Revision): Promise<LocalHistoryRecord | null> {
+            return unwrap(
+                await invoke('spacepage.getHistoryDocument', { pageId, rev: String(rev) }),
+                'spacepage.getHistoryDocument',
+            )
+        },
+        async markHistorySynced(pageId: PageId, rev: Revision, remoteRev: Revision | null): Promise<boolean> {
+            return unwrap(
+                await invoke('spacepage.markHistorySynced', {
+                    pageId,
+                    rev: String(rev),
+                    remoteRev: remoteRev === null ? null : String(remoteRev),
+                }),
+                'spacepage.markHistorySynced',
+            )
+        },
+        async deleteHistory(pageId: PageId): Promise<number> {
+            return unwrap(await invoke('spacepage.deleteHistory', { pageId }), 'spacepage.deleteHistory')
         },
 
         async getBlock(blockId: BlockId): Promise<LocalBlockRecord | null> {

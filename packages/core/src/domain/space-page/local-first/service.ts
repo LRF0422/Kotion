@@ -50,7 +50,10 @@ import {
     type LocalSpaceRecord,
     type LocalStoreInfo,
     type MovePageRequest,
+    type LocalHistoryRecord,
+    type PageHistoryItem,
     type PageMetadata,
+    type PageMetadataPatch,
     type PageRecord,
     type PageSummary,
     type PageTreeNode,
@@ -428,6 +431,36 @@ export const createLocalFirstSpacePageService = (options: LocalFirstServiceOptio
             if (!noteFailure(operation, error)) throw error;
             return undefined;
         }
+    };
+
+    /**
+     * Fold the page identity the writer just sent into the local row.
+     *
+     * Title, icon, cover and tags live on the editor's `title` node, i.e. inside
+     * the document. The cloud medium gets them for free because the server
+     * derives them from the saved document; the local medium has no server to do
+     * that, so without this the sidebar, search and offline reads would keep
+     * showing the old title until (and if) a sync round-trip happened.
+     */
+    const applyPageMetadata = async (pageId: string, patch?: PageMetadataPatch): Promise<void> => {
+        if (!patch) return;
+        const keys = ["title", "icon", "cover", "tags"] as const;
+        if (!keys.some((key) => patch[key] !== undefined)) return;
+        const cached = await local.getPage(pageId);
+        const next = {
+            ...(cached ?? { id: pageId, title: "" }),
+            ...(patch.title === undefined ? {} : { title: patch.title }),
+            ...(patch.icon === undefined ? {} : { icon: patch.icon }),
+            ...(patch.cover === undefined ? {} : { cover: patch.cover ?? undefined }),
+            ...(patch.tags === undefined ? {} : { tags: patch.tags }),
+            ...localEdit(now()),
+        } as LocalPageRecord;
+        await local.upsertPages([next]);
+        changes.emit("page.updated", {
+            page: stripMeta<PageMetadata>(next as unknown as Record<string, unknown>),
+            spaceId: next.spaceId,
+        });
+        if (next.spaceId) changes.emit("page.tree.changed", { spaceId: String(next.spaceId), pageId });
     };
 
     /**
@@ -1140,6 +1173,19 @@ export const createLocalFirstSpacePageService = (options: LocalFirstServiceOptio
         },
     };
 
+    /** Local revisions are prefixed so a reader can tell them from server ones. */
+    const LOCAL_REV_PREFIX = "local-";
+    const isLocalRev = (rev: unknown): boolean => String(rev).startsWith(LOCAL_REV_PREFIX);
+
+    const toHistoryItem = (record: LocalHistoryRecord): PageHistoryItem => ({
+        rev: record.rev,
+        kind: record.kind,
+        label: record.label,
+        createdAt: record.createdAt,
+        current: record.current,
+        metadata: { ...record.metadata, local: true, clientId: record.clientId, remoteRev: record.remoteRev },
+    });
+
     const siblingCount = async (spaceId: string, parentId: unknown): Promise<number> => {
         const query: LocalPageQuery =
             parentId === undefined || parentId === null
@@ -1272,12 +1318,122 @@ export const createLocalFirstSpacePageService = (options: LocalFirstServiceOptio
             return { ...document, pageId: resolvedPageId };
         },
 
-        // History is a cloud-side revision log; nothing local can answer it.
-        getPageHistory: (request) => remote.documents.getPageHistory(request),
-        getPageHistoryDocument: (pageId, rev) => remote.documents.getPageHistoryDocument(pageId, rev),
-        createPageCheckpoint: (pageId, checkpointClientId, label) =>
-            remote.documents.createPageCheckpoint(pageId, checkpointClientId, label),
-        restorePageRevision: (request) => remote.documents.restorePageRevision(request),
+        /**
+         * Checkpoints are served by the *local* medium: the revision log lives in
+         * this database, so Ctrl+S and the version panel work with no account and
+         * no network. When sync is on, the same checkpoint is mirrored to the
+         * cloud so other devices see it; a mirror failure never fails the local
+         * checkpoint.
+         */
+        async createPageCheckpoint(pageId, clientIdValue, label, snapshot) {
+            const id = String(pageId);
+            const cached = await local.getDocument(id);
+            const doc = snapshot?.doc !== undefined ? snapshot.doc : (cached?.doc ?? cached?.content ?? null);
+            const record = await local.appendHistory({
+                pageId: id,
+                kind: "USER",
+                label: label ?? null,
+                clientId: clientIdValue,
+                doc,
+                metadata: { ...(label == null ? {} : { label }), actor: clientIdValue },
+            });
+            if (snapshot?.metadata) await applyPageMetadata(id, snapshot.metadata);
+
+            const item = toHistoryItem(record);
+            changes.emit("page.history.changed", { pageId: id, history: item, rev: item.rev });
+
+            if (syncEnabled()) {
+                void tryRemote("documents.createPageCheckpoint", () =>
+                    remote.documents.createPageCheckpoint(pageId, clientIdValue, label, snapshot),
+                )
+                    .then(async (remoteItem) => {
+                        if (remoteItem?.rev != null) await local.markHistorySynced(id, record.rev, remoteItem.rev);
+                    })
+                    .catch(() => {
+                        // The local checkpoint stands; the mirror is best effort.
+                    });
+            }
+            return item;
+        },
+
+        async getPageHistory(request) {
+            const id = String(request.pageId);
+            const localRecords = await local.listHistory(
+                id,
+                Number((request as { pageSize?: number }).pageSize) || 100,
+            );
+            const localItems = localRecords.map(toHistoryItem);
+            if (!syncEnabled()) return paged(localItems, localItems.length, request);
+
+            const remoteResult = await tryRemote("documents.getPageHistory", () =>
+                remote.documents.getPageHistory(request),
+            );
+            if (!remoteResult) return paged(localItems, localItems.length, request);
+            // Server revisions plus the checkpoints that only exist on this
+            // device, so an offline Ctrl+S is still visible in the panel.
+            const localOnly = localItems.filter((item) => {
+                const matching = localRecords.find((record) => String(record.rev) === String(item.rev));
+                return !matching?.remoteRev;
+            });
+            return {
+                ...remoteResult,
+                records: [...remoteResult.records, ...localOnly],
+                total: remoteResult.total + localOnly.length,
+            };
+        },
+
+        async getPageHistoryDocument(pageId, rev) {
+            const id = String(pageId);
+            const version = String(rev);
+            if (!isLocalRev(version)) return remote.documents.getPageHistoryDocument(pageId, rev);
+            const record = await local.getHistoryDocument(id, version);
+            if (!record) {
+                throw new LocalFirstOfflineError(`checkpoint ${version} of page ${id} is not stored locally`);
+            }
+            return {
+                pageId: id,
+                doc: record.doc ?? null,
+                rev: record.rev,
+                kind: record.kind,
+                createdAt: record.createdAt,
+                current: record.current,
+            };
+        },
+
+        async restorePageRevision(request) {
+            const id = String(request.pageId);
+            const target = String(request.targetRev);
+            if (!isLocalRev(target)) return remote.documents.restorePageRevision(request);
+
+            const record = await local.getHistoryDocument(id, target);
+            if (!record) {
+                throw new LocalFirstOfflineError(`checkpoint ${target} of page ${id} is not stored locally`);
+            }
+            const doc = record.doc ?? null;
+            // The local document becomes the restored content; the cloud is asked
+            // to adopt it (reconcile) as soon as syncing allows.
+            await local.upsertDocument(toLocalDocumentRecord(id, { pageId: id, doc }, localEdit(now())));
+            await enqueue({
+                kind: "document.reconcile",
+                entity: "document",
+                entityId: id,
+                payload: { pageId: id, request: { baseRev: null, clientId: request.clientId, doc } },
+            });
+            await local.appendHistory({
+                pageId: id,
+                kind: "RESTORE",
+                label: `restore ${target}`,
+                clientId: request.clientId,
+                doc,
+                metadata: { restoredFromRev: target },
+            });
+            const result = {
+                metadata: { queued: true, localFirst: true, restoredFromRev: target },
+            } as ApplyPageOperationsResult;
+            changes.emit("page.history.changed", { pageId: id, rev: target });
+            changes.emit("page.document.changed", { pageId: id, scope: "content", result });
+            return result;
+        },
 
         async claimPageSession(request) {
             const state = await tryRemote("documents.claimPageSession", () =>
@@ -1327,9 +1483,11 @@ export const createLocalFirstSpacePageService = (options: LocalFirstServiceOptio
                 remote.documents.applyPageOperations(pageId, request),
             );
             if (result) {
+                await applyPageMetadata(String(pageId), request.metadata);
                 changes.emit("page.document.changed", { pageId: String(pageId), scope: "content", result });
                 return result;
             }
+            await applyPageMetadata(String(pageId), request.metadata);
             await enqueue({
                 kind: "document.apply",
                 entity: "document",
@@ -1357,6 +1515,7 @@ export const createLocalFirstSpacePageService = (options: LocalFirstServiceOptio
                         { remoteUpdatedAt: null, dirty: false },
                     ),
                 );
+                await applyPageMetadata(String(pageId), request.metadata);
                 changes.emit("page.document.changed", { pageId: String(pageId), scope: "content", result });
                 return result;
             }
@@ -1377,6 +1536,9 @@ export const createLocalFirstSpacePageService = (options: LocalFirstServiceOptio
         },
 
         flushPageOperations(pageId, request) {
+            // The page's identity rides along with the batch, so the local row is
+            // right even when this last write never leaves the device.
+            void applyPageMetadata(String(pageId), request.metadata).catch(() => undefined);
             if (isOnline()) {
                 try {
                     const result = remote.documents.flushPageOperations(pageId, request);
@@ -1454,6 +1616,7 @@ export const createLocalFirstSpacePageService = (options: LocalFirstServiceOptio
                     pages: 0,
                     blocks: 0,
                     documents: 0,
+                    checkpoints: 0,
                     pendingChanges: 0,
                 };
             }

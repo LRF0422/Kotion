@@ -21,10 +21,13 @@ import type {
     StorageService,
     StorageSetOptions,
 } from '../storage/types'
+import type { Revision } from '../domain/space-page/contracts'
 import type {
     LocalBlockQuery,
     LocalBlockRecord,
     LocalDocumentRecord,
+    LocalHistoryDraft,
+    LocalHistoryRecord,
     LocalMutationCount,
     LocalOutboxDraft,
     LocalOutboxEntity,
@@ -121,6 +124,11 @@ export type DesktopCapability =
     | 'spacepage.remapPage'
     | 'spacepage.getDocument'
     | 'spacepage.upsertDocument'
+    | 'spacepage.appendHistory'
+    | 'spacepage.listHistory'
+    | 'spacepage.getHistoryDocument'
+    | 'spacepage.markHistorySynced'
+    | 'spacepage.deleteHistory'
     | 'spacepage.getBlock'
     | 'spacepage.listBlocks'
     | 'spacepage.countBlocks'
@@ -869,6 +877,26 @@ export interface DesktopCapabilityContract {
     'spacepage.upsertDocument': {
         params: { record: LocalDocumentRecord }
         result: DesktopSpacePageEnvelope<void>
+    }
+    'spacepage.appendHistory': {
+        params: LocalHistoryDraft
+        result: DesktopSpacePageEnvelope<LocalHistoryRecord>
+    }
+    'spacepage.listHistory': {
+        params: { pageId: string; limit?: number }
+        result: DesktopSpacePageEnvelope<LocalHistoryRecord[]>
+    }
+    'spacepage.getHistoryDocument': {
+        params: { pageId: string; rev: Revision }
+        result: DesktopSpacePageEnvelope<LocalHistoryRecord | null>
+    }
+    'spacepage.markHistorySynced': {
+        params: { pageId: string; rev: Revision; remoteRev: Revision | null }
+        result: DesktopSpacePageEnvelope<boolean>
+    }
+    'spacepage.deleteHistory': {
+        params: { pageId: string }
+        result: DesktopSpacePageEnvelope<number>
     }
     'spacepage.getBlock': {
         params: { blockId: string }

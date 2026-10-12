@@ -273,6 +273,33 @@ function main(): void {
     checkEqual('it is pending again', store.countOutbox('pending'), 2);
     checkEqual('ackOutbox clears the rest', store.ackOutbox(store.listOutbox().map((entry) => entry.id)), 2);
 
+    console.log('\nLocal history (the local medium for checkpoints)');
+    store.upsertDocument({ pageId: 'h1', doc: { type: 'doc', body: 'v1' }, rev: 3 });
+    const first = store.appendHistory({ pageId: 'h1', kind: 'USER', label: 'first', clientId: 'c1' });
+    checkEqual('appendHistory assigns local rev 1', first.rev, '1');
+    checkEqual('and marks it current', first.current, true);
+    const second = store.appendHistory({ pageId: 'h1', kind: 'USER', doc: { type: 'doc', body: 'v2' }, clientId: 'c1' });
+    checkEqual('the next checkpoint gets rev 2', second.rev, '2');
+    const listed = store.listHistory('h1');
+    checkEqual('history is newest first', listed.map((row) => row.rev), ['2', '1']);
+    checkEqual('only the newest is current', listed.map((row) => row.current), [true, false]);
+    checkEqual('the snapshot round-trips', store.getHistoryDocument('h1', '2')?.doc, { type: 'doc', body: 'v2' });
+    checkEqual('the label is kept', store.getHistoryDocument('h1', '1')?.label, 'first');
+    checkEqual('an unknown rev reads as null', store.getHistoryDocument('h1', '99'), null);
+    checkEqual('checkpoints start local-only', store.getHistoryDocument('h1', '1')?.remoteRev, null);
+    check('markHistorySynced records the cloud rev', store.markHistorySynced('h1', '1', '77') === true);
+    checkEqual('and the row now points upstream', store.getHistoryDocument('h1', '1')?.remoteRev, '77');
+    checkEqual('other pages have their own rev space', store.appendHistory({ pageId: 'h2', clientId: 'c1' }).rev, '1');
+    checkEqual('info counts checkpoints', store.info().checkpoints >= 3, true);
+    checkEqual('deleteHistory drops one page', store.deleteHistory('h1'), 2);
+    checkEqual('and leaves the other', store.listHistory('h2').length, 1);
+    checkEqual('deleting a local page drops its history', (() => {
+        store.upsertPages([page('h2', { dirty: true })]);
+        store.enqueue([{ kind: 'page.create', entity: 'page', entityId: 'h2', payload: { id: 'h2' } }]);
+        store.deletePages(['h2']);
+        return store.listHistory('h2').length;
+    })(), 0);
+
     console.log('\nSync state and maintenance');
     store.setState('sync.cursor', { token: 'abc' });
     checkEqual('sync state round-trips', store.getState('sync.cursor'), { token: 'abc' });
@@ -285,6 +312,7 @@ function main(): void {
     checkEqual('clear empties the outbox', store.countOutbox(), 0);
     checkEqual('clear empties the spaces', store.countSpaces({ includeDeleted: true }), 0);
     checkEqual('clear empties the sync state', store.getState('sync.cursor'), null);
+    checkEqual('clear empties the checkpoints', store.info().checkpoints, 0);
     checkEqual('ids start over after clear', store.enqueue([{ kind: 'page.title', entity: 'page', entityId: 'p1', payload: {} }]), [1]);
 
     console.log('\nExact-match payload rewriting');

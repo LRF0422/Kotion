@@ -171,6 +171,36 @@ export const MIGRATIONS: Migration[] = [
             `);
         },
     },
+    {
+        version: 4,
+        name: 'page-history',
+        up: (db) => {
+            // Checkpoints/history for the *local* medium.
+            //
+            // The cloud keeps the revision log inside the document store, so a
+            // device that only writes locally had no way to answer Ctrl+S or the
+            // version panel. Each row is a self-contained snapshot of the page
+            // document at `rev`, with `remote_rev` recording the cloud revision
+            // once the same checkpoint also exists there (null = local-only).
+            // `rev` is per page and monotonic; history is pruned by the store.
+            db.exec(`
+                CREATE TABLE IF NOT EXISTS page_history (
+                    page_id    TEXT    NOT NULL,
+                    rev        TEXT    NOT NULL,
+                    kind       TEXT    NOT NULL DEFAULT 'USER',
+                    label      TEXT,
+                    client_id  TEXT,
+                    doc        TEXT,
+                    data       TEXT    NOT NULL,
+                    remote_rev TEXT,
+                    current    INTEGER NOT NULL DEFAULT 0,
+                    created_at INTEGER NOT NULL,
+                    PRIMARY KEY (page_id, rev)
+                ) WITHOUT ROWID;
+                CREATE INDEX IF NOT EXISTS page_history_recent ON page_history (page_id, created_at DESC);
+            `);
+        },
+    },
 ];
 
 /** Version this build expects after migrations have run. */

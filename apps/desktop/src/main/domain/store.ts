@@ -33,6 +33,7 @@ import {
     documentFromRow,
     encodeJson,
     escapeLike,
+    historyFromRow,
     outboxFromRow,
     pageFromRow,
     recordEpoch,
@@ -41,6 +42,8 @@ import {
     type BlockRow,
     type DocumentRecord,
     type DocumentRow,
+    type HistoryRecord,
+    type HistoryRow,
     type JsonRecord,
     type OutboxEntry,
     type OutboxRow,
@@ -66,6 +69,8 @@ export interface DomainStoreInfo {
     pages: number;
     blocks: number;
     documents: number;
+    /** Locally stored checkpoints (the local medium's revision log). */
+    checkpoints: number;
     pendingChanges: number;
 }
 
@@ -110,6 +115,7 @@ export class SqliteDomainStore {
             pages: count('pages'),
             blocks: count('blocks'),
             documents: count('page_documents'),
+            checkpoints: count('page_history'),
             pendingChanges: count('outbox'),
         };
     }
@@ -360,6 +366,7 @@ export class SqliteDomainStore {
                     hard.run(id);
                     dropDoc.run(id);
                     dropOutbox.run(id);
+                    this.db.prepare('DELETE FROM page_history WHERE page_id = ?').run(id);
                 } else {
                     soft.run(this.now(), id);
                 }
@@ -546,6 +553,102 @@ export class SqliteDomainStore {
             }
             return affected;
         });
+    }
+
+    // -- history (local medium for checkpoints) -----------------------------
+
+    /**
+     * Append a checkpoint of the page document and return it.
+     *
+     * Revisions are per page and monotonic (`1`, `2`, …) because this database
+     * is the only writer for them; `remoteRev` stays null until the same
+     * checkpoint is mirrored to the cloud, which is what lets the version panel
+     * tell local-only checkpoints from server ones.
+     */
+    appendHistory(input: JsonRecord): HistoryRecord {
+        const pageId = assertId(input.pageId, 'pageId');
+        const kind = typeof input.kind === 'string' && input.kind ? input.kind : 'USER';
+        const label = asText(input.label);
+        const clientId = asText(input.clientId);
+        const now = this.now();
+
+        return this.transaction(() => {
+            const next = this.db
+                .prepare('SELECT COALESCE(MAX(CAST(rev AS INTEGER)), 0) + 1 AS rev FROM page_history WHERE page_id = ?')
+                .get(pageId) as { rev: number };
+            const rev = String(next.rev);
+            const doc = input.doc === undefined ? null : encodeJson(input.doc);
+            const data = encodeJson({
+                ...(input.metadata && typeof input.metadata === 'object' ? (input.metadata as JsonRecord) : {}),
+                kind,
+                ...(label === null ? {} : { label }),
+            });
+            this.db.prepare('UPDATE page_history SET current = 0 WHERE page_id = ?').run(pageId);
+            this.db
+                .prepare(`
+                    INSERT INTO page_history (page_id, rev, kind, label, client_id, doc, data, remote_rev, current, created_at)
+                    VALUES (@page_id, @rev, @kind, @label, @client_id, @doc, @data, @remote_rev, 1, @created_at)
+                `)
+                .run({
+                    page_id: pageId,
+                    rev,
+                    kind,
+                    label,
+                    client_id: clientId,
+                    doc,
+                    data,
+                    remote_rev: asText(input.remoteRev),
+                    created_at: now,
+                });
+            return historyFromRow({
+                page_id: pageId,
+                rev,
+                kind,
+                label,
+                client_id: clientId,
+                doc,
+                data,
+                remote_rev: null,
+                current: 1,
+                created_at: now,
+            });
+        });
+    }
+
+    listHistory(pageId: string, limit?: unknown): HistoryRecord[] {
+        const id = assertId(pageId, 'pageId');
+        const rows = this.db
+            .prepare('SELECT * FROM page_history WHERE page_id = ? ORDER BY CAST(rev AS INTEGER) DESC LIMIT ?')
+            .all(id, clampLimit(limit, 50, 500)) as HistoryRow[];
+        return rows.map(historyFromRow);
+    }
+
+    getHistoryDocument(pageId: string, rev: unknown): HistoryRecord | null {
+        const id = assertId(pageId, 'pageId');
+        const version = asText(rev);
+        if (version === null) throw new DomainError('LOCAL_STORE_INVALID', 'rev must be a string or number');
+        const row = this.db
+            .prepare('SELECT * FROM page_history WHERE page_id = ? AND rev = ?')
+            .get(id, version) as HistoryRow | undefined;
+        return row ? historyFromRow(row) : null;
+    }
+
+    /** Mark a checkpoint as also present upstream (set after a successful push). */
+    markHistorySynced(pageId: string, rev: unknown, remoteRev: unknown): boolean {
+        const id = assertId(pageId, 'pageId');
+        const version = asText(rev);
+        const remote = asText(remoteRev);
+        if (version === null) throw new DomainError('LOCAL_STORE_INVALID', 'rev must be a string or number');
+        const result = this.db
+            .prepare('UPDATE page_history SET remote_rev = ? WHERE page_id = ? AND rev = ?')
+            .run(remote, id, version);
+        return Number(result.changes) > 0;
+    }
+
+    /** Drop the snapshots of one page (cache eviction / page removal). */
+    deleteHistory(pageId: string): number {
+        const result = this.db.prepare('DELETE FROM page_history WHERE page_id = ?').run(assertId(pageId, 'pageId'));
+        return Number(result.changes);
     }
 
     // -- outbox -------------------------------------------------------------
@@ -743,7 +846,15 @@ export class SqliteDomainStore {
 
     clear(): void {
         this.transaction(() => {
-            for (const table of ['spaces', 'pages', 'blocks', 'page_documents', 'outbox', 'sync_state']) {
+            for (const table of [
+                'spaces',
+                'pages',
+                'blocks',
+                'page_documents',
+                'page_history',
+                'outbox',
+                'sync_state',
+            ]) {
                 this.db.prepare(`DELETE FROM ${table}`).run();
             }
             this.db.prepare("DELETE FROM sqlite_sequence WHERE name = 'outbox'").run();

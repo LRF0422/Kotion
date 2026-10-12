@@ -430,17 +430,56 @@ export interface OperationVerdict {
     metadata?: UnknownRecord;
 }
 
+/**
+ * The page's *identity* as it stands in the document being written.
+ *
+ * Title, icon, cover and tags live on the editor's `title` node, i.e. inside the
+ * document, so they travel with the document write instead of through a second
+ * request. That is the kernel/medium split in miniature:
+ *
+ * - the **kernel** (the writer) describes the page, because only it can read the
+ *   document;
+ * - a **medium** decides what to do with it. The cloud derives these fields from
+ *   the document server-side and can ignore the hint; the local SQLite medium
+ *   has no server to do that for it, so it writes them into the page row itself
+ *   — which is what keeps the sidebar, search and offline reads in step with the
+ *   body the user just saved.
+ */
+export interface PageMetadataPatch {
+    title?: string;
+    icon?: unknown;
+    cover?: string | string[] | null;
+    tags?: string[];
+}
+
 export interface ApplyPageOperationsRequest {
     baseRev: number | null;
     idempotencyKey: string;
     clientId: ClientId;
     ops: BlockOperation[];
+    /** Identity of the page as of this write; see {@link PageMetadataPatch}. */
+    metadata?: PageMetadataPatch;
+}
+
+/**
+ * What the writer knows at the moment it asks for a checkpoint.
+ *
+ * Passing it makes the checkpoint self-contained on any medium: the local
+ * SQLite medium stores the snapshot as-is (there is no server to reconstruct it
+ * from), while the cloud medium already holds the document and ignores it. Only
+ * checkpoints carry this, so the per-save payload stays small.
+ */
+export interface PageCheckpointSnapshot {
+    doc?: PageDocumentContent;
+    metadata?: PageMetadataPatch;
 }
 
 export interface ReconcilePageDocumentRequest {
     baseRev: number | null;
     clientId: ClientId;
     doc: PageDocumentContent;
+    /** Identity of the page as of this write; see {@link PageMetadataPatch}. */
+    metadata?: PageMetadataPatch;
 }
 
 export interface ApplyPageOperationsResult {

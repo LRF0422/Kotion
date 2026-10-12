@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Editor, JSONContent } from '@tiptap/core'
-import type { ApplyOpsRequest, ApplyOpsResult, PageDocResult, ReconcileRequest } from '@kn/common'
+import type {
+  ApplyOpsRequest,
+  ApplyOpsResult,
+  PageDocResult,
+  PageMetadataPatch,
+  ReconcileRequest,
+} from '@kn/common'
 import type { OpBatch, OpTrackerStorage, ReconcileSnapshot } from '../extensions/op-tracker'
 import { OP_TRACKER_ABSORB } from '../extensions/op-tracker'
 import { decideExitFlush } from './exit-flush'
@@ -49,6 +55,18 @@ export interface UseOpSaveOptions {
    * writing permanently, because nothing can then clear the watermark.
    */
   onFetchDoc?: () => Promise<PageDocResult>
+  /**
+   * Describe the page as it stands right now — the title text plus the `title`
+   * node's icon/cover/tags.
+   *
+   * These fields live *inside* the document, so a write is the only moment they
+   * can be handed to a store. The cloud medium gets them for free (the server
+   * derives them from the document); a local medium has no server to do that and
+   * writes them into its own page row. Keeping the description at this boundary
+   * is what makes "saving a page also saves its title and icon" true on either
+   * medium.
+   */
+  pageIdentity?: () => PageMetadataPatch | undefined
   /**
    * Send every write as a reconcile, never as an op batch.
    *
@@ -110,6 +128,30 @@ function getTracker(editor: Editor | null): OpTrackerStorage | null {
   const storage = (editor.storage as any)?.opTracker as OpTrackerStorage | undefined
   if (!storage || !storage.initialized) return null
   return storage
+}
+
+/**
+ * Read the page identity out of the document: the title text plus the `title`
+ * node's icon / cover / tags.
+ *
+ * These fields live *inside* the document, so a write is the only moment they
+ * can be handed to a store. The cloud medium gets them for free (the server
+ * derives them from the document); a local medium has no server to do that and
+ * writes them into its own page row. Keeping the description here — rather than
+ * inside one medium — is what makes "saving a page also saves its title and
+ * icon" true on either of them.
+ */
+export function readPageIdentity(editor: Editor | null): PageMetadataPatch | undefined {
+  if (!editor || editor.isDestroyed) return undefined
+  const node = editor.state.doc.firstChild
+  if (!node || node.type.name !== 'title') return undefined
+  const patch: PageMetadataPatch = {}
+  const title = node.textContent.trim()
+  if (title) patch.title = title
+  if (node.attrs.icon !== undefined) patch.icon = node.attrs.icon
+  if (node.attrs.cover !== undefined) patch.cover = node.attrs.cover
+  if (node.attrs.tags !== undefined) patch.tags = node.attrs.tags
+  return Object.keys(patch).length ? patch : undefined
 }
 
 let keyCounter = 0
@@ -185,7 +227,7 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
     editor, enabled, clientId, debounceMs = 3000,
     onApplyOps, onReconcile, onFlush,
     batchThreshold = 500, batchSize = 400, serverRev = null, onFetchDoc,
-    reconcileOnly = false,
+    reconcileOnly = false, pageIdentity,
   } = options
 
   const [saving, setSaving] = useState(false)
@@ -219,6 +261,24 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
   // block: the one failure this architecture exists to prevent. Cleared by the
   // next real change, which is new work and owed again.
   const flushedRef = useRef(false)
+
+  const pageIdentityRef = useRef(pageIdentity)
+  pageIdentityRef.current = pageIdentity
+
+  /**
+   * The page's identity, as the medium should store it alongside this write.
+   * Read lazily at request time so a rename or an icon change made between two
+   * saves travels with the write that follows it.
+   */
+  const metadataField = useCallback((): { metadata?: PageMetadataPatch } => {
+    try {
+      const patch = pageIdentityRef.current?.()
+      return patch ? { metadata: patch } : {}
+    } catch {
+      // Describing the page must never break a save.
+      return {}
+    }
+  }, [])
 
   const onApplyOpsRef = useRef(onApplyOps)
   onApplyOpsRef.current = onApplyOps
@@ -398,7 +458,12 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
         pending = {
           kind: 'reconcile',
           snapshot,
-          request: { baseRev: revRef.current, clientId, doc: snapshot.doc },
+          request: {
+            baseRev: revRef.current,
+            clientId,
+            doc: snapshot.doc,
+            ...metadataField(),
+          },
         }
       } else {
         const batch = tracker.getBatch()
@@ -422,6 +487,7 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
           batch,
           requests: groups.map(ops => ({
             baseRev: revRef.current,
+            ...metadataField(),
             idempotencyKey: newKey(clientId),
             clientId,
             ops,
@@ -536,7 +602,7 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
         settleManualSaveWaiters()
       }
     }
-  }, [editor, enabled, clientId, batchThreshold, batchSize, noteRev, settleManualSaveWaiters])
+  }, [editor, enabled, clientId, batchThreshold, batchSize, metadataField, noteRev, settleManualSaveWaiters])
   doSaveRef.current = doSave
 
   useEffect(() => () => {
@@ -653,7 +719,10 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
       // request usually survives long enough on a same-origin connection.
       const snapshot = tracker.getReconcile()
       return onReconcileRef.current({
-        baseRev: revRef.current, clientId, doc: snapshot.doc,
+        baseRev: revRef.current,
+        clientId,
+        doc: snapshot.doc,
+        ...metadataField(),
       }).catch(() => {})
     }
 
@@ -682,6 +751,7 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
       if (batch) {
         inFlight = send({
           baseRev: revRef.current,
+          ...metadataField(),
           idempotencyKey: newKey(clientId),
           clientId,
           ops: batch.ops,
@@ -695,7 +765,7 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
 
     if (inFlight) flushedRef.current = true
     return inFlight
-  }, [editor, enabled, clientId])
+  }, [editor, enabled, clientId, metadataField])
 
   // Best-effort flush when the page or the component goes away: without it,
   // anything typed inside the debounce window dies with the tab.

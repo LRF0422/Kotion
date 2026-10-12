@@ -2,6 +2,7 @@ import { useCallback, useRef } from 'react'
 import type { Editor } from '@tiptap/core'
 import type {
     ApplyOpsRequest,
+    PageMetadataPatch,
     ApplyOpsResult,
     PageDocResult,
     PageDocumentOperations,
@@ -52,6 +53,12 @@ export interface UsePageSaveOptions {
      */
     reconcileOnly: boolean
     documents: PageSaveDocumentOperations
+    /**
+     * Describe the page (title text + `title` node icon/cover/tags) so every
+     * write carries it. Media differ in what they need: the cloud derives these
+     * from the document, a local store has to be told.
+     */
+    pageIdentity?: () => PageMetadataPatch | undefined
     /** Called after every acknowledged write; see {@link PageSavedInfo}. */
     onSaved?: (info: PageSavedInfo) => void
 }
@@ -76,7 +83,7 @@ export interface UsePageSaveReturn {
  * should go through this rather than owning its own copy.
  */
 export function usePageSave(options: UsePageSaveOptions): UsePageSaveReturn {
-    const { editor, pageId, enabled, clientId, canHost = true, presence, reconcileOnly, documents, onSaved } = options
+    const { editor, pageId, enabled, clientId, canHost = true, presence, reconcileOnly, documents, pageIdentity, onSaved } = options
 
     // Read at call time rather than captured, so the caller can hand in a fresh
     // service capability (or a stable one) without this hook re-subscribing.
@@ -234,6 +241,7 @@ export function usePageSave(options: UsePageSaveOptions): UsePageSaveReturn {
         serverRev: session.serverRev,
         onFetchDoc: handleFetchDoc,
         reconcileOnly,
+        pageIdentity,
     })
     flushNowRef.current = save.flushNow
 

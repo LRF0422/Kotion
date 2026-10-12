@@ -87,6 +87,11 @@ export const SPACEPAGE_CAPABILITIES = [
     'spacepage.remapPage',
     'spacepage.getDocument',
     'spacepage.upsertDocument',
+    'spacepage.appendHistory',
+    'spacepage.listHistory',
+    'spacepage.getHistoryDocument',
+    'spacepage.markHistorySynced',
+    'spacepage.deleteHistory',
     'spacepage.getBlock',
     'spacepage.listBlocks',
     'spacepage.countBlocks',
@@ -156,6 +161,26 @@ export function setupDomainHandlers(
     );
     handle('spacepage.upsertDocument', (params) =>
         run(domain, 'spacepage.upsertDocument', (store) => store.upsertDocument(params.record)),
+    );
+
+    handle('spacepage.appendHistory', (params) =>
+        run(domain, 'spacepage.appendHistory', (store) => store.appendHistory(params)),
+    );
+    handle('spacepage.listHistory', (params) =>
+        run(domain, 'spacepage.listHistory', (store) => store.listHistory(asString(params.pageId), params.limit)),
+    );
+    handle('spacepage.getHistoryDocument', (params) =>
+        run(domain, 'spacepage.getHistoryDocument', (store) =>
+            store.getHistoryDocument(asString(params.pageId), params.rev),
+        ),
+    );
+    handle('spacepage.markHistorySynced', (params) =>
+        run(domain, 'spacepage.markHistorySynced', (store) =>
+            store.markHistorySynced(asString(params.pageId), params.rev, params.remoteRev),
+        ),
+    );
+    handle('spacepage.deleteHistory', (params) =>
+        run(domain, 'spacepage.deleteHistory', (store) => store.deleteHistory(asString(params.pageId))),
     );
 
     handle('spacepage.getBlock', (params) =>

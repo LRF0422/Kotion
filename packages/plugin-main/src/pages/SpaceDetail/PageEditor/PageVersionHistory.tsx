@@ -151,6 +151,16 @@ export const PageVersionHistory: React.FC<PageVersionHistoryProps> = ({
                         ) : (
                             history.map((item) => {
                                 const actor = formatActor(item.actor)
+                                // Checkpoints taken while the local medium owned
+                                // the page: they live only on this device until
+                                // sync mirrors them, so they are labelled as such
+                                // instead of pretending to be server revisions.
+                                const isLocal = Boolean((item.metadata as { local?: boolean } | undefined)?.local)
+                                const revLabel = isLocal
+                                    ? t('editor.version.localRev', 'Local r{{rev}}', {
+                                          rev: String(item.rev).replace(/^local-/, ''),
+                                      })
+                                    : `r${item.rev}`
                                 return (
                                     <div
                                         key={String(item.rev)}
@@ -158,13 +168,18 @@ export const PageVersionHistory: React.FC<PageVersionHistoryProps> = ({
                                     >
                                         <div className="flex flex-col gap-0.5 min-w-0">
                                             <div className="flex items-center gap-2">
-                                                <span className="text-sm font-medium">r{item.rev}</span>
+                                                <span className="text-sm font-medium">{revLabel}</span>
                                                 <Badge variant="outline" className="text-[10px] px-1.5 py-0">
                                                     {kindLabel(item.kind, t)}
                                                 </Badge>
                                                 {item.current && (
                                                     <Badge variant="default" className="text-[10px] px-1.5 py-0">
                                                         {t('editor.version.current', 'Current')}
+                                                    </Badge>
+                                                )}
+                                                {isLocal && (
+                                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                                                        {t('editor.version.localOnly', 'On this device')}
                                                     </Badge>
                                                 )}
                                             </div>

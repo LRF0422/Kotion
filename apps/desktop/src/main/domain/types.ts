@@ -303,6 +303,48 @@ export const documentFromRow = (row: DocumentRow): DocumentRecord => ({
     deleted: false,
 });
 
+export interface HistoryRow {
+    page_id: string;
+    rev: string;
+    kind: string;
+    label: string | null;
+    client_id: string | null;
+    doc: string | null;
+    data: string;
+    remote_rev: string | null;
+    current: number;
+    created_at: number;
+}
+
+export interface HistoryRecord {
+    pageId: string;
+    rev: string;
+    kind: string;
+    label: string | null;
+    clientId: string | null;
+    /** Snapshot payload; absent for a checkpoint taken before any document read. */
+    doc?: unknown;
+    current: boolean;
+    /** Cloud revision once the same checkpoint also exists upstream. */
+    remoteRev: string | null;
+    createdAt: number;
+    /** History payload (label/actor/kind) for the version panel. */
+    metadata: JsonRecord;
+}
+
+export const historyFromRow = (row: HistoryRow): HistoryRecord => ({
+    pageId: row.page_id,
+    rev: row.rev,
+    kind: row.kind,
+    label: row.label,
+    clientId: row.client_id,
+    ...(row.doc === null ? {} : { doc: decodeJson(row.doc, `page_history(${row.page_id}@${row.rev}).doc`) }),
+    current: bool(row.current),
+    remoteRev: row.remote_rev,
+    createdAt: row.created_at,
+    metadata: decodeJson<JsonRecord>(row.data, `page_history(${row.page_id}@${row.rev}).data`),
+});
+
 export const outboxFromRow = (row: OutboxRow): OutboxEntry => ({
     id: Number(row.id),
     kind: row.kind,

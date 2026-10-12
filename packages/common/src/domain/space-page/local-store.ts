@@ -30,13 +30,14 @@
 import type {
     BlockSummary,
     PageDocument,
+    PageHistoryKind,
     PageMetadata,
     PageStatus,
     Revision,
     Space,
     SpaceType,
 } from "./contracts";
-import type { BlockId, PageId, SpaceId } from "./ids";
+import type { BlockId, ClientId, PageId, SpaceId } from "./ids";
 
 /** Which backend answered; `unavailable` means every call will reject. */
 export type LocalStoreEngine = "sqlite" | "memory" | "unavailable";
@@ -69,6 +70,8 @@ export interface LocalStoreInfo {
     pages: number;
     blocks: number;
     documents: number;
+    /** Locally stored checkpoints (the local medium's revision log). */
+    checkpoints: number;
     /** Entries still waiting to be pushed to the cloud. */
     pendingChanges: number;
 }
@@ -110,6 +113,36 @@ export type LocalPageRecord = PageMetadata & LocalRecordMeta & {
 };
 
 export type LocalBlockRecord = BlockSummary & LocalRecordMeta;
+
+/**
+ * A checkpoint written to the local medium.
+ *
+ * `rev` is assigned by the store (per page, monotonic) because this database is
+ * the only writer; `remoteRev` records the cloud revision once the same
+ * checkpoint has been mirrored there, so a version panel can tell a
+ * local-only checkpoint from a server one.
+ */
+export interface LocalHistoryDraft {
+    pageId: PageId;
+    kind?: PageHistoryKind;
+    label?: string | null;
+    clientId?: ClientId | null;
+    doc?: unknown;
+    metadata?: Record<string, unknown>;
+}
+
+export interface LocalHistoryRecord {
+    pageId: PageId;
+    rev: Revision;
+    kind: PageHistoryKind;
+    label: string | null;
+    clientId: ClientId | null;
+    doc?: unknown;
+    current: boolean;
+    remoteRev: Revision | null;
+    createdAt: number;
+    metadata: Record<string, unknown>;
+}
 
 export interface LocalDocumentRecord extends LocalRecordMeta {
     pageId: PageId;
@@ -230,6 +263,19 @@ export interface SpacePageLocalStore {
     deletePages(pageIds: PageId[]): Promise<number>;
     /** Re-key a page created offline (id, parent links, documents, outbox). */
     remapPage(from: PageId, to: PageId): Promise<LocalMutationCount>;
+
+    /**
+     * Append a checkpoint of the page document (the local medium's revision
+     * log) and return it with the assigned local revision.
+     */
+    appendHistory(input: LocalHistoryDraft): Promise<LocalHistoryRecord>;
+    /** Newest-first snapshots of one page. */
+    listHistory(pageId: PageId, limit?: number): Promise<LocalHistoryRecord[]>;
+    getHistoryDocument(pageId: PageId, rev: Revision): Promise<LocalHistoryRecord | null>;
+    /** Record the cloud revision once the same checkpoint also exists upstream. */
+    markHistorySynced(pageId: PageId, rev: Revision, remoteRev: Revision | null): Promise<boolean>;
+    /** Drop one page's snapshots (page removal / cache eviction). */
+    deleteHistory(pageId: PageId): Promise<number>;
 
     getDocument(pageId: PageId): Promise<LocalDocumentRecord | null>;
     upsertDocument(record: LocalDocumentRecord): Promise<void>;

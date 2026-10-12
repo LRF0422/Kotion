@@ -15,6 +15,7 @@ import type {
     MovePageRequest,
     PageCollaborator,
     PageComment,
+    PageCheckpointSnapshot,
     PageDocument,
     PageDocumentSnapshot,
     PageHistoryItem,
@@ -177,7 +178,21 @@ export interface RelationOperations {
 export interface PageHistoryOperations {
     getPageHistory(request: QueryPageHistoryRequest): Promise<PagedResult<PageHistoryItem>>;
     getPageHistoryDocument(pageId: PageId, rev: number | string): Promise<PageDocumentSnapshot>;
-    createPageCheckpoint(pageId: PageId, clientId: string, label?: string): Promise<PageHistoryItem | void>;
+    /**
+     * Snapshot the page as a checkpoint.
+     *
+     * `snapshot` carries the document (and the page identity) as the writer sees
+     * it. The cloud medium can ignore it — its document store already holds the
+     * content — but a purely local medium has nothing else to snapshot, which is
+     * why the argument exists at the kernel boundary rather than inside one
+     * implementation.
+     */
+    createPageCheckpoint(
+        pageId: PageId,
+        clientId: string,
+        label?: string,
+        snapshot?: PageCheckpointSnapshot,
+    ): Promise<PageHistoryItem | void>;
     restorePageRevision(request: RestorePageHistoryRequest): Promise<ApplyPageOperationsResult>;
 }
 

@@ -80,6 +80,7 @@ class MemoryLocalStore {
     readonly documents = new Map<string, any>();
     readonly outbox: any[] = [];
     readonly state = new Map<string, unknown>();
+    readonly history = new Map<string, any[]>();
     /** Every upsert that was skipped because the row had a queued edit. */
     readonly preserved: string[] = [];
     private seq = 0;
@@ -291,6 +292,51 @@ class MemoryLocalStore {
             return;
         }
         this.documents.set(record.pageId, { ...record, localUpdatedAt: record.localUpdatedAt ?? this.stamp() });
+    }
+
+    appendHistory(input: any): any {
+        const existing = (this.history.get(input.pageId) ?? []).slice();
+        const next = existing.length ? Math.max(...existing.map((row: any) => Number(String(row.rev).replace(/^local-/, '')))) + 1 : 1;
+        for (const row of existing) row.current = false;
+        const record = {
+            pageId: input.pageId,
+            rev: `local-${next}`,
+            kind: input.kind ?? 'USER',
+            label: input.label ?? null,
+            clientId: input.clientId ?? null,
+            ...(input.doc === undefined ? {} : { doc: input.doc }),
+            current: true,
+            remoteRev: null,
+            createdAt: this.stamp(),
+            metadata: input.metadata ?? {},
+        };
+        existing.push(record);
+        this.history.set(input.pageId, existing);
+        return record;
+    }
+
+    listHistory(pageId: string, limit = 50): any[] {
+        return (this.history.get(pageId) ?? [])
+            .slice()
+            .sort((a: any, b: any) => Number(String(b.rev).replace(/^local-/, '')) - Number(String(a.rev).replace(/^local-/, '')))
+            .slice(0, limit);
+    }
+
+    getHistoryDocument(pageId: string, rev: string): any {
+        return (this.history.get(pageId) ?? []).find((row: any) => row.rev === rev) ?? null;
+    }
+
+    markHistorySynced(pageId: string, rev: string, remoteRev: string | null): boolean {
+        const row = (this.history.get(pageId) ?? []).find((entry: any) => entry.rev === rev);
+        if (!row) return false;
+        row.remoteRev = remoteRev;
+        return true;
+    }
+
+    deleteHistory(pageId: string): number {
+        const rows = this.history.get(pageId) ?? [];
+        this.history.delete(pageId);
+        return rows.length;
     }
 
     getBlock(id: string): any {

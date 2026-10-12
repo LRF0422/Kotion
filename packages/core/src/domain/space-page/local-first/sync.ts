@@ -249,7 +249,12 @@ export const createLocalFirstSyncEngine = (options: LocalFirstSyncOptions): Loca
                     // `dirty` means "has a queued edit". Only the last entry for
                     // the entity may clear it, or a pull would overwrite the
                     // edits that are still waiting their turn.
+                    //
+                    // A document write also refreshes the page row's identity
+                    // (title/icon), because the cloud derives those from the
+                    // document: once it is accepted, that row is in step again.
                     await local.markSynced(ENTITY_OF[entry.kind] ?? entry.entity, [id]);
+                    if (ENTITY_OF[entry.kind] === "document") await local.markSynced("page", [id]);
                 }
                 publish({ lastError: null });
             } catch (error) {
