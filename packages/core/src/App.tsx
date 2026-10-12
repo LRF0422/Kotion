@@ -40,6 +40,7 @@ import { createDesktopBridge } from "./desktop/bridge";
 import { OrganizationInvitationAccept } from "./components/settings/OrganizationInvitationAccept";
 import { createSpacePageService } from "./domain/space-page";
 import { createLocalFirstRuntime, type LocalFirstRuntime } from "./domain/space-page/local-first";
+import { LocalFirstSyncPolicyBridge } from "./components/LocalFirstSyncPolicyBridge";
 import { uploadTaskService } from "./services/upload/upload-task-service";
 import { createPluginMarketplaceService } from "./services/plugin-marketplace";
 import { createPluginDevHost } from "@kn/common";
@@ -361,6 +362,8 @@ export const App: React.FC<AppProps> = (props) => {
                 spacePageService,
                 uploadTaskService,
                 ...(desktop ? { desktop } : {}),
+                // 本地数据与云同步的状态/开关（设置面板用），桌面端才有本地库。
+                ...(localFirstRuntime ? { localFirst: localFirstRuntime } : {}),
             },
         }, plugins)
         // The plugin studio (and any future tooling plugin) hot-installs local
@@ -548,7 +551,7 @@ export const App: React.FC<AppProps> = (props) => {
                         path='/'
                         element={
                             <>
-                                <EntitlementsProvider><Layout onPluginsReady={setPluginsReady} /></EntitlementsProvider>
+                                <EntitlementsProvider><LocalFirstSyncPolicyBridge /><Layout onPluginsReady={setPluginsReady} /></EntitlementsProvider>
                                 {/* Host-owned publish UI (pluginMarketplace.openPublisher):
                                     its publish editors mount extension page footers that
                                     call useNavigator, so it must sit inside the router. */}
@@ -587,7 +590,7 @@ export const App: React.FC<AppProps> = (props) => {
             console.log('Creating minimal router (plugins not ready yet)')
             const minimalRouter = createBrowserRouter(createRoutesFromElements(
                 [
-                    <Route path='/' element={<EntitlementsProvider><Layout onPluginsReady={setPluginsReady} /></EntitlementsProvider>} errorElement={<ErrorPage />}>
+                    <Route path='/' element={<EntitlementsProvider><LocalFirstSyncPolicyBridge /><Layout onPluginsReady={setPluginsReady} /></EntitlementsProvider>} errorElement={<ErrorPage />}>
                         <Route path="*" element={<div className="flex items-center justify-center h-screen">Loading...</div>} />
                     </Route>,
                     <Route path='/login' element={<Login />} />,

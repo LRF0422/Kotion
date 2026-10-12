@@ -1,4 +1,5 @@
 import type { SpacePageService } from "../domain/space-page/operations";
+import type { LocalFirstSyncControl } from "../domain/space-page/sync-control";
 import type { DesktopBridge } from "./desktop-bridge";
 import type { PluginHostService } from "./plugin-host";
 import type { PluginDevHostService } from "./plugin-dev-host";
@@ -309,6 +310,13 @@ export interface Services {
      * only; on the web the service is absent — use useOptionalService("desktop").
      */
     desktop?: DesktopBridge;
+    /**
+     * Desktop local-first store + sync control. Registered by the host on
+     * Electron only; the local database is always the source of truth and cloud
+     * sync is opt-in (`enable()`), so a settings panel uses this to show the
+     * local state and to turn syncing on or off.
+     */
+    localFirst?: LocalFirstSyncControl;
     /**
      * Host-side plugin lifecycle surface (install from source, uninstall,
      * change notifications). Registered by the host; the plugin studio uses it

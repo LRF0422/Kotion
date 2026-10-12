@@ -98,11 +98,17 @@ pnpm clean:packages         # Clean all dist directories
 
 ### Local-first 领域数据（Space / Page / Block）
 
-桌面端把 **Space / Page / Block / 页面文档** 也落在同一个 SQLite（schema v2），
-渲染端通过 `spacePageService` 端口读写，**端口本身没有变**：
+桌面端把 **Space / Page / Block / 页面文档** 也落在同一个 SQLite（schema v2/v3），
+渲染端通过 `spacePageService` 端口读写，**端口本身没有变**。
+**本地库是唯一权威，云端同步是可选能力（默认关闭）**：
 
-- 读本地优先，未命中才回云端并回写；写先落本地（`dirty`）+ outbox，后台
-  `SyncEngine` 推给云端，断网照常改名/移动/收藏/新建页面；
+- 本地模式（默认）：读只查本地库（没有就是没有，不发请求），写落本地 + outbox，
+  `createPage/createSpace` 也用本地 id；不登录/不联网也能完整使用；
+- 云同步开启后：后台 `SyncEngine` 推送 outbox（`claimOutbox` 取件）+ 拉取云端更新，
+  断网照常改名/移动/收藏/新建页面；关闭同步不清空 outbox，再次开启时按序补推；
+- 开关与门槛：`LocalFirstSyncControl`（核心服务 `localFirst`）+
+  `LocalFirstSyncPolicyBridge`（默认「登录 + 付费方案 tier > 0」，即会员门槛；放宽改一行）；
+  UI 在**设置 → 工作空间 → 本地数据与同步**。
 - 主进程实现 `apps/desktop/src/main/domain/`（能力组 `spacepage.*`，与 `storage.*`
   共用连接与数据库文件）；渲染端装配在
   `packages/core/src/domain/space-page/local-first/`；

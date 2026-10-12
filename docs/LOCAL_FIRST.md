@@ -3,17 +3,19 @@
 ## 一句话
 
 桌面端把 **Space / Page / Block / 页面文档** 存进主进程的 SQLite（和 KV 存储同一个
-`kotion.db`）；渲染端的 `spacePageService` 先读本地、写本地并排队，再由后台同步引擎推给云端。
-断网时浏览、搜索、改名、移动、收藏、新建页面照常工作，联网后自动补上。
+`kotion.db`），**本地库就是唯一权威**：不登录、不联网也能完整使用。
+云端同步是**可选能力**（默认关闭，由方案/会员门槛决定能否开启）；开启后后台引擎把
+outbox 里的改动推上去、并拉取云端更新，关闭后一切照旧只留在本机。
+断网时浏览、搜索、改名、移动、收藏、新建页面照常工作。
 
 ```
 渲染进程 / 插件
   useSpacePageService()  →  SpacePageService（契约不变）
         │
-        ├─ 桌面且数据库可用：LocalFirstSpacePageService
-        │     ├── 读：本地命中即返回；未命中 → 云端 → 回写本地
+        ├─ 桌面且数据库可用：LocalFirstSpacePageService（本地模式，不碰网络）
+        │     ├── 读：本地命中即返回；未命中即"本地没有"（不回源）
         │     ├── 写：写本地（dirty）+ 写入 outbox → 立刻返回
-        │     └── 后台 SyncEngine：push outbox → pull 空间/页面树/最近页面
+        │     └── 云同步开启后：SyncEngine 才 push outbox → pull 空间/页面树/最近页面
         │              │
         │              └── capability 通道 spacepage.*  →  信封 { ok, value } | { ok, code, message }
         │                        └── 主进程 SqliteDomainStore（与 storage.* 共用一个连接）
@@ -89,6 +91,28 @@ getState / setState / clear`，错误码
 | 主进程实现 | `apps/desktop/src/main/domain/{types,store,index}.ts`（主进程**不能** import `@kn/common`，类型是镜像声明） |
 | preload 白名单 | `apps/desktop/src/preload/index.ts` 的 `CAPABILITIES` 与 `SPACEPAGE_CAPABILITIES` 一致 |
 
+## 3.4 云同步：默认关闭的可选能力
+
+| 状态 | 读 | 写 | 网络 |
+|------|----|----|------|
+| **本地模式（默认）** | 只读本地库；没有就是 `LocalFirstOfflineError` | 写本地库 + outbox，`createPage/createSpace` 也用本地 id | 数据库相关调用**一次都不发** |
+| **云同步已开启** | 本地优先，未命中回源并回写 | 同上，随后由引擎推送 | push + pull（启动/每 30s/online/写入后防抖） |
+
+开关与门槛：
+
+- 契约在 `@kn/common`：`LocalFirstSyncControl`（`status/enable/disable/setSyncPolicy/syncNow/retryFailed/subscribe`），
+  由桌面运行时实现并注册成核心服务 `localFirst`；
+- **门槛可插拔**：`setSyncPolicy(() => boolean | undefined)`。`false` = 拒绝（附稳定原因码
+  `no-session` / `policy` / `unavailable`），`undefined` = 权益还没加载完 —— 这时运行时保留用户
+  已有的选择，而不是把同步悄悄关掉；
+- 默认装配在 `LocalFirstSyncPolicyBridge`：**登录 + 付费方案（`tier > 0`）** 才允许开启（"开会员"那条路径）。
+  想放宽成"任何登录账号都能开"，把该文件里的判断改成 `() => true` 即可；
+- 选择记录在 `sync_state` 的 `localFirst.syncEnabled`，重启后沿用；
+- UI：**设置 → 工作空间 → 本地数据与同步**（本地库信息、缓存计数、队列长度、开关、
+  立即同步、重试失败项）。
+
+关闭同步**不清空** outbox：改动会一直排队，等再次开启时按顺序补推。
+
 ## 3.5 本地库不可用时会怎样
 
 `spacepage.*` 能力存在但数据库打不开（原生模块 ABI 不匹配、文件损坏、磁盘只读）时，主进程
@@ -116,6 +140,8 @@ getState / setState / clear`，错误码
 | `documents.claimPageSeed/releasePageSeed/releasePageSession` | 离线：claim → `true`（本地文档就是权威）；release → no-op |
 | `relations.queryPageRelations/getSpaceGraph` | 云端派生数据：离线返回空结果，**不编造** |
 | `templates / members / collaboration / shares / comments / tags / activity / documents history` | 云端专属，整体委托；离线按原样报错（多用户语义没有诚实的离线答案） |
+| 任意读（本地模式） | 只查本地库，不发起任何请求；没有就是 `LocalFirstOfflineError`（"本地没有"） |
+| 任意读（同步已开启） | 本地优先，未命中回源并回写 |
 | 任意读 | 本地库不可用（`LOCAL_STORE_UNAVAILABLE`）时自动改由云端服务应答，并永久切到纯云端模式 |
 
 写入的策略分两类：
@@ -143,7 +169,8 @@ getState / setState / clear`，错误码
     toggle 类已改为不合并，其余幂等）。
 - **pull**：空间列表 → 每个已知空间的页面树 → 跨空间最近页面，全部以 `dirty: false` 落库。
 - **顺序**：先 push 后 pull，所以离线改动上传后会被云端版本回读，两边收敛。
-- **触发**：启动、每 30s、`online` 事件、以及每次本地写入后的 800ms 防抖 `requestFlush()`。
+- **触发**：仅在**同步已开启**时——启动、每 30s、`online` 事件、以及每次本地写入后的 800ms
+  防抖 `requestFlush()`（同步关闭时这些全部短路）。
 - **前置条件**：没有 access token 或 `navigator.onLine === false` 时直接跳过（同步等待登录）。
 - **会话隔离**：数据库是「每台机器一份」，不是「每个账号一份」。启动时（以及跨标签页的
   上下文变更事件）会比对 JWT 的 `sub|ctx_id` 指纹（`sync_state` 的 `localFirst.session`），
@@ -176,7 +203,8 @@ getState / setState / clear`，错误码
 pnpm --filter @kn/desktop check:domain        # 需要宿主 Node 版 better-sqlite3
 pnpm --filter @kn/desktop rebuild:native:node # 若当前是 Electron 版二进制（会打印 SKIP）
 
-# local-first 服务 + 同步引擎 + 降级/会话隔离（114 项，内存 store + 假云端，逐条断言"有没有走网络"）
+# local-first 服务 + 同步引擎 + 本地模式/开关/降级/会话隔离（146 项，内存 store + 假云端，
+# 逐条断言"有没有走网络"）
 pnpm --filter @kn/core check:local-first
 
 # 两条一起
@@ -198,6 +226,9 @@ pnpm test:local-first
 | `apps/desktop/src/main/ipc.ts` | 注册 `setupDomainHandlers(storageRuntime)` |
 | `apps/desktop/src/preload/index.ts` | 白名单加 30 个 `spacepage.*` |
 | `packages/common/src/domain/space-page/local-store.ts` | 新增本地库契约 |
+| `packages/common/src/domain/space-page/sync-control.ts` | 新增同步开关/状态契约（`Services.localFirst`） |
+| `packages/core/src/components/LocalFirstSyncPolicyBridge.tsx` | 会员门槛（tier > 0），挂在 `EntitlementsProvider` 内 |
+| `packages/core/src/components/settings/components/LocalData.tsx` | 「本地数据与同步」设置面板 |
 | `packages/common/src/core/desktop-bridge.ts` | 能力/契约声明 + `DesktopBridge.spacePage` |
 | `packages/core/src/desktop/space-page-bridge.ts` | 能力 → 契约的桥（信封还原成 `LocalStoreError`） |
 | `packages/core/src/domain/space-page/local-first/*` | 服务、同步引擎、运行时装配、检查 |

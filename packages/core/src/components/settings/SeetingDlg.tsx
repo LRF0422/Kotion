@@ -16,6 +16,7 @@ import {
     Gem,
     Sparkles,
     ChevronLeft,
+    HardDrive,
 } from "@kn/icon";
 import React, { PropsWithChildren, useContext, useMemo, Suspense, useEffect } from "react";
 import {
@@ -30,6 +31,7 @@ import {
 import { useUploadFile, useTranslation, usePluginSettings } from "@kn/common";
 import { MyAccount } from "./components/MyAccount";
 import { MySetting } from "./components/MySetting";
+import { LocalData } from "./components/LocalData";
 import { MyProfile } from "./components/MyProfile";
 import { Member } from "./components/Member";
 import { AgentManager } from "../Agents";
@@ -124,7 +126,10 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
             {
                 id: "workspace",
                 label: t("settings.nav.workspace"),
-                items: [{ id: "Member", label: t("settings.nav.members"), icon: <UserCog />, contentKey: "Member" }],
+                items: [
+                    { id: "Member", label: t("settings.nav.members"), icon: <UserCog />, contentKey: "Member" },
+                    { id: "LocalData", label: t("settings.nav.localData"), icon: <HardDrive />, contentKey: "LocalData" },
+                ],
             },
         ];
 
@@ -174,6 +179,8 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                 return { title: t("settings.agents.title"), description: t("settings.agents.desc") };
             case "MyProfile":
                 return { title: t("settings.profile.title"), description: t("settings.profile.desc") };
+            case "LocalData":
+                return { title: t("settings.localData.title"), description: t("settings.localData.desc") };
             default:
                 return { title: t("settings.title"), description: "" };
         }
@@ -200,6 +207,8 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                 return <AgentManager />;
             case "MyProfile":
                 return <MyProfile />;
+            case "LocalData":
+                return <LocalData />;
             case "MyAccount":
             default:
                 return <MyAccount />;

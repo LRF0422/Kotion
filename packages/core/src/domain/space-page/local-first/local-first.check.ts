@@ -1153,11 +1153,154 @@ async function resilienceBehaviour(): Promise<void> {
     checkEqual("so nothing of the previous one is left", sessionLocal.getPage("p9"), null);
 }
 
+
+const localOnly = (): boolean => false;
+const syncOn = (): boolean => true;
+
+/**
+ * Desktop默认是「只存本地」：不登录、不联网也能完整使用，云端同步要显式开启。
+ * 这些用例钉住"本地模式绝不碰网络"和"开启后能把积压的改动补上"。
+ */
+async function localOnlyBehaviour(): Promise<void> {
+    console.log("\nLocal-only mode never touches the network");
+    const local = new MemoryLocalStore();
+    const remote = makeRemote();
+    let syncEnabled = false;
+    const service = createLocalFirstSpacePageService({
+        local: asLocal(local),
+        remote: remote.service,
+        isOnline: online,
+        isSyncEnabled: () => syncEnabled,
+    });
+
+    remote.replies.set("spaces.querySpaces", () => ({
+        records: [{ id: "s1", name: "Cloud space" }],
+        total: 1,
+        current: 1,
+        pageSize: 20,
+    }));
+    let coldRead: any;
+    try {
+        await service.spaces.querySpaces();
+    } catch (error) {
+        coldRead = error;
+    }
+    check("a cold read fails instead of calling the cloud", coldRead instanceof LocalFirstOfflineError, coldRead);
+    checkEqual("and no request was made", remote.calls.length, 0);
+
+    const created: any = await service.pages.createPage({ spaceId: "s1", title: "Local page" });
+    check("an online create still gets a local id", String(created.id).startsWith("local-page-"), created.id);
+    checkEqual("queued for a future sync", local.listOutbox({ state: "pending" })[0]?.kind, "page.create");
+    checkEqual("with no cloud call either", remote.calls.length, 0);
+
+    const space: any = await service.spaces.createSpace({ name: "Local space" });
+    check("a locally created space gets a local id", String(space.id).startsWith("local-space-"), space.id);
+    checkEqual("and nothing was sent", remote.calls.length, 0);
+
+    const queuedOps: any = await service.documents.applyPageOperations(String(created.id), {
+        baseRev: null,
+        idempotencyKey: "k",
+        clientId: "c",
+        ops: [{ op: "insert", blockId: "b" }],
+    } as any);
+    checkEqual("document edits queue as well", queuedOps.metadata?.queued, true);
+    checkEqual("still nothing sent", remote.calls.length, 0);
+
+    local.upsertPages([pageRecord("p1", { spaceId: "s1", title: "Cached" })]);
+    local.setState("pageTree.synced.s1", 1);
+    const tree: any = await service.pages.getPageTree({ spaceId: "s1" });
+    check(
+        "local reads keep working",
+        tree.some((node: any) => node.id === "p1"),
+        tree.map((node: any) => node.id),
+    );
+
+    console.log("\nTurning cloud sync on replays the queue");
+    const toggleLocal = new MemoryLocalStore();
+    const toggleRemote = makeRemote();
+    toggleRemote.replies.set("pages.createPage", () => ({ id: "p-real", spaceId: "s1", title: "Local page" }));
+    toggleRemote.replies.set("pages.updatePageTitle", () => undefined);
+    toggleRemote.replies.set("spaces.querySpaces", () => ({ records: [], total: 0, current: 1, pageSize: 200 }));
+    toggleRemote.replies.set("pages.queryRecentPages", () => ({ records: [], total: 0, current: 1, pageSize: 100 }));
+    let policyVerdict: boolean | undefined = true;
+    const runtime = createLocalFirstRuntime({
+        local: asLocal(toggleLocal),
+        remote: toggleRemote.service,
+        isOnline: online,
+        intervalMs: 0,
+        hasSession: () => true,
+        syncPolicy: () => policyVerdict,
+    });
+
+    check("desktop starts local-only", runtime.isSyncEnabled() === false);
+    checkEqual("and says so in its status", (await runtime.status()).syncEnabled, false);
+    checkEqual("with a reason attached", (await runtime.status()).syncBlockedReason, undefined);
+
+    const serviceWhileOff = runtime.service;
+    await serviceWhileOff.pages.createPage({ spaceId: "s1", title: "Made offline" });
+    checkEqual("nothing is pushed while sync is off", toggleRemote.calls.length, 0);
+
+    policyVerdict = false;
+    const refused = await runtime.enable();
+    checkEqual("a plan that forbids syncing is refused", refused.enabled, false);
+    checkEqual("with a stable reason code", refused.reason, "policy");
+    checkEqual("and the status explains it", (await runtime.status()).syncBlockedReason, "policy");
+
+    policyVerdict = true;
+    const enabled = await runtime.enable();
+    checkEqual("a permitted plan can enable sync", enabled.enabled, true);
+    check("the runtime reports it on", runtime.isSyncEnabled() === true);
+    checkEqual("the choice is persisted", toggleLocal.getState("localFirst.syncEnabled"), true);
+
+    await runtime.syncNow();
+    check("the queued create is replayed", toggleRemote.calls.includes("pages.createPage"), toggleRemote.calls);
+    checkEqual("and re-keyed onto the cloud id", toggleLocal.getPage("p-real")?.title, "Made offline");
+    checkEqual("the queue drained", toggleLocal.countOutbox("pending"), 0);
+
+    const status = await runtime.status();
+    checkEqual("the status reports the local counts", status.pages >= 1, true);
+    check("the status carries the engine descriptor", status.engine === "memory", status.engine);
+
+    console.log("\nTurning it back off stays local");
+    await runtime.disable();
+    check("sync is off again", runtime.isSyncEnabled() === false);
+    checkEqual("and that is persisted too", toggleLocal.getState("localFirst.syncEnabled"), false);
+    const before = toggleRemote.calls.length;
+    await runtime.service.pages.createPage({ spaceId: "s1", title: "Another local page" });
+    checkEqual("writes stop reaching the cloud", toggleRemote.calls.length, before);
+
+    console.log("\nA gate that does not know yet must not switch sync off");
+    let unknownPolicy: boolean | undefined = true;
+    const guardLocal = new MemoryLocalStore();
+    const guardRuntime = createLocalFirstRuntime({
+        local: asLocal(guardLocal),
+        remote: makeRemote().service,
+        isOnline: online,
+        intervalMs: 0,
+        hasSession: () => true,
+        syncPolicy: () => unknownPolicy,
+    });
+    await guardRuntime.enable();
+    check("sync is on", guardRuntime.isSyncEnabled() === true);
+    unknownPolicy = undefined;
+    guardRuntime.setSyncPolicy(() => unknownPolicy);
+    // A start with an unknown gate keeps the user's choice.
+    guardRuntime.start();
+    await Promise.resolve();
+    check("an unknown gate keeps the user's choice", guardRuntime.isSyncEnabled() === true);
+    unknownPolicy = false;
+    guardRuntime.start();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    check("a lapsed plan eventually switches it off", guardRuntime.isSyncEnabled() === false);
+    checkEqual("and records the refusal", (await guardRuntime.status()).syncBlockedReason, "policy");
+}
+
 async function main(): Promise<void> {
     await offlineBehaviour();
     await onlineBehaviour();
     await syncBehaviour();
     await resilienceBehaviour();
+    await localOnlyBehaviour();
 
     console.log("\n" + pass + " passed, " + fail + " failed");
     if (fail > 0) process.exit(1);

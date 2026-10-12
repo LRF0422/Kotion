@@ -95,6 +95,18 @@ export interface LocalFirstServiceOptions {
     now?: () => number;
     /** Network probe; defaults to `navigator.onLine` (assumed online elsewhere). */
     isOnline?: () => boolean;
+    /**
+     * Whether cloud sync is switched on.
+     *
+     * Desktop is local-only by default: the SQLite repository is the source of
+     * truth and the app never reaches the cloud behind the user's back. When
+     * this returns `false`, every database read is answered from the local store
+     * and every write (including `createPage`) goes straight to the local
+     * database and the outbox — nothing is sent, and nothing is expected back.
+     * Collaboration features (members, invitations, comments…) are not part of
+     * this switch; they are inherently online and stay delegated.
+     */
+    isSyncEnabled?: () => boolean;
     /** Stable per-installation id; used by the document operation protocol. */
     clientId?: string;
     onDiagnostic?: (event: LocalFirstDiagnostic) => void;
@@ -368,6 +380,12 @@ export const createLocalFirstSpacePageService = (options: LocalFirstServiceOptio
             },
         });
 
+    /**
+     * Cloud sync is opt-in on desktop. `true` when the caller did not say,
+     * which keeps the web build (and tests) on the cloud-backed path.
+     */
+    const syncEnabled = (): boolean => options.isSyncEnabled?.() ?? true;
+
     const noteFailure = (operation: string, error: unknown): boolean => {
         const offline = isOfflineError(error);
         if (offline) observedOffline = true;
@@ -390,6 +408,13 @@ export const createLocalFirstSpacePageService = (options: LocalFirstServiceOptio
      * (validation, auth, conflicts) still throw.
      */
     const tryRemote = async <T>(operation: string, run: () => Promise<T>): Promise<T | undefined> => {
+        if (!syncEnabled()) {
+            // Local-only: never touch the network for database reads/writes. The
+            // queued mutations stay in the outbox and are replayed the moment the
+            // user turns syncing on.
+            diagnose({ type: "remote.failed", operation, message: "sync disabled", offline: false });
+            return undefined;
+        }
         if (!isOnline()) {
             observedOffline = true;
             diagnose({ type: "remote.failed", operation, message: "offline", offline: true });
