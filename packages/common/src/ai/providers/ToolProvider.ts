@@ -145,6 +145,12 @@ export class ToolProvider {
                 loaded: true,
                 source: 'plugin',
                 pluginName,
+                // Declared per tool by the contribution scope (see
+                // PluginManager#resolvePluginToolGroups): whether it needs a live
+                // editor. The chat's frontend-tool gate reads it.
+                ...((tool as { requiresEditor?: boolean }).requiresEditor === undefined
+                    ? {}
+                    : { requiresEditor: (tool as { requiresEditor?: boolean }).requiresEditor }),
                 ...(options?.deferred ? { deferred: true } : {}),
             }
 

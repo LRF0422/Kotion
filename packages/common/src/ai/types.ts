@@ -185,6 +185,16 @@ export interface ToolMetadata {
      * drops it has no way left to reach anything.
      */
     scope?: 'any' | 'page' | 'workspace'
+    /**
+     * Whether executing this tool requires a live editor. Explicit for plugin
+     * tools (carried down from their declared contribution scope); absent for
+     * built-ins, where it follows {@link scope} (absent/document-scoped → needs
+     * one). The chat's frontend-tool gate reads it so an editor-independent tool
+     * (file / studio / host tools) is never blocked behind an editor that is not
+     * ready — which used to freeze the whole batch until the server's tool
+     * timeout.
+     */
+    requiresEditor?: boolean
 }
 
 export interface CategoryInfo {

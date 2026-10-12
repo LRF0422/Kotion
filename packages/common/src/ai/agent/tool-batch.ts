@@ -22,6 +22,28 @@ export function matchesPendingToolBatch(
 export type PendingAckDecision = 'ack' | 'resubmit' | 'wait'
 
 /**
+ * Whether every call in a pending batch can run without a live editor.
+ *
+ * The chat's edit target is not always ready (page switch, offscreen re-acquire,
+ * a plugin page with no document), and the gate that waits for it must not hold
+ * editor-independent tools — file / studio / host tools — because that freezes
+ * the whole batch until the server's tool timeout. Unknown tools count as
+ * editor-bound: running a document tool against the wrong document is worse than
+ * waiting for one, and the batch watchdog still bounds the wait.
+ */
+export function pendingBatchIsEditorIndependent(
+    callIds: string[],
+    toolOf: (callId: string) => string | undefined,
+    needsEditor: (toolName: string) => boolean,
+): boolean {
+    if (callIds.length === 0) return false
+    return callIds.every(callId => {
+        const tool = toolOf(callId)
+        return tool !== undefined && tool !== '' && needsEditor(tool) === false
+    })
+}
+
+/**
  * Decide from the run view whether an unacknowledged batch must be re-submitted.
  *
  * A batch is delivered only when the server acknowledges it (durable

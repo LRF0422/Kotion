@@ -442,8 +442,48 @@ function checkEntryPointsStayCallableWhenAClaimedByASkill(): void {
         'the skill framing those tools must ship too')
 }
 
+/**
+ * The chat's frontend-tool gate must not have to guess whether a tool needs the
+ * editor: the declaration already says it (`scope: 'any'` = reads no editor) and
+ * it has to survive as far as the tool record + metadata, or an editor-less
+ * session's file/studio tools sit unexecuted until the server's tool timeout.
+ */
+function checkRequiresEditorFollowsDeclaredScope(): void {
+    const scoped = [legacyTool('hostFileTool')]
+    const pageBound = [legacyTool('documentOnlyTool')]
+    const pluginInstance = new KPlugin<any>({
+        name: 'Scoped',
+        status: 'active',
+        editorExtension: [],
+        tools: [
+            ...liftLegacyTools(scoped as any, { scope: 'any' }),
+            ...liftLegacyTools(pageBound as any, { scope: 'page' }),
+        ],
+    })
+    const manager = new PluginManager({} as any, [pluginInstance])
+    manager.plugins = [pluginInstance]
+    const groups = manager.resolvePluginToolGroups({ id: 'stub-editor' } as any)
+    const toolProvider = new ToolProvider({ editor: { id: 'stub-editor' } as any })
+    for (const group of groups) toolProvider.registerPluginTools(group.tools, group.pluginName)
+
+    const hostTool = [...groups.flatMap(group => Object.values(group.tools)) as any[]]
+        .find(tool => tool && tool.description?.startsWith('hostFileTool')) as any
+    assert(hostTool && hostTool.requiresEditor === false,
+        'a scope-wide tool must reach the record as editor-independent')
+    const docTool = [...groups.flatMap(group => Object.values(group.tools)) as any[]]
+        .find(tool => tool && tool.description?.startsWith('documentOnlyTool')) as any
+    assert(docTool && docTool.requiresEditor === true,
+        'a page-scoped tool must reach the record as editor-bound')
+
+    assert(toolProvider.getToolMetadata('hostFileTool')?.requiresEditor === false,
+        'the flag must reach the tool metadata the gate reads')
+    assert(toolProvider.getToolMetadata('documentOnlyTool')?.requiresEditor === true,
+        'a page-scoped plugin tool must stay editor-bound in the metadata')
+}
+
 async function main(): Promise<void> {
     checkSchemasAreWithheldButNamed()
+    checkRequiresEditorFollowsDeclaredScope()
     checkDiscoveryCanBeTurnedOff()
     checkDefaultSkillToolsStayAdvertised()
     checkEntryPointsStayCallableWhenAClaimedByASkill()

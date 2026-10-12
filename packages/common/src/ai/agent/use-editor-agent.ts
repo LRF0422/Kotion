@@ -65,6 +65,12 @@ export interface UseEditorAgentOptions {
      * agents on the same document are serialized instead of interleaving.
      */
     isReadOnlyTool?: (name: string) => boolean
+    /**
+     * Whether a tool needs a live editor. Editor-independent tools are executed
+     * even while the edit target is not ready (see the frontend-tool gate);
+     * unknown tools count as editor-bound.
+     */
+    needsEditor?: (name: string) => boolean
     skills?: AgentSkillInput[]
     /**
      * Tools past the provider's tool ceiling: callable from the first turn, but
@@ -131,6 +137,26 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
         autoExecuteTools = true, persist = true, store: providedStore, lock: providedLock,
     } = options
     const isReadOnlyTool = options.isReadOnlyTool
+    // Held in a ref: the classifier reads live tool records, so an
+    // identity-unstable host callback must not rebuild anything downstream.
+    const needsEditorRef = useRef(options.needsEditor)
+    needsEditorRef.current = options.needsEditor
+    /**
+     * Editor dependency per tool, without requiring host wiring: a host-supplied
+     * classifier wins; otherwise the live tool record decides. Plugin tools carry
+     * the flag their declaration produced (a `scope: 'any'`/workspace tool reads
+     * no editor), built-ins carry none and are treated as editor-bound — the
+     * conservative direction, since running a document tool against a
+     * half-switched target is worse than waiting for it.
+     */
+    const needsEditorTool = useCallback((toolName: string): boolean => {
+        const provided = needsEditorRef.current
+        if (provided) return provided(toolName)
+        const resolved = resolveTools()
+        if (resolved instanceof Promise) return true
+        const definition = (resolved as Record<string, { requiresEditor?: boolean } | undefined>)[toolName]
+        return definition?.requiresEditor !== false
+    }, [resolveTools])
 
     const client = useMemo(() => options.client ?? new AgentClient(), [options.client])
     // Persistence is host-registered (contract in ./persistence); the SDK never
@@ -363,6 +389,7 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
         mountedRef,
         attachReplayThroughRef,
         autoExecuteTools,
+        needsEditor: needsEditorTool,
     })
 
     const scheduleAttachRetry = useCallback((runId: string | undefined, generation: number, error: unknown) => {

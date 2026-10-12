@@ -31,6 +31,7 @@ import {
     filterContributionByScope,
     getAgentToolImplementation,
     isAgentContextAllowed,
+    normalizeAgentScopes,
     resolveAgentToolNames,
     toAgentWireName,
 } from "../ai/plugin-agent";import type {
@@ -2087,12 +2088,28 @@ export class PluginManager {
             const instantiate = (
                 wireName: string,
                 create: (ctx: AgentToolContext) => unknown,
-                def: { description: string; inputSchema: any; readOnly?: boolean; priority?: number },
+                def: {
+                    description: string
+                    inputSchema: any
+                    readOnly?: boolean
+                    priority?: number
+                    scope?: AgentScope | AgentScope[]
+                },
             ) => {
                 try {
                     const execute = create(ctx)
                     if (typeof execute !== 'function') return
                     if (record[wireName]) logger.warn(`Tool ${wireName} already exists, overwriting`)
+                    // Carry the declared scope down as `requiresEditor`: a tool that
+                    // is only valid in the page scope needs a live editor, while a
+                    // scope-wide one (`any`/`workspace`, or an undeclared scope,
+                    // which normalizes to `any`) does not. The chat's frontend-tool
+                    // execution gate reads this, so a studio/host tool can never be
+                    // blocked behind an editor that happens not to be ready.
+                    const scopes = normalizeAgentScopes(def.scope)
+                    const requiresEditor = scopes.includes('page')
+                        && !scopes.includes('any')
+                        && !scopes.includes('workspace')
                     record[wireName] = {
                         description: def.description,
                         inputSchema: def.inputSchema,
@@ -2100,6 +2117,7 @@ export class PluginManager {
                         // Ranks this tool against the provider's tool ceiling; see
                         // ToolProvider#registerPluginTools.
                         priority: def.priority,
+                        requiresEditor,
                         execute,
                     }
                 } catch (error) {

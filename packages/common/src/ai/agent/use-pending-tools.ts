@@ -5,13 +5,19 @@
  * tool-execution owner.
  */
 
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { Dispatch, MutableRefObject } from 'react'
 import type { AgentClient } from './client'
 import { AgentControlError } from './events'
 import type { EditorToolExecutor, ToolExecutionResult } from './tool-executor'
 import type { AgentRunStore } from './persistence'
-import { createPendingToolBatch, decidePendingAck, matchesPendingToolBatch, type PendingToolBatch } from './tool-batch'
+import {
+    createPendingToolBatch,
+    decidePendingAck,
+    matchesPendingToolBatch,
+    pendingBatchIsEditorIndependent,
+    type PendingToolBatch,
+} from './tool-batch'
 import { parseToolArgs, type ResumePayload } from './types'
 import { MAX_TOOL_RESUME_RETRIES, isPermanentTransportError } from './retry-policy'
 import type { Action, EditorAgentState } from './editor-agent-state'
@@ -40,6 +46,13 @@ export interface UsePendingToolExecutionOptions {
     attachReplayThroughRef: MutableRefObject<number>
     /** Execute frontend tool calls automatically (editor UX). */
     autoExecuteTools: boolean
+    /**
+     * Whether a tool needs a live editor. A batch whose tools all say no is
+     * executed even while the edit target is not ready: the gate exists to keep
+     * document tools off a half-switched target, not to freeze file/studio/host
+     * tools. Unknown tools count as editor-bound.
+     */
+    needsEditor?: (toolName: string) => boolean
 }
 
 export interface UsePendingToolExecutionApi {
@@ -57,7 +70,7 @@ export function usePendingToolExecution(
 ): UsePendingToolExecutionApi {
     const {
         client, store, executor, resumeWith, dispatch, state, stateRef,
-        generationRef, mountedRef, attachReplayThroughRef, autoExecuteTools,
+        generationRef, mountedRef, attachReplayThroughRef, autoExecuteTools, needsEditor,
     } = options
 
     const toolBatchRef = useRef<PendingToolBatch | null>(null)
@@ -252,16 +265,37 @@ export function usePendingToolExecution(
         }
     }, [state.runId, state.pendingToolIds, store])
 
+    /**
+     * True when every call in the current batch can run without a live editor
+     * (file / studio / host tools). Those are executed even while the edit target
+     * is not ready: the readiness gate protects document tools from a
+     * half-switched editor, it must not freeze an entire batch behind it — that
+     * is what left the main agent's `writePluginProjectFile` batch unexecuted
+     * until the server's ten-minute tool timeout.
+     */
+    const editorIndependentBatch = useMemo(() => {
+        if (!needsEditor || state.pendingToolIds.length === 0) return false
+        const byCallId = new Map(state.toolCalls.map(call => [call.callId, call.tool]))
+        return pendingBatchIsEditorIndependent(
+            state.pendingToolIds,
+            callId => byCallId.get(callId),
+            needsEditor,
+        )
+    }, [needsEditor, state.pendingToolIds, state.toolCalls])
+
     // Auto-execute frontend tools when the run pauses for them.
     useEffect(() => {
-        if (!autoExecuteTools
+        if ((!autoExecuteTools && !editorIndependentBatch)
             || state.phase !== 'waiting-tools'
             || state.pendingToolIds.length === 0
             || state.lastSeq < attachReplayThroughRef.current) {
             return
         }
         void executePendingTools()
-    }, [autoExecuteTools, state.phase, state.pendingToolIds, state.lastSeq, state.toolRetryToken, executePendingTools])
+    }, [
+        autoExecuteTools, editorIndependentBatch, state.phase, state.pendingToolIds,
+        state.lastSeq, state.toolRetryToken, executePendingTools,
+    ])
 
     /**
      * Watchdog for the conversation's OWN tool batch. It covers the two ways a

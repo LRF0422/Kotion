@@ -114,6 +114,14 @@ export interface CapabilityProviders {
     buildToolsForEditor: (targetEditor: any) => ToolsRecord
     /** Read-only classification of a tool (write-lease decision). */
     isReadOnlyTool: (name: string) => boolean
+    /**
+     * Whether a tool needs a live editor to run. Built-ins follow their metadata
+     * scope (absent/document-scoped → yes); plugin tools carry the flag their
+     * declaration produced (`scope: 'any'`/`workspace` → no). The chat uses it so
+     * an editor-independent batch is never blocked while the edit target is not
+     * ready; unknown tools default to "needs one".
+     */
+    needsEditor: (name: string) => boolean
     /** The editor the active catalog is bound to. */
     getEditor: () => any
 }
@@ -282,6 +290,18 @@ export function useCapabilityProviders(
         return isReadOnlyTool(toolProvider.getToolMetadata(name), toolProvider.getToolExecutor(name))
     }, [toolProvider])
 
+    /**
+     * Editor dependency, read live so a plugin installed mid-session is covered.
+     * Conservative on unknown tools: a tool we cannot classify might be
+     * editor-bound, so it is treated as such (the batch gate then waits for the
+     * target instead of running it against the wrong document).
+     */
+    const needsEditor = useCallback((name: string): boolean => {
+        const meta = toolProvider.getToolMetadata(name)
+        if (meta?.requiresEditor !== undefined) return meta.requiresEditor
+        return !(meta?.scope === 'any' || meta?.scope === 'workspace')
+    }, [toolProvider])
+
     /** The editor the active catalog is bound to. */
     const getEditor = useCallback(() => toolProvider.getEditor(), [toolProvider])
 
@@ -424,6 +444,7 @@ export function useCapabilityProviders(
         resolveTools,
         buildToolsForEditor,
         isReadOnlyTool: isReadOnlyToolName,
+        needsEditor,
         getEditor,
     }
 }

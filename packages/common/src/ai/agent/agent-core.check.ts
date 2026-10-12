@@ -5,7 +5,12 @@ import {
     AgentSequenceGapError,
     readSseDataLines,
 } from './events'
-import { createPendingToolBatch, decidePendingAck, matchesPendingToolBatch } from './tool-batch'
+import {
+    createPendingToolBatch,
+    decidePendingAck,
+    matchesPendingToolBatch,
+    pendingBatchIsEditorIndependent,
+} from './tool-batch'
 import { EditorToolExecutor, ensureSerializableToolResult } from './tool-executor'
 import { resetDocumentWriteLocks, withDocumentWrite } from './document-write-lock'
 import { SubRunWorker } from './sub-run-worker'
@@ -619,6 +624,35 @@ function checkPendingAckDecision(): void {
     assert.equal(decidePendingAck({ status: 'WAITING_TOOLS', pendingTools: [{ callId: 'c1' }] }, []), 'ack')
 }
 
+function checkEditorIndependentBatchRunsWithoutGate(): void {
+    // The chat's edit target is not always ready (page switch, plugin route with
+    // no document). A batch whose tools declare no editor dependency must still be
+    // executed — that is what froze `writePluginProjectFile` until tool_timeout.
+    const tools: Record<string, string> = { c1: 'writePluginProjectFile', c2: 'readPluginProjectFile' }
+    const toolOf = (callId: string) => tools[callId]
+    const fileTool = (name: string) => !name.endsWith('PluginProjectFile')
+    assert.equal(
+        pendingBatchIsEditorIndependent(['c1', 'c2'], toolOf, fileTool),
+        true,
+        'file/studio tools need no editor'
+    )
+    assert.equal(
+        pendingBatchIsEditorIndependent(['c1'], toolOf, () => true),
+        false,
+        'an editor-bound tool keeps the batch gated'
+    )
+    assert.equal(
+        pendingBatchIsEditorIndependent(['c1', 'unknown'], callId => callId === 'c1' ? tools.c1 : undefined, () => false),
+        false,
+        'a call with no known tool is never treated as safe'
+    )
+    assert.equal(
+        pendingBatchIsEditorIndependent([], toolOf, () => false),
+        false,
+        'an empty batch is not "independent"'
+    )
+}
+
 async function waitFor(predicate: () => boolean, timeoutMs: number): Promise<void> {
     const deadline = Date.now() + timeoutMs
     while (Date.now() < deadline) {
@@ -632,6 +666,7 @@ async function main(): Promise<void> {
     await checkExecutorSingleFlight()
     checkToolBatchSnapshot()
     checkPendingAckDecision()
+    checkEditorIndependentBatchRunsWithoutGate()
     checkSerializableResults()
     checkStreamSequenceRules()
     await checkCrlfSseFrames()
