@@ -39,6 +39,7 @@ import * as pluginApi from "@kn/plugin-api";
 import { createDesktopBridge } from "./desktop/bridge";
 import { OrganizationInvitationAccept } from "./components/settings/OrganizationInvitationAccept";
 import { createSpacePageService } from "./domain/space-page";
+import { createLocalFirstRuntime, type LocalFirstRuntime } from "./domain/space-page/local-first";
 import { uploadTaskService } from "./services/upload/upload-task-service";
 import { createPluginMarketplaceService } from "./services/plugin-marketplace";
 import { createPluginDevHost } from "@kn/common";
@@ -47,8 +48,6 @@ import { PluginPublisherHost } from "./components/Shop/PluginUploader/PluginPubl
 const { createBrowserRouter,
     createRoutesFromElements, Route, RouterProvider, Provider, EntitlementsProvider,
     AppContext, i18n, initReactI18next, LanguageDetector, event, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS, createRoot } = common;
-
-const spacePageService = createSpacePageService()
 
 const reslove = (config: common.RouteConfig) => {
     // Wrap each plugin route element with PluginErrorBoundary to isolate plugin errors
@@ -320,11 +319,38 @@ export const App: React.FC<AppProps> = (props) => {
     const { plugins = [] } = props
     const [router, setRouter] = useSafeState<any>()
     const { usePath } = useUploadFile()
+    /**
+     * Local-first runtime, desktop only.
+     *
+     * When the host exposes the `spacepage.*` capabilities (SQLite in the main
+     * process), the app registers a service that reads from the local database
+     * and queues writes for the cloud, plus the sync engine that replays them.
+     * On the web — or when the database could not be opened — the runtime is
+     * `undefined` and the cloud-only HTTP service is used unchanged.
+     */
+    const [localFirstRuntime] = useState<LocalFirstRuntime | undefined>(() => {
+        const bridge = createDesktopBridge()
+        if (!bridge?.spacePage) return undefined
+        return createLocalFirstRuntime({
+            local: bridge.spacePage,
+            remote: createSpacePageService(),
+        })
+    })
+    useEffect(() => {
+        if (!localFirstRuntime) return
+        // The engine waits for an access token on its own, so starting before
+        // login is a cheap no-op rather than an error.
+        localFirstRuntime.start()
+        return () => localFirstRuntime.stop()
+    }, [localFirstRuntime])
     const pluginManager = useMemo(() => {
         // Desktop capabilities are registered as a core service on Electron and
         // stay absent on the web, so plugins use useOptionalService("desktop").
         const desktop = createDesktopBridge()
         const storage = createAppStorage(desktop)
+        // Local-first on desktop, cloud-only elsewhere. Both expose the same
+        // `spacePageService` port, so no plugin has to check which one it got.
+        const spacePageService = localFirstRuntime?.service ?? createSpacePageService()
         const manager = new common.PluginManager({
             // Plugin artifacts are served from the public (no-auth) plugin endpoint
             // so script tags need no Authorization query param and SRI/CORS work.
@@ -383,13 +409,20 @@ export const App: React.FC<AppProps> = (props) => {
             logger.warn('storage: legacy localStorage import failed', error)
         })
         return manager
-    }, [])
+    }, [localFirstRuntime])
     const [pluginsReady, setPluginsReady] = useState(false)
     const [refreshFlag, setRefreshFlag] = useState(0)
 
-    useEffect(() => subscribeToContextChanges(() => {
-        if (window.location.pathname !== '/login') window.location.assign('/')
-    }), [])
+    useEffect(() => {
+        // A context change means a different account/session: the sync engine
+        // waits for a token on its own, so ask it to look again immediately
+        // instead of making the user wait for the next interval tick.
+        localFirstRuntime?.sync.requestFlush()
+        return subscribeToContextChanges(() => {
+            localFirstRuntime?.sync.requestFlush()
+            if (window.location.pathname !== '/login') window.location.assign('/')
+        })
+    }, [localFirstRuntime])
 
     useEffect(() => {
         const unbind = common.bindServiceRegistry(pluginManager.serviceRegistry)

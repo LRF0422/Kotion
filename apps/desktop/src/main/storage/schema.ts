@@ -48,6 +48,105 @@ export const MIGRATIONS: Migration[] = [
             `);
         },
     },
+    {
+        version: 2,
+        name: 'domain-space-page',
+        up: (db) => {
+            // Local-first domain tables. `data` holds the normalized contract
+            // record (Space / PageMetadata / BlockSummary) exactly as the
+            // renderer knows it; the extracted columns exist only so list and
+            // tree queries — the app's hot path — are index scans.
+            //
+            // `dirty` means "a local edit the cloud has not accepted yet" and
+            // is what stops a pull from overwriting a queued change.
+            // `deleted` is a tombstone, kept so a queued delete can still be
+            // replayed after a restart.
+            db.exec(`
+                CREATE TABLE IF NOT EXISTS spaces (
+                    id                TEXT    PRIMARY KEY,
+                    name              TEXT    NOT NULL DEFAULT '',
+                    type              TEXT,
+                    archived          INTEGER NOT NULL DEFAULT 0,
+                    favorite          INTEGER NOT NULL DEFAULT 0,
+                    personal          INTEGER NOT NULL DEFAULT 0,
+                    data              TEXT    NOT NULL,
+                    updated_at        INTEGER NOT NULL,
+                    remote_updated_at INTEGER,
+                    deleted           INTEGER NOT NULL DEFAULT 0,
+                    dirty             INTEGER NOT NULL DEFAULT 0
+                );
+                CREATE INDEX IF NOT EXISTS spaces_order ON spaces (deleted, archived, name);
+
+                CREATE TABLE IF NOT EXISTS pages (
+                    id                TEXT    PRIMARY KEY,
+                    space_id          TEXT,
+                    parent_id         TEXT,
+                    title             TEXT    NOT NULL DEFAULT '',
+                    page_type         TEXT,
+                    status            TEXT,
+                    favorite          INTEGER NOT NULL DEFAULT 0,
+                    pinned            INTEGER NOT NULL DEFAULT 0,
+                    rank              INTEGER NOT NULL DEFAULT 0,
+                    data              TEXT    NOT NULL,
+                    updated_at        INTEGER NOT NULL,
+                    remote_updated_at INTEGER,
+                    deleted           INTEGER NOT NULL DEFAULT 0,
+                    dirty             INTEGER NOT NULL DEFAULT 0
+                );
+                CREATE INDEX IF NOT EXISTS pages_space ON pages (space_id, deleted, parent_id, rank);
+                CREATE INDEX IF NOT EXISTS pages_recent ON pages (deleted, remote_updated_at, updated_at);
+
+                CREATE TABLE IF NOT EXISTS blocks (
+                    id                TEXT    PRIMARY KEY,
+                    page_id           TEXT,
+                    space_id          TEXT,
+                    parent_id         TEXT,
+                    type              TEXT,
+                    text              TEXT,
+                    data              TEXT    NOT NULL,
+                    updated_at        INTEGER NOT NULL,
+                    remote_updated_at INTEGER,
+                    deleted           INTEGER NOT NULL DEFAULT 0,
+                    dirty             INTEGER NOT NULL DEFAULT 0
+                );
+                CREATE INDEX IF NOT EXISTS blocks_page ON blocks (page_id, deleted);
+                CREATE INDEX IF NOT EXISTS blocks_space ON blocks (space_id, deleted);
+
+                CREATE TABLE IF NOT EXISTS page_documents (
+                    page_id           TEXT    PRIMARY KEY,
+                    doc               TEXT,
+                    rev               TEXT,
+                    data              TEXT    NOT NULL,
+                    updated_at        INTEGER NOT NULL,
+                    remote_updated_at INTEGER,
+                    dirty             INTEGER NOT NULL DEFAULT 0
+                );
+
+                CREATE TABLE IF NOT EXISTS outbox (
+                    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                    kind         TEXT    NOT NULL,
+                    entity       TEXT    NOT NULL,
+                    entity_id    TEXT    NOT NULL,
+                    coalesce_key TEXT,
+                    payload      TEXT    NOT NULL,
+                    state        TEXT    NOT NULL DEFAULT 'pending',
+                    attempts     INTEGER NOT NULL DEFAULT 0,
+                    last_error   TEXT,
+                    created_at   INTEGER NOT NULL,
+                    updated_at   INTEGER NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS outbox_state ON outbox (state, id);
+                CREATE UNIQUE INDEX IF NOT EXISTS outbox_coalesce
+                    ON outbox (coalesce_key) WHERE coalesce_key IS NOT NULL;
+
+                CREATE TABLE IF NOT EXISTS sync_state (
+                    key        TEXT    PRIMARY KEY,
+                    value      TEXT    NOT NULL,
+                    updated_at INTEGER NOT NULL
+                ) WITHOUT ROWID;
+            `);
+        },
+    },
 ];
 
 /** Version this build expects after migrations have run. */

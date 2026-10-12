@@ -1,18 +1,22 @@
 /**
  * Electron end-to-end test for the desktop storage layer.
  *
- * Answers what the compiled check cannot:
+ * Answers what the compiled checks cannot:
  *   1. does `better-sqlite3` load under Electron (its N-API prebuild is ABI
  *      stable, but that claim is worth proving on this machine)?
  *   2. does the whole chain work — real preload capability whitelist → real
- *      `storage.*` IPC handlers → real SQLite file — including the
- *      `{ok, code}` failure envelopes the renderer rethrows?
+ *      `storage.*` and `spacepage.*` IPC handlers → real SQLite file —
+ *      including the `{ok, code}` failure envelopes the renderer rethrows?
  *   3. does data survive the process?
  *
- * The storage modules are TypeScript, so they are bundled with esbuild into
- * `.tmp-check/storage-smoke/` first (the same bundler the plugin studio uses);
- * the preload is bundled too, so the capability list under test is the one in
- * source.
+ * The `spacepage.*` half is the local-first domain repository (spaces, pages,
+ * blocks, documents, outbox) sharing the same database file and connection as
+ * `storage.*`; see docs/LOCAL_FIRST.md.
+ *
+ * The storage/domain modules are TypeScript, so they are bundled with esbuild
+ * into `.tmp-check/storage-smoke/` first (the same bundler the plugin studio
+ * uses); the preload is bundled too, so the capability list under test is the
+ * one in source.
  *
  * CommonJS on purpose: Electron 33's ESM loader throws
  * "Cannot read properties of undefined (reading 'exports')" on
@@ -94,12 +98,28 @@ async function run() {
         external: ['electron'],
         logLevel: 'silent',
     })
+    await build({
+        entryPoints: [join(appRoot, 'src/main/domain/index.ts')],
+        outfile: join(workDir, 'domain.cjs'),
+        bundle: true,
+        format: 'cjs',
+        platform: 'node',
+        target: 'node20',
+        external: ['electron', 'better-sqlite3'],
+        logLevel: 'silent',
+    })
 
     const storageModule = require(join(workDir, 'storage.cjs'))
     const dbPath = join(workDir, 'storage', 'kotion.db')
     const runtime = storageModule.setupStorageHandlers({ filePath: dbPath, log: () => {} })
     check('main: sqlite runtime opened', runtime.store !== null, runtime.failure || '')
     check('main: database file created', existsSync(dbPath), dbPath)
+
+    // The local-first repository shares the connection the storage layer opened
+    // (one writer, one WAL, one close) — exactly as `ipc.ts` wires it.
+    const domainModule = require(join(workDir, 'domain.cjs'))
+    const domain = domainModule.setupDomainHandlers(runtime)
+    check('main: domain repository opened', domain.store !== null, domain.failure || '')
 
     const win = new BrowserWindow({
         show: false,
@@ -200,6 +220,89 @@ async function run() {
     }
     check('preload: unknown capabilities are rejected', gated)
 
+    console.log('\nLocal-first domain data (same bridge, same file)')
+    check(
+        'preload: spacepage capabilities are whitelisted',
+        ['spacepage.upsertPages', 'spacepage.listPages', 'spacepage.enqueue', 'spacepage.listOutbox'].every((name) =>
+            capabilities.includes(name),
+        ),
+    )
+
+    const domainInfo = await call('spacepage.info')
+    check(
+        'spacepage.info: reports the sqlite engine',
+        domainInfo && domainInfo.ok === true && domainInfo.value.engine === 'sqlite',
+        JSON.stringify(domainInfo),
+    )
+
+    const upserted = await call('spacepage.upsertPages', {
+        records: [{ id: 'p1', spaceId: 's1', title: 'Smoke page' }],
+    })
+    check(
+        'spacepage.upsertPages: stores a page',
+        upserted && upserted.ok === true && upserted.value === 1,
+        JSON.stringify(upserted),
+    )
+
+    const pageRead = await call('spacepage.getPage', { pageId: 'p1' })
+    check(
+        'spacepage.getPage: round-trips through IPC',
+        pageRead && pageRead.ok === true && pageRead.value.title === 'Smoke page',
+        JSON.stringify(pageRead),
+    )
+
+    const pageList = await call('spacepage.listPages', { spaceId: 's1' })
+    check(
+        'spacepage.listPages: filters by space',
+        pageList && pageList.ok === true && pageList.value.length === 1,
+        JSON.stringify(pageList),
+    )
+
+    const enqueued = await call('spacepage.enqueue', {
+        entries: [{ kind: 'page.title', entity: 'page', entityId: 'p1', payload: { pageId: 'p1', title: 'Queued' } }],
+    })
+    check(
+        'spacepage.enqueue: returns the queued id',
+        enqueued && enqueued.ok === true && Array.isArray(enqueued.value) && enqueued.value.length === 1,
+        JSON.stringify(enqueued),
+    )
+
+    const outbox = await call('spacepage.listOutbox', { state: 'pending' })
+    check(
+        'spacepage.listOutbox: returns the queued edit',
+        outbox && outbox.ok === true && outbox.value[0] && outbox.value[0].payload.title === 'Queued',
+        JSON.stringify(outbox),
+    )
+
+    const acked = await call('spacepage.ackOutbox', {
+        ids: outbox && outbox.ok ? outbox.value.map((entry) => entry.id) : [],
+    })
+    check(
+        'spacepage.ackOutbox: drains the queue',
+        acked && acked.ok === true && acked.value === 1,
+        JSON.stringify(acked),
+    )
+
+    const remapped = await call('spacepage.remapPage', { from: 'p1', to: 'p-cloud' })
+    check(
+        'spacepage.remapPage: re-keys the row',
+        remapped && remapped.ok === true && remapped.value.affected >= 1,
+        JSON.stringify(remapped),
+    )
+    const afterRemap = await call('spacepage.getPage', { pageId: 'p-cloud' })
+    check(
+        'spacepage.getPage: the cloud id answers',
+        afterRemap && afterRemap.ok === true && afterRemap.value.title === 'Smoke page',
+        JSON.stringify(afterRemap),
+    )
+
+    const badPageId = await call('spacepage.getPage', { pageId: '' })
+    check(
+        'spacepage: invalid input keeps its code across IPC',
+        badPageId && badPageId.ok === false && badPageId.code === 'LOCAL_STORE_INVALID',
+        JSON.stringify(badPageId),
+    )
+
     console.log('\nPersistence')
     const db = new Database(dbPath, { readonly: true })
     const journalMode = db.pragma('journal_mode', { simple: true })
@@ -211,6 +314,19 @@ async function run() {
         rows.map((row) => row.key).join(','),
     )
     check('schema version recorded', db.pragma('user_version', { simple: true }) >= 1)
+    const domainTables = db
+        .prepare(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN " +
+                "('spaces','pages','blocks','page_documents','outbox','sync_state')",
+        )
+        .all()
+    check('domain tables exist on disk', domainTables.length === 6, domainTables.map((row) => row.name).join(','))
+    const domainRows = db.prepare('SELECT id, title FROM pages').all()
+    check(
+        'domain rows are on disk',
+        domainRows.some((row) => row.id === 'p-cloud' && row.title === 'Smoke page'),
+        JSON.stringify(domainRows),
+    )
     db.close()
 
     win.destroy()

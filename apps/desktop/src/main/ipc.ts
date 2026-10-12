@@ -6,6 +6,7 @@ import * as dns from 'node:dns';
 import * as net from 'node:net';
 import { setupDevIpcHandlers } from './plugin-dev/index';
 import { setupStorageHandlers } from './storage/index';
+import { setupDomainHandlers } from './domain/index';
 import {
   clearCredentials,
   isEncryptionAvailable,
@@ -151,6 +152,14 @@ export function setupIpcHandlers() {
   // taking the window down with it.
   const storageRuntime = setupStorageHandlers();
   app.on('will-quit', () => storageRuntime.dispose());
+
+  // ==================== local-first domain data (SQLite) ====================
+  // Shares the connection opened above: one writer, one WAL, one close. These
+  // handlers back `spacepage.*` — the local repository for spaces, pages,
+  // blocks and page documents, plus the outbox of edits waiting for the cloud.
+  // The renderer reads from here first and falls back to the cloud service when
+  // the capability group is missing (web, or a degraded database).
+  setupDomainHandlers(storageRuntime);
 
   // ==================== system ====================
   handle('system.info', () => ({

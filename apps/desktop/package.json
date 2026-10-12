@@ -16,6 +16,7 @@
         "rebuild:native": "node scripts/rebuild-sqlite.cjs",
         "rebuild:native:node": "node scripts/rebuild-sqlite.cjs --node",
         "check:storage": "rm -rf .tmp-check/storage && tsc --noEmitOnError src/main/storage/sqlite-store.check.ts --rootDir src/main/storage --outDir .tmp-check/storage --module commonjs --target ES2020 --lib ES2020,DOM --types node --esModuleInterop --skipLibCheck --strict && node .tmp-check/storage/sqlite-store.check.js",
+        "check:domain": "rm -rf .tmp-check/domain && tsc --noEmitOnError src/main/domain/store.check.ts --rootDir src/main --outDir .tmp-check/domain --module commonjs --target ES2020 --lib ES2020,DOM --types node --esModuleInterop --skipLibCheck --strict && node .tmp-check/domain/domain/store.check.js",
         "test:storage:electron": "ELECTRON_RUN_AS_NODE= electron src/main/storage/electron.smoke.cjs --no-sandbox --disable-gpu --user-data-dir=.tmp-check/electron-userdata",
         "lint": "eslint . --ext .js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix"
     },

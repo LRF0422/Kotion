@@ -14,6 +14,7 @@
 
 import { app, ipcMain } from 'electron';
 import { join } from 'node:path';
+import type Database from 'better-sqlite3';
 import { SqliteKvStore, openStorageDatabase } from './sqlite-store';
 import { StorageError, type StorageErrorCode } from './types';
 
@@ -25,6 +26,11 @@ export type StorageEnvelope<T> =
 export interface StorageRuntime {
     /** The live store, or `null` when the database could not be opened. */
     readonly store: SqliteKvStore | null;
+    /**
+     * The raw connection, shared with the local-first domain repository
+     * (`../domain`). `null` whenever `store` is.
+     */
+    readonly db: Database.Database | null;
     /** Absolute path of the database file (or `':memory:'`). */
     readonly location: string;
     /** Why `store` is null; absent on success. */
@@ -51,7 +57,7 @@ export function createStorageRuntime(options: SetupStorageOptions = {}): Storage
     const log = options.log ?? ((message: string) => console.log(message));
     const location = options.filePath ?? resolveStoragePath();
 
-    let db;
+    let db: Database.Database;
     let recoveredFrom: string | undefined;
     try {
         const opened = openStorageDatabase(location, log);
@@ -63,6 +69,7 @@ export function createStorageRuntime(options: SetupStorageOptions = {}): Storage
         console.error('[storage] unavailable:', message);
         return {
             store: null,
+            db: null,
             location,
             failure: message,
             dispose: () => {},
@@ -81,6 +88,7 @@ export function createStorageRuntime(options: SetupStorageOptions = {}): Storage
 
     return {
         store,
+        db,
         location,
         dispose: () => store.close(),
     };

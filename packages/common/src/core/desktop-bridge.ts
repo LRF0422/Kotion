@@ -21,6 +21,24 @@ import type {
     StorageService,
     StorageSetOptions,
 } from '../storage/types'
+import type {
+    LocalBlockQuery,
+    LocalBlockRecord,
+    LocalDocumentRecord,
+    LocalMutationCount,
+    LocalOutboxDraft,
+    LocalOutboxEntity,
+    LocalOutboxEntry,
+    LocalOutboxQuery,
+    LocalOutboxState,
+    LocalPageQuery,
+    LocalPageRecord,
+    LocalSpaceQuery,
+    LocalSpaceRecord,
+    LocalStoreErrorCode,
+    LocalStoreInfo,
+    SpacePageLocalStore,
+} from '../domain/space-page/local-store'
 
 export type DesktopPlatform = 'darwin' | 'win32' | 'linux' | 'other'
 
@@ -83,6 +101,41 @@ export type DesktopCapability =
     | 'storage.clear'
     | 'storage.batch'
     | 'storage.namespaces'
+    // ---- local-first domain data (spaces / pages / blocks) -----------------
+    // The SQLite tables behind these are the app's read path and its write
+    // path while offline; the renderer pushes queued edits to the cloud from
+    // the outbox. Names deliberately avoid clashing with `storage.*`: that
+    // group is a generic KV map, this one is a typed domain repository.
+    | 'spacepage.info'
+    | 'spacepage.getSpace'
+    | 'spacepage.listSpaces'
+    | 'spacepage.countSpaces'
+    | 'spacepage.upsertSpaces'
+    | 'spacepage.deleteSpaces'
+    | 'spacepage.remapSpace'
+    | 'spacepage.getPage'
+    | 'spacepage.listPages'
+    | 'spacepage.countPages'
+    | 'spacepage.upsertPages'
+    | 'spacepage.deletePages'
+    | 'spacepage.remapPage'
+    | 'spacepage.getDocument'
+    | 'spacepage.upsertDocument'
+    | 'spacepage.getBlock'
+    | 'spacepage.listBlocks'
+    | 'spacepage.countBlocks'
+    | 'spacepage.upsertBlocks'
+    | 'spacepage.deleteBlocks'
+    | 'spacepage.enqueue'
+    | 'spacepage.listOutbox'
+    | 'spacepage.countOutbox'
+    | 'spacepage.ackOutbox'
+    | 'spacepage.failOutbox'
+    | 'spacepage.retryOutbox'
+    | 'spacepage.markSynced'
+    | 'spacepage.getState'
+    | 'spacepage.setState'
+    | 'spacepage.clear'
 
 /**
  * Storage capabilities answer with an envelope instead of throwing: Electron
@@ -92,6 +145,16 @@ export type DesktopCapability =
 export type DesktopStorageEnvelope<T> =
     | { ok: true; value: T }
     | { ok: false; code: StorageErrorCode; message: string }
+
+/**
+ * Local-first domain capabilities answer with the same envelope shape as
+ * `storage.*`: a rejected `ipcMain.handle` reaches the renderer as a plain
+ * message string, which would lose the {@link LocalStoreErrorCode} the
+ * renderer needs in order to fall back to the cloud-only path.
+ */
+export type DesktopSpacePageEnvelope<T> =
+    | { ok: true; value: T }
+    | { ok: false; code: LocalStoreErrorCode; message: string }
 
 export interface DesktopAppInfo {
     version: string
@@ -767,6 +830,81 @@ export interface DesktopCapabilityContract {
         result: DesktopStorageEnvelope<StorageBatchResult>
     }
     'storage.namespaces': { params?: void; result: DesktopStorageEnvelope<string[]> }
+    'spacepage.info': { params?: void; result: DesktopSpacePageEnvelope<LocalStoreInfo> }
+    'spacepage.getSpace': {
+        params: { spaceId: string }
+        result: DesktopSpacePageEnvelope<LocalSpaceRecord | null>
+    }
+    'spacepage.listSpaces': { params?: LocalSpaceQuery; result: DesktopSpacePageEnvelope<LocalSpaceRecord[]> }
+    'spacepage.countSpaces': { params?: LocalSpaceQuery; result: DesktopSpacePageEnvelope<number> }
+    'spacepage.upsertSpaces': {
+        params: { records: LocalSpaceRecord[] }
+        result: DesktopSpacePageEnvelope<number>
+    }
+    'spacepage.deleteSpaces': { params: { spaceIds: string[] }; result: DesktopSpacePageEnvelope<number> }
+    'spacepage.remapSpace': {
+        params: { from: string; to: string }
+        result: DesktopSpacePageEnvelope<LocalMutationCount>
+    }
+    'spacepage.getPage': {
+        params: { pageId: string }
+        result: DesktopSpacePageEnvelope<LocalPageRecord | null>
+    }
+    'spacepage.listPages': { params?: LocalPageQuery; result: DesktopSpacePageEnvelope<LocalPageRecord[]> }
+    'spacepage.countPages': { params?: LocalPageQuery; result: DesktopSpacePageEnvelope<number> }
+    'spacepage.upsertPages': {
+        params: { records: LocalPageRecord[] }
+        result: DesktopSpacePageEnvelope<number>
+    }
+    'spacepage.deletePages': { params: { pageIds: string[] }; result: DesktopSpacePageEnvelope<number> }
+    'spacepage.remapPage': {
+        params: { from: string; to: string }
+        result: DesktopSpacePageEnvelope<LocalMutationCount>
+    }
+    'spacepage.getDocument': {
+        params: { pageId: string }
+        result: DesktopSpacePageEnvelope<LocalDocumentRecord | null>
+    }
+    'spacepage.upsertDocument': {
+        params: { record: LocalDocumentRecord }
+        result: DesktopSpacePageEnvelope<void>
+    }
+    'spacepage.getBlock': {
+        params: { blockId: string }
+        result: DesktopSpacePageEnvelope<LocalBlockRecord | null>
+    }
+    'spacepage.listBlocks': { params?: LocalBlockQuery; result: DesktopSpacePageEnvelope<LocalBlockRecord[]> }
+    'spacepage.countBlocks': { params?: LocalBlockQuery; result: DesktopSpacePageEnvelope<number> }
+    'spacepage.upsertBlocks': {
+        params: { records: LocalBlockRecord[] }
+        result: DesktopSpacePageEnvelope<number>
+    }
+    'spacepage.deleteBlocks': { params: { blockIds: string[] }; result: DesktopSpacePageEnvelope<number> }
+    'spacepage.enqueue': {
+        params: { entries: LocalOutboxDraft[] }
+        result: DesktopSpacePageEnvelope<number[]>
+    }
+    'spacepage.listOutbox': { params?: LocalOutboxQuery; result: DesktopSpacePageEnvelope<LocalOutboxEntry[]> }
+    'spacepage.countOutbox': {
+        params?: { state?: LocalOutboxState }
+        result: DesktopSpacePageEnvelope<number>
+    }
+    'spacepage.ackOutbox': { params: { ids: number[] }; result: DesktopSpacePageEnvelope<number> }
+    'spacepage.failOutbox': {
+        params: { id: number; error: string }
+        result: DesktopSpacePageEnvelope<void>
+    }
+    'spacepage.retryOutbox': { params?: { ids?: number[] }; result: DesktopSpacePageEnvelope<number> }
+    'spacepage.markSynced': {
+        params: { entity: LocalOutboxEntity; ids: string[] }
+        result: DesktopSpacePageEnvelope<number>
+    }
+    'spacepage.getState': { params: { key: string }; result: DesktopSpacePageEnvelope<unknown> }
+    'spacepage.setState': {
+        params: { key: string; value: unknown }
+        result: DesktopSpacePageEnvelope<void>
+    }
+    'spacepage.clear': { params?: void; result: DesktopSpacePageEnvelope<void> }
 }
 
 /**
@@ -797,4 +935,11 @@ export interface DesktopBridge {
      * this field.
      */
     readonly storage?: StorageService
+    /**
+     * Local-first Space/Page/Block database, backed by SQLite in the main
+     * process. Present on desktop builds that expose the `spacepage.*`
+     * capabilities; `@kn/core` then registers a local-first
+     * `spacePageService` instead of the cloud-only HTTP one.
+     */
+    readonly spacePage?: SpacePageLocalStore
 }

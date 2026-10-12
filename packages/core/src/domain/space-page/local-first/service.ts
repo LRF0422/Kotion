@@ -1,0 +1,1190 @@
+/**
+ * Local-first `SpacePageService`.
+ *
+ * The port itself (see `@kn/common/domain/space-page/operations`) predates
+ * offline support: every method used to be one HTTP call. This implementation
+ * keeps that port unchanged so no consumer has to know which side answered:
+ *
+ * - **Reads** hit the local database first (instant, works with no network) and
+ *   fall back to the cloud only for data that has never been cached. Whatever
+ *   the cloud returns is written back, so the next read is local.
+ * - **Writes** land in the local database immediately, are recorded in the
+ *   outbox with `dirty: true`, and are replayed to the cloud by the sync engine.
+ *   A mutation that fails only because the network is down is therefore a
+ *   success from the user's point of view, and it survives a restart.
+ * - **Collaboration features** (members, invitations, shares, comments,
+ *   templates, activity, tags, history) stay cloud-only and are delegated
+ *   verbatim: they are inherently multi-user and have no meaningful offline
+ *   answer. Offline they reject with the transport error — the same feedback the
+ *   app gave before local-first, which is the honest behaviour.
+ *
+ * The rules that keep this honest:
+ *
+ * 1. When online, a metadata write tries the cloud **first** and only falls back
+ *    to the offline path on a connectivity failure. Only a network failure
+ *    counts as offline (`isOfflineError`); a 4xx is a real error and is
+ *    rethrown, so server-side validation is never bypassed by a queued write.
+ * 2. A page created without a network gets a `local-page-…` id. The sync engine
+ *    re-keys it onto the cloud id (`remapPage`) the moment the create succeeds,
+ *    so nothing downstream ever sees the temporary id.
+ */
+
+import {
+    LocalStoreError,
+    createSpacePageChangeStream,
+    fromLocalDocumentRecord,
+    toLocalDocumentRecord,
+    type ApplyPageOperationsRequest,
+    type ApplyPageOperationsResult,
+    type BlockSummary,
+    type CreatePageRequest,
+    type CreateSpaceRequest,
+    type LocalBlockQuery,
+    type LocalPageQuery,
+    type LocalPageRecord,
+    type LocalRecordMeta,
+    type LocalSpaceQuery,
+    type LocalSpaceRecord,
+    type LocalStoreInfo,
+    type MovePageRequest,
+    type PageMetadata,
+    type PageRecord,
+    type PageSummary,
+    type PageTreeNode,
+    type PagedResult,
+    type QueryBlocksRequest,
+    type QueryPagesRequest,
+    type QueryPageTreeRequest,
+    type Space,
+    type SpacePageLocalStore,
+    type SpacePageService,
+    type UpdatePageTitleRequest,
+    type UpdateSpaceRequest,
+} from "@kn/common";
+
+/**
+ * Local-only bookkeeping keys, stripped before a record goes back out through
+ * the `SpacePageService` contract.
+ *
+ * `updatedAt` is deliberately absent: it is a real optional field of
+ * `PageMetadata`/`Space` and belongs to the payload, which is exactly why the
+ * local write time is spelled `localUpdatedAt` throughout.
+ */
+const LOCAL_META_KEYS = [
+    "localUpdatedAt",
+    "remoteUpdatedAt",
+    "dirty",
+    "deleted",
+    "partial",
+    "rank",
+    "personal",
+] as const;
+
+export type LocalFirstDiagnostic =
+    | { type: "cache.miss"; entity: string; id: string }
+    | { type: "write.queued"; kind: string; entityId: string }
+    | { type: "remote.failed"; operation: string; message: string; offline: boolean };
+
+export interface LocalFirstServiceOptions {
+    local: SpacePageLocalStore;
+    /** The cloud-backed service used for cache misses and outbox replay. */
+    remote: SpacePageService;
+    now?: () => number;
+    /** Network probe; defaults to `navigator.onLine` (assumed online elsewhere). */
+    isOnline?: () => boolean;
+    /** Stable per-installation id; used by the document operation protocol. */
+    clientId?: string;
+    onDiagnostic?: (event: LocalFirstDiagnostic) => void;
+    /**
+     * Called after a mutation has been queued. `createLocalFirstRuntime` wires
+     * this to the sync engine's "flush soon" hint; leaving it unset means the
+     * next scheduled sync picks the change up.
+     */
+    requestFlush?: () => void;
+}
+
+export interface LocalFirstSpacePageService extends SpacePageService {
+    /** The local database behind this service (diagnostics, storage UI). */
+    readonly local: SpacePageLocalStore;
+    readonly remote: SpacePageService;
+    readonly durable: boolean;
+    /** True when the cloud is unreachable or the last call failed on the network. */
+    readonly offline: boolean;
+    info(): Promise<LocalStoreInfo>;
+}
+
+/** True when an error means "no usable network", not "the server said no". */
+export function isOfflineError(error: unknown): boolean {
+    if (error instanceof LocalStoreError) return error.code === "LOCAL_STORE_UNAVAILABLE";
+    if (!error || typeof error !== "object") return false;
+    const candidate = error as {
+        code?: unknown;
+        message?: unknown;
+        response?: unknown;
+        isAxiosError?: unknown;
+    };
+    if (candidate.code === "ERR_NETWORK" || candidate.code === "ECONNABORTED" || candidate.code === "ETIMEDOUT") {
+        return true;
+    }
+    if (candidate.isAxiosError === true && candidate.response === undefined) return true;
+    if (
+        typeof candidate.message === "string" &&
+        /network|failed to fetch|fetch failed|timeout|offline|ENOTFOUND|ECONNREFUSED/i.test(candidate.message)
+    ) {
+        return true;
+    }
+    return false;
+}
+
+const stripMeta = <T>(record: Record<string, unknown>): T => {
+    const copy: Record<string, unknown> = { ...record };
+    for (const key of LOCAL_META_KEYS) delete copy[key];
+    return copy as T;
+};
+
+const applyChildCounts = (nodes: PageTreeNode[]): void => {
+    for (const node of nodes) {
+        const children = node.children ?? [];
+        node.childCount = children.length;
+        node.hasChildren = children.length > 0;
+        if (children.length) applyChildCounts(children);
+        else delete node.children;
+    }
+};
+
+/** Group cached pages into the tree the page list renders, keeping row order. */
+export function buildPageTree(records: LocalPageRecord[]): PageTreeNode[] {
+    const nodes = new Map<string, PageTreeNode>();
+    for (const record of records) nodes.set(record.id, stripMeta<PageTreeNode>(record as unknown as Record<string, unknown>));
+    const roots: PageTreeNode[] = [];
+    for (const record of records) {
+        const node = nodes.get(record.id);
+        if (!node) continue;
+        const parentId = typeof record.parentId === "string" && record.parentId ? record.parentId : null;
+        const parent = parentId ? nodes.get(parentId) : undefined;
+        if (parent) (parent.children ??= []).push(node);
+        else roots.push(node);
+    }
+    applyChildCounts(roots);
+    return roots;
+}
+
+/** Depth-first flatten of a page tree, tagging each node with its sibling rank. */
+export function flattenTree(nodes: PageTreeNode[]): Array<PageMetadata & { rank?: number }> {
+    const out: Array<PageMetadata & { rank?: number }> = [];
+    const visit = (list: PageTreeNode[]): void => {
+        list.forEach((node, index) => {
+            const rest = { ...node } as PageTreeNode & { rank?: number };
+            delete rest.children;
+            delete rest.childCount;
+            delete rest.hasChildren;
+            rest.rank = index;
+            out.push(rest as PageMetadata & { rank?: number });
+            if (node.children?.length) visit(node.children);
+        });
+    };
+    visit(nodes);
+    return out;
+}
+
+const paged = <T>(
+    records: T[],
+    total: number,
+    request: { current?: number; page?: number; pageSize?: number } = {},
+): PagedResult<T> => {
+    const pageSize = Number(request.pageSize) > 0 ? Number(request.pageSize) : records.length;
+    const current = Number(request.current ?? request.page) > 0 ? Number(request.current ?? request.page) : 1;
+    const pages = pageSize > 0 ? Math.max(Math.ceil(total / pageSize), 1) : 1;
+    return { records, current, pageSize, total, pages, hasNext: current < pages };
+};
+
+const pageSummaryFrom = (record: LocalPageRecord): PageSummary =>
+    stripMeta<PageSummary>(record as unknown as Record<string, unknown>);
+
+const localEdit = (now: number): LocalRecordMeta => ({ localUpdatedAt: now, dirty: true });
+
+export const createLocalFirstSpacePageService = (options: LocalFirstServiceOptions): LocalFirstSpacePageService => {
+    const { local, remote } = options;
+    const now = options.now ?? (() => Date.now());
+    const isOnline =
+        options.isOnline ?? (() => (typeof navigator === "undefined" ? true : navigator.onLine !== false));
+    const clientId =
+        options.clientId ?? `local-${Math.random().toString(36).slice(2, 10)}-${now().toString(36)}`;
+    const diagnose = options.onDiagnostic ?? (() => {});
+    const changes = createSpacePageChangeStream();
+    let observedOffline = false;
+
+    const requestFlush = (): void => {
+        observedOffline = false;
+        options.requestFlush?.();
+    };
+
+    const noteFailure = (operation: string, error: unknown): boolean => {
+        const offline = isOfflineError(error);
+        if (offline) observedOffline = true;
+        diagnose({
+            type: "remote.failed",
+            operation,
+            message: error instanceof Error ? error.message : String(error),
+            offline,
+        });
+        return offline;
+    };
+
+    /**
+     * Run a cloud call, returning `undefined` when it cannot be used so the
+     * caller can serve the request from cache instead.
+     *
+     * Two ways in: the platform already knows there is no network (cheap and
+     * deterministic — no five-second TCP timeout for every read on a plane), or
+     * the call was attempted and failed on connectivity. Real errors
+     * (validation, auth, conflicts) still throw.
+     */
+    const tryRemote = async <T>(operation: string, run: () => Promise<T>): Promise<T | undefined> => {
+        if (!isOnline()) {
+            observedOffline = true;
+            diagnose({ type: "remote.failed", operation, message: "offline", offline: true });
+            return undefined;
+        }
+        try {
+            const value = await run();
+            observedOffline = false;
+            return value;
+        } catch (error) {
+            if (!noteFailure(operation, error)) throw error;
+            return undefined;
+        }
+    };
+
+    /**
+     * Cache page records.
+     *
+     * `partial` marks rows that came from a summary source (tree/list/recent/
+     * search) instead of the full page endpoint: they lack the fields only a
+     * full read returns, so `getPage` refreshes them from the cloud before
+     * trusting them.
+     */
+    const cachePages = async (
+        records: Array<PageMetadata & { rank?: number }>,
+        meta: LocalRecordMeta,
+        partial = false,
+    ): Promise<void> => {
+        if (!records.length) return;
+        const withFlag: LocalRecordMeta = { ...meta, ...(partial ? { partial: true } : {}) };
+        await local.upsertPages(records.map((record) => ({ ...record, ...withFlag }) as LocalPageRecord));
+    };
+
+    const cacheSpaces = async (records: Space[], meta: LocalRecordMeta): Promise<void> => {
+        if (!records.length) return;
+        await local.upsertSpaces(records.map((record) => ({ ...record, ...meta }) as LocalSpaceRecord));
+    };
+
+    const cacheBlocks = async (records: BlockSummary[], meta: LocalRecordMeta): Promise<void> => {
+        if (!records.length) return;
+        await local.upsertBlocks(records.map((record) => ({ ...record, ...meta })));
+    };
+
+    const enqueue = async (draft: {
+        kind: string;
+        entity: "space" | "page" | "block" | "document";
+        entityId: string;
+        payload: Record<string, unknown>;
+        coalesceKey?: string;
+    }): Promise<void> => {
+        await local.enqueue([draft]);
+        diagnose({ type: "write.queued", kind: draft.kind, entityId: draft.entityId });
+        requestFlush();
+    };
+
+    const cachePage = async (
+        page: PageMetadata,
+        extra: LocalRecordMeta = {},
+        rank?: number,
+    ): Promise<PageMetadata> => {
+        await local.upsertPages([
+            { ...page, ...(rank === undefined ? {} : { rank }), ...extra } as LocalPageRecord,
+        ]);
+        return page;
+    };
+
+    /** The cached page, fetching it when the cache has never seen it. */
+    const hydratePage = async (pageId: string): Promise<LocalPageRecord | null> => {
+        const cached = await local.getPage(pageId);
+        if (cached) return cached;
+        diagnose({ type: "cache.miss", entity: "page", id: pageId });
+        const page = await tryRemote("pages.getPage", () => remote.pages.getPage(pageId));
+        if (!page) return null;
+        await cachePage(page, { remoteUpdatedAt: null, dirty: false });
+        return local.getPage(pageId);
+    };
+
+    const localPageQuery = (request: QueryPagesRequest): LocalPageQuery => {
+        const pageSize = Number(request.pageSize) > 0 ? Number(request.pageSize) : undefined;
+        const current = Number(request.current ?? request.page) > 0 ? Number(request.current ?? request.page) : 1;
+        return {
+            ...(request.spaceId ? { spaceId: String(request.spaceId) } : {}),
+            ...(request.parentId === undefined ? {} : { parentId: request.parentId ?? "root" }),
+            ...(request.status ? { status: request.status } : {}),
+            ...(request.favorite === undefined ? {} : { favorite: Boolean(request.favorite) }),
+            ...(request.pinned === undefined ? {} : { pinned: Boolean(request.pinned) }),
+            ...(typeof request.searchValue === "string" && request.searchValue.trim()
+                ? { search: request.searchValue }
+                : {}),
+            ...(pageSize ? { limit: pageSize } : {}),
+            ...(pageSize ? { offset: (current - 1) * pageSize } : {}),
+        };
+    };
+
+    const queryPagesLocally = async (
+        request: QueryPagesRequest,
+        orderBy: LocalPageQuery["orderBy"],
+    ): Promise<PagedResult<PageSummary>> => {
+        const query: LocalPageQuery = { ...localPageQuery(request), orderBy };
+        const countQuery: LocalPageQuery = { ...query };
+        delete countQuery.limit;
+        delete countQuery.offset;
+        const [records, total] = await Promise.all([local.listPages(query), local.countPages(countQuery)]);
+        return paged(records.map(pageSummaryFrom), total, request);
+    };
+
+    const spaces: SpacePageService["spaces"] = {
+        async getSpace(spaceId) {
+            const cached = await local.getSpace(String(spaceId));
+            if (cached && !cached.deleted) return stripMeta<Space>(cached as unknown as Record<string, unknown>);
+            diagnose({ type: "cache.miss", entity: "space", id: String(spaceId) });
+            const space = await tryRemote("spaces.getSpace", () => remote.spaces.getSpace(spaceId));
+            if (!space) {
+                if (cached) return stripMeta<Space>(cached as unknown as Record<string, unknown>);
+                throw new LocalStoreError(
+                    "LOCAL_STORE_UNAVAILABLE",
+                    `space ${String(spaceId)} is not cached and the cloud is unreachable`,
+                );
+            }
+            await cacheSpaces([space], { remoteUpdatedAt: null, dirty: false });
+            return space;
+        },
+
+        async getPersonalSpace() {
+            const [cached] = await local.listSpaces({ personal: true, limit: 1 });
+            if (cached) return stripMeta<Space>(cached as unknown as Record<string, unknown>);
+            const space = await tryRemote("spaces.getPersonalSpace", () => remote.spaces.getPersonalSpace());
+            if (!space) {
+                throw new LocalStoreError("LOCAL_STORE_UNAVAILABLE", "the personal space has not been synced yet");
+            }
+            await local.upsertSpaces([
+                { ...space, personal: true, remoteUpdatedAt: null, dirty: false } as LocalSpaceRecord,
+            ]);
+            return space;
+        },
+
+        async querySpaces(request = {}) {
+            const query: LocalSpaceQuery = {
+                ...(typeof request.searchValue === "string" && request.searchValue.trim()
+                    ? { search: request.searchValue }
+                    : {}),
+                ...(request.type ? { type: request.type } : {}),
+                ...(request.archived === undefined ? {} : { archived: Boolean(request.archived) }),
+                ...(request.favorite === undefined ? {} : { favorite: Boolean(request.favorite) }),
+                ...(Number(request.pageSize) > 0 ? { limit: Number(request.pageSize) } : {}),
+            };
+            const [records, total] = await Promise.all([local.listSpaces(query), local.countSpaces(query)]);
+            if (total > 0) {
+                return paged(
+                    records.map((record) => stripMeta<Space>(record as unknown as Record<string, unknown>)),
+                    total,
+                    request,
+                );
+            }
+
+            const result = await tryRemote("spaces.querySpaces", () => remote.spaces.querySpaces(request));
+            if (!result) {
+                throw new LocalStoreError(
+                    "LOCAL_STORE_UNAVAILABLE",
+                    "no spaces are cached and the cloud is unreachable",
+                );
+            }
+            await cacheSpaces(result.records, { remoteUpdatedAt: null, dirty: false });
+            // `type: "PERSONAL"` is the only signal the cloud gives for the user's
+            // own space; remembering it is what makes `getPersonalSpace()` work
+            // offline afterwards.
+            const personal = result.records.filter((space) => space.type === "PERSONAL");
+            if (personal.length) {
+                await local.upsertSpaces(
+                    personal.map(
+                        (space) =>
+                            ({ ...space, personal: true, remoteUpdatedAt: null, dirty: false }) as LocalSpaceRecord,
+                    ),
+                );
+            }
+            return result;
+        },
+
+        async createSpace(request: CreateSpaceRequest) {
+            const created = await tryRemote("spaces.createSpace", () => remote.spaces.createSpace(request));
+            if (created?.id) {
+                await local.upsertSpaces([
+                    {
+                        ...created,
+                        ...(created.type === "PERSONAL" ? { personal: true } : {}),
+                        remoteUpdatedAt: null,
+                        dirty: false,
+                    } as LocalSpaceRecord,
+                ]);
+                changes.emit("space.created", { space: created });
+                return created;
+            }
+            if (created) return created;
+
+            const localId = `local-space-${Math.random().toString(36).slice(2, 10)}`;
+            const record: LocalSpaceRecord = {
+                ...(request as unknown as Partial<Space>),
+                id: localId,
+                name: request.name,
+                ...(request.type === "PERSONAL" ? { personal: true } : {}),
+                remoteUpdatedAt: null,
+                ...localEdit(now()),
+            } as LocalSpaceRecord;
+            await local.upsertSpaces([record]);
+            await enqueue({
+                kind: "space.create",
+                entity: "space",
+                entityId: localId,
+                payload: { ...(request as unknown as Record<string, unknown>), id: localId, localId },
+                coalesceKey: `space.create:${localId}`,
+            });
+            const space = stripMeta<Space>(record as unknown as Record<string, unknown>);
+            changes.emit("space.created", { space });
+            return space;
+        },
+
+        async updateSpace(request: UpdateSpaceRequest) {
+            const spaceId = String(request.id);
+            const updated = await tryRemote("spaces.updateSpace", () => remote.spaces.updateSpace(request));
+            if (updated?.id) {
+                await cacheSpaces([updated], { remoteUpdatedAt: null, dirty: false });
+                changes.emit("space.updated", { space: updated, spaceId });
+                return updated;
+            }
+
+            const cached = await local.getSpace(spaceId);
+            const merged: LocalSpaceRecord = {
+                ...(cached ?? { id: spaceId, name: "" }),
+                ...(request as unknown as Partial<Space>),
+                id: spaceId,
+                ...localEdit(now()),
+            } as LocalSpaceRecord;
+            await local.upsertSpaces([merged]);
+            await enqueue({
+                kind: "space.update",
+                entity: "space",
+                entityId: spaceId,
+                payload: { ...(request as unknown as Record<string, unknown>), id: spaceId },
+                coalesceKey: `space.update:${spaceId}`,
+            });
+            const space = stripMeta<Space>(merged as unknown as Record<string, unknown>);
+            changes.emit("space.updated", { space, spaceId });
+            return space;
+        },
+
+        async archiveSpace(spaceId) {
+            const id = String(spaceId);
+            const cached = await hydrateSpace(id);
+            if (cached) {
+                await local.upsertSpaces([{ ...cached, archived: true, ...localEdit(now()) } as LocalSpaceRecord]);
+                await enqueue({
+                    kind: "space.archive",
+                    entity: "space",
+                    entityId: id,
+                    payload: { spaceId: id },
+                    coalesceKey: `space.archive:${id}`,
+                });
+            } else {
+                await remote.spaces.archiveSpace(spaceId);
+            }
+            changes.emit("space.archived", { spaceId: id });
+        },
+
+        async unarchiveSpace(spaceId) {
+            const id = String(spaceId);
+            const cached = await hydrateSpace(id);
+            if (cached) {
+                await local.upsertSpaces([{ ...cached, archived: false, ...localEdit(now()) } as LocalSpaceRecord]);
+                await enqueue({
+                    kind: "space.unarchive",
+                    entity: "space",
+                    entityId: id,
+                    payload: { spaceId: id },
+                    coalesceKey: `space.archive:${id}`,
+                });
+            } else {
+                await remote.spaces.unarchiveSpace(spaceId);
+            }
+            changes.emit("space.unarchived", { spaceId: id });
+        },
+
+        async deleteSpace(spaceId) {
+            const id = String(spaceId);
+            const cached = await local.getSpace(id);
+            if (isOnline()) {
+                const done = await tryRemote("spaces.deleteSpace", async () => {
+                    await remote.spaces.deleteSpace(spaceId);
+                    return true;
+                });
+                if (done) {
+                    await local.deleteSpaces([id]);
+                    changes.emit("space.deleted", { spaceId: id });
+                    return;
+                }
+            }
+            if (cached?.dirty) {
+                // Never left this device: drop it and its queued ops outright.
+                await local.deleteSpaces([id]);
+            } else {
+                await enqueue({
+                    kind: "space.delete",
+                    entity: "space",
+                    entityId: id,
+                    payload: { spaceId: id },
+                    coalesceKey: `space.delete:${id}`,
+                });
+                await local.deleteSpaces([id]);
+            }
+            changes.emit("space.deleted", { spaceId: id });
+        },
+
+        async toggleSpaceFavorite(spaceId) {
+            const id = String(spaceId);
+            const cached = await hydrateSpace(id);
+            if (!cached) {
+                await remote.spaces.toggleSpaceFavorite(spaceId);
+                changes.emit("space.favorite.changed", { spaceId: id });
+                return;
+            }
+            const favorite = !cached.favorite;
+            await local.upsertSpaces([{ ...cached, favorite, ...localEdit(now()) } as LocalSpaceRecord]);
+            await enqueue({
+                kind: "space.favorite",
+                entity: "space",
+                entityId: id,
+                payload: { spaceId: id, favorite },
+                coalesceKey: `space.favorite:${id}`,
+            });
+            changes.emit("space.favorite.changed", { spaceId: id, favorite });
+        },
+    };
+
+    /** Cached space, fetching it when the cache has never seen it. */
+    const hydrateSpace = async (spaceId: string): Promise<LocalSpaceRecord | null> => {
+        const cached = await local.getSpace(spaceId);
+        if (cached) return cached;
+        diagnose({ type: "cache.miss", entity: "space", id: spaceId });
+        const space = await tryRemote("spaces.getSpace", () => remote.spaces.getSpace(spaceId));
+        if (!space) return null;
+        await cacheSpaces([space], { remoteUpdatedAt: null, dirty: false });
+        return local.getSpace(spaceId);
+    };
+
+    const pages: SpacePageService["pages"] = {
+        async getPage(pageId) {
+            const cached = await local.getPage(String(pageId));
+            if (cached && !cached.deleted && !cached.partial) {
+                return stripMeta<PageRecord>(cached as unknown as Record<string, unknown>);
+            }
+            diagnose({ type: "cache.miss", entity: "page", id: String(pageId) });
+            const page = await tryRemote("pages.getPage", () => remote.pages.getPage(pageId));
+            if (!page) {
+                if (cached) return stripMeta<PageRecord>(cached as unknown as Record<string, unknown>);
+                throw new LocalStoreError(
+                    "LOCAL_STORE_UNAVAILABLE",
+                    `page ${String(pageId)} is not cached and the cloud is unreachable`,
+                );
+            }
+            if (cached?.dirty) {
+                // The row holds a local edit the cloud has not accepted yet, so
+                // the full record is merged *under* it: the local values win for
+                // the fields both have, the cloud fills in the rest.
+                const merged = {
+                    ...page,
+                    ...stripMeta<PageMetadata>(cached as unknown as Record<string, unknown>),
+                    localUpdatedAt: cached.localUpdatedAt,
+                    ...(cached.remoteUpdatedAt == null
+                        ? {}
+                        : { remoteUpdatedAt: cached.remoteUpdatedAt }),
+                    dirty: true,
+                    partial: false,
+                } as unknown as LocalPageRecord;
+                await local.upsertPages([merged]);
+                return stripMeta<PageRecord>(merged as unknown as Record<string, unknown>);
+            }
+            await cachePage(page, { remoteUpdatedAt: null, dirty: false });
+            return page;
+        },
+
+        async getPageMetadata(pageId) {
+            const page = await pages.getPage(pageId);
+            return page as PageMetadata;
+        },
+
+        async getPageTree(request: QueryPageTreeRequest) {
+            const spaceId = String(request.spaceId);
+            const records = await local.listPages({ spaceId, limit: 2000 });
+            if (records.length) return buildPageTree(records);
+
+            diagnose({ type: "cache.miss", entity: "pageTree", id: spaceId });
+            const tree = await tryRemote("pages.getPageTree", () => remote.pages.getPageTree(request));
+            if (!tree) {
+                throw new LocalStoreError(
+                    "LOCAL_STORE_UNAVAILABLE",
+                    `space ${spaceId} has no cached page tree and the cloud is unreachable`,
+                );
+            }
+            await cachePages(flattenTree(tree), { remoteUpdatedAt: null, dirty: false }, true);
+            return tree;
+        },
+
+        async queryPages(request = {}) {
+            const result = await queryPagesLocally(request, request.parentId === undefined ? "updated" : "rank");
+            if (result.total > 0) return result;
+            const remoteResult = await tryRemote("pages.queryPages", () => remote.pages.queryPages(request));
+            if (!remoteResult) return result;
+            await cachePages(remoteResult.records, { remoteUpdatedAt: null, dirty: false }, true);
+            return remoteResult;
+        },
+
+        async queryRecentPages(request = {}) {
+            const result = await queryPagesLocally({ ...request, pageSize: request.pageSize ?? 50 }, "updated");
+            if (result.total > 0) return result;
+            const remoteResult = await tryRemote("pages.queryRecentPages", () =>
+                remote.pages.queryRecentPages(request),
+            );
+            if (!remoteResult) return result;
+            await cachePages(remoteResult.records, { remoteUpdatedAt: null, dirty: false }, true);
+            return remoteResult;
+        },
+
+        async queryFavoritePages(request = {}) {
+            const result = await queryPagesLocally({ ...request, favorite: true }, "updated");
+            if (result.total > 0) return result;
+            const remoteResult = await tryRemote("pages.queryFavoritePages", () =>
+                remote.pages.queryFavoritePages(request),
+            );
+            if (!remoteResult) return result;
+            await cachePages(remoteResult.records, { remoteUpdatedAt: null, dirty: false }, true);
+            return remoteResult;
+        },
+
+        async createPage(request: CreatePageRequest) {
+            const created = await tryRemote("pages.createPage", () => remote.pages.createPage(request));
+            if (created?.id) {
+                const siblings = await siblingCount(String(request.spaceId), request.parentId);
+                await cachePage(created, { remoteUpdatedAt: null, dirty: false }, siblings);
+                if (request.content !== undefined) {
+                    await local.upsertDocument(
+                        toLocalDocumentRecord(
+                            created.id,
+                            { pageId: created.id, doc: request.content, rev: null },
+                            { remoteUpdatedAt: null, dirty: false },
+                        ),
+                    );
+                }
+                changes.emit("page.created", { page: created, spaceId: created.spaceId ?? request.spaceId });
+                return created;
+            }
+            if (created) return created;
+
+            const localId = `local-page-${Math.random().toString(36).slice(2, 10)}`;
+            const record: LocalPageRecord = {
+                id: localId,
+                spaceId: request.spaceId,
+                parentId: request.parentId ?? null,
+                title: request.title,
+                ...(request.pageType === undefined ? {} : { pageType: request.pageType }),
+                ...(request.icon === undefined ? {} : { icon: request.icon }),
+                ...(request.tags === undefined ? {} : { tags: request.tags }),
+                rank: await siblingCount(String(request.spaceId), request.parentId),
+                remoteUpdatedAt: null,
+                ...localEdit(now()),
+            } as LocalPageRecord;
+            await local.upsertPages([record]);
+            if (request.content !== undefined) {
+                await local.upsertDocument(
+                    toLocalDocumentRecord(
+                        localId,
+                        { pageId: localId, doc: request.content, rev: null },
+                        localEdit(now()),
+                    ),
+                );
+            }
+            await enqueue({
+                kind: "page.create",
+                entity: "page",
+                entityId: localId,
+                payload: { ...(request as unknown as Record<string, unknown>), id: localId, localId },
+                coalesceKey: `page.create:${localId}`,
+            });
+            const page = stripMeta<PageRecord>(record as unknown as Record<string, unknown>);
+            changes.emit("page.created", { page, spaceId: request.spaceId });
+            changes.emit("page.tree.changed", { spaceId: String(request.spaceId), pageId: localId });
+            return page;
+        },
+
+        async updatePageTitle(request: UpdatePageTitleRequest) {
+            const pageId = String(request.pageId);
+            const cached = await hydratePage(pageId);
+            if (!cached) {
+                await remote.pages.updatePageTitle(request);
+                changes.emit("page.updated", { page: { id: pageId, title: request.title }, spaceId: undefined });
+                return;
+            }
+            const next: LocalPageRecord = { ...cached, title: request.title, ...localEdit(now()) };
+            await local.upsertPages([next]);
+            await enqueue({
+                kind: "page.title",
+                entity: "page",
+                entityId: pageId,
+                payload: { pageId, title: request.title },
+                coalesceKey: `page.title:${pageId}`,
+            });
+            const page = stripMeta<PageMetadata>(next as unknown as Record<string, unknown>);
+            changes.emit("page.updated", { page, spaceId: next.spaceId });
+            if (next.spaceId) changes.emit("page.tree.changed", { spaceId: String(next.spaceId), pageId });
+        },
+
+        async movePage(request: MovePageRequest) {
+            const pageId = String(request.pageId);
+            const targetSpaceId = String(request.targetSpaceId);
+            const targetParentId = request.targetParentId == null ? null : String(request.targetParentId);
+            const cached = await hydratePage(pageId);
+            if (!cached) {
+                await remote.pages.movePage(request);
+                changes.emit("page.moved", { pageId, spaceId: targetSpaceId, parentId: targetParentId });
+                return;
+            }
+            const fromSpaceId = cached.spaceId;
+            const next: LocalPageRecord = {
+                ...cached,
+                spaceId: targetSpaceId,
+                parentId: targetParentId,
+                ...localEdit(now()),
+            };
+            await local.upsertPages([next]);
+            await enqueue({
+                kind: "page.move",
+                entity: "page",
+                entityId: pageId,
+                payload: { pageId, targetParentId, targetSpaceId },
+                coalesceKey: `page.move:${pageId}`,
+            });
+            changes.emit("page.moved", { pageId, spaceId: targetSpaceId, parentId: targetParentId });
+            if (fromSpaceId) changes.emit("page.tree.changed", { spaceId: String(fromSpaceId), pageId });
+            changes.emit("page.tree.changed", { spaceId: targetSpaceId, pageId });
+        },
+
+        async movePageToTrash(pageId) {
+            const id = String(pageId);
+            const cached = await hydratePage(id);
+            if (!cached) {
+                await remote.pages.movePageToTrash(pageId);
+                changes.emit("page.trashed", { pageId: id });
+                return;
+            }
+            if (cached.dirty) {
+                // Created on this device and never pushed: there is nothing to
+                // delete upstream, so drop the page and its queued ops.
+                await local.deletePages([id]);
+            } else {
+                await enqueue({
+                    kind: "page.trash",
+                    entity: "page",
+                    entityId: id,
+                    payload: { pageId: id },
+                    coalesceKey: `page.trash:${id}`,
+                });
+                await local.deletePages([id]);
+            }
+            changes.emit("page.trashed", { pageId: id, spaceId: cached.spaceId });
+            if (cached.spaceId) changes.emit("page.tree.changed", { spaceId: String(cached.spaceId), pageId: id });
+        },
+
+        async restorePageFromTrash(pageId) {
+            const id = String(pageId);
+            const cached = await local.getPage(id);
+            if (!cached) {
+                await remote.pages.restorePageFromTrash(pageId);
+                changes.emit("page.restoredFromTrash", { pageId: id });
+                return;
+            }
+            await local.upsertPages([
+                {
+                    ...cached,
+                    deleted: false,
+                    ...(cached.status === "TRASH" ? { status: undefined } : {}),
+                    ...localEdit(now()),
+                } as LocalPageRecord,
+            ]);
+            await enqueue({
+                kind: "page.restore",
+                entity: "page",
+                entityId: id,
+                payload: { pageId: id },
+                coalesceKey: `page.trash:${id}`,
+            });
+            changes.emit("page.restoredFromTrash", { pageId: id, spaceId: cached.spaceId });
+            if (cached.spaceId) changes.emit("page.tree.changed", { spaceId: String(cached.spaceId), pageId: id });
+        },
+
+        async favoritePage(pageId) {
+            const id = String(pageId);
+            const cached = await hydratePage(id);
+            if (!cached) {
+                await remote.pages.favoritePage(pageId);
+                changes.emit("page.favorite.changed", { pageId: id, favorite: true });
+                return;
+            }
+            await local.upsertPages([{ ...cached, favorite: true, ...localEdit(now()) } as LocalPageRecord]);
+            await enqueue({
+                kind: "page.favorite",
+                entity: "page",
+                entityId: id,
+                payload: { pageId: id, favorite: true },
+                coalesceKey: `page.favorite:${id}`,
+            });
+            changes.emit("page.favorite.changed", { pageId: id, favorite: true, spaceId: cached.spaceId });
+        },
+
+        async unfavoritePage(pageId) {
+            const id = String(pageId);
+            const cached = await hydratePage(id);
+            if (!cached) {
+                await remote.pages.unfavoritePage(pageId);
+                changes.emit("page.favorite.changed", { pageId: id, favorite: false });
+                return;
+            }
+            await local.upsertPages([{ ...cached, favorite: false, ...localEdit(now()) } as LocalPageRecord]);
+            await enqueue({
+                kind: "page.favorite",
+                entity: "page",
+                entityId: id,
+                payload: { pageId: id, favorite: false },
+                coalesceKey: `page.favorite:${id}`,
+            });
+            changes.emit("page.favorite.changed", { pageId: id, favorite: false, spaceId: cached.spaceId });
+        },
+
+        async togglePagePin(spaceId, pageId) {
+            const id = String(pageId);
+            const cached = await hydratePage(id);
+            if (!cached) {
+                await remote.pages.togglePagePin(spaceId, pageId);
+                changes.emit("page.pin.changed", { spaceId: String(spaceId), pageId: id });
+                return;
+            }
+            const pinned = !cached.pinned;
+            await local.upsertPages([{ ...cached, pinned, ...localEdit(now()) } as LocalPageRecord]);
+            await enqueue({
+                kind: "page.pin",
+                entity: "page",
+                entityId: id,
+                payload: { spaceId: String(spaceId), pageId: id, pinned },
+                coalesceKey: `page.pin:${id}`,
+            });
+            changes.emit("page.pin.changed", { spaceId: String(spaceId), pageId: id, pinned });
+        },
+
+        async getPinnedPages(spaceId) {
+            const records = await local.listPages({ spaceId: String(spaceId), pinned: true, limit: 200 });
+            return records.map(pageSummaryFrom);
+        },
+    };
+
+    const siblingCount = async (spaceId: string, parentId: unknown): Promise<number> => {
+        const query: LocalPageQuery =
+            parentId === undefined || parentId === null
+                ? { spaceId, parentId: "root" }
+                : { spaceId, parentId: String(parentId) };
+        return local.countPages(query);
+    };
+
+    const relations: SpacePageService["relations"] = {
+        async queryBlocksPage(request: QueryBlocksRequest) {
+            const pageSize = Number((request as { pageSize?: number }).pageSize);
+            const current = Number((request as { current?: number }).current) || 1;
+            const query: LocalBlockQuery = {
+                ...(request.pageId ? { pageId: String(request.pageId) } : {}),
+                ...(request.spaceId ? { spaceId: String(request.spaceId) } : {}),
+                ...(pageSize > 0 ? { limit: pageSize, offset: (current - 1) * pageSize } : {}),
+            };
+            const countQuery: LocalBlockQuery = { ...query };
+            delete countQuery.limit;
+            delete countQuery.offset;
+            const [records, total] = await Promise.all([
+                local.listBlocks(query),
+                local.countBlocks(countQuery),
+            ]);
+            if (total > 0) {
+                return {
+                    records: records.map((record) =>
+                        stripMeta<BlockSummary>(record as unknown as Record<string, unknown>),
+                    ),
+                    total,
+                    current,
+                    pageSize: pageSize > 0 ? pageSize : total,
+                } as PagedResult<BlockSummary>;
+            }
+            diagnose({
+                type: "cache.miss",
+                entity: "blocks",
+                id: String(request.pageId ?? request.spaceId ?? "all"),
+            });
+            const result = await tryRemote("relations.queryBlocksPage", () =>
+                remote.relations.queryBlocksPage(request),
+            );
+            if (!result) return { records: [], total: 0, current: 1, pageSize: 0 } as PagedResult<BlockSummary>;
+            await cacheBlocks(result.records, { remoteUpdatedAt: null, dirty: false });
+            return result;
+        },
+
+        async queryBlocks(request: QueryBlocksRequest) {
+            return (await relations.queryBlocksPage(request)).records;
+        },
+
+        async getBlock(blockId) {
+            const cached = await local.getBlock(String(blockId));
+            if (cached && !cached.deleted) {
+                return stripMeta<BlockSummary>(cached as unknown as Record<string, unknown>);
+            }
+            const block = await tryRemote("relations.getBlock", () => remote.relations.getBlock(blockId));
+            if (!block) {
+                if (cached) return stripMeta<BlockSummary>(cached as unknown as Record<string, unknown>);
+                throw new LocalStoreError(
+                    "LOCAL_STORE_UNAVAILABLE",
+                    `block ${String(blockId)} is not cached and the cloud is unreachable`,
+                );
+            }
+            await cacheBlocks([block], { remoteUpdatedAt: null, dirty: false });
+            return block;
+        },
+
+        async searchBlocks(request) {
+            const records = await local.listBlocks({
+                ...(request.spaceId ? { spaceId: String(request.spaceId) } : {}),
+                ...(request.pageId ? { pageId: String(request.pageId) } : {}),
+                ...(request.keyword ? { search: request.keyword } : {}),
+                limit: 50,
+            });
+            if (records.length) {
+                return records.map((record) =>
+                    stripMeta<BlockSummary>(record as unknown as Record<string, unknown>),
+                );
+            }
+            const hits = await tryRemote("relations.searchBlocks", () => remote.relations.searchBlocks(request));
+            if (!hits) return [];
+            await cacheBlocks(hits, { remoteUpdatedAt: null, dirty: false });
+            return hits;
+        },
+
+        // Derived graph/backlink data is computed server-side from the whole
+        // space; a local approximation would be silently wrong, so it stays
+        // online-only and answers with "nothing" rather than a wrong graph.
+        async queryPageRelations(request) {
+            const result = await tryRemote("relations.queryPageRelations", () =>
+                remote.relations.queryPageRelations(request),
+            );
+            return result ?? [];
+        },
+
+        async getSpaceGraph(request = {}) {
+            const graph = await tryRemote("relations.getSpaceGraph", () => remote.relations.getSpaceGraph(request));
+            return graph ?? { nodes: [], edges: [] };
+        },
+
+        async reindexBlocks() {
+            await remote.relations.reindexBlocks?.();
+        },
+    };
+
+    const documents: SpacePageService["documents"] = {
+        async getPageDocument(pageId) {
+            const cached = await local.getDocument(String(pageId));
+            if (cached && (cached.doc !== undefined || cached.content !== undefined)) {
+                return { ...fromLocalDocumentRecord(cached), pageId: cached.pageId };
+            }
+            diagnose({ type: "cache.miss", entity: "document", id: String(pageId) });
+            const document = await tryRemote("documents.getPageDocument", () =>
+                remote.documents.getPageDocument(pageId),
+            );
+            if (!document) {
+                if (cached) return { ...fromLocalDocumentRecord(cached), pageId: cached.pageId };
+                throw new LocalStoreError(
+                    "LOCAL_STORE_UNAVAILABLE",
+                    `document ${String(pageId)} is not cached and the cloud is unreachable`,
+                );
+            }
+            const resolvedPageId = document.pageId ?? String(pageId);
+            await local.upsertDocument(
+                toLocalDocumentRecord(
+                    resolvedPageId,
+                    { ...document, pageId: resolvedPageId },
+                    { remoteUpdatedAt: null, dirty: false },
+                ),
+            );
+            return { ...document, pageId: resolvedPageId };
+        },
+
+        // History is a cloud-side revision log; nothing local can answer it.
+        getPageHistory: (request) => remote.documents.getPageHistory(request),
+        getPageHistoryDocument: (pageId, rev) => remote.documents.getPageHistoryDocument(pageId, rev),
+        createPageCheckpoint: (pageId, checkpointClientId, label) =>
+            remote.documents.createPageCheckpoint(pageId, checkpointClientId, label),
+        restorePageRevision: (request) => remote.documents.restorePageRevision(request),
+
+        async claimPageSession(request) {
+            const state = await tryRemote("documents.claimPageSession", () =>
+                remote.documents.claimPageSession(request),
+            );
+            if (state) return state;
+            // Offline the local document owns the page: there is no other editor
+            // to contend with, so the caller is the host by definition.
+            return { role: "HOST" as const, alive: true, hostSelf: true, metadata: { offline: true } };
+        },
+
+        async heartbeatPageSession(request) {
+            const state = await tryRemote("documents.heartbeatPageSession", () =>
+                remote.documents.heartbeatPageSession(request),
+            );
+            return (
+                state ?? { role: "HOST" as const, alive: true, hostSelf: true, metadata: { offline: true } }
+            );
+        },
+
+        releasePageSession(request) {
+            if (!isOnline()) return undefined;
+            try {
+                return remote.documents.releasePageSession(request);
+            } catch (error) {
+                if (isOfflineError(error)) return undefined;
+                throw error;
+            }
+        },
+
+        async applyPageOperations(pageId, request: ApplyPageOperationsRequest) {
+            const result = await tryRemote("documents.applyPageOperations", () =>
+                remote.documents.applyPageOperations(pageId, request),
+            );
+            if (result) {
+                changes.emit("page.document.changed", { pageId: String(pageId), scope: "content", result });
+                return result;
+            }
+            await enqueue({
+                kind: "document.apply",
+                entity: "document",
+                entityId: String(pageId),
+                payload: { pageId: String(pageId), request: request as unknown as Record<string, unknown> },
+            });
+            // No `rev` on purpose: the caller must not believe the revision it
+            // queued is the server's. Editors keep their own pending state until
+            // the sync engine reports a real revision back.
+            return {
+                opsApplied: request.ops.length,
+                metadata: { queued: true, localFirst: true },
+            } as ApplyPageOperationsResult;
+        },
+
+        async reconcilePageDocument(pageId, request) {
+            const result = await tryRemote("documents.reconcilePageDocument", () =>
+                remote.documents.reconcilePageDocument(pageId, request),
+            );
+            if (result) {
+                await local.upsertDocument(
+                    toLocalDocumentRecord(
+                        String(pageId),
+                        { pageId: String(pageId), doc: request.doc, rev: result.rev ?? null },
+                        { remoteUpdatedAt: null, dirty: false },
+                    ),
+                );
+                changes.emit("page.document.changed", { pageId: String(pageId), scope: "content", result });
+                return result;
+            }
+            await local.upsertDocument(
+                toLocalDocumentRecord(
+                    String(pageId),
+                    { pageId: String(pageId), doc: request.doc },
+                    localEdit(now()),
+                ),
+            );
+            await enqueue({
+                kind: "document.reconcile",
+                entity: "document",
+                entityId: String(pageId),
+                payload: { pageId: String(pageId), request: request as unknown as Record<string, unknown> },
+            });
+            return { metadata: { queued: true, localFirst: true } } as ApplyPageOperationsResult;
+        },
+
+        flushPageOperations(pageId, request) {
+            if (isOnline()) {
+                try {
+                    return remote.documents.flushPageOperations(pageId, request);
+                } catch (error) {
+                    if (!isOfflineError(error)) throw error;
+                }
+            }
+            return local
+                .enqueue([
+                    {
+                        kind: "document.apply",
+                        entity: "document",
+                        entityId: String(pageId),
+                        payload: { pageId: String(pageId), request: request as unknown as Record<string, unknown> },
+                    },
+                ])
+                .then(() => {
+                    requestFlush();
+                });
+        },
+
+        async claimPageSeed(request) {
+            const claimed = await tryRemote("documents.claimPageSeed", () => remote.documents.claimPageSeed(request));
+            return claimed ?? true;
+        },
+
+        releasePageSeed(request) {
+            if (!isOnline()) return undefined;
+            try {
+                return remote.documents.releasePageSeed(request);
+            } catch (error) {
+                if (isOfflineError(error)) return undefined;
+                throw error;
+            }
+        },
+    };
+
+    const service: LocalFirstSpacePageService = {
+        spaces,
+        pages,
+        // Cloud-only feature areas, delegated wholesale on purpose: an offline
+        // answer would be fabricated, and the pre-existing error surface
+        // (toast + retry) is the honest behaviour.
+        templates: remote.templates,
+        members: remote.members,
+        collaboration: remote.collaboration,
+        shares: remote.shares,
+        comments: remote.comments,
+        tags: remote.tags,
+        activity: remote.activity,
+        relations,
+        documents,
+        changes,
+        local,
+        remote,
+        durable: local.durable,
+        get offline() {
+            return observedOffline || !isOnline();
+        },
+        info: () => local.info(),
+    };
+
+    void clientId;
+
+    return service;
+};

@@ -199,7 +199,9 @@ pnpm test:storage
 ## 7. 已知后续项
 
 - Agent SDK 的同步持久化（`AgentRunStore`/`AgentTabLock`）需要 write-behind 适配器才能落到 SQLite。
-- 领域表（spaces/pages/blocks 离线缓存 + 同步队列）尚未建；`DESKTOP_ADAPTATION_PLAN.md` 里的
-  表设计仍是草案，落地前要先定与云端的同步/冲突策略。
+- **领域表（spaces/pages/blocks/文档 + 同步队列）已经落地**，见 **[LOCAL_FIRST.md](LOCAL_FIRST.md)**：
+  同一个 `kotion.db` 的 schema v2，主进程 `apps/desktop/src/main/domain/` 实现 `spacepage.*` 能力组。
+  后续项是文档协同的离线合并、拉取游标分页、以及 Web 端的 sql.js/OPFS 实现。
 - 主题等"首帧同步读"的偏好仍留在 localStorage；若要进 SQLite，需要在渲染前预加载。
-- 存储用量/清理入口（`storage.info()` 已提供数据，缺 UI）。
+- 存储用量/清理入口（`storage.info()` 已提供数据，缺 UI）；领域层的数据量/队列长度见
+  `spacePageService.info()`（local-first 服务）与 `spacepage.info` 能力。

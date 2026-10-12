@@ -96,6 +96,26 @@ pnpm clean:packages         # Clean all dist directories
 改动存储契约时，`packages/common/src/storage/storage.check.ts` 与
 `apps/desktop/src/main/storage/sqlite-store.check.ts` 的用例要一起更新。
 
+### Local-first 领域数据（Space / Page / Block）
+
+桌面端把 **Space / Page / Block / 页面文档** 也落在同一个 SQLite（schema v2），
+渲染端通过 `spacePageService` 端口读写，**端口本身没有变**：
+
+- 读本地优先，未命中才回云端并回写；写先落本地（`dirty`）+ outbox，后台
+  `SyncEngine` 推给云端，断网照常改名/移动/收藏/新建页面；
+- 主进程实现 `apps/desktop/src/main/domain/`（能力组 `spacepage.*`，与 `storage.*`
+  共用连接与数据库文件）；渲染端装配在
+  `packages/core/src/domain/space-page/local-first/`；
+- Web 与数据库不可用时自动退回纯 HTTP 的 `createSpacePageService()`，行为与改造前一致。
+
+两条铁律：**dirty 行不被干净的 upsert 覆盖**；**临时 id 换绑是原子的**
+（`remapPage/remapSpace` 同时改行、父子引用、块、文档与 outbox payload）。
+
+详细语义、离线矩阵、限制与测试见 **[docs/LOCAL_FIRST.md](docs/LOCAL_FIRST.md)**；
+改动契约时 `packages/common/src/domain/space-page/local-store.ts`、
+`packages/core/src/desktop/space-page-bridge.ts`、
+`apps/desktop/src/main/domain/types.ts`、`apps/desktop/src/preload/index.ts` 四处要同步。
+
 
 ### Plugin System
 
