@@ -17,7 +17,7 @@ import { Marketplace } from "./components/Shop/Marketplace";
 
 import { resources } from "./locales/resources"
 import { merge } from "lodash";
-import { AgentPaneProvider, usePluginLocales, clearContextSensitiveClientState, normalizeTokenResponse, notifyContextChanged, setRequestToast, setSessionExpiredHandler, resetSessionExpiredGuard, setEntitlementRequiredHandler, setAgentContextWhitelist, subscribeToContextChanges, useAsyncEffect, useSafeState, useTranslation, useApi, useUploadFile, APIS, saveTokens } from "@kn/common"
+import { AgentPaneProvider, usePluginLocales, useI18nInitialized, clearContextSensitiveClientState, normalizeTokenResponse, notifyContextChanged, setRequestToast, setSessionExpiredHandler, resetSessionExpiredGuard, setEntitlementRequiredHandler, setAgentContextWhitelist, subscribeToContextChanges, useAsyncEffect, useSafeState, useTranslation, useApi, useUploadFile, APIS, saveTokens } from "@kn/common"
 import { registerCoreAgentTools, registerCoreToolFactories } from "./ai/tools/register"
 import { registerOffscreenEditorBridge, setMaxOffscreenSessions } from "./ai/offscreen"
 import { registerAgentDocumentBridge } from "./ai/agentdoc"
@@ -397,16 +397,24 @@ export const App: React.FC<AppProps> = (props) => {
      * strings would sit in the store unused until some unrelated state change. The
      * call is idempotent (`overwrite: true`), so re-running it on a re-render or in
      * StrictMode is harmless.
+     *
+     * It also has to wait for i18n itself: the host calls `i18n.init()` in an
+     * effect and `init()` settles asynchronously, so on the first render
+     * `isInitialized` is still false. Keying only on the locales made that first
+     * attempt a silent no-op that never retried — every plugin string then
+     * rendered as its key (`pluginStudio.title` in the page header).
      */
     const pluginLocales = usePluginLocales()
+    const i18nReady = useI18nInitialized()
     useMemo(() => {
+        if (!i18nReady) return
         const res = merge(resources, pluginLocales)
         if (i18n.isInitialized) {
             Object.keys(res).forEach(it => {
                 i18n.addResourceBundle(it, "translation", res[it], true, true)
             })
         }
-    }, [pluginLocales])
+    }, [pluginLocales, i18nReady])
 
     // Wire up toast for the request module
     setRequestToast((msg, opts) => toast.error(msg))

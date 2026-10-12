@@ -851,6 +851,91 @@ const projectionChecks = async (): Promise<void> => {
   }
 };
 
+/* ------------------------------------------------------------------ *
+ * 9. Every registry mutation is observable
+ *
+ * `usePluginState()` (which every registry-driven view uses: dock panels, page
+ * types, routes, menus, settings, tours, agent cards) reads the registry through
+ * `useSyncExternalStore` on the manager's change stream, and treats `version` +
+ * `onChange` as a **complete** description of it. That is only sound if no
+ * lifecycle operation mutates the registry without committing — so this is the
+ * invariant to assert, for every path.
+ * ------------------------------------------------------------------ */
+const notificationChecks = async (): Promise<void> => {
+  const originalLoad = pluginScriptLoader.load;
+  const hostPlugin = new KPlugin({ name: "Host Plugin", status: "ACTIVE" });
+  const remote = {
+    pluginKey: "notified-plugin",
+    name: "Notified Plugin",
+    versionId: "n1",
+    resourcePath: "/notified.js",
+  };
+  pluginScriptLoader.load = async () => registration(
+    new KPlugin({ name: "Notified Plugin", status: "ACTIVE", menus: [] } as any),
+  );
+
+  const manager = new PluginManager({ resolveUrl: (path) => path, hostApiVersion: "2.0.0" }, [hostPlugin]);
+  let notifications = 0;
+  const unsubscribe = manager.onChange(() => { notifications += 1 });
+
+  /** Run one mutation and assert it moved both the version and the listeners. */
+  const observed = async (label: string, mutate: () => Promise<unknown> | unknown): Promise<void> => {
+    const versionBefore = manager.version;
+    const notificationsBefore = notifications;
+    await mutate();
+    assert(
+      manager.version > versionBefore && notifications > notificationsBefore,
+      `${label} must bump the version and notify listeners `
+      + `(version ${versionBefore}→${manager.version}, notifications ${notificationsBefore}→${notifications})`,
+    );
+  };
+
+  try {
+    await observed("init", () => manager.init([remote]));
+    await observed("a dev install", () => manager.installBundle({
+      code: "export default {}",
+      pluginKey: "notified-plugin",
+      name: "Notified Plugin",
+      version: "dev.1",
+      sourceLabel: "/tmp/notified",
+    }));
+    await observed("a reload", () => manager.installBundle({
+      code: "export default {}",
+      pluginKey: "notified-plugin",
+      name: "Notified Plugin",
+      version: "dev.2",
+      sourceLabel: "/tmp/notified",
+    }));
+    await observed("uninstall", () => manager.uninstallPlugin("notified-plugin"));
+    await observed("remove", () => {
+      manager.remove("Host Plugin");
+      return undefined;
+    });
+
+    /* A refused install must not move the stream either (nothing changed). */
+    const versionBeforeRefusal = manager.version;
+    const refused = await manager.installBundle({
+      // The host plugin's own registry key: the host owns it, no bundle may take it.
+      code: "export default {}",
+      pluginKey: "Host Plugin",
+      name: "Host Plugin",
+      version: "dev.9",
+    });
+    assert(refused.ok === false, "installing under a host plugin's key must be refused");
+    assert(
+      manager.version === versionBeforeRefusal,
+      "a refused install must leave the version untouched (no phantom change to react to)",
+    );
+
+    unsubscribe();
+    const afterUnsubscribe = notifications;
+    await manager.init([]);
+    assert(notifications === afterUnsubscribe, "an unsubscribed listener must not be called");
+  } finally {
+    pluginScriptLoader.load = originalLoad;
+  }
+};
+
 const run = async (): Promise<void> => {
   registryChecks();
   hookOwnershipChecks();
@@ -860,6 +945,7 @@ const run = async (): Promise<void> => {
   await registrationChecks();
   await routeChecks();
   await projectionChecks();
+  await notificationChecks();
   logger.info(`plugin hot-swap checks passed (${checks} assertions)`);
 };
 

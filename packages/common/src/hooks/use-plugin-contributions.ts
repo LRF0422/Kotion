@@ -1,8 +1,9 @@
-import { useContext, useMemo } from "react"
+import { useContext, useEffect, useMemo, useState } from "react"
 import { AppContext } from "../core/AppContext"
 import type { SiderMenuItemProps } from "../core/menu"
 import type { PluginSettingsConfig } from "../core/PluginManager"
 import type { TourConfig } from "../core/tour"
+import { i18n } from "../locales"
 import { usePluginState } from "./use-plugin-state"
 
 /**
@@ -59,4 +60,32 @@ export function usePluginLocales(): Record<string, unknown> {
         () => (pluginManager?.resolveLocales() ?? {}) as Record<string, unknown>,
         [pluginManager, pluginVersion]
     )
+}
+
+/**
+ * Whether the host i18n instance has finished initializing.
+ *
+ * Plugin contributions that are *resources* (translations) can only be registered
+ * once it is ready — and "ready" arrives asynchronously, because the host
+ * initializes i18next in an effect and `init()` settles on a later tick. Anything
+ * that registers them has to re-run when this flips, or the very first attempt
+ * becomes a silent no-op: that is exactly how a build ended up rendering
+ * `pluginStudio.title` instead of its label.
+ */
+export function useI18nInitialized(): boolean {
+    const [initialized, setInitialized] = useState(() => Boolean(i18n.isInitialized))
+
+    useEffect(() => {
+        if (initialized) return undefined
+        const markReady = () => setInitialized(true)
+        // `init()` may also have settled between the render above and this effect.
+        if (i18n.isInitialized) {
+            markReady()
+            return undefined
+        }
+        i18n.on('initialized', markReady)
+        return () => { i18n.off('initialized', markReady) }
+    }, [initialized])
+
+    return initialized
 }
