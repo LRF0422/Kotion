@@ -37,7 +37,7 @@ import {
     type UpdatePageTitleRequest,
     type UpdateSpaceRequest,
 } from "@kn/common";
-import { flattenTree, isOfflineError, type LocalFirstDiagnostic } from "./service";
+import { flattenTree, isOfflineError, pageTreeSyncedKey, type LocalFirstDiagnostic } from "./service";
 
 export type LocalFirstSyncPhase = "idle" | "pushing" | "pulling" | "error";
 
@@ -270,6 +270,9 @@ export const createLocalFirstSyncEngine = (options: LocalFirstSyncOptions): Loca
             const spaceId = String(space.id);
             const tree = await remote.pages.getPageTree({ spaceId });
             const records = flattenTree(tree);
+            // The space's tree is now complete in the cache, which is what lets
+            // `getPageTree` answer locally instead of re-fetching.
+            await local.setState(pageTreeSyncedKey(spaceId), now());
             if (records.length) {
                 // Tree nodes are summaries, not full page records: flag them so
                 // a later `getPage` refreshes from the cloud instead of trusting them.

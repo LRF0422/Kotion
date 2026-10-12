@@ -50,7 +50,7 @@ editor、AI 工具、插件）继续按原接口调用，不需要知道这次�
 > `Space`/`PageMetadata` 里已经有 `updatedAt` 字段，所以本地的写入时间在契约层叫
 > `localUpdatedAt`，避免和云端时间戳混淆。
 
-## 2. 三条铁律（实现里强制，不靠调用方自觉）
+## 2. 四条铁律（实现里强制，不靠调用方自觉）
 
 1. **dirty 行不会被干净的 upsert 覆盖。** 拉取（`dirty: false`）遇到本地仍有排队改动的行时，
    只更新 `remote_updated_at`，payload 原样保留。否则后台同步会悄悄吃掉离线编辑。
@@ -59,7 +59,10 @@ editor、AI 工具、插件）继续按原接口调用，不需要知道这次�
    `remapPage` 在一个事务里改：行本身、子页面的 `parent_id`、块的 `page_id`、文档的
    `page_id`、以及 outbox 里所有**恰好等于**该 id 的字符串（子串不动，所以正文里出现同样
    字符不会被误改）。空间同理（`remapSpace`）。
-3. **summary 行要先补全再当完整记录用。** 页面树/列表/最近/搜索写进 `pages` 表的是**摘要**
+3. **树是否完整看标记，不看「有没有行」。** 页面树落库时写 `sync_state` 的
+   `pageTree.synced.<spaceId>` 标记；没有标记时 `getPageTree` 一律回源（否则「最近页面」
+   里偶然缓存的一行会让侧边栏只显示一个节点）。同步引擎拉完某个空间的树也会打标记。
+4. **summary 行要先补全再当完整记录用。** 页面树/列表/最近/搜索写进 `pages` 表的是**摘要**
    （缺 `permission`、`legacyContent` 等只有完整接口才返回的字段），因此带 `partial: true`。
    `getPage()` 读到 partial 行会先回源补全（离线则退回用这行），再把结果合并回本地行；
    若这行还有排队中的本地改名，本地值优先、云端补齐其余字段。
@@ -87,7 +90,9 @@ getState / setState / clear`，错误码
 |------|----------|
 | `spaces.getSpace/getPersonalSpace/querySpaces` | 本地优先；个人空间用 `personal` 标记记住 |
 | `pages.getPage/getPageMetadata` | 本地优先；命中 `partial`（摘要）行时先回源补全，离线退回摘要 |
-| `pages.getPageTree/queryPages/queryRecentPages/queryFavoritePages/getPinnedPages` | 本地优先；树由缓存的 `parent_id` + `rank` 现场拼，落库标 `partial`；空缓存才回源 |
+| `pages.getPageTree` | 只有该空间的树**拉取过**（`sync_state` 里的 `pageTree.synced.<spaceId>` 标记）才用本地拼树；否则回源并打标记。离线时退回用手上的行拼树 |
+| `pages.queryPages`（带 spaceId） | 与树同一把尺子：标记存在才用本地；不带 spaceId 的全局查询保持本地 best-effort |
+| `pages.queryRecentPages/queryFavoritePages/getPinnedPages` | 本地优先，空缓存才回源（离线为本地快照，见限制） |
 | `pages.createPage` | 在线：先云端（拿真实 id）；离线：临时 id + outbox，正文同时写 `page_documents` |
 | `pages.updatePageTitle/movePage/movePageToTrash/restorePageFromTrash/favorite/unfavorite/togglePagePin` | 本地立即生效 + outbox；同一页面的同类改动按 `coalesceKey` 合并 |
 | `spaces.createSpace/updateSpace/archive/unarchive/delete/toggleFavorite` | 同上；`deleteSpace` 对"从未推送过"的行直接丢弃并清掉排队项 |
@@ -134,7 +139,7 @@ outbox 吞掉。
 pnpm --filter @kn/desktop check:domain        # 需要宿主 Node 版 better-sqlite3
 pnpm --filter @kn/desktop rebuild:native:node # 若当前是 Electron 版二进制（会打印 SKIP）
 
-# local-first 服务 + 同步引擎（85 项，内存 store + 假云端，逐条断言"有没有走网络"）
+# local-first 服务 + 同步引擎（93 项，内存 store + 假云端，逐条断言"有没有走网络"）
 pnpm --filter @kn/core check:local-first
 
 # 两条一起

@@ -785,6 +785,42 @@ async function onlineBehaviour(): Promise<void> {
     }
     check("a 4xx is NOT treated as offline", strictError instanceof LocalStoreError === false, strictError);
     checkEqual("the real error survives", (strictError as Error)?.message, "Request failed with status code 422");
+
+    console.log("\nA space tree is only served locally once it has been pulled");
+    const treeLocal = new MemoryLocalStore();
+    const treeRemote = makeRemote();
+    const treeService = createLocalFirstSpacePageService({
+        local: treeLocal,
+        remote: treeRemote.service,
+        isOnline: online,
+    });
+    // One row for the space, but from a *summary* source: not a tree.
+    treeLocal.upsertPages([{ ...pageRecord("only-one", { spaceId: "s7" }), dirty: false, partial: true }]);
+    treeRemote.replies.set("pages.getPageTree", () => [
+        { id: "only-one", spaceId: "s7", title: "Server page", children: [{ id: "child", spaceId: "s7", title: "Child" }] },
+    ]);
+    const fetchedTree: any = await treeService.pages.getPageTree({ spaceId: "s7" });
+    checkEqual("an unmarked space goes to the cloud", treeRemote.calls, ["pages.getPageTree"]);
+    checkEqual("the cloud tree is returned", fetchedTree[0]?.children?.[0]?.id, "child");
+    checkEqual("the fetched nodes are cached", treeLocal.getPage("child") !== null, true);
+    checkEqual("the tree is marked as synced", treeLocal.getState("pageTree.synced.s7") != null, true);
+
+    treeRemote.calls.length = 0;
+    const cachedTree: any = await treeService.pages.getPageTree({ spaceId: "s7" });
+    checkEqual("the next tree read is local", treeRemote.calls.length, 0);
+    checkEqual("and contains the cached child", cachedTree[0]?.children?.[0]?.id, "child");
+
+    const scopedLocal = new MemoryLocalStore();
+    const scopedRemote = makeRemote();
+    const scopedService = createLocalFirstSpacePageService({
+        local: scopedLocal,
+        remote: scopedRemote.service,
+        isOnline: online,
+    });
+    scopedLocal.upsertPages([{ ...pageRecord("solo", { spaceId: "s8" }), dirty: false, partial: true }]);
+    scopedRemote.replies.set("pages.queryPages", () => ({ records: [], total: 0, current: 1, pageSize: 20 }));
+    await scopedService.pages.queryPages({ spaceId: "s8" });
+    checkEqual("a space-scoped list follows the same rule", scopedRemote.calls, ["pages.queryPages"]);
 }
 
 async function syncBehaviour(): Promise<void> {
@@ -912,6 +948,7 @@ async function syncBehaviour(): Promise<void> {
     });
     await pullEngine.syncNow();
     check("spaces were pulled", pullLocal.getSpace("s1") !== null);
+    checkEqual("the pull marks the space tree as synced", pullLocal.getState("pageTree.synced.s1") != null, true);
     checkEqual("the queued local title survived the pull", pullLocal.getPage("p1")?.title, "Local title");
     check("the skip is recorded", pullLocal.preserved.includes("page:p1"), pullLocal.preserved);
 

@@ -169,21 +169,32 @@ export function buildPageTree(records: LocalPageRecord[]): PageTreeNode[] {
     return roots;
 }
 
-/** Depth-first flatten of a page tree, tagging each node with its sibling rank. */
+/**
+ * Depth-first flatten of a page tree into cacheable rows.
+ *
+ * The hierarchy is recorded twice, on purpose: `parentId` is taken from the
+ * node's position in the tree (a server tree need not repeat it), which is what
+ * lets `buildPageTree` rebuild the same shape from flat rows later, and `rank`
+ * keeps the sibling order the server sent. A node that declares a parent while
+ * sitting at the top of a *filtered* tree keeps its declared parent.
+ */
 export function flattenTree(nodes: PageTreeNode[]): Array<PageMetadata & { rank?: number }> {
     const out: Array<PageMetadata & { rank?: number }> = [];
-    const visit = (list: PageTreeNode[]): void => {
+    const visit = (list: PageTreeNode[], parentId: string | null): void => {
         list.forEach((node, index) => {
             const rest = { ...node } as PageTreeNode & { rank?: number };
             delete rest.children;
             delete rest.childCount;
             delete rest.hasChildren;
             rest.rank = index;
+            const resolvedParent = parentId ?? node.parentId ?? null;
+            if (resolvedParent === null) delete rest.parentId;
+            else rest.parentId = resolvedParent;
             out.push(rest as PageMetadata & { rank?: number });
-            if (node.children?.length) visit(node.children);
+            if (node.children?.length) visit(node.children, node.id);
         });
     };
-    visit(nodes);
+    visit(nodes, null);
     return out;
 }
 
@@ -202,6 +213,16 @@ const pageSummaryFrom = (record: LocalPageRecord): PageSummary =>
     stripMeta<PageSummary>(record as unknown as Record<string, unknown>);
 
 const localEdit = (now: number): LocalRecordMeta => ({ localUpdatedAt: now, dirty: true });
+
+/**
+ * `sync_state` key marking that a space's page tree has been pulled (or
+ * fetched) at least once.
+ *
+ * Without it, any single cached row for a space (a recent-pages hit, a search
+ * result) would make `getPageTree` serve a one-node tree instead of asking the
+ * cloud. The marker is also written by the sync engine's pull.
+ */
+export const pageTreeSyncedKey = (spaceId: string): string => `pageTree.synced.${spaceId}`;
 
 export const createLocalFirstSpacePageService = (options: LocalFirstServiceOptions): LocalFirstSpacePageService => {
     const { local, remote } = options;
@@ -316,6 +337,25 @@ export const createLocalFirstSpacePageService = (options: LocalFirstServiceOptio
         if (!page) return null;
         await cachePage(page, { remoteUpdatedAt: null, dirty: false });
         return local.getPage(pageId);
+    };
+
+    const isTreeSynced = async (spaceId: string): Promise<boolean> => {
+        try {
+            return (await local.getState<number>(pageTreeSyncedKey(spaceId))) != null;
+        } catch {
+            // A store that cannot answer is treated as "not synced": worst case
+            // we ask the cloud, which is what the cached tree would have to do
+            // anyway when it is genuinely absent.
+            return false;
+        }
+    };
+
+    const markTreeSynced = async (spaceId: string): Promise<void> => {
+        try {
+            await local.setState(pageTreeSyncedKey(spaceId), now());
+        } catch {
+            // The marker is an optimisation; losing it only costs a re-fetch.
+        }
     };
 
     const localPageQuery = (request: QueryPagesRequest): LocalPageQuery => {
@@ -627,23 +667,37 @@ export const createLocalFirstSpacePageService = (options: LocalFirstServiceOptio
 
         async getPageTree(request: QueryPageTreeRequest) {
             const spaceId = String(request.spaceId);
-            const records = await local.listPages({ spaceId, limit: 2000 });
-            if (records.length) return buildPageTree(records);
+            // "Some rows exist for this space" is not the same as "the tree has
+            // been pulled": a recent-pages or search hit leaves one row behind,
+            // and serving a one-node tree from it would look like data loss. The
+            // marker is what makes the cached tree trustworthy.
+            if (await isTreeSynced(spaceId)) {
+                return buildPageTree(await local.listPages({ spaceId, limit: 5000 }));
+            }
 
             diagnose({ type: "cache.miss", entity: "pageTree", id: spaceId });
             const tree = await tryRemote("pages.getPageTree", () => remote.pages.getPageTree(request));
             if (!tree) {
+                const records = await local.listPages({ spaceId, limit: 5000 });
+                if (records.length) return buildPageTree(records);
                 throw new LocalStoreError(
                     "LOCAL_STORE_UNAVAILABLE",
                     `space ${spaceId} has no cached page tree and the cloud is unreachable`,
                 );
             }
             await cachePages(flattenTree(tree), { remoteUpdatedAt: null, dirty: false }, true);
+            await markTreeSynced(spaceId);
             return tree;
         },
 
         async queryPages(request = {}) {
-            const result = await queryPagesLocally(request, request.parentId === undefined ? "updated" : "rank");
+            // A space-scoped list is only as complete as that space's tree; an
+            // unscoped list (search, pickers) stays best-effort local.
+            const scopedSpaceId = request.spaceId ? String(request.spaceId) : undefined;
+            const result =
+                scopedSpaceId && !(await isTreeSynced(scopedSpaceId))
+                    ? paged<PageSummary>([], 0, request)
+                    : await queryPagesLocally(request, request.parentId === undefined ? "updated" : "rank");
             if (result.total > 0) return result;
             const remoteResult = await tryRemote("pages.queryPages", () => remote.pages.queryPages(request));
             if (!remoteResult) return result;
