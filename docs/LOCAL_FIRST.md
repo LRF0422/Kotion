@@ -25,7 +25,7 @@
 **设计约束（重要）**：`SpacePageService` 端口本身一行没改。所有消费者（plugin-main、
 editor、AI 工具、插件）继续按原接口调用，不需要知道这次读写落在哪一侧。
 
-## 1. 数据表（schema v2，追加迁移）
+## 1. 数据表（schema v2 建表，v3 放宽 outbox 合并索引）
 
 `apps/desktop/src/main/storage/schema.ts` 的 `MIGRATIONS` 追加了 `version: 2`
 
@@ -36,7 +36,7 @@ editor、AI 工具、插件）继续按原接口调用，不需要知道这次�
 | `blocks` | `id` | 块缓存：`page_id/space_id/parent_id/type/text` + `data` |
 | `page_documents` | `page_id` | 页面文档快照：`doc`(JSON) + `rev` + `data` |
 | `outbox` | `id` 自增 | 待推送的本地改动（kind/entity/entity_id/coalesce_key/payload/state/attempts） |
-| `sync_state` | `key` | 同步游标等（`sync.lastPullAt` 等） |
+| `sync_state` | `key` | 同步标记与游标：`pageTree.synced.<spaceId>`、`localFirst.session` 等 |
 
 每行都带四个本地字段（**只存在于本地，不进契约**）：
 
@@ -50,15 +50,16 @@ editor、AI 工具、插件）继续按原接口调用，不需要知道这次�
 > `Space`/`PageMetadata` 里已经有 `updatedAt` 字段，所以本地的写入时间在契约层叫
 > `localUpdatedAt`，避免和云端时间戳混淆。
 
-## 2. 四条铁律（实现里强制，不靠调用方自觉）
+## 2. 五条铁律（实现里强制，不靠调用方自觉）
 
 1. **dirty 行不会被干净的 upsert 覆盖。** 拉取（`dirty: false`）遇到本地仍有排队改动的行时，
-   只更新 `remote_updated_at`，payload 原样保留。否则后台同步会悄悄吃掉离线编辑。
-   等同步引擎 `markSynced` 清掉 dirty，云端版本才重新说了算。
-2. **id 换绑是原子的。** 离线创建的页面先拿 `local-page-…` 临时 id；云端返回真实 id 后，
-   `remapPage` 在一个事务里改：行本身、子页面的 `parent_id`、块的 `page_id`、文档的
-   `page_id`、以及 outbox 里所有**恰好等于**该 id 的字符串（子串不动，所以正文里出现同样
-   字符不会被误改）。空间同理（`remapSpace`）。
+   只更新 `remote_updated_at`，payload 原样保留。同步引擎只在该实体的**最后一条**排队项
+   ack 之后才 `markSynced` 清 dirty，否则后来的拉取会吃掉还没轮到的本地改动。
+2. **id 换绑是原子的，且按主键逐行更新。** 离线创建的页面先拿 `local-page-…` 临时 id；
+   云端返回真实 id 后 `remapPage` 在一个事务里改：行本身、子页面的 `parent_id`、块的
+   `page_id`、文档的 `page_id`、outbox 的 `entity_id`/`coalesce_key`，以及 payload 里
+   **恰好等于**该 id 的字符串（子串不动）。多行共用同一个 `parent_id`，所以更新必须按
+   主键（`id`/`page_id`）而不能按引用列，否则会把第一个子行的 payload 写给所有兄弟。
 3. **树是否完整看标记，不看「有没有行」。** 页面树落库时写 `sync_state` 的
    `pageTree.synced.<spaceId>` 标记；没有标记时 `getPageTree` 一律回源（否则「最近页面」
    里偶然缓存的一行会让侧边栏只显示一个节点）。同步引擎拉完某个空间的树也会打标记。
@@ -66,6 +67,10 @@ editor、AI 工具、插件）继续按原接口调用，不需要知道这次�
    （缺 `permission`、`legacyContent` 等只有完整接口才返回的字段），因此带 `partial: true`。
    `getPage()` 读到 partial 行会先回源补全（离线则退回用这行），再把结果合并回本地行；
    若这行还有排队中的本地改名，本地值优先、云端补齐其余字段。
+5. **墓碑是本地状态。** `deleted`（软删除）只由本地的删除动作设置；拉取记录不带这个字段
+   （它不是契约字段），所以 upsert 必须保留已有墓碑，只有显式 `deleted: false`
+   （`restorePageFromTrash`）才恢复。否则打开一次回收站（会缓存 `status: TRASH` 的列表）
+   就能把已删除页面重新塞回侧边栏。
 
 ## 3. 契约
 
@@ -83,6 +88,14 @@ getState / setState / clear`，错误码
 | 渲染端桥 | `packages/core/src/desktop/space-page-bridge.ts` |
 | 主进程实现 | `apps/desktop/src/main/domain/{types,store,index}.ts`（主进程**不能** import `@kn/common`，类型是镜像声明） |
 | preload 白名单 | `apps/desktop/src/preload/index.ts` 的 `CAPABILITIES` 与 `SPACEPAGE_CAPABILITIES` 一致 |
+
+## 3.5 本地库不可用时会怎样
+
+`spacepage.*` 能力存在但数据库打不开（原生模块 ABI 不匹配、文件损坏、磁盘只读）时，主进程
+照常注册所有 handler，每个都回 `LOCAL_STORE_UNAVAILABLE`。渲染端的 local-first 服务**第一次**
+遇到这个错误就把该次调用转给云端并把整个（`spaces`/`pages`/`relations`/`documents`）命名空间
+切到纯云端模式（`service.degraded === true`，同时把云端 `changes` 转发出来），此后不再碰本地库。
+也就是说：坏掉的数据库只会让"离线/本地优先"失效，不会让应用不可用。
 
 ## 4. 服务行为矩阵
 
@@ -103,43 +116,67 @@ getState / setState / clear`，错误码
 | `documents.claimPageSeed/releasePageSeed/releasePageSession` | 离线：claim → `true`（本地文档就是权威）；release → no-op |
 | `relations.queryPageRelations/getSpaceGraph` | 云端派生数据：离线返回空结果，**不编造** |
 | `templates / members / collaboration / shares / comments / tags / activity / documents history` | 云端专属，整体委托；离线按原样报错（多用户语义没有诚实的离线答案） |
+| 任意读 | 本地库不可用（`LOCAL_STORE_UNAVAILABLE`）时自动改由云端服务应答，并永久切到纯云端模式 |
 
-写入的判定规则：只有**网络类**失败（`isOfflineError`：`ERR_NETWORK` / 无 `response` 的
-axios 错误 / fetch failed / timeout…）才会退化成离线路径；4xx 是真错误，照常抛出，不会被
-outbox 吞掉。
+写入的策略分两类：
+
+- **本地优先（多数）**：`updatePageTitle`、`movePage`、trash/restore、favorite、pin、
+  `archive/unarchiveSpace`、`toggleSpaceFavorite`、文档操作 —— 先落本地库 + outbox，UI 不等网络。
+  这种情况下服务端 4xx 不会同步抛出，而是在同步时变成 outbox 里的 `failed` 条目（保留原因，
+  可手动重试）。
+- **云端优先（少数，因为 id/校验必须来自服务端）**：`createPage`、`createSpace`、`updateSpace`
+  先请求云端；只有**网络类**失败（`isOfflineError`：`ERR_NETWORK` / 无 `response` 的 axios 错误 /
+  fetch failed / timeout…）才退化成离线路径，4xx 照常抛出。
+
+`LOCAL_STORE_UNAVAILABLE` 专指「本地数据库坏了」；「没缓存 + 没网」抛的是
+`LocalFirstOfflineError`（`LOCAL_FIRST_OFFLINE`），两者不能混用 —— 前者会把服务切换到纯云端模式。
 
 ## 5. 同步引擎（`packages/core/src/domain/space-page/local-first/sync.ts`）
 
-- **push**：按 `id` 升序逐条重放，成功后 `ackOutbox` + `markSynced`（清 dirty）。
-  - 网络失败 → 条目保持 `pending` 并**停止**（顺序不能被破坏）；
-  - 4xx → 标记 `failed` 并记录原因，继续下一条（`sync.retryFailed()` / `retryFailed()` 可重试）。
+- **push**：用 `claimOutbox` 原子地取最旧的 `pending` 条目（取走即变 `inflight`），
+  按 `id` 升序逐条重放；成功后先 `ackOutbox`，再在没有该实体其它排队项时 `markSynced`。
+  - `claim` 而不是 `list` 的原因：两个同步回合（或两个窗口）拿不到同一条；推送期间到达的
+    合并型编辑不会覆盖已在网线上的 payload，而是变成新条目排在后面（否则那次 ack 会把它删掉）。
+  - 网络失败 → `retryOutbox([id])` 放回 `pending` 并**停止**（顺序不能被破坏）；
+  - 4xx → 标记 `failed` 并记录原因，继续下一条（`retryFailed()` 会把它们放回 pending 并触发一次 flush）。
+  - 重放是 **at-least-once**：崩溃点落在 ack 之前会重复推送一次（create 有 body 里的临时 id、
+    toggle 类已改为不合并，其余幂等）。
 - **pull**：空间列表 → 每个已知空间的页面树 → 跨空间最近页面，全部以 `dirty: false` 落库。
 - **顺序**：先 push 后 pull，所以离线改动上传后会被云端版本回读，两边收敛。
 - **触发**：启动、每 30s、`online` 事件、以及每次本地写入后的 800ms 防抖 `requestFlush()`。
 - **前置条件**：没有 access token 或 `navigator.onLine === false` 时直接跳过（同步等待登录）。
+- **会话隔离**：数据库是「每台机器一份」，不是「每个账号一份」。启动时（以及跨标签页的
+  上下文变更事件）会比对 JWT 的 `sub|ctx_id` 指纹（`sync_state` 的 `localFirst.session`），
+  变了就 `clear()` 整个缓存与队列 —— 既不让新账号读到旧账号的空间/页面，也绝不把上个账号
+  的离线改动用新账号的 token 推上去。
 - **状态**：`{ phase, pending, failed, lastSyncAt, lastError, online }`，`subscribe()` 可给设置页/状态条用。
 
 ## 6. 有意为之的限制（v1）
 
 - **文档协同仍是云端权威**：`applyPageOperations` 离线只是排队，不带服务端 rev；重放时若
   baseRev 过期会拿到 `stale` 判定，需要 `reconcile` 兜底。真正的离线协同编辑（Yjs 持久化 +
-  本地合并）是后续工作。
-- **拉取是单页**：空间/最近页面各拉 200/100 条、每个空间最多 50 个空间拉树；超大账号需要
-  分页游标（`sync_state` 已备好放游标的地方）。
-- **没有冲突 UI**：元数据是"本地 dirty 优先、云端版本让路"，跨端同时改名以先推送者为准。
-- **Web 端没有本地库**：浏览器仍走纯 HTTP（`@kn/common` 的 KV 存储层已有 `localStorage`
-  兜底，但领域表没有）。要覆盖 Web 需要 sql.js/OPFS 实现同一个 `SpacePageLocalStore`。
+  本地合并）是后续工作。离线排队的文档操作也不会写进 `page_documents` 快照，所以离线重载
+  页面会读到编辑前的文档。
+- **拉取是单页且不回收**：空间 200 / 最近页面 100 / 每空间 50 个空间拉树，单个空间的页面
+  上限 5000 行；本端没见过的删除（别处删掉的页面）不会被清理，只会一直留在缓存里。
+- **搜索/列表是本地快照**：`queryPages`/`queryRecentPages`/`queryFavoritePages`/`searchBlocks`
+  只要本地有匹配就返回本地结果，因此带 `searchValue` 的搜索可能漏掉尚未缓存的结果，
+  `total` 也是本地计数。跨空间的完整搜索仍应走云端接口。
+- **重放不是 exactly-once**：ack 之前崩溃会重复推送一次（见上）。
+- **没有冲突 UI**：元数据是「本地 dirty 优先、云端版本让路」，跨端同时改名以先推送者为准。
+- **Web 端没有本地库**：浏览器仍走纯 HTTP。要覆盖 Web 需要 sql.js/OPFS 实现同一个
+  `SpacePageLocalStore`。
 - **块写入**：`blocks` 目前是读缓存，块级改动仍通过页面文档的操作流走。
-- **不转发远端变更事件**：`changes` 只发本端产生的事件，保持改造前的语义。
+- **不转发远端变更事件**：`changes` 只发本端产生的事件（本地库不可用而整体降级到云端时除外）。
 
 ## 7. 测试与验证
 
 ```bash
-# 主进程仓库：dirty 保护 / 软硬删除 / outbox 合并 / id 换绑 / 校验 / 清理（78 项）
+# 主进程仓库：dirty 保护 / 墓碑 / 软硬删除 / outbox 合并与 claim / 逐行 id 换绑 / 校验（100 项）
 pnpm --filter @kn/desktop check:domain        # 需要宿主 Node 版 better-sqlite3
 pnpm --filter @kn/desktop rebuild:native:node # 若当前是 Electron 版二进制（会打印 SKIP）
 
-# local-first 服务 + 同步引擎（93 项，内存 store + 假云端，逐条断言"有没有走网络"）
+# local-first 服务 + 同步引擎 + 降级/会话隔离（114 项，内存 store + 假云端，逐条断言"有没有走网络"）
 pnpm --filter @kn/core check:local-first
 
 # 两条一起
@@ -147,6 +184,8 @@ pnpm test:local-first
 ```
 
 `check:domain` 复用 `check:storage` 的 ABI 约定：二进制不匹配时打印 SKIP 并退出 0，不伪装通过。
+`pnpm --filter @kn/desktop test:storage:electron` 还会走真实 preload → IPC → SQLite，
+同时覆盖 `storage.*` 与 `spacepage.*`（含 claimOutbox 与墓碑/换绑的落盘结果）。
 
 ## 8. 落地时改了什么
 

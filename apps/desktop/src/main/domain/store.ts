@@ -124,7 +124,7 @@ export class SqliteDomainStore {
 
     listSpaces(query: JsonRecord = {}): SpaceRecord[] {
         const { where, params } = this.spaceFilter(query);
-        const limit = clampLimit(query.limit, 500);
+        const limit = clampLimit(query.limit, 500, 5000);
         const offset = clampOffset(query.offset);
         const rows = this.db
             .prepare(`SELECT * FROM spaces ${where} ORDER BY archived ASC, name COLLATE NOCASE ASC, id ASC LIMIT ? OFFSET ?`)
@@ -142,7 +142,7 @@ export class SqliteDomainStore {
         const records = assertRecordArray(rawRecords, 'records');
         const insert = this.db.prepare(`
             INSERT INTO spaces (id, name, type, archived, favorite, personal, data, updated_at, remote_updated_at, deleted, dirty)
-            VALUES (@id, @name, @type, @archived, @favorite, @personal, @data, @updated_at, @remote_updated_at, @deleted, @dirty)
+            VALUES (@id, @name, @type, @archived, @favorite, @personal, @data, @updated_at, @remote_updated_at, COALESCE(@deleted, 0), @dirty)
             ON CONFLICT(id) DO UPDATE SET
                 name = excluded.name,
                 type = excluded.type,
@@ -152,7 +152,7 @@ export class SqliteDomainStore {
                 data = excluded.data,
                 updated_at = excluded.updated_at,
                 remote_updated_at = COALESCE(excluded.remote_updated_at, spaces.remote_updated_at),
-                deleted = excluded.deleted,
+                deleted = CASE WHEN @deleted IS NULL THEN spaces.deleted ELSE @deleted END,
                 dirty = excluded.dirty
         `);
         const touch = this.db.prepare(
@@ -181,7 +181,7 @@ export class SqliteDomainStore {
                     data: encodeJson(record),
                     updated_at: asFiniteNumber(record.localUpdatedAt) ?? this.now(),
                     remote_updated_at: asFiniteNumber(record.remoteUpdatedAt) ?? recordEpoch(record),
-                    deleted: asBool(record.deleted),
+                    deleted: record.deleted === undefined ? null : asBool(record.deleted),
                     dirty: dirty ? 1 : 0,
                 });
                 affected += 1;
@@ -197,7 +197,13 @@ export class SqliteDomainStore {
         const hard = this.db.prepare('DELETE FROM spaces WHERE id = ?');
         const soft = this.db.prepare('UPDATE spaces SET deleted = 1, updated_at = ? WHERE id = ?');
         const dropOutbox = this.db.prepare(
-            "DELETE FROM outbox WHERE entity = 'space' AND entity_id = ? AND state IN ('pending', 'failed')",
+            "DELETE FROM outbox WHERE entity = 'space' AND entity_id = ?",
+        );
+        // "dirty" only means "has an unsent edit"; it does not mean the space was
+        // created here. Only a queued create proves the cloud has never seen it,
+        // and only then is dropping the row (and its queue) correct.
+        const pendingCreate = this.db.prepare(
+            "SELECT 1 AS present FROM outbox WHERE entity = 'space' AND entity_id = ? AND kind = 'space.create' LIMIT 1",
         );
 
         return this.transaction(() => {
@@ -205,7 +211,7 @@ export class SqliteDomainStore {
             for (const id of ids) {
                 const row = find.get(id) as SpaceRow | undefined;
                 if (!row) continue;
-                if (row.dirty === 1) {
+                if (pendingCreate.get(id)) {
                     hard.run(id);
                     dropOutbox.run(id);
                 } else {
@@ -256,7 +262,7 @@ export class SqliteDomainStore {
 
     listPages(query: JsonRecord = {}): PageRecord[] {
         const { where, params } = this.pageFilter(query);
-        const limit = clampLimit(query.limit, 500);
+        const limit = clampLimit(query.limit, 500, 5000);
         const offset = clampOffset(query.offset);
         const order = this.pageOrder(query.orderBy);
         const rows = this.db
@@ -275,7 +281,7 @@ export class SqliteDomainStore {
         const records = assertRecordArray(rawRecords, 'records');
         const insert = this.db.prepare(`
             INSERT INTO pages (id, space_id, parent_id, title, page_type, status, favorite, pinned, rank, data, updated_at, remote_updated_at, deleted, dirty)
-            VALUES (@id, @space_id, @parent_id, @title, @page_type, @status, @favorite, @pinned, @rank, @data, @updated_at, @remote_updated_at, @deleted, @dirty)
+            VALUES (@id, @space_id, @parent_id, @title, @page_type, @status, @favorite, @pinned, @rank, @data, @updated_at, @remote_updated_at, COALESCE(@deleted, 0), @dirty)
             ON CONFLICT(id) DO UPDATE SET
                 space_id = excluded.space_id,
                 parent_id = excluded.parent_id,
@@ -288,7 +294,7 @@ export class SqliteDomainStore {
                 data = excluded.data,
                 updated_at = excluded.updated_at,
                 remote_updated_at = COALESCE(excluded.remote_updated_at, pages.remote_updated_at),
-                deleted = excluded.deleted,
+                deleted = CASE WHEN @deleted IS NULL THEN pages.deleted ELSE @deleted END,
                 dirty = excluded.dirty
         `);
         const touch = this.db.prepare(
@@ -320,7 +326,7 @@ export class SqliteDomainStore {
                     data: encodeJson(record),
                     updated_at: asFiniteNumber(record.localUpdatedAt) ?? this.now(),
                     remote_updated_at: asFiniteNumber(record.remoteUpdatedAt) ?? recordEpoch(record),
-                    deleted: asBool(record.deleted),
+                    deleted: record.deleted === undefined ? null : asBool(record.deleted),
                     dirty: dirty ? 1 : 0,
                 });
                 affected += 1;
@@ -334,17 +340,23 @@ export class SqliteDomainStore {
         const find = this.db.prepare('SELECT * FROM pages WHERE id = ?');
         const hard = this.db.prepare('DELETE FROM pages WHERE id = ?');
         const soft = this.db.prepare('UPDATE pages SET deleted = 1, updated_at = ? WHERE id = ?');
+        // Only a page this device created (and the cloud has not accepted yet)
+        // is discarded outright; a page the cloud knows is tombstoned so the
+        // queued delete can still be replayed.
         const dropOutbox = this.db.prepare(
-            "DELETE FROM outbox WHERE entity_id = ? AND state IN ('pending', 'failed')",
+            "DELETE FROM outbox WHERE entity = 'page' AND entity_id = ?",
         );
         const dropDoc = this.db.prepare('DELETE FROM page_documents WHERE page_id = ?');
+        const pendingCreate = this.db.prepare(
+            "SELECT 1 AS present FROM outbox WHERE entity = 'page' AND entity_id = ? AND kind = 'page.create' LIMIT 1",
+        );
 
         return this.transaction(() => {
             let affected = 0;
             for (const id of ids) {
                 const row = find.get(id) as PageRow | undefined;
                 if (!row) continue;
-                if (row.dirty === 1) {
+                if (pendingCreate.get(id)) {
                     hard.run(id);
                     dropDoc.run(id);
                     dropOutbox.run(id);
@@ -458,7 +470,7 @@ export class SqliteDomainStore {
 
     listBlocks(query: JsonRecord = {}): BlockRecord[] {
         const { where, params } = this.blockFilter(query);
-        const limit = clampLimit(query.limit, 500);
+        const limit = clampLimit(query.limit, 500, 5000);
         const offset = clampOffset(query.offset);
         const rows = this.db
             .prepare(`SELECT * FROM blocks ${where} ORDER BY page_id ASC, parent_id ASC, id ASC LIMIT ? OFFSET ?`)
@@ -476,7 +488,7 @@ export class SqliteDomainStore {
         const records = assertRecordArray(rawRecords, 'records');
         const insert = this.db.prepare(`
             INSERT INTO blocks (id, page_id, space_id, parent_id, type, text, data, updated_at, remote_updated_at, deleted, dirty)
-            VALUES (@id, @page_id, @space_id, @parent_id, @type, @text, @data, @updated_at, @remote_updated_at, @deleted, @dirty)
+            VALUES (@id, @page_id, @space_id, @parent_id, @type, @text, @data, @updated_at, @remote_updated_at, COALESCE(@deleted, 0), @dirty)
             ON CONFLICT(id) DO UPDATE SET
                 page_id = excluded.page_id,
                 space_id = excluded.space_id,
@@ -486,7 +498,7 @@ export class SqliteDomainStore {
                 data = excluded.data,
                 updated_at = excluded.updated_at,
                 remote_updated_at = COALESCE(excluded.remote_updated_at, blocks.remote_updated_at),
-                deleted = excluded.deleted,
+                deleted = CASE WHEN @deleted IS NULL THEN blocks.deleted ELSE @deleted END,
                 dirty = excluded.dirty
         `);
         const existing = this.db.prepare('SELECT dirty FROM blocks WHERE id = ?');
@@ -508,7 +520,7 @@ export class SqliteDomainStore {
                     data: encodeJson(record),
                     updated_at: asFiniteNumber(record.localUpdatedAt) ?? this.now(),
                     remote_updated_at: asFiniteNumber(record.remoteUpdatedAt) ?? recordEpoch(record),
-                    deleted: asBool(record.deleted),
+                    deleted: record.deleted === undefined ? null : asBool(record.deleted),
                     dirty: dirty ? 1 : 0,
                 });
                 affected += 1;
@@ -540,8 +552,10 @@ export class SqliteDomainStore {
 
     enqueue(rawEntries: unknown): number[] {
         const entries = assertRecordArray(rawEntries, 'entries');
+        // Pending only: an `inflight` entry is on the wire and overwriting its
+        // payload would lose the newer edit when that push acks it.
         const findCoalesced = this.db.prepare(
-            "SELECT id FROM outbox WHERE coalesce_key = ? AND state IN ('pending', 'failed') ORDER BY id ASC LIMIT 1",
+            "SELECT id FROM outbox WHERE coalesce_key = ? AND state = 'pending' ORDER BY id ASC LIMIT 1",
         );
         const update = this.db.prepare(`
             UPDATE outbox
@@ -589,6 +603,27 @@ export class SqliteDomainStore {
                 ids.push(Number(result.lastInsertRowid));
             }
             return ids;
+        });
+    }
+
+    /**
+     * Atomically take the oldest pending entries for replay (pending -> inflight).
+     *
+     * Claiming is what makes the push loop safe: two runs cannot get the same
+     * entry, and a coalescing edit arriving mid-push becomes a new entry instead
+     * of mutating the payload that is already being sent.
+     */
+    claimOutbox(query: JsonRecord = {}): OutboxEntry[] {
+        const limit = clampLimit(query.limit, 1, 100);
+        return this.transaction(() => {
+            const rows = this.db
+                .prepare("SELECT * FROM outbox WHERE state = 'pending' ORDER BY id ASC LIMIT ?")
+                .all(limit) as OutboxRow[];
+            if (!rows.length) return [];
+            const update = this.db.prepare("UPDATE outbox SET state = 'inflight', updated_at = ? WHERE id = ?");
+            const now = this.now();
+            for (const row of rows) update.run(now, Number(row.id));
+            return rows.map((row) => outboxFromRow({ ...row, state: 'inflight' }));
         });
     }
 
@@ -648,7 +683,9 @@ export class SqliteDomainStore {
         const now = this.now();
         if (rawIds === undefined) {
             const result = this.db
-                .prepare("UPDATE outbox SET state = 'pending', last_error = NULL, updated_at = ? WHERE state = 'failed'")
+                .prepare(
+                    "UPDATE outbox SET state = 'pending', last_error = NULL, updated_at = ? WHERE state IN ('failed', 'inflight')",
+                )
                 .run(now);
             return Number(result.changes);
         }
@@ -661,7 +698,9 @@ export class SqliteDomainStore {
         if (!ids.length) return 0;
         const placeholders = ids.map(() => '?').join(', ');
         const result = this.db
-            .prepare(`UPDATE outbox SET state = 'pending', last_error = NULL, updated_at = ? WHERE id IN (${placeholders})`)
+            .prepare(
+                `UPDATE outbox SET state = 'pending', last_error = NULL, updated_at = ? WHERE id IN (${placeholders})`,
+            )
             .run(now, ...ids);
         return Number(result.changes);
     }
@@ -876,11 +915,17 @@ export class SqliteDomainStore {
         rekey?: boolean;
     }): number {
         const { table, column, from, to, patch, rekey } = options;
+        const keyColumn = table === 'page_documents' ? 'page_id' : 'id';
         const rows = this.db
             .prepare(`SELECT * FROM ${table} WHERE ${column} = ?`)
             .all(from) as JsonRecord[];
         if (!rows.length) return 0;
-        const update = this.db.prepare(`UPDATE ${table} SET ${column} = @next, data = @data WHERE ${column} = @from`);
+        // Update by primary key, never by the reference column: several rows
+        // share one `parent_id`/`page_id`, so a WHERE on that column would
+        // rewrite all of them with the first row's payload and lose the rest.
+        const update = this.db.prepare(
+            `UPDATE ${table} SET ${column} = @next, data = @data WHERE ${keyColumn} = @key`,
+        );
 
         if (rekey) {
             // `page_documents` is keyed by `page_id` itself: the new key must not
@@ -890,9 +935,9 @@ export class SqliteDomainStore {
 
         let affected = 0;
         for (const row of rows) {
-            const key = String(row[column]);
+            const key = String(row[keyColumn]);
             const current = decodeJson<JsonRecord>(row.data as string, `${table}(${key}).data`);
-            update.run({ next: to, data: encodeJson(patch(current)), from: key });
+            update.run({ next: to, data: encodeJson(patch(current)), key });
             affected += 1;
         }
         return affected;
@@ -904,17 +949,33 @@ export class SqliteDomainStore {
      */
     private rewriteOutbox(from: string, to: string): number {
         const rows = this.db
-            .prepare("SELECT id, entity_id, payload FROM outbox WHERE state IN ('pending', 'failed')")
-            .all() as Array<{ id: number; entity_id: string; payload: string }>;
+            .prepare(
+                "SELECT id, entity_id, coalesce_key, payload FROM outbox WHERE state IN ('pending', 'inflight', 'failed')",
+            )
+            .all() as Array<{ id: number; entity_id: string; coalesce_key: string | null; payload: string }>;
         if (!rows.length) return 0;
-        const update = this.db.prepare('UPDATE outbox SET entity_id = ?, payload = ?, updated_at = ? WHERE id = ?');
+        const update = this.db.prepare(
+            'UPDATE outbox SET entity_id = ?, coalesce_key = ?, payload = ?, updated_at = ? WHERE id = ?',
+        );
         let affected = 0;
         for (const row of rows) {
             const payload = decodeJson<JsonRecord>(row.payload, `outbox(${row.id}).payload`);
             const nextPayload = replaceStringValue(payload, from, to);
             const nextEntityId = row.entity_id === from ? to : row.entity_id;
-            if (nextEntityId === row.entity_id && nextPayload === payload) continue;
-            update.run(nextEntityId, encodeJson(nextPayload), this.now(), Number(row.id));
+            // The key is built from the id (`page.title:<id>`), so it has to move
+            // too or later edits of the same kind stop coalescing.
+            const nextCoalesce =
+                row.coalesce_key && row.coalesce_key.includes(from)
+                    ? row.coalesce_key.split(from).join(to)
+                    : row.coalesce_key;
+            if (
+                nextEntityId === row.entity_id
+                && nextCoalesce === row.coalesce_key
+                && nextPayload === payload
+            ) {
+                continue;
+            }
+            update.run(nextEntityId, nextCoalesce, encodeJson(nextPayload), this.now(), Number(row.id));
             affected += 1;
         }
         return affected;

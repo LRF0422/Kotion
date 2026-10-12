@@ -106,10 +106,15 @@ pnpm clean:packages         # Clean all dist directories
 - 主进程实现 `apps/desktop/src/main/domain/`（能力组 `spacepage.*`，与 `storage.*`
   共用连接与数据库文件）；渲染端装配在
   `packages/core/src/domain/space-page/local-first/`；
-- Web 与数据库不可用时自动退回纯 HTTP 的 `createSpacePageService()`，行为与改造前一致。
+- Web 端、或本地库打不开时（第一次 `LOCAL_STORE_UNAVAILABLE` 后整体切换）自动退回纯 HTTP 的
+  `createSpacePageService()`，行为与改造前一致；账号/组织切换会清掉本地缓存与队列（数据库是
+  每台机器一份，不是每个账号一份）。
 
-两条铁律：**dirty 行不被干净的 upsert 覆盖**；**临时 id 换绑是原子的**
-（`remapPage/remapSpace` 同时改行、父子引用、块、文档与 outbox payload）。
+要点：**dirty 行不被干净的 upsert 覆盖**（且只在该实体最后一条排队项 ack 后清 dirty）；
+**临时 id 换绑是原子的且按主键逐行更新**（行、父子引用、块、文档、outbox payload 与 coalesce key）；
+**树完整性看 `pageTree.synced.<spaceId>` 标记而非"有没有行"**；**墓碑 `deleted` 是本地状态**，
+拉取不会清除；**outbox 用 `claimOutbox` 取件（pending → inflight）**，推送期间的合并型编辑会另起
+一条而不是覆盖在途 payload。
 
 详细语义、离线矩阵、限制与测试见 **[docs/LOCAL_FIRST.md](docs/LOCAL_FIRST.md)**；
 改动契约时 `packages/common/src/domain/space-page/local-store.ts`、

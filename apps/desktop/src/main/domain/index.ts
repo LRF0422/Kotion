@@ -95,6 +95,7 @@ export const SPACEPAGE_CAPABILITIES = [
     'spacepage.enqueue',
     'spacepage.listOutbox',
     'spacepage.countOutbox',
+    'spacepage.claimOutbox',
     'spacepage.ackOutbox',
     'spacepage.failOutbox',
     'spacepage.retryOutbox',
@@ -174,6 +175,9 @@ export function setupDomainHandlers(
     handle('spacepage.enqueue', (params) => run(domain, 'spacepage.enqueue', (store) => store.enqueue(params.entries)));
     handle('spacepage.listOutbox', (params) =>
         run(domain, 'spacepage.listOutbox', (store) => store.listOutbox(params)),
+    );
+    handle('spacepage.claimOutbox', (params) =>
+        run(domain, 'spacepage.claimOutbox', (store) => store.claimOutbox(params)),
     );
     handle('spacepage.countOutbox', (params) =>
         run(domain, 'spacepage.countOutbox', (store) => store.countOutbox((params as { state?: unknown }).state)),

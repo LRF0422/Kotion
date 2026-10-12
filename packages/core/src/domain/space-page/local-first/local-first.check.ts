@@ -10,8 +10,9 @@
  * Run with: pnpm --filter @kn/core check:local-first
  */
 
-import { createLocalFirstSpacePageService } from "./service";
+import { LocalFirstOfflineError, createLocalFirstSpacePageService } from "./service";
 import { createLocalFirstSyncEngine } from "./sync";
+import { createLocalFirstRuntime, sessionIdentity } from "./index";
 import { LocalStoreError, type SpacePageLocalStore } from "@kn/common";
 
 /**
@@ -130,7 +131,11 @@ class MemoryLocalStore {
                 if (record.remoteUpdatedAt != null) existing.remoteUpdatedAt = record.remoteUpdatedAt;
                 continue;
             }
-            this.spaces.set(record.id, { ...record, localUpdatedAt: record.localUpdatedAt ?? this.stamp() });
+            const next = { ...record, localUpdatedAt: record.localUpdatedAt ?? this.stamp() };
+            // A tombstone is local-only state: a pull that does not mention
+            // `deleted` must not resurrect a row.
+            if (record.deleted === undefined && existing) next.deleted = existing.deleted;
+            this.spaces.set(record.id, next);
             affected += 1;
         }
         return affected;
@@ -141,7 +146,10 @@ class MemoryLocalStore {
         for (const id of ids) {
             const row = this.spaces.get(id);
             if (!row) continue;
-            if (row.dirty) {
+            const pendingCreate = this.outbox.some(
+                (entry) => entry.entityId === id && entry.kind === "space.create",
+            );
+            if (pendingCreate) {
                 this.spaces.delete(id);
                 this.dropOutbox(id);
             } else {
@@ -214,7 +222,9 @@ class MemoryLocalStore {
                 if (record.remoteUpdatedAt != null) existing.remoteUpdatedAt = record.remoteUpdatedAt;
                 continue;
             }
-            this.pages.set(record.id, { ...record, localUpdatedAt: record.localUpdatedAt ?? this.stamp() });
+            const next = { ...record, localUpdatedAt: record.localUpdatedAt ?? this.stamp() };
+            if (record.deleted === undefined && existing) next.deleted = existing.deleted;
+            this.pages.set(record.id, next);
             affected += 1;
         }
         return affected;
@@ -225,7 +235,10 @@ class MemoryLocalStore {
         for (const id of ids) {
             const row = this.pages.get(id);
             if (!row) continue;
-            if (row.dirty) {
+            const pendingCreate = this.outbox.some(
+                (entry) => entry.entityId === id && entry.kind === "page.create",
+            );
+            if (pendingCreate) {
                 this.pages.delete(id);
                 this.documents.delete(id);
                 this.dropOutbox(id);
@@ -307,7 +320,9 @@ class MemoryLocalStore {
         for (const record of records) {
             const existing = this.blocks.get(record.id);
             if (existing && existing.dirty && !record.dirty) continue;
-            this.blocks.set(record.id, { ...record, localUpdatedAt: record.localUpdatedAt ?? this.stamp() });
+            const next = { ...record, localUpdatedAt: record.localUpdatedAt ?? this.stamp() };
+            if (record.deleted === undefined && existing) next.deleted = existing.deleted;
+            this.blocks.set(record.id, next);
             affected += 1;
         }
         return affected;
@@ -329,8 +344,9 @@ class MemoryLocalStore {
         const ids: number[] = [];
         for (const entry of entries) {
             const id = ++this.seq;
+            // Pending only: an inflight entry is already on the wire.
             const existing = entry.coalesceKey
-                ? this.outbox.find((row) => row.coalesceKey === entry.coalesceKey && row.state !== "done")
+                ? this.outbox.find((row) => row.coalesceKey === entry.coalesceKey && row.state === "pending")
                 : undefined;
             if (existing) {
                 Object.assign(existing, { ...entry, id: existing.id, state: "pending", attempts: 0, lastError: null });
@@ -341,6 +357,18 @@ class MemoryLocalStore {
             ids.push(id);
         }
         return ids;
+    }
+
+    claimOutbox(query: any = {}): any[] {
+        const limit = query.limit ?? 1;
+        const claimed: any[] = [];
+        for (const row of this.outbox) {
+            if (claimed.length >= limit) break;
+            if (row.state !== "pending") continue;
+            row.state = "inflight";
+            claimed.push({ ...row });
+        }
+        return claimed;
     }
 
     listOutbox(query: any = {}): any[] {
@@ -377,7 +405,7 @@ class MemoryLocalStore {
     retryOutbox(ids?: number[]): number {
         let affected = 0;
         for (const row of this.outbox) {
-            if (row.state !== "failed") continue;
+            if (row.state !== "failed" && row.state !== "inflight") continue;
             if (ids && !ids.includes(row.id)) continue;
             row.state = "pending";
             row.lastError = null;
@@ -431,6 +459,9 @@ class MemoryLocalStore {
     private rewriteOutbox(from: string, to: string): void {
         for (const row of this.outbox) {
             if (row.entityId === from) row.entityId = to;
+            if (row.coalesceKey && row.coalesceKey.includes(from)) {
+                row.coalesceKey = row.coalesceKey.split(from).join(to);
+            }
             row.payload = replaceExact(row.payload, from, to);
         }
     }
@@ -615,7 +646,7 @@ async function offlineBehaviour(): Promise<void> {
     } catch (error) {
         uncachedDocument = error;
     }
-    check("a missing document with no network rejects as unavailable", uncachedDocument instanceof LocalStoreError, uncachedDocument);
+    check("a missing document with no network rejects as offline", uncachedDocument instanceof LocalFirstOfflineError, uncachedDocument);
 
     const queued: any = await service.documents.applyPageOperations("p1", {
         baseRev: 3,
@@ -641,8 +672,8 @@ async function offlineBehaviour(): Promise<void> {
     } catch (error) {
         unavailable = error;
     }
-    check("an uncached space with no network throws a coded error", unavailable instanceof LocalStoreError, unavailable);
-    checkEqual("with the unavailable code", unavailable?.code, "LOCAL_STORE_UNAVAILABLE");
+    check("an uncached space with no network throws an offline error", unavailable instanceof LocalFirstOfflineError, unavailable);
+    checkEqual("with the offline code", unavailable?.code, "LOCAL_FIRST_OFFLINE");
 }
 
 async function onlineBehaviour(): Promise<void> {
@@ -706,7 +737,7 @@ async function onlineBehaviour(): Promise<void> {
     } catch (error) {
         degradeError = error;
     }
-    check("a cache miss with a dead network throws a coded error", degradeError instanceof LocalStoreError, degradeError);
+    check("a cache miss with a dead network throws an offline error", degradeError instanceof LocalFirstOfflineError, degradeError);
     check("the service reports itself offline afterwards", failing.offline === true);
     const cachedList: any = await failing.spaces.querySpaces();
     checkEqual("while cached reads keep working", cachedList.records[0]?.name, "Cached team");
@@ -769,7 +800,7 @@ async function onlineBehaviour(): Promise<void> {
     } catch (error) {
         emptyError = error;
     }
-    check("an empty cache plus a dead network is an explicit failure", emptyError instanceof LocalStoreError, emptyError);
+    check("an empty cache plus a dead network is an explicit failure", emptyError instanceof LocalFirstOfflineError, emptyError);
 
     const strict = new MemoryLocalStore();
     const rejecting = makeRemote();
@@ -783,14 +814,14 @@ async function onlineBehaviour(): Promise<void> {
     } catch (error) {
         strictError = error;
     }
-    check("a 4xx is NOT treated as offline", strictError instanceof LocalStoreError === false, strictError);
+    check("a 4xx is NOT treated as offline", strictError instanceof LocalFirstOfflineError === false, strictError);
     checkEqual("the real error survives", (strictError as Error)?.message, "Request failed with status code 422");
 
     console.log("\nA space tree is only served locally once it has been pulled");
     const treeLocal = new MemoryLocalStore();
     const treeRemote = makeRemote();
     const treeService = createLocalFirstSpacePageService({
-        local: treeLocal,
+        local: asLocal(treeLocal),
         remote: treeRemote.service,
         isOnline: online,
     });
@@ -813,7 +844,7 @@ async function onlineBehaviour(): Promise<void> {
     const scopedLocal = new MemoryLocalStore();
     const scopedRemote = makeRemote();
     const scopedService = createLocalFirstSpacePageService({
-        local: scopedLocal,
+        local: asLocal(scopedLocal),
         remote: scopedRemote.service,
         isOnline: online,
     });
@@ -980,10 +1011,153 @@ async function syncBehaviour(): Promise<void> {
     checkEqual("and the state says so", offlineGated.state().online, false);
 }
 
+
+/**
+ * A local store whose every method reports the database as unusable, the way a
+ * corrupt file or an ABI-mismatched native module does in the main process.
+ */
+class BrokenLocalStore extends MemoryLocalStore {
+    private fail(): never {
+        throw new LocalStoreError("LOCAL_STORE_UNAVAILABLE", "desktop local store is unavailable");
+    }
+    info(): any { this.fail(); }
+    getSpace(): any { this.fail(); }
+    listSpaces(): any { this.fail(); }
+    countSpaces(): any { this.fail(); }
+    upsertSpaces(): any { this.fail(); }
+    getPage(): any { this.fail(); }
+    listPages(): any { this.fail(); }
+    countPages(): any { this.fail(); }
+    upsertPages(): any { this.fail(); }
+    getDocument(): any { this.fail(); }
+    upsertDocument(): any { this.fail(); }
+    enqueue(): any { this.fail(); }
+    listOutbox(): any { this.fail(); }
+    claimOutbox(): any { this.fail(); }
+    getState(): any { this.fail(); }
+    setState(): any { this.fail(); }
+    clear(): any { this.fail(); }
+}
+
+async function resilienceBehaviour(): Promise<void> {
+    console.log("\nA broken local database degrades to the cloud instead of failing");
+    const broken = new BrokenLocalStore();
+    const remote = makeRemote();
+    remote.replies.set("spaces.querySpaces", () => ({
+        records: [{ id: "s1", name: "From the cloud" }],
+        total: 1,
+        current: 1,
+        pageSize: 20,
+    }));
+    remote.replies.set("pages.getPage", () => pageRecord("p1", { title: "Cloud page" }));
+    const service = createLocalFirstSpacePageService({
+        local: asLocal(broken),
+        remote: remote.service,
+        isOnline: online,
+    });
+    const spaces: any = await service.spaces.querySpaces({ pageSize: 20 });
+    checkEqual("the first call falls back to the cloud", spaces.records[0]?.name, "From the cloud");
+    check("and the service reports itself degraded", service.degraded === true);
+    check("info() reports an unusable engine instead of throwing", (await service.info()).engine === "unavailable");
+    remote.calls.length = 0;
+    const page: any = await service.pages.getPage("p1");
+    checkEqual("later reads go straight to the cloud", page.title, "Cloud page");
+    checkEqual("with no further local attempts", remote.calls, ["pages.getPage"]);
+
+    console.log("\nA mid-push edit is not swallowed by coalescing");
+    const pushLocal = new MemoryLocalStore();
+    const pushRemote = makeRemote();
+    const pushService = createLocalFirstSpacePageService({
+        local: asLocal(pushLocal),
+        remote: pushRemote.service,
+        isOnline: offline,
+    });
+    pushLocal.upsertPages([pageRecord("p1", { dirty: false })]);
+    await pushService.pages.updatePageTitle({ pageId: "p1", title: "First" });
+    const [claimed] = pushLocal.claimOutbox({ limit: 1 });
+    // The user keeps typing while that entry is on the wire.
+    await pushService.pages.updatePageTitle({ pageId: "p1", title: "Second" });
+    const remaining = pushLocal.listOutbox({ state: "pending" });
+    check("the in-flight entry is not coalesced into", remaining.length === 1 && remaining[0].id !== claimed.id, remaining);
+    checkEqual("the newer edit keeps its own payload", remaining[0]?.payload.title, "Second");
+
+    console.log("\nThe exit flush queues its batch when the transport fails late");
+    const flushLocal = new MemoryLocalStore();
+    const flushRemote = makeRemote();
+    const flushService = createLocalFirstSpacePageService({
+        local: asLocal(flushLocal),
+        remote: flushRemote.service,
+        isOnline: online,
+    });
+    flushRemote.replies.set("documents.flushPageOperations", () => {
+        throw networkError();
+    });
+    await flushService.documents.flushPageOperations("p1", {
+        baseRev: 2,
+        idempotencyKey: "exit",
+        clientId: "c1",
+        ops: [{ op: "insert", blockId: "b1" }],
+    } as any);
+    checkEqual("the batch is queued after the async failure", flushLocal.countOutbox("pending"), 1);
+    checkEqual("as a document.apply entry", flushLocal.listOutbox({ state: "pending" })[0]?.kind, "document.apply");
+
+    console.log("\nA trashed page stays out of the tree after a pull");
+    const trashLocal = new MemoryLocalStore();
+    const trashRemote = makeRemote();
+    const trashService = createLocalFirstSpacePageService({
+        local: asLocal(trashLocal),
+        remote: trashRemote.service,
+        isOnline: online,
+    });
+    trashRemote.replies.set("pages.getPageTree", () => [{ id: "p2", spaceId: "s1", title: "Alive" }]);
+    trashLocal.upsertPages([pageRecord("p1", { title: "Doomed" }), pageRecord("p2", { title: "Alive" })]);
+    trashLocal.setState("pageTree.synced.s1", 1);
+    await trashService.pages.movePageToTrash("p1");
+    checkEqual("the trash is queued", trashLocal.listOutbox({ state: "pending" })[0]?.kind, "page.trash");
+    checkEqual("and the page leaves the tree", (await trashService.pages.getPageTree({ spaceId: "s1" })).map((node: any) => node.id), ["p2"]);
+    // A pull must not resurrect it: the incoming tree row carries no `deleted`.
+    trashLocal.upsertPages([{ ...pageRecord("p1", { title: "Doomed again" }), remoteUpdatedAt: null, dirty: false }]);
+    check("the tombstone survives the pull", trashLocal.getPage("p1")?.deleted === true, trashLocal.getPage("p1"));
+    checkEqual("so it is still out of the tree", (await trashService.pages.getPageTree({ spaceId: "s1" })).map((node: any) => node.id), ["p2"]);
+
+    console.log("\nA page with a queued edit is still trashed, not discarded");
+    const editLocal = new MemoryLocalStore();
+    const editRemote = makeRemote();
+    const editService = createLocalFirstSpacePageService({
+        local: asLocal(editLocal),
+        remote: editRemote.service,
+        isOnline: offline,
+    });
+    editLocal.upsertPages([pageRecord("p3", { title: "Renamed offline" })]);
+    await editService.pages.updatePageTitle({ pageId: "p3", title: "Renamed offline" });
+    await editService.pages.movePageToTrash("p3");
+    const editOutbox = editLocal.listOutbox({ state: "pending" }).map((entry: any) => entry.kind);
+    check("the rename and the trash are both queued", editOutbox.includes("page.trash"), editOutbox);
+    checkEqual("the page is tombstoned, not deleted", editLocal.getPage("p3")?.deleted, true);
+
+    console.log("\nSession bookkeeping");
+    const sessionLocal = new MemoryLocalStore();
+    const runtime = createLocalFirstRuntime({
+        local: asLocal(sessionLocal),
+        remote: makeRemote().service,
+        isOnline: offline,
+        intervalMs: 0,
+    });
+    checkEqual("an unknown token is its own identity", sessionIdentity(null), "anonymous");
+    check("the first reset claims the empty cache", (await runtime.resetForSession()) === true);
+    checkEqual("and records the identity", typeof sessionLocal.getState("localFirst.session"), "string");
+    check("a repeat reset for the same session is a no-op", (await runtime.resetForSession()) === false);
+    sessionLocal.upsertPages([pageRecord("p9", { title: "Someone else's" })]);
+    await sessionLocal.setState("localFirst.session", "someone-else|");
+    check("a changed session clears the cache", (await runtime.resetForSession()) === true);
+    checkEqual("so nothing of the previous one is left", sessionLocal.getPage("p9"), null);
+}
+
 async function main(): Promise<void> {
     await offlineBehaviour();
     await onlineBehaviour();
     await syncBehaviour();
+    await resilienceBehaviour();
 
     console.log("\n" + pass + " passed, " + fail + " failed");
     if (fail > 0) process.exit(1);

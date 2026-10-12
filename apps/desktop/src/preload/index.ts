@@ -86,6 +86,7 @@ const CAPABILITIES = [
   'spacepage.enqueue',
   'spacepage.listOutbox',
   'spacepage.countOutbox',
+  'spacepage.claimOutbox',
   'spacepage.ackOutbox',
   'spacepage.failOutbox',
   'spacepage.retryOutbox',

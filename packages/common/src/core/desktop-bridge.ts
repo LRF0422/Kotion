@@ -129,6 +129,7 @@ export type DesktopCapability =
     | 'spacepage.enqueue'
     | 'spacepage.listOutbox'
     | 'spacepage.countOutbox'
+    | 'spacepage.claimOutbox'
     | 'spacepage.ackOutbox'
     | 'spacepage.failOutbox'
     | 'spacepage.retryOutbox'
@@ -885,6 +886,10 @@ export interface DesktopCapabilityContract {
         result: DesktopSpacePageEnvelope<number[]>
     }
     'spacepage.listOutbox': { params?: LocalOutboxQuery; result: DesktopSpacePageEnvelope<LocalOutboxEntry[]> }
+    'spacepage.claimOutbox': {
+        params?: { limit?: number }
+        result: DesktopSpacePageEnvelope<LocalOutboxEntry[]>
+    }
     'spacepage.countOutbox': {
         params?: { state?: LocalOutboxState }
         result: DesktopSpacePageEnvelope<number>

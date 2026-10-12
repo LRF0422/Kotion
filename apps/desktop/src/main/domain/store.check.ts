@@ -61,8 +61,8 @@ function main(): void {
 
     console.log('\nSchema');
     const opened = openStorageDatabase(':memory:');
-    checkEqual('domain tables arrive with schema v2', readSchemaVersion(opened.db), SCHEMA_VERSION);
-    check('schema version is at least 2', SCHEMA_VERSION >= 2, SCHEMA_VERSION);
+    checkEqual('the domain schema is at the current version', readSchemaVersion(opened.db), SCHEMA_VERSION);
+    check('schema version is at least 3', SCHEMA_VERSION >= 3, SCHEMA_VERSION);
     const store = new SqliteDomainStore(opened.db, { location: ':memory:', now });
 
     console.log('\nSpaces');
@@ -181,9 +181,36 @@ function main(): void {
     checkCode('a missing page id is rejected', () => store.getPage(''), 'LOCAL_STORE_INVALID');
     checkCode('a non-array record list is rejected', () => store.upsertPages({}), 'LOCAL_STORE_INVALID');
 
+    console.log('\nTombstones are local state');
+    store.upsertPages([page('t1', { title: 'Alive' }), page('t2', { title: 'Alive too' })]);
+    store.deletePages(['t1']);
+    checkEqual('deleting a clean page tombstones it', store.getPage('t1')?.deleted, true);
+    store.upsertPages([page('t1', { title: 'Back from the server?' })]);
+    checkEqual('a pull that never mentions deleted does not resurrect it', store.getPage('t1')?.deleted, true);
+    checkEqual('and the tree still excludes it', store.listPages({ spaceId: 's1' }).some((row) => row.id === 't1'), false);
+    store.upsertPages([page('t1', { title: 'Restored', deleted: false })]);
+    checkEqual('an explicit deleted:false restores it', store.getPage('t1')?.deleted, false);
+
+    console.log('\nDiscarding only what the cloud never accepted');
+    store.upsertPages([page('d1', { dirty: true })]);
+    store.upsertPages([page('d2', { dirty: true })]);
+    store.enqueue([{ kind: 'page.title', entity: 'page', entityId: 'd2', payload: { title: 'renamed' } }]);
+    checkEqual('a page with only a queued edit is tombstoned', (() => { store.deletePages(['d2']); return store.getPage('d2')?.deleted; })(), true);
+    checkEqual('and its queued edit survives', store.listOutbox({ entityId: 'd2' }).length, 1);
+    store.enqueue([{ kind: 'page.create', entity: 'page', entityId: 'd1', payload: { id: 'd1' } }]);
+    checkEqual('a page whose create is queued is dropped outright', (() => { store.deletePages(['d1']); return store.getPage('d1'); })(), null);
+    checkEqual('along with its queued ops', store.listOutbox({ entityId: 'd1' }).length, 0);
+
     console.log('\nRe-keying a locally created page');
-    store.upsertPages([page('local-page-1', { dirty: true }), page('child', { parentId: 'local-page-1' })]);
-    store.upsertBlocks([{ id: 'b9', pageId: 'local-page-1', spaceId: 's1', type: 'paragraph', text: 'body' }]);
+    store.upsertPages([
+        page('local-page-1', { dirty: true }),
+        page('child-a', { parentId: 'local-page-1', title: 'Child A' }),
+        page('child-b', { parentId: 'local-page-1', title: 'Child B' }),
+    ]);
+    store.upsertBlocks([
+        { id: 'b9', pageId: 'local-page-1', spaceId: 's1', type: 'paragraph', text: 'body' },
+        { id: 'b10', pageId: 'local-page-1', spaceId: 's1', type: 'heading', text: 'other body' },
+    ]);
     store.upsertDocument({ pageId: 'local-page-1', doc: { type: 'doc' }, dirty: true });
     store.enqueue([
         { kind: 'page.move', entity: 'page', entityId: 'local-page-1', payload: { pageId: 'local-page-1', targetSpaceId: 's1', targetParentId: null } },
@@ -194,8 +221,12 @@ function main(): void {
     check('remap reports the rows it touched', remapped.affected >= 4, remapped);
     checkEqual('the row moved to the cloud id', store.getPage('p42')?.title, 'Page local-page-1');
     checkEqual('the temporary id is gone', store.getPage('local-page-1'), null);
-    checkEqual('children follow their parent', store.getPage('child')?.parentId, 'p42');
-    checkEqual('blocks follow their page', store.listBlocks({ pageId: 'p42' }).map((row) => row.id), ['b9']);
+    checkEqual('every child follows its parent', store.getPage('child-a')?.parentId, 'p42');
+    checkEqual('and keeps its own payload (child A)', store.getPage('child-a')?.title, 'Child A');
+    checkEqual('and keeps its own payload (child B)', store.getPage('child-b')?.title, 'Child B');
+    checkEqual('blocks follow their page', store.listBlocks({ pageId: 'p42' }).map((row) => row.id), ['b10', 'b9']);
+    checkEqual('each block keeps its own text', store.getBlock('b10')?.text, 'other body');
+    checkEqual('and so does its sibling', store.getBlock('b9')?.text, 'body');
     checkEqual('the document follows its page', store.getDocument('p42')?.pageId, 'p42');
     checkEqual('outbox entity ids are rewritten', store.listOutbox({ entityId: 'p42' }).length, 2);
     checkEqual(
@@ -219,6 +250,28 @@ function main(): void {
     checkEqual('pages follow the space', store.getPage('p50')?.spaceId, 's77');
     checkEqual('blocks follow the space', store.listBlocks({ spaceId: 's77' }).map((row) => row.id), ['b50']);
     checkEqual('outbox payloads follow the space', store.listOutbox({ entityId: 's77' })[0]?.payload, { spaceId: 's77' });
+
+    console.log('\nClaiming entries for replay');
+    // Drain whatever the earlier sections left queued, so this section observes
+    // exactly the entries it creates.
+    store.ackOutbox(store.listOutbox().map((entry) => entry.id));
+    const claimable = store.enqueue([
+        { kind: 'page.title', entity: 'page', entityId: 'p1', payload: { title: 'one' }, coalesceKey: 'page.title:p1' },
+    ]);
+    const claimed = store.claimOutbox({ limit: 1 });
+    checkEqual('claimOutbox takes the oldest pending entry', claimed.map((entry) => entry.id), claimable);
+    checkEqual('and marks it inflight', claimed[0]?.state, 'inflight');
+    checkEqual('the queue no longer offers it as pending', store.countOutbox('pending'), 0);
+    checkEqual('countOutbox can see it inflight', store.countOutbox('inflight'), 1);
+    const whileInflight = store.enqueue([
+        { kind: 'page.title', entity: 'page', entityId: 'p1', payload: { title: 'two' }, coalesceKey: 'page.title:p1' },
+    ]);
+    check('an edit arriving mid-push becomes its own entry', whileInflight[0] !== claimable[0], whileInflight);
+    checkEqual('with the newer payload', store.listOutbox({ state: 'pending' })[0]?.payload, { title: 'two' });
+    checkEqual('the in-flight payload is untouched', store.listOutbox({ state: 'inflight' })[0]?.payload, { title: 'one' });
+    checkEqual('retryOutbox releases an inflight entry', store.retryOutbox(claimable), 1);
+    checkEqual('it is pending again', store.countOutbox('pending'), 2);
+    checkEqual('ackOutbox clears the rest', store.ackOutbox(store.listOutbox().map((entry) => entry.id)), 2);
 
     console.log('\nSync state and maintenance');
     store.setState('sync.cursor', { token: 'abc' });

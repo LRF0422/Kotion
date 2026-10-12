@@ -20,10 +20,13 @@
  *
  * The rules that keep this honest:
  *
- * 1. When online, a metadata write tries the cloud **first** and only falls back
- *    to the offline path on a connectivity failure. Only a network failure
- *    counts as offline (`isOfflineError`); a 4xx is a real error and is
- *    rethrown, so server-side validation is never bypassed by a queued write.
+ * 1. A metadata write is local-first by design: it lands in the local database
+ *    and in the outbox, and the engine replays it. Only a write whose *id or
+ *    validation verdict has to come from the server* (`createPage`,
+ *    `createSpace`, `updateSpace`) tries the cloud first, falling back to the
+ *    offline path on a connectivity failure — there a 4xx is a real error and is
+ *    rethrown. For the queued kinds a server-side rejection surfaces later as a
+ *    `failed` outbox entry, not as a synchronous error.
  * 2. A page created without a network gets a `local-page-…` id. The sync engine
  *    re-keys it onto the cloud id (`remapPage`) the moment the create succeeds,
  *    so nothing downstream ever sees the temporary id.
@@ -110,11 +113,34 @@ export interface LocalFirstSpacePageService extends SpacePageService {
     readonly durable: boolean;
     /** True when the cloud is unreachable or the last call failed on the network. */
     readonly offline: boolean;
+    /**
+     * True once the local database proved unusable and every namespace call is
+     * being served by the cloud service instead.
+     */
+    readonly degraded: boolean;
     info(): Promise<LocalStoreInfo>;
+}
+
+/**
+ * Thrown when a read cannot be answered: the cache has never seen the record
+ * and the cloud is unreachable.
+ *
+ * Deliberately *not* a {@link LocalStoreError}: `LOCAL_STORE_UNAVAILABLE` means
+ * "the database itself is broken" and is what switches the service into
+ * cloud-only mode, so a plain cache miss must not be spelled the same way.
+ */
+export class LocalFirstOfflineError extends Error {
+    readonly code = "LOCAL_FIRST_OFFLINE";
+
+    constructor(message: string) {
+        super(message);
+        this.name = "LocalFirstOfflineError";
+    }
 }
 
 /** True when an error means "no usable network", not "the server said no". */
 export function isOfflineError(error: unknown): boolean {
+    if (error instanceof LocalFirstOfflineError) return true;
     if (error instanceof LocalStoreError) return error.code === "LOCAL_STORE_UNAVAILABLE";
     if (!error || typeof error !== "object") return false;
     const candidate = error as {
@@ -239,6 +265,108 @@ export const createLocalFirstSpacePageService = (options: LocalFirstServiceOptio
         observedOffline = false;
         options.requestFlush?.();
     };
+
+    /** Queue a document operation (shared by the apply/reconcile/flush paths). */
+    const queueDocument = async (
+        pageId: string,
+        kind: "document.apply" | "document.reconcile",
+        request: unknown,
+    ): Promise<void> => {
+        await local.enqueue([
+            {
+                kind,
+                entity: "document",
+                entityId: pageId,
+                payload: { pageId, request: request as Record<string, unknown> },
+            },
+        ]);
+        requestFlush();
+    };
+
+    /**
+     * Whether the local database is answering.
+     *
+     * The `spacepage.*` capabilities can exist while the database could not be
+     * opened (unusable native module, corrupt file, read-only disk); the main
+     * process still registers every handler and answers
+     * `LOCAL_STORE_UNAVAILABLE`. Rather than failing every read and write, the
+     * first such failure flips this off and the namespaces in the assembled
+     * service fall back to the cloud — the app's pre-local-first behaviour.
+     */
+    let localUsable = true;
+    let forwardedRemoteChanges = false;
+
+    const isUnavailable = (error: unknown): boolean =>
+        error instanceof LocalStoreError && error.code === "LOCAL_STORE_UNAVAILABLE";
+
+    const degrade = (error: unknown): void => {
+        if (!localUsable) return;
+        localUsable = false;
+        observedOffline = true;
+        diagnose({
+            type: "remote.failed",
+            operation: "local.degraded",
+            message: error instanceof Error ? error.message : String(error),
+            offline: false,
+        });
+        if (!forwardedRemoteChanges) {
+            forwardedRemoteChanges = true;
+            try {
+                // In degraded mode our own implementations never run, so the
+                // cloud's events are the only ones left to forward.
+                remote.changes.subscribe((change) => changes.publish(change));
+            } catch {
+                // A host without a change stream simply has no events to forward.
+            }
+        }
+    };
+
+    /**
+     * Wrap a namespace so a call that cannot reach the local database is retried
+     * against the cloud — once, transparently, and from then on without touching
+     * the broken store again.
+     */
+    const degradeNamespace = <T extends object>(
+        name: "spaces" | "pages" | "relations" | "documents",
+        impl: T,
+    ): T =>
+        new Proxy(impl, {
+            get(target, property, receiver) {
+                const value = Reflect.get(target, property, receiver) as unknown;
+                if (typeof value !== "function") return value;
+                const localCall = (...args: unknown[]): unknown =>
+                    (value as (...callArgs: unknown[]) => unknown).apply(target, args);
+                const remoteCall = (...args: unknown[]): unknown => {
+                    const remoteNamespace = (remote as unknown as Record<string, Record<string, unknown>>)[name];
+                    const fallback = remoteNamespace?.[String(property)];
+                    if (typeof fallback !== "function") {
+                        throw new LocalStoreError(
+                            "LOCAL_STORE_UNAVAILABLE",
+                            `local store is unavailable and the cloud has no ${name}.${String(property)}`,
+                        );
+                    }
+                    return fallback.apply(remoteNamespace, args);
+                };
+                return (...args: unknown[]) => {
+                    if (!localUsable) return remoteCall(...args);
+                    try {
+                        const result = localCall(...args);
+                        if (result && typeof (result as Promise<unknown>).then === "function") {
+                            return (result as Promise<unknown>).catch((error: unknown) => {
+                                if (!isUnavailable(error)) throw error;
+                                degrade(error);
+                                return remoteCall(...args);
+                            });
+                        }
+                        return result;
+                    } catch (error) {
+                        if (!isUnavailable(error)) throw error;
+                        degrade(error);
+                        return remoteCall(...args);
+                    }
+                };
+            },
+        });
 
     const noteFailure = (operation: string, error: unknown): boolean => {
         const offline = isOfflineError(error);
@@ -395,8 +523,7 @@ export const createLocalFirstSpacePageService = (options: LocalFirstServiceOptio
             const space = await tryRemote("spaces.getSpace", () => remote.spaces.getSpace(spaceId));
             if (!space) {
                 if (cached) return stripMeta<Space>(cached as unknown as Record<string, unknown>);
-                throw new LocalStoreError(
-                    "LOCAL_STORE_UNAVAILABLE",
+                throw new LocalFirstOfflineError(
                     `space ${String(spaceId)} is not cached and the cloud is unreachable`,
                 );
             }
@@ -409,7 +536,7 @@ export const createLocalFirstSpacePageService = (options: LocalFirstServiceOptio
             if (cached) return stripMeta<Space>(cached as unknown as Record<string, unknown>);
             const space = await tryRemote("spaces.getPersonalSpace", () => remote.spaces.getPersonalSpace());
             if (!space) {
-                throw new LocalStoreError("LOCAL_STORE_UNAVAILABLE", "the personal space has not been synced yet");
+                throw new LocalFirstOfflineError("the personal space has not been synced yet");
             }
             await local.upsertSpaces([
                 { ...space, personal: true, remoteUpdatedAt: null, dirty: false } as LocalSpaceRecord,
@@ -425,7 +552,17 @@ export const createLocalFirstSpacePageService = (options: LocalFirstServiceOptio
                 ...(request.type ? { type: request.type } : {}),
                 ...(request.archived === undefined ? {} : { archived: Boolean(request.archived) }),
                 ...(request.favorite === undefined ? {} : { favorite: Boolean(request.favorite) }),
-                ...(Number(request.pageSize) > 0 ? { limit: Number(request.pageSize) } : {}),
+                ...(Number(request.pageSize) > 0
+                    ? {
+                          limit: Number(request.pageSize),
+                          offset:
+                              ((Number(request.current ?? request.page) > 0
+                                  ? Number(request.current ?? request.page)
+                                  : 1) -
+                                  1) *
+                              Number(request.pageSize),
+                      }
+                    : {}),
             };
             const [records, total] = await Promise.all([local.listSpaces(query), local.countSpaces(query)]);
             if (total > 0) {
@@ -438,10 +575,7 @@ export const createLocalFirstSpacePageService = (options: LocalFirstServiceOptio
 
             const result = await tryRemote("spaces.querySpaces", () => remote.spaces.querySpaces(request));
             if (!result) {
-                throw new LocalStoreError(
-                    "LOCAL_STORE_UNAVAILABLE",
-                    "no spaces are cached and the cloud is unreachable",
-                );
+                throw new LocalFirstOfflineError("no spaces are cached and the cloud is unreachable");
             }
             await cacheSpaces(result.records, { remoteUpdatedAt: null, dirty: false });
             // `type: "PERSONAL"` is the only signal the cloud gives for the user's
@@ -565,7 +699,7 @@ export const createLocalFirstSpacePageService = (options: LocalFirstServiceOptio
         async deleteSpace(spaceId) {
             const id = String(spaceId);
             const cached = await local.getSpace(id);
-            if (isOnline()) {
+            if (isOnline() && !(await isUnsyncedCreation(id, "space.create"))) {
                 const done = await tryRemote("spaces.deleteSpace", async () => {
                     await remote.spaces.deleteSpace(spaceId);
                     return true;
@@ -576,7 +710,7 @@ export const createLocalFirstSpacePageService = (options: LocalFirstServiceOptio
                     return;
                 }
             }
-            if (cached?.dirty) {
+            if (await isUnsyncedCreation(id, "space.create")) {
                 // Never left this device: drop it and its queued ops outright.
                 await local.deleteSpaces([id]);
             } else {
@@ -607,13 +741,32 @@ export const createLocalFirstSpacePageService = (options: LocalFirstServiceOptio
                 entity: "space",
                 entityId: id,
                 payload: { spaceId: id, favorite },
-                coalesceKey: `space.favorite:${id}`,
+                // Deliberately not coalesced: the port only exposes a *toggle*,
+                // so replacing two queued toggles with the last one would invert
+                // what the user actually did.
             });
             changes.emit("space.favorite.changed", { spaceId: id, favorite });
         },
     };
 
     /** Cached space, fetching it when the cache has never seen it. */
+    /**
+     * True when this device created the entity and the cloud has not accepted it.
+     *
+     * `dirty` alone is not the test: any local edit sets it, so basing a
+     * tombstone decision on it would throw away pages the cloud already knows —
+     * and they would reappear on the next pull. The queued create is the
+     * evidence, and discarding is only correct while it is there.
+     */
+    const isUnsyncedCreation = async (entityId: string, kind: string): Promise<boolean> => {
+        try {
+            const entries = await local.listOutbox({ entityId, limit: 50 });
+            return entries.some((entry) => entry.kind === kind);
+        } catch {
+            return false;
+        }
+    };
+
     const hydrateSpace = async (spaceId: string): Promise<LocalSpaceRecord | null> => {
         const cached = await local.getSpace(spaceId);
         if (cached) return cached;
@@ -634,8 +787,7 @@ export const createLocalFirstSpacePageService = (options: LocalFirstServiceOptio
             const page = await tryRemote("pages.getPage", () => remote.pages.getPage(pageId));
             if (!page) {
                 if (cached) return stripMeta<PageRecord>(cached as unknown as Record<string, unknown>);
-                throw new LocalStoreError(
-                    "LOCAL_STORE_UNAVAILABLE",
+                throw new LocalFirstOfflineError(
                     `page ${String(pageId)} is not cached and the cloud is unreachable`,
                 );
             }
@@ -680,8 +832,7 @@ export const createLocalFirstSpacePageService = (options: LocalFirstServiceOptio
             if (!tree) {
                 const records = await local.listPages({ spaceId, limit: 5000 });
                 if (records.length) return buildPageTree(records);
-                throw new LocalStoreError(
-                    "LOCAL_STORE_UNAVAILABLE",
+                throw new LocalFirstOfflineError(
                     `space ${spaceId} has no cached page tree and the cloud is unreachable`,
                 );
             }
@@ -842,9 +993,10 @@ export const createLocalFirstSpacePageService = (options: LocalFirstServiceOptio
                 changes.emit("page.trashed", { pageId: id });
                 return;
             }
-            if (cached.dirty) {
+            if (await isUnsyncedCreation(id, "page.create")) {
                 // Created on this device and never pushed: there is nothing to
-                // delete upstream, so drop the page and its queued ops.
+                // delete upstream, so drop the page and its queued ops. A page
+                // the cloud knows is tombstoned *and* has its trash queued.
                 await local.deletePages([id]);
             } else {
                 await enqueue({
@@ -940,14 +1092,26 @@ export const createLocalFirstSpacePageService = (options: LocalFirstServiceOptio
                 entity: "page",
                 entityId: id,
                 payload: { spaceId: String(spaceId), pageId: id, pinned },
-                coalesceKey: `page.pin:${id}`,
+                // Not coalesced: `togglePagePin` flips, so both clicks must be
+                // replayed for the server to end up where the user left it.
             });
             changes.emit("page.pin.changed", { spaceId: String(spaceId), pageId: id, pinned });
         },
 
         async getPinnedPages(spaceId) {
-            const records = await local.listPages({ spaceId: String(spaceId), pinned: true, limit: 200 });
-            return records.map(pageSummaryFrom);
+            const space = String(spaceId);
+            const records = await local.listPages({ spaceId: space, pinned: true, limit: 200 });
+            if (records.length) return records.map(pageSummaryFrom);
+            const remotePins = await tryRemote("pages.getPinnedPages", () => remote.pages.getPinnedPages(spaceId));
+            if (!remotePins) return [];
+            // The pin list is a summary source, and being on it is the only pin
+            // signal it carries — record that so the next read is local.
+            await cachePages(
+                remotePins.map((record) => ({ ...record, pinned: true })),
+                { remoteUpdatedAt: null, dirty: false },
+                true,
+            );
+            return remotePins;
         },
     };
 
@@ -1010,8 +1174,7 @@ export const createLocalFirstSpacePageService = (options: LocalFirstServiceOptio
             const block = await tryRemote("relations.getBlock", () => remote.relations.getBlock(blockId));
             if (!block) {
                 if (cached) return stripMeta<BlockSummary>(cached as unknown as Record<string, unknown>);
-                throw new LocalStoreError(
-                    "LOCAL_STORE_UNAVAILABLE",
+                throw new LocalFirstOfflineError(
                     `block ${String(blockId)} is not cached and the cloud is unreachable`,
                 );
             }
@@ -1069,8 +1232,7 @@ export const createLocalFirstSpacePageService = (options: LocalFirstServiceOptio
             );
             if (!document) {
                 if (cached) return { ...fromLocalDocumentRecord(cached), pageId: cached.pageId };
-                throw new LocalStoreError(
-                    "LOCAL_STORE_UNAVAILABLE",
+                throw new LocalFirstOfflineError(
                     `document ${String(pageId)} is not cached and the cloud is unreachable`,
                 );
             }
@@ -1099,7 +1261,12 @@ export const createLocalFirstSpacePageService = (options: LocalFirstServiceOptio
             if (state) return state;
             // Offline the local document owns the page: there is no other editor
             // to contend with, so the caller is the host by definition.
-            return { role: "HOST" as const, alive: true, hostSelf: true, metadata: { offline: true } };
+            return {
+                role: "HOST" as const,
+                alive: true,
+                hostSelf: true,
+                metadata: { offline: true, clientId },
+            };
         },
 
         async heartbeatPageSession(request) {
@@ -1107,14 +1274,23 @@ export const createLocalFirstSpacePageService = (options: LocalFirstServiceOptio
                 remote.documents.heartbeatPageSession(request),
             );
             return (
-                state ?? { role: "HOST" as const, alive: true, hostSelf: true, metadata: { offline: true } }
+                state ?? {
+                    role: "HOST" as const,
+                    alive: true,
+                    hostSelf: true,
+                    metadata: { offline: true, clientId },
+                }
             );
         },
 
         releasePageSession(request) {
             if (!isOnline()) return undefined;
             try {
-                return remote.documents.releasePageSession(request);
+                const result = remote.documents.releasePageSession(request);
+                // A fire-and-forget caller must not see an unhandled rejection.
+                return result && typeof (result as Promise<unknown>).then === "function"
+                    ? (result as Promise<unknown>).catch(() => undefined)
+                    : result;
             } catch (error) {
                 if (isOfflineError(error)) return undefined;
                 throw error;
@@ -1178,23 +1354,23 @@ export const createLocalFirstSpacePageService = (options: LocalFirstServiceOptio
         flushPageOperations(pageId, request) {
             if (isOnline()) {
                 try {
-                    return remote.documents.flushPageOperations(pageId, request);
+                    const result = remote.documents.flushPageOperations(pageId, request);
+                    if (result && typeof (result as Promise<unknown>).then === "function") {
+                        // The keepalive transport rejects asynchronously: without
+                        // this catch the final batch of a session would be lost
+                        // with no outbox entry, because the caller swallows the
+                        // returned promise.
+                        return (result as Promise<unknown>).catch((error: unknown) => {
+                            if (!isOfflineError(error)) throw error;
+                            return queueDocument(String(pageId), "document.apply", request);
+                        });
+                    }
+                    return result;
                 } catch (error) {
                     if (!isOfflineError(error)) throw error;
                 }
             }
-            return local
-                .enqueue([
-                    {
-                        kind: "document.apply",
-                        entity: "document",
-                        entityId: String(pageId),
-                        payload: { pageId: String(pageId), request: request as unknown as Record<string, unknown> },
-                    },
-                ])
-                .then(() => {
-                    requestFlush();
-                });
+            return queueDocument(String(pageId), "document.apply", request);
         },
 
         async claimPageSeed(request) {
@@ -1205,7 +1381,10 @@ export const createLocalFirstSpacePageService = (options: LocalFirstServiceOptio
         releasePageSeed(request) {
             if (!isOnline()) return undefined;
             try {
-                return remote.documents.releasePageSeed(request);
+                const result = remote.documents.releasePageSeed(request);
+                return result && typeof (result as Promise<unknown>).then === "function"
+                    ? (result as Promise<unknown>).catch(() => undefined)
+                    : result;
             } catch (error) {
                 if (isOfflineError(error)) return undefined;
                 throw error;
@@ -1214,8 +1393,8 @@ export const createLocalFirstSpacePageService = (options: LocalFirstServiceOptio
     };
 
     const service: LocalFirstSpacePageService = {
-        spaces,
-        pages,
+        spaces: degradeNamespace("spaces", spaces),
+        pages: degradeNamespace("pages", pages),
         // Cloud-only feature areas, delegated wholesale on purpose: an offline
         // answer would be fabricated, and the pre-existing error surface
         // (toast + retry) is the honest behaviour.
@@ -1226,8 +1405,8 @@ export const createLocalFirstSpacePageService = (options: LocalFirstServiceOptio
         comments: remote.comments,
         tags: remote.tags,
         activity: remote.activity,
-        relations,
-        documents,
+        relations: degradeNamespace("relations", relations),
+        documents: degradeNamespace("documents", documents),
         changes,
         local,
         remote,
@@ -1235,10 +1414,26 @@ export const createLocalFirstSpacePageService = (options: LocalFirstServiceOptio
         get offline() {
             return observedOffline || !isOnline();
         },
-        info: () => local.info(),
+        get degraded() {
+            return !localUsable;
+        },
+        async info() {
+            try {
+                return await local.info();
+            } catch {
+                return {
+                    engine: "unavailable" as const,
+                    durable: false,
+                    schemaVersion: 0,
+                    spaces: 0,
+                    pages: 0,
+                    blocks: 0,
+                    documents: 0,
+                    pendingChanges: 0,
+                };
+            }
+        },
     };
-
-    void clientId;
 
     return service;
 };

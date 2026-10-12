@@ -414,12 +414,18 @@ export const App: React.FC<AppProps> = (props) => {
     const [refreshFlag, setRefreshFlag] = useState(0)
 
     useEffect(() => {
-        // A context change means a different account/session: the sync engine
-        // waits for a token on its own, so ask it to look again immediately
-        // instead of making the user wait for the next interval tick.
+        // A context change means a different session (logout, another account,
+        // another organization). The local database is per installation, so its
+        // cached spaces/pages and any queued edits belong to the previous
+        // session and are dropped before anything is read or pushed again.
+        // The sync engine waits for a token on its own, so ask it to look again
+        // immediately instead of waiting for the next interval tick.
         localFirstRuntime?.sync.requestFlush()
         return subscribeToContextChanges(() => {
-            localFirstRuntime?.sync.requestFlush()
+            void localFirstRuntime
+                ?.resetForSession()
+                .then(() => localFirstRuntime?.sync.requestFlush())
+                .catch(() => undefined)
             if (window.location.pathname !== '/login') window.location.assign('/')
         })
     }, [localFirstRuntime])

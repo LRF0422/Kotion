@@ -65,6 +65,7 @@ const SPACEPAGE_CAPABILITIES: DesktopCapability[] = [
     'spacepage.enqueue',
     'spacepage.listOutbox',
     'spacepage.countOutbox',
+    'spacepage.claimOutbox',
     'spacepage.ackOutbox',
     'spacepage.failOutbox',
     'spacepage.retryOutbox',
@@ -168,6 +169,9 @@ export function createSpacePageBridge(
         },
         async listOutbox(query?: LocalOutboxQuery): Promise<LocalOutboxEntry[]> {
             return unwrap(await invoke('spacepage.listOutbox', query), 'spacepage.listOutbox')
+        },
+        async claimOutbox(query?: { limit?: number }): Promise<LocalOutboxEntry[]> {
+            return unwrap(await invoke('spacepage.claimOutbox', query), 'spacepage.claimOutbox')
         },
         async countOutbox(state?: LocalOutboxState): Promise<number> {
             return unwrap(

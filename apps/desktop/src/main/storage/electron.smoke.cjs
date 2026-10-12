@@ -274,8 +274,15 @@ async function run() {
         JSON.stringify(outbox),
     )
 
+    const claimed = await call('spacepage.claimOutbox', { limit: 1 })
+    check(
+        'spacepage.claimOutbox: takes the entry for replay',
+        claimed && claimed.ok === true && claimed.value.length === 1 && claimed.value[0].state === 'inflight',
+        JSON.stringify(claimed),
+    )
+
     const acked = await call('spacepage.ackOutbox', {
-        ids: outbox && outbox.ok ? outbox.value.map((entry) => entry.id) : [],
+        ids: claimed && claimed.ok ? claimed.value.map((entry) => entry.id) : [],
     })
     check(
         'spacepage.ackOutbox: drains the queue',

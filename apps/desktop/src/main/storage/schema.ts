@@ -147,6 +147,30 @@ export const MIGRATIONS: Migration[] = [
             `);
         },
     },
+    {
+        version: 3,
+        name: 'outbox-coalesce-pending-only',
+        up: (db) => {
+            // Coalescing must only ever replace a mutation that has not left the
+            // device yet. The v2 index covered every entry, and `enqueue` matched
+            // `failed` rows too, so a second edit with the same key could land on
+            // an entry that was already on the wire: the push then sent the older
+            // payload while the ack deleted the newer one. From v3 an entry being
+            // pushed is `inflight` (see `claimOutbox`) and is never coalesced.
+            db.exec(`
+                DROP INDEX IF EXISTS outbox_coalesce;
+                -- Deliberately NOT unique: releasing an entry that failed
+                -- mid-push can legitimately put two entries with the same key
+                -- back in the queue (the older payload first, the newer one
+                -- after it), and the order is what keeps the final state right.
+                -- enqueue() is the only coalescing writer and it looks the row
+                -- up inside a transaction, so uniqueness buys nothing.
+                CREATE INDEX IF NOT EXISTS outbox_coalesce
+                    ON outbox (coalesce_key) WHERE coalesce_key IS NOT NULL AND state = 'pending';
+                CREATE INDEX IF NOT EXISTS outbox_entity ON outbox (entity_id, state);
+            `);
+        },
+    },
 ];
 
 /** Version this build expects after migrations have run. */

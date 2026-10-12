@@ -240,15 +240,32 @@ export interface SpacePageLocalStore {
     upsertBlocks(records: LocalBlockRecord[]): Promise<number>;
     deleteBlocks(blockIds: BlockId[]): Promise<number>;
 
-    /** Returns the ids of the stored entries, in replay order. */
+    /**
+     * Store queued mutations and return their ids, in replay order.
+     *
+     * An entry with a `coalesceKey` replaces an existing **pending** entry with
+     * the same key; `inflight` (being pushed right now) and `failed` entries are
+     * never touched, so a newer edit cannot overwrite a payload that is already
+     * on the wire — it becomes its own entry and is replayed after it.
+     */
     enqueue(entries: LocalOutboxDraft[]): Promise<number[]>;
     listOutbox(query?: LocalOutboxQuery): Promise<LocalOutboxEntry[]>;
     countOutbox(state?: LocalOutboxState): Promise<number>;
+    /**
+     * Atomically take the oldest pending entries for replay: they move to
+     * `inflight` and are returned. Claiming is what stops two sync runs (or two
+     * windows) from pushing the same mutation twice, and what keeps a coalescing
+     * edit from landing on an entry that is already in flight.
+     */
+    claimOutbox(query?: { limit?: number }): Promise<LocalOutboxEntry[]>;
     /** Remove entries the cloud has accepted. */
     ackOutbox(ids: number[]): Promise<number>;
     /** Mark one entry as permanently failed (a 4xx the cloud will never take). */
     failOutbox(id: number, error: string): Promise<void>;
-    /** Move `failed` entries back to `pending` (retry from the UI). */
+    /**
+     * Return entries to `pending`: `failed` ones (a manual retry) and `inflight`
+     * ones (the push did not finish — connectivity died, the app closed).
+     */
     retryOutbox(ids?: number[]): Promise<number>;
     /** Clear the dirty flag once the cloud has the row. */
     markSynced(entity: LocalOutboxEntity, ids: string[]): Promise<number>;
@@ -256,7 +273,7 @@ export interface SpacePageLocalStore {
     getState<T = unknown>(key: string): Promise<T | null>;
     setState(key: string, value: unknown): Promise<void>;
 
-    /** Drop every cached row. Used on logout and by tests. */
+    /** Drop every cached row. Used when the session changes, and by tests. */
     clear(): Promise<void>;
 }
 

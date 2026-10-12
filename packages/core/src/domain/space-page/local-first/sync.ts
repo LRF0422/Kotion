@@ -145,11 +145,14 @@ export const createLocalFirstSyncEngine = (options: LocalFirstSyncOptions): Loca
     };
 
     const refreshCounts = async (): Promise<void> => {
-        const [pending, failed] = await Promise.all([
+        const [pending, inflight, failed] = await Promise.all([
             local.countOutbox("pending"),
+            local.countOutbox("inflight"),
             local.countOutbox("failed"),
         ]);
-        publish({ pending, failed, online: isOnline() });
+        // "Pending" from the user's point of view is everything not yet on the
+        // server: queued *and* currently being pushed.
+        publish({ pending: pending + inflight, failed, online: isOnline() });
     };
 
     /** Replay one queued entry; returns the id the entity now has upstream. */
@@ -229,18 +232,37 @@ export const createLocalFirstSyncEngine = (options: LocalFirstSyncOptions): Loca
         publish({ phase: "pushing" });
         for (;;) {
             if (!isOnline()) return;
-            const [entry] = await local.listOutbox({ state: "pending", limit: 1 });
+            // Claim instead of read: the entry moves to `inflight`, so a second
+            // sync run cannot pick the same mutation up and an edit arriving
+            // during the request becomes its own entry instead of overwriting
+            // the payload that is already on the wire.
+            const [entry] = await local.claimOutbox({ limit: 1 });
             if (!entry) return;
             try {
                 const id = await pushEntry(entry);
-                await local.markSynced(ENTITY_OF[entry.kind] ?? entry.entity, [id]);
+                // Ack before clearing the dirty flag: if the flag write fails,
+                // replaying the (already accepted) entry would be worse than a
+                // row that stays dirty until the next pull.
                 await local.ackOutbox([entry.id]);
+                const stillQueued = await local.listOutbox({ entityId: id, limit: 1 });
+                if (!stillQueued.length) {
+                    // `dirty` means "has a queued edit". Only the last entry for
+                    // the entity may clear it, or a pull would overwrite the
+                    // edits that are still waiting their turn.
+                    await local.markSynced(ENTITY_OF[entry.kind] ?? entry.entity, [id]);
+                }
                 publish({ lastError: null });
             } catch (error) {
                 const message = errorMessage(error);
                 if (isOfflineError(error)) {
-                    // Keep the entry pending and stop: replaying later preserves
-                    // the order the user made the edits in.
+                    // Back to pending and stop the walk: replaying later
+                    // preserves the order the user made the edits in.
+                    try {
+                        await local.retryOutbox([entry.id]);
+                    } catch {
+                        // The entry stays `inflight`; the next run releases it, and
+                        // `retryOutbox()` without ids releases every stuck entry.
+                    }
                     publish({ lastError: message, online: false });
                     return;
                 }
@@ -402,6 +424,8 @@ export const createLocalFirstSyncEngine = (options: LocalFirstSyncOptions): Loca
         async retryFailed() {
             const count = await local.retryOutbox();
             await refreshCounts().catch(() => {});
+            // Retrying is only useful if something pushes the retried entries.
+            if (count > 0) engine.requestFlush();
             return count;
         },
 
