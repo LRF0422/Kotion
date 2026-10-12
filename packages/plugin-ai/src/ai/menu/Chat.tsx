@@ -617,8 +617,18 @@ export const ExpandableChatDemo: React.FC<{
         return () => clearSessionPageBinding(binding)
     }, [bindTargetPage, switchEditTarget, rebindEditor, editor, getPageFor, acquireOwnerTarget, releaseOwner, claimEditor, releaseEditor])
     const liveCurrentPageId = getPageNavigationBridge()?.getCurrentPage()?.pageId
+    // A conversation without an explicit @-page target rides on the page the
+    // user has open, so waiting for that context only makes sense while a
+    // document editor is actually published. Only PageEditor both publishes the
+    // editor and registers the navigation bridge, so `editor === undefined`
+    // means no page is coming at all — a plugin route such as db-connector, or
+    // the workspace shell. Making that case "pending" kept the composer in its
+    // "connecting" state forever (Send stayed disabled) and made `handleSend`
+    // drop every typed message. Such a run now simply fails closed per document
+    // tool call, exactly like a published-but-unbound editor already did.
+    const currentPagePending = !!editor && !currentPage?.pageId
     const targetToolsReady = !targetPageId
-        ? !!currentPage?.pageId
+        ? !currentPagePending
         : ((targetStatus === 'current' && String(liveCurrentPageId) === targetPageId)
             || (targetStatus === 'ready' && offscreenHandle?.pageId === targetPageId))
 
@@ -1080,7 +1090,7 @@ export const ExpandableChatDemo: React.FC<{
                     onModelParamsChange={handleModelParamsChange}
                     targetPage={targetPage}
                     currentPage={currentPage}
-                    targetStatus={!targetPage && !currentPage?.pageId ? 'connecting' : targetStatus}
+                    targetStatus={!targetPage && currentPagePending ? 'connecting' : targetStatus}
                     onPickPage={setTargetPage}
                     onClearPage={() => setTargetPage(null)}
                     onRetryPage={handleRetryPage}

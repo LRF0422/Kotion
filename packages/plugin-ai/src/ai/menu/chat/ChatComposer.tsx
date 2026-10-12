@@ -26,6 +26,13 @@ import { PageMentionPicker, TargetPageStatus } from './PageMentionPicker'
 // Flip this back to `true` to restore the button.
 const SHOW_TRACKING_TOGGLE: boolean = false
 
+// TEMP(chat): the "@-page" chip (and the `@` shortcut that opens the page
+// picker) is hidden in the chat composer for now — a conversation already acts
+// on the page it was opened from, so the chip mostly advertised a binding the
+// user never asked for. The binding machinery itself is untouched: flipping this
+// back to `true` restores both the chip and the picker shortcut.
+const SHOW_TARGET_PAGE_CHIP: boolean = false
+
 // ─── Mode toggle ───────────────────────────────────────────────────
 
 interface ModeToggleProps {
@@ -182,8 +189,10 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
             if (isValid) onSubmit()
             return
         }
-        // `@` at the start or after whitespace opens the page picker.
-        if (e.key === '@' && !targetPage) {
+        // `@` at the start or after whitespace opens the page picker. Gated with
+        // the chip: with no chip rendered there is nothing to anchor the
+        // popover, so `@` must stay a plain text character.
+        if (SHOW_TARGET_PAGE_CHIP && e.key === '@' && !targetPage) {
             const el = e.currentTarget
             const before = el.value.slice(0, el.selectionStart ?? 0)
             if (before === '' || /\s$/.test(before)) {
@@ -229,7 +238,7 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
                     </span>
                 </div>
             )}
-            {!hideTargetPage && (
+            {SHOW_TARGET_PAGE_CHIP && !hideTargetPage && (
                 <PageMentionPicker
                     targetPage={targetPage}
                     currentPage={currentPage}
