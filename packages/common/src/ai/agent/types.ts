@@ -214,15 +214,64 @@ export interface ImportAgentChatSessionInput {
     createdAt?: number
 }
 
+/** Long-term memory kinds the backend accepts (mirrors the `remember` tool). */
+export type MemoryType = 'fact' | 'preference' | 'note' | 'episode'
+
+/** Hierarchical memory scope: user → space → page (see backend MemoryScope). */
 export interface MemoryItem {
     memoryId: string
+    /** Scope key: `u:{userId}` / `u:{userId}:s:{spaceId}` / `…:p:{pageId}`. */
     scope: string
-    type: 'fact' | 'preference' | 'note' | 'episode'
+    type: MemoryType
     content: string
     importance: number
     tags?: string[]
     createTime: number
     lastAccessTime: number
+}
+
+/** Query for browsing / searching the caller's long-term memory. */
+export interface ListMemoryParams {
+    /**
+     * Exact scope key, or `*` (alias `all`) to span **every** scope the caller
+     * owns. `*` is what a browse UI needs: page scope keys embed ids the client
+     * cannot enumerate.
+     */
+    scope?: string
+    /** Keyword recall. With `scope: '*'` it searches every scope of the caller. */
+    query?: string
+    /** Filter by memory type. */
+    type?: MemoryType | string
+    /** Required for the space/page scopes of a non-`*` query. */
+    spaceId?: string
+    pageId?: string
+    /** Paging offset for browse; a ranked query ignores it. */
+    offset?: number
+    limit?: number
+}
+
+/** One page of long-term memory plus the caller's total for the same filter. */
+export interface MemoryListPage {
+    items: MemoryItem[]
+    /** Rows in this page. */
+    count: number
+    /** Rows the caller owns for the same filter (browse total). */
+    total: number
+}
+
+/**
+ * A hand-written memory — the `remember` tool's payload without the model.
+ * Scope defaults to `user`; `space`/`page` need the matching ids.
+ */
+export interface CreateMemoryInput {
+    content: string
+    type?: MemoryType
+    /** 0-100; backend default 50. */
+    importance?: number
+    tags?: string[]
+    scope?: 'user' | 'space' | 'page'
+    spaceId?: string
+    pageId?: string
 }
 
 /**

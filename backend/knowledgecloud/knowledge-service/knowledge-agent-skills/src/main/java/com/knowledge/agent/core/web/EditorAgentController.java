@@ -11,6 +11,7 @@ import com.knowledge.agent.core.supervisor.CreateRunCommand;
 import com.knowledge.agent.core.supervisor.DefaultRunSupervisor;
 import com.knowledge.agent.core.supervisor.ThreadStore;
 import com.knowledge.agent.core.tool.ToolSpec;
+import com.knowledge.agent.core.web.dto.CreateMemoryRequest;
 import com.knowledge.agent.core.web.dto.CreateRunRequest;
 import com.knowledge.agent.core.web.dto.ResumeRequest;
 import com.knowledge.agent.core.web.dto.ThreadView;
@@ -33,6 +34,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -47,6 +49,10 @@ import java.util.Map;
  * POST   /api/agent/v1/runs/{runId}/cancel        cancel
  * DELETE /api/agent/v1/threads/{threadId}/active-run   cancel conversation's run
  * GET    /api/agent/v1/threads/{threadId}         thread view (session memory)
+ * GET    /api/agent/v1/memory                     browse/search long-term memory
+ * POST   /api/agent/v1/memory                     create one memory by hand
+ * DELETE /api/agent/v1/memory                     purge the caller's memory
+ * DELETE /api/agent/v1/memory/{memoryId}          delete one memory
  * </pre>
  *
  * <p>All task endpoints perform ownership checks; "not found" and "not yours"
@@ -57,6 +63,14 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/agent/v1")
 public class EditorAgentController {
+
+    /** Hard cap for one page of the memory browser (the store caps this too). */
+    private static final int MAX_MEMORY_PAGE = 200;
+
+    /** Manual memory text cap — longer "memories" are notes, not memories. */
+    private static final int MAX_MEMORY_CONTENT = 2000;
+
+    private static final int MAX_MEMORY_TAGS = 10;
 
     private final DefaultRunSupervisor supervisor;
     private final ThreadStore threadStore;
@@ -259,46 +273,145 @@ public class EditorAgentController {
 
     // ==================== memory ====================
 
-    @ApiOperation("Browse long-term memory (optionally keyword recall)")
+    /**
+     * Browse / search long-term memory for the memory-management UI.
+     *
+     * <ul>
+     *   <li>{@code scope=*} (alias {@code all}) — every scope the caller owns
+     *       (user → space → page), newest first. This is the only way the UI can
+     *       see page-scoped memories, because it cannot enumerate page ids.</li>
+     *   <li>{@code query} — keyword recall. It spans the caller's scopes when
+     *       {@code scope=*}, otherwise the scopes reachable from
+     *       {@code spaceId}/{@code pageId} (most specific first). A ranked result
+     *       ignores {@code offset}.</li>
+     *   <li>neither — one exact scope (default: the caller's user scope).</li>
+     * </ul>
+     *
+     * {@code total} counts the caller's whole set for the same {@code type}
+     * filter, so the UI can page honestly instead of guessing from {@code count}.
+     */
+    @ApiOperation("Browse or search long-term memory (scope=* spans every scope)")
     @GetMapping("/memory")
     public R<Map<String, Object>> listMemory(
             @RequestParam(name = "scope", required = false) String scope,
             @RequestParam(name = "query", required = false) String query,
+            @RequestParam(name = "type", required = false) String type,
             @RequestParam(name = "spaceId", required = false) String spaceId,
             @RequestParam(name = "pageId", required = false) String pageId,
+            @RequestParam(name = "offset", defaultValue = "0") int offset,
             @RequestParam(name = "limit", defaultValue = "20") int limit) {
         Long userId = SecurityContextUtil.getUserId();
-        Map<String, Object> result = new LinkedHashMap<>();
+        Long tenantId = parseTenantId();
+        int safeLimit = Math.max(1, Math.min(limit, MAX_MEMORY_PAGE));
+        int safeOffset = Math.max(0, offset);
+        String typeFilter = blankToNull(type);
         List<Map<String, Object>> items = new ArrayList<>();
+        int total;
         try {
             List<MemoryEntry> entries;
-            if (query != null && !query.trim().isEmpty()) {
+            if (isAllScopes(scope)) {
+                entries = memoryStore.listAll(userId, tenantId, query, typeFilter, safeLimit, safeOffset);
+                total = memoryStore.countAll(userId, tenantId, typeFilter);
+            } else if (query != null && !query.trim().isEmpty()) {
                 entries = memoryStore.recall(
-                        MemoryScope.scopesFor(userId, spaceId, pageId), query, null, limit);
+                        MemoryScope.scopesFor(userId, spaceId, pageId), query, typeFilter, safeLimit);
+                total = entries.size();
             } else {
-                String targetScope = scope;
-                if (targetScope == null || targetScope.trim().isEmpty()) {
+                String targetScope = blankToNull(scope);
+                if (targetScope == null) {
                     targetScope = MemoryScope.userScope(userId);
                 }
-                entries = memoryStore.list(targetScope, limit);
+                entries = memoryStore.list(targetScope, safeLimit);
+                if (typeFilter != null) {
+                    entries.removeIf(entry -> !typeFilter.equalsIgnoreCase(entry.getType()));
+                }
+                total = entries.size();
             }
             for (MemoryEntry entry : entries) {
-                Map<String, Object> item = new LinkedHashMap<>();
-                item.put("memoryId", entry.getMemoryId());
-                item.put("scope", entry.getScope());
-                item.put("type", entry.getType());
-                item.put("content", entry.getContent());
-                item.put("importance", entry.getImportance());
-                item.put("tags", entry.getTags());
-                item.put("createTime", entry.getCreateTime());
-                item.put("lastAccessTime", entry.getLastAccessTime());
-                items.add(item);
+                items.add(toMemoryItem(entry));
             }
         } catch (Exception e) {
             return R.fail("读取记忆失败：" + e.getMessage());
         }
+        Map<String, Object> result = new LinkedHashMap<>();
         result.put("count", items.size());
+        result.put("total", total);
         result.put("memories", items);
+        return R.data(result);
+    }
+
+    @ApiOperation("Create one long-term memory entry by hand (user scope by default)")
+    @PostMapping("/memory")
+    public R<Map<String, Object>> createMemory(@RequestBody CreateMemoryRequest request) {
+        String content = request.getContent() == null ? "" : request.getContent().trim();
+        if (content.isEmpty()) {
+            return R.fail("记忆内容不能为空");
+        }
+        if (content.length() > MAX_MEMORY_CONTENT) {
+            content = content.substring(0, MAX_MEMORY_CONTENT);
+        }
+        Long userId = SecurityContextUtil.getUserId();
+        if (userId == null) {
+            // Without an identity the scope key would be "u:null" — a memory
+            // nobody can ever list or delete again.
+            return R.fail("未登录");
+        }
+        String spaceId = blankToNull(request.getSpaceId());
+        String pageId = blankToNull(request.getPageId());
+        String scopeMode = request.getScope() == null
+                ? "user" : request.getScope().trim().toLowerCase(Locale.ROOT);
+        String scopeKey;
+        if ("space".equals(scopeMode)) {
+            if (spaceId == null) {
+                return R.fail("空间级记忆需要 spaceId");
+            }
+            scopeKey = MemoryScope.spaceScope(userId, spaceId);
+        } else if ("page".equals(scopeMode)) {
+            if (spaceId == null || pageId == null) {
+                return R.fail("页面级记忆需要 spaceId 与 pageId");
+            }
+            scopeKey = MemoryScope.pageScope(userId, spaceId, pageId);
+        } else {
+            scopeKey = MemoryScope.userScope(userId);
+        }
+
+        MemoryEntry entry = new MemoryEntry();
+        entry.setUserId(userId);
+        entry.setTenantId(parseTenantId());
+        entry.setSpaceId(spaceId);
+        entry.setPageId(pageId);
+        entry.setScope(scopeKey);
+        entry.setType(normalizeMemoryType(request.getType()));
+        entry.setContent(content);
+        entry.setImportance(clampImportance(request.getImportance()));
+        if (request.getTags() != null) {
+            for (String tag : request.getTags()) {
+                if (tag == null || tag.trim().isEmpty() || entry.getTags().size() >= MAX_MEMORY_TAGS) {
+                    continue;
+                }
+                // Tags travel as one comma-joined column; a comma inside a tag
+                // would split it apart on the next read.
+                entry.getTags().add(tag.trim().replace(',', ' ').replace('，', ' '));
+            }
+        }
+        try {
+            return R.data(toMemoryItem(memoryStore.remember(entry)));
+        } catch (Exception e) {
+            return R.fail("保存记忆失败：" + e.getMessage());
+        }
+    }
+
+    @ApiOperation("Delete every long-term memory entry owned by the caller")
+    @DeleteMapping("/memory")
+    public R<Map<String, Object>> purgeMemory() {
+        int removed;
+        try {
+            removed = memoryStore.forgetAll(SecurityContextUtil.getUserId(), parseTenantId());
+        } catch (Exception e) {
+            return R.fail("清空记忆失败：" + e.getMessage());
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("removed", removed);
         return R.data(result);
     }
 
@@ -310,6 +423,47 @@ public class EditorAgentController {
         result.put("memoryId", memoryId);
         result.put("removed", removed);
         return removed ? R.data(result) : R.fail("记忆不存在或无权限");
+    }
+
+    /** One memory row as JSON for the management UI. */
+    private Map<String, Object> toMemoryItem(MemoryEntry entry) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("memoryId", entry.getMemoryId());
+        item.put("scope", entry.getScope());
+        item.put("type", entry.getType());
+        item.put("content", entry.getContent());
+        item.put("importance", entry.getImportance());
+        item.put("tags", entry.getTags());
+        item.put("createTime", entry.getCreateTime());
+        item.put("lastAccessTime", entry.getLastAccessTime());
+        return item;
+    }
+
+    /** {@code scope=*} / {@code scope=all} = the caller's every scope. */
+    private static boolean isAllScopes(String scope) {
+        if (scope == null) {
+            return false;
+        }
+        String value = scope.trim();
+        return "*".equals(value) || "all".equalsIgnoreCase(value);
+    }
+
+    private static String blankToNull(String value) {
+        return (value == null || value.trim().isEmpty()) ? null : value.trim();
+    }
+
+    private static String normalizeMemoryType(String type) {
+        String value = type == null ? "" : type.trim().toLowerCase(Locale.ROOT);
+        if ("fact".equals(value) || "preference".equals(value) || "note".equals(value)
+                || "episode".equals(value)) {
+            return value;
+        }
+        return "note";
+    }
+
+    private static int clampImportance(Integer importance) {
+        int value = importance == null ? 50 : importance;
+        return Math.max(0, Math.min(100, value));
     }
 
     // ==================== internals ====================

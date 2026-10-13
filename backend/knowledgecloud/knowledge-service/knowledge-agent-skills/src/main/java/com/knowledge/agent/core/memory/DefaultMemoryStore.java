@@ -21,6 +21,16 @@ import java.util.UUID;
 @Component
 public class DefaultMemoryStore implements MemoryStore {
 
+    /** Hard cap for one UI page of memories, whatever the caller asks for. */
+    private static final int MAX_BROWSE_LIMIT = 200;
+
+    /**
+     * Candidates pulled from MySQL before keyword ranking. Browsing one user's
+     * whole memory set is bounded and cheap (the store is per-user and small),
+     * so ranking in memory beats a second indexed query.
+     */
+    private static final int RECALL_CANDIDATE_LIMIT = 500;
+
     private final AgentLongMemoryMapper memoryMapper;
     private final MemoryRetriever retriever;
     private final AgentCoreProperties properties;
@@ -74,16 +84,7 @@ public class DefaultMemoryStore implements MemoryStore {
         }
         candidates.addAll(dedupe.values());
         List<MemoryEntry> top = retriever.top(candidates, query, limit);
-        // Touch lastAccessTime (recency feeds future scoring).
-        long now = System.currentTimeMillis();
-        for (MemoryEntry entry : top) {
-            entry.setLastAccessTime(now);
-            try {
-                memoryMapper.upsertByMemoryId(entry.toEntity());
-            } catch (Exception ignored) {
-                // hot-path best effort
-            }
-        }
+        touch(top);
         return top;
     }
 
@@ -116,5 +117,83 @@ public class DefaultMemoryStore implements MemoryStore {
             log.warn("list failed for scope {}: {}", scope, e.getMessage());
         }
         return entries;
+    }
+
+    @Override
+    public List<MemoryEntry> listAll(Long userId, Long tenantId, String query, String type,
+                                     int limit, int offset) {
+        if (userId == null) {
+            return new ArrayList<>();
+        }
+        String normalizedType = blankToNull(type);
+        int safeLimit = Math.max(1, Math.min(limit, MAX_BROWSE_LIMIT));
+        try {
+            if (query != null && !query.trim().isEmpty()) {
+                List<AgentLongMemoryEntity> entities =
+                        memoryMapper.selectByUserId(userId, tenantId, normalizedType,
+                                RECALL_CANDIDATE_LIMIT, 0);
+                List<MemoryEntry> top = retriever.top(toEntries(entities), query, safeLimit);
+                touch(top);
+                return top;
+            }
+            return toEntries(memoryMapper.selectByUserId(userId, tenantId, normalizedType,
+                    safeLimit, Math.max(0, offset)));
+        } catch (Exception e) {
+            log.warn("listAll failed for user {}: {}", userId, e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+
+    @Override
+    public int countAll(Long userId, Long tenantId, String type) {
+        if (userId == null) {
+            return 0;
+        }
+        try {
+            return memoryMapper.countByUserId(userId, tenantId, blankToNull(type));
+        } catch (Exception e) {
+            log.warn("countAll failed for user {}: {}", userId, e.getMessage());
+            return 0;
+        }
+    }
+
+    @Override
+    public int forgetAll(Long userId, Long tenantId) {
+        if (userId == null) {
+            return 0;
+        }
+        try {
+            return memoryMapper.deleteByUserId(userId, tenantId);
+        } catch (Exception e) {
+            log.warn("forgetAll failed for user {}: {}", userId, e.getMessage());
+            return 0;
+        }
+    }
+
+    private List<MemoryEntry> toEntries(List<AgentLongMemoryEntity> entities) {
+        List<MemoryEntry> entries = new ArrayList<>();
+        if (entities != null) {
+            for (AgentLongMemoryEntity entity : entities) {
+                entries.add(MemoryEntry.fromEntity(entity));
+            }
+        }
+        return entries;
+    }
+
+    /** Touch lastAccessTime (recency feeds future scoring). */
+    private void touch(List<MemoryEntry> entries) {
+        long now = System.currentTimeMillis();
+        for (MemoryEntry entry : entries) {
+            entry.setLastAccessTime(now);
+            try {
+                memoryMapper.upsertByMemoryId(entry.toEntity());
+            } catch (Exception ignored) {
+                // hot-path best effort
+            }
+        }
+    }
+
+    private static String blankToNull(String value) {
+        return (value == null || value.trim().isEmpty()) ? null : value.trim();
     }
 }

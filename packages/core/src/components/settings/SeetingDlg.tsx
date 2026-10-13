@@ -12,6 +12,7 @@ import {
     UserCog,
     Puzzle,
     Bot,
+    Brain,
     Compass,
     Gem,
     Sparkles,
@@ -31,6 +32,7 @@ import { useUploadFile, useTranslation, usePluginSettings } from "@kn/common";
 import { MyAccount } from "./components/MyAccount";
 import { MySetting } from "./components/MySetting";
 import { MyProfile } from "./components/MyProfile";
+import { MyMemory } from "./components/MyMemory";
 import { Member } from "./components/Member";
 import { AgentManager } from "../Agents";
 import { PlanBadge } from "../subscription/PlanBadge";
@@ -118,6 +120,7 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                     { id: "Subscription", label: t("settings.nav.subscription"), icon: <Gem />, contentKey: "Subscription", tone: "brand" },
                     { id: "MySetting", label: t("settings.nav.preferences"), icon: <Settings />, contentKey: "MySetting" },
                     { id: "MyProfile", label: t("settings.nav.profile"), icon: <Sparkles />, contentKey: "MyProfile" },
+                    { id: "MyMemory", label: t("settings.nav.memory"), icon: <Brain />, contentKey: "MyMemory" },
                     { id: "MyAgents", label: t("settings.nav.agents"), icon: <Bot />, contentKey: "MyAgents" },
                 ],
             },
@@ -174,6 +177,8 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                 return { title: t("settings.agents.title"), description: t("settings.agents.desc") };
             case "MyProfile":
                 return { title: t("settings.profile.title"), description: t("settings.profile.desc") };
+            case "MyMemory":
+                return { title: t("settings.memory.title"), description: t("settings.memory.desc") };
             default:
                 return { title: t("settings.title"), description: "" };
         }
@@ -200,6 +205,8 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                 return <AgentManager />;
             case "MyProfile":
                 return <MyProfile />;
+            case "MyMemory":
+                return <MyMemory />;
             case "MyAccount":
             default:
                 return <MyAccount />;

@@ -169,8 +169,11 @@ POST   /api/agent/v1/runs/{runId}/resume        SSE；{ action: tool_results|app
 POST   /api/agent/v1/runs/{runId}/cancel        → { status: CANCELLED }
 DELETE /api/agent/v1/threads/{threadId}/active-run    取消会话活跃 run
 GET    /api/agent/v1/threads/{threadId}         会话摘要/标题/活跃 run（前端恢复用）
-GET    /api/agent/v1/memory?scope=&query=&limit=  记忆浏览（UI）
-DELETE /api/agent/v1/memory/{memoryId}          删除记忆（UI）
+GET    /api/agent/v1/memory?scope=&query=&type=&spaceId=&pageId=&offset=&limit=
+                                               记忆浏览/检索（UI）；scope=* 跨全部作用域，返回 { memories, count, total }
+POST   /api/agent/v1/memory                     手动新增一条记忆（默认用户级）
+DELETE /api/agent/v1/memory                     清空本人全部记忆
+DELETE /api/agent/v1/memory/{memoryId}          删除单条记忆（UI）
 ```
 
 事件协议（SSE `data:` JSON，全局 seq）：
@@ -246,6 +249,9 @@ agent/
 - 新 `AgentPanel`（editor 侧边面板，替代 AIAssistantPanel 内部实现）：
   会话历史、流式文本、步骤列表、工具执行条目、子任务树（可下钻子 run 事件）、计划审批卡片、
   「继续执行」断点恢复、记忆管理入口。视觉语言保留，内部全部切新 SDK。
+- 记忆管理界面已落在 **设置 → 个人中心 → 「记忆管理」**（`packages/core/src/components/settings/components/MyMemory.tsx`，
+  紧邻「我的画像」）：跨作用域浏览、关键词检索、类型/排序筛选、手动新增、单条删除与一键清空。
+  面板内入口可后续在 AgentPanel 里加一个跳转，不必重复实现列表逻辑。
 - AIAssistantPage / 快捷键触发保留。
 
 ## 12. 删除清单

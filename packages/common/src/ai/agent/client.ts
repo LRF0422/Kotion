@@ -26,9 +26,12 @@ import type {
     AgentProfile,
     AgentProfileEvidence,
     AgentProfileTrait,
+    CreateMemoryInput,
     CreateRunInput,
     ImportAgentChatSessionInput,
+    ListMemoryParams,
     MemoryItem,
+    MemoryListPage,
     ResumePayload,
     RunView,
     SaveAgentChatSessionInput,
@@ -389,21 +392,53 @@ export class AgentClient {
         })
     }
 
-    async listMemory(params: {
-        scope?: string
-        query?: string
-        spaceId?: string
-        pageId?: string
-        limit?: number
-    } = {}): Promise<MemoryItem[]> {
+    /**
+     * Browse / search the caller's long-term memory, with the owner's total for
+     * the same filter. Pass `scope: '*'` to span every scope — the only way a UI
+     * can show page-scoped memories, since their scope keys embed page ids.
+     */
+    async listMemoryPage(params: ListMemoryParams = {}): Promise<MemoryListPage> {
         const search = new URLSearchParams()
         if (params.scope) search.set('scope', params.scope)
         if (params.query) search.set('query', params.query)
+        if (params.type) search.set('type', params.type)
         if (params.spaceId) search.set('spaceId', params.spaceId)
         if (params.pageId) search.set('pageId', params.pageId)
+        if (params.offset != null) search.set('offset', String(params.offset))
         search.set('limit', String(params.limit ?? 20))
-        const data = await this.request<{ memories?: MemoryItem[] }>('/memory?' + search.toString())
-        return data?.memories ?? []
+        const data = await this.request<{
+            memories?: MemoryItem[]
+            count?: number
+            total?: number
+        }>('/memory?' + search.toString())
+        const items = Array.isArray(data?.memories) ? data!.memories! : []
+        return {
+            items,
+            count: typeof data?.count === 'number' ? data.count : items.length,
+            total: typeof data?.total === 'number' ? data.total : items.length,
+        }
+    }
+
+    /** Memory items only — the compact form of {@link listMemoryPage}. */
+    async listMemory(params: ListMemoryParams = {}): Promise<MemoryItem[]> {
+        return (await this.listMemoryPage(params)).items
+    }
+
+    /**
+     * Write one memory by hand, the same row the `remember` tool would create.
+     * Scope defaults to `user` server-side.
+     */
+    async createMemory(input: CreateMemoryInput): Promise<MemoryItem> {
+        return await this.request<MemoryItem>('/memory', {
+            method: 'POST',
+            body: JSON.stringify(input),
+        })
+    }
+
+    /** Delete every memory the caller owns; returns how many rows were removed. */
+    async purgeMemory(): Promise<number> {
+        const data = await this.request<{ removed?: number }>('/memory', { method: 'DELETE' })
+        return typeof data?.removed === 'number' ? data.removed : 0
     }
 
     async deleteMemory(memoryId: string): Promise<void> {
