@@ -3,6 +3,12 @@ import { Editor } from "@kn/editor";
 import { FieldType, ViewType, ChartType, FieldConfig, ViewConfig, BitableAttrs } from "../types";
 import { generateFieldId, generateViewId } from "../utils/id";
 import { createRecords, sanitizeRecordValues } from "../utils/record";
+import { OPTION_COLORS } from "../utils/colors";
+import {
+    normalizeOptions,
+    normalizeRecordValuesBatch,
+    resolveOptionId,
+} from "../utils/selectValues";
 import {
     findBitableNodes,
     findBitableByIndex,
@@ -41,7 +47,12 @@ const ChartTypeEnum = z.enum(["bar", "line", "pie", "area", "radar", "scatter", 
 const SelectOptionSchema = z.object({
     id: z.string().optional().describe("选项ID，不提供则自动生成"),
     label: z.string().describe("选项显示名称"),
-    color: z.string().optional().describe("选项颜色，如 #red, #blue, #green"),
+    color: z
+        .string()
+        .optional()
+        .describe(
+            `选项颜色，可用调色板色值 ${OPTION_COLORS.join(" / ")}，也接受 red/blue/green/amber/purple/pink/teal/orange/gray 等名称`
+        ),
 });
 
 const FieldConfigSchema = z.object({
@@ -54,7 +65,25 @@ const FieldConfigSchema = z.object({
     description: z.string().optional().describe("字段描述"),
 });
 
-const RecordDataSchema = z.record(z.string(), z.any()).describe("记录数据，key为字段ID，value为字段值");
+const RecordDataSchema = z
+    .record(z.string(), z.any())
+    .describe(
+        "记录数据，key为字段ID或字段标题，value为字段值。" +
+            "select字段填选项文本或选项ID；multi_select字段填选项文本/选项ID的数组（也接受「前端, 后端」这类分隔字符串）。" +
+            "填写的文本若与已有选项匹配（忽略大小写和首尾空格）会自动关联到该选项；未匹配的文本会自动创建为新选项，不会丢数据。"
+    );
+
+/** Compact, model-friendly description of options auto-created while writing data. */
+function describeCreatedOptions(
+    created: Array<{ fieldId: string; fieldTitle: string; option: { id: string; label: string } }>
+): Array<{ fieldId: string; fieldTitle: string; optionId: string; optionLabel: string }> {
+    return created.map((item) => ({
+        fieldId: item.fieldId,
+        fieldTitle: item.fieldTitle,
+        optionId: item.option.id,
+        optionLabel: item.option.label,
+    }));
+}
 
 // ============================================================================
 // Tool Definitions
@@ -148,20 +177,45 @@ export const bitableTools = [
             if (!bitable) return { success: false, error: `找不到索引为 ${params.bitableIndex} 的多维表格` };
 
             let records = [...(bitable.attrs.data || [])];
+            const filterFields = new Map((bitable.attrs.fields || []).map((field) => [field.id, field]));
+
+            // Select cells store option ids while callers filter with labels;
+            // resolve both sides so "已完成" matches the stored option id. Every
+            // other field type keeps the original strict comparison.
+            const matchesValue = (stored: any, expected: any, fieldId: string): boolean => {
+                const field = filterFields.get(fieldId);
+                const isSelectField =
+                    field?.type === FieldType.SELECT || field?.type === FieldType.MULTI_SELECT;
+                if (!isSelectField || !field) return stored === expected;
+                if (String(stored) === String(expected)) return true;
+                const expectedId = resolveOptionId(field.options, expected);
+                if (!expectedId) return false;
+                if (String(stored) === String(expectedId)) return true;
+                const storedId = resolveOptionId(field.options, stored);
+                return Boolean(storedId) && storedId === expectedId;
+            };
 
             if (params.filters && params.filters.length > 0) {
                 records = records.filter((record) =>
                     params.filters!.every((filter) => {
                         const value = record[filter.fieldId];
                         switch (filter.operator) {
-                            case "equals": return value === filter.value;
-                            case "contains": return String(value).toLowerCase().includes(String(filter.value).toLowerCase());
+                            case "equals":
+                                return Array.isArray(value)
+                                    ? value.some((item) => matchesValue(item, filter.value, filter.fieldId))
+                                    : matchesValue(value, filter.value, filter.fieldId);
+                            case "contains":
+                                if (Array.isArray(value)) {
+                                    return value.some((item) => matchesValue(item, filter.value, filter.fieldId));
+                                }
+                                if (matchesValue(value, filter.value, filter.fieldId)) return true;
+                                return String(value).toLowerCase().includes(String(filter.value).toLowerCase());
                             case "gt": return value > filter.value;
                             case "lt": return value < filter.value;
                             case "gte": return value >= filter.value;
                             case "lte": return value <= filter.value;
-                            case "isEmpty": return value === null || value === undefined || value === "";
-                            case "isNotEmpty": return value !== null && value !== undefined && value !== "";
+                            case "isEmpty": return value === null || value === undefined || value === "" || (Array.isArray(value) && value.length === 0);
+                            case "isNotEmpty": return !(value === null || value === undefined || value === "" || (Array.isArray(value) && value.length === 0));
                             default: return true;
                         }
                     })
@@ -203,21 +257,24 @@ export const bitableTools = [
             defaultViewType?: string;
         }) => {
             const { fields, titleToIdMap } = buildFieldsConfig(params.fields as any);
-            const defaultViews = buildDefaultViews(fields);
-            const processedData = processInitialData(params.initialData, titleToIdMap, fields);
+            const processed = processInitialData(params.initialData, titleToIdMap, fields);
+            const defaultViews = buildDefaultViews(processed.fields);
 
             editor.commands.insertContent({
                 type: "bitable",
-                attrs: { fields, views: defaultViews, currentView: defaultViews[0]?.id, data: processedData },
+                attrs: { fields: processed.fields, views: defaultViews, currentView: defaultViews[0]?.id, data: processed.data },
             });
 
             return {
                 success: true,
                 message: "多维表格已插入",
-                fieldCount: fields.length,
-                recordCount: processedData.length,
-                recordIds: processedData.map((r) => r.id),
+                fieldCount: processed.fields.length,
+                recordCount: processed.data.length,
+                recordIds: processed.data.map((r) => r.id),
                 fieldMapping: titleToIdMap,
+                ...(processed.createdOptions.length > 0 && {
+                    createdOptions: describeCreatedOptions(processed.createdOptions),
+                }),
             };
         },
     },
@@ -239,22 +296,25 @@ export const bitableTools = [
             defaultViewType?: string;
         }) => {
             const { fields, titleToIdMap } = buildFieldsConfig(params.fields as any);
-            const defaultViews = buildDefaultViews(fields);
-            const processedData = processInitialData(params.initialData, titleToIdMap, fields);
+            const processed = processInitialData(params.initialData, titleToIdMap, fields);
+            const defaultViews = buildDefaultViews(processed.fields);
 
             editor.commands.insertContentAt(params.position, {
                 type: "bitable",
-                attrs: { fields, views: defaultViews, currentView: defaultViews[0]?.id, data: processedData },
+                attrs: { fields: processed.fields, views: defaultViews, currentView: defaultViews[0]?.id, data: processed.data },
             });
 
             return {
                 success: true,
                 message: `多维表格已插入到位置 ${params.position}`,
-                fieldCount: fields.length,
-                recordCount: processedData.length,
-                recordIds: processedData.map((r) => r.id),
+                fieldCount: processed.fields.length,
+                recordCount: processed.data.length,
+                recordIds: processed.data.map((r) => r.id),
                 fieldMapping: titleToIdMap,
                 position: params.position,
+                ...(processed.createdOptions.length > 0 && {
+                    createdOptions: describeCreatedOptions(processed.createdOptions),
+                }),
             };
         },
     },
@@ -284,11 +344,24 @@ export const bitableTools = [
                 });
                 return transformedRecord;
             });
-            const newRecords = createRecords(fields, existingData, values);
+            const normalized = normalizeRecordValuesBatch(fields, values, { createMissingOptions: true });
+            const newRecords = createRecords(normalized.fields, existingData, normalized.valuesList);
             const newData = [...existingData, ...newRecords];
-            updateBitableAttrs(editor, bitable.pos, { data: newData });
+            updateBitableAttrs(editor, bitable.pos, {
+                data: newData,
+                // Labels that had no option grew `fields.options`, so persist it too.
+                ...(normalized.fields !== fields && { fields: normalized.fields }),
+            });
 
-            return { success: true, addedCount: newRecords.length, newRecordIds: newRecords.map((r) => r.id), totalRecords: newData.length };
+            return {
+                success: true,
+                addedCount: newRecords.length,
+                newRecordIds: newRecords.map((r) => r.id),
+                totalRecords: newData.length,
+                ...(normalized.createdOptions.length > 0 && {
+                    createdOptions: describeCreatedOptions(normalized.createdOptions),
+                }),
+            };
         },
     },
 
@@ -317,15 +390,30 @@ export const bitableTools = [
             Object.entries(params.updates).forEach(([key, value]) => {
                 transformedUpdates[titleToIdMap[key] || key] = value;
             });
-            const safeUpdates = sanitizeRecordValues(fields, transformedUpdates);
+            // Resolve select labels onto option ids first, so the sanitizer (and
+            // the cell renderer) sees ids; unknown labels create their option.
+            const normalized = normalizeRecordValuesBatch(fields, [transformedUpdates], {
+                createMissingOptions: true,
+            });
+            const safeUpdates = sanitizeRecordValues(normalized.fields, normalized.valuesList[0] || {});
 
             const newData = existingData.map((record, idx) =>
                 idx === recordIndex ? { ...record, ...safeUpdates, updatedTime: new Date().toISOString() } : record
             );
 
-            updateBitableAttrs(editor, bitable.pos, { data: newData });
+            updateBitableAttrs(editor, bitable.pos, {
+                data: newData,
+                ...(normalized.fields !== fields && { fields: normalized.fields }),
+            });
 
-            return { success: true, recordId: params.recordId, updatedFields: Object.keys(params.updates) };
+            return {
+                success: true,
+                recordId: params.recordId,
+                updatedFields: Object.keys(params.updates),
+                ...(normalized.createdOptions.length > 0 && {
+                    createdOptions: describeCreatedOptions(normalized.createdOptions),
+                }),
+            };
         },
     },
 
@@ -370,11 +458,7 @@ export const bitableTools = [
 
             const { attrs } = bitable;
             const fieldId = params.field.id || generateFieldId();
-            const options = params.field.options?.map((opt, idx) => ({
-                id: opt.id || String(idx + 1),
-                label: opt.label,
-                color: opt.color || "#gray",
-            }));
+            const options = params.field.options ? normalizeOptions(params.field.options) : undefined;
 
             const newField: FieldConfig = {
                 id: fieldId,
@@ -388,7 +472,13 @@ export const bitableTools = [
 
             updateBitableAttrs(editor, bitable.pos, { fields: [...(attrs.fields || []), newField] });
 
-            return { success: true, fieldId, fieldTitle: params.field.title, fieldType: params.field.type };
+            return {
+                success: true,
+                fieldId,
+                fieldTitle: params.field.title,
+                fieldType: params.field.type,
+                ...(options && { options: options.map((option) => ({ id: option.id, label: option.label })) }),
+            };
         },
     },
 
@@ -414,13 +504,28 @@ export const bitableTools = [
             const fieldIndex = attrs.fields?.findIndex((f) => f.id === params.fieldId);
             if (fieldIndex === undefined || fieldIndex === -1) return { success: false, error: `找不到ID为 ${params.fieldId} 的字段` };
 
+            const currentField = attrs.fields![fieldIndex];
+            const updates: Partial<FieldConfig> = { ...params.updates };
+            if (updates.options) {
+                // Keep the ids of options whose label is unchanged: record values
+                // already reference them, and losing the id empties those cells.
+                updates.options = normalizeOptions(updates.options, currentField.options || []);
+            }
+
             const newFields = attrs.fields!.map((field, idx) =>
-                idx === fieldIndex ? { ...field, ...params.updates } : field
+                idx === fieldIndex ? { ...field, ...updates } : field
             );
 
             updateBitableAttrs(editor, bitable.pos, { fields: newFields });
 
-            return { success: true, fieldId: params.fieldId, updatedProperties: Object.keys(params.updates) };
+            return {
+                success: true,
+                fieldId: params.fieldId,
+                updatedProperties: Object.keys(params.updates),
+                ...(updates.options && {
+                    options: updates.options.map((option) => ({ id: option.id, label: option.label })),
+                }),
+            };
         },
     },
 

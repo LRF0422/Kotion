@@ -1,4 +1,5 @@
-import { RecordData, FieldConfig, FilterConfig, SortConfig, GroupConfig, FilterOperator } from '../types';
+import { RecordData, FieldConfig, FilterConfig, SortConfig, GroupConfig, FilterOperator, FieldType } from '../types';
+import { resolveOptionIds } from './selectValues';
 
 /**
  * Apply filters to data
@@ -14,13 +15,13 @@ export function applyFilters(
     // Resolve each filter's field once instead of scanning `fields` for every
     // (record × filter). Filters whose field no longer exists are dropped, which
     // matches the previous "field not found → ignore filter" behaviour.
-    const fieldIds = new Set(fields.map(f => f.id));
-    const activeFilters = filters.filter(filter => fieldIds.has(filter.fieldId));
+    const fieldMap = new Map(fields.map(f => [f.id, f]));
+    const activeFilters = filters.filter(filter => fieldMap.has(filter.fieldId));
     if (activeFilters.length === 0) return data;
 
     // `and` → every filter must match; `or` → any filter matching keeps the record.
     const matches = (record: RecordData, filter: FilterConfig) =>
-        evaluateFilter(record[filter.fieldId], filter.operator, filter.value);
+        evaluateFilter(record[filter.fieldId], filter.operator, filter.value, fieldMap.get(filter.fieldId));
 
     return data.filter(record =>
         logic === 'or'
@@ -29,18 +30,49 @@ export function applyFilters(
     );
 }
 
-function evaluateFilter(value: any, operator: FilterOperator, filterValue: any): boolean {
+/**
+ * Compare a stored select cell against a filter value.
+ *
+ * Select cells store option ids while filters are usually written with the
+ * option label (and documents written before values were normalised may hold
+ * either); resolving both sides keeps filtering consistent with the tag the
+ * cell renders.
+ */
+function matchesSelectValue(stored: any, expected: any, field: FieldConfig): boolean {
+    const storedIds = resolveOptionIds(field.options, stored);
+    const expectedIds = resolveOptionIds(field.options, expected);
+    if (storedIds.length > 0 && expectedIds.length > 0) {
+        return expectedIds.some(id => storedIds.includes(id));
+    }
+    // Unresolvable on either side: compare the same way a non-select field does
+    // (null/'' are equal, otherwise case-insensitive text equality).
+    const strStored = stored != null ? String(stored).toLowerCase() : '';
+    const strExpected = expected != null ? String(expected).toLowerCase() : '';
+    return strStored === strExpected;
+}
+
+function evaluateFilter(value: any, operator: FilterOperator, filterValue: any, field?: FieldConfig): boolean {
     const strValue = value != null ? String(value).toLowerCase() : '';
     const strFilterValue = filterValue != null ? String(filterValue).toLowerCase() : '';
+    const isSelectField = field?.type === FieldType.SELECT || field?.type === FieldType.MULTI_SELECT;
 
     switch (operator) {
         case FilterOperator.EQUALS:
-            return strValue === strFilterValue;
+            return isSelectField && field ? matchesSelectValue(value, filterValue, field) : strValue === strFilterValue;
         case FilterOperator.NOT_EQUALS:
-            return strValue !== strFilterValue;
+            return isSelectField && field ? !matchesSelectValue(value, filterValue, field) : strValue !== strFilterValue;
         case FilterOperator.CONTAINS:
+            // For select fields "contains" means "is one of the selected
+            // options"; fall back to substring so free-text partial filters on
+            // legacy label cells keep working.
+            if (isSelectField && field) {
+                return matchesSelectValue(value, filterValue, field) || strValue.includes(strFilterValue);
+            }
             return strValue.includes(strFilterValue);
         case FilterOperator.NOT_CONTAINS:
+            if (isSelectField && field) {
+                return !matchesSelectValue(value, filterValue, field) && !strValue.includes(strFilterValue);
+            }
             return !strValue.includes(strFilterValue);
         case FilterOperator.IS_EMPTY:
             return value == null || value === '' || (Array.isArray(value) && value.length === 0);
@@ -56,11 +88,17 @@ function evaluateFilter(value: any, operator: FilterOperator, filterValue: any):
             return Number(value) <= Number(filterValue);
         case FilterOperator.IS_ANY_OF:
             if (Array.isArray(filterValue)) {
+                if (isSelectField && field) {
+                    return filterValue.some(fv => matchesSelectValue(value, fv, field));
+                }
                 return filterValue.some(fv => String(fv).toLowerCase() === strValue);
             }
             return false;
         case FilterOperator.IS_NONE_OF:
             if (Array.isArray(filterValue)) {
+                if (isSelectField && field) {
+                    return !filterValue.some(fv => matchesSelectValue(value, fv, field));
+                }
                 return !filterValue.some(fv => String(fv).toLowerCase() === strValue);
             }
             return true;

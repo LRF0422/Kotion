@@ -1,6 +1,7 @@
 import { FieldConfig, FieldType, Person, RecordData, isReadonlyField } from "../types";
 import { generateRecordId } from "./id";
 import { STRUCTURAL_RECORD_ID_FIELD_ID } from "./recordIdentity";
+import { normalizeRecordValues } from "./selectValues";
 
 const STRUCTURAL_SYSTEM_KEYS = new Set([
     STRUCTURAL_RECORD_ID_FIELD_ID,
@@ -18,7 +19,14 @@ function nextAutoNumber(fieldId: string, existingData: RecordData[]): number {
     return maxValue + 1;
 }
 
-/** Remove structural and read-only values supplied by a caller. */
+/**
+ * Remove structural and read-only values supplied by a caller, and normalise
+ * select / multi-select values onto their option ids.
+ *
+ * Callers other than the cell editors (AI tools, Excel import, programmatic
+ * updates) pass option *labels*; without this translation the value matches no
+ * option and the cell renders as empty.
+ */
 export function sanitizeRecordValues(
     fields: FieldConfig[],
     values: Partial<RecordData>
@@ -32,7 +40,10 @@ export function sanitizeRecordValues(
         if (STRUCTURAL_SYSTEM_KEYS.has(key) || readonlyFieldIds.has(key)) return;
         sanitized[key] = value;
     });
-    return sanitized;
+
+    // No option creation here: this is also the UI update path, where an
+    // unknown label must not silently grow the field's option list.
+    return normalizeRecordValues(fields, sanitized).values as Partial<RecordData>;
 }
 
 /**

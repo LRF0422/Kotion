@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { ImageIcon, Expand } from "@kn/icon";
 import { FieldConfig, RecordData, FieldType } from "../../../types";
+import { resolveOptionId, resolveOptionIds } from "../../../utils/selectValues";
 
 interface GalleryCardProps {
     record: RecordData;
@@ -36,10 +37,17 @@ function formatFieldValue(value: any, field: FieldConfig): string {
         case FieldType.CHECKBOX:
             return value ? "\u2713" : "";
         case FieldType.SELECT: {
-            const opt = field.options?.find((o: any) => o.id === value);
+            // Accept legacy label-valued cells as well as option ids.
+            const optionId = resolveOptionId(field.options, value);
+            const opt = optionId ? field.options?.find((o: any) => o.id === optionId) : undefined;
             return opt?.label || String(value);
         }
-        case FieldType.MULTI_SELECT:
+        case FieldType.MULTI_SELECT: {
+            const optionIds = resolveOptionIds(field.options, value);
+            const labels = optionIds
+                .map((id) => field.options?.find((o: any) => o.id === id)?.label)
+                .filter((label): label is string => Boolean(label));
+            if (labels.length > 0) return labels.join(", ");
             if (Array.isArray(value)) {
                 return value
                     .map((id: string) => {
@@ -49,6 +57,7 @@ function formatFieldValue(value: any, field: FieldConfig): string {
                     .join(", ");
             }
             return String(value);
+        }
         case FieldType.PROGRESS:
             return `${value}%`;
         case FieldType.RATING:

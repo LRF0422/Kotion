@@ -13,6 +13,7 @@ import {
 import type { FieldConfig, RecordData, SelectOption } from "../../../types";
 import type { BarPosition, MilestonePosition, Dependency, TimelineScale } from "./types";
 import { createTimelineGeometry } from "./timelineGeometry";
+import { resolveOptionId } from "../../../utils/selectValues";
 
 function toTimelineDate(value: unknown): Date | null {
     const date = typeof value === "string" ? parseISO(value) : value instanceof Date ? value : null;
@@ -123,9 +124,13 @@ export function useTimelineLayout({
         groups["unassigned"] = [];
 
         validRecords.forEach((record) => {
-            const groupValue = record[groupByField.id];
+            const rawGroupValue = record[groupByField.id];
+            // Accept legacy label-valued cells as well as option ids.
+            const groupValue = rawGroupValue != null
+                ? resolveOptionId(groupByField.options, rawGroupValue) ?? String(rawGroupValue)
+                : null;
             if (groupValue && groups[groupValue]) {
-                groups[groupValue].push(record);
+                groups[groupValue]!.push(record);
             } else {
                 groups["unassigned"]?.push(record);
             }
@@ -201,7 +206,10 @@ export function useTimelineLayout({
             const val = cf ? record[cf.id] : undefined;
             if (cf && val) {
                 if (cf.type === "select") {
-                    const opt = (cf.options || []).find((o: SelectOption) => o.id === val);
+                    const optionId = resolveOptionId(cf.options, val);
+                    const opt = optionId
+                        ? (cf.options || []).find((o: SelectOption) => o.id === optionId)
+                        : undefined;
                     if (opt?.color) return opt.color;
                 } else {
                     return val as string;

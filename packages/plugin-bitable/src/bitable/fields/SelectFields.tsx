@@ -2,6 +2,7 @@ import React from "react";
 import { Checkbox } from "@kn/ui";
 import { SelectOption } from "../../types";
 import { getTagStyle } from "../../utils/colors";
+import { resolveOptionId, resolveOptionIds } from "../../utils/selectValues";
 import { FieldRendererProps, FieldEditorProps } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -10,7 +11,12 @@ import { FieldRendererProps, FieldEditorProps } from "./types";
 
 export const SelectRenderer: React.FC<FieldRendererProps> = ({ value, field }) => {
     if (!value) return <div className="bitable-field-empty" />;
-    const option = field.options?.find((opt: SelectOption) => opt.id === value);
+    // Option ids are the storage format, but legacy cells may still hold the
+    // option label; accept both so those cells are not rendered as empty.
+    const resolvedId = resolveOptionId(field.options, value);
+    const option = resolvedId
+        ? field.options?.find((opt: SelectOption) => opt.id === resolvedId)
+        : undefined;
     if (!option) return <div className="bitable-field-empty" />;
 
     const style = getTagStyle(option.color);
@@ -29,9 +35,10 @@ export const SelectEditor: React.FC<FieldEditorProps> = ({ value, field, onChang
     const [highlightedIndex, setHighlightedIndex] = React.useState(0);
     const containerRef = React.useRef<HTMLDivElement>(null);
     const options = field.options || [];
+    const currentId = resolveOptionId(options, value);
 
     React.useEffect(() => {
-        const currentIndex = options.findIndex((opt: SelectOption) => opt.id === value);
+        const currentIndex = options.findIndex((opt: SelectOption) => opt.id === currentId);
         if (currentIndex >= 0) {
             setHighlightedIndex(currentIndex);
         }
@@ -73,7 +80,7 @@ export const SelectEditor: React.FC<FieldEditorProps> = ({ value, field, onChang
         >
             {options.map((opt: SelectOption, index: number) => {
                 const style = getTagStyle(opt.color);
-                const isSelected = opt.id === value;
+                const isSelected = opt.id === currentId;
                 return (
                     <div
                         key={opt.id}
@@ -112,11 +119,16 @@ export const SelectEditor: React.FC<FieldEditorProps> = ({ value, field, onChang
 // ---------------------------------------------------------------------------
 
 export const MultiSelectRenderer: React.FC<FieldRendererProps> = ({ value, field }) => {
-    if (!Array.isArray(value) || value.length === 0) return <div className="bitable-field-empty" />;
+    if (value === null || value === undefined || value === "") {
+        return <div className="bitable-field-empty" />;
+    }
+
+    const resolvedIds = resolveOptionIds(field.options, value);
+    if (resolvedIds.length === 0) return <div className="bitable-field-empty" />;
 
     return (
         <div className="bitable-tag-group">
-            {value.map((id) => {
+            {resolvedIds.map((id) => {
                 const option = field.options?.find((opt: SelectOption) => opt.id === id);
                 if (!option) return null;
                 const style = getTagStyle(option.color);
@@ -135,21 +147,32 @@ export const MultiSelectRenderer: React.FC<FieldRendererProps> = ({ value, field
 };
 
 export const MultiSelectEditor: React.FC<FieldEditorProps> = ({ value, field, onChange }) => {
-    const selectedValues = Array.isArray(value) ? value : [];
+    const options = field.options || [];
+    // Toggling must start from resolved ids: with a legacy label value the
+    // clicked option would otherwise be appended as a duplicate. Tokens that
+    // resolve to no option are carried through untouched, so an unrelated
+    // toggle never silently deletes stored data.
+    const selectedValues = resolveOptionIds(options, value);
+    const rawValues = Array.isArray(value)
+        ? value
+        : value === null || value === undefined || value === ""
+          ? []
+          : [value];
+    const danglingValues = rawValues.filter(
+        (token) => token !== null && token !== undefined && token !== "" && resolveOptionId(options, token) === null
+    );
     const [focusedIndex, setFocusedIndex] = React.useState(0);
     const containerRef = React.useRef<HTMLDivElement>(null);
-    const options = field.options || [];
 
     React.useEffect(() => {
         containerRef.current?.focus();
     }, []);
 
     const toggleOption = (optId: string) => {
-        if (selectedValues.includes(optId)) {
-            onChange(selectedValues.filter((id) => id !== optId));
-        } else {
-            onChange([...selectedValues, optId]);
-        }
+        const next = selectedValues.includes(optId)
+            ? selectedValues.filter((id) => id !== optId)
+            : [...selectedValues, optId];
+        onChange([...next, ...danglingValues]);
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {

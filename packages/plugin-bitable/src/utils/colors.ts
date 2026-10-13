@@ -42,11 +42,39 @@ const TAG_COLOR_MAP: Record<string, { bg: string; text: string }> = {
     '#f97316': { bg: 'rgba(249, 115, 22, 0.2)', text: '#fb923c' },
 };
 
+const FALLBACK_TAG_STYLE = { bg: 'rgba(107, 114, 128, 0.2)', text: '#9ca3af' };
+const HEX_3 = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i;
+const HEX_6 = /^#[0-9a-f]{6}$/i;
+const HEX_8 = /^#[0-9a-f]{8}$/i;
+
 /**
- * Get Notion-style tag style for a SELECT/MULTI_SELECT option color
+ * Normalise a hex colour to lowercase 6-digit form, or null when it is not a
+ * hex colour. `#abc` expands to `#aabbcc`; `#rrggbbaa` drops the alpha. Only
+ * 6-digit values can be turned into a translucent tag background.
+ */
+export function toHex6(color: string): string | null {
+    const raw = String(color).trim();
+    if (HEX_6.test(raw)) return raw.toLowerCase();
+    const short = HEX_3.exec(raw);
+    if (short) {
+        return `#${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}`.toLowerCase();
+    }
+    if (HEX_8.test(raw)) return raw.slice(0, 7).toLowerCase();
+    return null;
+}
+
+/**
+ * Get Notion-style tag style for a SELECT/MULTI_SELECT option color.
+ *
+ * Option colours written before colour normalisation (e.g. "#red") are not
+ * renderable CSS; fall back to gray instead of emitting an invalid value.
  */
 export function getTagStyle(color: string): { bg: string; text: string } {
-    return TAG_COLOR_MAP[color] || { bg: `${color}20`, text: color };
+    const mapped = TAG_COLOR_MAP[color];
+    if (mapped) return mapped;
+    const hex6 = typeof color === 'string' ? toHex6(color) : null;
+    if (hex6) return { bg: `${hex6}20`, text: hex6 };
+    return FALLBACK_TAG_STYLE;
 }
 
 /**

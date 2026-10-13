@@ -25,6 +25,7 @@ import {
 } from "@kn/icon";
 import { FieldConfig, FieldType, SelectOption } from "../../types";
 import { getTagStyle } from "../../utils/colors";
+import { resolveOptionId, resolveOptionIds } from "../../utils/selectValues";
 import { PersonRenderer, PersonEditor, AttachmentRenderer } from "../fields";
 import { format } from "date-fns";
 import { zhCN, enUS } from "date-fns/locale";
@@ -155,7 +156,9 @@ const DetailNumber: React.FC<{ value: any; field: FieldConfig; onChange: (v: num
 const DetailSelect: React.FC<{ value: any; field: FieldConfig; onChange: (v: string) => void; editable: boolean }> = ({ value, field, onChange, editable }) => {
     const { tagPadY } = useDensity();
     const options = field.options || [];
-    const selected = options.find((o: SelectOption) => o.id === value);
+    // Legacy cells may store the label instead of the option id.
+    const currentId = resolveOptionId(options, value);
+    const selected = currentId ? options.find((o: SelectOption) => o.id === currentId) : undefined;
 
     if (!editable) {
         if (!selected) return <span className="text-sm text-muted-foreground">-</span>;
@@ -171,7 +174,7 @@ const DetailSelect: React.FC<{ value: any; field: FieldConfig; onChange: (v: str
         <div className="flex flex-wrap gap-1.5">
             {options.map((opt: SelectOption) => {
                 const style = getTagStyle(opt.color);
-                const isActive = opt.id === value;
+                const isActive = opt.id === currentId;
                 return (
                     <button
                         key={opt.id}
@@ -190,7 +193,18 @@ const DetailSelect: React.FC<{ value: any; field: FieldConfig; onChange: (v: str
 const DetailMultiSelect: React.FC<{ value: any; field: FieldConfig; onChange: (v: string[]) => void; editable: boolean }> = ({ value, field, onChange, editable }) => {
     const { tagPadY } = useDensity();
     const options = field.options || [];
-    const selected: string[] = Array.isArray(value) ? value : [];
+    // Legacy cells may store labels; resolve them so editing cannot duplicate.
+    const selected: string[] = resolveOptionIds(options, value);
+    // Stored tokens that match no option are preserved through a toggle instead
+    // of being silently discarded.
+    const rawValues = Array.isArray(value)
+        ? value
+        : value === null || value === undefined || value === ""
+          ? []
+          : [value];
+    const danglingValues = rawValues.filter(
+        (token) => token !== null && token !== undefined && token !== "" && resolveOptionId(options, token) === null
+    );
 
     if (!editable) {
         if (selected.length === 0) return <span className="text-sm text-muted-foreground">-</span>;
@@ -211,11 +225,10 @@ const DetailMultiSelect: React.FC<{ value: any; field: FieldConfig; onChange: (v
     }
 
     const toggle = (optId: string) => {
-        if (selected.includes(optId)) {
-            onChange(selected.filter(id => id !== optId));
-        } else {
-            onChange([...selected, optId]);
-        }
+        const next = selected.includes(optId)
+            ? selected.filter(id => id !== optId)
+            : [...selected, optId];
+        onChange([...next, ...danglingValues]);
     };
 
     return (

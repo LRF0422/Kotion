@@ -23,7 +23,7 @@ import {
 import { Upload, FileSpreadsheet, ArrowRight, Plus, AlertCircle, Check } from "@kn/icon";
 import { useTranslation } from "@kn/common";
 import { FieldConfig, FieldType, RecordData } from "../../types";
-import { generateFieldId } from "../../utils/id";
+import { generateFieldId, generateOptionId } from "../../utils/id";
 
 interface ExcelImportDialogProps {
     open: boolean;
@@ -279,8 +279,11 @@ export const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
                                 uniqueValues.add(String(val));
                             }
                         });
+                        // Unique generated ids: an index-form id ("1", "2", …)
+                        // could collide with a numeric-looking column value and
+                        // make the cell resolve to the wrong option.
                         newField.options = Array.from(uniqueValues).slice(0, 20).map((label, i) => ({
-                            id: String(i + 1),
+                            id: generateOptionId(),
                             label,
                             color: ['#6b7280', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'][i % 6],
                         }));

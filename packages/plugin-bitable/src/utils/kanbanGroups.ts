@@ -1,4 +1,5 @@
 import { FieldConfig, FieldType, RecordData, SelectOption } from "../types";
+import { resolveOptionId } from "./selectValues";
 
 export const KANBAN_UNASSIGNED = "__unassigned__";
 
@@ -72,8 +73,12 @@ export function buildKanbanColumns(
         }
         switch (field.type) {
             case FieldType.SELECT: {
-                const opt = optionById.get(value);
-                return { key: String(value), label: opt?.label ?? String(value), color: opt?.color };
+                // Resolve labels as well as ids: documents written before select
+                // values were normalised still hold labels, and they must land in
+                // the existing option column instead of a duplicate one.
+                const optionId = resolveOptionId(field.options, value);
+                const opt = optionId ? optionById.get(optionId) : undefined;
+                return { key: optionId ?? String(value), label: opt?.label ?? String(value), color: opt?.color };
             }
             case FieldType.CHECKBOX:
                 return value ? { key: "true", label: labels.yes, color: "green" } : { key: "false", label: labels.no, color: "gray" };
