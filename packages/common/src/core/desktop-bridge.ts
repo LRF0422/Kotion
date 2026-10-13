@@ -51,6 +51,9 @@ export type DesktopCapability =
     | 'window.setTrafficLights'
     | 'window.toggleDevTools'
     | 'app.quit'
+    // ---- network policy for http.request (SSRF switch) ---------------------
+    | 'net.policy.get'
+    | 'net.policy.set'
     // ---- remembered login credentials (OS keychain via safeStorage) --------
     | 'credentials.available'
     | 'credentials.load'
@@ -250,6 +253,13 @@ export interface DesktopCaptureSource {
 
 export interface DesktopHttpRequest {
     method?: string
+    /**
+     * Target URL. The main process refuses loopback / private / link-local /
+     * cloud-metadata targets unless the user enabled
+     * {@link DesktopNetPolicy.allowPrivateNetwork} in Settings — the SSRF guard
+     * cannot be overridden per request, so read `net.policy.get` before
+     * promising the caller a LAN gateway works.
+     */
     url: string
     headers?: Record<string, string>
     /** Raw request body (text). */
@@ -267,6 +277,18 @@ export interface DesktopHttpRequest {
 export interface DesktopHttpRedirect {
     status: number
     location: string
+}
+
+/**
+ * What the `http.request` SSRF guard is allowed to reach.
+ *
+ * `allowPrivateNetwork` is a user preference (Settings → 偏好设置), owned by the
+ * desktop main process, not a per-request flag: a plugin cannot widen it by
+ * asking. Cloud metadata endpoints stay refused either way.
+ */
+export interface DesktopNetPolicy {
+    /** Allow loopback / RFC1918 / link-local / ULA targets. Default false. */
+    allowPrivateNetwork: boolean
 }
 
 export interface DesktopHttpResponse {
@@ -676,6 +698,14 @@ export interface DesktopCapabilityContract {
     'system.info': { params?: void; result: DesktopAppInfo }
     'system.paths': { params?: void; result: DesktopPaths }
     'http.request': { params: DesktopHttpRequest; result: DesktopHttpResponse }
+    /**
+     * The policy the SSRF guard is enforcing right now. Read it before warning
+     * about a private gateway: `allowPrivateNetwork: false` means the request
+     * will be refused by the main process.
+     */
+    'net.policy.get': { params?: void; result: DesktopNetPolicy }
+    /** Replace the policy (the Settings toggle). Answers with the stored value. */
+    'net.policy.set': { params: Partial<DesktopNetPolicy>; result: DesktopNetPolicy }
     'capture.sources': {
         params?: { types?: DesktopCaptureSourceType[]; thumbnailWidth?: number }
         result: DesktopCaptureSource[]

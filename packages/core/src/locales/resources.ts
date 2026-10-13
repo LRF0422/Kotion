@@ -1319,6 +1319,13 @@ export const resources = {
           sec30: "30 秒",
           min1: "1 分钟",
           min5: "5 分钟",
+          networkTitle: "桌面网络",
+          networkDesc: "控制桌面端主进程可以访问哪些网络地址",
+          allowPrivateNetwork: "允许访问内网 / 本机地址",
+          allowPrivateNetworkDesc:
+            "开启后，插件通过桌面端发起的 HTTP 请求可以访问本机与内网地址（localhost、127.x、10.x、192.168.x、172.16-31.x、链路本地）。用于连接局域网的数据库网关（如 PostgREST）。云元数据地址（169.254.169.254 等）始终被拦截。",
+          allowPrivateNetworkWarn:
+            "已允许内网访问：任何插件都能借桌面端探测你的局域网。仅在需要连接内网网关时开启，用完建议关闭。",
           reset: "重置默认",
           saveBtn: "保存设置",
         },
@@ -2812,6 +2819,13 @@ export const resources = {
           sec30: "30 sec",
           min1: "1 min",
           min5: "5 min",
+          networkTitle: "Desktop network",
+          networkDesc: "Control which network addresses the desktop main process may reach",
+          allowPrivateNetwork: "Allow private / local addresses",
+          allowPrivateNetworkDesc:
+            "When on, HTTP requests that plugins send through the desktop app may reach loopback and LAN addresses (localhost, 127.x, 10.x, 192.168.x, 172.16-31.x, link-local). Needed for a database gateway on your LAN, such as PostgREST. Cloud metadata endpoints (169.254.169.254, …) stay blocked either way.",
+          allowPrivateNetworkWarn:
+            "Private access is on: any plugin can now probe your LAN through the desktop app. Turn it on only while you need a LAN gateway, and turn it back off afterwards.",
           reset: "Reset to default",
           saveBtn: "Save settings",
         },

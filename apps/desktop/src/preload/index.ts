@@ -15,6 +15,11 @@ const CAPABILITIES = [
   'system.info',
   'system.paths',
   'http.request',
+  // Network policy for http.request: the SSRF guard's user-facing switch. The
+  // settings UI reads `net.policy.get` and writes `net.policy.set`; the main
+  // process owns the file, so a renderer reset cannot silently widen access.
+  'net.policy.get',
+  'net.policy.set',
   'capture.sources',
   'capture.selectRegion',
   'capture.region.context',

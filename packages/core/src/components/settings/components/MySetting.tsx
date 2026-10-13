@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { Label } from "@kn/ui";
 import { Switch } from "@kn/ui";
 import { Button } from "@kn/ui";
@@ -19,8 +19,9 @@ import {
     Mail,
     CalendarDays,
     Save,
+    Shield,
 } from "@kn/icon";
-import { useSafeState } from "@kn/common";
+import { useDesktop, useSafeState } from "@kn/common";
 import { useTheme, useUiStyle, type UiStyle } from "@kn/ui";
 import { useTranslation } from "@kn/common";
 import { SettingsPanel, SettingsSection, SettingsRow } from "./primitives";
@@ -63,6 +64,43 @@ export const MySetting: React.FC = () => {
     const { uiStyle, setUiStyle } = useUiStyle();
     const { t, i18n } = useTranslation();
     const currentLang = i18n.language?.startsWith("zh") ? "zh" : "en";
+
+    // 桌面端网络策略开关（SSRF 防护的外网/内网放行）。
+    // 真值保存在主进程（它才是 http.request 的守卫所在），本面板只负责读写回显，
+    // 不用本地 state 假装保存成功——写失败时显示主进程实际仍在执行的策略。
+    const desktop = useDesktop();
+    const canManageNetPolicy = desktop?.has("net.policy.get") === true;
+    const [allowPrivateNetwork, setAllowPrivateNetwork] = useSafeState(false);
+    const [netPolicyReady, setNetPolicyReady] = useSafeState(false);
+
+    useEffect(() => {
+        if (!desktop || !canManageNetPolicy) return;
+        let cancelled = false;
+        desktop
+            .invoke("net.policy.get")
+            .then((policy) => {
+                if (cancelled) return;
+                setAllowPrivateNetwork(policy.allowPrivateNetwork);
+                setNetPolicyReady(true);
+            })
+            .catch(() => {
+                // 读不到就保持关闭并禁用开关：宁可少给权限，也不要显示一个假的「已开启」。
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [desktop, canManageNetPolicy, setAllowPrivateNetwork, setNetPolicyReady]);
+
+    const toggleNetPolicy = async (next: boolean) => {
+        if (!desktop) return;
+        try {
+            const stored = await desktop.invoke("net.policy.set", { allowPrivateNetwork: next });
+            setAllowPrivateNetwork(stored.allowPrivateNetwork);
+            setNetPolicyReady(true);
+        } catch {
+            // 保持原值（主进程仍在执行旧策略）。
+        }
+    };
 
     const changeLanguage = (lang: string) => {
         i18n.changeLanguage(lang);
@@ -373,6 +411,32 @@ export const MySetting: React.FC = () => {
                     />
                 )}
             </SettingsSection>
+
+            {/* 桌面网络（仅桌面端；策略由主进程持有） */}
+            {canManageNetPolicy && (
+                <SettingsSection
+                    title={t("settings.preferences.networkTitle")}
+                    description={t("settings.preferences.networkDesc")}
+                >
+                    <SettingsRow
+                        icon={<Shield />}
+                        label={t("settings.preferences.allowPrivateNetwork")}
+                        description={t("settings.preferences.allowPrivateNetworkDesc")}
+                        control={
+                            <Switch
+                                checked={allowPrivateNetwork}
+                                disabled={!netPolicyReady}
+                                onCheckedChange={toggleNetPolicy}
+                            />
+                        }
+                    />
+                    {allowPrivateNetwork && (
+                        <div className="px-4 py-3 text-xs leading-relaxed text-amber-600 dark:text-amber-400">
+                            {t("settings.preferences.allowPrivateNetworkWarn")}
+                        </div>
+                    )}
+                </SettingsSection>
+            )}
 
             {/* 操作 */}
             <div className="mx-auto flex w-full max-w-2xl justify-end gap-2">

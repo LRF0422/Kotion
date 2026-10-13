@@ -239,6 +239,12 @@ ipcMain.handle('desktop:fs.readFile', withCapability('fs.readFile', async (_e, p
 - **参数 schema 校验**：类型/长度/必填。
 - **路径安全**（fs.*、dialog 返回值）：解析真实路径，限制在授权根目录内，拒绝 .. 穿越。
 - **URL 安全**：shell.openExternal 只允许 http/https；http.request 禁私网/环回/云元数据（SSRF）。
+  - 该拦截是**用户可关闭的策略**，不是写死在请求路径里：设置 → 偏好设置 → 桌面网络 的开关
+    经 `net.policy.get` / `net.policy.set` 读写，策略文件由主进程持有
+    （`<userData>/net-policy.json`，默认拒绝）。打开后放行 loopback / RFC1918 /
+    link-local / ULA；云元数据地址（169.254.169.254、100.100.100.200、fd00:ec2::254）
+    两种情况下都拦截。判定逻辑是纯函数，见 `apps/desktop/src/main/net-policy.ts`，
+    两个方向都由 `pnpm --filter @kn/desktop check:net-policy` 覆盖。
 - **限额**：请求/响应体大小、超时、并发。
 - **凭据隔离**：http.request 绝不自动附带知识库 JWT（避免泄露到任意第三方）。
 

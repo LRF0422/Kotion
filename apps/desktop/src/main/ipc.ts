@@ -3,9 +3,10 @@ import * as fs from 'fs-extra';
 import * as path from 'node:path';
 import { join } from 'node:path';
 import * as dns from 'node:dns';
-import * as net from 'node:net';
 import { setupDevIpcHandlers } from './plugin-dev/index';
 import { setupStorageHandlers } from './storage/index';
+import { decideResolvedAddress, decideTarget } from './net-policy';
+import { getNetPolicy, setNetPolicy } from './net-policy-store';
 import {
   clearCredentials,
   isEncryptionAvailable,
@@ -67,51 +68,28 @@ const assertAllowedPath = (target: unknown, field = 'path'): string => {
 
 // ---- http.request guards (SSRF) ------------------------------------------
 // The Postman-style plugin proxies arbitrary APIs through the main process.
-// Block loopback / private / link-local / metadata targets, on every redirect
-// hop. Trusted-plugin model, but a compromised plugin must not reach the LAN.
+// Loopback / private / link-local / metadata targets are refused, on every
+// redirect hop. Trusted-plugin model, but a compromised plugin must not reach
+// the LAN — unless the user lifted that refusal themselves: the decision lives
+// in ./net-policy and the user-facing switch in Settings (`net.policy.*`).
+// Cloud metadata endpoints stay refused either way.
 
-const BLOCKED_V4 = [
-  /^0\./,
-  /^10\./,
-  /^127\./,
-  /^169\.254\./,
-  /^192\.168\./,
-  /^172\.(1[6-9]|2\d|3[01])\./,
-];
+const resolveAllowedTarget = async (raw: string): Promise<URL> => {
+  const policy = getNetPolicy();
+  const decision = decideTarget(raw, policy);
+  if (decision.action === 'deny') throw new Error(decision.reason);
+  if (decision.action === 'allow') return decision.url;
 
-const isBlockedAddress = (address: string): boolean => {
-  if (net.isIPv4(address)) return BLOCKED_V4.some((re) => re.test(address));
-  const lower = address.toLowerCase();
-  if (lower === '::1' || lower === '::') return true;
-  if (lower.startsWith('fe80:') || lower.startsWith('fc') || lower.startsWith('fd')) return true;
-  if (lower.startsWith('::ffff:')) return isBlockedAddress(lower.slice(7));
-  return false;
-};
-
-const assertPublicTarget = async (raw: string): Promise<URL> => {
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    throw new Error('desktop http: invalid URL');
-  }
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-    throw new Error('desktop http: only http/https is allowed');
-  }
-  const host = url.hostname.replace(/^\[|\]$/g, '');
-  if (host === 'localhost' || host.endsWith('.localhost')) {
-    throw new Error('desktop http: localhost is blocked');
-  }
-  if (net.isIP(host)) {
-    if (isBlockedAddress(host)) throw new Error('desktop http: private address is blocked');
-    return url;
-  }
-  const records = await dns.promises.lookup(host, { all: true });
+  // A hostname: resolve once, then judge every answer. Refusing when *any*
+  // answer is blocked keeps a round-robin/dns-rebinding record from being the
+  // one the connection happens to land on.
+  const records = await dns.promises.lookup(decision.host, { all: true });
   if (!records.length) throw new Error('desktop http: cannot resolve host');
-  if (records.some((record) => isBlockedAddress(record.address))) {
-    throw new Error('desktop http: resolves to a private address');
+  for (const record of records) {
+    const verdict = decideResolvedAddress(record.address, policy);
+    if (verdict.action === 'deny') throw new Error(verdict.reason);
   }
-  return url;
+  return decision.url;
 };
 
 const toHeaderRecord = (value: unknown): Record<string, string> => {
@@ -367,7 +345,7 @@ export function setupIpcHandlers() {
     let response: Response | undefined;
 
     for (let hop = 0; hop <= 5; hop++) {
-      const target = await assertPublicTarget(current);
+      const target = await resolveAllowedTarget(current);
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {
@@ -435,6 +413,15 @@ export function setupIpcHandlers() {
       finalUrl: current,
     };
   });
+
+  // ==================== network policy (SSRF switch) ====================
+  // Read/write the policy that `resolveAllowedTarget` consults. The switch is
+  // what lets a LAN gateway (192.168.x / 10.x / a local dev service) be used at
+  // all; it is a user preference, so the main process owns the file and the
+  // settings UI only renders it. See ./net-policy-store.
+  handle('net.policy.get', () => getNetPolicy());
+
+  handle('net.policy.set', (_event, raw) => setNetPolicy(asRecord(raw)));
 
   // ==================== remembered login credentials ====================
   // The password is encrypted with the OS keychain by `safeStorage`; see

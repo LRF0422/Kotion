@@ -72,6 +72,7 @@ export type {
     DesktopHttpRequest,
     DesktopHttpRedirect,
     DesktopHttpResponse,
+    DesktopNetPolicy,
     DesktopCaptureSource,
     DesktopCaptureSourceType,
     DesktopCaptureRect,
