@@ -1,5 +1,5 @@
 import React from 'react'
-import { useTranslation } from '@kn/common'
+import { isImeComposing, useTranslation } from '@kn/common'
 import { HelpCircle, Send, XCircle } from '@kn/icon'
 import { Button, Input } from '@kn/ui'
 import type { PendingUserChoice } from '../chat-types'
@@ -76,6 +76,8 @@ export const UserChoiceCard: React.FC<UserChoiceCardProps> = ({
                             placeholder={t('ai.chat.customResponsePlaceholder')}
                             className="flex-1 h-7 text-xs"
                             onKeyDown={(e) => {
+                                // Enter confirms an IME candidate, not the answer.
+                                if (isImeComposing(e)) return
                                 if (e.key === 'Enter' && customInput.trim()) {
                                     e.preventDefault()
                                     onCustomSubmit()

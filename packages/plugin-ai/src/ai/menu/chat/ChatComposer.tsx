@@ -15,7 +15,7 @@ import {
     TooltipTrigger,
 } from '@kn/ui'
 import type { ChatMode, ChatModelParams } from '@kn/common'
-import { useTranslation } from '@kn/common'
+import { isImeComposing, useTranslation } from '@kn/common'
 
 import { ModelSelector } from '../../components/ModelSelector'
 import { AgentSelector } from '../../components/AgentSelector'
@@ -184,6 +184,9 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
     }
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        // While an IME is composing (拼音/kana/한글), Enter confirms the
+        // candidate — submitting here would send the raw pre-edit text.
+        if (isImeComposing(e)) return
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault()
             if (isValid) onSubmit()

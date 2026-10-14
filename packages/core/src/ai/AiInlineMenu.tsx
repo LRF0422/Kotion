@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { Editor, Plugin, PluginKey, Decoration, DecorationSet } from '@kn/editor'
 import { Sparkles, Send, X, Loader2, MessageSquare, XCircle } from '@kn/icon'
 import { Button, Streamdown } from '@kn/ui'
-import { streamKnowledgeText } from '@kn/common'
+import { isImeComposing, streamKnowledgeText } from '@kn/common'
 
 // ─── shared ─────────────────────────────────────────────────────
 
@@ -241,7 +241,8 @@ export const AiInlinePanel: React.FC<{ editor: Editor }> = ({ editor }) => {
 
     const handleInputKeyDown = useCallback(
         (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
+            // The IME's confirming Enter must not submit the prompt.
+            if (!isImeComposing(e) && e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
                 handleSubmit()
             }

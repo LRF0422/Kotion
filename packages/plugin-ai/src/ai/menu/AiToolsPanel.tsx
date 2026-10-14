@@ -5,6 +5,7 @@ import { Sparkles, X, Loader2, Check, RotateCcw, Square, Copy, GitCompare, Send 
 import { Button, Streamdown, toast } from "@kn/ui";
 import {
     streamKnowledgeChat,
+    isImeComposing,
     parseMarkdownToNodes,
     useTranslation,
     type AgentChatMessage,
@@ -307,7 +308,8 @@ export const AiToolsPanel: React.FC<{ editor: Editor }> = ({ editor }) => {
 
     const onInputKeyDown = useCallback(
         (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-            if (e.key === "Enter" && !e.shiftKey) {
+            // An IME's confirming Enter must not submit the prompt.
+            if (!isImeComposing(e) && e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 submitInput();
             }

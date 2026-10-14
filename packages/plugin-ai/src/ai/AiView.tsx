@@ -4,6 +4,7 @@ import { Button, Streamdown, Textarea, toast } from "@kn/ui";
 import { Check, Copy, Loader2, RotateCcw, Send, Sparkles, Square, X } from "@kn/icon";
 import {
     streamKnowledgeChat,
+    isImeComposing,
     parseMarkdownToNodes,
     useTranslation,
     type AgentChatMessage,
@@ -161,7 +162,7 @@ export const AiView: React.FC<NodeViewProps> = (props) => {
     }, [generate, hasResult, prompt, refine]);
 
     const onComposerKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+        if (e.key === "Enter" && !e.shiftKey && !isImeComposing(e)) {
             e.preventDefault();
             submitCurrentInput();
         } else if (e.key === "Escape" && !hasOutput && !isLoading) {

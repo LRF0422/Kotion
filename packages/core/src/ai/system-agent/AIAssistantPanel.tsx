@@ -45,6 +45,7 @@ import {
     useTranslation,
     buildCustomAgentNote,
     useCustomAgents,
+    isImeComposing,
 } from '@kn/common'
 import { SubAgentTree, buildSubAgentTreeLabels } from './SubAgentTree'
 import { PlanApprovalCard } from './PlanApprovalCard'
@@ -274,6 +275,8 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
     }, [input, agent, mode, currentPage?.pageId, customAgentNote])
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        // Let the IME confirm its candidate: Enter is not a send while composing.
+        if (isImeComposing(e)) return
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault()
             void handleSubmit()
