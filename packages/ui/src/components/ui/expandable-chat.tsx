@@ -184,10 +184,19 @@ const ExpandableChatBody: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
 
 ExpandableChatBody.displayName = "ExpandableChatBody";
 
-const ExpandableChatFooter: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
+interface ExpandableChatFooterProps extends React.HTMLAttributes<HTMLDivElement> {
+  /**
+   * Paint the top divider. Hosts whose composer already draws its own outline
+   * pass `false` so the line is not painted twice.
+   */
+  divided?: boolean;
+}
+
+const ExpandableChatFooter: React.FC<ExpandableChatFooterProps> = ({
   className,
+  divided = true,
   ...props
-}) => <div className={cn("border-t p-3", className)} {...props} />;
+}) => <div className={cn("p-3", divided && "border-t", className)} {...props} />;
 
 ExpandableChatFooter.displayName = "ExpandableChatFooter";
 

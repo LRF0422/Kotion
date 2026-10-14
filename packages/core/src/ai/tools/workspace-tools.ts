@@ -13,7 +13,7 @@
 
 import { z } from '@kn/ui'
 import { openAgentArtifact } from '@kn/common'
-import type { AgentArtifact, AgentToolImplementation } from '@kn/common'
+import type { AgentArtifact, AgentToolImplementation, ToolExecutionContext } from '@kn/common'
 import { createPageTools } from './page-tools'
 
 /**
@@ -115,14 +115,20 @@ const openPageSide: AgentToolImplementation = {
     readOnly: true,
     scope: 'any',
     artifactFromResult: pageArtifactFromResult,
-    create: () => async (params: { pageId: string; title?: string; spaceId?: string }) => {
+    create: () => async (
+        params: { pageId: string; title?: string; spaceId?: string },
+        _callId?: string,
+        context?: ToolExecutionContext,
+    ) => {
         if (!params?.pageId) return { success: false, error: 'pageId 不能为空' }
+        // Route the artifact to the conversation that CALLED the tool: with tabs
+        // several conversations are mounted, and only one pane exists.
         const opened = openAgentArtifact({
             kind: 'page',
             id: String(params.pageId),
             title: params.title,
             spaceId: params.spaceId ? String(params.spaceId) : undefined,
-        })
+        }, context?.conversationId)
         if (!opened) {
             return { success: false, error: '当前界面没有可用的侧边预览（宿主未挂载分栏）' }
         }
@@ -152,14 +158,19 @@ const focusArtifact: AgentToolImplementation = {
     }),
     readOnly: true,
     scope: 'any',
-    create: () => async (params: { kind: string; id: string; title?: string; spaceId?: string }) => {
+    create: () => async (
+        params: { kind: string; id: string; title?: string; spaceId?: string },
+        _callId?: string,
+        context?: ToolExecutionContext,
+    ) => {
         if (!params?.kind || !params?.id) return { success: false, error: 'kind 与 id 不能为空' }
+        // Same as openPageSide: the artifact belongs to the calling conversation.
         const opened = openAgentArtifact({
             kind: String(params.kind),
             id: String(params.id),
             title: params.title,
             spaceId: params.spaceId ? String(params.spaceId) : undefined,
-        })
+        }, context?.conversationId)
         if (!opened) return { success: false, error: '当前界面没有可用的侧边预览（宿主未挂载分栏）' }
         return { success: true, focused: true, kind: String(params.kind), id: String(params.id) }
     },

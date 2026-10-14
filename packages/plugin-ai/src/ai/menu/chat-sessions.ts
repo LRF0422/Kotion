@@ -1,3 +1,4 @@
+import { i18n } from '@kn/common'
 import type { AgentArtifact } from '@kn/common'
 import type { Message } from './chat-types'
 
@@ -15,6 +16,7 @@ import type { Message } from './chat-types'
 // ─── Storage keys ───────────────────────────────────────────────────
 const INDEX_KEY = 'kn-ai-chat-sessions-index'
 const ACTIVE_KEY = 'kn-ai-chat-active-session'
+const OPEN_TABS_KEY = 'kn-ai-chat-open-tabs'
 const SESSION_MSG_PREFIX = 'kn-ai-chat-session:'
 
 // Legacy keys (single-session era) — migrated on first load.
@@ -27,6 +29,14 @@ const LEGACY_CONVERSATION_KEY = 'agent-conversation-id'
 /** Cap applied only when seeding the pre-migration import copy. */
 export const MAX_MESSAGES_PER_SESSION = 100
 export const MAX_SESSIONS = 50
+/**
+ * Ceiling on OPEN tabs. Every open tab keeps its own live agent run, so this is
+ * also a ceiling on concurrent streams the panel will drive. Kept at the
+ * engine's off-screen editor session cap (6) so a strip of tabs cannot thrash
+ * the shared page-session pool; a queued stream is replayed from the engine log,
+ * so running past the stream budget is a delay, never a loss.
+ */
+export const MAX_OPEN_TABS = 6
 
 // ─── Types ─────────────────────────────────────────────────────────
 /** A page bound to a chat session via the @-mention picker. */
@@ -114,6 +124,61 @@ export function getActiveId(): string | null {
 export function setActiveId(id: string | null): void {
     if (id) safeWrite(ACTIVE_KEY, id)
     else safeRemove(ACTIVE_KEY)
+}
+
+// ─── Open tabs ─────────────────────────────────────────────────────
+/**
+ * Ids of the conversations with an open tab, in display order. Tab membership
+ * is a VIEW concern (the conversation itself lives in the index above): closing
+ * a tab keeps the chat, it only takes it out of the strip.
+ */
+export function loadOpenTabs(): string[] {
+    const arr = safeParse<unknown>(localStorage.getItem(OPEN_TABS_KEY), [])
+    if (!Array.isArray(arr)) return []
+    const seen = new Set<string>()
+    const out: string[] = []
+    for (const value of arr) {
+        if (typeof value !== 'string' || !value || seen.has(value)) continue
+        seen.add(value)
+        out.push(value)
+        if (out.length >= MAX_OPEN_TABS) break
+    }
+    return out
+}
+
+export function saveOpenTabs(ids: string[]): void {
+    const seen = new Set<string>()
+    const out: string[] = []
+    for (const id of ids) {
+        if (!id || seen.has(id)) continue
+        seen.add(id)
+        out.push(id)
+        if (out.length >= MAX_OPEN_TABS) break
+    }
+    safeWrite(OPEN_TABS_KEY, JSON.stringify(out))
+}
+
+// ─── Legacy transcript cleanup ─────────────────────────────────────
+/**
+ * Drop the legacy bound-page notice the client used to prepend to the user turn.
+ *
+ * It was baked into the message content, so the engine persisted it and a reload
+ * rendered it inside the bubble. New turns carry it as this run's system prompt
+ * instead; this only cleans transcripts written before that change.
+ */
+export function stripLegacyBoundPagePrefix(messages: Message[], title?: string): Message[] {
+    if (!title || messages.length === 0) return messages
+    const template = i18n.t('ai.chat.boundPagePrefix', { title })
+    if (!template || template === 'ai.chat.boundPagePrefix') return messages
+    const needle = template + '\n'
+    let changed = false
+    const next = messages.map(message => {
+        if (message.sender !== 'user' || typeof message.content !== 'string') return message
+        if (!message.content.startsWith(needle)) return message
+        changed = true
+        return { ...message, content: message.content.slice(needle.length) }
+    })
+    return changed ? next : messages
 }
 
 // ─── Per-session messages ──────────────────────────────────────────

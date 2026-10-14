@@ -20,13 +20,22 @@ interface SessionSwitcherProps {
     onSwitch: (id: string) => void
     onNewSession: () => void
     onDelete: (id: string) => void
+    /**
+     * `title` (default) shows the active conversation as the trigger — the
+     * switcher IS the header. `icon` is for headers that already show the
+     * active conversation (the tab strip): the trigger shrinks to a chevron so
+     * the dropdown becomes a "all conversations" history menu.
+     */
+    variant?: 'title' | 'icon'
 }
 
 /**
- * Compact session switcher.  Replaces the horizontal tab strip with a
- * dropdown that surfaces the current chat title and lets the user jump
- * between existing sessions.  Reduces header visual noise, especially
- * once several chats accumulate.
+ * Compact session switcher: a dropdown over every conversation.
+ *
+ * It used to be the whole header. With tabs it plays the other half of the
+ * model — the tab strip holds the OPEN conversations, this list holds every
+ * conversation (including the ones whose tab was closed), so closing a tab
+ * never loses a chat.
  */
 export const SessionSwitcher: React.FC<SessionSwitcherProps> = ({
     sessions,
@@ -34,6 +43,7 @@ export const SessionSwitcher: React.FC<SessionSwitcherProps> = ({
     onSwitch,
     onNewSession,
     onDelete,
+    variant = 'title',
 }) => {
     const { t } = useTranslation()
     const activeItemRef = useRef<HTMLDivElement | null>(null)
@@ -56,20 +66,31 @@ export const SessionSwitcher: React.FC<SessionSwitcherProps> = ({
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <button
-                    type="button"
-                    className="group flex items-center gap-1 min-w-0 max-w-[220px] h-6 px-1.5 -ml-1 rounded-md text-foreground hover:bg-muted/60 transition-colors"
-                    title={activePageTitle ? `${activeTitle} — @${activePageTitle}` : activeTitle}
-                >
-                    <span className="truncate text-xs font-medium">{activeTitle}</span>
-                    {activePageTitle && (
-                        <span className="flex items-center gap-0.5 min-w-0 shrink text-[10px] text-muted-foreground">
-                            <AtSign className="h-2.5 w-2.5 shrink-0" />
-                            <span className="truncate">{activePageTitle}</span>
-                        </span>
-                    )}
-                    <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0 opacity-60 group-hover:opacity-100 transition-opacity" />
-                </button>
+                {variant === 'icon' ? (
+                    <button
+                        type="button"
+                        aria-label={t('ai.chat.tabs.history', { defaultValue: '全部对话' })}
+                        title={t('ai.chat.tabs.history', { defaultValue: '全部对话' })}
+                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                    >
+                        <ChevronDown className="h-3.5 w-3.5" />
+                    </button>
+                ) : (
+                    <button
+                        type="button"
+                        className="group flex items-center gap-1 min-w-0 max-w-[220px] h-6 px-1.5 -ml-1 rounded-md text-foreground hover:bg-muted/60 transition-colors"
+                        title={activePageTitle ? `${activeTitle} — @${activePageTitle}` : activeTitle}
+                    >
+                        <span className="truncate text-xs font-medium">{activeTitle}</span>
+                        {activePageTitle && (
+                            <span className="flex items-center gap-0.5 min-w-0 shrink text-[10px] text-muted-foreground">
+                                <AtSign className="h-2.5 w-2.5 shrink-0" />
+                                <span className="truncate">{activePageTitle}</span>
+                            </span>
+                        )}
+                        <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0 opacity-60 group-hover:opacity-100 transition-opacity" />
+                    </button>
+                )}
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-[260px] p-1">
                 <DropdownMenuItem

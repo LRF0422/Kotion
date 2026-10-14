@@ -133,6 +133,14 @@ export const ai = new AiPlugin({
                         "thinking": "Thinking",
                         "reasoning": "Reasoning",
                         "newChat": "New chat",
+                        "tabs": {
+                            "label": "Open chats",
+                            "close": "Close {{title}}",
+                            "closeHint": "Close the tab (the chat stays in the history list)",
+                            "newTab": "New tab",
+                            "history": "All chats",
+                            "queuedHint": "{{count}} chat(s) are waiting for a stream slot — the number of simultaneously streaming chats is capped. A queued run attaches automatically as soon as one frees up; nothing is lost."
+                        },
                         "loadingSession": "Loading conversation…",
                         "clearChat": "Clear current chat",
                         "close": "Close",
@@ -262,6 +270,14 @@ export const ai = new AiPlugin({
                         "thinking": "思考中",
                         "reasoning": "思考过程",
                         "newChat": "新建对话",
+                        "tabs": {
+                            "label": "已打开的会话",
+                            "close": "关闭 {{title}}",
+                            "closeHint": "关闭标签页（会话保留在历史列表中）",
+                            "newTab": "新建标签页",
+                            "history": "全部对话",
+                            "queuedHint": "{{count}} 个会话正在排队等待并发流（同时流式运行的会话数有上限）。有会话结束或暂停后会自动接上，进度不会丢失。"
+                        },
                         "loadingSession": "正在加载会话…",
                         "clearChat": "清空当前对话",
                         "close": "关闭",

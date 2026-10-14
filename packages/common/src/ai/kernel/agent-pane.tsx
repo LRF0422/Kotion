@@ -99,7 +99,46 @@ export const AgentPaneHost: React.FC<AgentPaneHostProps> = (props) => {
  */
 let paneOpener: ((artifact: AgentArtifact) => void) | null = null
 
-export function openAgentArtifact(artifact: AgentArtifact): boolean {
+/**
+ * Per-conversation openers.
+ *
+ * With tabs, several conversations are mounted (and can be producing artifacts)
+ * at once, but the app has ONE pane. The surface registers an opener per open
+ * conversation so an artifact lands in the conversation that produced it: the
+ * focused one shows it, a background one just records it as its working target
+ * and shows it when the user switches over.
+ */
+const conversationOpeners = new Map<string, (artifact: AgentArtifact) => void>()
+
+/** Register the opener for one conversation. Returns an unregister function. */
+export function registerAgentPaneOpener(
+    conversationId: string,
+    opener: (artifact: AgentArtifact) => void,
+): () => void {
+    conversationOpeners.set(conversationId, opener)
+    return () => {
+        if (conversationOpeners.get(conversationId) === opener) {
+            conversationOpeners.delete(conversationId)
+        }
+    }
+}
+
+/**
+ * Open an artifact in the side pane.
+ *
+ * Pass the caller's `conversationId` whenever it is known (agent tools carry it
+ * in their execution context): the artifact then belongs to THAT conversation
+ * even when it is not the one on screen. Without an id (or with an unknown one)
+ * this falls back to the active surface's opener.
+ */
+export function openAgentArtifact(artifact: AgentArtifact, conversationId?: string | null): boolean {
+    if (conversationId) {
+        const scoped = conversationOpeners.get(conversationId)
+        if (scoped) {
+            scoped(artifact)
+            return true
+        }
+    }
     if (!paneOpener) return false
     paneOpener(artifact)
     return true

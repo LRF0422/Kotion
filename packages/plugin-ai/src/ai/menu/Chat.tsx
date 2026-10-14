@@ -1,89 +1,50 @@
-import React, { useState, useCallback, useEffect, useMemo, useRef } from "react"
-import { Loader2, Sparkles } from "@kn/icon"
-import {
-    ExpandableChat,
-    ExpandableChatHeader,
-    ExpandableChatBody,
-    ExpandableChatFooter,
-    ChatMessageList,
-} from "@kn/ui"
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Sparkles } from "@kn/icon"
+import { ExpandableChat, ExpandableChatHeader, cn } from "@kn/ui"
 import { Editor } from "@kn/editor"
-import type { ChangeTrackerStorage } from "@kn/editor"
 import {
-    useEditorAgent,
-    useCapabilityProviders,
-    buildAgentRunInputs,
-    useLoadedSkills,
-    useAgentPane,
-    AgentPaneHost,
-    getAgentDocumentBridge,
-    getPageNavigationBridge,
-    setSessionPageBinding,
-    clearSessionPageBinding,
-    revealBlockById,
-    PageEditWindow,
+    agentStreamBudgetSnapshot,
     event,
-    useTranslation,
     DOCK_PANEL_RUNNING,
-    buildCustomAgentNote,
-    useCustomAgents,
-    fileToAgentImage,
-    buildImageContentParts,
-    toImageDataUrl,
+    PageEditWindow,
+    registerAgentPaneOpener,
+    useAgentPane,
+    useTranslation,
 } from "@kn/common"
 import type {
-    AgentDocumentMergeReport,
+    AgentArtifact,
     ChatMode,
     ChatModelParams,
-    OffscreenEditorHandle,
-    UserChoiceRequest,
-    AgentChatMessage,
-    AgentStepRecord,
-    ToolCallRecord,
-    SessionPageBinding,
-    SessionPageBindingPage,
-    AgentImageData,
 } from "@kn/common"
 
-import { PlanApprovalCard } from "@kn/ui"
-import {
-    ExecutionStep, PendingUserChoice, ChatError,
-    classifyError, sanitizeToolPayload,
-} from "./chat-types"
-import type { BlockReference, Message } from "./chat-types"
-import type { ChatTargetPage } from "./chat-sessions"
-import { useChatSessions } from "./useChatSessions"
-import { useOffscreenTargets } from "./use-offscreen-targets"
-import { MessageBubble } from "./MessageBubble"
-import { ErrorDisplay } from "./ErrorDisplay"
+import type { Message } from "./chat-types"
+import type { ChatSessionMeta } from "./chat-sessions"
 import { ChatHeader } from "./chat/ChatHeader"
-import { ChatEmptyState } from "./chat/ChatEmptyState"
-import { ChatComposer } from "./chat/ChatComposer"
-import { useModelVisionSupport } from "../components/model-catalog"
-import type { TargetPageStatus } from "./chat/PageMentionPicker"
-import { UserChoiceCard } from "./chat/UserChoiceCard"
+import type { ChatTabInfo, ChatTabStatus } from "./chat/ChatTabs"
+import { ChatConversation } from "./ChatConversation"
+import { readModelParams, MODEL_PARAMS_STORAGE_KEY } from "./chat-helpers"
 import { useModelPreference } from "../model-preference"
-import {
-    getChangeTracker,
-    readModelParams,
-    selectFinalAnswer,
-    toolCallsToSteps,
-    MODEL_PARAMS_STORAGE_KEY,
-} from "./chat-helpers"
-import { useUserChoiceBridge } from "./use-user-choice-bridge"
-import { useSessionActions } from "./use-session-actions"
+import { useChatSessions } from "./useChatSessions"
+import { useSessionActions, type ChatPanelControls } from "./use-session-actions"
 
 // ─── Persistence keys ──────────────────────────────────────────────
 
 const MODE_STORAGE_KEY = 'kn_chat_mode'
-// ─── Chat ──────────────────────────────────────────────────────────
+/** How often the queued-stream hint refreshes while any tab is running. */
+const BUDGET_POLL_MS = 1000
 
 /**
- * Main Chat surface for the AI plugin.  This component owns state and
- * orchestrates the run lifecycle via the AgentCore SDK (useEditorAgent); the
- * visual pieces (header, empty state, composer, user-choice card, message
- * bubbles) live in dedicated files under ./chat and ./ so this file stays
- * readable.
+ * The AI side dock's chat surface.
+ *
+ * It is a TAB CONTAINER, not a chat: it owns the session/tab index, the shared
+ * model/mode preferences and the window chrome, and renders ONE mounted
+ * {@link ChatConversation} per open tab. Because every tab stays mounted, its
+ * agent keeps streaming while the user reads another one — switching tabs is
+ * visibility, never cancellation.
+ *
+ * Run status flows UP (each panel reports), commands flow DOWN (the header and
+ * the tab strip drive per-conversation controls), and the transcript/agent state
+ * stays inside the panel that owns it.
  *
  * `embedded` drops the floating shell so a host container (the side dock) can
  * own the frame; `onClose` is what that host's close affordance should do.
@@ -99,16 +60,8 @@ export const ExpandableChatDemo: React.FC<{
 }> = ({ editor, embedded, onClose }) => {
     const { t } = useTranslation()
 
-    // ─── Model / mode preferences (persisted) ─────────────────────
+    // ─── Model / mode preferences (persisted, shared by every tab) ──
     const [selectedModel, handleModelChange] = useModelPreference()
-
-    // Vision guard: knowing up front whether the selected model can see images
-    // is what lets the composer refuse an upload instead of letting the backend
-    // silently drop the parts and the model answer "看不到图片". `known=false`
-    // (catalog still loading, unknown/custom model id, or the '' backend
-    // default) never blocks — a false negative is just the old behaviour.
-    const modelVision = useModelVisionSupport(selectedModel)
-    const visionBlocked = modelVision.known && !modelVision.supportsVision
 
     const [chatMode, setChatMode] = useState<ChatMode>(() => {
         try {
@@ -135,799 +88,159 @@ export const ExpandableChatDemo: React.FC<{
         } catch { /* ignore */ }
     }, [])
 
-    // ─── User-choice bridge ───────────────────────────────────────
+    // ─── Session + tab index ──────────────────────────────────────
     const {
-        pendingChoice,
-        customInput,
-        setCustomInput,
-        handleUserChoiceRequest,
-        handleOptionSelect,
-        handleCustomSubmit,
-        handleCancelChoice,
-    } = useUserChoiceBridge()
-
-    // ─── Multi-session store ──────────────────────────────────────
-    const {
-        sessions,
+        sessions: allSessions,
         activeSessionId,
-        messages,
-        setMessages,
-        loadingTranscript,
+        openSessionIds,
+        activeSession,
+        patchSession,
+        noteSessionMessages,
+        activateSession,
+        closeTab,
         createSession,
-        switchSession,
         deleteSession,
-        clearActiveMessages,
-        targetPage,
-        setTargetPage,
-        targetArtifact,
-        setTargetArtifact,
+        clearSessionMessages,
     } = useChatSessions()
 
-    // The conversation's bound page. Page tools reach it through the binding
-    // registry below; the off-screen target manager reads it as the fallback
-    // page when a tool acts without an owner.
-    const boundPageRef = useRef<ChatTargetPage | undefined>(targetPage)
-    boundPageRef.current = targetPage
+    const activeIdRef = useRef(activeSessionId)
+    activeIdRef.current = activeSessionId
 
-    // ─── Off-screen target editor (@-page binding) ──────────────
-    // Leases for the conversation target and each delegated sub-run live in the
-    // hook; Chat keeps only the state the composer renders.
-    const {
-        offscreenTargetsRef,
-        ownerTargetsRef,
-        ownerHandlesRef,
-        ownerAcquireRef,
-        releaseTarget,
-        releaseAllTargets,
-        pageHeldByOwner,
-        acquireOwnerTarget,
-        getPageFor,
-        activateOffscreenTarget,
-        resolveSharedEditorForPage,
-        releaseOwner,
-        releaseAllOwners,
-        claimedEditorsRef,
-        claimEditor,
-        releaseEditor,
-    } = useOffscreenTargets({ editor, boundPageRef })
+    // Per-conversation stop/clear controls, published by the mounted panels.
+    const controlsRef = useRef<Map<string, ChatPanelControls>>(new Map())
 
-    const [offscreenHandle, setOffscreenHandle] = useState<OffscreenEditorHandle | null>(null)
-    const [targetStatus, setTargetStatus] = useState<TargetPageStatus>('idle')
-    const offscreenHandleRef = useRef<OffscreenEditorHandle | null>(null)
-    offscreenHandleRef.current = offscreenHandle
-    const [acquireAttempt, setAcquireAttempt] = useState(0)
-
-    const targetPageRef = useRef<ChatTargetPage | undefined>(targetPage)
-    targetPageRef.current = targetPage
-    const targetPageId = targetPage?.pageId
-
-    // Run-scoped edit target: a turn freezes the page it edits. While the run
-    // is active, browsing other pages must not redirect its document tools. The
-    // pin is expressed through targetPage (so the existing off-screen machinery
-    // keeps an editor on it) and released at the terminal phase, unless the
-    // target changed meanwhile (user pick / agent editPage).
-    const autoPinnedPageIdRef = useRef<string | null>(null)
-    const releaseRunTargetPin = useCallback(() => {
-        const pinned = autoPinnedPageIdRef.current
-        if (!pinned) return
-        autoPinnedPageIdRef.current = null
-        if (targetPageRef.current?.pageId === pinned) setTargetPage(null)
-    }, [setTargetPage])
-
-    useEffect(() => {
-        const requested = targetPageRef.current
-        if (!targetPageId || !requested) {
-            setOffscreenHandle(null)
-            setTargetStatus('idle')
-            return
-        }
-        const currentPageId = getPageNavigationBridge()?.getCurrentPage()?.pageId
-        if (currentPageId && String(currentPageId) === String(targetPageId)) {
-            // The open page is its own editor — drop any off-screen handle so
-            // document tools act on the visible editor.
-            setOffscreenHandle(null)
-            setTargetStatus('current')
-            return
-        }
-        // Already acquired (e.g. through the editPage tool) → reuse it without
-        // flashing through 'connecting' and briefly disabling auto-execution.
-        const cached = offscreenTargetsRef.current.get(String(targetPageId))
-        if (cached) {
-            setOffscreenHandle(cached)
-            setTargetStatus('ready')
-            return
-        }
-        let cancelled = false
-        setTargetStatus('connecting')
-        activateOffscreenTarget(requested)
-            .then(handle => {
-                if (cancelled) return
-                setOffscreenHandle(handle)
-                setTargetStatus('ready')
-            })
-            .catch(err => {
-                console.error('Failed to acquire off-screen editor:', err)
-                if (!cancelled) setTargetStatus('error')
-            })
-        return () => { cancelled = true }
-    }, [activeSessionId, targetPageId, acquireAttempt, editor, activateOffscreenTarget])
-
-    // Off-screen sessions are shared per page and survive target switches; only
-    // release them when the conversation changes or the panel unmounts. The same
-    // goes for delegated agents' targets: their owner ids are run-scoped and a
-    // new conversation can never reuse them.
-    useEffect(() => () => {
-        releaseAllOwners()
-        releaseAllTargets()
-    }, [activeSessionId, releaseAllOwners, releaseAllTargets])
-
-    const handleRetryPage = useCallback(() => setAcquireAttempt(n => n + 1), [])
-
-    const [currentPage, setCurrentPage] = useState<ChatTargetPage | undefined>()
-    useEffect(() => {
-        let tries = 0
-        const read = () => {
-            const info = getPageNavigationBridge()?.getCurrentPage()
-            if (!info?.pageId) return false
-            setCurrentPage({
-                pageId: String(info.pageId),
-                title: info.title || '',
-                spaceId: info.spaceId,
-            })
-            return !!info.title
-        }
-        if (read()) return
-        const timer = setInterval(() => {
-            if (read() || ++tries >= 20) clearInterval(timer)
-        }, 500)
-        return () => clearInterval(timer)
-    }, [editor])
-
+    // ─── Tab status (running / needs-you / unread / failed) ───────
+    const [runStatus, setRunStatus] = useState<Record<string, ChatTabStatus>>({})
+    const [messageCounts, setMessageCounts] = useState<Record<string, number>>({})
     const [editWindowPageId, setEditWindowPageId] = useState<string | null>(null)
-    const handleOpenPageWindow = useCallback(() => {
-        if (targetPage) setEditWindowPageId(targetPage.pageId)
-    }, [targetPage])
 
-    // ─── Working-target pane (artifact cards → preview) ───────────
-    // The dock is a narrow, user-resizable panel (default 400px), so it splits
-    // its behaviour by what the artifact needs:
-    //   • a PAGE opens in the full floating editor (PageEditWindow) — real
-    //     editing, live peer updates, and no cramped document column;
-    //   • every other kind (source lists, future cards) renders in the inline
-    //     side peek, which needs no editor session.
-    // Closing the pane only hides it: the working target survives (spec I2).
-    const pane = useAgentPane()
-    const paneTarget = pane.open ? pane.target : null
-    const paneIsPage = paneTarget?.kind === 'page'
-    const inlinePaneArtifact = paneTarget && !paneIsPage ? paneTarget : null
+    const handleRunStatus = useCallback((id: string, status: ChatTabStatus) => {
+        setRunStatus(prev => (prev[id] === status ? prev : { ...prev, [id]: status }))
+    }, [])
 
+    // Focusing a tab consumes its marker: the user has now seen the result (or
+    // the failure). `attention` deliberately survives — that still needs an answer.
     useEffect(() => {
-        if (!paneIsPage || !paneTarget) return
-        setEditWindowPageId(String(paneTarget.id))
-        // The floating window IS the preview for a page, so the inline column
-        // must not also open — that would be two editors for one document.
-        pane.close()
-    }, [paneIsPage, paneTarget, pane.close])
-
-    // Restore the conversation's target on switch (it is stored with the
-    // session) and persist whatever the agent/user opens afterwards.
-    const paneOpenArtifact = pane.openArtifact
-    const paneClearTarget = pane.clearTarget
-    const restoreSessionRef = useRef<string | null>(null)
-    useEffect(() => {
-        if (restoreSessionRef.current === activeSessionId) return
-        restoreSessionRef.current = activeSessionId
-        if (targetArtifact) paneOpenArtifact(targetArtifact)
-        else paneClearTarget()
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        setRunStatus(prev => {
+            const current = prev[activeSessionId]
+            if (current !== 'done' && current !== 'failed') return prev
+            return { ...prev, [activeSessionId]: 'idle' }
+        })
     }, [activeSessionId])
+
+    const handleMessagesChange = useCallback((id: string, messages: Message[]) => {
+        setMessageCounts(prev => (prev[id] === messages.length ? prev : { ...prev, [id]: messages.length }))
+        noteSessionMessages(id, messages)
+    }, [noteSessionMessages])
+
+    const handlePatchSession = useCallback((id: string, patch: Partial<ChatSessionMeta>) => {
+        patchSession(id, patch)
+    }, [patchSession])
+
+    const handleOpenPageWindow = useCallback((pageId: string) => {
+        setEditWindowPageId(String(pageId))
+    }, [])
+
+    // ─── Session/tab commands (shared with the kernel surface) ────
+    const {
+        handleClearChat,
+        handleNewSession,
+        handleSelectSession,
+        handleCloseTab,
+        handleDeleteSession,
+    } = useSessionActions({
+        activeSessionId,
+        controlsRef,
+        clearSessionMessages,
+        activateSession,
+        closeTab,
+        createSession,
+        deleteSession,
+    })
+
+    const anyRunning = openSessionIds.some(id => {
+        const status = runStatus[id]
+        return status === 'running' || status === 'attention'
+    })
+
+    // ─── Queued-stream notice ─────────────────────────────────────
+    // The engine caps concurrent live streams (each one holds an HTTP
+    // connection). Tabs past the cap attach later from the durable log, so the
+    // honest thing is to SAY so rather than show a spinner that looks stuck.
+    const [queuedCount, setQueuedCount] = useState(0)
     useEffect(() => {
-        setTargetArtifact(pane.target)
-    }, [pane.target, setTargetArtifact])
-
-    // ─── Session page binding bridge ─────────────────────────────
-    // Page tools (createPage / openPage / editPage) live in core and cannot
-    // reach this session's state. They call through this registry so a page the
-    // agent targets becomes the conversation's off-screen edit target instead
-    // of navigating away.
-    const bindTargetPage = useCallback((page: SessionPageBindingPage): ChatTargetPage => {
-        const record: ChatTargetPage = {
-            pageId: String(page.pageId),
-            title: page.title || '',
-            spaceId: page.spaceId,
+        if (!anyRunning) {
+            setQueuedCount(0)
+            return
         }
-        // Update synchronously so a tool later in the same batch already sees it.
-        boundPageRef.current = record
-        targetPageRef.current = record
-        setTargetPage(record)
-        return record
-    }, [setTargetPage])
-
-    const switchEditTarget = useCallback(async (page: SessionPageBindingPage): Promise<{ record: ChatTargetPage; handle: OffscreenEditorHandle | null }> => {
-        const record: ChatTargetPage = {
-            pageId: String(page.pageId),
-            title: page.title || '',
-            spaceId: page.spaceId,
-        }
-        const visiblePageId = getPageNavigationBridge()?.getCurrentPage()?.pageId
-        if (visiblePageId !== undefined && String(visiblePageId) === record.pageId) {
-            return { record, handle: null }
-        }
-        const handle = await activateOffscreenTarget(record)
-        return { record, handle }
-    }, [activateOffscreenTarget])
-
-    // ─── Block reference navigation ─────────────────────────────
-    const [pendingReveal, setPendingReveal] = useState<{ pageId: string; blockId: string } | null>(null)
-
-    const handleRevealReference = useCallback((ref: BlockReference) => {
-        if (ref.found === false) return
-        if (editor && revealBlockById(editor, ref.blockId)) return
-        if (targetPage) {
-            const currentPageId = getPageNavigationBridge()?.getCurrentPage()?.pageId
-            if (currentPageId !== undefined && String(currentPageId) === targetPage.pageId) return
-            setPendingReveal({ pageId: targetPage.pageId, blockId: ref.blockId })
-            getPageNavigationBridge()?.openPage(targetPage.pageId, targetPage.spaceId)
-        }
-    }, [editor, targetPage])
-
-    useEffect(() => {
-        if (!pendingReveal) return
-        let tries = 0
-        const timer = setInterval(() => {
-            const currentPageId = getPageNavigationBridge()?.getCurrentPage()?.pageId
-            const arrived = currentPageId !== undefined && String(currentPageId) === pendingReveal.pageId
-            if (arrived && editor && revealBlockById(editor, pendingReveal.blockId)) {
-                clearInterval(timer)
-                setPendingReveal(null)
-                return
-            }
-            if (++tries >= 20) {
-                clearInterval(timer)
-                setPendingReveal(null)
-            }
-        }, 300)
+        const read = () => setQueuedCount(agentStreamBudgetSnapshot().queuedRoot)
+        read()
+        const timer = setInterval(read, BUDGET_POLL_MS)
         return () => clearInterval(timer)
-    }, [pendingReveal, editor])
+    }, [anyRunning])
 
-    const agentEditor = (offscreenHandle?.editor as Editor) ?? editor
-    const agentEditorRef = useRef<Editor | undefined>(editor)
-    agentEditorRef.current = agentEditor
-
-    // ─── Change tracking ──────────────────────────────────────────
-    const [tracking, setTracking] = useState(false)
+    // The dock rail animates while ANY tab works.
     useEffect(() => {
-        const storage = getChangeTracker(agentEditor)
-        if (!storage) {
-            setTracking(false)
-            return
-        }
-        setTracking(storage.enabled)
-        return storage.subscribe(() => setTracking(storage.enabled))
-    }, [agentEditor])
-
-    const handleToggleTracking = useCallback(() => {
-        const storage = getChangeTracker(agentEditorRef.current)
-        if (!storage) return
-        if (storage.enabled) storage.stop()
-        else storage.start()
-    }, [])
-
-    // ─── AgentCore driver ─────────────────────────────────────────
-    const isAskMode = chatMode === 'ask'
-
-    const { getCatalog, rebindEditor, resolveTools, isReadOnlyTool } = useCapabilityProviders(agentEditor, {
-        onUserChoiceRequest: handleUserChoiceRequest,
-    })
-    const catalog = useMemo(() => getCatalog(), [getCatalog])
-    // Every callable tool rides in tools[] with its schema; skills[] adds the
-    // prompt fragments and the tool names each skill owns. Only what the
-    // provider's tool ceiling cannot fit comes back as deferredTools — plus the
-    // skills THIS conversation already loaded through `load_skill`: they stay
-    // callable on every following turn instead of being learned again.
-    const loadedSkills = useLoadedSkills(activeSessionId)
-    const { tools: toolSpecs, skills, deferredTools } = useMemo(
-        () => buildAgentRunInputs(catalog, { loadedSkills }),
-        [catalog, loadedSkills],
-    )
-
-    // ─── Session page binding bridge ─────────────────────────────
-    // Registered after the capability hook so editPage can rebind the live tool
-    // set synchronously. Page tools (createPage / openPage / editPage) live in
-    // core and cannot reach this session's state; they call through this registry
-    // so a page the agent targets becomes the conversation's off-screen edit
-    // target instead of navigating away.
-    useEffect(() => {
-        const binding: SessionPageBinding = {
-            bindPage: (page) => { bindTargetPage(page) },
-            getBoundPage: () => (boundPageRef.current ? { ...boundPageRef.current } : null),
-            // A visible editor claims the page: the hidden session for it was
-            // just destroyed, so the live tool map MUST follow the visible
-            // editor. Otherwise every document tool — including every editor
-            // plugin's tools — keeps pointing at the dead off-screen instance and
-            // silently stops working.
-            claimEditor: (pageId, claimedEditor) => {
-                claimEditor(pageId, claimedEditor)
-                const boundId = boundPageRef.current?.pageId
-                if (boundId === undefined || String(boundId) !== String(pageId)) return
-                offscreenHandleRef.current = null
-                setOffscreenHandle(null)
-                setTargetStatus('current')
-                rebindEditor(claimedEditor)
-            },
-            // The visible editor is gone. If it was the conversation target,
-            // re-acquire a hidden session so the target keeps a live editor for
-            // its own document (falling back to the open page would silently
-            // point the tools at the wrong document).
-            releaseEditor: (pageId, releasedEditor) => {
-                releaseEditor(pageId, releasedEditor)
-                const bound = boundPageRef.current
-                if (!bound || String(bound.pageId) !== String(pageId)) return
-                void switchEditTarget(bound).then(({ handle }) => {
-                    if (!handle) return
-                    offscreenHandleRef.current = handle
-                    setOffscreenHandle(handle)
-                    setTargetStatus('ready')
-                    rebindEditor(handle.editor)
-                }).catch(() => { /* fall back to the visible editor */ })
-            },
-            openPageWindow: (pageId) => setEditWindowPageId(String(pageId)),
-            editPage: async (page) => {
-                // A visible editor (side pane / floating window) owns this page:
-                // use it directly instead of acquiring a hidden second writer.
-                const claimed = claimedEditorsRef.current.get(String(page.pageId))
-                if (claimed) {
-                    rebindEditor(claimed)
-                    offscreenHandleRef.current = null
-                    setOffscreenHandle(null)
-                    setTargetStatus('current')
-                    const record = bindTargetPage(page)
-                    return { ...record, editor: claimed }
-                }
-                const { record, handle } = await switchEditTarget(page)
-                const targetEditor = (handle?.editor as Editor) ?? editor
-                // Rebind built-in AND plugin tools to the target editor in one
-                // synchronous step so document tools later in the same backend
-                // batch already act on it — no stale-editor window.
-                rebindEditor(targetEditor)
-                offscreenHandleRef.current = handle
-                if (handle) {
-                    setOffscreenHandle(handle)
-                    setTargetStatus('ready')
-                } else {
-                    setOffscreenHandle(null)
-                    setTargetStatus('current')
-                }
-                bindTargetPage(record)
-                return { ...record, editor: targetEditor }
-            },
-            getEditor: () => {
-                const boundId = boundPageRef.current?.pageId
-                const claimed = boundId ? claimedEditorsRef.current.get(String(boundId)) : undefined
-                return claimed ?? (offscreenHandleRef.current?.editor as Editor) ?? editor
-            },
-            // ─── Per-agent (delegated child) targeting ───────────────
-            getPageFor,
-            getEditorFor: (owner: string) => {
-                // A forked private document wins: its tools must act on the
-                // agent's own copy, never the shared page.
-                const privateDoc = getAgentDocumentBridge()?.get(owner)?.editor
-                if (privateDoc) return privateDoc
-                const handle = ownerHandlesRef.current.get(owner)
-                if (handle?.editor) return handle.editor
-                const target = ownerTargetsRef.current.get(owner)
-                if (target) {
-                    const claimed = claimedEditorsRef.current.get(String(target.pageId))
-                    if (claimed) return claimed
-                    const currentPageId = getPageNavigationBridge()?.getCurrentPage()?.pageId
-                    if (currentPageId !== undefined && String(currentPageId) === String(target.pageId)) {
-                        return editor
-                    }
-                }
-                // Nothing yet: the async path decides (fork on writes, live page
-                // for reads).
-                return null
-            },
-            // The synchronous lookup above cannot acquire; when a child has a
-            // target but no editor yet (it pointed at the page the user had open
-            // and the user navigated away), wait for its own session instead of
-            // silently letting its tools hit the conversation document.
-            getEditorForAsync: async (owner: string, options?: { mutating?: boolean }) => {
-                const docBridge = getAgentDocumentBridge()
-                const existing = docBridge?.get(owner)?.editor
-                if (existing) return existing
-
-                const target = ownerTargetsRef.current.get(owner) ?? boundPageRef.current
-                if (!target) return null
-                // Read-only work reads the live page: no fork, no snapshot cost,
-                // and no staleness for research-style children.
-                if (!options?.mutating || !docBridge) return null
-
-                const source = await resolveSharedEditorForPage(target)
-                if (!source) return null
-                try {
-                    const handle = await docBridge.fork(
-                        owner,
-                        String(target.pageId),
-                        source,
-                        target.title,
-                    )
-                    ownerTargetsRef.current.set(owner, target)
-                    return handle.editor
-                } catch (error) {
-                    // Over the fork cap (or a bad source): degrade to the shared
-                    // document, which the write lease still serializes.
-                    console.warn('[agent] private document unavailable, using the shared document:', error)
-                    return null
-                }
-            },
-            editPageFor: async (owner: string, page: SessionPageBindingPage) => {
-                const target: ChatTargetPage = {
-                    pageId: String(page.pageId),
-                    title: page.title || '',
-                    spaceId: page.spaceId,
-                }
-                ownerTargetsRef.current.set(owner, target)
-                const docBridge = getAgentDocumentBridge()
-                const source = await resolveSharedEditorForPage(target)
-                if (docBridge && source) {
-                    try {
-                        const handle = await docBridge.fork(owner, target.pageId, source, target.title)
-                        return { ...target, editor: handle.editor }
-                    } catch (error) {
-                        console.warn('[agent] private document unavailable, using the shared document:', error)
-                    }
-                }
-                if (!source) throw new Error('离屏编辑器不可用')
-                // Degraded path: the shared editor for that page (+ write lease).
-                return { ...target, editor: source }
-            },
-            releaseOwner,
-            isOwnerIsolated: (owner: string) => Boolean(getAgentDocumentBridge()?.get(owner)),
-            getPageForEditor: (targetEditor: any) => {
-                if (!targetEditor) return null
-                // A forked private document belongs to one agent's page.
-                const docBridge = getAgentDocumentBridge()
-                if (docBridge) {
-                    for (const [owner, target] of ownerTargetsRef.current) {
-                        if (docBridge.get(owner)?.editor === targetEditor) return { ...target }
-                    }
-                }
-                for (const [owner, handle] of ownerHandlesRef.current) {
-                    if (handle?.editor === targetEditor) {
-                        const target = ownerTargetsRef.current.get(owner)
-                        if (target) return { ...target }
-                    }
-                }
-                // A child bound to the page the user has open uses the visible
-                // editor, which the parent may share: resolving by *page* keeps
-                // both agents on the same (correct) document.
-                if (targetEditor === editor) {
-                    const currentPageId = getPageNavigationBridge()?.getCurrentPage()?.pageId
-                    if (currentPageId !== undefined) {
-                        for (const target of ownerTargetsRef.current.values()) {
-                            if (String(target.pageId) === String(currentPageId)) return { ...target }
-                        }
-                    }
-                }
-                return null
-            },
-        }
-        setSessionPageBinding(binding)
-        return () => clearSessionPageBinding(binding)
-    }, [bindTargetPage, switchEditTarget, rebindEditor, editor, getPageFor, acquireOwnerTarget, releaseOwner, claimEditor, releaseEditor])
-    const liveCurrentPageId = getPageNavigationBridge()?.getCurrentPage()?.pageId
-    // A conversation without an explicit @-page target rides on the page the
-    // user has open, so waiting for that context only makes sense while a
-    // document editor is actually published. Only PageEditor both publishes the
-    // editor and registers the navigation bridge, so `editor === undefined`
-    // means no page is coming at all — a plugin route such as db-connector, or
-    // the workspace shell. Making that case "pending" kept the composer in its
-    // "connecting" state forever (Send stayed disabled) and made `handleSend`
-    // drop every typed message. Such a run now simply fails closed per document
-    // tool call, exactly like a published-but-unbound editor already did.
-    const currentPagePending = !!editor && !currentPage?.pageId
-    const targetToolsReady = !targetPageId
-        ? !currentPagePending
-        : ((targetStatus === 'current' && String(liveCurrentPageId) === targetPageId)
-            || (targetStatus === 'ready' && offscreenHandle?.pageId === targetPageId))
-
-    // A child bound to the page the user had open must keep its own editor if
-    // the user navigates away: promote it to an off-screen session eagerly, so
-    // its next tool call does not have to wait for the acquisition.
-    useEffect(() => {
-        for (const [owner, target] of ownerTargetsRef.current) {
-            if (ownerHandlesRef.current.has(owner) || ownerAcquireRef.current.has(owner)) continue
-            if (liveCurrentPageId !== undefined && String(liveCurrentPageId) === String(target.pageId)) continue
-            void acquireOwnerTarget(owner, target).catch(error => {
-                console.error('Failed to promote delegated agent target off-screen:', error)
-            })
-        }
-    }, [liveCurrentPageId, acquireOwnerTarget])
-
-    // Custom agent selected for this chat. Its guidance is appended to the
-    // editor rules for every run it starts.
-    const { selectedAgent } = useCustomAgents()
-
-    const agent = useEditorAgent({
-        conversationId: activeSessionId,
-        tools: isAskMode ? [] : toolSpecs,
-        skills: isAskMode ? [] : skills,
-        deferredTools: isAskMode ? [] : deferredTools,
-        resolveTools,
-        // Mutating calls are serialized per document (write lease), and a
-        // delegated child resolves its tools against its own editor.
-        isReadOnlyTool,
-        // A page switch transiently unbinds the editor; defer a pending tool
-        // batch until the new editor is published instead of failing it.
-        autoExecuteTools: targetToolsReady && !!agentEditor,
-        spaceId: targetPage?.spaceId ?? currentPage?.spaceId,
-        pageId: targetPage?.pageId ?? currentPage?.pageId,
-    })
-
-    // Re-attach at most once per session activation. Without this guard, resetting
-    // a completed run immediately triggers another attach while the backend is
-    // still clearing thread.activeRunId, replaying the same assistant output.
-    const attachAttemptedSessionRef = useRef<string | null>(null)
-    useEffect(() => {
-        if (!targetToolsReady || agent.state.phase !== 'idle' || agent.state.runId) return
-        if (attachAttemptedSessionRef.current === activeSessionId) return
-        attachAttemptedSessionRef.current = activeSessionId
-        void agent.attach()
-    }, [activeSessionId, targetToolsReady, agent.state.phase, agent.state.runId, agent.attach])
-
-    // ─── Composer state ───────────────────────────────────────────
-    const [input, setInput] = useState("")
-    const [pendingImages, setPendingImages] = useState<AgentImageData[]>([])
-    const [imageError, setImageError] = useState<string | null>(null)
-    const [error, setError] = useState<ChatError | null>(null)
-
-    const handleAddImages = useCallback(async (files: File[]) => {
-        // A model the backend knows cannot see images would have the parts
-        // dropped server-side; refuse the attachment here and say why, rather
-        // than send an upload the model will answer with "看不到图片".
-        if (visionBlocked) {
-            setImageError(t('ai.chat.visionUnsupportedError', {
-                model: selectedModel,
-                defaultValue: '当前模型「{{model}}」不支持图片输入，图片未添加。请切换到支持识图的模型。',
-            }))
-            return
-        }
-        const images: AgentImageData[] = []
-        for (const file of files) {
-            try {
-                images.push(await fileToAgentImage(file))
-            } catch (err: any) {
-                setImageError(err?.message ?? String(err))
-            }
-        }
-        if (images.length > 0) {
-            setPendingImages(prev => [...prev, ...images])
-            setImageError(null)
-        }
-    }, [visionBlocked, selectedModel, t])
-
-    const handleRemoveImage = useCallback((index: number) => {
-        setPendingImages(prev => prev.filter((_, i) => i !== index))
-    }, [])
-
-    const isActive =
-        agent.state.phase === 'creating' ||
-        agent.state.phase === 'streaming' ||
-        agent.state.phase === 'waiting-tools' ||
-        agent.state.phase === 'waiting-approval' ||
-        agent.state.phase === 'suspended'
-
-    const currentSteps = useMemo(() => toolCallsToSteps(agent.state.toolCalls), [agent.state.toolCalls])
-    const liveMessage = useMemo<Message>(() => ({
-        id: 'active-agent-turn',
-        content: selectFinalAnswer(agent.state.steps, agent.state.answerStepId, agent.state.text),
-        reasoningContent: agent.state.reasoning || undefined,
-        activitySteps: agent.state.steps,
-        answerStepId: agent.state.answerStepId ?? undefined,
-        sender: 'ai',
-        timestamp: Date.now(),
-        steps: currentSteps,
-        subRuns: agent.state.subRuns,
-    }), [agent.state.answerStepId, agent.state.reasoning, agent.state.steps, agent.state.subRuns, agent.state.text, currentSteps])
-
-    useEffect(() => {
-        event.emit(DOCK_PANEL_RUNNING, { id: 'agent', running: isActive })
-    }, [isActive])
-
+        event.emit(DOCK_PANEL_RUNNING, { id: 'agent', running: anyRunning })
+    }, [anyRunning])
     useEffect(() => {
         return () => { event.emit(DOCK_PANEL_RUNNING, { id: 'agent', running: false }) }
     }, [])
 
-    const lastUserMessageRef = useRef<string>("")
-    const composerRef = useRef<HTMLTextAreaElement>(null)
+    // ─── Working target (artifact pane) ───────────────────────────
+    // The target belongs to the CONVERSATION (it is stored with the session
+    // metadata), so a tab switch restores it — and only the focused tab may own
+    // the (single, app-level) pane.
+    const pane = useAgentPane()
+    const paneOpenArtifact = pane.openArtifact
+    const paneClearTarget = pane.clearTarget
+    const targetArtifact = activeSession?.targetArtifact
 
-    const generateMessageId = useCallback(
-        () => 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9),
-        [],
-    )
-
-    // ─── Run lifecycle: snapshot terminal turns into history ─────
-    const abandoningRef = useRef(false)
-    const lastPhaseRef = useRef(agent.state.phase)
+    /** Suppress the persist effect for the restore a tab switch performs. */
+    const skipPersistRef = useRef(false)
+    const restoreSessionRef = useRef<string | null>(null)
     useEffect(() => {
-        const phase = agent.state.phase
-        if (lastPhaseRef.current === phase) return
-        lastPhaseRef.current = phase
-        if (phase === 'completed' || phase === 'failed' || phase === 'cancelled') {
-            releaseRunTargetPin()
-            if (abandoningRef.current) {
-                agent.reset()
-                return
-            }
-            const steps = toolCallsToSteps(agent.state.toolCalls)
-            const content = selectFinalAnswer(agent.state.steps, agent.state.answerStepId, agent.state.text)
-            const classifiedError = phase === 'failed'
-                ? classifyError(new Error(agent.state.error ?? ''))
-                : undefined
-            const hasContent = Boolean(
-                content.trim() || steps.length > 0 || agent.state.steps.length > 0
-                || agent.state.subRuns.length > 0 || classifiedError
-            )
-            if (hasContent) {
-                const snapshot: Message = {
-                    id: generateMessageId(),
-                    content,
-                    reasoningContent: agent.state.reasoning || undefined,
-                    activitySteps: agent.state.steps.map(step => ({ ...step })),
-                    answerStepId: agent.state.answerStepId ?? undefined,
-                    sender: 'ai',
-                    timestamp: Date.now(),
-                    steps,
-                    subRuns: agent.state.subRuns.slice(),
-                    usage: agent.state.usage ?? undefined,
-                    error: phase === 'failed',
-                    errorType: classifiedError?.type,
-                    errorMessage: classifiedError?.message,
-                }
-                setMessages(prev => [...prev, snapshot])
-            }
-            agent.reset()
-        }
+        if (restoreSessionRef.current === activeSessionId) return
+        restoreSessionRef.current = activeSessionId
+        skipPersistRef.current = true
+        if (targetArtifact) paneOpenArtifact(targetArtifact)
+        else paneClearTarget()
+        // Deliberately keyed on the session id: this is a restore, not a sync.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [agent.state.phase])
+    }, [activeSessionId])
 
-    const abandonAgent = useCallback(async () => {
-        abandoningRef.current = true
-        // Release before switching sessions so the pin is cleared on the
-        // session that owns it, not the one we are about to activate.
-        releaseRunTargetPin()
-        const cancelled = await agent.cancel().catch(() => false)
-        if (cancelled) agent.reset()
-        abandoningRef.current = false
-    }, [agent, releaseRunTargetPin])
-
-    // ─── Submit ───────────────────────────────────────────────────
-    const submitMessage = useCallback(async (messageText: string, images: AgentImageData[] = []) => {
-        const userMessage: Message = {
-            id: generateMessageId(),
-            content: messageText,
-            images: images.length > 0 ? images.map(toImageDataUrl) : undefined,
-            sender: "user",
-            timestamp: Date.now(),
-        }
-        setMessages((prev) => [...prev, userMessage])
-        lastUserMessageRef.current = messageText
-        setError(null)
-
-        // Freeze the page this turn edits. Navigation during the run then only
-        // moves the viewport; the agent keeps editing the same page (through an
-        // off-screen editor once it is no longer the visible one).
-        const runTarget = targetPage ?? (currentPage?.pageId
-            ? { pageId: currentPage.pageId, title: currentPage.title, spaceId: currentPage.spaceId }
-            : undefined)
-        if (!targetPage && runTarget) {
-            autoPinnedPageIdRef.current = runTarget.pageId
-            setTargetPage(runTarget)
-        }
-
-        // The bound-page notice is volatile model context, not part of the
-        // user turn and not an invariant system rule. Send it as contextNote so
-        // the backend persists it as an append-only <context> block behind the
-        // cacheable history — putting it in the system prompt would rewrite
-        // message index 0 and invalidate the whole conversation prefix cache.
-        const boundPageNote = runTarget
-            ? t('ai.chat.boundPagePrefix', { title: runTarget.title })
-            : undefined
-        // Per-turn context only: the bound page, and a selected custom agent's
-        // guidance (which must not be able to rewrite the backend's prompt).
-        const contextNote = [boundPageNote, buildCustomAgentNote(selectedAgent)]
-            .filter(Boolean)
-            .join('\n\n') || undefined
-
-        // Conversation history is engine-owned (session model log); the client
-        // only sends the new turn. Images ride as multimodal content parts so
-        // the model's own vision sees them (never interpreted here).
-        const contentParts = images.length > 0
-            ? buildImageContentParts(messageText, images)
-            : undefined
-        const agentMessages: AgentChatMessage[] = [{
-            role: 'user',
-            content: messageText,
-            contentParts,
-        }]
-
-        try {
-            await agent.start(agentMessages, {
-                model: selectedModel || undefined,
-                mode: 'execute',
-                temperature: modelParams.temperature,
-                maxTokens: modelParams.maxTokens,
-                contextNote,
-            })
-        } catch (err: any) {
-            setError(classifyError(err))
-        }
-    }, [
-        agent, generateMessageId, targetPage, currentPage, setTargetPage,
-        selectedModel, modelParams, setMessages, t, selectedAgent,
-    ])
-
-    const handleSend = useCallback(() => {
-        const text = input.trim()
-        const images = pendingImages
-        if ((!text && images.length === 0) || isActive || !targetToolsReady) return
-        // Images attached before switching to a non-vision model: don't send a
-        // turn whose attachments the backend would strip (the composer shows the
-        // same warning and keeps Send disabled).
-        if (visionBlocked && images.length > 0) {
-            setImageError(t('ai.chat.visionUnsupportedError', {
-                model: selectedModel,
-                defaultValue: '当前模型「{{model}}」不支持图片输入，图片未添加。请切换到支持识图的模型。',
-            }))
+    useEffect(() => {
+        // A tab switch has just rewritten the pane from the new session's own
+        // target; persisting that back would be a no-op on a good day and would
+        // carry the previous tab's target into the new one on a race.
+        if (skipPersistRef.current) {
+            skipPersistRef.current = false
             return
         }
-        setInput("")
-        setPendingImages([])
-        submitMessage(text, images)
-        requestAnimationFrame(() => {
-            if (composerRef.current) composerRef.current.style.height = 'auto'
-            composerRef.current?.focus()
-        })
-    }, [input, pendingImages, isActive, targetToolsReady, submitMessage, visionBlocked, selectedModel, t])
+        patchSession(activeIdRef.current, { targetArtifact: pane.target ?? undefined })
+    }, [pane.target, activeSessionId, patchSession])
 
-    const handleInputChange = useCallback((value: string) => {
-        setInput(value)
-        if (error) setError(null)
-    }, [error])
+    // Agent tools (`openPageSide` / `focusArtifact`) run outside React and only
+    // know their conversation id: route the artifact to the conversation that
+    // produced it instead of into whichever tab happens to be visible.
+    const openArtifact = pane.openArtifact
+    useEffect(() => {
+        const unregister = openSessionIds.map(id => registerAgentPaneOpener(id, (artifact: AgentArtifact) => {
+            patchSession(id, { targetArtifact: artifact })
+            if (id === activeIdRef.current) openArtifact(artifact)
+        }))
+        return () => { unregister.forEach(fn => fn()) }
+    }, [openSessionIds, openArtifact, patchSession])
 
-    const handleQuickSubmit = useCallback((prompt: string) => {
-        if (isActive) return
-        submitMessage(prompt)
-    }, [isActive, submitMessage])
-
-    const handleRetry = useCallback(() => {
-        if (!lastUserMessageRef.current || isActive) return
-        setError(null)
-        submitMessage(lastUserMessageRef.current)
-    }, [isActive, submitMessage])
-
-    // ─── Session lifecycle ────────────────────────────────────────
-    const { handleClearChat, handleNewSession, handleSwitchSession, handleDeleteSession } =
-        useSessionActions({
-            activeSessionId,
-            abandonAgent,
-            clearActiveMessages,
-            createSession,
-            switchSession,
-            deleteSession,
-            setError,
-        })
-
-    // ─── Page-independent conversation ─────────────────────────
-    // The agent is not bound to the open page. Switching pages keeps the
-    // active conversation (and any run it owns) untouched instead of swapping
-    // to a page-owned thread, so navigation can never cancel or strand
-    // in-flight work. The @-mention target (targetPage) remains the only
-    // explicit page binding the user can set.
-
-    // ─── Derived UI flags ─────────────────────────────────────────
-    const isEmpty = messages.length === 0 && !isActive && !loadingTranscript
+    const tabs = useMemo<ChatTabInfo[]>(() => openSessionIds.map(id => {
+        const meta = allSessions.find(session => session.id === id)
+        return {
+            id,
+            title: meta?.title || t('ai.chat.newChat'),
+            pageTitle: meta?.boundPage?.title || meta?.targetPage?.title,
+            status: runStatus[id] ?? 'idle',
+        }
+    }), [openSessionIds, allSessions, runStatus, t])
 
     // ─── Render ───────────────────────────────────────────────────
     return (
@@ -937,7 +250,7 @@ export const ExpandableChatDemo: React.FC<{
             onClose={onClose}
             icon={
                 <div className="relative flex items-center justify-center">
-                    {isActive && (
+                    {anyRunning && (
                         <span
                             aria-hidden
                             className="absolute -inset-1.5 rounded-full animate-spin"
@@ -946,168 +259,65 @@ export const ExpandableChatDemo: React.FC<{
                                     'conic-gradient(from 0deg, transparent 0deg, transparent 220deg, currentColor 340deg, transparent 360deg)',
                                 WebkitMask:
                                     'radial-gradient(circle, transparent 58%, #000 60%)',
-                                mask: 'radial-gradient(circle, transparent 58%, #000 60%)',
+                                mask:
+                                    'radial-gradient(circle, transparent 58%, #000 60%)',
                                 animationDuration: '1.1s',
                             }}
                         />
                     )}
                     <Sparkles
-                        className={`h-6 w-6 relative z-10 transition-transform duration-500 ${isActive ? 'scale-95 drop-shadow-[0_0_6px_currentColor]' : ''}`}
+                        className={`h-6 w-6 relative z-10 transition-transform duration-500 ${anyRunning ? 'scale-95 drop-shadow-[0_0_6px_currentColor]' : ''}`}
                     />
                 </div>
             }
         >
             <ExpandableChatHeader className="p-0 border-0">
                 <ChatHeader
-                    sessions={sessions}
-                    activeSessionId={activeSessionId}
-                    hasMessages={messages.length > 0}
-                    onSwitch={handleSwitchSession}
-                    onNewSession={handleNewSession}
+                    tabs={tabs}
+                    activeTabId={activeSessionId}
+                    onSelectTab={handleSelectSession}
+                    onCloseTab={handleCloseTab}
+                    onNewTab={handleNewSession}
+                    sessions={allSessions}
+                    hasMessages={(messageCounts[activeSessionId] ?? 0) > 0}
+                    onSwitch={handleSelectSession}
                     onDelete={handleDeleteSession}
                     onClear={handleClearChat}
+                    queuedCount={queuedCount}
                 />
             </ExpandableChatHeader>
 
-            <ExpandableChatBody className="bg-muted/20 dark:bg-background overflow-x-hidden flex-row">
-                {/* On mobile the pane takes over the panel (push navigation);
-                    on desktop it is an inline side peek next to the chat. */}
-                <div className={`flex min-h-0 min-w-0 flex-1 flex-col ${inlinePaneArtifact ? 'hidden md:flex' : ''}`}>
-                <ChatMessageList>
-                    {loadingTranscript && messages.length === 0 && (
-                        <div
-                            role="status"
-                            aria-live="polite"
-                            className="flex flex-col items-center justify-center gap-2 py-16 text-muted-foreground"
-                        >
-                            <Loader2 className="h-5 w-5 animate-spin" />
-                            <span className="text-xs">{t('ai.chat.loadingSession')}</span>
-                        </div>
+            {/* One mounted conversation per open tab. A background tab is only
+                hidden, never unmounted: its agent, stream and off-screen editor
+                leases stay alive so the run continues in parallel. */}
+            {openSessionIds.map(id => (
+                <div
+                    key={id}
+                    className={cn(
+                        'flex min-h-0 min-w-0 flex-1 flex-col',
+                        id !== activeSessionId && 'hidden',
                     )}
-
-                    {isEmpty && (
-                        <ChatEmptyState mode={chatMode} onSubmit={handleQuickSubmit} />
-                    )}
-
-                    {messages.map((message) => (
-                        <MessageBubble
-                            key={message.id}
-                            message={message}
-                            onRevealReference={handleRevealReference}
-                        />
-                    ))}
-
-                    {isActive && (
-                        <MessageBubble
-                            message={liveMessage}
-                            isStreaming
-                            onRevealReference={handleRevealReference}
-                        />
-                    )}
-
-                    {agent.state.phase === 'waiting-approval' && agent.state.plan && (
-                        <div className="mx-2 my-1.5">
-                            <PlanApprovalCard
-                                planText={agent.state.plan.text}
-                                onDecision={(approved, feedback) => agent.approvePlan(approved, feedback)}
-                            />
-                        </div>
-                    )}
-
-                    {agent.state.phase === 'suspended' && agent.state.suspendReason === 'budget' && (
-                        <div className="mx-2 my-1.5 flex items-center gap-2 rounded-lg border border-border/60 bg-card p-2.5 text-[12px] text-muted-foreground">
-                            <span>{t('ai.chat.budgetPaused')}</span>
-                            <button
-                                type="button"
-                                className="ml-auto shrink-0 rounded-md bg-primary px-2.5 py-1 text-[12px] font-medium text-primary-foreground hover:opacity-90"
-                                onClick={() => void agent.continueRun()}
-                            >
-                                {t('ai.chat.continueRun')}
-                            </button>
-                        </div>
-                    )}
-
-                    {agent.state.error && agent.state.phase !== 'failed' && (
-                        <div className="mx-2 my-1.5 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-[11px] text-amber-700 dark:text-amber-300">
-                            <span className="min-w-0 flex-1">{t('ai.chat.unavailable', { error: agent.state.error })}</span>
-                            {agent.state.phase === 'suspended' && (
-                                <button
-                                    type="button"
-                                    className="shrink-0 rounded-md border border-amber-500/30 px-2 py-1 font-medium hover:bg-amber-500/10"
-                                    onClick={agent.retryConnection}
-                                >
-                                    {t('ai.chat.retry')}
-                                </button>
-                            )}
-                        </div>
-                    )}
-
-                    {pendingChoice && (
-                        <UserChoiceCard
-                            choice={pendingChoice}
-                            customInput={customInput}
-                            onCustomInputChange={setCustomInput}
-                            onSelect={handleOptionSelect}
-                            onCustomSubmit={handleCustomSubmit}
-                            onCancel={handleCancelChoice}
-                        />
-                    )}
-
-                    {error && (
-                        <ErrorDisplay
-                            error={error}
-                            onRetry={handleRetry}
-                            onDismiss={() => setError(null)}
-                        />
-                    )}
-                </ChatMessageList>
+                    aria-hidden={id !== activeSessionId}
+                >
+                    <ChatConversation
+                        sessionId={id}
+                        session={allSessions.find(session => session.id === id)}
+                        active={id === activeSessionId}
+                        editor={editor}
+                        selectedModel={selectedModel}
+                        onModelChange={handleModelChange}
+                        chatMode={chatMode}
+                        onModeChange={handleModeChange}
+                        modelParams={modelParams}
+                        onModelParamsChange={handleModelParamsChange}
+                        onPatchSession={handlePatchSession}
+                        onMessagesChange={handleMessagesChange}
+                        onRunStatus={handleRunStatus}
+                        controlsRef={controlsRef}
+                        onOpenPageWindow={handleOpenPageWindow}
+                    />
                 </div>
-                {inlinePaneArtifact && (
-                    <aside className="flex min-h-0 min-w-0 flex-1 flex-col border-l border-border bg-background md:w-3/5 md:flex-none">
-                        <AgentPaneHost
-                            artifact={inlinePaneArtifact}
-                            onClose={pane.close}
-                            onOpenInPage={pane.openInPage}
-                            canOpenInPage={pane.canOpenInPage(inlinePaneArtifact)}
-                        />
-                    </aside>
-                )}
-            </ExpandableChatBody>
-
-            <ExpandableChatFooter className="border-t bg-background p-2">
-                <ChatComposer
-                    ref={composerRef}
-                    value={input}
-                    onChange={handleInputChange}
-                    onSubmit={handleSend}
-                    onStop={() => void agent.cancel()}
-                    isLoading={isActive}
-                    mode={chatMode}
-                    onModeChange={handleModeChange}
-                    model={selectedModel}
-                    onModelChange={handleModelChange}
-                    modelParams={modelParams}
-                    onModelParamsChange={handleModelParamsChange}
-                    targetPage={targetPage}
-                    currentPage={currentPage}
-                    targetStatus={!targetPage && currentPagePending ? 'connecting' : targetStatus}
-                    onPickPage={setTargetPage}
-                    onClearPage={() => setTargetPage(null)}
-                    onRetryPage={handleRetryPage}
-                    onOpenPageWindow={handleOpenPageWindow}
-                    tracking={tracking}
-                    onToggleTracking={handleToggleTracking}
-                    images={pendingImages.map(toImageDataUrl)}
-                    onAddImages={handleAddImages}
-                    onRemoveImage={handleRemoveImage}
-                    visionSupported={modelVision.known ? modelVision.supportsVision : undefined}
-                    visionModelLabel={selectedModel}
-                />
-                {imageError && (
-                    <div className="px-2 pt-1 text-[11px] text-destructive">{imageError}</div>
-                )}
-                <div className="h-safe-bottom lg:hidden" aria-hidden />
-            </ExpandableChatFooter>
+            ))}
 
             {editWindowPageId && (
                 <PageEditWindow

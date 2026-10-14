@@ -129,11 +129,18 @@ const forbiddenPatterns = [
     /title:\s*t\(['"]ai\.chat\.subAgentTitle['"]\)/,
     "the message bubble must build sub-agent labels via @kn/ui buildSubAgentTreeLabels(t)",
   ],
-  // The off-screen target cap/lease policy lives in the extracted hook.
+  // The off-screen target cap/lease policy lives in the extracted hook. The
+  // conversation panel owns it since tabs split the surface into a container
+  // (Chat.tsx) plus one mounted panel per open conversation.
   [
     join(root, "packages/plugin-ai/src/ai/menu/Chat.tsx"),
     /MAX_OFFSCREEN_TARGETS/,
     "the off-screen target cap belongs to useOffscreenTargets, not Chat",
+  ],
+  [
+    join(root, "packages/plugin-ai/src/ai/menu/ChatConversation.tsx"),
+    /MAX_OFFSCREEN_TARGETS/,
+    "the off-screen target cap belongs to useOffscreenTargets, not the panel",
   ],
 ];
 
@@ -168,9 +175,9 @@ const requiredPatterns = [
     "page tools must resolve the session binding from the tool execution context",
   ],
   [
-    join(root, "packages/plugin-ai/src/ai/menu/Chat.tsx"),
+    join(root, "packages/plugin-ai/src/ai/menu/ChatConversation.tsx"),
     /from\s*["']\.\/use-offscreen-targets["']/,
-    "the chat surface must delegate off-screen target management to useOffscreenTargets",
+    "the chat conversation panel must delegate off-screen target management to useOffscreenTargets",
   ],
   [
     join(root, "packages/ui/src/components/ai/index.ts"),

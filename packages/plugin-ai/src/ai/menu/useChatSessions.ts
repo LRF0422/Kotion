@@ -1,28 +1,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { Dispatch, SetStateAction } from 'react'
-
-import { i18n } from '@kn/common'
-import type { AgentArtifact } from '@kn/common'
 
 import type { Message } from './chat-types'
 import {
     ChatSessionMeta,
     ChatTargetPage,
+    MAX_OPEN_TABS,
     deleteSessionMessages,
     deriveTitle,
     generateSessionId,
     getActiveId,
     loadIndex,
-    loadSessionMessages,
+    loadOpenTabs,
     migrateLegacy,
     saveIndex,
+    saveOpenTabs,
     setActiveId,
 } from './chat-sessions'
 import {
     clearRemoteSession,
     deleteRemoteSession,
-    getRemoteMessages,
-    importRemoteSession,
     isSessionApiAvailable,
     listRemoteSessions,
     markSessionApiUnavailable,
@@ -32,63 +28,36 @@ import {
 export interface UseChatSessionsResult {
     /** All known chat sessions, sorted by most-recent first. */
     sessions: ChatSessionMeta[]
-    /** Metadata of the currently active session (null before initialization). */
+    /** Metadata of the currently focused session (null before initialization). */
     activeSession: ChatSessionMeta | null
-    /** Local id of the active chat session. */
+    /** Local id of the focused chat session. */
     activeSessionId: string
-    /** Messages of the active session. */
-    messages: Message[]
-    setMessages: Dispatch<SetStateAction<Message[]>>
-    /** True while the active session's engine transcript is being fetched. */
-    loadingTranscript: boolean
-    /** Create a brand-new empty chat session and switch to it. */
+    /**
+     * Ids of the conversations with an OPEN TAB, in display order. Every open
+     * tab keeps its own mounted conversation (and therefore its own live run):
+     * switching tabs never cancels anything.
+     */
+    openSessionIds: string[]
+    /** Open a conversation as a tab (when closed) and focus it. */
+    activateSession: (id: string) => void
+    /** Close a tab. The conversation itself is kept — it stays in history. */
+    closeTab: (id: string) => void
+    /** Create a brand-new conversation, open it as a tab and focus it. */
     createSession: (boundPage?: ChatTargetPage) => string
-    /** Switch the active chat to the given session id. */
-    switchSession: (id: string) => void
-    /** Delete a session. If it was active, switches to the next or creates a new one. */
+    /** Delete a conversation and close its tab. */
     deleteSession: (id: string) => void
     /** Manually rename a session. */
     renameSession: (id: string, title: string) => void
-    /** Clear all messages of the active session (keeps the session itself). */
-    clearActiveMessages: () => void
-    /** Page bound to the active session (@-mention), if any. */
-    targetPage: ChatTargetPage | undefined
-    /** Bind / unbind the active session's target page. */
-    setTargetPage: (page: ChatTargetPage | null) => void
-    /** Page the active session belongs to (auto-bound), if any. */
-    boundPage: ChatTargetPage | undefined
-    /** Bind / unbind the active session's owning page. */
-    setBoundPage: (page: ChatTargetPage | null) => void
-    /** Conversation's working target (kernel artifact), if any. */
-    targetArtifact: AgentArtifact | undefined
-    /** Persist / clear the active session's working target. */
-    setTargetArtifact: (artifact: AgentArtifact | null) => void
+    /** Auto-title / touch one session from its own transcript activity. */
+    noteSessionMessages: (id: string, messages: Message[]) => void
+    /** Reset one session's transcript (engine copy, local cache, title). */
+    clearSessionMessages: (id: string) => void
+    /** Patch one session's metadata (bound page, working target). */
+    patchSession: (id: string, patch: Partial<ChatSessionMeta>) => void
 }
 
 /** Upper bound on sessions fetched from the backend. */
 const SESSION_LIST_LIMIT = 100
-
-/**
- * Drop the legacy bound-page notice the client used to prepend to the user turn.
- *
- * It was baked into the message content, so the engine persisted it and a reload
- * rendered it inside the bubble. New turns carry it as this run's system prompt
- * instead; this only cleans transcripts written before that change.
- */
-function stripLegacyBoundPagePrefix(messages: Message[], title?: string): Message[] {
-    if (!title || messages.length === 0) return messages
-    const template = i18n.t('ai.chat.boundPagePrefix', { title })
-    if (!template || template === 'ai.chat.boundPagePrefix') return messages
-    const needle = template + '\n'
-    let changed = false
-    const next = messages.map(message => {
-        if (message.sender !== 'user' || typeof message.content !== 'string') return message
-        if (!message.content.startsWith(needle)) return message
-        changed = true
-        return { ...message, content: message.content.slice(needle.length) }
-    })
-    return changed ? next : messages
-}
 
 function createMeta(id: string, boundPage?: ChatTargetPage): ChatSessionMeta {
     const now = Date.now()
@@ -115,22 +84,23 @@ function mergeSessions(remote: ChatSessionMeta[], local: ChatSessionMeta[]): Cha
 }
 
 /**
- * React hook managing multiple chat sessions in the AI side panel.
+ * The AI chat's session + TAB index, shared by the side dock and the kernel
+ * home page.
  *
- * Persistence model (engine-owned):
- * - the backend projects the transcript from the durable run log and the client
- *   only READS it (plus writes UI-only metadata: title, @-page bindings);
- * - localStorage holds the session index and any pre-migration transcript, used
- *   to boot instantly and to import once into the engine;
- * - the live turn is an optimistic in-memory echo until the engine projects it.
+ * It owns three things and nothing else:
+ *  - the conversation index (metadata: title, page bindings, working target);
+ *  - which conversations have an open tab, and which one is focused;
+ *  - persistence of both (a localStorage index for boot, the engine for the
+ *    authoritative list).
  *
- * Programmatic `setMessages` loads update `lastSyncedRef` to the exact array,
- * so the effect can distinguish them from user/agent changes without racing
- * React's batching.
+ * The TRANSCRIPT is deliberately not here any more: with tabs, every open
+ * conversation stays mounted, so each of them owns its own transcript through
+ * {@link useSessionTranscript}. This hook therefore never swaps or resets
+ * message state — only the panel that owns a conversation can cancel it.
  */
 export function useChatSessions(): UseChatSessionsResult {
-    // ── Lazy one-shot local seed (migration + ensure at least one session) ──
-    const initial = useRef<{ sessions: ChatSessionMeta[]; activeId: string } | null>(null)
+    // ── Lazy one-shot local seed (migration + ensure one session + one tab) ──
+    const initial = useRef<{ sessions: ChatSessionMeta[]; activeId: string; tabs: string[] } | null>(null)
     if (initial.current === null) {
         migrateLegacy()
         let index = loadIndex()
@@ -145,92 +115,68 @@ export function useChatSessions(): UseChatSessionsResult {
             }
             setActiveId(activeId)
         }
-        initial.current = { sessions: index, activeId }
+        const tabs = loadOpenTabs().filter(id => index.some(s => s.id === id))
+        if (!tabs.includes(activeId)) tabs.unshift(activeId)
+        initial.current = { sessions: index, activeId, tabs }
     }
 
     const [sessions, setSessions] = useState<ChatSessionMeta[]>(initial.current.sessions)
     const [activeSessionId, setActiveSessionIdState] = useState<string>(initial.current.activeId)
-    const [messages, setMessages] = useState<Message[]>(() =>
-        loadSessionMessages(initial.current!.activeId),
-    )
+    const [openSessionIds, setOpenSessionIds] = useState<string[]>(initial.current.tabs)
 
     const sessionsRef = useRef(sessions)
     sessionsRef.current = sessions
     const activeIdRef = useRef(activeSessionId)
     activeIdRef.current = activeSessionId
-    const messagesRef = useRef(messages)
-    messagesRef.current = messages
+    const tabsRef = useRef(openSessionIds)
+    tabsRef.current = openSessionIds
 
-    const messagesSessionRef = useRef(activeSessionId)
-    const lastSyncedRef = useRef(messages)
-    const userTouchedRef = useRef(false)
-
-    // The engine transcript is fetched asynchronously on boot and on every
-    // switch; surface that as a loading state so the panel never flashes the
-    // empty state while a conversation is still in flight. Only the load the
-    // user is currently waiting on may clear the flag (an older load that
-    // resolves after a newer switch must not hide the spinner).
-    const [loadingTranscript, setLoadingTranscript] = useState(false)
-    const loadingSessionRef = useRef<string | null>(null)
-    const beginTranscriptLoad = useCallback((id: string) => {
-        loadingSessionRef.current = id
-        setLoadingTranscript(true)
+    const commitTabs = useCallback((next: string[]) => {
+        tabsRef.current = next
+        saveOpenTabs(next)
+        setOpenSessionIds(next)
     }, [])
-    const endTranscriptLoad = useCallback((id: string) => {
-        if (loadingSessionRef.current === id) {
-            loadingSessionRef.current = null
-            setLoadingTranscript(false)
+
+    const focus = useCallback((id: string) => {
+        activeIdRef.current = id
+        setActiveId(id)
+        setActiveSessionIdState(id)
+    }, [])
+
+    /** Open `id` as a tab (evicting the oldest other tab at the ceiling). */
+    const openTab = useCallback((id: string) => {
+        const tabs = tabsRef.current
+        if (tabs.includes(id)) return
+        const next = [...tabs]
+        if (next.length >= MAX_OPEN_TABS) {
+            const evictable = next.findIndex(tabId => tabId !== activeIdRef.current)
+            next.splice(evictable >= 0 ? evictable : 0, 1)
         }
-    }, [])
-    const cancelTranscriptLoad = useCallback(() => {
-        loadingSessionRef.current = null
-        setLoadingTranscript(false)
-    }, [])
+        next.push(id)
+        commitTabs(next)
+    }, [commitTabs])
 
-    // ── Engine transcript loading (with one-time import of local history) ──
-    const applyTranscript = useCallback((id: string, transcript: Message[]) => {
-        // Clean the notice older versions persisted inside the user turn; the
-        // session's bound title is exactly what was interpolated at send time.
-        const meta = sessionsRef.current.find(session => session.id === id)
-        const cleaned = stripLegacyBoundPagePrefix(transcript, meta?.targetPage?.title)
-        messagesSessionRef.current = id
-        lastSyncedRef.current = cleaned
-        messagesRef.current = cleaned
-        setMessages(cleaned)
-    }, [])
+    const activateSession = useCallback((id: string) => {
+        if (!id) return
+        openTab(id)
+        focus(id)
+    }, [focus, openTab])
 
-    const loadTranscript = useCallback(async (id: string, local: Message[]): Promise<Message[]> => {
-        // Reads are never gated by the availability flag: one transient failure
-        // (or a failed metadata write) must not permanently hide every
-        // transcript. A successful read resets the flag, so an explicit open
-        // recovers automatically at the cost of one extra attempt.
-        let remote: Message[] | null = null
-        try {
-            remote = await getRemoteMessages(id)
-        } catch {
-            markSessionApiUnavailable()
-            return local
-        }
-        if (remote && remote.length > 0 && local.length <= remote.length) {
-            return remote
-        }
-        // Engine has no transcript (or a shorter, window-seeded one): migrate the
-        // richer local history once. The backend accepts a strictly longer import.
-        if (local.length > 0) {
-            const meta = sessionsRef.current.find(s => s.id === id)
-            if (meta) {
-                void importRemoteSession(meta, local)
-                    .then(imported => {
-                        // Drop the pre-migration local copy once the engine owns it,
-                        // so it cannot be re-imported or linger in localStorage.
-                        if (imported) deleteSessionMessages(id)
-                    })
-                    .catch(() => markSessionApiUnavailable())
+    // ── Engine metadata sync (session list) ─────────────────────────
+    const updateMeta = useCallback(
+        (id: string, patch: (session: ChatSessionMeta) => ChatSessionMeta) => {
+            const prev = sessionsRef.current
+            const next = prev.map(session => (session.id === id ? patch(session) : session))
+            sessionsRef.current = next
+            saveIndex(next)
+            setSessions(next)
+            const updated = next.find(session => session.id === id)
+            if (updated && isSessionApiAvailable()) {
+                void upsertRemoteSession(updated).catch(() => markSessionApiUnavailable())
             }
-            return local
-        }
-        return remote ?? local
-    }, [])
+        },
+        [],
+    )
 
     useEffect(() => {
         const hydrate = async () => {
@@ -238,9 +184,8 @@ export function useChatSessions(): UseChatSessionsResult {
             try {
                 remote = await listRemoteSessions(SESSION_LIST_LIMIT)
             } catch {
-                // Keep the local index and still load the active transcript
-                // below: the detail read is a different endpoint and may
-                // succeed even when the list call failed.
+                // Keep the local index: the transcript read is a different
+                // endpoint and may succeed even when the list call failed.
                 markSessionApiUnavailable()
             }
             const merged = mergeSessions(remote, loadIndex())
@@ -255,34 +200,22 @@ export function useChatSessions(): UseChatSessionsResult {
             }
             sessionsRef.current = merged
             setSessions(merged)
-            setActiveId(nextActive)
-            setActiveSessionIdState(nextActive)
+            focus(nextActive)
             saveIndex(merged)
+
+            // Restore the open tabs against the merged list: a tab whose
+            // conversation no longer exists anywhere is dropped rather than
+            // reopening an empty ghost.
+            const restored = tabsRef.current.filter(id => merged.some(s => s.id === id))
+            if (!restored.includes(nextActive)) restored.unshift(nextActive)
+            commitTabs(restored)
+
             // Push local-only / newer metadata so the server list matches.
             const remoteById = new Map(remote.map(s => [s.id, s]))
             for (const meta of merged) {
                 const known = remoteById.get(meta.id)
                 if (known && (meta.updatedAt || 0) <= (known.updatedAt || 0)) continue
                 void upsertRemoteSession(meta).catch(() => markSessionApiUnavailable())
-            }
-
-            if (userTouchedRef.current) {
-                // The user started typing before hydration settled: keep it.
-                messagesSessionRef.current = nextActive
-                return
-            }
-            const local = loadSessionMessages(nextActive)
-            applyTranscript(nextActive, local)
-            beginTranscriptLoad(nextActive)
-            try {
-                const transcript = await loadTranscript(nextActive, local)
-                if (messagesSessionRef.current !== nextActive) return
-                if (messagesRef.current !== local) return
-                if (transcript !== local) {
-                    applyTranscript(nextActive, transcript)
-                }
-            } finally {
-                endTranscriptLoad(nextActive)
             }
         }
         void hydrate()
@@ -293,46 +226,9 @@ export function useChatSessions(): UseChatSessionsResult {
     }, [])
 
     const activeSession = useMemo(
-        () => sessions.find(s => s.id === activeSessionId) || null,
+        () => sessions.find(session => session.id === activeSessionId) || null,
         [sessions, activeSessionId],
     )
-
-    const updateMeta = useCallback(
-        (id: string, patch: (s: ChatSessionMeta) => ChatSessionMeta) => {
-            const prev = sessionsRef.current
-            const next = prev.map(s => (s.id === id ? patch(s) : s))
-            sessionsRef.current = next
-            saveIndex(next)
-            setSessions(next)
-            const updated = next.find(s => s.id === id)
-            if (updated && isSessionApiAvailable()) {
-                void upsertRemoteSession(updated).catch(() => markSessionApiUnavailable())
-            }
-        },
-        [],
-    )
-
-    // Keep the local title in sync with the conversation (metadata only — the
-    // transcript itself is written by the engine at run terminal).
-    useEffect(() => {
-        if (!activeSessionId) return
-        if (messagesSessionRef.current !== activeSessionId) {
-            messagesSessionRef.current = activeSessionId
-            lastSyncedRef.current = messages
-            return
-        }
-        if (lastSyncedRef.current === messages) return
-        lastSyncedRef.current = messages
-        userTouchedRef.current = true
-
-        const current = sessionsRef.current.find(s => s.id === activeSessionId)
-        if (!current) return
-        const shouldAutoTitle = !current.title || current.title === 'New chat'
-        const title = shouldAutoTitle ? deriveTitle(messages) : current.title
-        if (title !== current.title) {
-            updateMeta(activeSessionId, s => ({ ...s, title, updatedAt: Date.now() }))
-        }
-    }, [messages, activeSessionId, updateMeta])
 
     const createSession = useCallback((boundPage?: ChatTargetPage): string => {
         const id = generateSessionId()
@@ -341,162 +237,125 @@ export function useChatSessions(): UseChatSessionsResult {
         sessionsRef.current = next
         saveIndex(next)
         setSessions(next)
-
-        const empty: Message[] = []
-        messagesSessionRef.current = id
-        lastSyncedRef.current = empty
-        messagesRef.current = empty
-        setActiveId(id)
-        setActiveSessionIdState(id)
-        cancelTranscriptLoad()
-        setMessages(empty)
+        openTab(id)
+        focus(id)
         if (isSessionApiAvailable()) {
             void upsertRemoteSession(meta).catch(() => markSessionApiUnavailable())
         }
         return id
-    }, [cancelTranscriptLoad])
+    }, [focus, openTab])
 
-    const switchSession = useCallback(
-        (id: string) => {
-            if (!id || id === activeIdRef.current) return
-            const local = loadSessionMessages(id)
-            setActiveId(id)
-            setActiveSessionIdState(id)
-            applyTranscript(id, local)
-            beginTranscriptLoad(id)
+    const closeTab = useCallback((id: string) => {
+        if (!id) return
+        const tabs = tabsRef.current
+        const index = tabs.indexOf(id)
+        if (index < 0) return
+        const next = tabs.filter(tabId => tabId !== id)
+        if (next.length === 0) {
+            // The strip is never empty: closing the last tab starts a fresh
+            // conversation instead (the closed one stays in history).
+            const fresh = createMeta(generateSessionId())
+            const merged = [fresh, ...sessionsRef.current]
+            sessionsRef.current = merged
+            saveIndex(merged)
+            setSessions(merged)
+            focus(fresh.id)
+            commitTabs([fresh.id])
+            if (isSessionApiAvailable()) {
+                void upsertRemoteSession(fresh).catch(() => markSessionApiUnavailable())
+            }
+            return
+        }
+        commitTabs(next)
+        if (id === activeIdRef.current) {
+            const neighbour = next[Math.min(index, next.length - 1)]
+            focus(neighbour)
+        }
+    }, [commitTabs, focus])
 
-            void (async () => {
-                try {
-                    const transcript = await loadTranscript(id, local)
-                    if (messagesSessionRef.current !== id) return
-                    if (messagesRef.current !== local) return // user typed meanwhile
-                    if (transcript !== local) {
-                        applyTranscript(id, transcript)
-                    }
-                } finally {
-                    endTranscriptLoad(id)
-                }
-            })()
-        },
-        [applyTranscript, loadTranscript, beginTranscriptLoad, endTranscriptLoad],
-    )
+    const deleteSession = useCallback((id: string) => {
+        if (!id) return
+        deleteSessionMessages(id)
+        // Destructive ops are never pre-empted by a stale availability flag.
+        void deleteRemoteSession(id).catch(() => markSessionApiUnavailable())
 
-    const deleteSession = useCallback(
-        (id: string) => {
-            if (!id) return
-            deleteSessionMessages(id)
-            // Destructive ops are never pre-empted by a stale availability flag:
-            // attempt them and let a real failure re-mark the API.
-            void deleteRemoteSession(id).catch(() => markSessionApiUnavailable())
+        const remaining = sessionsRef.current.filter(session => session.id !== id)
+        sessionsRef.current = remaining
+        saveIndex(remaining)
+        setSessions(remaining)
 
-            const remaining = sessionsRef.current.filter(s => s.id !== id)
-            if (id === activeIdRef.current) {
-                if (remaining.length > 0) {
-                    const nextId = remaining[0].id
-                    applyTranscript(nextId, loadSessionMessages(nextId))
-                    setActiveId(nextId)
-                    setActiveSessionIdState(nextId)
-                    beginTranscriptLoad(nextId)
-                    void (async () => {
-                        try {
-                            const transcript = await loadTranscript(nextId, messagesRef.current)
-                            if (messagesSessionRef.current === nextId) {
-                                applyTranscript(nextId, transcript)
-                            }
-                        } finally {
-                            endTranscriptLoad(nextId)
-                        }
-                    })()
-                } else {
-                    const fresh = createMeta(generateSessionId())
-                    remaining.push(fresh)
-                    applyTranscript(fresh.id, [])
-                    setActiveId(fresh.id)
-                    setActiveSessionIdState(fresh.id)
-                    cancelTranscriptLoad()
-                    if (isSessionApiAvailable()) {
-                        void upsertRemoteSession(fresh).catch(() => markSessionApiUnavailable())
-                    }
+        const tabs = tabsRef.current
+        const index = tabs.indexOf(id)
+        const nextTabs = tabs.filter(tabId => tabId !== id)
+        if (id === activeIdRef.current) {
+            if (nextTabs.length > 0) {
+                focus(nextTabs[Math.min(index < 0 ? 0 : index, nextTabs.length - 1)])
+                commitTabs(nextTabs)
+            } else {
+                const fresh = createMeta(generateSessionId())
+                const merged = [fresh, ...remaining]
+                sessionsRef.current = merged
+                saveIndex(merged)
+                setSessions(merged)
+                focus(fresh.id)
+                commitTabs([fresh.id])
+                if (isSessionApiAvailable()) {
+                    void upsertRemoteSession(fresh).catch(() => markSessionApiUnavailable())
                 }
             }
-            sessionsRef.current = remaining
-            saveIndex(remaining)
-            setSessions(remaining)
-        },
-        [applyTranscript, loadTranscript, beginTranscriptLoad, endTranscriptLoad, cancelTranscriptLoad],
-    )
+        } else {
+            commitTabs(nextTabs)
+        }
+    }, [commitTabs, focus])
 
-    const renameSession = useCallback(
-        (id: string, title: string) => {
-            const trimmed = title.trim()
-            if (!trimmed) return
-            updateMeta(id, s => ({ ...s, title: trimmed, updatedAt: Date.now() }))
-        },
-        [updateMeta],
-    )
+    const renameSession = useCallback((id: string, title: string) => {
+        const trimmed = title.trim()
+        if (!trimmed) return
+        updateMeta(id, session => ({ ...session, title: trimmed, updatedAt: Date.now() }))
+    }, [updateMeta])
 
-    const clearActiveMessages = useCallback(() => {
-        const id = activeIdRef.current
-        applyTranscript(id, [])
+    /**
+     * Reflect a conversation's transcript activity: derive the auto title on the
+     * first user turn and keep "most recent" ordering honest. Called by the tab
+     * panel that owns the transcript, so a busy background tab also promotes
+     * itself in the history list without stealing focus.
+     */
+    const noteSessionMessages = useCallback((id: string, messages: Message[]) => {
+        const current = sessionsRef.current.find(session => session.id === id)
+        if (!current) return
+        const shouldAutoTitle = !current.title || current.title === 'New chat'
+        const title = shouldAutoTitle ? deriveTitle(messages) : current.title
+        if (title === current.title) return
+        updateMeta(id, session => ({ ...session, title, updatedAt: Date.now() }))
+    }, [updateMeta])
+
+    const clearSessionMessages = useCallback((id: string) => {
         deleteSessionMessages(id)
-        updateMeta(id, s => ({ ...s, title: 'New chat', updatedAt: Date.now() }))
         void clearRemoteSession(id).catch(() => markSessionApiUnavailable())
-    }, [applyTranscript, updateMeta])
+        updateMeta(id, session => ({
+            ...session,
+            title: 'New chat',
+            targetPage: undefined,
+            updatedAt: Date.now(),
+        }))
+    }, [updateMeta])
 
-    const targetPage = activeSession?.targetPage
-    const boundPage = activeSession?.boundPage
-
-    const setTargetPage = useCallback(
-        (page: ChatTargetPage | null) => {
-            updateMeta(activeIdRef.current, s => ({
-                ...s,
-                targetPage: page ?? undefined,
-                updatedAt: Date.now(),
-            }))
-        },
-        [updateMeta],
-    )
-
-    const setBoundPage = useCallback(
-        (page: ChatTargetPage | null) => {
-            // Binding is not user activity — leave updatedAt alone so merely
-            // browsing pages cannot promote a stale chat to "most recent".
-            updateMeta(activeIdRef.current, s => ({ ...s, boundPage: page ?? undefined }))
-        },
-        [updateMeta],
-    )
-
-    const targetArtifact = activeSession?.targetArtifact
-
-    const setTargetArtifact = useCallback(
-        (artifact: AgentArtifact | null) => {
-            // Like the page binding, a target change is agent activity, not user
-            // activity: it must not reorder the session list.
-            updateMeta(activeIdRef.current, s => ({
-                ...s,
-                targetArtifact: artifact ?? undefined,
-            }))
-        },
-        [updateMeta],
-    )
+    const patchSession = useCallback((id: string, patch: Partial<ChatSessionMeta>) => {
+        updateMeta(id, session => ({ ...session, ...patch }))
+    }, [updateMeta])
 
     return {
         sessions,
         activeSession,
         activeSessionId,
-        messages,
-        setMessages,
-        loadingTranscript,
+        openSessionIds,
+        activateSession,
+        closeTab,
         createSession,
-        switchSession,
         deleteSession,
         renameSession,
-        clearActiveMessages,
-        targetPage,
-        setTargetPage,
-        boundPage,
-        setBoundPage,
-        targetArtifact,
-        setTargetArtifact,
+        noteSessionMessages,
+        clearSessionMessages,
+        patchSession,
     }
 }
