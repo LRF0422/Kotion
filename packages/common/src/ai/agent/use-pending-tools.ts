@@ -15,6 +15,8 @@ import {
     createPendingToolBatch,
     decidePendingAck,
     matchesPendingToolBatch,
+    pendingAckBackoffMs,
+    pendingAckForcesExecution,
     pendingBatchIsEditorIndependent,
     pendingCallIdCandidates,
     type PendingToolBatch,
@@ -23,15 +25,6 @@ import { parseToolArgs, type ResumePayload } from './types'
 import { MAX_TOOL_RESUME_RETRIES, isPermanentTransportError } from './retry-policy'
 import type { Action, EditorAgentState } from './editor-agent-state'
 
-/** Quiet period before re-submitting a batch the server never acknowledged. */
-const PENDING_ACK_BASE_MS = 3_000
-const PENDING_ACK_MAX_MS = 20_000
-/**
- * Watchdog passes to wait for the editor/target gate before executing a batch it
- * never submitted (3s + 6s + 12s ≈ 21s). A page switch settles long before that,
- * while the server's own tool timeout is 600s.
- */
-const PENDING_ACK_FORCE_ATTEMPT = 3
 /**
  * Bounded idempotent re-submits before accepting the server's "not waiting for
  * these" answer. A parked backend can read a stale hot state (its pause/state
@@ -88,11 +81,39 @@ export function usePendingToolExecution(
     /** True while executePendingTools is mid-flight (the watchdog stays off). */
     const submittingRef = useRef(false)
     const ackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    /**
+     * Completed WAIT passes on the current batch. Reset only when nothing is owed
+     * any more (or a new turn/cancel resets the hook), never by a mere event: the
+     * watchdog's force pass must be reachable on a stream that has gone quiet.
+     */
     const ackAttemptsRef = useRef(0)
+    /** Latest check, so the timer can re-arm itself without a dependency cycle. */
+    const checkPendingAckRef = useRef<() => Promise<void>>(async () => {})
+
+    /**
+     * Arm the next watchdog pass. Only one pass is ever pending, and a burst of
+     * state changes does NOT push its deadline out — a watchdog that only ran on
+     * the next state change fired once and left the run spinning forever, which is
+     * exactly the hang it was written to end.
+     */
+    const scheduleAckPass = useCallback((delayMs: number) => {
+        if (ackTimerRef.current) return
+        ackTimerRef.current = setTimeout(() => {
+            ackTimerRef.current = null
+            void checkPendingAckRef.current()
+        }, delayMs)
+    }, [])
 
     const retryPendingTools = useCallback(() => {
         toolBatchRef.current = null
         toolRetryAttemptRef.current = 0
+        ackAttemptsRef.current = 0
+        // A manual retry starts a fresh escalation now: without this it could sit
+        // behind the tail of the previous batch's 20s backoff.
+        if (ackTimerRef.current) {
+            clearTimeout(ackTimerRef.current)
+            ackTimerRef.current = null
+        }
         dispatch({ type: 'retry-pending-tools' })
     }, [dispatch])
 
@@ -109,8 +130,13 @@ export function usePendingToolExecution(
             clearTimeout(toolRetryTimerRef.current)
             toolRetryTimerRef.current = null
         }
+        if (ackTimerRef.current) {
+            clearTimeout(ackTimerRef.current)
+            ackTimerRef.current = null
+        }
         toolRetryAttemptRef.current = 0
         toolRetryKeyRef.current = ''
+        ackAttemptsRef.current = 0
     }, [])
 
     const executePendingTools = useCallback(async () => {
@@ -338,12 +364,24 @@ export function usePendingToolExecution(
      * result, which the model can react to — better than a ten-minute hang.
      * Results come from the executor cache / journal, so nothing runs twice, and a
      * duplicate `tool_results` POST is idempotent server-side.
+     *
+     * Every pass that leaves the batch owed ARMS THE NEXT ONE. Waiting for the
+     * next state change instead was the actual hang: with the server parked there
+     * is no next event, so the watchdog fired once, warned "第 1 次等待", and the
+     * run sat in WAITING_TOOLS until its ten-minute tool timeout — the force pass
+     * below was unreachable exactly when it was needed.
      */
     const checkPendingAck = useCallback(async () => {
         const current = stateRef.current
-        if (!mountedRef.current || submittingRef.current || !current.runId) return
+        if (!mountedRef.current || !current.runId) return
         const candidates = pendingCallIdCandidates(current.pendingToolIds, current.toolCalls)
         if (candidates.length === 0) return
+        if (submittingRef.current) {
+            // An execution is mid-flight; look again after the next backoff so a
+            // submit the server silently drops is still retried.
+            scheduleAckPass(pendingAckBackoffMs(ackAttemptsRef.current))
+            return
+        }
 
         const generation = generationRef.current
         let view: {
@@ -380,13 +418,19 @@ export function usePendingToolExecution(
                         `[agent] 同步服务端仍在等待的前端调用（本地漏记 run.suspended）: ${unknown.join(', ')}`
                     )
                     dispatch({ type: 'restore-pending', records })
+                    scheduleAckPass(pendingAckBackoffMs(ackAttemptsRef.current))
                     return
                 }
             }
         }
 
         const decision = decidePendingAck(view, candidates)
-        if (decision === 'wait') return
+        if (decision === 'wait') {
+            // Unknown run state (the view request failed). Keep the batch and look
+            // again instead of leaving it unsubmitted forever.
+            scheduleAckPass(pendingAckBackoffMs(ackAttemptsRef.current))
+            return
+        }
         if (decision === 'ack' && ackAttemptsRef.current >= PENDING_ACK_MAX_RESUBMITS) {
             // The server has said "not waiting for these" repeatedly: settle
             // locally (and stop the spinners) instead of re-submitting forever.
@@ -396,15 +440,17 @@ export function usePendingToolExecution(
             return
         }
 
-        ackAttemptsRef.current += 1
+        const waitPasses = ackAttemptsRef.current
+        ackAttemptsRef.current = waitPasses + 1
         if (!toolBatchRef.current) {
             // Never submitted. Give a page switch / offscreen re-acquire a generous
             // moment — the retries back off 3s→20s — then submit anyway.
-            if (ackAttemptsRef.current < PENDING_ACK_FORCE_ATTEMPT) {
+            if (!pendingAckForcesExecution(waitPasses)) {
                 console.warn(
                     `[agent] 前端工具调用尚未提交（autoExecuteTools=${autoExecuteTools}，`
-                    + `第 ${ackAttemptsRef.current} 次等待）: ${candidates.join(', ')}`
+                    + `第 ${waitPasses + 1} 次等待）: ${candidates.join(', ')}`
                 )
+                scheduleAckPass(pendingAckBackoffMs(waitPasses))
                 return
             }
             console.warn(
@@ -417,13 +463,19 @@ export function usePendingToolExecution(
             // race), so a bounded number of idempotent re-submits is safer than
             // trusting a single "not waiting" answer.
             console.warn(
-                `[agent] 工具结果未被服务端确认，重新提交（第 ${ackAttemptsRef.current} 次）`
+                `[agent] 工具结果未被服务端确认，重新提交（第 ${waitPasses + 1} 次）`
                 + ` run ${current.runId} calls ${candidates.join(', ')}`
             )
         }
         toolBatchRef.current = null
         void executePendingTools()
-    }, [autoExecuteTools, client, dispatch, executePendingTools])
+        // The POST can be accepted and still dropped: stay armed so the batch is
+        // re-submitted rather than left spinning with no further events.
+        scheduleAckPass(pendingAckBackoffMs(ackAttemptsRef.current))
+    }, [autoExecuteTools, client, dispatch, executePendingTools, scheduleAckPass])
+    // The re-arm chain reads the latest check through a ref: the timer cannot
+    // depend on a callback that depends on it.
+    checkPendingAckRef.current = checkPendingAck
 
     useEffect(() => {
         const terminal = state.phase === 'completed' || state.phase === 'failed' || state.phase === 'cancelled'
@@ -441,25 +493,13 @@ export function usePendingToolExecution(
             }
             return
         }
-        // Any event (lastSeq) or new batch re-arms this: the watchdog only fires
-        // after a quiet period, so a server that is still streaming is left alone.
-        if (ackTimerRef.current) clearTimeout(ackTimerRef.current)
-        const delay = Math.min(
-            PENDING_ACK_BASE_MS * 2 ** Math.min(ackAttemptsRef.current, 3),
-            PENDING_ACK_MAX_MS
-        )
-        ackTimerRef.current = setTimeout(() => {
-            ackTimerRef.current = null
-            void checkPendingAck()
-        }, delay)
-        return () => {
-            if (ackTimerRef.current) {
-                clearTimeout(ackTimerRef.current)
-                ackTimerRef.current = null
-            }
-        }
+        // Only an empty candidate set resets the backoff (the pass count lives
+        // across events on purpose: a stream with nothing left to say is precisely
+        // when the force pass has to happen). `scheduleAckPass` ignores a call while
+        // a pass is already pending, so state churn cannot postpone it either.
+        scheduleAckPass(pendingAckBackoffMs(ackAttemptsRef.current))
     }, [
-        pendingCandidates, state.phase, state.lastSeq, state.toolRetryToken, checkPendingAck,
+        pendingCandidates, state.phase, state.lastSeq, state.toolRetryToken, scheduleAckPass,
     ])
 
     // Timers are owned here; clear them on unmount.

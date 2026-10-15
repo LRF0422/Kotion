@@ -391,7 +391,7 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
     /** Stable getter: the SDK and every tool execution read the LIVE binding. */
     const getSessionBinding = useCallback(() => sessionBindingRef.current, [])
 
-    const { getCatalog, rebindEditor, resolveTools, isReadOnlyTool } = useCapabilityProviders(agentEditor, {
+    const { getCatalog, rebindEditor, resolveTools, isReadOnlyTool, needsEditor } = useCapabilityProviders(agentEditor, {
         onUserChoiceRequest: handleUserChoiceRequest,
         sessionBinding: getSessionBinding,
     })
@@ -630,6 +630,13 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
         // Mutating calls are serialized per document (write lease), and a
         // delegated child resolves its tools against its own editor.
         isReadOnlyTool,
+        // Editor dependency of each tool, from the live provider metadata. The SDK
+        // can only see built-ins without this, so plugin-declared `scope: 'any'`
+        // tools (plugin-studio file writes, builds) would be treated as
+        // editor-bound — and then held behind an edit target that this panel may
+        // not have at all (a plugin route with no document), which is the gate the
+        // batch watchdog exists to survive, not a reason to wait for it.
+        needsEditor,
         // A page switch transiently unbinds the editor; defer a pending tool
         // batch until the new editor is published instead of failing it.
         autoExecuteTools: targetToolsReady && !!agentEditor,

@@ -863,3 +863,48 @@ export function getCategoryInfo(tools: ToolMetadata[]): CategoryInfo[] {
 export function isEssentialTool(toolName: string): boolean {
     return (ESSENTIAL_TOOLS as readonly string[]).includes(toolName)
 }
+
+const BUILTIN_METADATA_BY_NAME = new Map(BUILTIN_TOOL_METADATA.map(meta => [meta.name, meta]))
+
+/** The built-in registry entry for a tool, when it is a built-in at all. */
+export function getBuiltinToolMetadata(toolName: string): ToolMetadata | undefined {
+    return BUILTIN_METADATA_BY_NAME.get(toolName)
+}
+
+/**
+ * Whether a tool needs a live editor, from its metadata alone.
+ *
+ * ONE rule, shared by every consumer of the frontend-tool gate
+ * (see `useCapabilityProviders.needsEditor`): an explicit `requiresEditor`
+ * wins, otherwise the declared scope decides — `any` / `workspace` tools
+ * (discovery, background tasks, plugin file/studio tools) touch no editor.
+ * An unknown tool counts as editor-bound: running a document tool against a
+ * half-switched target is worse than waiting for one.
+ */
+export function metadataNeedsEditor(meta: ToolMetadata | undefined): boolean {
+    if (!meta) return true
+    if (meta.requiresEditor !== undefined) return meta.requiresEditor
+    return !(meta.scope === 'any' || meta.scope === 'workspace')
+}
+
+/**
+ * Editor dependency for a tool known to a surface that only has the live tool
+ * record (not the provider's metadata map — e.g. `useEditorAgent`'s fallback
+ * when the host passes no classifier).
+ *
+ * An explicit declaration on the live record wins. Otherwise the built-in
+ * registry has to be consulted, because a built-in's tool record says nothing
+ * about its scope: `load_skill` and the background-task tools declare
+ * `scope: 'any'` in metadata only, so reading the record alone classified them as
+ * editor-bound and parked their batch behind an editor that was never coming.
+ * Plugin records always carry `requiresEditor` themselves, so they answer first.
+ */
+export function inferToolNeedsEditor(
+    toolName: string,
+    definition?: { requiresEditor?: boolean },
+): boolean {
+    if (definition?.requiresEditor !== undefined) return definition.requiresEditor
+    const meta = getBuiltinToolMetadata(toolName)
+    if (meta) return metadataNeedsEditor(meta)
+    return true
+}

@@ -29,6 +29,7 @@ import type {
 } from './types'
 import { parseToolArgs, TERMINAL_EVENT_TYPES } from './types'
 import { getSessionPageBinding, type SessionPageBinding } from '../session-page-binding'
+import { inferToolNeedsEditor } from '../discovery/tool-metadata'
 import { reducer, initialState } from './editor-agent-state'
 import type {
     AgentStepRecord,
@@ -153,11 +154,14 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
     needsEditorRef.current = options.needsEditor
     /**
      * Editor dependency per tool, without requiring host wiring: a host-supplied
-     * classifier wins; otherwise the live tool record decides. Plugin tools carry
-     * the flag their declaration produced (a `scope: 'any'`/workspace tool reads
-     * no editor), built-ins carry none and are treated as editor-bound — the
-     * conservative direction, since running a document tool against a
-     * half-switched target is worse than waiting for it.
+     * classifier wins; otherwise the registry + the live tool record decide.
+     * The registry has to be consulted because a built-in's scope lives in its
+     * METADATA, not in the record: `load_skill` and the background-task tools are
+     * protocol-level (`scope: 'any'`) and read no editor, yet the record-only rule
+     * called them editor-bound and parked their batch behind an editor that was
+     * never coming. Unknown tools stay editor-bound — the conservative direction,
+     * since running a document tool against a half-switched target is worse than
+     * waiting for it.
      */
     const needsEditorTool = useCallback((toolName: string): boolean => {
         const provided = needsEditorRef.current
@@ -165,7 +169,7 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
         const resolved = resolveTools()
         if (resolved instanceof Promise) return true
         const definition = (resolved as Record<string, { requiresEditor?: boolean } | undefined>)[toolName]
-        return definition?.requiresEditor !== false
+        return inferToolNeedsEditor(toolName, definition)
     }, [resolveTools])
 
     const client = useMemo(() => options.client ?? new AgentClient(), [options.client])

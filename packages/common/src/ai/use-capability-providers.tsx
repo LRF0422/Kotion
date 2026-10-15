@@ -42,6 +42,7 @@ import {
     releaseSkillToolSource,
 } from "./skills"
 import { wrapToolsWithCallback } from "./utils/tool-wrapper"
+import { metadataNeedsEditor } from "./discovery/tool-metadata"
 import { getSessionPageBinding, type SessionPageBinding } from "./session-page-binding"
 
 /**
@@ -294,12 +295,11 @@ export function useCapabilityProviders(
      * Editor dependency, read live so a plugin installed mid-session is covered.
      * Conservative on unknown tools: a tool we cannot classify might be
      * editor-bound, so it is treated as such (the batch gate then waits for the
-     * target instead of running it against the wrong document).
+     * target instead of running it against the wrong document). The rule itself
+     * lives in the metadata module so the SDK's own fallback cannot drift from it.
      */
     const needsEditor = useCallback((name: string): boolean => {
-        const meta = toolProvider.getToolMetadata(name)
-        if (meta?.requiresEditor !== undefined) return meta.requiresEditor
-        return !(meta?.scope === 'any' || meta?.scope === 'workspace')
+        return metadataNeedsEditor(toolProvider.getToolMetadata(name))
     }, [toolProvider])
 
     /** The editor the active catalog is bound to. */

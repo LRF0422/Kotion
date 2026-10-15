@@ -18,6 +18,37 @@ export function matchesPendingToolBatch(
         && callIds.every(id => batch.callIds.includes(id))
 }
 
+/**
+ * Quiet period before re-submitting a batch the server never acknowledged.
+ * The watchdog backs off 3s → 6s → 12s (capped at 20s) and executes on the pass
+ * after the third wait, so a page switch / offscreen re-acquire has ≈21s to
+ * settle while the server's own tool timeout is 600s.
+ */
+export const PENDING_ACK_BASE_MS = 3_000
+export const PENDING_ACK_MAX_MS = 20_000
+/** Wait passes on ONE batch before its calls are executed regardless of the gate. */
+export const PENDING_ACK_FORCE_ATTEMPT = 3
+
+/**
+ * Delay before watchdog pass `waitPasses + 1` (0-based count of completed wait
+ * passes): 3s, 6s, 12s, then the cap.
+ */
+export function pendingAckBackoffMs(waitPasses: number): number {
+    const step = Math.min(Math.max(waitPasses, 0), 3)
+    return Math.min(PENDING_ACK_BASE_MS * 2 ** step, PENDING_ACK_MAX_MS)
+}
+
+/**
+ * Whether pass `waitPasses + 1` must execute the batch instead of waiting again.
+ *
+ * The watchdog has to reach this: a batch that waits forever is the bug this
+ * exists to prevent, so the decision is a pure function of the pass count rather
+ * than of whether some unrelated state happened to change.
+ */
+export function pendingAckForcesExecution(waitPasses: number): boolean {
+    return waitPasses >= PENDING_ACK_FORCE_ATTEMPT
+}
+
 /** What to do about a submitted batch the server has not acknowledged yet. */
 export type PendingAckDecision = 'ack' | 'resubmit' | 'wait'
 

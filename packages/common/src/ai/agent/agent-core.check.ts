@@ -9,9 +9,12 @@ import {
     createPendingToolBatch,
     decidePendingAck,
     matchesPendingToolBatch,
+    pendingAckBackoffMs,
+    pendingAckForcesExecution,
     pendingBatchIsEditorIndependent,
     pendingCallIdCandidates,
 } from './tool-batch'
+import { inferToolNeedsEditor } from '../discovery/tool-metadata'
 import { initialState, reducer } from './editor-agent-state'
 import { EditorToolExecutor, ensureSerializableToolResult } from './tool-executor'
 import { resetDocumentWriteLocks, withDocumentWrite } from './document-write-lock'
@@ -598,6 +601,72 @@ async function checkLostSuspendFrameStillServes(): Promise<void> {
     worker.dispose()
 }
 
+function checkWatchdogReachesItsForcePass(): void {
+    // The watchdog must ESCALATE on its own: with the server parked there is no
+    // further event, so a pass that only runs on the next state change fires once
+    // ("第 1 次等待") and the run hangs until the server's ten-minute tool timeout.
+    // The schedule is therefore a pure function of the pass count.
+    assert.deepEqual(
+        [0, 1, 2, 3, 4, 9].map(pendingAckBackoffMs),
+        [3_000, 6_000, 12_000, 20_000, 20_000, 20_000],
+        'the watchdog backs off 3s → 6s → 12s and caps at 20s'
+    )
+    assert.equal(pendingAckForcesExecution(0), false, 'pass 1 waits')
+    assert.equal(pendingAckForcesExecution(1), false, 'pass 2 waits')
+    assert.equal(pendingAckForcesExecution(2), false, 'pass 3 waits')
+    assert.equal(pendingAckForcesExecution(3), true, 'pass 4 must execute — that is the whole point')
+    assert.equal(
+        pendingAckBackoffMs(0) + pendingAckBackoffMs(1) + pendingAckBackoffMs(2),
+        21_000,
+        'a page switch gets ≈21s to settle before the batch runs anyway'
+    )
+    assert.equal(pendingAckBackoffMs(-1), 3_000, 'a negative count must not shorten the first pass')
+
+    // Simulate the loop the hook runs: every waiting pass arms the next one, so a
+    // stream with nothing further to say still ends in a forced execution. Before
+    // the fix the chain died after the first pass — that was the hang.
+    let waitedMs = 0
+    let waitPasses = 0
+    while (!pendingAckForcesExecution(waitPasses)) {
+        waitedMs += pendingAckBackoffMs(waitPasses)
+        waitPasses += 1
+        assert.ok(waitPasses < 10, 'the watchdog must reach its force pass, not wait forever')
+    }
+    assert.equal(waitPasses, 3, 'three waits, then the fourth pass executes')
+    assert.equal(waitedMs, 21_000, 'the whole escalation stays far below the 600s tool timeout')
+}
+
+function checkBuiltinProtocolToolsReadNoEditor(): void {
+    // `load_skill` and the background-task tools are protocol-level
+    // (`scope: 'any'`): they touch no editor, so the frontend-tool gate must run
+    // them on a surface with no document (a plugin route, a released offscreen
+    // session). Classifying them from the tool RECORD alone — which is all the SDK
+    // fallback has — called them editor-bound and parked their batch behind an
+    // editor that was never coming.
+    assert.equal(inferToolNeedsEditor('load_skill'), false, 'load_skill needs no editor')
+    assert.equal(inferToolNeedsEditor('listBackgroundTasks'), false, 'background-task tools need no editor')
+    assert.equal(inferToolNeedsEditor('getBackgroundTask'), false)
+    assert.equal(inferToolNeedsEditor('cancelBackgroundTask'), false)
+    assert.equal(inferToolNeedsEditor('getDocumentStructure'), true, 'document tools stay editor-bound')
+    assert.equal(inferToolNeedsEditor('write'), true, 'document writes stay editor-bound')
+    assert.equal(inferToolNeedsEditor('no-such-tool-at-all'), true, 'an unknown tool is never assumed safe')
+    assert.equal(
+        inferToolNeedsEditor('writePluginProjectFile', { requiresEditor: false }),
+        false,
+        'a plugin tool that declared no editor dependency is honoured'
+    )
+    assert.equal(
+        inferToolNeedsEditor('somePluginDocumentTool', { requiresEditor: true }),
+        true,
+        'a plugin tool that declared an editor dependency is honoured'
+    )
+    assert.equal(
+        inferToolNeedsEditor('somePluginToolWithoutFlag'),
+        true,
+        'a plugin tool with no declaration is treated as editor-bound'
+    )
+}
+
 function checkPendingAckDecision(): void {
     // The parent-path watchdog decides whether an unacknowledged batch must be
     // re-submitted; the run view is the authority (same rule as the child worker).
@@ -712,6 +781,8 @@ async function main(): Promise<void> {
     await checkExecutorSingleFlight()
     checkToolBatchSnapshot()
     checkPendingAckDecision()
+    checkWatchdogReachesItsForcePass()
+    checkBuiltinProtocolToolsReadNoEditor()
     checkEditorIndependentBatchRunsWithoutGate()
     checkPendingCandidatesComeFromTheTapeToo()
     checkAckPendingSettlesTheTape()
