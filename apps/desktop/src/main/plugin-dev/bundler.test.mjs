@@ -8,9 +8,11 @@
  * Run: node apps/desktop/src/main/plugin-dev/bundler.test.mjs
  */
 import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import {
+    DEFAULT_HOST_MODULES,
     SCAFFOLD_TEMPLATES,
     buildPlugin,
     hostNameForExternal,
@@ -18,6 +20,9 @@ import {
     readProjectManifest,
     renderScaffold,
 } from './bundler.mjs'
+
+/** The host's real React packages, for the JSX-runtime regression below. */
+const require = createRequire(import.meta.url)
 
 const results = []
 const check = (name, condition, detail = '') => {
@@ -107,6 +112,14 @@ const runBundle = (code, extras = {}) => {
         ui: {},
         icon: {},
         editor: {},
+        // The host publishes the real JSX runtimes (packages/core/src/App.tsx);
+        // mirror them here so every bundle resolves its host modules.
+        jsxRuntime: {
+            Fragment: 'Fragment',
+            jsx: (type, props) => ({ type, props }),
+            jsxs: (type, props) => ({ type, props }),
+        },
+        jsxDevRuntime: { Fragment: 'Fragment', jsxDEV: (type, props) => ({ type, props }) },
         definePlugin(key, exports, meta) {
             calls.push({ key, exports, meta })
             KN.__exports = exports
@@ -141,6 +154,75 @@ check(
     'runtime: KPlugin instance exported',
     Object.values(registered[0]?.exports || {}).some((value) => value && value.name === 'Test Dev Plugin'),
     Object.keys(registered[0]?.exports || {}).join(','),
+)
+
+/* ------------------------------------------------------------------ *
+ * 1a. The automatic JSX runtime.
+ *
+ * Regression: `react/jsx-runtime` was mapped to the `React` global. React 18
+ * has no `React.jsx`, so a bundle that imports the automatic runtime built fine
+ * and then threw `jsx is not a function` at render time — which is exactly what
+ * happens to every third-party React library compiled with the automatic
+ * runtime. The runtime module must resolve to the host's real
+ * `react/jsx-runtime` namespace.
+ * ------------------------------------------------------------------ */
+check(
+    'jsx-runtime: host map points at the runtime module, not at React',
+    DEFAULT_HOST_MODULES['react/jsx-runtime'] === '__KN__.jsxRuntime' &&
+        DEFAULT_HOST_MODULES['react/jsx-dev-runtime'] === '__KN__.jsxDevRuntime',
+    JSON.stringify({
+        runtime: DEFAULT_HOST_MODULES['react/jsx-runtime'],
+        dev: DEFAULT_HOST_MODULES['react/jsx-dev-runtime'],
+    }),
+)
+
+await writeProject(`
+import { jsx, jsxs, Fragment } from 'react/jsx-runtime'
+export const el = jsxs(Fragment, { children: [jsx('span', { children: 'hi' })] })
+`)
+const jsxBuilt = await buildPlugin({
+    root,
+    entry: join(root, 'src/index.tsx'),
+    pluginKey: 'jsx-runtime-probe',
+    name: 'jsx probe',
+})
+check('jsx-runtime: builds', jsxBuilt.ok, (jsxBuilt.errors || []).join(' | '))
+
+// 1) Routing: the bundle must call the host runtime object, not React.
+const runtimeCalls = []
+const fakeRuntime = {
+    Fragment: Symbol.for('kn.Fragment'),
+    jsx: (type, props) => {
+        runtimeCalls.push(['jsx', type, props])
+        return { type, props, via: 'jsx' }
+    },
+    jsxs: (type, props) => {
+        runtimeCalls.push(['jsxs', type, props])
+        return { type, props, via: 'jsxs' }
+    },
+}
+const jsxRegistered = runBundle(jsxBuilt.code, { namespace: { jsxRuntime: fakeRuntime } })
+const jsxExports = jsxRegistered[0]?.exports || {}
+check(
+    'jsx-runtime: calls __KN__.jsxRuntime (not the React global)',
+    runtimeCalls.length === 2 && jsxExports.el?.via === 'jsxs',
+    `calls=${runtimeCalls.map((call) => call[0]).join(',')} el=${JSON.stringify(jsxExports.el)}`,
+)
+
+// 2) End-to-end: against the host's real runtime the element is a genuine React
+//    element — the case that used to throw "jsx is not a function".
+const realJsxRuntime = require('react/jsx-runtime')
+const realRegistered = runBundle(jsxBuilt.code, { namespace: { jsxRuntime: realJsxRuntime } })
+const realEl = realRegistered[0]?.exports?.el
+const realChild = realEl?.props?.children?.[0]
+check(
+    'jsx-runtime: real runtime produces a valid React element',
+    Boolean(realEl) &&
+        realEl.$$typeof === Symbol.for('react.element') &&
+        realEl.type === realJsxRuntime.Fragment &&
+        realChild?.type === 'span' &&
+        realChild?.props?.children === 'hi',
+    `type=${String(realEl?.type)} child=${String(realChild?.type)}/${JSON.stringify(realChild?.props)}`,
 )
 
 /* ------------------------------------------------------------------ *

@@ -1,4 +1,14 @@
 import React, { useEffect, useMemo, useState } from "react";
+/**
+ * The automatic JSX runtime must be published to plugins as its own module.
+ *
+ * `react/jsx-runtime` is a real subpath, not a re-export of the `react` main
+ * entry (React 18's `React.jsx` is `undefined`), and plugin bundles are told to
+ * treat it as a host module. Publishing the module itself — instead of pointing
+ * it at `React` — is what keeps "install a third-party React library" working.
+ */
+import * as jsxRuntime from "react/jsx-runtime";
+import * as jsxDevRuntime from "react/jsx-dev-runtime";
 
 import { Layout } from "./Layout";
 import { ThemeProvider, Toaster, ResponsiveProvider } from "@kn/ui";
@@ -598,6 +608,10 @@ const coreApi = Object.freeze({ ...legacyCoreApi, App })
 common.setupGlobalNamespace({
     React,
     ReactDOM,
+    // Published so plugin bundles resolve `react/jsx-runtime` to the host's real
+    // automatic runtime instead of to `React` (which has no `jsx` export).
+    jsxRuntime,
+    jsxDevRuntime,
     ui,
     common,
     core: coreApi,

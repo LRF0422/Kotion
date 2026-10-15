@@ -29,6 +29,19 @@ export interface PluginRegistration {
 export interface KnGlobalNamespace {
     React: any
     ReactDOM: any
+    /**
+     * The real `react/jsx-runtime` module namespace (`Fragment` / `jsx` / `jsxs`).
+     *
+     * The automatic JSX runtime lives in this **subpath**, not on the `react`
+     * main entry — React 18's `React.jsx` is `undefined`. Plugin bundles must
+     * resolve `react/jsx-runtime` to this namespace; mapping it to `React` hands
+     * them an object without `jsx`, so any component compiled with the automatic
+     * runtime (which is how most published React libraries ship) throws
+     * `jsx is not a function` at render time.
+     */
+    jsxRuntime: any
+    /** The real `react/jsx-dev-runtime` namespace (`Fragment` / `jsxDEV`). */
+    jsxDevRuntime: any
     ui: any
     common: any
     core: any
@@ -64,6 +77,16 @@ export interface KnGlobalNamespace {
 export interface SetupGlobalNamespaceOptions {
     React: any
     ReactDOM: any
+    /**
+     * The `react/jsx-runtime` namespace, published so plugin bundles resolve the
+     * automatic JSX runtime to the host's single React copy (see
+     * {@link KnGlobalNamespace.jsxRuntime}). Optional for embedders; when it is
+     * absent the bundle logs a missing-host-module warning instead of silently
+     * rendering with an object that has no `jsx`.
+     */
+    jsxRuntime?: any
+    /** The `react/jsx-dev-runtime` namespace; see {@link KnGlobalNamespace.jsxDevRuntime}. */
+    jsxDevRuntime?: any
     ui: any
     common: any
     core: any
@@ -97,6 +120,8 @@ export function setupGlobalNamespace(opts: SetupGlobalNamespaceOptions): KnGloba
     const kn: KnGlobalNamespace = {
         React: opts.React,
         ReactDOM: opts.ReactDOM,
+        jsxRuntime: opts.jsxRuntime,
+        jsxDevRuntime: opts.jsxDevRuntime,
         ui: opts.ui,
         common: opts.common,
         core: opts.core,

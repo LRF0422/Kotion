@@ -177,6 +177,16 @@ export const myPlugin = new MyPlugin({
 `@kn/ui`、`@kn/icon`、`@kn/editor`、`@kn/plugin-api`。
 需要额外的**宿主全局**时用 `externals` 声明（见下）。
 
+> 自动 JSX 运行时（`react/jsx-runtime`、`react/jsx-dev-runtime`）同样由宿主注入，
+> 并且解析到宿主**真实的运行时模块**（`__KN__.jsxRuntime` / `__KN__.jsxDevRuntime`），不是 `React` 本体 ——
+> React 18 的 `React.jsx` 是 `undefined`，把子路径指到 `React` 会让所有用自动运行时编译的第三方库
+> 在渲染时抛 `jsx is not a function`。所以第三方 React 组件库可以直接用，不必自带 React。
+>
+> 边界：这两个全局是**本次新增**的，比它更旧的桌面客户端不发布它们（那时这条路径本来就是坏的，
+> 因为 `jsx` 根本取不到），所以「插件里用自动运行时的第三方库」要求较新的宿主。
+> 这正是缺少「最低宿主版本声明」会带来的那类问题，见
+> [PLUGIN_STUDIO_GAP_ANALYSIS.md](./PLUGIN_STUDIO_GAP_ANALYSIS.md) 的 B6 / C3。
+
 ## 宿主全局与 `externals`
 
 `externals` 声明「这个 import 名不打进产物，运行时去宿主全局里取」：
@@ -580,7 +590,7 @@ pnpm test:plugin-dev:electron
 
 | 测试 | 数量 | 覆盖 |
 | --- | --- | --- |
-| `bundler.test.mjs` | 50 | 清单解析、esbuild 打包、宿主模块 shim、注册代码、构建错误上报、**五个模板逐个构建并注册**、**externals 解析（命名空间 / window 兜底 / 缺失告警）** |
+| `bundler.test.mjs` | 54 | 清单解析、esbuild 打包、宿主模块 shim、注册代码、构建错误上报、**五个模板逐个构建并注册**、**externals 解析（命名空间 / window 兜底 / 缺失告警）**、**`react/jsx-runtime` 走宿主真实运行时（假运行时路由 + 真 React 元素）** |
 | `dev-server.test.mjs` | 10 | NDJSON 协议、文件监听重建、stdin 手动构建、错误隔离、干净退出 |
 | `manager.test.mjs` | 35 | **失败重建**立即释放等待、错误上报、会话存活、恢复；防回归「卡 30s」；**子进程启动即崩（缺 esbuild 那种）被判为 failed、快速失败、并把 stderr 原文带进 error 与日志**；**删除工程（拒绝非工程 / 拒绝标准目录 / 停止会话并删文件）**；**externals 的沿用与清空语义**；**删单个文件（越界 / manifest / 入口 / 目录 / 不存在全部拒绝，并回显正文）** |
 | `host-api.test.mjs` | 14 | 标准包枚举/搜索/读取、越界与未知包拒绝 |
@@ -588,13 +598,15 @@ pnpm test:plugin-dev:electron
 | `package-install.test.mjs` | 20 | 包名/版本校验、管理器探测、argv 构造、假 spawn 安装 |
 | `tailwind.test.mjs` | 12 | 用宿主配置编译插件工具类、去除 @keyframes、空工程 |
 | `packaged-studio-deps.test.mjs` | 23 | **打包布局回归**：用真实 `afterPack` 钩子物化依赖，然后在**没有源码树**的前提下跑子进程——入口 `.mjs` 与 esbuild 都在 asar 外且可解析、平台二进制可 spawn、tailwind/postcss 与宿主配置就位并**真的编译出插件 CSS**、宿主标准包可读、**manager 从 `Resources/` 解析运行时且解析出的路径不含 `app.asar`** |
-| `studio-tools.test.mjs` | 182 | **agent 工具面**：名称/描述/schema、create→write→run→build→list→stop 的每次能力调用、**模板与 externals 透传和校验**、**删除工程与自卸载**、**删单个文件与「未读不许删」**、**service 发现（提供者归属/过滤/无注册表兜底）**、**产物聚焦（含 focus:false 与坏预览不拖垮构建）**、失败装订、缺能力提示、失败不装旧产物、**只读发现可以、注册表管理不在** |
+| `studio-tools.test.mjs` | 203 | **agent 工具面**：名称/描述/schema、create→write→run→build→list→stop 的每次能力调用、**模板与 externals 透传和校验**、**删除工程与自卸载**、**删单个文件与「未读不许删」**、**service 发现（提供者归属/过滤/无注册表兜底）**、**产物聚焦（含 focus:false 与坏预览不拖垮构建）**、失败装订、缺能力提示、失败不装旧产物、**只读发现可以、注册表管理不在** |
 | `surface.test.mjs` | 31 | **产物声明**：mapper 与工具面一致、kind 与预览一致、构建/发布/工程/图标的 payload、失败不产生产物、id 稳定（同工程重建/重生成只占一格）、`focusArtifact` 无 payload 路径、垃圾输入不抛 |
 | `icon-art.test.mjs` | 36 | **图标**：同插件同图、关键词/显式字形/首字母兜底、配色哈希与显式色、SVG 自包含与转义、栏位片段、只改该改的文件（不动手写图标、兼容 legacy `knPlugin` 块）、清单读取与 mime/可上传判断 |
 | `studio.smoke.mjs` | 63 | 真实 `PluginManager.installPluginFromSource` + Blob URL + 真实 loader；热更替换、单实例、坏代码不中断、恢复；**热更保身份（同一 dock 面板组件跨两次重建仍是同一个函数）、换实现可见（同一身份渲染出 `panel-v3`）、求值即抛的产物被拒绝、不动正在运行的版本、且拒绝原因里带着产物抛出的原文（`boom at eval`）**；**内置目录建工程、五个模板都能构建、删除工程、工程内删文件**；**产物管线（mapper 按工具名注册、卡片/预览贡献、产物架从 transcript 派生）**、**把活的插件面板真的渲染成 markup**、**真实 ServiceRegistry 把服务归属到插件** |
 | `electron.smoke.mjs` | 36 | 真实 preload 能力白名单、`dev.*` IPC（含 `dev.remove` / `dev.deleteFile`）、`ELECTRON_RUN_AS_NODE` 子进程、`desktop:event:dev` 推送、**无对话框 scaffold + 模板 + list + 读写/删除文件**、越界路径拒绝 |
 
-`pnpm test:plugin-dev` 合计 486 项检查。
+`pnpm test:plugin-dev` 合计 511 项检查。
+
+> 只由包内 `pnpm --filter @kn/plugin-plugin-studio test` 跑的还有 `icons/icon-ai.test.mjs`（14 项，AI 图标的校验器），它目前**没有**被 root 的 `test:plugin-dev` 聚合——改测试脚本时一并对齐。
 
 热更机制自己还有一组纯 Node 断言（`packages/common`，`pnpm check` 的一部分，不进 `test:plugin-dev`）：
 

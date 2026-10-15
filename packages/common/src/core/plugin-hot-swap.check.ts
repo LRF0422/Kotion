@@ -38,6 +38,7 @@ import {
 import { resolveMountedPanels } from "./dock";
 import type { ResolvedDockPanel } from "./dock";
 import type { PluginRegistration } from "./global-namespace";
+import { setupGlobalNamespace } from "./global-namespace";
 import { pluginScriptLoader } from "../utils/import-util";
 import { logger } from "../utils/logger";
 import { readFileSync } from "node:fs";
@@ -1123,6 +1124,50 @@ const appWiringChecks = (): void => {
     "plugin translations must be registered per (language, namespace) bundle, "
     + "not as a `{ translation: {...} }` wrapper",
   );
+
+  /**
+   * The JSX-runtime half of the host contract.
+   *
+   * Plugin bundles treat `react/jsx-runtime` as a host module. React 18's
+   * `React.jsx` is `undefined`, so the namespace has to carry the real runtime
+   * module — passing the module away and pointing the bundler at `React` made
+   * every automatic-runtime component (i.e. most published React libraries)
+   * throw `jsx is not a function` while the build stayed green.
+   */
+  assert(
+    /\bjsxRuntime\b/.test(code) && /\bjsxDevRuntime\b/.test(code),
+    "App must publish the real react/jsx-runtime and react/jsx-dev-runtime "
+    + "to plugin bundles (they are separate subpaths, not React re-exports)",
+  );
+
+  const previousWindow = (globalThis as { window?: unknown }).window;
+  (globalThis as { window?: unknown }).window = {};
+  try {
+    const jsxRuntime = { Fragment: Symbol("Fragment"), jsx: () => null, jsxs: () => null };
+    const jsxDevRuntime = { Fragment: jsxRuntime.Fragment, jsxDEV: () => null };
+    const namespace = setupGlobalNamespace({
+      React: {},
+      ReactDOM: {},
+      jsxRuntime,
+      jsxDevRuntime,
+      ui: {},
+      common: {},
+      core: {},
+      icon: {},
+      editor: {},
+      hostApiVersion: "test",
+    });
+    assert(
+      namespace.jsxRuntime === jsxRuntime && namespace.jsxDevRuntime === jsxDevRuntime,
+      "setupGlobalNamespace must publish the jsx runtimes it is given",
+    );
+    assert(
+      (globalThis as { window?: { __KN__?: { jsxRuntime?: unknown } } }).window?.__KN__?.jsxRuntime === jsxRuntime,
+      "window.__KN__.jsxRuntime must be the host's real automatic runtime",
+    );
+  } finally {
+    (globalThis as { window?: unknown }).window = previousWindow;
+  }
 };
 
 const run = async (): Promise<void> => {

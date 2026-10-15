@@ -576,11 +576,19 @@ export const hostNameForExternal = (specifier: string): string => {
     return slash === -1 ? specifier : specifier.slice(slash + 1)
 }
 
-/** Modules the host always injects, whether or not they show up as globals. */
+/**
+ * Modules the host always injects, whether or not they show up as globals.
+ *
+ * Keep this list in sync with `DEFAULT_HOST_MODULES` in the dev-server bundler:
+ * it is the same "host always provides this" contract, and it is what
+ * `assertExternalsAvailable` short-circuits on.
+ */
 export const BUILTIN_HOST_MODULES = [
     'react',
     'react-dom',
+    'react-dom/client',
     'react/jsx-runtime',
+    'react/jsx-dev-runtime',
     '@kn/common',
     '@kn/core',
     '@kn/ui',

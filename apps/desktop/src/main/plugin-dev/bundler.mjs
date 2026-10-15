@@ -38,13 +38,22 @@ const loadEsbuild = () => {
     return esbuildPromise
 }
 
-/** Import specifiers that must resolve to a host global, not be bundled. */
+/**
+ * Import specifiers that must resolve to a host global, not be bundled.
+ *
+ * The two JSX-runtime entries point at the runtime **module** the host
+ * publishes, not at `React`: the automatic runtime is a separate subpath
+ * (`react/jsx-runtime`), and React 18's `React.jsx` is `undefined`. Pointing
+ * them at `React` would make every component compiled with the automatic
+ * runtime — i.e. most third-party React libraries — throw
+ * `jsx is not a function` at render time, while the build itself stayed green.
+ */
 export const DEFAULT_HOST_MODULES = {
     react: 'React',
     'react-dom': 'ReactDOM',
     'react-dom/client': 'ReactDOM',
-    'react/jsx-runtime': 'React',
-    'react/jsx-dev-runtime': 'React',
+    'react/jsx-runtime': '__KN__.jsxRuntime',
+    'react/jsx-dev-runtime': '__KN__.jsxDevRuntime',
     '@kn/common': '__KN__.common',
     '@kn/core': '__KN__.core',
     '@kn/ui': '__KN__.ui',
