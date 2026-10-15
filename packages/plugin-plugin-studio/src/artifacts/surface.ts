@@ -236,6 +236,85 @@ export const readIconView = (result: unknown): StudioIconView | null => {
 }
 
 /* ------------------------------------------------------------------ *
+ * Background tasks
+ * ------------------------------------------------------------------ */
+
+/**
+ * The handle a long tool answers with when it runs with `background: true`.
+ * `root` comes from the call's own args (the result only carries the id), which
+ * is why every reader here takes `args` as well.
+ */
+export interface StudioBackgroundAck {
+    taskId: string
+    root: string
+    tool?: string
+    title?: string
+}
+
+/** Read a `background: true` tool result, or null for an ordinary result. */
+export const readBackgroundAck = (result: unknown, args?: unknown): StudioBackgroundAck | null => {
+    const value = readRecord(result)
+    if (value.background !== true) return null
+    const taskId = readString(value.taskId)
+    if (!taskId) return null
+    const root = readString(value.root) ?? readString(readRecord(args).root)
+    if (!root) return null
+    return { taskId, root, tool: readString(value.tool), title: readString(value.title) }
+}
+
+/** Tools whose background task produces the build artifact. */
+const BUILD_TOOL_SET = new Set<string>(BUILD_ARTIFACT_TOOLS)
+
+export type StudioBackgroundTaskStatus = 'running' | 'succeeded' | 'failed' | 'cancelled'
+
+export interface StudioBackgroundArtifactInput {
+    tool: string
+    args: unknown
+    status: StudioBackgroundTaskStatus
+    result?: unknown
+    error?: string
+}
+
+/**
+ * The artifact of a background build, for EVERY phase of the task.
+ *
+ * A background call's tool result is a handle, not a build — so the transcript
+ * alone can only ever describe "a build was asked for". The task carries the
+ * artifact instead, from the moment it starts (a placeholder pointing at the
+ * project, which is enough for the pane: it live-reads the dev session by root)
+ * until it settles, when this returns the same artifact a foreground build
+ * would have produced.
+ *
+ * Every terminal outcome returns something: returning null would leave the
+ * placeholder from the call in place, i.e. "still building" forever.
+ */
+export const backgroundBuildArtifact = (input: StudioBackgroundArtifactInput): StudioArtifact | null => {
+    if (!BUILD_TOOL_SET.has(input.tool)) return null
+    const root = readString(readRecord(input.args).root)
+    if (!root) return null
+    const base = { kind: PLUGIN_BUILD_KIND, id: root, title: baseName(root) }
+
+    if (input.status === 'succeeded') {
+        // Identical to the foreground mapper: same slot, same data, so the pane
+        // and the shelf cannot tell the two apart afterwards.
+        return buildArtifactFromResult(input.result, input.args)
+            ?? { ...base, data: { root, background: { status: input.status } } }
+    }
+    return {
+        ...base,
+        data: {
+            root,
+            ...(input.error ? { error: input.error } : {}),
+            background: { status: input.status },
+        },
+    }
+}
+
+/** {@link backgroundBuildArtifact} keyed by tool, for the plugin entry to inject. */
+export const backgroundArtifactForTool = (input: StudioBackgroundArtifactInput): StudioArtifact | null =>
+    BUILD_TOOL_SET.has(input.tool) ? backgroundBuildArtifact(input) : null
+
+/* ------------------------------------------------------------------ *
  * Artifact mappers
  * ------------------------------------------------------------------ */
 
@@ -245,8 +324,16 @@ export const readIconView = (result: unknown): StudioIconView | null => {
  * which is what "the artifact this conversation is working on" means for a
  * hot-reload loop. A failed build maps to null — it produced nothing to open,
  * and the conversation card still renders the error.
+ *
+ * A `background: true` result maps to the project's slot too (via
+ * {@link backgroundBuildArtifact}): the shelf must show the thing being built
+ * from the call itself, because for the next few minutes that result is the only
+ * trace the transcript has. The task later replaces it with the real build.
  */
 export const buildArtifactFromResult: StudioArtifactMapper = (result, args) => {
+    const ack = readBackgroundAck(result, args)
+    if (ack) return backgroundBuildArtifact({ tool: ack.tool ?? 'buildPluginProject', args, status: 'running' })
+
     const view = readBuildView(result, args)
     if (!view || !view.ok) return null
 

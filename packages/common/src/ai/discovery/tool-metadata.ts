@@ -72,6 +72,46 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
         scope: 'any'
     },
 
+    // ===== Background (long-running) tasks =====
+    // Protocol-level like `load_skill`, and for the same reason: the surfaces
+    // where a long tool actually runs (a workbench run with no document) would
+    // otherwise filter these out and leave the model with a taskId it cannot wait
+    // on. They touch no editor, so the chat's frontend-tool gate must not park a
+    // batch on editor readiness before running them.
+    {
+        name: 'listBackgroundTasks',
+        category: 'interaction',
+        description: '列出本会话的后台任务（background: true 启动的长任务：构建、装依赖、发布等）及其状态。',
+        priority: 7,
+        tags: ['background', 'task', 'plugin', 'essential'],
+        loaded: false,
+        source: 'builtin',
+        scope: 'any',
+        requiresEditor: false,
+    },
+    {
+        name: 'getBackgroundTask',
+        category: 'interaction',
+        description: '取后台任务的状态与结果；wait 为 true（默认）时等到它结束或超时。',
+        priority: 7,
+        tags: ['background', 'task', 'plugin', 'essential'],
+        loaded: false,
+        source: 'builtin',
+        scope: 'any',
+        requiresEditor: false,
+    },
+    {
+        name: 'cancelBackgroundTask',
+        category: 'interaction',
+        description: '取消后台任务：不再等待它，之后完成也不会再通知。不是杀掉后台动作。',
+        priority: 6,
+        tags: ['background', 'task', 'plugin'],
+        loaded: false,
+        source: 'builtin',
+        scope: 'any',
+        requiresEditor: false,
+    },
+
     // ===== Document Read Tools =====
     {
         name: 'getDocumentStructure',

@@ -46,6 +46,8 @@ import {
     buildCustomAgentNote,
     useCustomAgents,
     isImeComposing,
+    type AgentChatMessage,
+    type EditorAgentApi,
 } from '@kn/common'
 import { SubAgentTree, buildSubAgentTreeLabels } from './SubAgentTree'
 import { PlanApprovalCard } from './PlanApprovalCard'
@@ -194,6 +196,8 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
     // context note, never in the backend-owned system prompt.
     const { selectedAgent } = useCustomAgents()
     const customAgentNote = useMemo(() => buildCustomAgentNote(selectedAgent), [selectedAgent])
+    /** Set right after `useEditorAgent`: the completion callback needs `start`. */
+    const agentRef = useRef<EditorAgentApi | null>(null)
 
     const agent = useEditorAgent({
         conversationId,
@@ -206,7 +210,32 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
         isReadOnlyTool,
         spaceId: currentPage?.spaceId,
         pageId: currentPage?.pageId !== undefined ? String(currentPage.pageId) : undefined,
+        // 长任务（background: true 的工具调用，如构建/装依赖/发布）跑完后，若 agent
+        // 没有在等它，就把结果作为一条通知推进对话——否则"帮我 build 一下"会安安静静
+        // 地结束，模型再也不会提起它。回调是 hook 的 OPTIONS，拿不到 hook 的返回值，
+        // 所以用 ref 桥接（hook 内部每次都读最新回调）。
+        // 面板关着时不推进：那会是一次用户看不见的模型调用。等用户打开面板，
+        // `enabled` 由 false 变 true，待投递的结果会在那一刻补上。
+        onBackgroundTaskSettled: open
+            ? (_tasks, note) => {
+                const notification: Message = {
+                    id: 'background-' + Date.now().toString(36),
+                    role: 'user',
+                    content: note,
+                    timestamp: Date.now(),
+                }
+                setMessages(prev => [...prev, notification])
+                void agentRef.current
+                    ?.start([{ role: 'user', content: note } satisfies AgentChatMessage], {
+                        mode,
+                        contextNote: customAgentNote,
+                    })
+                    .catch(() => undefined)
+            }
+            : undefined,
     })
+    // 桥接：completion 回调在 agent 之前定义，触发时（异步）agent 早已就位。
+    agentRef.current = agent
 
     // 主 agent 自己的工具调用记录；带 subRunId 的调用属于子 agent，归入委派树。
     const parentToolCalls = useMemo(

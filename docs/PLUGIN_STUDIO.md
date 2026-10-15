@@ -96,8 +96,8 @@
 | `editPluginProjectFile` | 精确替换（`oldString`→`newString`，唯一性校验；改代码优先用它） |
 | `listPluginProjectFiles` | 列出工程内源码文件（跳过 node_modules/dist） |
 | `searchPluginProject` | 在工程源码里搜索（返回文件+行号） |
-| `runPluginProject` | 开始监听 + 把首个构建热更进当前窗口（**实时预览**入口）；可传 `externals` / `focus`。热更被拒绝时返回 `reloadRejected`（正在运行的版本保留） |
-| `buildPluginProject` | 一次性构建 + 热更；可传 `externals`（与会话不同时会重启会话）/ `focus`；同样会返回 `reloadRejected` |
+| `runPluginProject` | 开始监听 + 把首个构建热更进当前窗口（**实时预览**入口）；可传 `externals` / `focus` / `background`。热更被拒绝时返回 `reloadRejected`（正在运行的版本保留） |
+| `buildPluginProject` | 一次性构建 + 热更；可传 `externals`（与会话不同时会重启会话）/ `focus` / `background`；同样会返回 `reloadRejected` |
 | `stopPluginProject` | 停止监听、回收子进程，并**卸载窗口里的开发版本**（磁盘文件保留；返回 `uninstalled`） |
 | `deletePluginProject` | 停止监听、卸载窗口里的开发版本、**删除工程目录及磁盘文件**（不可恢复；宿主拒绝非工程目录） |
 | `deletePluginProjectFile` | **删除工程里的单个文件**（如遗留的旧组件）。只能删工程内的文件，拒绝 `package.json` 与入口文件；必须先 `readPluginProjectFile` 读过；返回被删正文，误删可粘回 |
@@ -109,9 +109,9 @@
 | `listHostApiPackages` | 列出可查阅的标准宿主包与类型入口 |
 | `searchHostApi` | 在标准包源码里按名字搜索类型/接口（返回文件+行号） |
 | `readHostApiFile` | 读取标准包里的一个源码文件，查看真实接口定义 |
-| `installPluginDependencies` | 安装第三方 npm 包（调用 npm/pnpm/yarn 并写入 package.json） |
+| `installPluginDependencies` | 安装第三方 npm 包（调用 npm/pnpm/yarn 并写入 package.json）；可传 `background` |
 | `listMyPlugins` | 列出我在市场上的提交/已上架插件（拿 pluginId、审核状态） |
-| `publishPluginProject` | 构建并上传产物，然后上架（提交审核）或发布新版本；**图标默认自动上传**（读清单里的 `knPluginStudio.icon`） |
+| `publishPluginProject` | 构建并上传产物，然后上架（提交审核）或发布新版本；**图标默认自动上传**（读清单里的 `knPluginStudio.icon`）；可传 `background` |
 | `upgradePluginVersion` | 把已安装插件升级到市场里的目标版本 |
 
 所以你可以直接说：
@@ -123,6 +123,25 @@ agent 会：`createPluginProject({ name, template: 'panel' })` → `writePluginP
 （开发台页面打开时，保存文件会自动重建并热更）→
 `buildPluginProject({ writeToDisk: true })` 出 `dist/index.js`，可直接上传插件市场。
 试错用的工程用 `deletePluginProject` 清掉，不会在磁盘上留垃圾。
+
+### 长任务：让 agent 自己决定要不要等
+
+构建、装依赖、发布都可能跑很久（`installPluginDependencies` 联网装包、
+`publishPluginProject` 构建+上传+提交审核）。上面这四个工具都支持 `background: true`：
+
+```
+buildPluginProject({ root, background: true })
+  → { background: true, taskId: "bg-3", status: "running", hint: "…" }   // 立即返回
+
+getBackgroundTask({ taskId: "bg-3", wait: true, timeoutMs: 120000 })     // 要等就明确地等
+listBackgroundTasks()                                                    // 还有谁在跑
+cancelBackgroundTask({ taskId: "bg-3" })                                 // 不再等（不是杀进程）
+```
+
+- 不传 `background` = 原来的阻塞行为；传了之后**要不要等由 agent 判断**（可以先写代码再回来查）。
+- 等待超时（`timedOut: true`）不是失败，任务还在跑。
+- agent 没有在等它时，任务完成会由系统作为一条通知推进对话；正在等就不会重复通知。
+- 语义边界（取消不等于中断、刷新后列表清空等）见 **[AGENT_BACKGROUND_TASKS.md](AGENT_BACKGROUND_TASKS.md)**。
 
 ### 工程约定
 
@@ -194,6 +213,50 @@ await runPluginProject({ root, externals: ['svelte'] })
 | `plugin-build` | `runPluginProject` / `buildPluginProject` / `publishPluginProject` | 工程根目录 | **实时渲染插件贡献的 UI** + 构建信息 |
 | `plugin-project` | `createPluginProject` | 工程根目录 | 同上（插件还没热更时显示"尚未运行"） |
 | `plugin-icon` | `generatePluginIcon` | 工程根目录 | 生成的图标本身 + 字形/配色/清单指向 + 栏位图标片段 |
+
+### 你做的插件怎么产出自己的产物（重要）
+
+上面那套是**内核能力，不是开发台专属**：任何插件都能让自己的结果变成产物。
+通道只有三条，**必须同时具备**，否则会出现"没人能点开 / 点开显示「没有这个类型的预览器」"：
+
+```
+1. 工具声明   artifactFromResult(result, args) ──▶ AgentArtifact { kind, id, title?, subtitle?, data? }
+2. 插件贡献   agent.artifactRenderers: [{ kind, render }]        ← 侧栏预览（按 kind）
+3. 插件贡献   agent.toolRenderers:     [{ tool, render }]        ← 会话卡片（按工具名，含「预览」按钮）
+```
+
+以「点了工具去触发 Jenkins 构建，想打开这次构建」为例（契约类型都在 `@kn/plugin-api`）：
+
+```tsx
+// 1) 数据半：工具结果 → 产物（id 稳定：同一个 job+build 永远一个槽）
+const artifactFromResult = (result: any) => result?.buildId
+    ? { kind: 'jenkins-build', id: `${result.job}#${result.buildNumber}`, title: `${result.job} #${result.buildNumber}`, data: { status: result.status } }
+    : null
+
+// 2) UI 半：按 kind 注册侧栏预览；artifact.data 只是摘要，缺数据时要能按 id 自己取
+const JenkinsBuildPane: React.FC<AgentArtifactProps> = ({ artifact }) => <BuildView ref={artifact} />
+
+// 3) 会话卡片：给这次调用一个可点的入口
+const JenkinsBuildCard: React.FC<AgentToolResultProps> = ({ artifact, openArtifact }) =>
+    artifact ? <button onClick={() => openArtifact(artifact)}>预览构建</button> : null
+
+export const jenkins = new KPlugin({
+    name: 'Jenkins', status: '',
+    tools: [{ name: 'triggerJenkinsJob', description: '…', inputSchema: {…}, scope: 'any', artifactFromResult, create: … }],
+    agent: {
+        artifactRenderers: [{ kind: 'jenkins-build', render: JenkinsBuildPane }],
+        toolRenderers: [{ tool: 'triggerJenkinsJob', render: JenkinsBuildCard }],
+    },
+})
+```
+
+- **插件自己的 UI 要打开产物**（面板里的「查看」按钮、编辑器节点）：`openAgentArtifact(artifact, conversationId?)`（来自 `@kn/common`）；不带 conversationId 时进入当前会话的侧栏。
+- **agent 想再次聚焦某件产物**：宿主工具 `focusArtifact({ kind, id })`——它**只传 kind+id、不带 data**，所以 renderer 不能假设 `data` 存在（开发台的预览就是这样按 `root` 现拉开发会话的）。
+- **只映射产物、没登记 renderer** 时，侧栏只会显示一句「没有这个类型的预览器」（`agentPane.noRenderer`）。
+- **`data` 要小且可序列化**（跟着会话记录走）：存 id + 摘要，细节让 renderer 现取。
+- **长任务**（一次构建几分钟）用 `background: true`：把产物挂到后台任务上（`artifact` 回调按 `running/succeeded/failed` 各返回一次），运行期间它就已经是会话的工作目标。见 [AGENT_BACKGROUND_TASKS.md](AGENT_BACKGROUND_TASKS.md#任务的产物)。
+- 契约类型清单：[`packages/plugin-api/src/index.ts`](../packages/plugin-api/src/index.ts)（`AgentArtifact` / `AgentArtifactProps` / `AgentToolResultProps` / 两个 renderer 贡献类型）。
+- 这条链路有回归测试：[`plugin-tools.check.ts`](../packages/common/src/core/plugin-tools.check.ts) 里 `checkPluginArtifactsReachTheKernel` 用一个「Jenkins 插件」跑完「声明 → 解析 → 映射 → 产物架 key」全程。
 
 ### 预览：插件到底做了什么
 

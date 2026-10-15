@@ -33,6 +33,7 @@ import type {
     ChatModelParams,
     OffscreenEditorHandle,
     AgentChatMessage,
+    EditorAgentApi,
     SessionPageBinding,
     SessionPageBindingPage,
     AgentImageData,
@@ -617,6 +618,9 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
     // editor rules for every run it starts.
     const { selectedAgent } = useCustomAgents()
 
+    /** Set right after `useEditorAgent`: the completion callback needs `start`. */
+    const agentRef = useRef<EditorAgentApi | null>(null)
+
     const agent = useEditorAgent({
         conversationId: sessionId,
         tools: isAskMode ? [] : toolSpecs,
@@ -634,7 +638,28 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
         // THIS conversation's binding — never the module-level singleton, which
         // another mounted tab may own.
         sessionBinding: getSessionBinding,
+        // 长任务（background: true 的构建/装依赖/发布）跑完，而 agent 没有在等它时，
+        // 把结果作为一条通知推进对话：否则那条工具调用的"结果"永远不会回到会话里。
+        // 回调属于 hook 的 OPTIONS，拿不到 hook 的返回值，用 ref 桥接。
+        onBackgroundTaskSettled: (_tasks, note) => {
+            setMessages(prev => [...prev, {
+                id: 'background-' + Date.now().toString(36),
+                sender: 'user' as const,
+                content: note,
+                timestamp: Date.now(),
+            }])
+            void agentRef.current
+                ?.start([{ role: 'user', content: note } as AgentChatMessage], {
+                    model: selectedModel || undefined,
+                    mode: 'execute',
+                    temperature: modelParams.temperature,
+                    maxTokens: modelParams.maxTokens,
+                    contextNote: buildCustomAgentNote(selectedAgent) || undefined,
+                })
+                .catch(err => setError(classifyError(err)))
+        },
     })
+    agentRef.current = agent
 
     // Re-attach at most once per session activation. Without this guard, resetting
     // a completed run immediately triggers another attach while the backend is

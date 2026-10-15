@@ -108,6 +108,18 @@ export const KernelConversation: React.FC<KernelConversationProps> = ({
         conversationId: sessionId,
         mode: chatMode,
         customAgent: selectedAgent,
+        // 长任务（background: true 的构建/装依赖/发布）跑完、而 agent 没有在等它时，
+        // 把结果作为一条通知推进对话：工作台正是这些长任务发生的地方，不推的话
+        // "帮我 build 一下"就没有下文了。回调先于 `send` 定义，触发时它早已就位。
+        onBackgroundTaskSettled: (_tasks, note) => {
+            setMessages(prev => [...prev, {
+                id: `background-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
+                sender: 'user' as const,
+                content: note,
+                timestamp: Date.now(),
+            }])
+            void send(note).catch(() => undefined)
+        },
     })
     const { state } = agent
     const modelVision = useModelVisionSupport(selectedModel)
@@ -154,7 +166,10 @@ export const KernelConversation: React.FC<KernelConversationProps> = ({
         }
         return list
     }, [messages, liveSteps, isActive])
-    const artifactsShelf = useAgentArtifacts(invocations)
+    // The conversation id scopes the BACKGROUND tasks whose artifacts this
+    // shelf includes: a long build (e.g. a plugin build) contributes its artifact
+    // from the moment it starts, not only when its tool result comes back.
+    const artifactsShelf = useAgentArtifacts(invocations, sessionId)
     const shelfArtifacts = artifactsShelf.artifacts
     useEffect(() => {
         onArtifacts(sessionId, shelfArtifacts)

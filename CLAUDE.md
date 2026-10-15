@@ -198,6 +198,13 @@ description: 技能描述
 原则：**纯外观差异用 Tailwind `md:`/`lg:` 前缀；结构性差异才用 `useResponsive`/`<DeviceSwitch>`**。
 触摸目标 ≥44px；固定贴边元素用安全区类 `pb-safe`/`pt-safe`/`*-safe-*`。
 
+## 长任务（后台执行）
+
+长工具（构建 / 装依赖 / 发布）可以带 `background: true`：立即返回 `{ taskId }`，活继续在后台跑，
+**由 agent 自己决定要不要等**（`getBackgroundTask({ wait: true })`、`listBackgroundTasks`、`cancelBackgroundTask`）；
+没人等它时完成结果会作为一条通知推进对话。机制、边界与改法见 **[docs/AGENT_BACKGROUND_TASKS.md](docs/AGENT_BACKGROUND_TASKS.md)**，
+自测 `pnpm --filter @kn/common check:background-tasks`。
+
 ## Logging
 
 Use the centralized logger from `@kn/common`:

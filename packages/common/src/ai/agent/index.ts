@@ -60,6 +60,29 @@ export type {
     UsePendingToolExecutionOptions,
 } from './use-pending-tools'
 export { MAX_TOOL_RESUME_RETRIES, isPermanentTransportError } from './retry-policy'
+export {
+    BackgroundTaskRegistry,
+    backgroundTasks,
+    backgroundToolRunner,
+    clipForNote,
+    DEFAULT_BACKGROUND_WAIT_MS,
+    MAX_BACKGROUND_WAIT_MS,
+} from './background-tasks'
+export type {
+    BackgroundTaskAck,
+    BackgroundTaskArtifactState,
+    BackgroundTaskEvent,
+    BackgroundTaskHandle,
+    BackgroundTaskListener,
+    BackgroundTaskStatus,
+    BackgroundTaskView,
+    BackgroundToolRunner,
+    BackgroundToolStartRequest,
+    StartBackgroundTaskOptions,
+} from './background-tasks'
+export { useBackgroundTask, useBackgroundTasks } from './use-background-tasks'
+export { useBackgroundTaskNotifications } from './use-background-task-notifications'
+export type { UseBackgroundTaskNotificationsOptions } from './use-background-task-notifications'
 export type {
     AgentStepRecord,
     EditorAgentApi,

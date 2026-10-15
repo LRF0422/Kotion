@@ -1160,6 +1160,157 @@ check('skill: owns every studio tool', uncoveredTools.length === 0, uncoveredToo
 const unknownTools = pluginAuthoringSkill.requiredTools.filter((name) => !toolNames.includes(name))
 check('skill: references no unknown tools', unknownTools.length === 0, unknownTools.join(', '))
 
+/* ------------------------------------------------------------------ *
+ * Background mode: the long tools can hand their work to the kernel's
+ * task board. What matters for the agent is that the CALL returns before
+ * the work finishes, and that the same work still runs (and still focuses
+ * the artifact) when the task settles.
+ * ------------------------------------------------------------------ */
+const backgroundRequests = []
+const backgroundRunner = {
+    start(request) {
+        backgroundRequests.push(request)
+        return {
+            background: true,
+            taskId: `bg-${backgroundRequests.length}`,
+            tool: request.tool,
+            title: request.title,
+            status: 'running',
+            startedAt: Date.now(),
+            hint: 'getBackgroundTask',
+        }
+    },
+}
+const bgTools = createStudioTools({
+    getDev: () => dev,
+    getPluginHost: () => pluginHost,
+    getDevHost: () => devHost,
+    getMarketplace: () => marketplace,
+    getHostGlobals: () => hostGlobals,
+    getIconToolkit: () => iconToolkit,
+    focusArtifactResult: (tool, result, args) => {
+        focused.push({ tool, result, args })
+        return true
+    },
+    getBackgroundRunner: () => backgroundRunner,
+})
+
+check(
+    'background: declared on every long tool',
+    ['buildPluginProject', 'runPluginProject', 'installPluginDependencies', 'publishPluginProject'].every(
+        (name) => bgTools[name].inputSchema.properties.background?.type === 'boolean',
+    ),
+)
+
+const callsBefore = calls.length
+const ack = await bgTools.buildPluginProject.execute({ root: ROOT, background: true }, 'call-bg', {
+    conversationId: 'conv-1',
+})
+check('background: build answers with a task handle', ack.background === true && ack.taskId === 'bg-1', JSON.stringify(ack))
+check('background: the tool call did not wait for the build', calls.length === callsBefore, `${calls.length - callsBefore} host calls`)
+const request = backgroundRequests[backgroundRequests.length - 1]
+check('background: the task is scoped to the calling conversation', request.conversationId === 'conv-1')
+check('background: the task carries a readable title', /agent-made-plugin/.test(request.title), request.title)
+
+const focusCountBefore = focused.length
+const settled = await request.run({ progress: () => {}, cancelled: false })
+check('background: the work still runs when the task runs', calls.length > callsBefore)
+check('background: settling returns the same result a foreground build returns', settled.ok === true && settled.buildCount > 0, JSON.stringify(settled))
+check('background: the finished build still becomes the working artifact', focused.length === focusCountBefore + 1)
+
+/* A host with no task board must SAY so instead of blocking for minutes. */
+let unsupported = ''
+try {
+    await createStudioTools({ getDev: () => dev, getPluginHost: () => pluginHost }).buildPluginProject.execute(
+        { root: ROOT, background: true },
+    )
+} catch (error) {
+    unsupported = error.message
+}
+check('background: a host without a task board explains itself', /background/.test(unsupported), unsupported)
+
+/* ------------------------------------------------------------------ *
+ * Background mode hands the task board an ARTIFACT for every phase, so
+ * "the plugin I am building" is the conversation's working target while
+ * it is still being built — not only once the tool result comes back.
+ * ------------------------------------------------------------------ */
+const artifactStates = []
+const bgArtifactTools = createStudioTools({
+    getDev: () => dev,
+    getPluginHost: () => pluginHost,
+    getDevHost: () => devHost,
+    getMarketplace: () => marketplace,
+    getHostGlobals: () => hostGlobals,
+    getIconToolkit: () => iconToolkit,
+    getBackgroundRunner: () => backgroundRunner,
+    backgroundArtifact: (input) => {
+        artifactStates.push({ tool: input.tool, status: input.status })
+        return { kind: 'plugin-build', id: input.args?.root ?? 'unknown', data: { status: input.status } }
+    },
+})
+
+backgroundRequests.length = 0
+const artifactAck = await bgArtifactTools.publishPluginProject.execute(
+    { root: ROOT, version: '1.0.0', background: true },
+    'call-bg-artifact',
+    { conversationId: 'conv-2' },
+)
+const artifactRequest = backgroundRequests[backgroundRequests.length - 1]
+check('background artifact: the task is given a mapper', typeof artifactRequest.artifact === 'function')
+const placeholder = artifactRequest.artifact({ status: 'running' })
+check(
+    'background artifact: running maps to the project slot',
+    placeholder?.kind === 'plugin-build' && placeholder.id === ROOT,
+    JSON.stringify(placeholder),
+)
+await artifactRequest.run({ progress: () => {}, cancelled: false })
+const settledArtifact = artifactRequest.artifact({ status: 'succeeded', result: { ok: true, root: ROOT } })
+check(
+    'background artifact: settling maps the same slot',
+    settledArtifact?.kind === 'plugin-build' && settledArtifact.id === ROOT,
+    JSON.stringify(settledArtifact),
+)
+const failedArtifact = artifactRequest.artifact({ status: 'failed', error: 'boom' })
+check(
+    'background artifact: failure still yields the slot (no stale "building")',
+    failedArtifact?.kind === 'plugin-build' && failedArtifact.data?.status === 'failed',
+    JSON.stringify(failedArtifact),
+)
+check('background artifact: the tool name travels with it', artifactStates.every((s) => s.tool === 'publishPluginProject'))
+backgroundRequests.length = 0
+await createStudioTools({
+    getDev: () => dev,
+    getPluginHost: () => pluginHost,
+    getDevHost: () => devHost,
+    getBackgroundRunner: () => backgroundRunner,
+}).buildPluginProject.execute({ root: ROOT, background: true })
+check(
+    'background artifact: no mapper is passed when the host injects none',
+    typeof backgroundRequests[backgroundRequests.length - 1].artifact === 'undefined',
+)
+
+/* The transcript half: the tool's own mapper turns the HANDLE into the same
+ * project slot, so the shelf/working target exist from the call itself. */
+const { buildArtifactFromResult, readBackgroundAck, backgroundArtifactForTool } = await import('./artifacts/surface.ts')
+const fromAck = buildArtifactFromResult(artifactAck, { root: ROOT })
+check(
+    'background artifact: the tool-result mapper maps the handle to the project slot',
+    fromAck?.kind === 'plugin-build' && fromAck.id === ROOT,
+    JSON.stringify(fromAck),
+)
+check(
+    'background artifact: a handle is recognised',
+    readBackgroundAck(artifactAck, { root: ROOT })?.taskId === artifactAck.taskId,
+)
+check(
+    'background artifact: a foreground result is NOT treated as a handle',
+    readBackgroundAck({ ok: true, root: ROOT }, { root: ROOT }) === null,
+)
+check(
+    'background artifact: non-artifact tools contribute nothing',
+    backgroundArtifactForTool({ tool: 'installPluginDependencies', args: { root: ROOT }, status: 'running' }) === null,
+)
+
 const failedChecks = results.filter((entry) => !entry.ok)
 console.log(`\n${results.length - failedChecks.length}/${results.length} checks passed`)
 process.exit(failedChecks.length ? 1 : 0)

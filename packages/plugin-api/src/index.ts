@@ -50,6 +50,38 @@ export interface PluginRegistration {
 
 // Contract types re-exported (type-only) from @kn/common so plugin authors
 // can depend on @kn/plugin-api alone for typings.
+//
+// The AGENT half is part of this list on purpose. A plugin that shows results in
+// the conversation has two contributions — the tools the model may call
+// (`PluginConfig.tools`) and the UI that renders what they produce
+// (`PluginConfig.agent.toolRenderers` / `.artifactRenderers`) — and the artifact
+// contract (`AgentArtifact` + the props of each renderer) is the wire between
+// them. Leaving it out of this file made "my plugin produces a renderable
+// result" undiscoverable from the contract list plugin authors are told to read.
+export type {
+    // ── Agent capability: tools, skills, context ──────────────────────────
+    AgentScope,
+    AgentToolContext,
+    AgentToolExecutor,
+    AgentToolDefinition,
+    AgentSkillDefinition,
+    AgentContextProviderDefinition,
+    AgentActionDefinition,
+    AgentToolInclude,
+    AgentContribution,
+    // ── Artifacts (产物): the result a plugin makes openable ──────────────
+    /** What a tool result / `focusArtifact` turns into: a `kind:id` the host can render. */
+    AgentArtifact,
+    /** Props of a plugin's side-pane preview, registered per `kind`. */
+    AgentArtifactProps,
+    /** Props of a plugin's conversation card, registered per tool. */
+    AgentToolResultProps,
+    /** Register a card for a tool (and optionally the result→artifact mapper). */
+    AgentToolRendererContribution,
+    /** Register a side-pane preview for an artifact kind. */
+    AgentArtifactRendererContribution,
+} from "@kn/common"
+
 export type {
     DesktopBridge,
     DesktopCapability,

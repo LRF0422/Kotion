@@ -18,6 +18,7 @@
 import React from 'react'
 import {
     KPlugin,
+    backgroundToolRunner,
     getBoundServiceRegistry,
     openAgentArtifact,
     resolveOptionalService,
@@ -30,7 +31,7 @@ import * as KN_ICONS from '@kn/icon'
 import { StudioPage } from './StudioPage'
 import { createStudioTools } from './studio-tools'
 import * as iconArt from './icons/icon-art'
-import { STUDIO_ARTIFACT_MAPPERS } from './artifacts/surface'
+import { STUDIO_ARTIFACT_MAPPERS, backgroundArtifactForTool } from './artifacts/surface'
 import { STUDIO_ARTIFACT_RENDERERS, STUDIO_TOOL_RENDERERS } from './artifacts'
 import { pluginAuthoringSkill } from './skills/plugin-authoring'
 
@@ -100,6 +101,22 @@ const studioTools = createStudioTools({
         if (!artifact) return false
         return openAgentArtifact(artifact as AgentArtifact)
     },
+    /**
+     * Background tasks (the kernel's task board). A build, an install and a
+     * release are the longest calls the agent can make; `background: true` hands
+     * them to the kernel, which owns waiting, cancellation and the completion
+     * note. Injected here (not imported in studio-tools) because the tool layer
+     * stays dependency-free.
+     */
+    getBackgroundRunner: () => backgroundToolRunner,
+    /**
+     * What a background build IS while it runs: the task board holds the
+     * artifact, so "the plugin I am building" is already the conversation's
+     * working target (and the artifacts shelf entry) instead of only appearing
+     * once the long tool finally returns.
+     */
+    backgroundArtifact: ({ tool, args, status, result, error }) =>
+        backgroundArtifactForTool({ tool, args, status, result, error }),
 })
 
 class PluginStudio extends KPlugin<PluginConfig> {}
@@ -308,6 +325,9 @@ export const pluginStudio = new PluginStudio({
                     artifact: {
                         buildFailed: 'Build failed: {{name}}',
                         installed: 'hot-reloaded',
+                        backgroundRunning: 'Building in background…',
+                        backgroundCancelled: 'Background task cancelled',
+                        backgroundDetached: 'Background build (no task handle after reload)',
                         openBeside: 'Preview',
                         moduleCount: '{{n}} modules',
                         fileCount: '{{n}} files',
@@ -524,6 +544,9 @@ export const pluginStudio = new PluginStudio({
                     artifact: {
                         buildFailed: '构建失败：{{name}}',
                         installed: '已热更',
+                        backgroundRunning: '后台构建中…',
+                        backgroundCancelled: '后台任务已取消',
+                        backgroundDetached: '后台构建（刷新后已拿不到任务句柄）',
                         openBeside: '预览',
                         moduleCount: '{{n}} 个模块',
                         fileCount: '{{n}} 个文件',

@@ -27,6 +27,7 @@ import { collectCapabilityCatalog } from '../ai/capabilities/CapabilityCatalog'
 import { filterAgentCatalog } from '../ai/kernel/filter-catalog'
 import { BUILTIN_TOOL_METADATA } from '../ai/discovery/tool-metadata'
 import { buildAgentRunInputs } from '../ai/capabilities/catalog-to-run-input'
+import { agentArtifactKey, collectAgentArtifacts } from '../ai/kernel/agent-artifact-collect'
 import { createSkillToolSource, registerSkillToolSource } from '../ai/skills/skill-tool-bridge'
 import { createSkillTools } from '../ai/tools/skill-tools'
 import { registerToolFactories } from '../ai/tools/tool-factory-registry'
@@ -481,6 +482,66 @@ function checkRequiresEditorFollowsDeclaredScope(): void {
         'a page-scoped plugin tool must stay editor-bound in the metadata')
 }
 
+/**
+ * A plugin's ARTIFACT capability must survive the same chain as its tools.
+ *
+ * `artifactFromResult` is the data half (a tool result becomes a renderable
+ * artifact) and `agent.artifactRenderers` is the UI half (a kind becomes a side
+ * pane). Both have to reach the kernel, or a plugin's results are just JSON in
+ * the transcript: nothing on the artifacts shelf, nothing to open, and the
+ * `focusArtifact` the model was told about points at a blank pane.
+ *
+ * This is the contract a Plugin-Studio-authored plugin depends on — the exact
+ * shape a plugin like "trigger a Jenkins job, open the build" needs. The check
+ * walks the chain the kernel walks: resolve → mapper map (keyed by the name the
+ * model calls) → `collectAgentArtifacts` → the `kind:id` key the pane resolves.
+ */
+function checkPluginArtifactsReachTheKernel(): void {
+    const artifactFromResult = (result: any) => (result?.buildId
+        ? { kind: 'jenkins-build', id: String(result.buildId), title: result.job }
+        : null)
+    const jenkins = new KPlugin<any>({
+        name: 'Jenkins',
+        status: '',
+        tools: [{
+            name: 'triggerJenkinsJob',
+            description: 'Trigger a Jenkins job',
+            inputSchema: { type: 'object', properties: {} },
+            scope: 'any',
+            artifactFromResult,
+            create: () => async () => ({ ok: true }),
+        }],
+        agent: {
+            // The plugin owns both halves: the kind it renders, and the card.
+            artifactRenderers: [{ kind: 'jenkins-build', render: (() => null) as any }],
+            toolRenderers: [{ tool: 'triggerJenkinsJob', render: (() => null) as any }],
+        },
+    })
+    const manager = new PluginManager({} as any, [jenkins])
+    manager.plugins = [jenkins]
+    const capabilities = manager.resolveAgentCapabilities('workspace')
+
+    const tool = capabilities.tools.find(entry => entry.name === 'triggerJenkinsJob') as any
+    assert(Boolean(tool), 'the plugin tool must be resolved')
+    assert.equal(tool.wireName, 'triggerJenkinsJob', 'the mapper is keyed by the name the model calls')
+    assert.equal(typeof tool.artifactFromResult, 'function', 'artifactFromResult must survive resolution')
+    assert(capabilities.artifactRenderers.some(renderer => renderer.kind === 'jenkins-build'),
+        'the side pane must be registered by artifact kind')
+    assert(capabilities.toolRenderers.some(renderer => renderer.tool === 'triggerJenkinsJob'),
+        'the conversation card must be registered by tool')
+
+    const mappers = new Map<string, any>([[tool.wireName, tool.artifactFromResult]])
+    const artifacts = collectAgentArtifacts(
+        [{ tool: tool.wireName, result: { buildId: 42, job: 'deploy' } }],
+        mappers,
+    )
+    assert.equal(artifacts.length, 1, 'the tool result must become an artifact')
+    assert.equal(agentArtifactKey(artifacts[0]), 'jenkins-build:42', 'the pane key is kind:id')
+    // A result the mapper rejects contributes nothing (no half-built entry).
+    assert.equal(collectAgentArtifacts([{ tool: tool.wireName, result: {} }], mappers).length, 0,
+        'an unmappable result must contribute no artifact')
+}
+
 async function main(): Promise<void> {
     checkSchemasAreWithheldButNamed()
     checkRequiresEditorFollowsDeclaredScope()
@@ -489,6 +550,7 @@ async function main(): Promise<void> {
     checkEntryPointsStayCallableWhenAClaimedByASkill()
     checkNestedAgentFormStillLoads()
     checkCeilingKeepsEntryPoints()
+    checkPluginArtifactsReachTheKernel()
     await checkWorkspaceScopeKeepsTheDiscoveryPath()
     await checkLoadSkillDeliversAWholeCapability()
     await checkRealBitableDeclarationResolves()

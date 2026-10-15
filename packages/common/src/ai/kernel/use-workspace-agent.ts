@@ -17,11 +17,12 @@ import { useCallback, useMemo } from 'react'
 import { useCapabilityProviders } from '../use-capability-providers'
 import { buildAgentRunInputs } from '../capabilities'
 import { useLoadedSkills } from '../skills/use-loaded-skills'
-import { filterAgentCatalog } from './filter-catalog'
+import { agentToolAvailableAtScope, filterAgentCatalog } from './filter-catalog'
 import { useEditorAgent, type EditorAgentApi } from '../agent/use-editor-agent'
 import type { AgentChatMessage } from '../agent/types'
 import type { OnToolExecution } from '../types'
 import type { CustomAgent } from '../agent/custom-agents'
+import type { BackgroundTaskView } from '../agent/background-tasks'
 import { buildCustomAgentNote } from '../agent/custom-agents'
 import { workspaceHomeSkill } from './surface-skills'
 import { useWorkspaceDocumentTarget } from './use-workspace-document'
@@ -47,6 +48,13 @@ export interface WorkspaceAgentOptions {
      */
     mode?: 'ask' | 'agent'
     onToolExecution?: OnToolExecution
+    /**
+     * A background task finished and the agent did not wait for it: the host
+     * injects the note as a new turn. The workbench is where long builds happen,
+     * so a surface that omits this loses the completion entirely (the result
+     * still sits in `getBackgroundTask` / the artifacts shelf).
+     */
+    onBackgroundTaskSettled?: (tasks: BackgroundTaskView[], note: string) => void
 }
 
 export interface WorkspaceAgentApi {
@@ -94,20 +102,12 @@ export function useWorkspaceAgent(options: WorkspaceAgentOptions = {}): Workspac
     // plus the backend's own builtins (web_search, memory, …). Editor tools
     // arrive through their plugin's declaration instead of failing at call
     // time. Core-implemented workspace tools declared via `agent.include`
-    // register as plugin tools, so they pass this filter.
+    // register as plugin tools, so they pass this filter. The rule itself lives
+    // in filter-catalog (and is checked there), because a protocol tool dropped
+    // here is a capability the run was told about but cannot reach.
     const hasDocument = target.editor !== null
     const isAvailableTool = useCallback((name: string) => {
-        const meta = providers.toolProvider.getToolMetadata(name)
-        if (!meta) return false
-        // A live edit target makes this a document session like any other: every
-        // registered tool can run, so all of them are offered.
-        if (hasDocument) return true
-        // Without one, plugin contributions still carry this scope's capabilities
-        // (a page-scoped tool is never registered in the first place) …
-        if (meta.source === 'plugin') return true
-        // … and a protocol-level tool such as the discovery tool must survive on
-        // every surface, or the run has no way to reach what it was told about.
-        return meta.scope === 'any' || meta.scope === 'workspace'
+        return agentToolAvailableAtScope(providers.toolProvider.getToolMetadata(name), hasDocument)
     }, [providers.toolProvider, hasDocument])
 
     // getCatalog's identity changes with the provider version, so the catalog
@@ -159,6 +159,9 @@ export function useWorkspaceAgent(options: WorkspaceAgentOptions = {}): Workspac
         isToolAvailable: isAvailableTool,
         // Fresh surface: never adopt the dock's persisted run handle.
         persist: false,
+        // Long tasks finish here too (a studio build runs in the workbench): the
+        // host decides how the completion rejoins the conversation.
+        onBackgroundTaskSettled: options.onBackgroundTaskSettled,
     })
 
     const send = useCallback(async (

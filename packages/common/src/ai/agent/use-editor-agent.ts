@@ -15,6 +15,8 @@ import { EditorToolExecutor, type ToolExecutionResult } from './tool-executor'
 import { useSubRuns } from './use-sub-runs'
 import { usePendingToolExecution } from './use-pending-tools'
 import { useAgentStream } from './use-agent-stream'
+import { useBackgroundTaskNotifications } from './use-background-task-notifications'
+import type { BackgroundTaskView } from './background-tasks'
 import { isPermanentTransportError } from './retry-policy'
 import { createAgentPersistence, type AgentRunStore, type AgentTabLock } from './persistence'
 import type {
@@ -103,6 +105,14 @@ export interface UseEditorAgentOptions {
      * the surface can run everything it registered (the editor panel).
      */
     isToolAvailable?: (name: string) => boolean
+    /**
+     * A background task (`background: true`) settled and nobody has shown the
+     * agent the result — the run is idle, so this is the moment the completion
+     * can become a new turn. Pages that do not pass it simply lose the
+     * auto-notification: the result still waits in `getBackgroundTask`, and a
+     * later `listBackgroundTasks` shows it.
+     */
+    onBackgroundTaskSettled?: (tasks: BackgroundTaskView[], note: string) => void
 }
 
 export interface StartTurnOptions {
@@ -637,6 +647,30 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
             lock.release()
         }
     }, [lock])
+
+    /**
+     * A finished background task becomes a note in the conversation — but only
+     * once the run is genuinely at rest and only when nobody waited on it (a
+     * `getBackgroundTask` result already told the agent).
+     *
+     * `idle` is the only ready phase, not `completed`: every host snapshots the
+     * finished turn and calls `reset()` in that same commit, which would abort a
+     * turn started from here. The live check also covers the window between
+     * `start()` being called and the phase actually moving off `idle`.
+     */
+    const onBackgroundTaskSettledRef = useRef(options.onBackgroundTaskSettled)
+    onBackgroundTaskSettledRef.current = options.onBackgroundTaskSettled
+    const isBackgroundTurnBusy = useCallback(
+        () => stateRef.current.phase !== 'idle' || startInFlightRef.current !== null,
+        [],
+    )
+    useBackgroundTaskNotifications({
+        conversationId,
+        busy: state.phase !== 'idle' || startInFlightRef.current !== null,
+        isBusy: isBackgroundTurnBusy,
+        onNotify: (tasks, note) => onBackgroundTaskSettledRef.current?.(tasks, note),
+        enabled: Boolean(options.onBackgroundTaskSettled),
+    })
 
     return { state, start, attach, approvePlan, continueRun, retryConnection, cancel, reset }
 }

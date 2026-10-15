@@ -21,8 +21,35 @@ import type {
     SkillPayload,
     ToolPayload,
 } from '../capabilities/payload-types'
+import type { ToolMetadata } from '../types'
 
 export type { AgentCapabilityCatalog }
+
+/**
+ * Whether a run at this scope may be offered a tool.
+ *
+ * The rule lives here (not inline in the workspace hook) because it is the one
+ * place a protocol tool can be lost: without `scope: 'any'` in the metadata, a
+ * workbench run — which is exactly where a long build happens — would never be
+ * told about `getBackgroundTask`, and the taskId it was just handed would be
+ * useless.
+ *
+ * - a live edit target makes this a document session like any other: everything
+ *   registered can run;
+ * - with no target, plugin contributions still carry this scope's capabilities
+ *   (a page-scoped tool is never registered in the first place);
+ * - an unknown tool is unavailable: guessing "it probably works" is how a model
+ *   ends up calling a document tool against a document that is not there.
+ */
+export function agentToolAvailableAtScope(
+    meta: ToolMetadata | undefined,
+    hasDocument: boolean,
+): boolean {
+    if (!meta) return false
+    if (hasDocument) return true
+    if (meta.source === 'plugin') return true
+    return meta.scope === 'any' || meta.scope === 'workspace'
+}
 
 /**
  * Drop every tool the scope cannot run, and reconcile the skills that

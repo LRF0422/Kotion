@@ -301,6 +301,48 @@ export interface StudioPluginMarketplace {
     upgrade(versionId: string | number): Promise<void>
 }
 
+/**
+ * Background-task seam (kernel `background: true` support).
+ *
+ * A build, an npm install and a release all take long enough that holding the
+ * agent's run — and the run's document write lease — for them is the wrong
+ * trade. The kernel owns the task board (waiting, cancellation, the completion
+ * note); the studio only decides *what work* may go there, so it takes a runner
+ * by injection like every other service and stays dependency-free.
+ *
+ * Structural on purpose: the tools must not import `@kn/common` (they run in
+ * tests without the host). `plugin-entry` passes the kernel's own runner.
+ */
+export interface StudioBackgroundRunHandle {
+    /** One-line progress note (shown in task listings / the UI). */
+    progress(text: string): void
+    /** True once someone cancelled: long work cannot be stopped, only abandoned. */
+    readonly cancelled: boolean
+}
+
+export interface StudioBackgroundStartRequest {
+    tool: string
+    title: string
+    conversationId?: string | null
+    owner?: string | null
+    meta?: Record<string, unknown>
+    onCancel?: () => void
+    run: (handle: StudioBackgroundRunHandle) => Promise<unknown>
+}
+
+export interface StudioBackgroundRunner {
+    /** Start the task; the returned value is what the tool call answers with. */
+    start(request: StudioBackgroundStartRequest): unknown
+}
+
+/** What the frontend tool executor hands a tool about its calling run. */
+export interface StudioToolExecContext {
+    /** Delegated sub-run id, or null/undefined for the main agent. */
+    owner?: string | null
+    /** Conversation the call belongs to: background tasks are scoped to it. */
+    conversationId?: string | null
+}
+
 export interface StudioToolDeps {
     /** The desktop bridge's dev surface, or undefined on a non-dev host. */
     getDev: () => StudioDevBridge | undefined
@@ -343,6 +385,37 @@ export interface StudioToolDeps {
      * kernel pane, and best-effort otherwise.
      */
     focusArtifactResult?: (tool: string, result: unknown, args: unknown) => boolean
+    /**
+     * Kernel background-task runner. Absent in tests and on hosts that do not
+     * publish one, where `background: true` is refused with an explanation
+     * instead of silently blocking the run.
+     */
+    getBackgroundRunner?: () => StudioBackgroundRunner | undefined
+    /**
+     * What a background task produces, per phase. Injected by the plugin entry
+     * from `./artifacts/surface` (the kernel-facing mapper table), because the
+     * tool layer must not import React and the artifact contract is structural.
+     *
+     * Without it a background build is invisible: the transcript only ever holds
+     * the handle, so nothing would put the project on the artifacts shelf while
+     * the build is running.
+     */
+    backgroundArtifact?: (input: {
+        tool: string
+        args: unknown
+        status: 'running' | 'succeeded' | 'failed' | 'cancelled'
+        result?: unknown
+        error?: string
+    }) => StudioArtifactRef | null
+}
+
+/** Structural copy of the kernel's `AgentArtifact` (see `@kn/common`). */
+export interface StudioArtifactRef {
+    kind: string
+    id: string
+    title?: string
+    subtitle?: string
+    data?: unknown
 }
 
 /* ------------------------------------------------------------------ *
@@ -648,6 +721,80 @@ const summarizeProject = (project: StudioProjectEntry) => ({
     active: Boolean(project.active),
 })
 
+/** A handle for work that is running in the foreground: nothing to report. */
+const NOOP_HANDLE: StudioBackgroundRunHandle = { progress: () => {}, cancelled: false }
+
+/** Last path segment — the label a task listing shows. */
+const projectLabel = (root: string): string => {
+    const parts = String(root ?? '').split(/[\\/]/).filter(Boolean)
+    return parts[parts.length - 1] || String(root ?? '')
+}
+
+/**
+ * Run long tool work either inline (the tool blocks, as it always did) or on the
+ * kernel's task board, where the agent decides whether to wait.
+ *
+ * One code path for both modes: the work function is identical, so a background
+ * build and a foreground build cannot drift apart in what they do — only in when
+ * the model learns the answer.
+ *
+ * `background: true` is a *request*. If the host publishes no runner the call is
+ * refused with an explanation: quietly blocking would look to the model like the
+ * host ignored the parameter, and the server's 600s tool timeout is the only
+ * thing that would eventually say otherwise.
+ */
+const runToolWork = async (
+    deps: StudioToolDeps,
+    request: {
+        tool: string
+        title: string
+        /** The call's own arguments: the artifact mapper reads `root` from them. */
+        args: unknown
+        background?: boolean
+        meta?: Record<string, unknown>
+        onCancel?: () => void
+    },
+    execCtx: StudioToolExecContext | undefined,
+    work: (handle: StudioBackgroundRunHandle) => Promise<unknown>,
+): Promise<unknown> => {
+    if (request.background !== true) return work(NOOP_HANDLE)
+    const runner = deps.getBackgroundRunner?.()
+    if (!runner) {
+        throw new Error(
+            '当前宿主没有后台任务能力（background: true 不可用）：请去掉 background 参数重试，'
+            + '本次调用会等它跑完再返回。',
+        )
+    }
+    const mapper = deps.backgroundArtifact
+    return runner.start({
+        tool: request.tool,
+        title: request.title,
+        conversationId: execCtx?.conversationId ?? null,
+        owner: execCtx?.owner ?? null,
+        ...(request.meta ? { meta: request.meta } : {}),
+        ...(request.onCancel ? { onCancel: request.onCancel } : {}),
+        // The task carries the artifact for its whole life (see the kernel's
+        // task board): a background build must be the conversation's working
+        // target while it is still being built, not only afterwards.
+        ...(mapper
+            ? {
+                artifact: (state: {
+                    status: 'running' | 'succeeded' | 'failed' | 'cancelled'
+                    result?: unknown
+                    error?: string
+                }) => mapper({
+                    tool: request.tool,
+                    args: request.args,
+                    status: state.status,
+                    result: state.result,
+                    error: state.error,
+                }),
+            }
+            : {}),
+        run: work,
+    })
+}
+
 /* ------------------------------------------------------------------ *
  * Tools
  * ------------------------------------------------------------------ */
@@ -911,7 +1058,8 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
     installPluginDependencies: {
         description:
             '在插件工程里安装第三方 npm 包：调用工程所用的包管理器（npm/pnpm/yarn）并写入 package.json。' +
-            '安装成功后即可在源码里 import（打包时会打进产物；react 与 @kn/* 仍由宿主提供）。需要网络。',
+            '安装成功后即可在源码里 import（打包时会打进产物；react 与 @kn/* 仍由宿主提供）。需要网络。' +
+            '安装通常要几十秒到几分钟：不想在这里干等就传 background: true，之后用 getBackgroundTask 等结果。',
         inputSchema: {
             type: 'object',
             properties: {
@@ -922,27 +1070,52 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
                     description: '要安装的包，如 ["date-fns@^3", "@octokit/rest"]。',
                 },
                 dev: { type: 'boolean', description: '可选。装到 devDependencies，默认 false。' },
+                background: {
+                    type: 'boolean',
+                    description:
+                        '可选。true = 后台安装：立即返回 taskId，安装继续在后台跑；' +
+                        '之后用 getBackgroundTask({ taskId, wait: true }) 拿结果。默认 false（等安装完再返回）。',
+                },
             },
             required: ['root', 'packages'],
         },
-        execute: async (args: { root: string; packages: string[]; dev?: boolean }) => {
-            const result = await requireInstall(deps)({
-                root: args.root,
-                packages: Array.isArray(args.packages) ? args.packages : [],
-                dev: args.dev === true,
-            })
-            if (!result.ok) {
-                throw new Error(
-                    '依赖安装失败（' + result.manager + '）：' + (result.error || '未知错误') + '\n' + result.output,
-                )
+        execute: async (
+            args: { root: string; packages: string[]; dev?: boolean; background?: boolean },
+            _callId?: string,
+            execCtx?: StudioToolExecContext,
+        ) => {
+            const work = async (handle: StudioBackgroundRunHandle) => {
+                    handle.progress(`正在安装 ${(args.packages ?? []).join('、') || '（未指定包）'}`)
+                    const result = await requireInstall(deps)({
+                        root: args.root,
+                        packages: Array.isArray(args.packages) ? args.packages : [],
+                        dev: args.dev === true,
+                    })
+                    if (!result.ok) {
+                        throw new Error(
+                            '依赖安装失败（' + result.manager + '）：' + (result.error || '未知错误') + '\n' + result.output,
+                        )
+                    }
+                    return {
+                        ok: true,
+                        manager: result.manager,
+                        packages: result.packages,
+                        output: result.output,
+                        next: '现在可以在源码里 import 这些包；改完用 runPluginProject / buildPluginProject 验证。',
+                    }
             }
-            return {
-                ok: true,
-                manager: result.manager,
-                packages: result.packages,
-                output: result.output,
-                next: '现在可以在源码里 import 这些包；改完用 runPluginProject / buildPluginProject 验证。',
-            }
+            return runToolWork(
+                deps,
+                {
+                    tool: 'installPluginDependencies',
+                    title: `安装依赖 ${projectLabel(args.root)}`,
+                    args,
+                    background: args.background,
+                    meta: { root: args.root, packages: args.packages },
+                },
+                execCtx,
+                work,
+            )
         },
     },
 
@@ -962,7 +1135,8 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
             '把插件工程构建并发布到插件市场：先构建，再上传产物；新插件走“上架”（提交审核，不传 pluginId），' +
             '已上架插件走“发布新版本”（传 pluginId，来自 listMyPlugins）。' +
             '两种模式都会带上工程的图标（清单里的 knPluginStudio.icon，用 generatePluginIcon 生成）——' +
-            '升版时可以借它改图标，图标在版本审核通过后才对市场生效。',
+            '升版时可以借它改图标，图标在版本审核通过后才对市场生效。' +
+            '构建 + 上传 + 提交要跑一段时间（图标上传还要读盘）：不想干等就传 background: true，之后用 getBackgroundTask 等结果。',
         inputSchema: {
             type: 'object',
             properties: {
@@ -995,118 +1169,145 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
                     },
                     description: '可选版本说明小节。',
                 },
+                background: {
+                    type: 'boolean',
+                    description:
+                        '可选。true = 后台发布：立即返回 taskId，构建/上传/提交继续在后台跑；' +
+                        '之后用 getBackgroundTask({ taskId, wait: true }) 拿结果（含 resourcePath、审核状态）。' +
+                        '默认 false（等发布流程走完再返回）。',
+                },
             },
             required: ['root', 'version'],
         },
-        execute: async (args: {
-            root: string
-            version: string
-            pluginId?: string | number
-            name?: string
-            pluginKey?: string
-            description?: string
-            category?: string
-            tags?: string[]
-            icon?: string
-            permissions?: string[]
-            versionDescs?: Array<{ label: string; content: string }>
-        }) => {
-            const dev = requireDev(deps)
-            const marketplace = requireMarketplace(deps)
-            const status = await dev.build({ root: args.root })
-            if (!status.build?.code) {
-                throw new Error('构建失败，无法发布：' + (status.error ?? '没有构建产物'))
-            }
-            const uploaded = await marketplace.uploadArtifact({
-                fileName: args.pluginKey ? args.pluginKey + '.js' : 'index.js',
-                data: new Blob([status.build.code], { type: 'text/javascript' }),
-            })
+        execute: async (
+            args: {
+                root: string
+                version: string
+                pluginId?: string | number
+                name?: string
+                pluginKey?: string
+                description?: string
+                category?: string
+                tags?: string[]
+                icon?: string
+                permissions?: string[]
+                versionDescs?: Array<{ label: string; content: string }>
+                background?: boolean
+            },
+            _callId?: string,
+            execCtx?: StudioToolExecContext,
+        ) => {
+            const work = async (handle: StudioBackgroundRunHandle) => {
+                const dev = requireDev(deps)
+                const marketplace = requireMarketplace(deps)
+                handle.progress(`正在构建并发布 ${args.version}`)
+                const status = await dev.build({ root: args.root })
+                if (!status.build?.code) {
+                    throw new Error('构建失败，无法发布：' + (status.error ?? '没有构建产物'))
+                }
+                const uploaded = await marketplace.uploadArtifact({
+                    fileName: args.pluginKey ? args.pluginKey + '.js' : 'index.js',
+                    data: new Blob([status.build.code], { type: 'text/javascript' }),
+                })
 
-            /**
-             * The marketplace icon, when the project has one.
-             *
-             * A plugin's icon is a declared FILE (`knPluginStudio.icon`), which
-             * `generatePluginIcon` writes — but the catalogue wants an uploaded
-             * image, and the tool used to require the caller to have uploaded it
-             * by hand. Upload it here instead, unless the caller passed a path
-             * they already uploaded.
-             */
-            let icon = typeof args.icon === 'string' && args.icon ? args.icon : null
-            let iconNote: string | undefined
-            if (!icon) {
-                const toolkit = deps.getIconToolkit?.()
-                if (toolkit) {
-                    try {
-                        const manifestText = await dev.readFile({ path: joinRoot(args.root, 'package.json') })
-                        const declared = toolkit.readDeclaredIcon(manifestText)
-                        if (toolkit.isUploadableIcon(declared) && declared) {
-                            const svg = await dev.readFile({ path: joinRoot(args.root, declared) })
-                            const fileName = lastSegment(declared)
-                            const uploadedIcon = await marketplace.uploadArtifact({
-                                fileName,
-                                data: new Blob([svg], { type: toolkit.iconMimeType(fileName) }),
-                            })
-                            icon = uploadedIcon.resourcePath
-                            iconNote = `已上传工程图标 ${declared}。`
-                        } else if (declared) {
-                            icon = declared
-                            iconNote = `清单声明的图标 "${declared}" 不是工程内文件（URL/data URI），原样提交。`
+                /**
+                 * The marketplace icon, when the project has one.
+                 *
+                 * A plugin's icon is a declared FILE (`knPluginStudio.icon`), which
+                 * `generatePluginIcon` writes — but the catalogue wants an uploaded
+                 * image, and the tool used to require the caller to have uploaded it
+                 * by hand. Upload it here instead, unless the caller passed a path
+                 * they already uploaded.
+                 */
+                let icon = typeof args.icon === 'string' && args.icon ? args.icon : null
+                let iconNote: string | undefined
+                if (!icon) {
+                    const toolkit = deps.getIconToolkit?.()
+                    if (toolkit) {
+                        try {
+                            const manifestText = await dev.readFile({ path: joinRoot(args.root, 'package.json') })
+                            const declared = toolkit.readDeclaredIcon(manifestText)
+                            if (toolkit.isUploadableIcon(declared) && declared) {
+                                const svg = await dev.readFile({ path: joinRoot(args.root, declared) })
+                                const fileName = lastSegment(declared)
+                                const uploadedIcon = await marketplace.uploadArtifact({
+                                    fileName,
+                                    data: new Blob([svg], { type: toolkit.iconMimeType(fileName) }),
+                                })
+                                icon = uploadedIcon.resourcePath
+                                iconNote = `已上传工程图标 ${declared}。`
+                            } else if (declared) {
+                                icon = declared
+                                iconNote = `清单声明的图标 "${declared}" 不是工程内文件（URL/data URI），原样提交。`
+                            }
+                        } catch (error) {
+                            iconNote =
+                                `清单声明了图标但上传失败（${(error as Error)?.message ?? error}）：` +
+                                '可以先跑 generatePluginIcon 重新生成，或上架后到插件市场补图。'
                         }
-                    } catch (error) {
-                        iconNote =
-                            `清单声明了图标但上传失败（${(error as Error)?.message ?? error}）：` +
-                            '可以先跑 generatePluginIcon 重新生成，或上架后到插件市场补图。'
                     }
                 }
-            }
 
-            if (args.pluginId !== undefined && args.pluginId !== null) {
-                await marketplace.publishVersion(args.pluginId, {
+                if (args.pluginId !== undefined && args.pluginId !== null) {
+                    await marketplace.publishVersion(args.pluginId, {
+                        version: args.version,
+                        resourcePath: uploaded.resourcePath,
+                        integrity: uploaded.integrity,
+                        // A version may rebrand the plugin; the server keeps the
+                        // current icon when this is absent, and only shows the new
+                        // one once the version is approved.
+                        ...(icon ? { icon } : {}),
+                        versionDescs: args.versionDescs,
+                    })
+                    return {
+                        ok: true,
+                        mode: 'version',
+                        pluginId: args.pluginId,
+                        version: args.version,
+                        resourcePath: uploaded.resourcePath,
+                        buildCount: status.buildCount,
+                        ...(icon ? { icon } : {}),
+                        iconNote,
+                    }
+                }
+                const name = args.name ?? status.plugin.name
+                const pluginKey = args.pluginKey ?? status.plugin.pluginKey
+                await marketplace.submit({
+                    name,
+                    pluginKey,
                     version: args.version,
+                    category: args.category ?? 'FEATURE',
+                    description: args.description ?? name,
                     resourcePath: uploaded.resourcePath,
                     integrity: uploaded.integrity,
-                    // A version may rebrand the plugin; the server keeps the
-                    // current icon when this is absent, and only shows the new
-                    // one once the version is approved.
-                    ...(icon ? { icon } : {}),
+                    tags: args.tags,
+                    icon,
+                    permissions: args.permissions,
                     versionDescs: args.versionDescs,
                 })
                 return {
                     ok: true,
-                    mode: 'version',
-                    pluginId: args.pluginId,
+                    mode: 'submit',
+                    pluginKey,
                     version: args.version,
                     resourcePath: uploaded.resourcePath,
                     buildCount: status.buildCount,
-                    ...(icon ? { icon } : {}),
+                    icon,
                     iconNote,
                 }
             }
-            const name = args.name ?? status.plugin.name
-            const pluginKey = args.pluginKey ?? status.plugin.pluginKey
-            await marketplace.submit({
-                name,
-                pluginKey,
-                version: args.version,
-                category: args.category ?? 'FEATURE',
-                description: args.description ?? name,
-                resourcePath: uploaded.resourcePath,
-                integrity: uploaded.integrity,
-                tags: args.tags,
-                icon,
-                permissions: args.permissions,
-                versionDescs: args.versionDescs,
-            })
-            return {
-                ok: true,
-                mode: 'submit',
-                pluginKey,
-                version: args.version,
-                resourcePath: uploaded.resourcePath,
-                buildCount: status.buildCount,
-                icon,
-                iconNote,
-            }
+            return runToolWork(
+                deps,
+                {
+                    tool: 'publishPluginProject',
+                    title: `发布 ${projectLabel(args.root)} ${args.version}`,
+                    args,
+                    background: args.background,
+                    meta: { root: args.root, version: args.version, pluginId: args.pluginId ?? null },
+                },
+                execCtx,
+                work,
+            )
         },
     },
 
@@ -1130,7 +1331,8 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
         description:
             '开始（或重启）监听一个插件工程，等首个构建完成后把它热更到当前应用窗口；之后保存文件会自动重新构建，' +
             '插件开发台面板打开时会把成功的重建自动热更到窗口（未打开时用 buildPluginProject 主动热更）。' +
-            '这是"实时预览"的入口。返回构建结果或编译错误。',
+            '这是"实时预览"的入口。返回构建结果或编译错误。' +
+            '首个构建通常很快，但冷启动/依赖多时要等一会儿：不想干等就传 background: true（监听照常开启）。',
         inputSchema: {
             type: 'object',
             properties: {
@@ -1150,76 +1352,111 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
                         '先用 listHostGlobals 查；react、react-dom 与 @kn/* 无需声明。第三方 npm 包应改用 installPluginDependencies。' +
                         '省略表示沿用该工程上一次的声明，传 [] 才是清空。',
                 },
+                background: {
+                    type: 'boolean',
+                    description:
+                        '可选。true = 后台执行：立即返回 taskId，监听与首个构建在后台进行；' +
+                        '之后用 getBackgroundTask({ taskId, wait: true }) 拿构建结果。默认 false（等首个构建完成再返回）。',
+                },
             },
             required: ['root'],
         },
-        execute: async (args: { root: string; watch?: boolean; autoInstall?: boolean; focus?: boolean; externals?: string[] }) => {
-            const externals = args.externals === undefined
-                ? undefined
-                : assertExternalsAvailable(deps, normalizeExternals(args.externals))
-            const status = await requireDev(deps).start({
-                root: args.root,
-                watch: args.watch !== false,
-                externals,
-            })
-            const summary = summarize(status)
-            if (!summary.ok || !status?.build) return summary
+        execute: async (
+            args: {
+                root: string
+                watch?: boolean
+                autoInstall?: boolean
+                focus?: boolean
+                externals?: string[]
+                background?: boolean
+            },
+            _callId?: string,
+            execCtx?: StudioToolExecContext,
+        ) => {
+            const work = async (handle: StudioBackgroundRunHandle) => {
+                const externals = args.externals === undefined
+                    ? undefined
+                    : assertExternalsAvailable(deps, normalizeExternals(args.externals))
+                handle.progress(`正在启动监听/首个构建 ${projectLabel(args.root)}`)
+                const status = await requireDev(deps).start({
+                    root: args.root,
+                    watch: args.watch !== false,
+                    externals,
+                })
+                const summary = summarize(status)
+                if (!summary.ok || !status?.build) return summary
 
-            let installed = false
-            let reloadReason = ''
-            if (args.autoInstall !== false) {
-                const devHost = deps.getDevHost?.()
-                if (devHost) {
-                    // Bind the project in the *host*: every later build hot-reloads
-                    // the window on its own, whether or not this page — or any page —
-                    // is open. This is the difference the studio used to have to
-                    // document as a limitation.
-                    const binding = await devHost.watch({
-                        root: status.root,
-                        pluginKey: status.plugin.pluginKey,
-                        name: status.plugin.name,
-                    })
-                    installed = binding.outcome?.ok !== false && Boolean(binding.outcome)
-                    reloadReason = binding.outcome?.reason ?? ''
-                } else {
-                    installed = await requirePluginHost(deps).installFromSource({
-                        code: status.build.code,
-                        pluginKey: status.plugin.pluginKey,
-                        name: status.plugin.name,
-                        version: `dev.${status.buildCount}`,
-                        replace: true,
-                        sourceLabel: status.root,
-                        onRejected: (reason) => { reloadReason = reason },
-                    })
+                let installed = false
+                let reloadReason = ''
+                if (args.autoInstall !== false) {
+                    const devHost = deps.getDevHost?.()
+                    if (devHost) {
+                        // Bind the project in the *host*: every later build hot-reloads
+                        // the window on its own, whether or not this page — or any page —
+                        // is open. This is the difference the studio used to have to
+                        // document as a limitation.
+                        const binding = await devHost.watch({
+                            root: status.root,
+                            pluginKey: status.plugin.pluginKey,
+                            name: status.plugin.name,
+                        })
+                        installed = binding.outcome?.ok !== false && Boolean(binding.outcome)
+                        reloadReason = binding.outcome?.reason ?? ''
+                    } else {
+                        installed = await requirePluginHost(deps).installFromSource({
+                            code: status.build.code,
+                            pluginKey: status.plugin.pluginKey,
+                            name: status.plugin.name,
+                            version: `dev.${status.buildCount}`,
+                            replace: true,
+                            sourceLabel: status.root,
+                            onRejected: (reason) => { reloadReason = reason },
+                        })
+                    }
                 }
+                const reloadNote = rejectedReloadNote(status.plugin.name, reloadReason)
+                const result = {
+                    ...summary,
+                    ...(externals ? { externals } : {}),
+                    installed,
+                    // `installed: false` after a *successful* build is not a success:
+                    // say why the window kept the previous version.
+                    ...(args.autoInstall !== false && !installed
+                        ? { reloadRejected: true, reloadNote }
+                        : {}),
+                    next: status.watching
+                        ? (args.autoInstall !== false && !installed
+                            ? reloadNote
+                            : '现在编辑源码即可自动热更；改完用 buildPluginProject 可主动重建。')
+                        : undefined,
+                }
+                // The build IS the artifact: make it the working target unless the
+                // caller asked for a silent build. In background mode this runs when
+                // the task settles — the side pane then opens on the finished build
+                // exactly as it does for a foreground call.
+                if (args.focus !== false) focusProducedArtifact(deps, 'runPluginProject', result, args)
+                return result
             }
-            const reloadNote = rejectedReloadNote(status.plugin.name, reloadReason)
-            const result = {
-                ...summary,
-                ...(externals ? { externals } : {}),
-                installed,
-                // `installed: false` after a *successful* build is not a success:
-                // say why the window kept the previous version.
-                ...(args.autoInstall !== false && !installed
-                    ? { reloadRejected: true, reloadNote }
-                    : {}),
-                next: status.watching
-                    ? (args.autoInstall !== false && !installed
-                        ? reloadNote
-                        : '现在编辑源码即可自动热更；改完用 buildPluginProject 可主动重建。')
-                    : undefined,
-            }
-            // The build IS the artifact: make it the working target unless the
-            // caller asked for a silent build.
-            if (args.focus !== false) focusProducedArtifact(deps, 'runPluginProject', result, args)
-            return result
+            return runToolWork(
+                deps,
+                {
+                    tool: 'runPluginProject',
+                    title: `监听/构建 ${projectLabel(args.root)}`,
+                    args,
+                    background: args.background,
+                    meta: { root: args.root },
+                },
+                execCtx,
+                work,
+            )
         },
     },
 
     buildPluginProject: {
         description:
             '对插件工程做一次构建并热更到当前窗口（不改变监听状态）。适合改完源码后主动重建，或在监听未开启时预览一次。' +
-            '构建失败会返回编译错误，宿主不会受影响。',
+            '构建失败会返回编译错误，宿主不会受影响。' +
+            '依赖多/冷启动时构建可能要等十几秒：不想干等就传 background: true，之后用 getBackgroundTask 等结果。',
         inputSchema: {
             type: 'object',
             properties: {
@@ -1238,77 +1475,109 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
                         '可选。声明为“宿主全局模块”的 import 名（同 runPluginProject）。省略表示沿用当前会话的声明；' +
                         '传了但与会话不同时，宿主会重启该会话来生效。',
                 },
+                background: {
+                    type: 'boolean',
+                    description:
+                        '可选。true = 后台构建：立即返回 taskId，构建与热更在后台进行；' +
+                        '之后用 getBackgroundTask({ taskId, wait: true }) 拿构建结果。默认 false（等构建完成再返回）。',
+                },
             },
             required: ['root'],
         },
-        execute: async (args: { root: string; install?: boolean; writeToDisk?: boolean; focus?: boolean; externals?: string[] }) => {
-            const dev = requireDev(deps)
-            const externals = args.externals === undefined
-                ? undefined
-                : assertExternalsAvailable(deps, normalizeExternals(args.externals))
+        execute: async (
+            args: {
+                root: string
+                install?: boolean
+                writeToDisk?: boolean
+                focus?: boolean
+                externals?: string[]
+                background?: boolean
+            },
+            _callId?: string,
+            execCtx?: StudioToolExecContext,
+        ) => {
+            const work = async (handle: StudioBackgroundRunHandle) => {
+                const dev = requireDev(deps)
+                const externals = args.externals === undefined
+                    ? undefined
+                    : assertExternalsAvailable(deps, normalizeExternals(args.externals))
+                handle.progress(`正在构建 ${projectLabel(args.root)}`)
 
-            const devHost = deps.getDevHost?.()
-            if (devHost) {
-                // The host owns "wait for the fresh build, then install it": it has
-                // to, because that is the same path an ordinary file-save takes.
-                const { status, outcome } = await devHost.build({
+                const devHost = deps.getDevHost?.()
+                if (devHost) {
+                    // The host owns "wait for the fresh build, then install it": it has
+                    // to, because that is the same path an ordinary file-save takes.
+                    const { status, outcome } = await devHost.build({
+                        root: args.root,
+                        writeToDisk: args.writeToDisk === true,
+                        externals,
+                    })
+                    const summary = summarize(status)
+                    if (!summary.ok || !status?.build) return summary
+                    const installed = args.install === false ? false : outcome?.ok !== false && Boolean(outcome)
+                    const reloadNote = rejectedReloadNote(status.plugin.name, outcome?.reason ?? '')
+                    const result = {
+                        ...summary,
+                        ...(externals ? { externals } : {}),
+                        installed,
+                        ...(args.install !== false && !installed
+                            ? { reloadRejected: true, reloadNote }
+                            : {}),
+                    }
+                    if (args.focus !== false) focusProducedArtifact(deps, 'buildPluginProject', result, args)
+                    return result
+                }
+
+                const [existing] = await dev.status({ root: args.root })
+                const previous = existing?.buildCount ?? 0
+                const requested = await dev.build({
                     root: args.root,
                     writeToDisk: args.writeToDisk === true,
                     externals,
                 })
+                const status =
+                    requested.buildCount > previous || requested.state === 'failed' || requested.error
+                        ? requested
+                        : await waitForFreshBuild(deps, args.root, previous)
                 const summary = summarize(status)
                 if (!summary.ok || !status?.build) return summary
-                const installed = args.install === false ? false : outcome?.ok !== false && Boolean(outcome)
-                const reloadNote = rejectedReloadNote(status.plugin.name, outcome?.reason ?? '')
+
+                let installed = false
+                let reloadReason = ''
+                if (args.install !== false) {
+                    installed = await requirePluginHost(deps).installFromSource({
+                        code: status.build.code,
+                        pluginKey: status.plugin.pluginKey,
+                        name: status.plugin.name,
+                        version: `dev.${status.buildCount}`,
+                        replace: true,
+                        sourceLabel: status.root,
+                        onRejected: (reason) => { reloadReason = reason },
+                    })
+                }
                 const result = {
                     ...summary,
                     ...(externals ? { externals } : {}),
                     installed,
                     ...(args.install !== false && !installed
-                        ? { reloadRejected: true, reloadNote }
+                        ? { reloadRejected: true, reloadNote: rejectedReloadNote(status.plugin.name, reloadReason) }
                         : {}),
                 }
                 if (args.focus !== false) focusProducedArtifact(deps, 'buildPluginProject', result, args)
                 return result
             }
-
-            const [existing] = await dev.status({ root: args.root })
-            const previous = existing?.buildCount ?? 0
-            const requested = await dev.build({
-                root: args.root,
-                writeToDisk: args.writeToDisk === true,
-                externals,
-            })
-            const status =
-                requested.buildCount > previous || requested.state === 'failed' || requested.error
-                    ? requested
-                    : await waitForFreshBuild(deps, args.root, previous)
-            const summary = summarize(status)
-            if (!summary.ok || !status?.build) return summary
-
-            let installed = false
-            let reloadReason = ''
-            if (args.install !== false) {
-                installed = await requirePluginHost(deps).installFromSource({
-                    code: status.build.code,
-                    pluginKey: status.plugin.pluginKey,
-                    name: status.plugin.name,
-                    version: `dev.${status.buildCount}`,
-                    replace: true,
-                    sourceLabel: status.root,
-                    onRejected: (reason) => { reloadReason = reason },
-                })
-            }
-            const result = {
-                ...summary,
-                ...(externals ? { externals } : {}),
-                installed,
-                ...(args.install !== false && !installed
-                    ? { reloadRejected: true, reloadNote: rejectedReloadNote(status.plugin.name, reloadReason) }
-                    : {}),
-            }
-            if (args.focus !== false) focusProducedArtifact(deps, 'buildPluginProject', result, args)
-            return result
+            return runToolWork(
+                deps,
+                {
+                    tool: 'buildPluginProject',
+                    title: `构建 ${projectLabel(args.root)}`,
+                    args,
+                    background: args.background,
+                    meta: { root: args.root, writeToDisk: args.writeToDisk === true },
+                },
+                execCtx,
+                work,
+            )
         },
     },
 

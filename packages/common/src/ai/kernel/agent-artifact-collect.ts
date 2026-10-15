@@ -47,3 +47,23 @@ export function collectAgentArtifacts(
     }
     return Array.from(byKey.values()).reverse()
 }
+
+/**
+ * Pure: fold the artifacts of in-flight/background tasks into the transcript's.
+ *
+ * This is what makes a long tool (a plugin build, a Jenkins job) a real artifact
+ * for its whole lifetime: its tool result is only a handle, so the transcript
+ * can never describe more than "it was asked for". The task's artifact is the
+ * same `(kind, id)` slot and holds the newer truth (it knows the work finished,
+ * and with what numbers), so it overrides — see
+ * `BackgroundTaskRegistry.artifacts`.
+ */
+export function mergeAgentArtifacts(
+    fromTranscript: readonly AgentArtifact[],
+    fromTasks: readonly AgentArtifact[],
+): AgentArtifact[] {
+    const byKey = new Map<string, AgentArtifact>()
+    for (const artifact of fromTranscript) byKey.set(agentArtifactKey(artifact), artifact)
+    for (const artifact of fromTasks) byKey.set(agentArtifactKey(artifact), artifact)
+    return Array.from(byKey.values()).reverse()
+}
