@@ -16,7 +16,7 @@
 
 | 命令 | 结果 |
 | --- | --- |
-| `pnpm test:plugin-dev` | **通过**（12 个 suite；本轮修复后 bundler 由 50 → **54** 项，合计 511） |
+| `pnpm test:plugin-dev` | **通过**（12 个 suite；A0 修复后 bundler 50 → **54**，grep 后 project-files 10 → **30**、studio-tools 203 → **228**，A12 修复后 packaged-studio-deps 23 → **28**，合计 **561**） |
 | `node packages/plugin-plugin-studio/src/icons/icon-ai.test.mjs` | 14/14 通过 —— **但没有被 root 的 `test:plugin-dev` 聚合**（见 §5.1） |
 | `pnpm --filter @kn/common check:plugin-hot-swap` | 145 → **148** 项通过（新增 JSX 运行时的接线断言，见 A0） |
 | `pnpm --filter @kn/plugin-plugin-studio typecheck` | 干净通过（`tsc --noEmit`） |
@@ -40,17 +40,17 @@
 
 ## 2. 现状能力矩阵
 
-### 2.1 Agent 工具面（24 个，`studio-tools.ts`）
+### 2.1 Agent 工具面（26 个，`studio-tools.ts`）
 
 与文档第 88–115 行**逐个核对一致**，数量与名字都对得上：
 
 | 分组 | 工具（行号） |
 | --- | --- |
 | 工程 CRUD | `listPluginProjects`:803 · `createPluginProject`:829 · `deletePluginProject`:1584 · `deletePluginProjectFile`:1632 |
-| 源码读写 | `writePluginProjectFile`:893 · `readPluginProjectFile`:913 · `editPluginProjectFile`:947 · `listPluginProjectFiles`:1001 · `searchPluginProject`:1027 |
+| 源码读写 | `writePluginProjectFile`:893 · `readPluginProjectFile`:913 · `editPluginProjectFile`:947 · `listPluginProjectFiles`:1001 · `searchPluginProject`:1027 · **`grepPluginProject`（本轮新增，正则 + glob + 上下文 + 三种输出模式）** |
 | 构建/运行 | `runPluginProject`:1330 · `buildPluginProject`:1455 · `stopPluginProject`:1667 · `pluginProjectLogs`:1696 |
 | 依赖 | `installPluginDependencies`:1058 |
-| 能力发现 | `listHostGlobals`:1720 · `listPluginServices`:1751 · `listPluginIcons`:1830 · `generatePluginIcon`:1877 · `listHostApiPackages`:1960 · `searchHostApi`:1981 · `readHostApiFile`:2006 |
+| 能力发现 | `listDesktopCapabilities`（本轮新增，列出宿主真实暴露的桌面能力面） · `listHostGlobals`:1720 · `listPluginServices`:1751 · `listPluginIcons`:1830 · `generatePluginIcon`:1877 · `listHostApiPackages`:1960 · `searchHostApi`:1981 · `readHostApiFile`:2006 |
 | 市场 | `listMyPlugins`:1122 · `publishPluginProject`:1133 · `upgradePluginVersion`:1314 |
 
 设计上确有两个值得肯定的硬约束：**读后写**（`observedFiles` 守卫，`studio-tools.ts:648-651`，没读过不能 `edit`/`delete`）
@@ -58,7 +58,7 @@
 
 但工具面还有三处**文档与语义不符 / 结构性缺失**（逐行核对结论）：
 
-- **参数不做 schema 校验**：24 个工具**没有一个**在运行时用 `inputSchema` 校验入参，检查全靠 `execute` 里的临时判断或下沉给宿主。
+- **参数不做 schema 校验**：26 个工具**没有一个**在运行时用 `inputSchema` 校验入参，检查全靠 `execute` 里的临时判断或下沉给宿主。
   模型传错形状的入参时，得到的不是「参数非法」而是一句宿主侧的偶发错误。
 - `listPluginProjects` 的 `active` 是「有会话」而非「正在监听」（`manager.mjs:771`、`studio-tools.ts:721`）：
   一次 `watch:false` 的构建会让工程显示为 active；文档第 92 行写的是「是否在监听」。
@@ -83,7 +83,7 @@
 | 只有 agent 能做 | 证据 |
 | --- | --- |
 | 产出 `dist/index.js`（`writeToDisk`） | 渲染层从不传 `writeToDisk`（`StudioPage.tsx:551-564`、`StudioMarketplacePanel.tsx:28`），只有工具面暴露（`studio-tools.ts:1465,1512`） |
-| 在工程内搜索 | GUI 调 `dev.files` 时不带 `query`（`StudioPage.tsx:369`）尽管能力支持搜索（`project-files.mjs:63`）；`searchPluginProject` 只在工具面（`studio-tools.ts:1027`） |
+| 在工程内搜索 / grep | GUI 调 `dev.files` 时不带 `query`/`pattern`（`StudioPage.tsx:369`）尽管能力已支持搜索与 grep；`searchPluginProject` / `grepPluginProject` 都只在工具面 |
 | 删单个文件 | `deletePluginProjectFile` 只在工具面（`studio-tools.ts:1632`），UI 无入口 |
 | 配置 secrets / env | 宿主已有 `usePluginConfig({ secretFields })`（`packages/common/src/hooks/use-plugin-config.ts:54`、`docs/PLUGIN_CONFIG_SECRETS.md`），但开发台**无论 UI 还是 skill 都没提过它** |
 | 声明 externals 的具体取值 | 只在工具入参里（`studio-tools.ts:1465` 等） |
@@ -143,7 +143,7 @@
 | A9 | **模板只覆盖 5 个贡献点** | `SCAFFOLD_TEMPLATES = ['panel','page','settings','command','blank']`（`bundler.mjs:257`） | 缺 editor 节点、dock 面板之外的 tours/locales/services/agent-tools/artifact-renderer 模板；且没有「模板目录可扩展」的机制（模板硬编码在 `bundler.mjs` 里的字符串） | P2 |
 | A10 | **无离线分发** | 发布只有「上传到市场」一条路（`publishPluginProject`） | 内网/私有分发缺 `打包成 .knp/.zip` + 本地导入安装；企业场景常是第一需求 | P2 |
 | A11 | **脚手架产物不是一个能独立开发的 TS 工程** | `renderScaffold` 只写 `package.json`（`bundler.mjs:419-430`：无 `scripts`、无 `devDependencies`、无 `tsconfig.json`、无 `.gitignore`）+ `src/*` + `README.md`；`@kn/*` 只写成 `peerDependencies`，磁盘上从未真正安装 | 把工程拿回 IDE：`import { KPlugin } from '@kn/common'` **解析不到**，全程飘红、没有补全；工程内也无法跑 `tsc` / 任何脚本。这既是 A1 的根因之一，也让「离开开发台就用不了」 | **P0** |
-| A12 | **打包版里 `dev.hostApi`（`searchHostApi` / `readHostApiFile`）是死的**（已定位，见 §5.2） | `prepare-studio-deps.cjs:328` 把标准包源码物化到 `Resources/kn-studio-runtime/host-api/packages/…`，但 `workspaceRootCandidates()`（`plugin-dev/index.ts:63-75`）从不包含 `process.resourcesPath`；打包应用里 cwd 为 `/` ⇒ `resolveWorkspaceRoot` 返回 undefined ⇒ `dev.hostApi` 抛「not available in this build」 | 「让 agent 查真实接口」这条能力在**正式安装的客户端里整条失效**（而 ~1MB 源码照旧随包发出）；`packaged-studio-deps.test.mjs:159-161` 只断言文件存在、从不解析 root，所以没被发现 | **P0** |
+| A12 | ~~**打包版里 `dev.hostApi` 是死的**~~ **✅ 已修**：候选路径抽成纯函数 `workspace-candidates.mjs`（含 `process.resourcesPath/kn-studio-runtime/host-api`），`packaged-studio-deps.test.mjs` 现在真的解析这棵树并列包。原症状： `prepare-studio-deps.cjs:328` 把标准包源码物化到 `Resources/kn-studio-runtime/host-api/packages/…`，但 `workspaceRootCandidates()`（`plugin-dev/index.ts:63-75`）从不包含 `process.resourcesPath`；打包应用里 cwd 为 `/` ⇒ `resolveWorkspaceRoot` 返回 undefined ⇒ `dev.hostApi` 抛「not available in this build」 | 「让 agent 查真实接口」这条能力在**正式安装的客户端里整条失效**（而 ~1MB 源码照旧随包发出）；`packaged-studio-deps.test.mjs:159-161` 只断言文件存在、从不解析 root，所以没被发现 | **P0** |
 | A13 | **无构建期 env / secrets / define** | 子进程继承整个宿主环境（`manager.mjs:342-348`），但 esbuild 配置没有 `define`、没有 `.env` 支持、没有 per-project env（`bundler.mjs:730-753`） | 插件既**拿不到**自己的配置（API key、baseURL），又**白白继承**宿主所有环境变量；「插件要连第三方服务」目前只能写死在源码里再人工改 | P1 |
 | A14 | **没有增量构建、没有资源上限** | 每次改动都是完整 `esbuild.build()`（无 `context()`/incremental，`bundler.mjs:35-39,730-753`）；每次构建都整体重编 Tailwind（重新遍历整个工程，`tailwind.mjs:77-85`、`bundler.mjs:763`）；无会话数/包体/`readFile`/`writeFile` 上限 | 大工程热更延迟随规模线性增长；一次超大构建还会把整份 bundle 广播给**所有窗口**（`plugin-dev/index.ts:85-89`） | P2 |
 | A15 | **没有静态资源管线**（图片/字体）；而工程文件浏览器也看不到它们 | bundler 只配了 `loader: { '.jsx': 'jsx' }`（`bundler.mjs:746`），且假定单产物（`outputFiles[0]`，:755）；我实测 `import logo from './logo.svg'` 直接构建失败：`No loader is configured for ".svg" files`；`import './theme.css'` 也失败：`Cannot import "src/theme.css" into a JavaScript file without an output path configured`（CSS 只走「扫源码类名生成 Tailwind 工具类」这一条路，`tailwind.mjs`）。同时 `project-files.mjs:14` 的扩展名白名单不含 `.svg/.png/.woff` | 插件**不能带自己的图片/字体/自写 CSS/第三方 CSS**；连开发台自己生成的 `assets/icon.svg` 在「文件」页签里都看不见。发布也只能上传「一个 JS + 一个图标」（`studio-tools.ts:1208-1211,1281-1287`） | P1 |
@@ -209,8 +209,7 @@
 0. ~~**修 `react/jsx-runtime` 外部化**~~ **✅ 已完成**：宿主发布真实运行时到 `__KN__.jsxRuntime` / `__KN__.jsxDevRuntime`，
    bundler 映射过去；`bundler.test.mjs` +4 项、`plugin-hot-swap.check.ts` +3 项回归。
    （未走「打进产物」那条路，原因见 §5.2。）
-0b. **修打包版 `dev.hostApi`**（§5.2）：把 `Resources/kn-studio-runtime/host-api` 加进 `workspaceRootCandidates()`（A12），
-   并把 `packaged-studio-deps.test.mjs` 从「断言文件存在」升级为「在没有源码树时真的能列包/搜符号」。
+0b. ~~**修打包版 `dev.hostApi`**~~ **✅ 已完成**：候选路径抽成纯函数 `workspace-candidates.mjs` 并加上 `Resources/kn-studio-runtime/host-api`；`packaged-studio-deps.test.mjs` 现在断言「打包布局下候选能解析到这棵树、能列出 6 个包」，并额外断言「去掉 resources 候选就找不到」——把这次回归钉死。
 0c. **修两处 CSS 契约**（§5.2）：预览的无 payload 路径统一用 `pluginKey` 作作用域键；`StudioBuild` 补 `css` 字段并在回退路径透传。
 0d. **补上 `realpath` 与更严的目录判定**（§5.3 第 1/3 条）：`assertAllowedPath` 加 realpath/lstat，
    `dev.remove` 删除前 realpath，并把「是不是插件工程」从「有 package.json」收紧为「有 `knPluginStudio`/入口」；
@@ -242,7 +241,7 @@
    审核侧已有的白名单直接复用；未声明即拒绝而不是静默放行。同时把 `dev.*` 从「所有插件可用」收紧为「开发工具权限」。
 7. 静态资源管线（A15）：给 bundler 配 `file`/`dataurl` loader + `outdir`，让插件能带图片/字体/自写 CSS；
    同时把 `.svg/.png/.woff` 加进 `project-files` 白名单，并让发布能带上资源目录（而不是「一个 JS + 一个图标」）。
-8. 收尾一致性（都是小改）：`globalRoutes` 要么接上要么删（B11）；`agent.actions`/`agent.context`/`status` 同样处理（B18）；
+8. 收尾一致性（都是小改）：**已做**——skill 补了「桌面能力（`desktop.*`）」一节 + 新增只读工具 `listDesktopCapabilities`（让 agent 能查到宿主真实能力面，而不是只知道服务名 `desktop`）；`globalRoutes` 要么接上要么删（B11）；`agent.actions`/`agent.context`/`status` 同样处理（B18）；
    生命周期钩子 `dispose()` + 卸载时调用（B14）；插件文案给 `plugin.<key>` 命名空间（B17）；
    设置面板的 prop 名与密钥命名空间对齐注册键（B16）；skill 补 `tools`/`skills`/`agent` 与
    `usePluginConfig`/storage 命名空间（§5.1 第 3 条）；预览的菜单摘要用 ReactNode 渲染（§5.1 第 5 条）；
@@ -332,7 +331,7 @@
 - 顺带：把 `studio-tools.ts` 的 `BUILTIN_HOST_MODULES` 补齐为与 bundler 一致（补 `react-dom/client`、`react/jsx-dev-runtime`），
   并注明两份清单需同步。
 
-**打包版里 `dev.hostApi` 通向一棵不存在的目录树 ⇒ 「让 agent 查真实接口」整条能力在正式客户端里失效。**
+**打包版里 `dev.hostApi` 通向一棵不存在的目录树 ⇒ 「让 agent 查真实接口」整条能力在正式客户端里失效。** — ✅ **已修（本次）**
 
 - `prepare-studio-deps.cjs:328` 把 6 个标准包源码物化到 `Resources/kn-studio-runtime/host-api/packages/…`；
 - 但 `workspaceRootCandidates()`（`apps/desktop/src/main/plugin-dev/index.ts:63-75`）里的候选**从不包含 `process.resourcesPath`**
@@ -416,9 +415,9 @@
 ### 5.5 其余零散问题（代码层面）
 
 - `StudioPage.tsx` 1467 行、`studio-tools.ts` 2030 行，都是单文件大模块；前者已按 UI 段落组织，后者按工具切片，
-  目前可读，但加上 A1/A4/A5 会需要拆分（建议按 `tools/project.ts`、`tools/build.ts`、`tools/catalog.ts`、`tools/market.ts` 分文件）。
+  目前可读（新增 grep 后 2100+ 行），但加上 A1/A4/A5 会需要拆分（建议按 `tools/project.ts`、`tools/build.ts`、`tools/catalog.ts`、`tools/market.ts` 分文件）。
 - 工具层「依赖注入、运行时不依赖 `@kn/common`」这个取舍很值（`studio-tools.ts:16-24` 注释、203 项纯 Node 测试是它的红利），
-  新增能力时应延续，不要把 React/宿主 API 直接 import 进来。
+  新增能力时应延续，不要把 React/宿主 API 直接 import 进来（本轮新增的 `grepPluginProject` 就是照这个约定加的：工具层只描述参数，检索在宿主侧）。
 - **侧栏/预览的边界要说准确**：贡献点**组件**是随组件自带 `HotComponentBoundary` 的（`mapComponents`，见 B15 更正），
   所以「开发台自己的 pane 抛错带走侧栏」并不成立；真正没有边界的是 `menus[].icon` 这类 **ReactNode** 贡献与非 React 执行面。
 - **「预览只读」的说法容易误导**：预览渲染的是插件**真身**，它照样能读存储、调 service、产生副作用
@@ -458,7 +457,7 @@
 ### 已经确定会坏、且成本极低的三处（建议立即修）
 
 1. ~~`react/jsx-runtime` 外部化 → 第三方自动运行时库必然 `jsx is not a function`~~ **✅ 已修（本次，见 §5.2）**。
-2. 打包版 `dev.hostApi` 解析不到 `Resources/kn-studio-runtime/host-api` → agent 查宿主接口的能力在安装版上整条失效（§5.2）。
+2. ~~打包版 `dev.hostApi` 解析不到 `Resources/kn-studio-runtime/host-api`~~ **✅ 已修（本次，见 §5.2）**。
 3. 预览的无 payload 路径 + agent 回退安装路径都会**丢 CSS**（§5.2）；`globalRoutes` 声明了永远不生效（§3B/B11）。
 
 ### 另外三处「功能承诺已经落空」的（成本同样很低）

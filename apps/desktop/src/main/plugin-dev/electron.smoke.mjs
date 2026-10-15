@@ -174,6 +174,11 @@ const run = async () => {
         const name = capability === 'dev.devstatus' ? 'dev.status' : capability
         check(`bridge: capability ${name}`, capabilities?.includes(name) === true)
     }
+    // The ssh group shares this preload contract; assert its names are exposed
+    // so a whitelist regression is caught by the Electron suite as well.
+    for (const capability of ['ssh.exec', 'ssh.put', 'ssh.get', 'ssh.hosts', 'ssh.forget']) {
+        check(`bridge: capability ${capability}`, capabilities?.includes(capability) === true)
+    }
     check(
         'bridge: unauthorized capability rejected',
         await evaluate(

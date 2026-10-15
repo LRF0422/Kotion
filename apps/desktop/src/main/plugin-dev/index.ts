@@ -12,7 +12,8 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { DevSessionManager } from './manager.mjs'
 import { queryHostApi, resolveWorkspaceRoot } from './host-api.mjs'
-import { queryProjectFiles } from './project-files.mjs'
+import { workspaceRootCandidates } from './workspace-candidates.mjs'
+import { normalizeFilesParams, queryProjectFiles } from './project-files.mjs'
 import { installDependencies } from './package-install.mjs'
 
 /** Subdirectory of userData that the studio owns; see DEV_PROJECTS_DIR_NAME. */
@@ -54,25 +55,21 @@ const asExternals = (value: unknown): string[] | undefined =>
         : undefined
 
 /**
- * Candidates for the monorepo root, most specific first. Dev runs from the
- * checkout; a packaged app ships no `packages/`, so `afterPack` copies the host
- * packages' source into `app.asar.unpacked/out/main/plugin-dev/host-api/` and
- * the `../../..` entries below resolve to it (a packaged app *is* the app root,
- * so there is no checkout to find).
+ * Where `dev.hostApi` looks for the host packages' source.
+ *
+ * Dev: the checkout. Packaged: `<Resources>/kn-studio-runtime/host-api`, shipped
+ * by `afterPack` (see `workspace-candidates.mjs` — pure, so
+ * `packaged-studio-deps.test.mjs` can guard the packaged layout). Passing the
+ * Electron values in keeps that module testable without Electron.
  */
-const workspaceRootCandidates = (): Array<string | undefined> => [
-    process.env.KN_WORKSPACE_ROOT,
-    resolve(app.getAppPath(), '..', '..'),
-    resolve(app.getAppPath(), '..'),
-    app.getAppPath(),
-    resolve(__dirname, '..', '..', '..', '..'),
-    // Packaged: `<Resources>/app.asar.unpacked/out/main/plugin-dev/host-api`.
-    // `__dirname` alone points inside app.asar, so name the unpacked mirror.
-    resolve(app.getAppPath(), '..', 'app.asar.unpacked', 'out', 'main', 'plugin-dev', 'host-api'),
-    resolve(process.cwd(), '..'),
-    resolve(process.cwd(), '..', '..'),
-    process.cwd(),
-]
+const hostApiWorkspaceCandidates = (): Array<string | undefined> =>
+    workspaceRootCandidates({
+        appPath: app.getAppPath(),
+        resourcesPath: process.resourcesPath,
+        moduleDir: __dirname,
+        cwd: process.cwd(),
+        env: process.env,
+    })
 
 export interface DevIpcOptions {
     /** Resolve + validate an absolute path against the fs allowlist. */
@@ -194,19 +191,16 @@ export function setupDevIpcHandlers({ assertAllowedPath }: DevIpcOptions): DevSe
     // deliberately bypasses the fs allowlist (a checkout may live anywhere)
     // but never escapes the selected package root.
     handle('dev.hostApi', (_event, raw) =>
-        queryHostApi(resolveWorkspaceRoot(workspaceRootCandidates()), asRecord(raw)),
+        queryHostApi(resolveWorkspaceRoot(hostApiWorkspaceCandidates()), asRecord(raw)),
     )
 
-    // Enumerate or search one project's own files. The root goes through the
-    // same fs allowlist as every other dev.* path.
+    // Enumerate, search or grep one project's own files. The root goes through
+    // the same fs allowlist as every other dev.* path; the params are normalized
+    // (and type-checked) inside the module.
     handle('dev.files', async (_event, raw) => {
         const params = asRecord(raw)
         const root = assertAllowedPath(params.root, 'root')
-        return queryProjectFiles(root, {
-            query: typeof params.query === 'string' ? params.query : undefined,
-            include: typeof params.include === 'string' ? params.include : undefined,
-            limit: typeof params.limit === 'number' ? params.limit : undefined,
-        })
+        return queryProjectFiles(root, normalizeFilesParams(params))
     })
 
     // Install third-party packages into a project. The root goes through the

@@ -74,6 +74,12 @@ export type DesktopCapability =
     | 'dev.installDependencies'
     | 'dev.remove'
     | 'dev.deleteFile'
+    // ---- ssh (runs the user's own OpenSSH binaries) ------------------------
+    | 'ssh.exec'
+    | 'ssh.put'
+    | 'ssh.get'
+    | 'ssh.hosts'
+    | 'ssh.forget'
     // ---- durable storage (SQLite in the main process) ----------------------
     | 'storage.info'
     | 'storage.get'
@@ -596,15 +602,82 @@ export interface DevFileMatch {
     text: string
 }
 
-/** List or search the files of one plugin project. */
+/** One line of grep context, with its own 1-based line number. */
+export interface DevFileGrepLine {
+    line: number
+    text: string
+}
+
+/** A `content`-mode grep match, with the context lines around it. */
+export interface DevFileGrepMatch {
+    /** Project-relative file path. */
+    path: string
+    /** 1-based line number. */
+    line: number
+    /** The matching line, trimmed (long lines are truncated with an ellipsis). */
+    text: string
+    /** Lines before the match (empty unless `context` was requested). */
+    before: DevFileGrepLine[]
+    /** Lines after the match (empty unless `context` was requested). */
+    after: DevFileGrepLine[]
+}
+
+/** Per-file match count, for `count` mode. */
+export interface DevFileGrepCount {
+    path: string
+    count: number
+}
+
+/** How a grep reports its hits. */
+export type DevFilesGrepMode = 'content' | 'files_with_matches' | 'count'
+
+/** Result of a grep over one plugin project's text files. */
+export interface DevFilesGrepResult {
+    kind: 'grep'
+    root: string
+    mode: DevFilesGrepMode
+    /** The pattern as executed. */
+    pattern: string
+    /** Populated in `content` mode. */
+    matches: DevFileGrepMatch[]
+    /** Populated in `files_with_matches` mode. */
+    files: string[]
+    /** Populated in `count` mode. */
+    counts: DevFileGrepCount[]
+    /** Files actually read (vendor dirs and oversized files excluded). */
+    scanned: number
+    /** Files skipped because they exceeded the size cap. */
+    skippedLarge: number
+    /** A bound was hit (match cap or file cap): the result is partial. */
+    truncated: boolean
+    /** The wall-clock budget expired before the walk finished. */
+    timedOut: boolean
+}
+
+/** List, search or grep the files of one plugin project. */
 export interface DevFilesOptions {
     /** Absolute project root (validated against the fs allowlist). */
     root: string
     /** Case-insensitive substring to search for; omit to list files. */
     query?: string
-    /** Optional substring filter on project-relative paths. */
+    /**
+     * Regular-expression pattern to grep for. Takes precedence over `query`.
+     * Any JavaScript `RegExp` source is accepted; an invalid pattern is refused
+     * with the compiler's message instead of matching nothing.
+     */
+    pattern?: string
+    /**
+     * Path filter: a comma-separated mix of globs (`*.tsx`, `src/**`) and plain
+     * substrings (`src/`). Applies to `query` and `pattern` alike.
+     */
     include?: string
-    /** Max files (list) or matches (search). */
+    /** Make the grep case-insensitive (default: case-sensitive). */
+    ignoreCase?: boolean
+    /** Lines of leading/trailing context per match, `content` mode only (0–5). */
+    context?: number
+    /** Grep report shape; defaults to `content`. */
+    outputMode?: DevFilesGrepMode
+    /** Max files (list) or matches (search/grep). */
     limit?: number
 }
 
@@ -612,6 +685,7 @@ export interface DevFilesOptions {
 export type DevFilesResult =
     | { kind: 'list'; root: string; files: string[]; truncated: boolean }
     | { kind: 'search'; root: string; matches: DevFileMatch[]; truncated: boolean }
+    | DevFilesGrepResult
 
 /** Install npm packages into one plugin project. */
 export interface DevInstallOptions {
@@ -637,6 +711,128 @@ export interface DevInstallResult {
     /** Combined stdout/stderr tail for the studio log. */
     output: string
     error?: string
+}
+
+/**
+ * Host-key verification policy for an SSH call.
+ *
+ * - `strict` (default): the host must already be in the user's `known_hosts`;
+ *   an unknown or changed key fails.
+ * - `accept-new`: trust on first use. The main process asks the user before a
+ *   connection is made under this policy, because it is the weaker one.
+ */
+export type SshHostKeyPolicy = 'strict' | 'accept-new'
+
+/** Which host to talk to. Credentials are never part of this shape. */
+export interface SshTarget {
+    /** Hostname, IPv4 or IPv6 literal (no brackets needed). */
+    host: string
+    /** Login user; omitted means the ssh config / local user decides. */
+    user?: string | null
+    /** TCP port; defaults to 22. */
+    port?: number
+}
+
+/** Common knobs for one SSH call. */
+export interface SshCallOptions extends SshTarget {
+    /** Wall-clock budget for the whole call (default 30s, max 10min). */
+    timeoutMs?: number
+    /** Combined stdout+stderr byte budget (default 1 MiB, max 4 MiB). */
+    maxOutputBytes?: number
+    /** Host-key policy; defaults to `strict`. */
+    hostKeyPolicy?: SshHostKeyPolicy
+}
+
+/** Run one command on a remote host. */
+export interface SshExecOptions extends SshCallOptions {
+    /** Shell command line executed by the remote login shell. */
+    command: string
+}
+
+/** Result of {@link SshExecOptions}. */
+export interface SshExecResult {
+    host: string
+    user: string | null
+    port: number
+    /** The remote command that ran. */
+    command: string
+    /** True only for exit code 0 without a timeout. */
+    ok: boolean
+    code: number | null
+    signal: string | null
+    stdout: string
+    stderr: string
+    /** Output hit the byte budget: the text is clipped. */
+    truncated: boolean
+    timedOut: boolean
+    durationMs: number
+    /** The exact argv that ran, for diagnosing flag problems. */
+    argv: string[]
+}
+
+/** Copy one file to (`put`) or from (`get`) a remote host. */
+export interface SshTransferOptions extends SshCallOptions {
+    /** Local path; validated against the same fs allowlist as `fs.*`. */
+    localPath: string
+    /** Remote path (no quoting needed: it travels as an argv entry). */
+    remotePath: string
+}
+
+/** Result of {@link SshTransferOptions}. */
+export interface SshTransferResult {
+    host: string
+    user: string | null
+    port: number
+    direction: 'put' | 'get'
+    localPath: string
+    remotePath: string
+    ok: boolean
+    code: number | null
+    signal: string | null
+    stdout: string
+    stderr: string
+    truncated: boolean
+    timedOut: boolean
+    durationMs: number
+    argv: string[]
+}
+
+/** A host the user has allowed for this app run. */
+export interface SshGrant {
+    /** `user@host:port` — the identity {@link SshForgetOptions} revokes. */
+    key: string
+    host: string
+    user: string | null
+    port: number
+    hostKeyPolicy: SshHostKeyPolicy
+    /** Epoch ms of the confirmation. */
+    grantedAt: number
+}
+
+/** Revoke a grant, either by its key or by naming the target again. */
+export interface SshForgetOptions extends Partial<SshTarget> {
+    /** The `key` from {@link SshGrant}; takes precedence when present. */
+    key?: string
+}
+
+/**
+ * The SSH surface of the desktop bridge. Present only on desktop builds that
+ * expose the `ssh.*` capabilities; feature-detect before use.
+ *
+ * Every call is gated by the network policy and by a per-host user confirmation
+ * on first use in an app run. There is deliberately no way to pass a password
+ * or a key: auth comes from the user's `~/.ssh/config` and ssh-agent.
+ */
+export interface SshBridge {
+    exec(options: SshExecOptions): Promise<SshExecResult>
+    /** Upload a local file to the remote host. */
+    put(options: SshTransferOptions): Promise<SshTransferResult>
+    /** Download a remote file to a local path. */
+    get(options: SshTransferOptions): Promise<SshTransferResult>
+    /** Hosts the user has granted for this app run. */
+    hosts(): Promise<SshGrant[]>
+    /** Revoke one grant; true when a grant was removed. */
+    forget(options: SshForgetOptions): Promise<boolean>
 }
 
 /**
@@ -762,6 +958,11 @@ export interface DesktopCapabilityContract {
     'dev.installDependencies': { params: DevInstallOptions; result: DevInstallResult }
     'dev.remove': { params: DevRemoveOptions; result: DevRemoveResult }
     'dev.deleteFile': { params: DevDeleteFileOptions; result: DevDeleteFileResult }
+    'ssh.exec': { params: SshExecOptions; result: SshExecResult }
+    'ssh.put': { params: SshTransferOptions; result: SshTransferResult }
+    'ssh.get': { params: SshTransferOptions; result: SshTransferResult }
+    'ssh.hosts': { params?: void; result: SshGrant[] }
+    'ssh.forget': { params: SshForgetOptions; result: boolean }
     'storage.info': { params?: void; result: DesktopStorageEnvelope<StorageInfo> }
     'storage.get': {
         params: { namespace: string; key: string }
@@ -827,4 +1028,12 @@ export interface DesktopBridge {
      * this field.
      */
     readonly storage?: StorageService
+    /**
+     * SSH surface. Present on desktop builds that expose the `ssh.*`
+     * capabilities; undefined on older builds and on the web. Every call needs
+     * the network policy's blessing and, on first use per host in an app run,
+     * an explicit user confirmation — so treat this as user-consented remote
+     * execution, not as a silent utility.
+     */
+    readonly ssh?: SshBridge
 }

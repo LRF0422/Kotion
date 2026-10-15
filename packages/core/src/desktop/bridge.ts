@@ -27,6 +27,13 @@ import type {
     DevRemoveResult,
     DevDeleteFileOptions,
     DevDeleteFileResult,
+    SshBridge,
+    SshExecOptions,
+    SshExecResult,
+    SshForgetOptions,
+    SshGrant,
+    SshTransferOptions,
+    SshTransferResult,
 } from '@kn/common'
 
 /**
@@ -156,6 +163,37 @@ const createDevBridge = (
     }
 }
 
+/** Capabilities the ssh group adds; their presence gates {@link SshBridge}. */
+const SSH_CAPABILITIES: DesktopCapability[] = [
+    'ssh.exec',
+    'ssh.put',
+    'ssh.get',
+    'ssh.hosts',
+    'ssh.forget',
+]
+
+const createSshBridge = (
+    host: DesktopHostBridge,
+    capabilities: readonly string[],
+): SshBridge | undefined => {
+    if (!SSH_CAPABILITIES.some((capability) => capabilities.includes(capability))) {
+        // A desktop build that predates the ssh group: `desktop.ssh` stays
+        // undefined so plugins degrade instead of throwing per call.
+        return undefined
+    }
+
+    const invoke = <C extends DesktopCapability>(capability: C, params?: unknown) =>
+        host.invoke(capability, params) as Promise<DesktopCapabilityContract[C]['result']>
+
+    return {
+        exec: (options: SshExecOptions): Promise<SshExecResult> => invoke('ssh.exec', options),
+        put: (options: SshTransferOptions): Promise<SshTransferResult> => invoke('ssh.put', options),
+        get: (options: SshTransferOptions): Promise<SshTransferResult> => invoke('ssh.get', options),
+        hosts: (): Promise<SshGrant[]> => invoke('ssh.hosts'),
+        forget: (options: SshForgetOptions): Promise<boolean> => invoke('ssh.forget', options),
+    }
+}
+
 /**
  * Build the `desktop` core service, or undefined on the web (where the preload
  * bridge is absent). The host registers it via PluginManager coreServices.
@@ -167,6 +205,7 @@ export const createDesktopBridge = (): DesktopBridge | undefined => {
     const capabilities = (host.capabilities ?? []) as DesktopCapability[]
     const dev = createDevBridge(host, capabilities)
     const storage = createStorageBridge(host, capabilities)
+    const ssh = createSshBridge(host, capabilities)
 
     return {
         version: DESKTOP_BRIDGE_VERSION,
@@ -181,5 +220,6 @@ export const createDesktopBridge = (): DesktopBridge | undefined => {
             host.on('fullscreen', (value) => listener(Boolean(value))),
         ...(dev ? { dev } : {}),
         ...(storage ? { storage } : {}),
+        ...(ssh ? { ssh } : {}),
     }
 }

@@ -29,6 +29,8 @@ const APP_DIR = join(here, '..', '..', '..')
 const WORKSPACE_ROOT = join(APP_DIR, '..', '..')
 const require = createRequire(import.meta.url)
 const { describeDevResolution } = await import('./manager.mjs')
+const { listHostPackages, resolveWorkspaceRoot } = await import('./host-api.mjs')
+const { workspaceRootCandidates } = await import('./workspace-candidates.mjs')
 
 const results = []
 const check = (name, condition, detail = '') => {
@@ -159,6 +161,60 @@ try {
     const hostApiRoot = join(runtimeDir, 'host-api')
     check('hook: host-api tree shipped', await exists(join(hostApiRoot, 'packages', 'common', 'package.json')))
     check('hook: host-api source shipped', await exists(join(hostApiRoot, 'packages', 'common', 'src', 'index.ts')))
+
+    /* -------------------------------------------------------------- *
+     * 3b. `dev.hostApi` can actually FIND that tree.
+     *
+     * The shipped sources are useless if the candidate list never points at
+     * them: the app used to look for `app.asar.unpacked/out/main/plugin-dev/
+     * host-api` (a layout that no longer exists), so `searchHostApi` /
+     * `readHostApiFile` threw in every packaged build while ~1 MB of sources
+     * shipped. Only the *candidate list* is exercised here — with the same
+     * Electron values a packaged app passes in.
+     * -------------------------------------------------------------- */
+    const packagedAppPath = join(resourcesDir, 'app.asar')
+    const packagedCandidates = workspaceRootCandidates({
+        appPath: packagedAppPath,
+        resourcesPath: resourcesDir,
+        moduleDir: unpackedAsarDevDir,
+        cwd: '/',
+        env: {},
+    })
+    const resolvedHostApiRoot = resolveWorkspaceRoot(packagedCandidates)
+    check(
+        'hostApi: candidates resolve to the shipped tree in a packaged app',
+        resolvedHostApiRoot === hostApiRoot,
+        `${resolvedHostApiRoot} (candidates: ${packagedCandidates.join(' | ')})`,
+    )
+    const shippedPackages = resolvedHostApiRoot ? listHostPackages(resolvedHostApiRoot) : []
+    check(
+        'hostApi: the shipped tree lists the host packages',
+        shippedPackages.length >= 6 && shippedPackages.every((entry) => entry.root.startsWith(hostApiRoot)),
+        shippedPackages.map((entry) => entry.name).join(', '),
+    )
+    check(
+        'hostApi: without the resources candidate the old layout finds nothing',
+        resolveWorkspaceRoot(
+            packagedCandidates.filter((candidate) => !String(candidate).includes('kn-studio-runtime')),
+        ) === undefined,
+        'this is the regression the candidate list guards',
+    )
+    // Dev must keep working from the checkout.
+    check(
+        'hostApi: dev candidates resolve to the repo root',
+        resolveWorkspaceRoot(
+            workspaceRootCandidates({ appPath: APP_DIR, moduleDir: here, cwd: APP_DIR, env: {} }),
+        ) === join(APP_DIR, '..', '..'),
+        join(APP_DIR, '..', '..'),
+    )
+    check(
+        'hostApi: KN_WORKSPACE_ROOT still wins',
+        workspaceRootCandidates({
+            appPath: packagedAppPath,
+            resourcesPath: resourcesDir,
+            env: { KN_WORKSPACE_ROOT: '/tmp/custom-root' },
+        })[0] === '/tmp/custom-root',
+    )
 
     /* -------------------------------------------------------------- *
      * 4. The dev-server builds — with CSS — against that layout alone

@@ -59,7 +59,9 @@ pnpm clean:packages         # Clean all dist directories
 **packages/common** - 基础工具，被所有包依赖：
 - `src/core/PluginManager.ts` - 插件管理器
 - `src/core/editor.ts` - 编辑器类型定义（ExtensionWrapper）
-- `src/core/desktop-bridge.ts` - 桌面能力契约（含 `storage.*`）
+- `src/core/desktop-bridge.ts` - 桌面能力契约（含 `storage.*`、`ssh.*`）
+  - `ssh.*` 用用户自己的 OpenSSH 执行远程命令/传文件：过网络策略 + 每个主机在本次运行内首次需用户确认，
+    **宿主不接收也不保存任何凭证**（认证走 `~/.ssh` 与 ssh-agent）。详见 [docs/SSH.md](docs/SSH.md)。
 - `src/storage/` - 存储契约 + 通用 KV 引擎 + 内存/localStorage 后端
 - HTTP 客户端、Logger、工具函数
 

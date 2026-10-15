@@ -69,6 +69,16 @@ const iconToolkit = {
  */
 const studioTools = createStudioTools({
     getDev: () => resolveOptionalService('desktop')?.dev,
+    /**
+     * The whole desktop bridge, for capability discovery: an agent authoring a
+     * plugin needs to know which host capabilities this build actually exposes
+     * (`desktop.ssh`, `desktop.dev`, `fs.*`, …), and the live bridge is the only
+     * honest source — the service registry only shows the name `desktop`.
+     */
+    getDesktop: () =>
+        resolveOptionalService('desktop') as ReturnType<
+            NonNullable<Parameters<typeof createStudioTools>[0]['getDesktop']>
+        >,
     getPluginHost: () =>
         resolveOptionalService('pluginHost') as ReturnType<
             Parameters<typeof createStudioTools>[0]['getPluginHost']

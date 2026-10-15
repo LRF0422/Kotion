@@ -87,6 +87,16 @@ const CAPABILITIES = [
   'dev.remove',
   // Delete one file inside a project (confined to the project root).
   'dev.deleteFile',
+  // SSH. Runs the user's own OpenSSH binaries; the main process checks the
+  // network policy and asks the user before the first connection to a host in
+  // this app run. No credential is ever passed through these calls — auth is
+  // the user's ~/.ssh config and agent.
+  'ssh.exec',
+  'ssh.put',
+  'ssh.get',
+  // Which hosts the user has granted for this app run, and how to revoke one.
+  'ssh.hosts',
+  'ssh.forget',
 ] as readonly string[]
 
 const knDesktop = {

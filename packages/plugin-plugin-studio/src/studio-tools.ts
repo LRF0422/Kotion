@@ -90,9 +90,92 @@ export interface StudioFileMatch {
     text: string
 }
 
+/** One line of grep context. */
+export interface StudioGrepLine {
+    line: number
+    text: string
+}
+
+/** A `content`-mode grep match with its surrounding context lines. */
+export interface StudioGrepMatch {
+    path: string
+    line: number
+    text: string
+    before: StudioGrepLine[]
+    after: StudioGrepLine[]
+}
+
+/** Per-file match count (`count` mode). */
+export interface StudioGrepCount {
+    path: string
+    count: number
+}
+
+export type StudioGrepMode = 'content' | 'files_with_matches' | 'count'
+
+export interface StudioGrepResult {
+    kind: 'grep'
+    root: string
+    mode: StudioGrepMode
+    pattern: string
+    matches: StudioGrepMatch[]
+    files: string[]
+    counts: StudioGrepCount[]
+    scanned: number
+    skippedLarge: number
+    truncated: boolean
+    timedOut: boolean
+}
+
 export type StudioFilesResult =
     | { kind: 'list'; root: string; files: string[]; truncated: boolean }
     | { kind: 'search'; root: string; matches: StudioFileMatch[]; truncated: boolean }
+    | StudioGrepResult
+
+/**
+ * The live `desktop` core service, seen structurally.
+ *
+ * Only what capability discovery needs: the host's capability whitelist and the
+ * typed groups it hangs off the bridge. Structural (not imported from
+ * `@kn/common`) so this module stays dependency-free at runtime, like every
+ * other bridge shape here.
+ */
+export interface StudioDesktopBridge {
+    platform?: string
+    capabilities?: readonly string[]
+    has?: (capability: string) => boolean
+    /** Feature-detectable groups; keys are inspected, not called. */
+    dev?: unknown
+    ssh?: unknown
+    storage?: unknown
+    [key: string]: unknown
+}
+
+/** One capability family, grouped by the name prefix in front of the first dot. */
+export interface StudioDesktopCapabilityGroup {
+    /** e.g. `ssh.` */
+    group: string
+    /** Capability names in this family, sorted. */
+    capabilities: string[]
+    /** One-line note on what the family is for and its guard rails. */
+    summary?: string
+}
+
+export interface StudioDesktopCapabilitiesResult {
+    hasDesktop: boolean
+    platform?: string
+    /** Total capabilities this host exposes. */
+    count: number
+    groups: StudioDesktopCapabilityGroup[]
+    /** Typed groups hanging off the bridge (`desktop.dev` / `.ssh` / `.storage`). */
+    typedGroups: Array<{ group: string; methods: string[] }>
+    /** How a plugin consumes any of this. */
+    callPattern: string
+    /** Where the exact parameter/result types live. */
+    hint: string
+    /** Set when the host exposes no `desktop` service at all. */
+    note?: string
+}
 
 export interface StudioInstallResult {
     ok: boolean
@@ -100,9 +183,7 @@ export interface StudioInstallResult {
     packages: string[]
     output: string
     error?: string
-}
-
-/** Result of deleting a project: its files are gone, the session is stopped. */
+}/** Result of deleting a project: its files are gone, the session is stopped. */
 export interface StudioRemoveResult {
     root: string
     removed: boolean
@@ -213,11 +294,15 @@ export interface StudioDevBridge {    start(options: { root: string; watch?: boo
         query?: string
         limit?: number
     }): Promise<StudioHostApiResult>
-    /** List or search one project's files; see StudioFilesResult. */
+    /** List, search or grep one project's files; see StudioFilesResult. */
     files(options: {
         root: string
         query?: string
+        pattern?: string
         include?: string
+        ignoreCase?: boolean
+        context?: number
+        outputMode?: StudioGrepMode
         limit?: number
     }): Promise<StudioFilesResult>
     /** Install npm packages into a project; see StudioInstallResult. */
@@ -346,6 +431,15 @@ export interface StudioToolExecContext {
 export interface StudioToolDeps {
     /** The desktop bridge's dev surface, or undefined on a non-dev host. */
     getDev: () => StudioDevBridge | undefined
+    /**
+     * The whole `desktop` core service — the channel through which a plugin
+     * consumes host capabilities (`desktop.ssh`, `desktop.dev`, `fs.*`, …).
+     *
+     * Injected so the studio can answer "what can a plugin I write actually
+     * call on this host?" from the live bridge instead of a hand-maintained
+     * list; absent on the web and in tests that do not care.
+     */
+    getDesktop?: () => StudioDesktopBridge | undefined
     /** The host plugin registry's hot-install surface, or undefined when absent. */
     getPluginHost: () => StudioPluginHost | undefined
     /**
@@ -598,6 +692,29 @@ export const BUILTIN_HOST_MODULES = [
 ]
 
 const BUILTIN_HOST_MODULE_SET = new Set(BUILTIN_HOST_MODULES)
+
+/**
+ * What each `desktop.<family>.` capability family is for.
+ *
+ * Deliberately family-level (not per-capability): the authoritative
+ * per-capability list comes from the live bridge, and the parameter/result types
+ * come from `@kn/common`'s `desktop-bridge.ts`. This map only adds the "what is
+ * this for / what is the guard rail" that a name like `fs.remove` cannot convey.
+ */
+const CAPABILITY_FAMILY_NOTES: Record<string, string> = {
+    'system.': '应用与路径信息（版本、平台、标准目录）。只读。',
+    'http.': '宿主代发 HTTP 请求（免 CORS）。有 SSRF 防护：私网/回环/云元数据默认拒绝，受 net.policy 开关控制。',
+    'net.policy.': '读写网络策略（私网访问开关）。改它会放宽 http.request 的可达范围。',
+    'capture.': '屏幕/区域截屏，需要用户交互授权。',
+    'dialog.': '原生对话框（打开/保存文件、消息框）。对话框授予的路径会进入 fs 白名单。',
+    'fs.': '本地文件读写与管理。**全部**受 fs 白名单限制（标准用户目录 + 对话框授权过的目录）。',
+    'window.': '窗口状态（全屏、macOS 交通灯）与 DevTools 开关。',
+    'app.': '应用级动作，例如退出。',
+    'credentials.': '“记住登录”凭证（safeStorage 加密）。宿主自己的登录态用它，插件不应顺手读取。',
+    'dev.': '插件开发台：构建/热更/工程文件/依赖安装。只有开发台这类工具插件需要；主进程侧的 dev-server 是唯一能被它拉起的进程。',
+    'ssh.': 'SSH 远程执行与文件传输（用你自己的 OpenSSH）。过网络策略，且每个主机在本次运行内首次使用需用户确认；宿主不接收也不保存凭证。',
+    'storage.': '持久化 KV（桌面 SQLite / Web localStorage）。插件必须留在自己的 `plugin.<pluginKey>` 命名空间里。',
+}
 
 const normalizeExternals = (value: unknown): string[] => {
     if (value === undefined || value === null) return []
@@ -1059,6 +1176,80 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
                 count: result.matches.length,
                 truncated: result.truncated,
                 matches: result.matches,
+            }
+        },
+    },
+
+    grepPluginProject: {
+        description:
+            '在插件工程源码里按**正则表达式**检索（grep）：返回 文件 + 行号 + 该行内容，可带上下文行。' +
+            '比 searchPluginProject 强的地方：正则、glob 过滤（*.tsx / src/**）、大小写开关、上下文、三种输出模式。' +
+            '用法：找符号定义与调用点用 "export (function|const) Foo"；找 TODO 用 "TODO|FIXME"；' +
+            '只要文件名列表用 outputMode: "files_with_matches"；先看哪个文件最多用 outputMode: "count"。' +
+            '注意：pattern 是正则，要搜字面量需转义元字符（搜 foo( 要写 "foo\\("）；默认大小写敏感，忽略大小写传 ignoreCase: true。' +
+            '结果是**有界**的：默认最多 80 条（limit 最大 200），只扫文本类文件、跳过 node_modules/dist 与超过 400KB 的文件，' +
+            '并有约 2.5 秒的总时限；返回里的 truncated / timedOut / scanned / skippedLarge 说明结果是否完整，' +
+            'truncated 或 timedOut 为 true 时不要当成「没有更多匹配」。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                root: { type: 'string', description: '工程根目录。' },
+                pattern: {
+                    type: 'string',
+                    description:
+                        '正则表达式（JS RegExp 语法），如 "useState\\(|useMemo\\(" 匹配这两个调用（注意 `(` 要转义，' +
+                        '并且按 JSON 规则反斜杠还要再转义一次）。搜索字面量时要转义元字符。',
+                },
+                include: {
+                    type: 'string',
+                    description: '可选。路径过滤，逗号分隔，支持 glob 与子串：`*.tsx`、`src/**`、`src/`。',
+                },
+                ignoreCase: { type: 'boolean', description: '可选。忽略大小写，默认 false（grep 语义）。' },
+                context: {
+                    type: 'number',
+                    description: '可选。每条匹配前后各带几行上下文（0–5，默认 0）。仅 content 模式有效。',
+                },
+                outputMode: {
+                    type: 'string',
+                    enum: ['content', 'files_with_matches', 'count'],
+                    description: '可选。content（默认，带行内容）/ files_with_matches（只要文件）/ count（每文件条数）。',
+                },
+                limit: { type: 'number', description: '可选。最多返回条数，默认 80，上限 200。' },
+            },
+            required: ['root', 'pattern'],
+        },
+        readOnly: true,
+        execute: async (args: {
+            root: string
+            pattern: string
+            include?: string
+            ignoreCase?: boolean
+            context?: number
+            outputMode?: StudioGrepMode
+            limit?: number
+        }) => {
+            const result = await requireFiles(deps)({
+                root: args.root,
+                pattern: args.pattern,
+                include: args.include,
+                ignoreCase: args.ignoreCase,
+                context: args.context,
+                outputMode: args.outputMode,
+                limit: args.limit,
+            })
+            if (result.kind !== 'grep') throw new Error('dev.files 返回了意外的结果（不是 grep）')
+            return {
+                root: result.root,
+                mode: result.mode,
+                pattern: result.pattern,
+                count: result.mode === 'content' ? result.matches.length : result.mode === 'count' ? result.counts.length : result.files.length,
+                scanned: result.scanned,
+                skippedLarge: result.skippedLarge,
+                truncated: result.truncated,
+                timedOut: result.timedOut,
+                ...(result.mode === 'content' ? { matches: result.matches } : {}),
+                ...(result.mode === 'files_with_matches' ? { files: result.files } : {}),
+                ...(result.mode === 'count' ? { counts: result.counts } : {}),
             }
         },
     },
@@ -1717,6 +1908,105 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
             return {
                 count: logs.length,
                 logs: logs.map((entry) => ({ level: entry.level, message: entry.message })),
+            }
+        },
+    },
+
+    /**
+     * What a plugin I write here can actually call on this host.
+     *
+     * The desktop bridge is the only channel through which a renderer-side
+     * plugin reaches host capabilities (files, dialogs, HTTP, SSH, storage…),
+     * and it is *not* discoverable from the service registry: `listPluginServices`
+     * shows the service name `desktop`, not the capability families under it.
+     * Reading the live bridge is the honest answer — it reports what this build
+     * exposes, not what some doc promised.
+     */
+    listDesktopCapabilities: {
+        description:
+            '列出当前宿主通过 `desktop` 服务暴露给插件的能力（能力名按前缀分组，例如 `fs.` / `dialog.` / `ssh.` / `dev.`），' +
+            '以及挂在桥上的类型化能力组（`desktop.dev` / `desktop.ssh` / `desktop.storage`）各自有哪些方法。' +
+            '写插件要用桌面能力（读写文件、发 HTTP、SSH、弹对话框、持久化…）时先查这里，再用 ' +
+            "`resolveOptionalService('desktop')`（非组件）或 `useOptionalService('desktop')`（组件里）拿服务。" +
+            '注意三点：①Web 端没有这个服务，老桌面构建也可能缺某些组，所以必须先 `desktop?.has(能力名)` 或 `desktop?.ssh` 判断再调用；' +
+            '②能力的参数/结果类型在 @kn/common 的 src/core/desktop-bridge.ts（`DesktopCapabilityContract` 是总表），用 searchHostApi / readHostApiFile 读；' +
+            '③插件消费能力不需要在 config 里声明（`services` 是给“对外提供”用的）。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                query: { type: 'string', description: '可选。能力名子串过滤（大小写不敏感），如 "ssh"、"fs."、"storage"。' },
+            },
+        },
+        readOnly: true,
+        execute: async (args: { query?: string }) => {
+            const desktop = deps.getDesktop?.()
+            const callPattern =
+                "非 React 代码 resolveOptionalService('desktop')；组件里 useOptionalService('desktop')。" +
+                "有类型化组的直接调（desktop.ssh.exec({...}) / desktop.dev.start({...})）；其余用 desktop.invoke('<能力名>', params)。" +
+                '能力可能不存在：先 desktop?.has(能力名) 判断，缺失时降级而不是崩。'
+            const hint =
+                '参数与结果的确切类型：@kn/common 的 src/core/desktop-bridge.ts（DesktopCapabilityContract 是全部能力的表，' +
+                'DevBridge / SshBridge / StorageService 是各组的接口）。用 searchHostApi({ query: "SshBridge" }) 定位后 readHostApiFile 读。' +
+                'SSH 的信任模型与边界另见工程里的 docs/SSH.md。'
+
+            if (!desktop || typeof desktop !== 'object') {
+                return {
+                    hasDesktop: false,
+                    count: 0,
+                    groups: [],
+                    typedGroups: [],
+                    callPattern,
+                    hint,
+                    note:
+                        '当前宿主没有 desktop 服务：Web 端本来就没有，桌面端则可能是老构建或未接线。' +
+                        '写插件时按“能力可能不存在”处理，不要直接调用。',
+                }
+            }
+
+            const all = Array.isArray(desktop.capabilities) ? [...desktop.capabilities] : []
+            const needle = typeof args?.query === 'string' && args.query.trim() ? args.query.trim().toLowerCase() : undefined
+            const filtered = all.filter((name) => (needle ? name.toLowerCase().includes(needle) : true)).sort()
+
+            const byFamily = new Map<string, string[]>()
+            for (const name of filtered) {
+                // Prefer the longest *known* family (`net.policy.` over `net.`),
+                // so its note is attached; a capability from a family this build
+                // has never heard of still gets grouped (and simply has no note).
+                const known = Object.keys(CAPABILITY_FAMILY_NOTES)
+                    .filter((family) => name.startsWith(family))
+                    .sort((a, b) => b.length - a.length)[0]
+                const dot = name.indexOf('.')
+                const family = known ?? (dot === -1 ? name : `${name.slice(0, dot)}.`)
+                const list = byFamily.get(family) ?? []
+                list.push(name)
+                byFamily.set(family, list)
+            }
+
+            const groups: StudioDesktopCapabilityGroup[] = [...byFamily.entries()]
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([group, capabilities]) => ({
+                    group,
+                    capabilities,
+                    ...(CAPABILITY_FAMILY_NOTES[group] ? { summary: CAPABILITY_FAMILY_NOTES[group] } : {}),
+                }))
+
+            const typedGroups = ['dev', 'ssh', 'storage']
+                .map((group) => {
+                    const value = desktop[group]
+                    if (!value || typeof value !== 'object') return null
+                    return { group, methods: Object.keys(value as Record<string, unknown>).sort() }
+                })
+                .filter((entry): entry is { group: string; methods: string[] } => entry !== null)
+
+            return {
+                hasDesktop: true,
+                platform: typeof desktop.platform === 'string' ? desktop.platform : undefined,
+                count: filtered.length,
+                groups,
+                typedGroups,
+                callPattern,
+                hint,
+                ...(needle && filtered.length !== all.length ? { totalBeforeFilter: all.length } : {}),
             }
         },
     },

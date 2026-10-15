@@ -85,7 +85,7 @@
 
 ### agent：工具驱动
 
-插件向 agent 注册了 24 个工具（顶层 `tools`，见 `PluginManager.resolveAgentCapabilities`）：
+插件向 agent 注册了 26 个工具（顶层 `tools`，见 `PluginManager.resolveAgentCapabilities`）：
 
 | 工具 | 作用 |
 | --- | --- |
@@ -95,7 +95,8 @@
 | `readPluginProjectFile` | 读工程文件（带行号；编辑前必须先读，宿主强制） |
 | `editPluginProjectFile` | 精确替换（`oldString`→`newString`，唯一性校验；改代码优先用它） |
 | `listPluginProjectFiles` | 列出工程内源码文件（跳过 node_modules/dist） |
-| `searchPluginProject` | 在工程源码里搜索（返回文件+行号） |
+| `searchPluginProject` | 在工程源码里按**子串**搜索（大小写不敏感；返回文件+行号）。日常定位符号用下面的 grep |
+| `grepPluginProject` | 在工程源码里按**正则**检索：`pattern`（JS RegExp）+ `include`（glob 或子串，如 `*.tsx`、`src/**`）+ `ignoreCase` / `context`（0–5 行上下文）/ `outputMode`（`content` / `files_with_matches` / `count`）。结果有界（默认 80 条、上限 200；跳过 node_modules/dist 与 >400KB 文件；约 2.5s 时限），返回 `scanned` / `skippedLarge` / `truncated` / `timedOut` —— **截断或超时不得当成「没有更多匹配」** |
 | `runPluginProject` | 开始监听 + 把首个构建热更进当前窗口（**实时预览**入口）；可传 `externals` / `focus` / `background`。热更被拒绝时返回 `reloadRejected`（正在运行的版本保留） |
 | `buildPluginProject` | 一次性构建 + 热更；可传 `externals`（与会话不同时会重启会话）/ `focus` / `background`；同样会返回 `reloadRejected` |
 | `stopPluginProject` | 停止监听、回收子进程，并**卸载窗口里的开发版本**（磁盘文件保留；返回 `uninstalled`） |
@@ -106,6 +107,7 @@
 | `listPluginIcons` | **查宿主真实存在的图标名**（`@kn/icon` 里的组件），返回 import + 可直接粘的栏位图标代码，以及按用途关键词的 emoji 建议。栏位图标别凭记忆拼名字 |
 | `generatePluginIcon` | **给工程生成图标**：按插件名/关键词选字形配色，离线渲染 SVG 写进 `assets/icon.svg`，把 `knPluginStudio.icon` 指向它，并尽量把源码里那个 emoji 栏位图标换成同一字形 |
 | `listHostGlobals` | 列出宿主通过 `window.__KN__` 暴露的全局模块（写 `externals` 前先查它） |
+| `listDesktopCapabilities` | **列出当前宿主真实暴露的桌面能力**（按 `fs.` / `dialog.` / `http.` / `ssh.` / `dev.` / `storage.` 等前缀分组）与类型化组（`desktop.dev` / `desktop.ssh` / `desktop.storage`）的方法。插件要用桌面能力时先查它：服务注册表只显示服务名 `desktop`，看不到下面的能力面 |
 | `listHostApiPackages` | 列出可查阅的标准宿主包与类型入口 |
 | `searchHostApi` | 在标准包源码里按名字搜索类型/接口（返回文件+行号） |
 | `readHostApiFile` | 读取标准包里的一个源码文件，查看真实接口定义 |
@@ -594,17 +596,17 @@ pnpm test:plugin-dev:electron
 | `dev-server.test.mjs` | 10 | NDJSON 协议、文件监听重建、stdin 手动构建、错误隔离、干净退出 |
 | `manager.test.mjs` | 35 | **失败重建**立即释放等待、错误上报、会话存活、恢复；防回归「卡 30s」；**子进程启动即崩（缺 esbuild 那种）被判为 failed、快速失败、并把 stderr 原文带进 error 与日志**；**删除工程（拒绝非工程 / 拒绝标准目录 / 停止会话并删文件）**；**externals 的沿用与清空语义**；**删单个文件（越界 / manifest / 入口 / 目录 / 不存在全部拒绝，并回显正文）** |
 | `host-api.test.mjs` | 14 | 标准包枚举/搜索/读取、越界与未知包拒绝 |
-| `project-files.test.mjs` | 10 | 工程文件枚举/搜索/过滤、跳过 node_modules、截断上报 |
+| `project-files.test.mjs` | 30 | 工程文件枚举/搜索/过滤、跳过 node_modules、截断上报；**grep（正则、交替、大小写、glob 与子串 include、上下文行、三种输出模式、匹配上限、非法正则、扫描量上报）**、glob 编译、IPC 参数类型校验 |
 | `package-install.test.mjs` | 20 | 包名/版本校验、管理器探测、argv 构造、假 spawn 安装 |
 | `tailwind.test.mjs` | 12 | 用宿主配置编译插件工具类、去除 @keyframes、空工程 |
-| `packaged-studio-deps.test.mjs` | 23 | **打包布局回归**：用真实 `afterPack` 钩子物化依赖，然后在**没有源码树**的前提下跑子进程——入口 `.mjs` 与 esbuild 都在 asar 外且可解析、平台二进制可 spawn、tailwind/postcss 与宿主配置就位并**真的编译出插件 CSS**、宿主标准包可读、**manager 从 `Resources/` 解析运行时且解析出的路径不含 `app.asar`** |
-| `studio-tools.test.mjs` | 203 | **agent 工具面**：名称/描述/schema、create→write→run→build→list→stop 的每次能力调用、**模板与 externals 透传和校验**、**删除工程与自卸载**、**删单个文件与「未读不许删」**、**service 发现（提供者归属/过滤/无注册表兜底）**、**产物聚焦（含 focus:false 与坏预览不拖垮构建）**、失败装订、缺能力提示、失败不装旧产物、**只读发现可以、注册表管理不在** |
+| `packaged-studio-deps.test.mjs` | 28 | **打包布局回归**：用真实 `afterPack` 钩子物化依赖，然后在**没有源码树**的前提下跑子进程——入口 `.mjs` 与 esbuild 都在 asar 外且可解析、平台二进制可 spawn、tailwind/postcss 与宿主配置就位并**真的编译出插件 CSS**、宿主标准包可读、**manager 从 `Resources/` 解析运行时且解析出的路径不含 `app.asar`** |
+| `studio-tools.test.mjs` | 228 | **agent 工具面**：名称/描述/schema、create→write→run→build→list→stop 的每次能力调用、**模板与 externals 透传和校验**、**删除工程与自卸载**、**删单个文件与「未读不许删」**、**service 发现（提供者归属/过滤/无注册表兜底）**、**产物聚焦（含 focus:false 与坏预览不拖垮构建）**、失败装订、缺能力提示、失败不装旧产物、**只读发现可以、注册表管理不在** |
 | `surface.test.mjs` | 31 | **产物声明**：mapper 与工具面一致、kind 与预览一致、构建/发布/工程/图标的 payload、失败不产生产物、id 稳定（同工程重建/重生成只占一格）、`focusArtifact` 无 payload 路径、垃圾输入不抛 |
 | `icon-art.test.mjs` | 36 | **图标**：同插件同图、关键词/显式字形/首字母兜底、配色哈希与显式色、SVG 自包含与转义、栏位片段、只改该改的文件（不动手写图标、兼容 legacy `knPlugin` 块）、清单读取与 mime/可上传判断 |
 | `studio.smoke.mjs` | 63 | 真实 `PluginManager.installPluginFromSource` + Blob URL + 真实 loader；热更替换、单实例、坏代码不中断、恢复；**热更保身份（同一 dock 面板组件跨两次重建仍是同一个函数）、换实现可见（同一身份渲染出 `panel-v3`）、求值即抛的产物被拒绝、不动正在运行的版本、且拒绝原因里带着产物抛出的原文（`boom at eval`）**；**内置目录建工程、五个模板都能构建、删除工程、工程内删文件**；**产物管线（mapper 按工具名注册、卡片/预览贡献、产物架从 transcript 派生）**、**把活的插件面板真的渲染成 markup**、**真实 ServiceRegistry 把服务归属到插件** |
 | `electron.smoke.mjs` | 36 | 真实 preload 能力白名单、`dev.*` IPC（含 `dev.remove` / `dev.deleteFile`）、`ELECTRON_RUN_AS_NODE` 子进程、`desktop:event:dev` 推送、**无对话框 scaffold + 模板 + list + 读写/删除文件**、越界路径拒绝 |
 
-`pnpm test:plugin-dev` 合计 511 项检查。
+`pnpm test:plugin-dev` 合计 561 项检查。
 
 > 只由包内 `pnpm --filter @kn/plugin-plugin-studio test` 跑的还有 `icons/icon-ai.test.mjs`（14 项，AI 图标的校验器），它目前**没有**被 root 的 `test:plugin-dev` 聚合——改测试脚本时一并对齐。
 
@@ -631,7 +633,7 @@ pnpm test:plugin-dev:electron
 | `dev.list` | 枚举工程目录 |
 | `dev.readFile` / `dev.writeFile` | 读写工程文件（agent 改源码用） |
 | `dev.hostApi` | 只读标准宿主包源码：列出包（无参）/ 搜索（`query`）/ 读文件（`package`+`path`） |
-| `dev.files` | 枚举/搜索一个工程的源码文件：列出（无 `query`）/ 搜索（`query`，返回文件+行号） |
+| `dev.files` | 枚举/搜索/grep 一个工程的源码文件：列出（无 `query`/`pattern`）/ 子串搜索（`query`）/ 正则检索（`pattern` + `include`/`ignoreCase`/`context`/`outputMode`），带 `scanned`/`truncated`/`timedOut` 完整性上报 |
 | `dev.installDependencies` | 在工程目录里安装第三方 npm 包（自动识别 npm/pnpm/yarn，校验包名） |
 | `dev.remove` | 停止会话并**删除工程目录**；拒绝没有可读 `package.json` 的目录与用户标准目录（Documents/Downloads/Desktop/temp/userData） |
 | `dev.deleteFile` | **删除工程内的单个文件**（`root` + `path`）：`realpath` 限定在工程内，拒绝 `package.json`、入口文件、目录与不存在的文件；返回被删正文（≤200 KB）供撤销 |
@@ -709,7 +711,7 @@ agent 工具面因此没有 `listInstalledPlugins` / `uninstallInstalledPlugin` 
 | 子进程入口 `dev-server.mjs` / `bundler.mjs` / `tailwind.mjs` | `ELECTRON_RUN_AS_NODE` 子进程 | manager 找不到随包发的那份就回退到 asar 内，子进程一加载就 `MODULE_NOT_FOUND` |
 | `esbuild` + 目标平台二进制 | 编译插件源码（`bundler.mjs`） | 一构建就失败 —— 开发台**完全不可用** |
 | `tailwindcss` / `postcss` / 宿主 `tailwind.config` | 编译插件 CSS（`tailwind.mjs`） | 面板/页面**没有样式**（裸 DOM） |
-| 宿主标准包源码（`common`/`core`/`ui`/`icon`/`editor`/`plugin-api`） | agent 的 `searchHostApi` / `readHostApiFile` | AI 写插件时查不到真实接口 |
+| 宿主标准包源码（`common`/`core`/`ui`/`icon`/`editor`/`plugin-api`） | agent 的 `searchHostApi` / `readHostApiFile` | AI 写插件时查不到真实接口（回归测试同时断言**候选路径能在打包布局里找到这棵树**——曾经只复制文件、却指向一个不存在的旧目录） |
 
 三条硬约束（都是实测踩出来的，改这里前先读）：
 

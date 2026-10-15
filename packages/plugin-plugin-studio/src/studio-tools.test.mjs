@@ -102,6 +102,33 @@ const dev = {
     },
     async files(options = {}) {
         calls.push(['files', options])
+        if (typeof options.pattern === 'string' && options.pattern) {
+            const mode = options.outputMode ?? 'content'
+            return {
+                kind: 'grep',
+                root: options.root,
+                mode,
+                pattern: options.pattern,
+                matches:
+                    mode === 'content'
+                        ? [
+                              {
+                                  path: 'src/index.tsx',
+                                  line: 2,
+                                  text: 'export const x = useOptionalService("storage")',
+                                  before: [{ line: 1, text: "import { useOptionalService } from '@kn/common'" }],
+                                  after: [],
+                              },
+                          ]
+                        : [],
+                files: mode === 'files_with_matches' ? ['src/index.tsx'] : [],
+                counts: mode === 'count' ? [{ path: 'src/index.tsx', count: 2 }] : [],
+                scanned: 3,
+                skippedLarge: 0,
+                truncated: false,
+                timedOut: false,
+            }
+        }
         if (typeof options.query === 'string' && options.query) {
             return {
                 kind: 'search',
@@ -313,8 +340,39 @@ const devHost = {
     },
 }
 
+/**
+ * A fake `desktop` core service: capability discovery reads the live bridge, so
+ * the test supplies a realistic whitelist plus the typed groups.
+ */
+const desktopBridge = {
+    platform: 'darwin',
+    capabilities: [
+        'system.info',
+        'fs.readFile',
+        'fs.writeFile',
+        'dialog.openFile',
+        'http.request',
+        'net.policy.get',
+        'credentials.load',
+        'ssh.exec',
+        'ssh.put',
+        'ssh.get',
+        'ssh.hosts',
+        'ssh.forget',
+        'dev.start',
+        'dev.build',
+        'vertex.made.up',
+    ],
+    has: (capability) => desktopBridge.capabilities.includes(capability),
+    dev: { start: () => undefined, build: () => undefined, stop: () => undefined, status: () => undefined },
+    ssh: { exec: () => undefined, put: () => undefined, get: () => undefined, hosts: () => undefined, forget: () => undefined },
+    storage: { info: () => undefined, get: () => undefined, set: () => undefined },
+    version: '2.2.0',
+}
+
 const tools = createStudioTools({
     getDev: () => dev,
+    getDesktop: () => desktopBridge,
     getPluginHost: () => pluginHost,
     getDevHost: () => devHost,
     getMarketplace: () => marketplace,
@@ -339,6 +397,7 @@ const EXPECTED = [
     'editPluginProjectFile',
     'listPluginProjectFiles',
     'searchPluginProject',
+    'grepPluginProject',
     'installPluginDependencies',
     'listMyPlugins',
     'publishPluginProject',
@@ -353,6 +412,7 @@ const EXPECTED = [
     'listPluginIcons',
     'generatePluginIcon',
     'listHostGlobals',
+    'listDesktopCapabilities',
     'listHostApiPackages',
     'searchHostApi',
     'readHostApiFile',
@@ -377,6 +437,7 @@ check(
     tools.listPluginProjects.readOnly === true
         && tools.readPluginProjectFile.readOnly === true
         && tools.listHostGlobals.readOnly === true
+        && tools.listDesktopCapabilities.readOnly === true
         && tools.listPluginServices.readOnly === true,
 )
 check(
@@ -458,6 +519,46 @@ check(
 )
 check('files: list reached dev.files', calls.some(([name, args]) => name === 'files' && !args.query))
 check('files: search reached dev.files', calls.some(([name, args]) => name === 'files' && args.query === 'export'))
+
+const grepped = await tools.grepPluginProject.execute({
+    root: ROOT,
+    pattern: 'useOptionalService\\(',
+    include: '*.tsx',
+    ignoreCase: true,
+    context: 1,
+})
+check(
+    'grep: returns matches with line + context',
+    grepped.count === 1 && grepped.matches[0].line === 2 && grepped.matches[0].before[0].text.startsWith('import'),
+    JSON.stringify(grepped),
+)
+check(
+    'grep: forwards pattern/include/ignoreCase/context to dev.files',
+    calls.some(
+        ([name, args]) =>
+            name === 'files' &&
+            args.pattern === 'useOptionalService\\(' &&
+            args.include === '*.tsx' &&
+            args.ignoreCase === true &&
+            args.context === 1,
+    ),
+)
+check('grep: reports scanned/truncated so a partial result is visible', grepped.scanned === 3 && grepped.truncated === false)
+
+const grepFiles = await tools.grepPluginProject.execute({ root: ROOT, pattern: 'export', outputMode: 'files_with_matches' })
+check('grep: files mode returns paths', grepFiles.mode === 'files_with_matches' && grepFiles.files[0] === 'src/index.tsx', JSON.stringify(grepFiles))
+const grepCounts = await tools.grepPluginProject.execute({ root: ROOT, pattern: 'export', outputMode: 'count' })
+check('grep: count mode returns per-file counts', grepCounts.counts[0].count === 2, JSON.stringify(grepCounts))
+check('grep: tool is read-only', tools.grepPluginProject.readOnly === true)
+check(
+    'grep: schema requires root + pattern',
+    JSON.stringify(tools.grepPluginProject.inputSchema.required) === JSON.stringify(['root', 'pattern']),
+    JSON.stringify(tools.grepPluginProject.inputSchema.required),
+)
+check(
+    'grep: description teaches regex escaping',
+    /正则/.test(tools.grepPluginProject.description) && /转义/.test(tools.grepPluginProject.description),
+)
 
 const installed = await tools.installPluginDependencies.execute({ root: ROOT, packages: ['date-fns@^3'] })
 check(
@@ -648,6 +749,87 @@ check(
     'services: tolerates a registry without ownership',
     bareServices.count === 1 && bareServices.services[0].ownerType === 'unknown',
     JSON.stringify(bareServices.services),
+)
+
+/* ------------------------------------------------------------------ *
+ * Desktop capabilities: what can a plugin I write here actually call?
+ * ------------------------------------------------------------------ */
+const desktopCapabilities = await tools.listDesktopCapabilities.execute({})
+check(
+    'capabilities: reports the live bridge',
+    desktopCapabilities.hasDesktop === true && desktopCapabilities.count === 15 && desktopCapabilities.platform === 'darwin',
+    JSON.stringify({ count: desktopCapabilities.count, platform: desktopCapabilities.platform }),
+)
+check(
+    'capabilities: groups by family with notes',
+    ['credentials.', 'dev.', 'dialog.', 'fs.', 'http.', 'net.policy.', 'ssh.', 'system.'].every((family) =>
+        desktopCapabilities.groups.some((entry) => entry.group === family),
+    ) &&
+        desktopCapabilities.groups.find((entry) => entry.group === 'ssh.')?.summary?.includes('用户确认') === true,
+    JSON.stringify(desktopCapabilities.groups.map((entry) => entry.group)),
+)
+check(
+    'capabilities: ssh family lists its five calls',
+    JSON.stringify(desktopCapabilities.groups.find((entry) => entry.group === 'ssh.')?.capabilities) ===
+        JSON.stringify(['ssh.exec', 'ssh.forget', 'ssh.get', 'ssh.hosts', 'ssh.put']),
+    JSON.stringify(desktopCapabilities.groups.find((entry) => entry.group === 'ssh.')?.capabilities),
+)
+check(
+    'capabilities: typed groups expose their methods',
+    desktopCapabilities.typedGroups.find((entry) => entry.group === 'ssh')?.methods.join(',') === 'exec,forget,get,hosts,put' &&
+        desktopCapabilities.typedGroups.some((entry) => entry.group === 'dev') &&
+        desktopCapabilities.typedGroups.some((entry) => entry.group === 'storage'),
+    JSON.stringify(desktopCapabilities.typedGroups),
+)
+check(
+    'capabilities: teaches the degradation rule',
+    desktopCapabilities.callPattern.includes('has(') && /useOptionalService/.test(desktopCapabilities.callPattern),
+    desktopCapabilities.callPattern,
+)
+check(
+    'capabilities: points at the contract for signatures',
+    /desktop-bridge/.test(desktopCapabilities.hint) && /DesktopCapabilityContract/.test(desktopCapabilities.hint),
+    desktopCapabilities.hint,
+)
+const filteredCapabilities = await tools.listDesktopCapabilities.execute({ query: 'SSH' })
+check(
+    'capabilities: query filters, case-insensitively, and reports the unfiltered total',
+    filteredCapabilities.count === 5 && filteredCapabilities.groups.length === 1 && filteredCapabilities.totalBeforeFilter === 15,
+    JSON.stringify({ count: filteredCapabilities.count, total: filteredCapabilities.totalBeforeFilter }),
+)
+check(
+    'capabilities: multi-segment families group as one (net.policy., not net.)',
+    desktopCapabilities.groups.some((entry) => entry.group === 'net.policy.') &&
+        !desktopCapabilities.groups.some((entry) => entry.group === 'net.'),
+    JSON.stringify(desktopCapabilities.groups.map((entry) => entry.group)),
+)
+check(
+    'capabilities: a family this build has never heard of is listed without an invented note',
+    desktopCapabilities.groups.find((entry) => entry.group === 'vertex.')?.capabilities.join(',') === 'vertex.made.up' &&
+        desktopCapabilities.groups.find((entry) => entry.group === 'vertex.')?.summary === undefined,
+    JSON.stringify(desktopCapabilities.groups.find((entry) => entry.group === 'vertex.')),
+)
+
+/* Web host: no `desktop` service at all — a structured answer, not a throw. */const noDesktop = await createStudioTools({
+    getDev: () => dev,
+    getPluginHost: () => pluginHost,
+}).listDesktopCapabilities.execute({})
+check(
+    'capabilities: a host without desktop answers instead of failing',
+    noDesktop.hasDesktop === false && noDesktop.count === 0 && /没有 desktop 服务/.test(noDesktop.note),
+    JSON.stringify(noDesktop.note),
+)
+/* Old desktop build: the service exists but a typed group is missing. */
+const partialDesktop = createStudioTools({
+    getDev: () => dev,
+    getPluginHost: () => pluginHost,
+    getDesktop: () => ({ platform: 'win32', capabilities: ['fs.readFile'], has: () => false }),
+})
+const partial = await partialDesktop.listDesktopCapabilities.execute({})
+check(
+    'capabilities: a build without typed groups still lists raw capabilities',
+    partial.hasDesktop === true && partial.count === 1 && partial.typedGroups.length === 0,
+    JSON.stringify(partial),
 )
 
 /* ------------------------------------------------------------------ *

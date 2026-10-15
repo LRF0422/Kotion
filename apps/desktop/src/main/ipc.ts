@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { join } from 'node:path';
 import * as dns from 'node:dns';
 import { setupDevIpcHandlers } from './plugin-dev/index';
+import { setupSshIpcHandlers } from './ssh/index';
 import { setupStorageHandlers } from './storage/index';
 import { decideResolvedAddress, decideTarget } from './net-policy';
 import { getNetPolicy, setNetPolicy } from './net-policy-store';
@@ -120,6 +121,14 @@ export function setupIpcHandlers() {
   // The manager owns the dev-server child processes and nothing else calls
   // dispose(), so reap them on quit instead of leaving orphaned watchers.
   app.on('will-quit', () => devManager.dispose());
+
+  // ==================== ssh ====================
+  // Runs the user's own OpenSSH binaries. Every target passes the network
+  // policy (private/loopback refused by default) and the first connection to a
+  // host in this app run asks the user in a modal dialog; local paths in the
+  // transfer calls share this module's fs allowlist. No credential ever enters
+  // the contract — auth is the user's ~/.ssh config and agent.
+  setupSshIpcHandlers({ assertAllowedPath });
 
   // ==================== durable storage (SQLite) ====================
   // The main process is the database's only writer; the renderer reaches it
