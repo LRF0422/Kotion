@@ -327,8 +327,13 @@ export function isPluginStorageNamespace(namespace: string, pluginKey?: string):
  *
  * Collections map onto flat keys: `key('doc', id, 'body')` → `doc/<id>/body`,
  * so a prefix scan is the collection query.
+ *
+ * `null`/`undefined`/empty parts are dropped by the filter below, so the
+ * signature accepts them: callers routinely pass an optional id straight through
+ * (`key('doc', maybeId, 'body')`), and narrowing the type to `string | number`
+ * made that a compile error while the runtime had always tolerated it.
  */
-export function storageKey(...parts: Array<string | number>): string {
+export function storageKey(...parts: Array<string | number | null | undefined>): string {
     return parts
         .filter((part) => part !== undefined && part !== null && `${part}`.length > 0)
         .map((part) => String(part))
