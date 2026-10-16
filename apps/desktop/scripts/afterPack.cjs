@@ -49,6 +49,7 @@ const path = require('node:path')
 const { promisify } = require('node:util')
 const prepareStudioDependencies = require('./prepare-studio-deps.cjs')
 const prepareStorageDependencies = require('./prepare-storage-deps.cjs')
+const prepareSshDependencies = require('./prepare-ssh-deps.cjs')
 
 const execFileAsync = promisify(execFile)
 const MAX_BUFFER = 64 * 1024 * 1024
@@ -84,6 +85,14 @@ module.exports = async function afterPack(context) {
     // 先落资源，再签名 —— 否则 unpacked 出来的依赖不在签名封印里。
     await prepareStudioDependencies(context)
     await prepareStorageDependencies(context)
+    // `ssh2` is a runtime require of the main process and node_modules is
+    // excluded from the bundle: without this the packaged app has no SSH.
+    const ssh = prepareSshDependencies(context)
+    if (!ssh.ok) {
+        console.error(ssh.error)
+        throw new Error(ssh.error)
+    }
+    if (!ssh.skipped) console.log(`[prepare-ssh-deps] shipped: ${ssh.packages.join(', ')}`)
 
     if (context.electronPlatformName !== 'darwin') return
     await adhocSign(context)

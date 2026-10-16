@@ -80,6 +80,23 @@ export type DesktopCapability =
     | 'ssh.get'
     | 'ssh.hosts'
     | 'ssh.forget'
+    // ---- ssh: sftp directory surface ---------------------------------------
+    | 'ssh.sftpList'
+    | 'ssh.sftpStat'
+    | 'ssh.sftpMkdir'
+    | 'ssh.sftpRename'
+    | 'ssh.sftpRemove'
+    // ---- ssh: interactive terminal (remote pty, streamed) ------------------
+    | 'ssh.shellOpen'
+    | 'ssh.shellWrite'
+    | 'ssh.shellResize'
+    | 'ssh.shellClose'
+    | 'ssh.shells'
+    // ---- ssh: credentials the user stores in the host (never given to plugins)
+    | 'ssh.credentialsAvailable'
+    | 'ssh.credentialsList'
+    | 'ssh.credentialsSet'
+    | 'ssh.credentialsRemove'
     // ---- durable storage (SQLite in the main process) ----------------------
     | 'storage.info'
     | 'storage.get'
@@ -741,6 +758,68 @@ export interface SshCallOptions extends SshTarget {
     maxOutputBytes?: number
     /** Host-key policy; defaults to `strict`. */
     hostKeyPolicy?: SshHostKeyPolicy
+    /**
+     * Which stored credential to authenticate with.
+     *
+     * Optional: when omitted, the credential saved for this target is used, and
+     * without one the connection falls back to the ssh-agent and `~/.ssh` keys.
+     * **A password or key is never passed in a call** — it is stored once, in the
+     * host, and resolved in the main process.
+     */
+    credentialId?: string
+}
+
+/** How a stored credential authenticates. */
+export type SshCredentialKind = 'password' | 'key'
+
+/**
+ * A stored SSH credential, as the renderer sees it.
+ *
+ * Deliberately metadata only: there is no field here that could carry the
+ * password or the private key back out of the main process.
+ */
+export interface SshCredentialMetadata {
+    id: string
+    host: string
+    user: string | null
+    port: number
+    kind: SshCredentialKind
+    label?: string
+    createdAt: number
+    updatedAt: number
+    /** A passphrase is stored alongside the key. */
+    hasPassphrase: boolean
+    /** `user@host:port` — what a call's target has to match. */
+    targetKey: string
+}
+
+/** Add or replace the credential for one target. */
+export interface SshCredentialInput {
+    host: string
+    user?: string | null
+    port?: number
+    kind?: SshCredentialKind
+    label?: string
+    /** The password, or a PEM private key. */
+    secret: string
+    /** Passphrase for an encrypted private key. */
+    passphrase?: string
+}
+
+/** Result of storing/removing a credential: `ok: false` + a reason to show. */
+export interface SshCredentialMutationResult {
+    ok: boolean
+    credential?: SshCredentialMetadata
+    error?: string
+}
+
+/** The credential surface: everything a settings panel needs, and nothing more. */
+export interface SshCredentialBridge {
+    /** False when the OS cannot encrypt (no keyring): storing is refused. */
+    available(): Promise<boolean>
+    list(): Promise<SshCredentialMetadata[]>
+    set(input: SshCredentialInput): Promise<SshCredentialMutationResult>
+    remove(options: { id: string }): Promise<SshCredentialMutationResult>
 }
 
 /** Run one command on a remote host. */
@@ -797,14 +876,22 @@ export interface SshTransferResult {
     argv: string[]
 }
 
+/** What an SSH call does, as far as the user's consent is concerned. */
+export type SshRequestScope = 'command' | 'transfer' | 'sftp' | 'shell'
+
 /** A host the user has allowed for this app run. */
 export interface SshGrant {
-    /** `user@host:port` — the identity {@link SshForgetOptions} revokes. */
+    /** `user@host:port` — the identity {@link SshForgetOptions} revokes (every scope). */
     key: string
     host: string
     user: string | null
     port: number
     hostKeyPolicy: SshHostKeyPolicy
+    /**
+     * What was allowed. Grants are per host **and** per scope: permission to run
+     * a command does not imply permission to open an interactive terminal.
+     */
+    scope: SshRequestScope
     /** Epoch ms of the confirmation. */
     grantedAt: number
 }
@@ -816,23 +903,181 @@ export interface SshForgetOptions extends Partial<SshTarget> {
 }
 
 /**
+ * One remote directory entry (SFTP `readdir`).
+ *
+ * `path` is already joined with the directory that was listed, so a caller never
+ * has to re-assemble it.
+ */
+export interface SshSftpEntry {
+    name: string
+    path: string
+    /** The server's `ls -l`-style line, when it provides one. */
+    longname: string
+    directory: boolean
+    file: boolean
+    symlink: boolean
+    size: number
+    mode: number
+    modifiedAt: number
+    uid: number
+    gid: number
+}
+
+/** Common knobs for every SFTP call. */
+export interface SshSftpOptions extends SshCallOptions {}
+
+export interface SshSftpPathOptions extends SshSftpOptions {
+    /** Remote path. No quoting needed: it is a protocol field, not a shell word. */
+    path: string
+}
+
+export interface SshSftpMkdirOptions extends SshSftpPathOptions {
+    /** Create missing parents (`mkdir -p`). */
+    recursive?: boolean
+}
+
+export interface SshSftpRenameOptions extends SshSftpOptions {
+    from: string
+    to: string
+    /** POSIX rename replaces silently; the default refuses an existing target. */
+    overwrite?: boolean
+}
+
+export interface SshSftpRemoveOptions extends SshSftpPathOptions {
+    /** Remove an empty directory instead of a file. */
+    directory?: boolean
+}
+
+export interface SshSftpListOptions extends SshSftpPathOptions {}
+
+export interface SshSftpListResult {
+    host: string
+    user: string | null
+    port: number
+    path: string
+    entries: SshSftpEntry[]
+    /** The entry cap was hit; the listing is partial. */
+    truncated: boolean
+}
+
+export interface SshSftpStatResult {
+    host: string
+    user: string | null
+    port: number
+    path: string
+    size: number
+    mode: number
+    directory: boolean
+    file: boolean
+    symlink: boolean
+    modifiedAt: number
+    accessedAt: number
+    uid: number
+    gid: number
+}
+
+export interface SshSftpMutationResult {
+    host: string
+    user: string | null
+    port: number
+    [key: string]: unknown
+}
+
+/** Open an interactive terminal: a remote pty with a writable stdin. */
+export interface SshShellOpenOptions extends SshCallOptions {
+    /** TERM name; sanitized to a boring default when it is not a plain token. */
+    term?: string
+    cols?: number
+    rows?: number
+}
+
+/** A live terminal session. Data arrives as `SshShellEvent`s. */
+export interface SshShellSession {
+    sessionId: string
+    host: string
+    user: string | null
+    port: number
+    cols: number
+    rows: number
+    /** Epoch ms. */
+    openedAt: number
+}
+
+export interface SshShellWriteOptions {
+    sessionId: string
+    /** Keystrokes / pasted text (UTF-8). */
+    data: string
+}
+
+export interface SshShellResizeOptions {
+    sessionId: string
+    cols: number
+    rows: number
+}
+
+export interface SshShellTarget {
+    sessionId: string
+}
+
+/**
+ * One terminal event, delivered on the `ssh` desktop event channel.
+ *
+ * `data` is base64: ssh2 hands over byte chunks that can split a multi-byte
+ * character, so the renderer must decode bytes rather than trust a JSON string.
+ */
+export type SshShellEvent =
+    | { type: 'shell-data'; sessionId: string; data: string }
+    | { type: 'shell-exit'; sessionId: string; code: number | null; signal: string | null }
+    | { type: 'shell-error'; sessionId: string; message: string }
+
+/**
  * The SSH surface of the desktop bridge. Present only on desktop builds that
  * expose the `ssh.*` capabilities; feature-detect before use.
  *
  * Every call is gated by the network policy and by a per-host user confirmation
- * on first use in an app run. There is deliberately no way to pass a password
- * or a key: auth comes from the user's `~/.ssh/config` and ssh-agent.
+ * on first use in an app run; an interactive shell says so explicitly in that
+ * dialog. There is deliberately no way to pass a password or a key — auth comes
+ * from the user's ssh-agent and default identity files.
  */
 export interface SshBridge {
     exec(options: SshExecOptions): Promise<SshExecResult>
-    /** Upload a local file to the remote host. */
+    /** Upload a local file to the remote host (SFTP). */
     put(options: SshTransferOptions): Promise<SshTransferResult>
-    /** Download a remote file to a local path. */
+    /** Download a remote file to a local path (SFTP). */
     get(options: SshTransferOptions): Promise<SshTransferResult>
+    /** List a remote directory. */
+    list(options: SshSftpListOptions): Promise<SshSftpListResult>
+    /** Stat a remote path. */
+    stat(options: SshSftpPathOptions): Promise<SshSftpStatResult>
+    /** Create a remote directory (optionally `-p`). */
+    mkdir(options: SshSftpMkdirOptions): Promise<SshSftpMutationResult>
+    /** Rename/move; refuses an existing target unless `overwrite` is set. */
+    rename(options: SshSftpRenameOptions): Promise<SshSftpMutationResult>
+    /** Delete a file, or an empty directory when `directory` is set. */
+    remove(options: SshSftpRemoveOptions): Promise<SshSftpMutationResult>
+    /** Open an interactive terminal (remote pty). */
+    shell(options: SshShellOpenOptions): Promise<SshShellSession>
+    /** Send input to a shell session. */
+    shellWrite(options: SshShellWriteOptions): Promise<boolean>
+    /** Resize a shell session's pty (the reason this is not a spawned `ssh`). */
+    shellResize(options: SshShellResizeOptions): Promise<boolean>
+    /** Close a shell session. */
+    shellClose(options: SshShellTarget): Promise<boolean>
+    /** Sessions that are currently open. */
+    shellSessions(): Promise<SshShellSession[]>
+    /** Subscribe to terminal output/exit events; returns an unsubscribe. */
+    onShell(listener: (event: SshShellEvent) => void): () => void
     /** Hosts the user has granted for this app run. */
     hosts(): Promise<SshGrant[]>
     /** Revoke one grant; true when a grant was removed. */
     forget(options: SshForgetOptions): Promise<boolean>
+    /**
+     * Stored credentials — the only way to log in to a password-only host.
+     *
+     * Secrets go in and never come back out: `list()` is metadata only and the
+     * main process is the only reader of the plaintext.
+     */
+    credentials: SshCredentialBridge
 }
 
 /**
@@ -963,6 +1208,20 @@ export interface DesktopCapabilityContract {
     'ssh.get': { params: SshTransferOptions; result: SshTransferResult }
     'ssh.hosts': { params?: void; result: SshGrant[] }
     'ssh.forget': { params: SshForgetOptions; result: boolean }
+    'ssh.sftpList': { params: SshSftpListOptions; result: SshSftpListResult }
+    'ssh.sftpStat': { params: SshSftpPathOptions; result: SshSftpStatResult }
+    'ssh.sftpMkdir': { params: SshSftpMkdirOptions; result: SshSftpMutationResult }
+    'ssh.sftpRename': { params: SshSftpRenameOptions; result: SshSftpMutationResult }
+    'ssh.sftpRemove': { params: SshSftpRemoveOptions; result: SshSftpMutationResult }
+    'ssh.shellOpen': { params: SshShellOpenOptions; result: SshShellSession }
+    'ssh.shellWrite': { params: SshShellWriteOptions; result: boolean }
+    'ssh.shellResize': { params: SshShellResizeOptions; result: boolean }
+    'ssh.shellClose': { params: SshShellTarget; result: boolean }
+    'ssh.shells': { params?: void; result: SshShellSession[] }
+    'ssh.credentialsAvailable': { params?: void; result: boolean }
+    'ssh.credentialsList': { params?: void; result: SshCredentialMetadata[] }
+    'ssh.credentialsSet': { params: SshCredentialInput; result: SshCredentialMutationResult }
+    'ssh.credentialsRemove': { params: { id: string }; result: SshCredentialMutationResult }
     'storage.info': { params?: void; result: DesktopStorageEnvelope<StorageInfo> }
     'storage.get': {
         params: { namespace: string; key: string }

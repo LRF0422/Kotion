@@ -60,8 +60,11 @@ pnpm clean:packages         # Clean all dist directories
 - `src/core/PluginManager.ts` - 插件管理器
 - `src/core/editor.ts` - 编辑器类型定义（ExtensionWrapper）
 - `src/core/desktop-bridge.ts` - 桌面能力契约（含 `storage.*`、`ssh.*`）
-  - `ssh.*` 用用户自己的 OpenSSH 执行远程命令/传文件：过网络策略 + 每个主机在本次运行内首次需用户确认，
-    **宿主不接收也不保存任何凭证**（认证走 `~/.ssh` 与 ssh-agent）。详见 [docs/SSH.md](docs/SSH.md)。
+  - `ssh.*` 在主进程用 `ssh2` 提供远程执行 / **交互式 pty 终端（流式）** / **SFTP 目录能力**：
+    过网络策略 + 每个主机在本次运行内首次需用户确认（开终端会单独写明），主机密钥在认证**之前**校验
+    （`known_hosts` 含 hash 形式 + TOFU 记住）。**宿主不接收也不保存任何凭证**（认证走 ssh-agent 与默认密钥）。
+    只接受密码的机器用 `ssh.credentials*`（明文只进不出，落盘走 safeStorage）；**宿主只提供接口，凭据界面由插件实现**。
+    打包时 `ssh2` 由 `scripts/prepare-ssh-deps.cjs` 物化进产物。详见 [docs/SSH.md](docs/SSH.md)。
 - `src/storage/` - 存储契约 + 通用 KV 引擎 + 内存/localStorage 后端
 - HTTP 客户端、Logger、工具函数
 

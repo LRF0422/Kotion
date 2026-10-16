@@ -34,6 +34,23 @@ import type {
     SshGrant,
     SshTransferOptions,
     SshTransferResult,
+    SshSftpListOptions,
+    SshSftpListResult,
+    SshSftpMkdirOptions,
+    SshSftpMutationResult,
+    SshSftpPathOptions,
+    SshSftpRemoveOptions,
+    SshSftpRenameOptions,
+    SshSftpStatResult,
+    SshShellEvent,
+    SshShellOpenOptions,
+    SshShellResizeOptions,
+    SshShellSession,
+    SshShellTarget,
+    SshShellWriteOptions,
+    SshCredentialInput,
+    SshCredentialMetadata,
+    SshCredentialMutationResult,
 } from '@kn/common'
 
 /**
@@ -170,6 +187,20 @@ const SSH_CAPABILITIES: DesktopCapability[] = [
     'ssh.get',
     'ssh.hosts',
     'ssh.forget',
+    'ssh.sftpList',
+    'ssh.sftpStat',
+    'ssh.sftpMkdir',
+    'ssh.sftpRename',
+    'ssh.sftpRemove',
+    'ssh.shellOpen',
+    'ssh.shellWrite',
+    'ssh.shellResize',
+    'ssh.shellClose',
+    'ssh.shells',
+    'ssh.credentialsAvailable',
+    'ssh.credentialsList',
+    'ssh.credentialsSet',
+    'ssh.credentialsRemove',
 ]
 
 const createSshBridge = (
@@ -189,8 +220,32 @@ const createSshBridge = (
         exec: (options: SshExecOptions): Promise<SshExecResult> => invoke('ssh.exec', options),
         put: (options: SshTransferOptions): Promise<SshTransferResult> => invoke('ssh.put', options),
         get: (options: SshTransferOptions): Promise<SshTransferResult> => invoke('ssh.get', options),
+        list: (options: SshSftpListOptions): Promise<SshSftpListResult> => invoke('ssh.sftpList', options),
+        stat: (options: SshSftpPathOptions): Promise<SshSftpStatResult> => invoke('ssh.sftpStat', options),
+        mkdir: (options: SshSftpMkdirOptions): Promise<SshSftpMutationResult> => invoke('ssh.sftpMkdir', options),
+        rename: (options: SshSftpRenameOptions): Promise<SshSftpMutationResult> => invoke('ssh.sftpRename', options),
+        remove: (options: SshSftpRemoveOptions): Promise<SshSftpMutationResult> => invoke('ssh.sftpRemove', options),
+        shell: (options: SshShellOpenOptions): Promise<SshShellSession> => invoke('ssh.shellOpen', options),
+        shellWrite: (options: SshShellWriteOptions): Promise<boolean> => invoke('ssh.shellWrite', options),
+        shellResize: (options: SshShellResizeOptions): Promise<boolean> => invoke('ssh.shellResize', options),
+        shellClose: (options: SshShellTarget): Promise<boolean> => invoke('ssh.shellClose', options),
+        shellSessions: (): Promise<SshShellSession[]> => invoke('ssh.shells'),
+        /**
+         * One event channel for every session; filter by `sessionId` here so a
+         * component only sees its own terminal.
+         */
+        onShell: (listener) =>
+            host.on('ssh', (value) => listener(value as SshShellEvent)),
         hosts: (): Promise<SshGrant[]> => invoke('ssh.hosts'),
         forget: (options: SshForgetOptions): Promise<boolean> => invoke('ssh.forget', options),
+        credentials: {
+            available: (): Promise<boolean> => invoke('ssh.credentialsAvailable'),
+            list: (): Promise<SshCredentialMetadata[]> => invoke('ssh.credentialsList'),
+            set: (input: SshCredentialInput): Promise<SshCredentialMutationResult> =>
+                invoke('ssh.credentialsSet', input),
+            remove: (options: { id: string }): Promise<SshCredentialMutationResult> =>
+                invoke('ssh.credentialsRemove', options),
+        },
     }
 }
 

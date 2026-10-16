@@ -1,4 +1,4 @@
-/** Types for ssh-args.mjs (plain JS so tests can import it directly). */
+/** Types for ssh-params.mjs (plain JS so tests can import it directly). */
 
 export type SshHostKeyPolicy = 'strict' | 'accept-new'
 
@@ -16,6 +16,11 @@ export const MAX_SSH_TIMEOUT_MS: number
 export const DEFAULT_SSH_OUTPUT_BYTES: number
 export const MAX_SSH_OUTPUT_BYTES: number
 export const MAX_SSH_COMMAND_CHARS: number
+export const MAX_SFTP_ENTRIES: number
+export const MAX_TERM_CHARS: number
+export const MAX_SHELL_COLS: number
+export const MAX_SHELL_ROWS: number
+export const MAX_SHELL_WRITE_BYTES: number
 
 export function clampSshTimeout(value: unknown): number
 export function clampSshOutputBytes(value: unknown): number
@@ -24,26 +29,10 @@ export function normalizeSshTarget(raw?: Record<string, unknown>): SshTarget
 export function sshGrantKey(target: SshTarget): string
 export function normalizeSshCommand(value: unknown): string
 export function normalizeRemotePath(value: unknown, field?: string): string
-export function buildCommonSshArgs(options: {
-    target: SshTarget
-    hostKeyPolicy: SshHostKeyPolicy
-    connectTimeoutMs: number
-    portFlag?: string
-}): string[]
-export function buildSshArgs(options: {
-    target: SshTarget
-    command: string
-    hostKeyPolicy: SshHostKeyPolicy
-    connectTimeoutMs: number
-}): string[]
-export function buildScpArgs(options: {
-    target: SshTarget
-    direction: 'put' | 'get'
-    localPath: string
-    remotePath: string
-    hostKeyPolicy: SshHostKeyPolicy
-    connectTimeoutMs: number
-}): string[]
+export function normalizeSessionId(value: unknown): string
+export function normalizeShellSize(options?: { cols?: unknown; rows?: unknown }): { cols: number; rows: number }
+export function normalizeTerm(value: unknown): string
+export function normalizeShellInput(value: unknown): string
 export function sshDenyReason(verdict: 'private' | 'metadata', options?: { resolved?: boolean }): string
 export function createOutputCollector(maxBytes: number): {
     push(chunk: Buffer | string): void

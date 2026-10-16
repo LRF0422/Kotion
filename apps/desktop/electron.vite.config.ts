@@ -39,10 +39,21 @@ export default defineConfig({
     // `require`, and `prepare-storage-deps.cjs` copies it into the packaged app.
     // It is also a `dependency`, so `externalizeDepsPlugin` already externalizes
     // it — listing it keeps that true if the manifest ever changes.
+    // `ssh2` is exported as a runtime require as well: it is a dependency, so
+    // externalizeDepsPlugin should handle it, but the packaged app must never
+    // end up with a bundled copy (the afterPack hook ships the real package and
+    // `prepare-ssh-deps.test.mjs` asserts it resolves from there). Being
+    // explicit here is the difference between "works in dev" and "works after
+    // packaging".
+    build: {
+      rollupOptions: {
+        external: ['ssh2'],
+      },
+    },
     plugins: [
       externalizeDepsPlugin({
         exclude: ['@electron-toolkit/utils', 'fs-extra'],
-        include: ['esbuild', 'better-sqlite3'],
+        include: ['esbuild', 'better-sqlite3', 'ssh2'],
       }),
       copyPluginDevAssets(),
     ],

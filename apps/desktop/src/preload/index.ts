@@ -97,6 +97,23 @@ const CAPABILITIES = [
   // Which hosts the user has granted for this app run, and how to revoke one.
   'ssh.hosts',
   'ssh.forget',
+  // SFTP directory surface (list/stat/mkdir/rename/remove), on the same gate.
+  'ssh.sftpList',
+  'ssh.sftpStat',
+  'ssh.sftpMkdir',
+  'ssh.sftpRename',
+  'ssh.sftpRemove',
+  // Interactive terminal: a remote pty streamed over `desktop:event:ssh`.
+  'ssh.shellOpen',
+  'ssh.shellWrite',
+  'ssh.shellResize',
+  'ssh.shellClose',
+  'ssh.shells',
+  // Stored credentials. `set` takes a secret in; nothing ever returns one out.
+  'ssh.credentialsAvailable',
+  'ssh.credentialsList',
+  'ssh.credentialsSet',
+  'ssh.credentialsRemove',
 ] as readonly string[]
 
 const knDesktop = {

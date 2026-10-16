@@ -123,7 +123,7 @@ export const pluginAuthoringSkill = {
         "- 参数与结果的确切类型在 @kn/common 的 `src/core/desktop-bridge.ts`：`DesktopCapabilityContract` 是全部能力的参数/结果总表，`DevBridge` / `SshBridge` / `StorageService` 是各组的接口。用 `searchHostApi({ query: 'SshBridge' })` 或 `'DesktopCapabilityContract'` 定位后 `readHostApiFile` 读。",
         "- **必须特性检测，不能假设存在**：Web 端没有 `desktop`（服务为 undefined），老的桌面客户端可能整个组都缺。写法：`if (!desktop?.has('ssh.exec')) return <降级 UI>`、`await desktop?.ssh?.exec(...)`；绝不在模块顶层或事件外直接调用。",
         "- 调用方式：有包装的组直接调（`desktop.ssh.exec({...})`、`desktop.dev.start({...})`、`desktop.storage.*`）；其余用 `desktop.invoke('<能力名>', params)`，返回类型按 `DesktopCapabilityContract` 断言。",
-        "- 典型能力与它们的边界：`fs.readFile/writeFile/readdir`（受 fs 白名单限制：标准用户目录 + 用户用对话框授权过的目录）、`dialog.openFile/saveFile`（原生对话框）、`http.request`（宿主代发、有 SSRF 防护，私网默认拒绝）、`ssh.exec/put/get`（过网络策略，**每个主机在本次运行内首次使用要用户点确认，用户可能拒绝**，远程失败是 `ok:false` 而不是抛错）、`storage.*`（持久化 KV，必须留在自己的 `plugin.<pluginKey>` 命名空间）。",
+        "- 典型能力与它们的边界：`fs.readFile/writeFile/readdir`（受 fs 白名单限制：标准用户目录 + 用户用对话框授权过的目录）、`dialog.openFile/saveFile`（原生对话框）、`http.request`（宿主代发、有 SSRF 防护，私网默认拒绝）、`ssh.exec`（远程执行）、`ssh.put/get`（传文件）、`ssh.sftpList/Stat/Mkdir/Rename/Remove`（远端目录）、`ssh.shellOpen/Write/Resize/Close` + `onShell` 事件（**交互式终端**，输出是 base64 字节流）——全部过网络策略，且**每个主机在本次运行内首次使用要用户点确认**（开终端会单独写明），用户可能拒绝；执行命令失败是 `ok:false`，连接/认证/主机密钥失败才是抛错、`storage.*`（持久化 KV，必须留在自己的 `plugin.<pluginKey>` 命名空间）。",
         "- 能力是**可信插件**模型：宿主不按插件身份校验权限（`desktop.dev.*` 之类的工具能力对所有插件开放），所以自己别做越权的事，也别把 `credentials.*` 当作顺手可读的东西。",
         "",
         "## 入口契约",
