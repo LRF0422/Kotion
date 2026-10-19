@@ -373,6 +373,55 @@ export const getAdminPluginReportList = (params: {
 export const handleAdminPluginReport = (id: string, payload: { approved: boolean; note?: string }) =>
   post<PluginReportVO>(`/knowledge-wiki/admin/plugin/report/${id}/handle`, payload)
 
+// ---------- 开发者认证（knowledge-wiki /admin/developer） ----------
+
+export type DeveloperStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED'
+export type DeveloperIdType = 'ID_CARD' | 'PASSPORT' | 'BUSINESS_LICENSE' | 'OTHER'
+
+export interface AdminDeveloperVO {
+  id: string
+  userId?: string
+  userName?: string
+  displayName?: string
+  contactName?: string
+  contactEmail?: string
+  contactPhone?: string
+  idType?: DeveloperIdType | { value?: DeveloperIdType; desc?: string }
+  /** Masked value, safe to render in lists. */
+  idNumberMasked?: string
+  /** Full document number — reviewer-only, returned by the admin endpoint. */
+  idNumber?: string
+  intro?: string
+  qualificationPath?: string
+  status?: DeveloperStatus | { value?: DeveloperStatus; desc?: string }
+  rejectReason?: string
+  reviewComment?: string
+  reviewerId?: string
+  reviewerName?: string
+  reviewTime?: string
+  createTime?: string
+  updateTime?: string
+}
+
+export const getAdminDeveloperList = (params: {
+  current: number
+  pageSize: number
+  searchValue?: string
+  status?: DeveloperStatus
+}) => get<PageResult<AdminDeveloperVO>>('/knowledge-wiki/admin/developer/list', params)
+
+/** 通过开发者认证。 */
+export const approveAdminDeveloper = (id: string, comment?: string) =>
+  post<AdminDeveloperVO>(`/knowledge-wiki/admin/developer/${id}/approve`, { comment })
+
+/** 驳回开发者认证（reason 必填）。 */
+export const rejectAdminDeveloper = (id: string, reason: string, comment?: string) =>
+  post<AdminDeveloperVO>(`/knowledge-wiki/admin/developer/${id}/reject`, { reason, comment })
+
+/** 撤销已通过的开发者认证（reason 必填）。 */
+export const revokeAdminDeveloper = (id: string, reason: string, comment?: string) =>
+  post<AdminDeveloperVO>(`/knowledge-wiki/admin/developer/${id}/revoke`, { reason, comment })
+
 // ---------- 日志（knowledge-log，current + size） ----------
 
 export interface LogVO {

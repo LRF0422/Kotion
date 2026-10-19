@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Answers.RETURNS_SELF;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -41,6 +42,7 @@ import com.knowledge.wiki.service.entity.enums.InstalledPluginStatus;
 import com.knowledge.wiki.service.entity.enums.PluginReviewDecision;
 import com.knowledge.wiki.service.entity.enums.PluginReviewReason;
 import com.knowledge.wiki.service.entity.enums.PluginStatus;
+import com.knowledge.wiki.service.exception.WikiException;
 import com.knowledge.wiki.service.entity.vo.PluginVO;
 import com.knowledge.wiki.service.service.IInstalledPluginService;
 import com.knowledge.wiki.service.service.IPluginRatingService;
@@ -68,6 +70,13 @@ class PluginApplicationTest {
      */
     @Mock
     private com.knowledge.core.entitlement.EntitlementGate entitlementGate;
+    /**
+     * Publishing also requires an APPROVED developer profile. The mock keeps the
+     * existing tests focused on the catalogue logic; the gate itself is asserted
+     * in {@link #publishingRequiresVerifiedDeveloper()}.
+     */
+    @Mock
+    private DeveloperApplication developerApplication;
     @InjectMocks
     private PluginApplication application;
 
@@ -105,6 +114,24 @@ class PluginApplicationTest {
         assertEquals(installed.getId(), result.getInstalleddVersions().get(0).getId());
         assertEquals(InstalledPluginStatus.DISABLED, result.getInstallStatus());
         assertEquals(Collections.singletonList("editor"), result.getTags());
+    }
+
+    @Test
+    void publishingRequiresVerifiedDeveloper() {
+        authenticate(42L, "user");
+        Plugin plugin = new Plugin();
+        plugin.setId(7L);
+        plugin.setDeveloperId(42L);
+        plugin.setStatus(PluginStatus.DONE);
+        when(pluginService.getById(7L)).thenReturn(plugin);
+        doThrow(WikiException.DEVELOPER_NOT_VERIFIED.newException())
+                .when(developerApplication).requireApproved(42L);
+
+        BusinessException error = assertThrows(BusinessException.class,
+                () -> application.publishVersion(7L, version("1.1.0")));
+
+        assertEquals(1100, error.getCode());
+        verify(pluginVersionService, never()).save(any(PluginVersion.class));
     }
 
     @Test

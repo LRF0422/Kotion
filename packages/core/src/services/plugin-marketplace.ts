@@ -1,5 +1,6 @@
 import { APIS, useApi } from '@kn/common'
 import type {
+    DeveloperVerificationSummary,
     PluginArtifactUpload,
     PluginMarketplaceInstalled,
     PluginMarketplaceMine,
@@ -8,6 +9,7 @@ import type {
     PluginSubmitInput,
     PluginVersionInput,
 } from '@kn/common'
+import { developerStatus, fetchDeveloperProfile } from '../components/Developer/developer-api'
 
 export interface PublisherRequest {
     pluginId?: string | number
@@ -24,6 +26,16 @@ export const subscribePublisherRequests = (
     publisherListeners.add(listener)
     return () => {
         publisherListeners.delete(listener)
+    }
+}
+
+const verificationListeners = new Set<() => void>()
+
+/** Subscribe to "open developer verification" requests; the host UI listens. */
+export const subscribeDeveloperVerificationRequests = (listener: () => void): (() => void) => {
+    verificationListeners.add(listener)
+    return () => {
+        verificationListeners.delete(listener)
     }
 }
 
@@ -78,6 +90,16 @@ export const createPluginMarketplaceService = (): PluginMarketplaceService => ({
         useApi(APIS.PUBLISH_PLUGIN_VERSION, { id: pluginId }, input) as Promise<unknown>,
     async upgrade(versionId: string | number) {
         await useApi(APIS.UPDATE_PLUGIN, { versionId }, undefined, undefined, true)
+    },
+    async getDeveloperProfile(): Promise<DeveloperVerificationSummary | null> {
+        const profile = await fetchDeveloperProfile()
+        if (!profile) return null
+        // Flatten the platform's { value, desc } enum so callers can compare a
+        // plain string without knowing the wire format.
+        return { ...profile, status: developerStatus(profile) }
+    },
+    openDeveloperVerification() {
+        verificationListeners.forEach((listener) => listener())
     },
     openPublisher(options) {
         const request: PublisherRequest = {

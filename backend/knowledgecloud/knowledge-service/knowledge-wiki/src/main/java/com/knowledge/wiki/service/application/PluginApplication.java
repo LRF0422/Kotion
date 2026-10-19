@@ -81,6 +81,8 @@ public class PluginApplication {
     @Autowired
     private IPluginRatingService pluginRatingService;
     @Autowired
+    private DeveloperApplication developerApplication;
+    @Autowired
     private PlatformTransactionManager transactionManager;
     @Autowired(required = false)
     private PluginReviewNotifier reviewNotifier;
@@ -95,6 +97,7 @@ public class PluginApplication {
     @Transactional(rollbackFor = Exception.class)
     public void createPlugin(PluginDTO dto) {
         requirePublishEntitlement();
+        requireDeveloperVerified();
         createLegacyPlugin(dto, false);
     }
 
@@ -147,6 +150,7 @@ public class PluginApplication {
     @Transactional(rollbackFor = Exception.class)
     public PluginVO submit(PluginSubmissionDTO dto) {
         requirePublishEntitlement();
+        requireDeveloperVerified();
         return toSubmissionVO(submitInternal(dto, currentUserId(), true));
     }
 
@@ -155,6 +159,7 @@ public class PluginApplication {
         Plugin plugin = requirePlugin(id);
         requireOwner(plugin, currentUserId());
         requirePublishEntitlement();
+        requireDeveloperVerified();
         return toSubmissionVO(resubmitInternal(plugin, dto, true));
     }
 
@@ -163,6 +168,7 @@ public class PluginApplication {
         Plugin plugin = requirePlugin(pluginId);
         requireOwner(plugin, currentUserId());
         requirePublishEntitlement();
+        requireDeveloperVerified();
         createVersionInternal(plugin, dto, true);
         return toSubmissionVO(plugin);
     }
@@ -537,6 +543,16 @@ public class PluginApplication {
         }
     }
 
+    /**
+     * 开发者认证门禁：只有 APPROVED 的开发者才能提交 / 发版 / 管理插件。
+     *
+     * <p>与前端引导互补——前端提前拦截只是体验，服务端这里才是真正的边界，
+     * 直接调用接口同样会被 1100 拒绝。
+     */
+    private void requireDeveloperVerified() {
+        developerApplication.requireApproved(currentUserId());
+    }
+
     /** 安装能力与已装插件数量门禁。 */
     private void requireInstallEntitlement(Plugin plugin) {
         Long userId = SecurityContextUtil.getUserId();
@@ -563,8 +579,12 @@ public class PluginApplication {
         plugin.setDeveloperId(ownerId);
         plugin.setMaintainerId(ownerId);
         String ownerName = SecurityContextUtil.getUserName();
-        plugin.setDeveloper(ownerName);
-        plugin.setMaintainer(ownerName);
+        // A verified developer's public name is the one they registered; fall
+        // back to the account name for inner/trusted plugins and legacy hosts.
+        String developerName = developerApplication.displayNameOf(ownerId);
+        String publicName = StrUtil.isBlank(developerName) ? ownerName : developerName;
+        plugin.setDeveloper(publicName);
+        plugin.setMaintainer(publicName);
         plugin.setStatus(PluginStatus.PENDING);
         plugin.setInstallCtn(0L);
         plugin.setFavoriteCtn(0L);

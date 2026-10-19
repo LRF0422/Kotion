@@ -68,16 +68,34 @@ GET    /knowledge-wiki/space/page/invited               # 受邀页面
 #### 插件市场 (`knowledge-wiki`)
 
 ```
-POST   /knowledge-wiki/plugin                    # 创建插件
+POST   /knowledge-wiki/plugin                    # 创建插件（需开发者认证）
 GET    /knowledge-wiki/plugin/public             # 公开插件列表
 GET    /knowledge-wiki/plugin/{id}               # 插件详情
+POST   /knowledge-wiki/plugin/submissions        # 提交上架（需开发者认证）
+PUT    /knowledge-wiki/plugin/submissions/{id}   # 驳回后重新提交（需开发者认证）
+GET    /knowledge-wiki/plugin/submissions/mine   # 我的提交
+POST   /knowledge-wiki/plugin/{id}/versions      # 发布新版本（需开发者认证）
 POST   /knowledge-wiki/plugin/install            # 安装插件
 GET    /knowledge-wiki/plugin/install/list       # 已安装插件
 POST   /knowledge-wiki/plugin/uninstall          # 卸载插件
 POST   /knowledge-wiki/plugin/update             # 更新插件
 ```
 
-**现有实现**: `PluginController.java:1-80`
+#### 开发者认证 (`knowledge-wiki`)
+
+```
+GET    /knowledge-wiki/developer/me              # 我的认证状态（未提交时 data=null）
+POST   /knowledge-wiki/developer/apply           # 提交/重新提交认证
+
+GET    /knowledge-wiki/admin/developer/list      # 后台审核列表（platform.plugins.read）
+POST   /knowledge-wiki/admin/developer/{id}/approve  # 通过（platform.plugins.review）
+POST   /knowledge-wiki/admin/developer/{id}/reject   # 驳回，reason 必填
+POST   /knowledge-wiki/admin/developer/{id}/revoke   # 撤销已通过认证，reason 必填
+```
+
+未认证调用发布类接口返回业务码 **1100**（HTTP 400）。详见 [docs/DEVELOPER_VERIFICATION.md](./docs/DEVELOPER_VERIFICATION.md)。
+
+**现有实现**: `PluginController.java`、`DeveloperController.java`、`AdminDeveloperController.java`
 
 #### 文件管理 (`knowledge-file-center`)
 

@@ -7,9 +7,16 @@
  * core.
  */
 import React from 'react'
+import { useTranslation } from '@kn/common'
 import type { PluginPublisherPrefill } from '@kn/common'
 
-import { subscribePublisherRequests, type PublisherRequest } from '../../../services/plugin-marketplace'
+import {
+    subscribeDeveloperVerificationRequests,
+    subscribePublisherRequests,
+    type PublisherRequest,
+} from '../../../services/plugin-marketplace'
+import { useDeveloperProfile } from '../../Developer/developer-api'
+import { DeveloperVerificationDialog } from '../../Developer/DeveloperVerificationDialog'
 import type { PluginSubmissionValues } from './types'
 import { PluginUploader } from './index'
 import { PluginVersionPublisher } from '../PluginManager/PluginVersionPublisher'
@@ -34,8 +41,32 @@ const toInitialValues = (
 
 export const PluginPublisherHost: React.FC = () => {
     const [request, setRequest] = React.useState<PublisherRequest | undefined>()
+    const [verificationRequested, setVerificationRequested] = React.useState(false)
+    const { t } = useTranslation()
+    // A request can arrive from the plugin studio (or any plugin) without the
+    // wizard having been opened through the gated trigger; gate it here too.
+    // The profile is only fetched once a request actually arrives, so mounting
+    // this host globally costs nothing for ordinary users.
+    const { verified } = useDeveloperProfile(Boolean(request) || verificationRequested)
 
     React.useEffect(() => subscribePublisherRequests(setRequest), [])
+    React.useEffect(
+        () => subscribeDeveloperVerificationRequests(() => setVerificationRequested(true)),
+        [],
+    )
+
+    // A plugin (the studio) can ask for the verification dialog directly,
+    // before it has anything to publish.
+    if (verificationRequested) {
+        return (
+            <DeveloperVerificationDialog
+                open
+                onOpenChange={(next) => {
+                    if (!next) setVerificationRequested(false)
+                }}
+            />
+        )
+    }
 
     // Mount the publisher only while a request is active. Keeping it mounted
     // (with open=false) made Vite Fast Refresh preserve stale hook state when
@@ -43,6 +74,18 @@ export const PluginPublisherHost: React.FC = () => {
     // queue"; a fresh mount per request avoids that entirely.
     if (!request) return null
     const close = () => setRequest(undefined)
+
+    if (!verified) {
+        return (
+            <DeveloperVerificationDialog
+                open
+                onOpenChange={(next) => {
+                    if (!next) close()
+                }}
+                reason={t('pluginHub.publish')}
+            />
+        )
+    }
 
     // A request with a pluginId publishes a new version; otherwise the wizard
     // submits a brand-new plugin for review.

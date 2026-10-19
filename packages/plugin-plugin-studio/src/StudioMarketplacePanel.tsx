@@ -24,6 +24,18 @@ export const usePublishProject = () => {
             if (!capability) throw new Error('插件开发台不可用：当前宿主缺少 dev.* 能力')
             if (!marketplace) throw new Error('宿主未注册 pluginMarketplace 服务，无法发布')
             if (!input.root) throw new Error('请先选择一个插件工程')
+            /**
+             * Publishing requires developer verification. Ask the host to open
+             * the verification dialog instead of building and uploading an
+             * artifact the backend will reject with code 1100.
+             */
+            if (marketplace.getDeveloperProfile) {
+                const profile = await marketplace.getDeveloperProfile()
+                if (!profile || profile.status !== 'APPROVED') {
+                    marketplace.openDeveloperVerification?.()
+                    throw new Error('请先完成开发者认证后再发布插件')
+                }
+            }
             const root = input.root.replace(/[\\/]+$/, '')
             const status = await capability.dev.build({ root: input.root })
             if (!status.build?.code) {

@@ -101,6 +101,15 @@ export interface OpenPublisherOptions {
     artifact?: { resourcePath: string; integrity?: string }
 }
 
+/** Current user's developer verification state (publishing requires APPROVED). */
+export interface DeveloperVerificationSummary {
+    status?: 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED'
+    displayName?: string
+    rejectReason?: string
+    idNumberMasked?: string
+    [key: string]: unknown
+}
+
 /** Service surface for the plugin catalogue lifecycle. */
 export interface PluginMarketplaceService {
     /** The developer's submissions and published plugins. */
@@ -117,6 +126,16 @@ export interface PluginMarketplaceService {
     publishVersion(pluginId: string | number, input: PluginVersionInput): Promise<unknown>
     /** Upgrade an installed plugin to the given catalogue version. */
     upgrade(versionId: string | number): Promise<void>
+    /**
+     * The current user's developer verification; `null` when never submitted.
+     *
+     * Publishing / resubmitting / releasing a version requires APPROVED. The
+     * studio checks this before building so a verification failure does not
+     * waste a build+upload; the backend still enforces it.
+     */
+    getDeveloperProfile(): Promise<DeveloperVerificationSummary | null>
+    /** Ask the host to open the developer-verification dialog. */
+    openDeveloperVerification(): void
     /**
      * Ask the host to open its publish flow. The host owns the UI (the same
      * three-step wizard the plugin center uses), so plugins never import it.

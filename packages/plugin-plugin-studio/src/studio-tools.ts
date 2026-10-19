@@ -384,6 +384,8 @@ export interface StudioPluginMarketplace {
     submit(input: Record<string, unknown>): Promise<unknown>
     publishVersion(pluginId: string | number, input: Record<string, unknown>): Promise<unknown>
     upgrade(versionId: string | number): Promise<void>
+    /** Optional: older hosts do not expose the developer profile. */
+    getDeveloperProfile?(): Promise<{ status?: string } | null>
 }
 
 /**
@@ -1399,6 +1401,18 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
             const work = async (handle: StudioBackgroundRunHandle) => {
                 const dev = requireDev(deps)
                 const marketplace = requireMarketplace(deps)
+                // Verification is a hard prerequisite; check before building so
+                // the agent does not burn a build+upload on a 1100 rejection.
+                // Older hosts may not implement the method — the backend still
+                // enforces the gate.
+                if (marketplace.getDeveloperProfile) {
+                    const profile = await marketplace.getDeveloperProfile()
+                    if (!profile || profile.status !== 'APPROVED') {
+                        throw new Error(
+                            '请先完成开发者认证后再发布插件（插件中心 → 管理插件 → 开发者认证）',
+                        )
+                    }
+                }
                 handle.progress(`正在构建并发布 ${args.version}`)
                 const status = await dev.build({ root: args.root })
                 if (!status.build?.code) {

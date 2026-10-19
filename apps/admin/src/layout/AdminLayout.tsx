@@ -109,6 +109,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { title: '插件审核', url: '/plugins', icon: Blocks, permissions: ['platform.plugins.read'] },
       { title: '插件举报', url: '/plugin-reports', icon: Flag, permissions: ['platform.plugins.read'] },
+      { title: '开发者认证', url: '/developers', icon: ShieldCheck, permissions: ['platform.plugins.read'] },
       { title: 'AI 配置', url: '/ai', icon: Sparkles, permissions: ['platform.ai.config.manage'] },
       { title: 'AI 用量', url: '/ai-usage', icon: Gauge, permissions: ['platform.ai.usage.read'] },
       { title: '订阅管理', url: '/subscription', icon: Gauge, permissions: SUBSCRIPTION_CODES },

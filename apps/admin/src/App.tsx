@@ -8,6 +8,7 @@ import { PageList } from './pages/pages/PageList'
 import { CommentList } from './pages/comments/CommentList'
 import { PluginList } from './pages/plugins/PluginList'
 import { PluginReports } from './pages/plugins/PluginReports'
+import { DeveloperList } from './pages/developers/DeveloperList'
 import { AISettings } from './pages/ai/AISettings'
 import { AiUsage } from './pages/ai/AiUsage'
 import { LogList } from './pages/audit/LogList'
@@ -84,6 +85,7 @@ export const App = () => {
             <Route path="comments" element={<CommentList />} />
             <Route path="plugins" element={<PluginList />} />
             <Route path="plugin-reports" element={<PluginReports />} />
+            <Route path="developers" element={<DeveloperList />} />
             <Route path="ai" element={<AISettings />} />
             <Route path="ai-usage" element={<AiUsage />} />
             <Route path="logs" element={<LogList />} />

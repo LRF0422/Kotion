@@ -14,6 +14,8 @@ import {
     SettingsIcon, HistoryIcon, ChevronRightIcon
 } from "@kn/icon";
 import { PluginUploader } from "../PluginUploader";
+import { useDeveloperProfile } from "../../Developer/developer-api";
+import { DeveloperVerificationDialog } from "../../Developer/DeveloperVerificationDialog";
 
 import { CollaborationEditor } from "@kn/editor";
 import { useTranslation } from "@kn/common";
@@ -128,6 +130,12 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
     const { pluginManager } = useContext(AppContext);
     const [open, setOpen] = useState(false);
     const [currentId, setCurrentId] = useState<string>();
+    // Publishing a new version is a developer-only action, same gate as 上架.
+    const { verified: developerVerified } = useDeveloperProfile();
+    const [verifyOpen, setVerifyOpen] = useState(false);
+    // Remember which row asked to publish, so "继续" after verification opens
+    // that plugin's version dialog instead of dropping the user's intent.
+    const [pendingPublishId, setPendingPublishId] = useState<string>();
     const [currentPlugin, setCurrentPlugin] = useState<Plugin>();
     const [file, setFile] = useState<PluginArtifactFile>();
     const [version, setVersion] = useState("1.0.0");
@@ -352,6 +360,19 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
         setDescriptions(prev => prev.filter((_, i) => i !== index));
         toast.success(t('pluginManager.tabRemoved'));
     }, [descriptions, t]);
+
+    const requestVersionPublish = useCallback((plugin: Plugin) => {
+        if (!developerVerified) {
+            setPendingPublishId(plugin.id);
+            setVerifyOpen(true);
+            return;
+        }
+        if (currentId === plugin.id) {
+            setOpen(true);
+        } else {
+            setCurrentId(plugin.id);
+        }
+    }, [currentId, developerVerified]);
 
     const handleEditPlugin = useCallback((plugin: Plugin) => {
         setDetailPlugin(plugin);
@@ -743,13 +764,7 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                                                             <EditIcon className="h-4 w-4 mr-2" />
                                                             {t('pluginManager.edit')}
                                                         </DropdownMenuItem>
-                                                        <DropdownMenuItem onClick={() => {
-                                                            if (currentId === item.id) {
-                                                                setOpen(true);
-                                                            } else {
-                                                                setCurrentId(item.id);
-                                                            }
-                                                        }}>
+                                                        <DropdownMenuItem onClick={() => requestVersionPublish(item)}>
                                                             <UploadIcon className="h-4 w-4 mr-2" />
                                                             {t('pluginManager.publishNewVersion')}
                                                         </DropdownMenuItem>
@@ -859,13 +874,7 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                                             variant="outline"
                                             size="sm"
                                             className="justify-start"
-                                            onClick={() => {
-                                                if (currentId === detailPlugin.id) {
-                                                    setOpen(true);
-                                                } else {
-                                                    setCurrentId(detailPlugin.id);
-                                                }
-                                            }}
+                                            onClick={() => requestVersionPublish(detailPlugin)}
                                         >
                                             <UploadIcon className="h-4 w-4 mr-2" />
                                             {t('pluginManager.publish')}
@@ -1143,5 +1152,20 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>
+
+        <DeveloperVerificationDialog
+            open={verifyOpen}
+            onOpenChange={setVerifyOpen}
+            reason={t('pluginManager.publishNewVersion')}
+            onVerified={() => {
+                setVerifyOpen(false);
+                if (pendingPublishId) {
+                    setCurrentId(pendingPublishId);
+                    setPendingPublishId(undefined);
+                } else if (currentId) {
+                    setOpen(true);
+                }
+            }}
+        />
     </div>
 }

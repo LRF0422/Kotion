@@ -2,6 +2,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import React, { PropsWithChildren, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PluginList } from "./PluginList";
 import { SubmissionList } from "./SubmissionList";
+import { DeveloperStatusCard } from "../../Developer/DeveloperStatusCard";
 import type { PluginSubmissionRecord } from "../PluginUploader/types";
 import { useApi } from "@kn/common";
 import { APIS } from "@kn/common";
@@ -170,13 +171,16 @@ export const PluginManager: React.FC<PropsWithChildren> = ({ children }) => {
             </DialogHeader>
             <div className="flex min-h-0 flex-1 flex-col md:grid md:grid-cols-[220px_minmax(0,1fr)] md:gap-0">
                 {isMobile && (
-                    <div className="flex shrink-0 gap-2 border-b p-3">
-                        <Button type="button" variant={!showSubmissions ? "default" : "outline"} className="h-11 flex-1" onClick={() => setShowSubmissions(false)}>
-                            {t('pluginManager.allPlugins')}
-                        </Button>
-                        <Button type="button" variant={showSubmissions ? "default" : "outline"} className="h-11 flex-1" onClick={() => setShowSubmissions(true)}>
-                            {t('pluginManager.mySubmissions')}
-                        </Button>
+                    <div className="flex shrink-0 flex-col gap-2 border-b p-3">
+                        <div className="flex gap-2">
+                            <Button type="button" variant={!showSubmissions ? "default" : "outline"} className="h-11 flex-1" onClick={() => setShowSubmissions(false)}>
+                                {t('pluginManager.allPlugins')}
+                            </Button>
+                            <Button type="button" variant={showSubmissions ? "default" : "outline"} className="h-11 flex-1" onClick={() => setShowSubmissions(true)}>
+                                {t('pluginManager.mySubmissions')}
+                            </Button>
+                        </div>
+                        <DeveloperStatusCard />
                     </div>
                 )}
 
@@ -206,7 +210,8 @@ export const PluginManager: React.FC<PropsWithChildren> = ({ children }) => {
                     </div>
 
                     <ScrollArea className="flex-1">
-                        <div className="p-4 pb-0">
+                        <div className="space-y-2 p-4 pb-0">
+                            <DeveloperStatusCard />
                             <button
                                 onClick={() => setShowSubmissions(value => !value)}
                                 className={cn(

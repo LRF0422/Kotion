@@ -45,6 +45,8 @@ import type {
   PluginUploaderProps,
 } from "./types";
 import { usePluginSubmission } from "./use-plugin-submission";
+import { useDeveloperProfile } from "../../Developer/developer-api";
+import { DeveloperVerificationDialog } from "../../Developer/DeveloperVerificationDialog";
 
 const BASIC_FIELDS: Array<keyof PluginSubmissionValues> = [
   "name",
@@ -118,6 +120,19 @@ export const PluginUploader: React.FC<PluginUploaderProps> = ({
     onSubmitted,
     t,
   });
+
+  // Publishing and resubmitting both require an APPROVED developer profile.
+  // Checking before the wizard opens keeps the upload/review work from being
+  // thrown away by a server-side 1100.
+  const { verified: developerVerified } = useDeveloperProfile();
+  const [verifyOpen, setVerifyOpen] = React.useState(false);
+  const requestOpen = React.useCallback(() => {
+    if (!developerVerified) {
+      setVerifyOpen(true);
+      return;
+    }
+    setOpen(true);
+  }, [developerVerified, setOpen]);
 
   const steps: WizardStep[] = React.useMemo(
     () => [
@@ -321,6 +336,10 @@ export const PluginUploader: React.FC<PluginUploaderProps> = ({
   };
 
   const closeSafely = (nextOpen: boolean) => {
+    if (nextOpen && !developerVerified) {
+      setVerifyOpen(true);
+      return;
+    }
     if (
       !nextOpen &&
       (form.formState.isDirty ||
@@ -362,7 +381,7 @@ export const PluginUploader: React.FC<PluginUploaderProps> = ({
     <>
       <Dialog open={open} onOpenChange={closeSafely}>
         {children ? (
-          <DialogTrigger asChild onClick={() => setOpen(true)}>
+          <DialogTrigger asChild onClick={requestOpen}>
             {children}
           </DialogTrigger>
         ) : null}
@@ -522,6 +541,20 @@ export const PluginUploader: React.FC<PluginUploaderProps> = ({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <DeveloperVerificationDialog
+        open={verifyOpen}
+        onOpenChange={setVerifyOpen}
+        reason={
+          submission
+            ? t("pluginManager.submissions.editResubmit")
+            : t("pluginHub.publish")
+        }
+        onVerified={() => {
+          setVerifyOpen(false);
+          setOpen(true);
+        }}
+      />
     </>
   );
 };
