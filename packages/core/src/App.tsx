@@ -42,6 +42,7 @@ import { toast, AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogT
 import { Loader2, Eye, EyeOff } from "@kn/icon"
 import { ErrorPage } from "./components/ErrorPage";
 import { LivePluginRoutes } from "./routing/LivePluginRoutes";
+import { createRouteCacheHandle } from "./routing/route-cache";
 import { PluginErrorBoundary } from "./components/PluginErrorBoundary";
 import ReactDOM from "react-dom";
 import { PLUGIN_API_VERSION } from "@kn/plugin-api";
@@ -67,14 +68,19 @@ const reslove = (config: common.RouteConfig) => {
         ? <PluginErrorBoundary pluginName={config.name} variant="page">{config.element}</PluginErrorBoundary>
         : undefined
 
+    // Route cache participation and the route's *pattern* travel on `handle`:
+    // `useMatches()` does not expose the route object, and the shell's
+    // RouteCacheOutlet keys keep-alive slots by pattern. See routing/route-cache.ts.
+    const handle = createRouteCacheHandle(config.path, config.keepAlive)
+
     if (config.children) {
-        return <Route path={config.path} element={wrappedElement} key={config.path} >
+        return <Route path={config.path} element={wrappedElement} handle={handle} key={config.path} >
             {
                 config.children.map(it => reslove(it))
             }
         </Route>
     } else {
-        return <Route path={config.path} element={wrappedElement} key={config.path} />
+        return <Route path={config.path} element={wrappedElement} handle={handle} key={config.path} />
     }
 }
 
@@ -531,8 +537,16 @@ export const App: React.FC<AppProps> = (props) => {
                         {routes}
                         {/* Standalone agent page: the fallback for entry points
                             outside a space, where no side dock is mounted. */}
-                        <Route path="/ai-assistant" element={<AIAssistantPage />} />
-                        <Route path="/plugin-hub" element={<Shop />}>
+                        <Route
+                            path="/ai-assistant"
+                            element={<AIAssistantPage />}
+                            handle={createRouteCacheHandle("/ai-assistant")}
+                        />
+                        <Route
+                            path="/plugin-hub"
+                            element={<Shop />}
+                            handle={createRouteCacheHandle("/plugin-hub")}
+                        >
                             <Route path="/plugin-hub" element={<Marketplace />} />
                             <Route path="/plugin-hub/:id" element={<PluginDetail />} />
                         </Route>

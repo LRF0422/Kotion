@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useResponsive, Button, Sheet, SheetContent, SheetTitle, cn, toast } from "@kn/ui";
 import { Menu, PanelLeftClose, PanelLeftOpen } from "@kn/icon";
-import { type PageSummary, type PageTreeNode, type ResolvedPageType, type Space, useSpacePageService, useNavigator, useToggle, useMobilePageHeader, useTranslation, usePageTabsStorage } from "@kn/common";
+import { type PageSummary, type PageTreeNode, type ResolvedPageType, type Space, useSpacePageService, useNavigator, useToggle, useMobilePageHeader, useTranslation, usePageTabsStorage, useRouteCacheActive } from "@kn/common";
 import { Outlet, useParams, useMatch } from "@kn/common";
 import { TabbedEditorArea } from "./PageEditor/TabbedEditorArea";
 import { TemplateSelector } from "../../components/TemplateSelector";
@@ -44,6 +44,12 @@ export const SpaceDetail: React.FC = () => {
     const [error, setError] = useState<string | null>(null)
     const { setHeaderInfo, clearHeaderInfo } = useMobilePageHeader()
     const service = useSpacePageService()
+    // The workspace is kept alive by the shell's route cache when the user opens
+    // another page. Document-level listeners, mobile header registration and the
+    // "no page in the URL → open the home page" redirect must only run while it
+    // is the visible route, otherwise a backgrounded workspace would steal
+    // shortcuts or navigate the user back from wherever they went.
+    const routeCacheActive = useRouteCacheActive()
 
     // Recent pages hook
     const { recentPages, recordVisit } = useRecentPages(params.id)
@@ -156,15 +162,23 @@ export const SpaceDetail: React.FC = () => {
     }, [params.id, service])
 
     useEffect(() => {
+        // Also re-run when the shell brings this route back to the foreground: a
+        // cached workspace returning to a page-less URL (`/space-detail/:id`,
+        // e.g. from the sidebar) must forward to the space's home page, just like
+        // a fresh mount would.
+        if (!routeCacheActive) return
         if (!params.pageId && space) {
             navigator.go({
                 to: `/space-detail/${params.id}/page/edit/${space?.homePageId}`
             })
         }
-    }, [space])
+    }, [space, routeCacheActive])
 
     // --- Keyboard shortcut: Ctrl+K for search ---
     useEffect(() => {
+        // A kept-alive workspace is still mounted on /home and friends; binding a
+        // document-level shortcut from the background would hijack Ctrl+K there.
+        if (!routeCacheActive) return
         const handleKeyDown = (e: KeyboardEvent) => {
             if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
                 e.preventDefault()
@@ -173,7 +187,7 @@ export const SpaceDetail: React.FC = () => {
         }
         document.addEventListener('keydown', handleKeyDown)
         return () => document.removeEventListener('keydown', handleKeyDown)
-    }, [toggle])
+    }, [toggle, routeCacheActive])
 
     // --- Action handlers ---
 
@@ -293,7 +307,11 @@ export const SpaceDetail: React.FC = () => {
     // --- Mobile header ---
 
     useEffect(() => {
-        if (!isMobile || !space) return
+        // The header belongs to the visible route. While the workspace is kept
+        // alive in the background (user is on /home), its title/icon/actions must
+        // not leak onto the other page's mobile app bar — the cleanup below runs
+        // when routeCacheActive flips false.
+        if (!isMobile || !space || !routeCacheActive) return
         setHeaderInfo({
             title: space.name,
             icon: isPageIconData(space.icon) ? space.icon.icon : undefined,
@@ -309,7 +327,7 @@ export const SpaceDetail: React.FC = () => {
             ),
         })
         return () => clearHeaderInfo()
-    }, [isMobile, space, setHeaderInfo, clearHeaderInfo])
+    }, [isMobile, space, setHeaderInfo, clearHeaderInfo, routeCacheActive])
 
     // --- Layout ---
 

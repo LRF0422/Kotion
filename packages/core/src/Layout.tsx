@@ -5,7 +5,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { TourHost } from "./components/Tour/TourHost"
 import { ChevronLeft } from "@kn/icon"
 import { MobileTabBar } from "./components/mobile/MobileTabBar"
-import { useApi, APIS, useAsyncEffect, useLocation, Outlet, useNavigator, useUploadFile, getAccessToken, getRefreshToken, getTokenContextState, clearContextSensitiveClientState, clearTokens, normalizeTokenResponse, notifyContextChanged, saveTokens, useDispatch, AppContext, event, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS, REMOTE_PLUGIN_CHANGE_SOURCES, type PluginChangeSource, TOGGLE_AI_ASSISTANT, TOGGLE_DOCK_PANEL, dockRuntime, logger, useDesktop } from "@kn/common"
+import { useApi, APIS, useAsyncEffect, useLocation, useNavigator, useUploadFile, getAccessToken, getRefreshToken, getTokenContextState, clearContextSensitiveClientState, clearTokens, normalizeTokenResponse, notifyContextChanged, saveTokens, useDispatch, AppContext, event, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS, REMOTE_PLUGIN_CHANGE_SOURCES, type PluginChangeSource, TOGGLE_AI_ASSISTANT, TOGGLE_DOCK_PANEL, dockRuntime, logger, useDesktop } from "@kn/common"
 import { toast } from "@kn/ui"
 import React from "react"
 import { MobilePageHeaderProvider, useMobilePageHeader } from "@kn/common"
@@ -16,6 +16,8 @@ import { DockHost } from "./components/Dock"
 import { AgentDocumentHost } from "./ai/agentdoc"
 import { UploadTaskHost } from "./components/UploadTasks/UploadTaskHost"
 import { toRemotePluginDescriptor, type PluginRecord } from "./components/Shop/plugin-model"
+import { RouteCacheOutlet } from "./routing/RouteCacheOutlet"
+import { isRouteCacheDisabledByFlag } from "./routing/route-cache"
 
 interface LayoutProps {
     onPluginsReady: (ready: boolean) => void
@@ -115,6 +117,9 @@ export function Layout({ onPluginsReady }: LayoutProps) {
     const [pluginsLoaded, setPluginsLoaded] = useState(false)
     const [pluginLoadError, setPluginLoadError] = useState<unknown>(null)
     const [refreshFlag, setRefreshFlag] = useState(0)
+    // Keep-alive is on by default; the localStorage escape hatch only needs to be
+    // read once because toggling it requires a reload anyway (see route-cache.ts).
+    const routeCacheDisabled = React.useMemo(() => isRouteCacheDisabledByFlag(), [])
     const webBootMode = (window as any).__KN_WEB_BOOT_MODE__ as 'development' | 'share' | 'main' | undefined
 
     // App's initial plugin set is immutable. Crossing the share boundary must
@@ -480,7 +485,13 @@ export function Layout({ onPluginsReady }: LayoutProps) {
                                 isMobile ? "flex-1 min-h-0" : "h-full min-h-0",
                                 !isMobile && !isWorkspaceRoute && "kn-route-pane"
                             )}>
-                                {pluginsLoaded ? <Outlet /> : null}
+                                {/* `<Outlet />` with Vue-`<keep-alive>` semantics: the
+                                    last few page routes stay mounted while the user is
+                                    elsewhere, so returning to a space/editor restores
+                                    its tree, editors and scroll instead of remounting
+                                    them. See RouteCacheOutlet for the contract and
+                                    docs/ROUTE_CACHE.md for the page-side rules. */}
+                                {pluginsLoaded ? <RouteCacheOutlet disabled={routeCacheDisabled} /> : null}
                             </main>
 
                             {/* Mobile bottom navigation (hidden while typing) */}

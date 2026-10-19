@@ -110,6 +110,18 @@ pnpm clean:packages         # Clean all dist directories
 `apps/desktop/src/main/storage/sqlite-store.check.ts` 的用例要一起更新。
 
 
+### 路由缓存 / Keep-alive（重要）
+
+壳层（`packages/core/src/Layout.tsx`）用 `<RouteCacheOutlet />` 代替 `<Outlet />`：离开页面时
+不卸载页面组件树，回来直接复用（类似 Vue `<keep-alive>`）。槽位按路由 pattern 区分，桌面 5 /
+移动端 3 个，LRU 淘汰。
+
+**看不见的页面仍然挂载**，所以页面里 document/window 级监听、定时器、移动端 header 注册必须用
+`@kn/common` 的 `useRouteCacheActive()` 判断可见性；"回到页面再刷新"用
+`useOnRouteCacheActivated()`。单个路由要退出缓存：`RouteConfig.keepAlive = false`。
+完整语义、排障开关与已知边界见 **[docs/ROUTE_CACHE.md](docs/ROUTE_CACHE.md)**；
+逻辑自测 `pnpm --filter @kn/core check:route-cache`。
+
 ### Plugin System
 
 Plugins extend functionality and are loaded dynamically. Each plugin exports:
