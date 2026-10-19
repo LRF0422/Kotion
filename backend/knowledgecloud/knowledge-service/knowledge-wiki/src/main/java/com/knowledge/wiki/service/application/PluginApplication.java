@@ -25,7 +25,11 @@ import com.baomidou.mybatisplus.extension.conditions.update.LambdaUpdateChainWra
 import com.github.yulichang.toolkit.MPJWrappers;
 import com.github.yulichang.wrapper.MPJLambdaWrapper;
 import com.knowledge.core.secure.utils.SecurityContextUtil;
+import com.knowledge.core.tool.api.R;
+import com.knowledge.core.tool.exception.BusinessException;
 import com.knowledge.core.version.VersionStatus;
+import com.knowledge.system.feign.IDeveloperClient;
+import com.knowledge.system.vo.DeveloperVerificationVO;
 import com.knowledge.wiki.service.converter.PluginConverter;
 import com.knowledge.wiki.service.converter.PluginVersionConverter;
 import com.knowledge.wiki.service.entity.InstalledPlugin;
@@ -81,7 +85,7 @@ public class PluginApplication {
     @Autowired
     private IPluginRatingService pluginRatingService;
     @Autowired
-    private DeveloperApplication developerApplication;
+    private IDeveloperClient developerClient;
     @Autowired
     private PlatformTransactionManager transactionManager;
     @Autowired(required = false)
@@ -546,11 +550,47 @@ public class PluginApplication {
     /**
      * 开发者认证门禁：只有 APPROVED 的开发者才能提交 / 发版 / 管理插件。
      *
-     * <p>与前端引导互补——前端提前拦截只是体验，服务端这里才是真正的边界，
-     * 直接调用接口同样会被 1100 拒绝。
+     * <p>认证档案属于系统（身份）域，这里通过 {@code IDeveloperClient} 读取；
+     * 前端提前拦截只是体验，服务端这里才是真正的边界，直接调用接口同样会被
+     * 1100 拒绝。系统服务不可用时 fail-closed（1106），不放行发布。
      */
     private void requireDeveloperVerified() {
-        developerApplication.requireApproved(currentUserId());
+        Long userId = currentUserId();
+        try {
+            R<DeveloperVerificationVO> response = developerClient.verification();
+            if (R.isNotSuccess(response) || response.getData() == null) {
+                throw WikiException.DEVELOPER_VERIFICATION_UNAVAILABLE.newException();
+            }
+            if (!"APPROVED".equals(response.getData().getStatus())) {
+                throw WikiException.DEVELOPER_NOT_VERIFIED.newException();
+            }
+        } catch (BusinessException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            log.warn("Developer verification lookup failed for user {}", userId, ex);
+            throw WikiException.DEVELOPER_VERIFICATION_UNAVAILABLE.newException(ex);
+        }
+    }
+
+    /**
+     * 已认证开发者的对外展示名称；未认证、非本人或系统服务不可用时返回 null，
+     * 调用方回退到账号名。
+     */
+    private String developerDisplayName(Long ownerId) {
+        Long currentUserId = SecurityContextUtil.getUserId();
+        if (ownerId == null || currentUserId == null || !Objects.equals(ownerId, currentUserId)) {
+            return null;
+        }
+        try {
+            R<DeveloperVerificationVO> response = developerClient.verification();
+            if (R.isSuccess(response) && response.getData() != null) {
+                String displayName = StrUtil.trim(response.getData().getDisplayName());
+                return StrUtil.isBlank(displayName) ? null : displayName;
+            }
+        } catch (Exception ex) {
+            log.warn("Developer display name lookup failed for user {}", ownerId, ex);
+        }
+        return null;
     }
 
     /** 安装能力与已装插件数量门禁。 */
@@ -581,7 +621,7 @@ public class PluginApplication {
         String ownerName = SecurityContextUtil.getUserName();
         // A verified developer's public name is the one they registered; fall
         // back to the account name for inner/trusted plugins and legacy hosts.
-        String developerName = developerApplication.displayNameOf(ownerId);
+        String developerName = developerDisplayName(ownerId);
         String publicName = StrUtil.isBlank(developerName) ? ownerName : developerName;
         plugin.setDeveloper(publicName);
         plugin.setMaintainer(publicName);

@@ -1,4 +1,4 @@
-package com.knowledge.wiki.service.entity.enums;
+package com.knowledge.system.domain.enums;
 
 import com.knowledge.core.common.base.BaseEnum;
 

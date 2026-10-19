@@ -1,8 +1,7 @@
-package com.knowledge.wiki.service.controller;
+package com.knowledge.system.controller;
 
 import javax.validation.Valid;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -14,10 +13,12 @@ import org.springframework.web.bind.annotation.RestController;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.knowledge.core.tool.api.R;
 import com.knowledge.core.tool.constant.RoleConstant;
-import com.knowledge.wiki.service.application.DeveloperApplication;
-import com.knowledge.wiki.service.entity.dto.DeveloperReviewDTO;
-import com.knowledge.wiki.service.entity.dto.QueryDeveloperDTO;
-import com.knowledge.wiki.service.entity.vo.AdminDeveloperVO;
+import com.knowledge.system.application.DeveloperApplication;
+import com.knowledge.system.domain.dto.DeveloperReviewDTO;
+import com.knowledge.system.domain.dto.QueryDeveloperDTO;
+import com.knowledge.system.domain.vo.AdminDeveloperVO;
+
+import lombok.AllArgsConstructor;
 
 /**
  * 开发者认证后台审核接口。
@@ -29,10 +30,10 @@ import com.knowledge.wiki.service.entity.vo.AdminDeveloperVO;
 @RequestMapping("/admin/developer")
 @PreAuthorize("(hasRole('platform.plugins.read') or " + RoleConstant.HAS_ROLE_ADMIN
         + ") and principal.clientId == 'kotion-platform-admin'")
+@AllArgsConstructor
 public class AdminDeveloperController {
 
-    @Autowired
-    private DeveloperApplication developerApplication;
+    private final DeveloperApplication developerApplication;
 
     @GetMapping("/list")
     public R<IPage<AdminDeveloperVO>> list(QueryDeveloperDTO dto) {

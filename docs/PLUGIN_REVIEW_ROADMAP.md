@@ -111,8 +111,9 @@
 
 - **兼容性矩阵**：最低宿主版本、依赖插件、平台（web/desktop）声明与校验。
 - **开发者体系**：开发者资料、认证/信任等级，认证开发者可走快速通道。
-  - ✅ 已落地「开发者认证」：`wiki_developer` + 人工审核（通过/驳回/撤销），发布与发版前强制 APPROVED；
-    后台入口「开发者认证」复用 `platform.plugins.read/review`。当前为单等级，信任分级与快速通道仍待做。
+  - ✅ 已落地「开发者认证」：`knowledge_developer`（knowledge-system 身份域）+ 人工审核（通过/驳回/撤销），
+    knowledge-wiki 发布/发版前通过 `IDeveloperClient` 强制 APPROVED；后台入口「开发者认证」复用
+    `platform.plugins.read/review`。当前为单等级，信任分级与快速通道仍待做。
     详见 [DEVELOPER_VERIFICATION.md](./DEVELOPER_VERIFICATION.md)。
 - **可信内建**：延续 `createInnerPlugin` 的可信直发，增加白名单与「跳过人审但保留扫描」策略。
 - **审核规则引擎**：把审核清单/评分模板配置化，支持不同分类走不同检查项。

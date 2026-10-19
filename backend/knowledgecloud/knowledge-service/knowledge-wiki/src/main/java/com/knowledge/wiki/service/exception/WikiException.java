@@ -47,11 +47,8 @@ public enum WikiException implements BusinessExceptionAssert {
 
     // Developer verification related (1100-1199)
     DEVELOPER_NOT_VERIFIED(1100, "wiki.developer.notVerified", "请先完成开发者认证后再发布或管理插件"),
-    DEVELOPER_NOT_FOUND(1101, "wiki.developer.notFound", "开发者认证记录不存在"),
-    DEVELOPER_APPLICATION_PENDING(1102, "wiki.developer.applicationPending", "开发者认证正在审核中，请耐心等待"),
-    DEVELOPER_ALREADY_VERIFIED(1103, "wiki.developer.alreadyVerified", "你已完成开发者认证"),
-    DEVELOPER_INVALID_STATE(1104, "wiki.developer.invalidState", "开发者认证当前状态不允许此操作"),
-    DEVELOPER_REASON_REQUIRED(1105, "wiki.developer.reasonRequired", "驳回或撤销开发者认证必须填写原因"),
+    DEVELOPER_VERIFICATION_UNAVAILABLE(1106, "wiki.developer.verificationUnavailable",
+            "开发者认证服务暂时不可用，请稍后重试"),
 
     // Space related (2000-2999)
     SPACE_NOT_FOUND(2001, "wiki.space.notFound", "空间不存在"),

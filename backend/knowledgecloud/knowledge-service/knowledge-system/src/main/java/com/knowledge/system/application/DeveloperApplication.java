@@ -1,4 +1,4 @@
-package com.knowledge.wiki.service.application;
+package com.knowledge.system.application;
 
 import java.time.LocalDateTime;
 import java.util.Objects;
@@ -13,28 +13,29 @@ import org.springframework.transaction.annotation.Transactional;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.knowledge.core.secure.utils.SecurityContextUtil;
-import com.knowledge.wiki.service.entity.Developer;
-import com.knowledge.wiki.service.entity.dto.DeveloperApplyDTO;
-import com.knowledge.wiki.service.entity.dto.DeveloperReviewDTO;
-import com.knowledge.wiki.service.entity.dto.QueryDeveloperDTO;
-import com.knowledge.wiki.service.entity.enums.DeveloperStatus;
-import com.knowledge.wiki.service.entity.vo.AdminDeveloperVO;
-import com.knowledge.wiki.service.entity.vo.DeveloperVO;
-import com.knowledge.wiki.service.exception.WikiException;
-import com.knowledge.wiki.service.service.IDeveloperService;
+import com.knowledge.system.domain.Developer;
+import com.knowledge.system.domain.dto.DeveloperApplyDTO;
+import com.knowledge.system.domain.dto.DeveloperReviewDTO;
+import com.knowledge.system.domain.dto.QueryDeveloperDTO;
+import com.knowledge.system.domain.enums.DeveloperStatus;
+import com.knowledge.system.domain.vo.AdminDeveloperVO;
+import com.knowledge.system.domain.vo.DeveloperVO;
+import com.knowledge.system.exception.SystemException;
+import com.knowledge.system.service.IDeveloperService;
+import com.knowledge.system.vo.DeveloperVerificationVO;
 
 import cn.hutool.core.util.StrUtil;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * 开发者认证。
+ * 开发者认证（系统/身份域）。
  *
  * <p>发布 / 管理插件要求认证状态为 {@link DeveloperStatus#APPROVED}。
  * 认证是人工审核：开发者提交资料后进入 PENDING，后台通过后 APPROVED；
  * 驳回（REJECTED）或撤销（SUSPENDED）后开发者可以修改资料重新提交。
  *
- * <p>发布侧门禁由 {@link #requireApproved(Long)} 提供，{@link PluginApplication}
- * 在提交插件、重新提交、发布新版本前调用。
+ * <p>knowledge-wiki 通过 {@code IDeveloperClient} 读取 {@link #verification()}
+ * 并在提交插件、重新提交、发布新版本前做发布门禁。
  */
 @Service
 @Slf4j
@@ -49,6 +50,27 @@ public class DeveloperApplication {
     }
 
     /**
+     * 当前用户的认证状态（服务间契约）。
+     *
+     * <p>未提交时也返回对象，只是 {@code status == null}；调用方据此判定未认证。
+     */
+    public DeveloperVerificationVO verification() {
+        Developer developer = findByCurrentUser();
+        DeveloperVerificationVO vo = new DeveloperVerificationVO();
+        if (developer == null) {
+            return vo;
+        }
+        if (developer.getStatus() != null) {
+            vo.setStatus(developer.getStatus().getValue());
+        }
+        if (developer.getStatus() == DeveloperStatus.APPROVED) {
+            String displayName = StrUtil.trim(developer.getDisplayName());
+            vo.setDisplayName(StrUtil.isBlank(displayName) ? null : displayName);
+        }
+        return vo;
+    }
+
+    /**
      * 提交 / 重新提交开发者认证。
      *
      * <p>已认证用户不能重复提交；审核中的提交需要等待结果；被驳回或撤销的
@@ -60,10 +82,10 @@ public class DeveloperApplication {
         Developer existing = developerService.getByUserId(userId);
         if (existing != null) {
             if (existing.getStatus() == DeveloperStatus.PENDING) {
-                throw WikiException.DEVELOPER_APPLICATION_PENDING.newException();
+                throw SystemException.DEVELOPER_APPLICATION_PENDING.newException();
             }
             if (existing.getStatus() == DeveloperStatus.APPROVED) {
-                throw WikiException.DEVELOPER_ALREADY_VERIFIED.newException();
+                throw SystemException.DEVELOPER_ALREADY_VERIFIED.newException();
             }
         }
 
@@ -95,36 +117,10 @@ public class DeveloperApplication {
             }
         } catch (DuplicateKeyException ex) {
             // A concurrent submission won the unique(user_id) race.
-            throw WikiException.DEVELOPER_APPLICATION_PENDING.newException(ex);
+            throw SystemException.DEVELOPER_APPLICATION_PENDING.newException(ex);
         }
         log.info("Developer verification submitted by user {}", userId);
         return toVO(developer);
-    }
-
-    /**
-     * 发布门禁：没有认证或不是 APPROVED 一律拒绝。
-     */
-    public Developer requireApproved(Long userId) {
-        Developer developer = userId == null ? null : developerService.getByUserId(userId);
-        if (developer == null || developer.getStatus() != DeveloperStatus.APPROVED) {
-            throw WikiException.DEVELOPER_NOT_VERIFIED.newException();
-        }
-        return developer;
-    }
-
-    /**
-     * 已认证开发者对外展示的名称；未认证时返回 {@code null}，调用方回退到账号名。
-     */
-    public String displayNameOf(Long userId) {
-        if (userId == null) {
-            return null;
-        }
-        Developer developer = developerService.getByUserId(userId);
-        if (developer == null || developer.getStatus() != DeveloperStatus.APPROVED) {
-            return null;
-        }
-        String displayName = StrUtil.trim(developer.getDisplayName());
-        return StrUtil.isBlank(displayName) ? null : displayName;
     }
 
     // ---------------------------------------------------------------- admin
@@ -152,7 +148,7 @@ public class DeveloperApplication {
         requirePermission("platform.plugins.review");
         Developer developer = require(id);
         if (developer.getStatus() != DeveloperStatus.PENDING) {
-            throw WikiException.DEVELOPER_INVALID_STATE.newException();
+            throw SystemException.DEVELOPER_INVALID_STATE.newException();
         }
         boolean updated = developerService.lambdaUpdate()
                 .eq(Developer::getId, id)
@@ -165,7 +161,7 @@ public class DeveloperApplication {
                 .set(Developer::getReviewTime, LocalDateTime.now())
                 .update();
         if (!updated) {
-            throw WikiException.DEVELOPER_INVALID_STATE.newException();
+            throw SystemException.DEVELOPER_INVALID_STATE.newException();
         }
         log.info("Developer verification {} approved by {}", id, currentUserId());
         return toAdminVO(require(id));
@@ -177,11 +173,11 @@ public class DeveloperApplication {
         requirePermission("platform.plugins.review");
         String reason = StrUtil.trim(dto.getReason());
         if (StrUtil.isBlank(reason)) {
-            throw WikiException.DEVELOPER_REASON_REQUIRED.newException();
+            throw SystemException.DEVELOPER_REASON_REQUIRED.newException();
         }
         Developer developer = require(id);
         if (developer.getStatus() != DeveloperStatus.PENDING) {
-            throw WikiException.DEVELOPER_INVALID_STATE.newException();
+            throw SystemException.DEVELOPER_INVALID_STATE.newException();
         }
         boolean updated = developerService.lambdaUpdate()
                 .eq(Developer::getId, id)
@@ -194,7 +190,7 @@ public class DeveloperApplication {
                 .set(Developer::getReviewTime, LocalDateTime.now())
                 .update();
         if (!updated) {
-            throw WikiException.DEVELOPER_INVALID_STATE.newException();
+            throw SystemException.DEVELOPER_INVALID_STATE.newException();
         }
         log.info("Developer verification {} rejected by {}", id, currentUserId());
         return toAdminVO(require(id));
@@ -206,11 +202,11 @@ public class DeveloperApplication {
         requirePermission("platform.plugins.review");
         String reason = StrUtil.trim(dto.getReason());
         if (StrUtil.isBlank(reason)) {
-            throw WikiException.DEVELOPER_REASON_REQUIRED.newException();
+            throw SystemException.DEVELOPER_REASON_REQUIRED.newException();
         }
         Developer developer = require(id);
         if (developer.getStatus() != DeveloperStatus.APPROVED) {
-            throw WikiException.DEVELOPER_INVALID_STATE.newException();
+            throw SystemException.DEVELOPER_INVALID_STATE.newException();
         }
         boolean updated = developerService.lambdaUpdate()
                 .eq(Developer::getId, id)
@@ -223,7 +219,7 @@ public class DeveloperApplication {
                 .set(Developer::getReviewTime, LocalDateTime.now())
                 .update();
         if (!updated) {
-            throw WikiException.DEVELOPER_INVALID_STATE.newException();
+            throw SystemException.DEVELOPER_INVALID_STATE.newException();
         }
         log.info("Developer verification {} revoked by {}", id, currentUserId());
         return toAdminVO(require(id));
@@ -242,7 +238,7 @@ public class DeveloperApplication {
     private Developer require(Long id) {
         Developer developer = developerService.getById(id);
         if (developer == null) {
-            throw WikiException.DEVELOPER_NOT_FOUND.newException();
+            throw SystemException.DEVELOPER_NOT_FOUND.newException();
         }
         return developer;
     }
@@ -250,7 +246,7 @@ public class DeveloperApplication {
     private Long currentUserId() {
         Long userId = SecurityContextUtil.getUserId();
         if (userId == null || userId <= 0) {
-            throw WikiException.FORBIDDEN_ACCESS.newException();
+            throw SystemException.DEVELOPER_FORBIDDEN.newException();
         }
         return userId;
     }
@@ -266,7 +262,7 @@ public class DeveloperApplication {
                             || Objects.equals("ROLE_" + permission, name);
                 });
         if (!allowed) {
-            throw WikiException.FORBIDDEN_ACCESS.newException();
+            throw SystemException.DEVELOPER_FORBIDDEN.newException();
         }
     }
 

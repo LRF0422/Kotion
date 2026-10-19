@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Answers.RETURNS_SELF;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -15,6 +15,7 @@ import static org.mockito.Mockito.when;
 import java.util.Collections;
 
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -27,8 +28,11 @@ import com.baomidou.mybatisplus.extension.conditions.update.LambdaUpdateChainWra
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.knowledge.core.secure.auth.KnowledgeUserAuthentication;
 import com.knowledge.core.tool.KnowledgeUser;
+import com.knowledge.core.tool.api.R;
 import com.knowledge.core.tool.exception.BusinessException;
 import com.knowledge.core.version.VersionStatus;
+import com.knowledge.system.feign.IDeveloperClient;
+import com.knowledge.system.vo.DeveloperVerificationVO;
 import com.knowledge.wiki.service.entity.InstalledPlugin;
 import com.knowledge.wiki.service.entity.Plugin;
 import com.knowledge.wiki.service.entity.PluginVersion;
@@ -42,7 +46,6 @@ import com.knowledge.wiki.service.entity.enums.InstalledPluginStatus;
 import com.knowledge.wiki.service.entity.enums.PluginReviewDecision;
 import com.knowledge.wiki.service.entity.enums.PluginReviewReason;
 import com.knowledge.wiki.service.entity.enums.PluginStatus;
-import com.knowledge.wiki.service.exception.WikiException;
 import com.knowledge.wiki.service.entity.vo.PluginVO;
 import com.knowledge.wiki.service.service.IInstalledPluginService;
 import com.knowledge.wiki.service.service.IPluginRatingService;
@@ -71,14 +74,20 @@ class PluginApplicationTest {
     @Mock
     private com.knowledge.core.entitlement.EntitlementGate entitlementGate;
     /**
-     * Publishing also requires an APPROVED developer profile. The mock keeps the
-     * existing tests focused on the catalogue logic; the gate itself is asserted
-     * in {@link #publishingRequiresVerifiedDeveloper()}.
+     * Publishing also requires an APPROVED developer profile (read from the
+     * system service). The lenient stub keeps existing catalogue tests focused;
+     * the gate itself is asserted in {@link #publishingRequiresVerifiedDeveloper()}.
      */
     @Mock
-    private DeveloperApplication developerApplication;
+    private IDeveloperClient developerClient;
     @InjectMocks
     private PluginApplication application;
+
+    @BeforeEach
+    void approveDeveloperVerification() {
+        lenient().when(developerClient.verification())
+                .thenReturn(R.data(verification("APPROVED")));
+    }
 
     @AfterEach
     void clearSecurityContext() {
@@ -124,8 +133,7 @@ class PluginApplicationTest {
         plugin.setDeveloperId(42L);
         plugin.setStatus(PluginStatus.DONE);
         when(pluginService.getById(7L)).thenReturn(plugin);
-        doThrow(WikiException.DEVELOPER_NOT_VERIFIED.newException())
-                .when(developerApplication).requireApproved(42L);
+        when(developerClient.verification()).thenReturn(R.data(verification("PENDING")));
 
         BusinessException error = assertThrows(BusinessException.class,
                 () -> application.publishVersion(7L, version("1.1.0")));
@@ -538,6 +546,13 @@ class PluginApplicationTest {
         LambdaUpdateChainWrapper<Plugin> wrapper = mock(LambdaUpdateChainWrapper.class, RETURNS_SELF);
         when(wrapper.update()).thenReturn(true);
         return wrapper;
+    }
+
+    private DeveloperVerificationVO verification(String status) {
+        DeveloperVerificationVO verification = new DeveloperVerificationVO();
+        verification.setStatus(status);
+        verification.setDisplayName("Acme Studio");
+        return verification;
     }
 
     private void authenticate(Long userId, String role) {

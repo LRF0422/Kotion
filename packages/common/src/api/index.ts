@@ -183,12 +183,12 @@ export const APIS = {
     } as API,
     /** 当前用户的开发者认证档案；从未提交时 data 为 null。 */
     GET_MY_DEVELOPER_PROFILE: {
-        url: '/knowledge-wiki/developer/me',
+        url: '/knowledge-system/developer/me',
         method: 'GET'
     } as API,
     /** 提交 / 重新提交开发者认证。 */
     APPLY_DEVELOPER_VERIFICATION: {
-        url: '/knowledge-wiki/developer/apply',
+        url: '/knowledge-system/developer/apply',
         method: 'POST'
     } as API,
     SUBMIT_PLUGIN_REPORT: {

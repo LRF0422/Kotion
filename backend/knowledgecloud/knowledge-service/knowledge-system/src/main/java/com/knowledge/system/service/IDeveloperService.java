@@ -1,7 +1,7 @@
-package com.knowledge.wiki.service.service;
+package com.knowledge.system.service;
 
 import com.github.yulichang.base.MPJBaseService;
-import com.knowledge.wiki.service.entity.Developer;
+import com.knowledge.system.domain.Developer;
 
 public interface IDeveloperService extends MPJBaseService<Developer> {
 

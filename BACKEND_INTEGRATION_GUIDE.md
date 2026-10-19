@@ -81,21 +81,26 @@ POST   /knowledge-wiki/plugin/uninstall          # 卸载插件
 POST   /knowledge-wiki/plugin/update             # 更新插件
 ```
 
-#### 开发者认证 (`knowledge-wiki`)
+#### 开发者认证 (`knowledge-system`)
+
+认证档案属于系统（身份）域；knowledge-wiki 通过 `IDeveloperClient`（`knowledge-system-api`）
+读取状态并在发布入口做门禁。
 
 ```
-GET    /knowledge-wiki/developer/me              # 我的认证状态（未提交时 data=null）
-POST   /knowledge-wiki/developer/apply           # 提交/重新提交认证
+GET    /knowledge-system/developer/me              # 我的认证档案（未提交时 data=null）
+GET    /knowledge-system/developer/verification    # 当前用户状态（服务间契约）
+POST   /knowledge-system/developer/apply           # 提交/重新提交认证
 
-GET    /knowledge-wiki/admin/developer/list      # 后台审核列表（platform.plugins.read）
-POST   /knowledge-wiki/admin/developer/{id}/approve  # 通过（platform.plugins.review）
-POST   /knowledge-wiki/admin/developer/{id}/reject   # 驳回，reason 必填
-POST   /knowledge-wiki/admin/developer/{id}/revoke   # 撤销已通过认证，reason 必填
+GET    /knowledge-system/admin/developer/list      # 后台审核列表（platform.plugins.read）
+POST   /knowledge-system/admin/developer/{id}/approve  # 通过（platform.plugins.review）
+POST   /knowledge-system/admin/developer/{id}/reject   # 驳回，reason 必填
+POST   /knowledge-system/admin/developer/{id}/revoke   # 撤销已通过认证，reason 必填
 ```
 
-未认证调用发布类接口返回业务码 **1100**（HTTP 400）。详见 [docs/DEVELOPER_VERIFICATION.md](./docs/DEVELOPER_VERIFICATION.md)。
+未认证调用 knowledge-wiki 的发布类接口返回业务码 **1100**（HTTP 400）；认证服务不可用返回 **1106**。
+详见 [docs/DEVELOPER_VERIFICATION.md](./docs/DEVELOPER_VERIFICATION.md)。
 
-**现有实现**: `PluginController.java`、`DeveloperController.java`、`AdminDeveloperController.java`
+**现有实现**: `PluginController.java`（发布门禁）、`DeveloperController.java`、`AdminDeveloperController.java`（knowledge-system）
 
 #### 文件管理 (`knowledge-file-center`)
 

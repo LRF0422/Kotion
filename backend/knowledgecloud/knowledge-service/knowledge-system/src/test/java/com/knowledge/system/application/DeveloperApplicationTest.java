@@ -1,9 +1,8 @@
-package com.knowledge.wiki.service.application;
+package com.knowledge.system.application;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Answers.RETURNS_SELF;
 import static org.mockito.ArgumentMatchers.any;
@@ -25,14 +24,15 @@ import com.baomidou.mybatisplus.extension.conditions.update.LambdaUpdateChainWra
 import com.knowledge.core.secure.auth.KnowledgeUserAuthentication;
 import com.knowledge.core.tool.KnowledgeUser;
 import com.knowledge.core.tool.exception.BusinessException;
-import com.knowledge.wiki.service.entity.Developer;
-import com.knowledge.wiki.service.entity.dto.DeveloperApplyDTO;
-import com.knowledge.wiki.service.entity.dto.DeveloperReviewDTO;
-import com.knowledge.wiki.service.entity.enums.DeveloperIdType;
-import com.knowledge.wiki.service.entity.enums.DeveloperStatus;
-import com.knowledge.wiki.service.entity.vo.AdminDeveloperVO;
-import com.knowledge.wiki.service.entity.vo.DeveloperVO;
-import com.knowledge.wiki.service.service.IDeveloperService;
+import com.knowledge.system.domain.Developer;
+import com.knowledge.system.domain.dto.DeveloperApplyDTO;
+import com.knowledge.system.domain.dto.DeveloperReviewDTO;
+import com.knowledge.system.domain.enums.DeveloperIdType;
+import com.knowledge.system.domain.enums.DeveloperStatus;
+import com.knowledge.system.domain.vo.AdminDeveloperVO;
+import com.knowledge.system.domain.vo.DeveloperVO;
+import com.knowledge.system.service.IDeveloperService;
+import com.knowledge.system.vo.DeveloperVerificationVO;
 
 @ExtendWith(MockitoExtension.class)
 class DeveloperApplicationTest {
@@ -75,7 +75,7 @@ class DeveloperApplicationTest {
         BusinessException error = assertThrows(BusinessException.class,
                 () -> application.apply(applyDTO("Acme Studio")));
 
-        assertEquals(1102, error.getCode());
+        assertEquals(1202, error.getCode());
         verify(developerService, never()).save(any(Developer.class));
     }
 
@@ -87,7 +87,7 @@ class DeveloperApplicationTest {
         BusinessException error = assertThrows(BusinessException.class,
                 () -> application.apply(applyDTO("Acme Studio")));
 
-        assertEquals(1103, error.getCode());
+        assertEquals(1203, error.getCode());
     }
 
     @Test
@@ -131,7 +131,7 @@ class DeveloperApplicationTest {
         BusinessException error = assertThrows(BusinessException.class,
                 () -> application.reject(RECORD_ID, review(null, null)));
 
-        assertEquals(1105, error.getCode());
+        assertEquals(1205, error.getCode());
         verify(developerService, never()).lambdaUpdate();
     }
 
@@ -159,7 +159,7 @@ class DeveloperApplicationTest {
         BusinessException error = assertThrows(BusinessException.class,
                 () -> application.revoke(RECORD_ID, review("违规发布", null)));
 
-        assertEquals(1104, error.getCode());
+        assertEquals(1204, error.getCode());
         verify(developerService, never()).lambdaUpdate();
     }
 
@@ -178,28 +178,22 @@ class DeveloperApplicationTest {
     }
 
     @Test
-    void requireApprovedRejectsMissingOrUnapprovedProfiles() {
+    void verificationReportsMissingPendingAndApproved() {
+        authenticate(USER_ID, "user");
         when(developerService.getByUserId(USER_ID)).thenReturn(null);
-        assertEquals(1100, assertThrows(BusinessException.class,
-                () -> application.requireApproved(USER_ID)).getCode());
+        DeveloperVerificationVO none = application.verification();
+        assertNull(none.getStatus());
+        assertNull(none.getDisplayName());
 
         when(developerService.getByUserId(USER_ID)).thenReturn(developer(RECORD_ID, DeveloperStatus.PENDING));
-        assertEquals(1100, assertThrows(BusinessException.class,
-                () -> application.requireApproved(USER_ID)).getCode());
+        DeveloperVerificationVO pending = application.verification();
+        assertEquals("PENDING", pending.getStatus());
+        assertNull(pending.getDisplayName());
 
-        Developer approved = developer(RECORD_ID, DeveloperStatus.APPROVED);
-        when(developerService.getByUserId(USER_ID)).thenReturn(approved);
-        assertSame(approved, application.requireApproved(USER_ID));
-    }
-
-    @Test
-    void displayNameOnlyComesFromAnApprovedProfile() {
-        Developer approved = developer(RECORD_ID, DeveloperStatus.APPROVED);
-        when(developerService.getByUserId(USER_ID)).thenReturn(approved);
-        assertEquals("Acme Studio", application.displayNameOf(USER_ID));
-
-        when(developerService.getByUserId(USER_ID)).thenReturn(developer(RECORD_ID, DeveloperStatus.PENDING));
-        assertNull(application.displayNameOf(USER_ID));
+        when(developerService.getByUserId(USER_ID)).thenReturn(developer(RECORD_ID, DeveloperStatus.APPROVED));
+        DeveloperVerificationVO approved = application.verification();
+        assertEquals("APPROVED", approved.getStatus());
+        assertEquals("Acme Studio", approved.getDisplayName());
     }
 
     // --------------------------------------------------------------- helpers

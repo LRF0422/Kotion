@@ -1,7 +1,7 @@
-package com.knowledge.wiki.service.entity.dto;
+package com.knowledge.system.domain.dto;
 
 import com.knowledge.core.common.base.PageDTO;
-import com.knowledge.wiki.service.entity.enums.DeveloperStatus;
+import com.knowledge.system.domain.enums.DeveloperStatus;
 
 import lombok.Data;
 import lombok.EqualsAndHashCode;

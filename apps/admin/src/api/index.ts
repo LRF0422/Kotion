@@ -408,19 +408,19 @@ export const getAdminDeveloperList = (params: {
   pageSize: number
   searchValue?: string
   status?: DeveloperStatus
-}) => get<PageResult<AdminDeveloperVO>>('/knowledge-wiki/admin/developer/list', params)
+}) => get<PageResult<AdminDeveloperVO>>('/knowledge-system/admin/developer/list', params)
 
 /** 通过开发者认证。 */
 export const approveAdminDeveloper = (id: string, comment?: string) =>
-  post<AdminDeveloperVO>(`/knowledge-wiki/admin/developer/${id}/approve`, { comment })
+  post<AdminDeveloperVO>(`/knowledge-system/admin/developer/${id}/approve`, { comment })
 
 /** 驳回开发者认证（reason 必填）。 */
 export const rejectAdminDeveloper = (id: string, reason: string, comment?: string) =>
-  post<AdminDeveloperVO>(`/knowledge-wiki/admin/developer/${id}/reject`, { reason, comment })
+  post<AdminDeveloperVO>(`/knowledge-system/admin/developer/${id}/reject`, { reason, comment })
 
 /** 撤销已通过的开发者认证（reason 必填）。 */
 export const revokeAdminDeveloper = (id: string, reason: string, comment?: string) =>
-  post<AdminDeveloperVO>(`/knowledge-wiki/admin/developer/${id}/revoke`, { reason, comment })
+  post<AdminDeveloperVO>(`/knowledge-system/admin/developer/${id}/revoke`, { reason, comment })
 
 // ---------- 日志（knowledge-log，current + size） ----------
 
