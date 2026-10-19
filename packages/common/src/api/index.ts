@@ -207,6 +207,11 @@ export const APIS = {
         url: '/knowledge-wiki/plugin/:id/versions',
         method: 'POST'
     } as API,
+    /** 开发者查看自己插件的版本历史。 */
+    GET_PLUGIN_VERSIONS: {
+        url: '/knowledge-wiki/plugin/:id/versions',
+        method: 'GET'
+    } as API,
     GET_PLUGIN: {
         url: '/knowledge-wiki/plugin/:id',
         method: 'GET'

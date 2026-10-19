@@ -1,30 +1,25 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { PluginArtifactFile, GlobalState, useApi, useUploadFile, useSelector, APIS, AppContext, event, PLUGIN_CHANGED, logger } from "@kn/common";
+import { PluginArtifactFile, GlobalState, useApi, useUploadFile, useSelector, APIS, AppContext, event, PLUGIN_CHANGED, logger, usePluginState, getApiErrorMessage } from "@kn/common";
 import {
     Avatar, Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, DialogTrigger,
     IconButton, Input, Label, Tabs, TabsContent, TabsList, TabsTrigger, AlertDialog, AlertDialogAction,
     AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
-    AlertDialogTitle, AlertDialogTrigger, EmptyState, toast, Checkbox, Select, SelectContent, SelectItem,
+    AlertDialogTitle, AlertDialogTrigger, EmptyState, toast, Select, SelectContent, SelectItem,
     SelectTrigger, SelectValue, Separator, ScrollArea, cn, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
     DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator
 } from "@kn/ui";
 import {
-    PlusIcon, SearchIcon, UploadIcon, XIcon, Loader2Icon, CheckCircleIcon, EditIcon,
-    PowerIcon, BoxIcon, Trash2Icon, MoreVerticalIcon, ArrowUpDownIcon, EyeIcon, CopyIcon, RefreshCwIcon,
-    SettingsIcon, HistoryIcon, ChevronRightIcon
+    PlusIcon, SearchIcon, UploadIcon, XIcon, Loader2Icon, CheckCircleIcon,
+    PowerIcon, BoxIcon, Trash2Icon, MoreVerticalIcon, ArrowUpDownIcon, EyeIcon, CopyIcon, RefreshCwIcon
 } from "@kn/icon";
 import { PluginUploader } from "../PluginUploader";
 import { useDeveloperProfile } from "../../Developer/developer-api";
 import { DeveloperVerificationDialog } from "../../Developer/DeveloperVerificationDialog";
+import { resolvePluginRuntimeState } from "../plugin-runtime-state";
 
 import { CollaborationEditor } from "@kn/editor";
 import { useTranslation } from "@kn/common";
 import { hasDocumentationContent, pluginRuntimeIdentity, toRemotePluginDescriptor } from "../plugin-model";
-
-interface PluginStatus {
-    code: string;
-    desc: string;
-}
 
 interface Plugin {
     id: string;
@@ -34,22 +29,33 @@ interface Plugin {
     developerId?: string;
     maintainer: string;
     description?: string;
-    status: PluginStatus;
+    /** Review status: PENDING / IN_PROGRESS / REJECTED / DONE (bare or { value }). */
+    status?: string | { value?: string; desc?: string; code?: string };
     currentVersion?: string;
+    currentVersionNumber?: string;
     key?: string;
     createdAt?: string;
     updatedAt?: string;
+    createTime?: string;
+    updateTime?: string;
     // Runtime install status (from backend PluginVO.installStatus): undefined/null = not installed
-    installStatus?: string | { value: string; desc?: string } | null;
+    installStatus?: string | { value?: string; desc?: string } | null;
     currentVersionId?: string;
     pluginKey?: string;
     resourcePath?: string;
     integrity?: string;
+    /** Versions of this plugin installed by the current user (newest first). */
+    installeddVersions?: Array<{ id?: string; version?: string }>;
+    /** Candidate version while a submission is in review / rejected. */
+    candidateVersion?: {
+        version?: string;
+        reviewComment?: string;
+        reviewReasonCode?: string | { value?: string };
+    };
 }
 
-// Backend may serialize an enum as a bare string or as { value, desc }; normalize to a code.
-const installState = (p: Pick<Plugin, 'installStatus'>): string | undefined =>
-    typeof p.installStatus === 'string' ? p.installStatus : (p.installStatus?.value ?? undefined);
+// Backend may serialize an enum as a bare string or as { value, desc }. Install
+// state comes from plugin-runtime-state (backend record + runtime registry).
 
 const pluginRuntimeDescriptor = (plugin: Plugin) => {
     const descriptor = toRemotePluginDescriptor(plugin);
@@ -114,12 +120,39 @@ interface PluginVersion {
     content: any;
 }
 
+/** One row of the owner-only version history. */
+interface PluginVersionHistoryItem {
+    id?: string;
+    version?: string;
+    status?: string | { value?: string; desc?: string };
+    reviewStatus?: string | { value?: string; desc?: string };
+    reviewComment?: string;
+    createTime?: string;
+}
+
+const enumCode = (value: unknown): string | undefined => {
+    if (typeof value === 'string') return value;
+    if (value && typeof value === 'object' && 'value' in value) {
+        const inner = (value as { value?: unknown }).value;
+        return typeof inner === 'string' ? inner : undefined;
+    }
+    return undefined;
+};
+
+const formatDate = (value?: string) => {
+    if (!value) return '';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
+};
+
 type SortOption = 'name' | 'status' | 'updated' | 'created';
 type SortDirection = 'asc' | 'desc';
 
 export interface PluginListProps {
     data: Plugin[];
     onRefresh?: () => void;
+    loadingPlugins?: boolean;
+    pluginsError?: string;
 }
 
 export const PluginList: React.FC<PluginListProps> = (props) => {
@@ -128,6 +161,7 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
     const { userInfo } = useSelector((state: GlobalState) => state);
     const { usePath, uploadPluginFile } = useUploadFile();
     const { pluginManager } = useContext(AppContext);
+    const { loadedPluginNames, pluginVersion } = usePluginState();
     const [open, setOpen] = useState(false);
     const [currentId, setCurrentId] = useState<string>();
     // Publishing a new version is a developer-only action, same gate as 上架.
@@ -152,13 +186,35 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
     const [pluginToDelete, setPluginToDelete] = useState<Plugin>();
     const [newTabName, setNewTabName] = useState("");
     const [addingTab, setAddingTab] = useState(false);
-
-    // New state for enhanced features
-    const [selectedPlugins, setSelectedPlugins] = useState<Set<string>>(new Set());
     const [sortBy, setSortBy] = useState<SortOption>('name');
     const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
     const [detailPlugin, setDetailPlugin] = useState<Plugin | null>(null);
-    const [bulkActionLoading, setBulkActionLoading] = useState(false);
+    const [versions, setVersions] = useState<PluginVersionHistoryItem[]>([]);
+    const [versionsLoading, setVersionsLoading] = useState(false);
+    const [versionsError, setVersionsError] = useState<string>();
+
+    const runtimeEntries = useMemo(
+        () => pluginManager?.getPluginEntries() ?? [],
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [pluginManager, loadedPluginNames, pluginVersion],
+    );
+
+    const runtimeState = useCallback(
+        (plugin: Plugin) =>
+            resolvePluginRuntimeState(
+                plugin,
+                runtimeEntries,
+                (name) => pluginManager?.isPluginRemovable(name) ?? true,
+            ),
+        [runtimeEntries, pluginManager],
+    );
+
+    /** Version id recorded by the backend for the *installed* copy. */
+    const installedVersionId = useCallback(
+        (plugin: Plugin): string | undefined =>
+            plugin.installeddVersions?.[0]?.id ?? plugin.currentVersionId,
+        [],
+    );
 
     // Sort and filter plugins
     const processedPlugins = useMemo(() => {
@@ -168,10 +224,10 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
         if (searchQuery.trim()) {
             const query = searchQuery.toLowerCase();
             result = result.filter(plugin =>
-                plugin.name.toLowerCase().includes(query) ||
-                plugin.developer.toLowerCase().includes(query) ||
-                plugin.maintainer.toLowerCase().includes(query) ||
-                plugin.description?.toLowerCase().includes(query)
+                (plugin.name || '').toLowerCase().includes(query) ||
+                (plugin.developer || '').toLowerCase().includes(query) ||
+                (plugin.maintainer || '').toLowerCase().includes(query) ||
+                (plugin.description || '').toLowerCase().includes(query)
             );
         }
 
@@ -183,156 +239,21 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                     comparison = a.name.localeCompare(b.name);
                     break;
                 case 'status':
-                    comparison = (installState(a) || '').localeCompare(installState(b) || '');
+                    comparison = (runtimeState(a).active ? '0' : runtimeState(a).installed ? '1' : '2')
+                        .localeCompare(runtimeState(b).active ? '0' : runtimeState(b).installed ? '1' : '2');
                     break;
                 case 'updated':
-                    comparison = (a.updatedAt || '').localeCompare(b.updatedAt || '');
+                    comparison = (a.updateTime || a.updatedAt || '').localeCompare(b.updateTime || b.updatedAt || '');
                     break;
                 case 'created':
-                    comparison = (a.createdAt || '').localeCompare(b.createdAt || '');
+                    comparison = (a.createTime || a.createdAt || '').localeCompare(b.createTime || b.createdAt || '');
                     break;
             }
             return sortDirection === 'asc' ? comparison : -comparison;
         });
 
         return result;
-    }, [props.data, searchQuery, sortBy, sortDirection]);
-
-    // Check if all visible plugins are selected
-    const allSelected = useMemo(() => {
-        return processedPlugins.length > 0 &&
-            processedPlugins.every(p => selectedPlugins.has(p.id));
-    }, [processedPlugins, selectedPlugins]);
-
-    // Check if some plugins are selected
-    const someSelected = useMemo(() => {
-        return processedPlugins.some(p => selectedPlugins.has(p.id)) && !allSelected;
-    }, [processedPlugins, selectedPlugins, allSelected]);
-
-    useEffect(() => {
-        if (currentId) {
-            const requestId = ++uploadSessionRef.current;
-            setFile(undefined);
-            setLoading(true);
-            useApi(APIS.GET_PLUGIN, { id: currentId })
-                .then(res => {
-                    if (requestId !== uploadSessionRef.current) return;
-                    const desc: PluginVersion[] = res.data.currentVersion?.versionDescription || [];
-                    setCurrentPlugin(res.data);
-                    setVersion(nextPatchVersion(res.data.currentVersion?.version));
-                    editorRefs.current = {};
-                    setDescriptions(desc.length > 0 ? res.data.currentVersion.versionDescription : [
-                        { label: "Feature", content: {} },
-                        { label: "Detail", content: {} },
-                        { label: "ChangeLog", content: {} },
-                    ]);
-                    setOpen(true);
-                })
-                .catch(error => {
-                    if (requestId !== uploadSessionRef.current) return;
-                    console.error('Failed to load plugin:', error);
-                    toast.error(t('pluginManager.loadFailed'));
-                })
-                .finally(() => {
-                    if (requestId === uploadSessionRef.current) setLoading(false);
-                });
-        }
-    }, [currentId])
-
-    // Selection handlers
-    const handleSelectAll = useCallback(() => {
-        if (allSelected) {
-            setSelectedPlugins(new Set());
-        } else {
-            setSelectedPlugins(new Set(processedPlugins.map(p => p.id)));
-        }
-    }, [allSelected, processedPlugins]);
-
-    const handleSelectPlugin = useCallback((pluginId: string) => {
-        setSelectedPlugins(prev => {
-            const newSet = new Set(prev);
-            if (newSet.has(pluginId)) {
-                newSet.delete(pluginId);
-            } else {
-                newSet.add(pluginId);
-            }
-            return newSet;
-        });
-    }, []);
-
-    const handleClearSelection = useCallback(() => {
-        setSelectedPlugins(new Set());
-    }, []);
-
-    // Bulk actions
-    // Run an API call for every selected (installed) plugin, then sync the runtime
-    // PluginManager once and report aggregate success. Uses allSettled so a single
-    // failure doesn't abort the batch.
-    const runBulk = useCallback(async (
-        api: typeof APIS.ENABLE_PLUGIN,
-        successKey: string,
-        sync: ((p: Plugin) => boolean | void | Promise<boolean | void>) | undefined,
-    ) => {
-        if (selectedPlugins.size === 0) return;
-        const targets = processedPlugins.filter(p => selectedPlugins.has(p.id) && p.currentVersionId);
-        if (targets.length === 0) {
-            toast.error(t('pluginManager.notInstalled'));
-            return;
-        }
-        setBulkActionLoading(true);
-        try {
-            const results = await Promise.allSettled(
-                targets.map(p => useApi(api, { versionId: p.currentVersionId }))
-            );
-            const succeeded = targets.filter((_, i) => results[i].status === 'fulfilled');
-            const syncResults = sync
-                ? await Promise.all(succeeded.map(p => Promise.resolve(sync(p))))
-                : succeeded.map(() => true);
-            const activated = succeeded.filter((_, i) => syncResults[i] !== false);
-            if (succeeded.length > 0) {
-                event.emit(PLUGIN_CHANGED, { source: 'bulk' });
-            }
-            if (activated.length === targets.length) {
-                toast.success(`${activated.length} ${t(successKey)}`);
-            } else {
-                toast.error(`${activated.length}/${targets.length} ${t(successKey)}`);
-            }
-            setSelectedPlugins(new Set());
-            props.onRefresh?.();
-        } catch (error) {
-            toast.error(t('pluginManager.operationFailed'));
-        } finally {
-            setBulkActionLoading(false);
-        }
-    }, [selectedPlugins, processedPlugins, pluginManager, props.onRefresh, t]);
-
-    const handleBulkEnable = useCallback(
-        () => runBulk(
-            APIS.ENABLE_PLUGIN,
-            'pluginManager.bulkEnableSuccess',
-            p => {
-                const descriptor = pluginRuntimeDescriptor(p);
-                return pluginManager && descriptor
-                    ? pluginManager.installPlugin(descriptor)
-                    : false;
-            },
-        ),
-        [runBulk, pluginManager]
-    );
-
-    const handleBulkDisable = useCallback(
-        () => runBulk(APIS.DISABLE_PLUGIN, 'pluginManager.bulkDisableSuccess', p => {
-            void pluginManager?.uninstallPlugin(pluginRuntimeIdentity(p))
-        }),
-        [runBulk, pluginManager]
-    );
-
-    const handleBulkDelete = useCallback(
-        () => runBulk(APIS.DELETE_INSTALLED_PLUGIN, 'pluginManager.bulkDeleteSuccess', p => {
-            void pluginManager?.uninstallPlugin(pluginRuntimeIdentity(p))
-        }),
-        [runBulk, pluginManager]
-    );
+    }, [props.data, searchQuery, sortBy, sortDirection, runtimeState]);
 
     const handleAddTab = useCallback(() => {
         if (!newTabName.trim()) {
@@ -361,6 +282,39 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
         toast.success(t('pluginManager.tabRemoved'));
     }, [descriptions, t]);
 
+    const isOwnPlugin = useCallback(
+        (plugin: Plugin) => String(plugin.developerId || '') === String(userInfo?.id || ''),
+        [userInfo?.id],
+    );
+
+    // Owner-only version history for the detail panel. The endpoint is
+    // owner-scoped, so other developers' plugins are not queried at all.
+    useEffect(() => {
+        if (!detailPlugin || !isOwnPlugin(detailPlugin)) {
+            setVersions([]);
+            setVersionsError(undefined);
+            return;
+        }
+        let cancelled = false;
+        setVersionsLoading(true);
+        setVersionsError(undefined);
+        useApi(APIS.GET_PLUGIN_VERSIONS, { id: detailPlugin.id })
+            .then((response) => {
+                if (cancelled) return;
+                setVersions(Array.isArray(response.data) ? response.data : []);
+            })
+            .catch((error) => {
+                if (cancelled) return;
+                setVersionsError(getApiErrorMessage(error, t('pluginManager.loadFailed')));
+            })
+            .finally(() => {
+                if (!cancelled) setVersionsLoading(false);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [detailPlugin, isOwnPlugin, t]);
+
     const requestVersionPublish = useCallback((plugin: Plugin) => {
         if (!developerVerified) {
             setPendingPublishId(plugin.id);
@@ -374,25 +328,59 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
         }
     }, [currentId, developerVerified]);
 
-    const handleEditPlugin = useCallback((plugin: Plugin) => {
-        setDetailPlugin(plugin);
-    }, []);
-
-    const handleToggleActive = useCallback(async (plugin: Plugin) => {
-        if (!plugin.currentVersionId) {
+    const handleInstall = useCallback(async (plugin: Plugin) => {
+        const versionId = plugin.currentVersionId;
+        const descriptor = pluginRuntimeDescriptor(plugin);
+        if (!versionId || !descriptor) {
             toast.error(t('pluginManager.notInstalled'));
             return;
         }
-        const isActive = installState(plugin) === 'ACTIVE';
         setActivePluginId(plugin.id);
         try {
-            if (isActive) {
-                await useApi(APIS.DISABLE_PLUGIN, { versionId: plugin.currentVersionId });
+            await useApi(APIS.INSTALL_PLUGIN, { versionId });
+            const activated = pluginManager ? await pluginManager.installPlugin(descriptor) : false;
+            event.emit(PLUGIN_CHANGED, { source: 'install' });
+            if (activated) {
+                toast.success(t('pluginManager.installSuccess'));
+            } else {
+                toast.warning(t('pluginHub.detail.activationFailed'));
+            }
+            props.onRefresh?.();
+        } catch (error) {
+            toast.error(getApiErrorMessage(error, t('pluginManager.operationFailed')));
+        } finally {
+            setActivePluginId(undefined);
+        }
+    }, [pluginManager, props.onRefresh, t]);
+
+    const handleToggleActive = useCallback(async (plugin: Plugin) => {
+        const state = runtimeState(plugin);
+        if (!state.installed) {
+            await handleInstall(plugin);
+            return;
+        }
+        if (state.active && !state.removable) {
+            toast.error(t('pluginManager.systemPluginLocked'));
+            return;
+        }
+        const versionId = installedVersionId(plugin);
+        setActivePluginId(plugin.id);
+        try {
+            if (state.active) {
+                // Bundled/dev plugins have no backend install record; only the
+                // registry needs to change. Marketplace installs update both.
+                if (state.backendInstalled && versionId) {
+                    await useApi(APIS.DISABLE_PLUGIN, { versionId });
+                }
                 pluginManager?.uninstallPlugin(pluginRuntimeIdentity(plugin));
                 event.emit(PLUGIN_CHANGED, { source: 'disable' });
                 toast.success(t('pluginManager.disableSuccess'));
             } else {
-                await useApi(APIS.ENABLE_PLUGIN, { versionId: plugin.currentVersionId });
+                if (!versionId) {
+                    toast.error(t('pluginManager.notInstalled'));
+                    return;
+                }
+                await useApi(APIS.ENABLE_PLUGIN, { versionId });
                 const descriptor = pluginRuntimeDescriptor(plugin);
                 const activated = pluginManager && descriptor
                     ? await pluginManager.installPlugin(descriptor)
@@ -406,41 +394,54 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
             }
             props.onRefresh?.();
         } catch (error) {
-            toast.error(t('pluginManager.operationFailed'));
+            toast.error(getApiErrorMessage(error, t('pluginManager.operationFailed')));
         } finally {
             setActivePluginId(undefined);
         }
-    }, [pluginManager, props.onRefresh, t]);
+    }, [handleInstall, installedVersionId, pluginManager, props.onRefresh, runtimeState, t]);
 
     const handleDeletePlugin = useCallback((plugin: Plugin) => {
+        const state = runtimeState(plugin);
+        if (!state.installed) {
+            toast.error(t('pluginManager.notInstalled'));
+            return;
+        }
+        if (!state.removable) {
+            toast.error(t('pluginManager.systemPluginLocked'));
+            return;
+        }
         setPluginToDelete(plugin);
         setDeleteDialogOpen(true);
-    }, []);
+    }, [runtimeState, t]);
 
     const confirmDelete = useCallback(async () => {
         if (!pluginToDelete) return;
-        if (!pluginToDelete.currentVersionId) {
+        const state = runtimeState(pluginToDelete);
+        if (!state.installed) {
             toast.error(t('pluginManager.notInstalled'));
             setDeleteDialogOpen(false);
             setPluginToDelete(undefined);
             return;
         }
         try {
-            await useApi(APIS.DELETE_INSTALLED_PLUGIN, { versionId: pluginToDelete.currentVersionId });
+            const versionId = installedVersionId(pluginToDelete);
+            if (state.backendInstalled && versionId) {
+                await useApi(APIS.DELETE_INSTALLED_PLUGIN, { versionId });
+            }
             pluginManager?.uninstallPlugin(pluginRuntimeIdentity(pluginToDelete));
             event.emit(PLUGIN_CHANGED, { source: 'delete' });
-            toast.success(t('pluginManager.deleteSuccess'));
+            toast.success(t('pluginManager.uninstallSuccess'));
             props.onRefresh?.();
         } catch (error) {
-            toast.error(t('pluginManager.operationFailed'));
+            toast.error(getApiErrorMessage(error, t('pluginManager.operationFailed')));
         } finally {
             setDeleteDialogOpen(false);
             setPluginToDelete(undefined);
         }
-    }, [pluginToDelete, pluginManager, props.onRefresh, t]);
+    }, [installedVersionId, pluginManager, pluginToDelete, props.onRefresh, runtimeState, t]);
 
     const handleCopyPluginKey = useCallback((plugin: Plugin) => {
-        navigator.clipboard.writeText(plugin.key || plugin.id);
+        navigator.clipboard.writeText(plugin.pluginKey || plugin.key || plugin.id);
         toast.success(t('pluginManager.keyCopied'));
     }, [t]);
 
@@ -497,14 +498,21 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
             props.onRefresh?.();
         } catch (error) {
             console.error('Failed to publish plugin:', error);
-            toast.error(t('pluginManager.operationFailed'));
+            toast.error(getApiErrorMessage(error, t('pluginManager.operationFailed')));
         } finally {
             setPublishing(false);
         }
     }, [currentPlugin, file, version, descriptions, props.onRefresh, t]);
 
-    // Badge/color/label are driven by the runtime install state (ACTIVE / DISABLED /
-    // not installed), not the catalog review status — that's what the toggle controls.
+    // Badge/color/label are driven by the merged runtime state: a bundled or
+    // dev plugin is active even without a backend install record.
+    const installCode = useCallback((plugin: Plugin): 'ACTIVE' | 'DISABLED' | undefined => {
+        const state = runtimeState(plugin);
+        if (state.active) return 'ACTIVE';
+        if (state.disabled) return 'DISABLED';
+        return undefined;
+    }, [runtimeState]);
+
     const getStatusBadgeVariant = (code?: string) => {
         switch (code) {
             case 'ACTIVE': return 'default';
@@ -521,12 +529,22 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
         }
     };
 
+    const versionLabel = (p: Plugin) =>
+        p.currentVersionNumber || (typeof p.currentVersion === 'string' ? p.currentVersion : '');
+
     const installLabel = (p: Plugin) => {
-        switch (installState(p)) {
+        switch (installCode(p)) {
             case 'ACTIVE': return t('pluginManager.active');
             case 'DISABLED': return t('pluginManager.inactive');
             default: return t('pluginManager.notInstalled');
         }
+    };
+
+    const primaryActionLabel = (p: Plugin) => {
+        const state = runtimeState(p);
+        if (!state.installed) return t('pluginManager.install');
+        if (state.active) return t('pluginManager.disable');
+        return t('pluginManager.enable');
     };
     return <div className="w-full h-full flex flex-col overflow-hidden">
         {/* Toolbar */}
@@ -592,72 +610,21 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
             </div>
         </div>
 
-        {/* Bulk Actions Bar */}
-        {selectedPlugins.size > 0 && (
-            <div className="flex items-center gap-2 px-3 py-2 bg-primary/5 border-b flex-shrink-0">
-                <Checkbox
-                    checked={allSelected}
-                    // @ts-ignore
-                    indeterminate={someSelected}
-                    onCheckedChange={handleSelectAll}
-                />
-                <span className="text-sm font-medium">
-                    {selectedPlugins.size} {t('pluginManager.selected')}
-                </span>
-                <Separator orientation="vertical" className="h-4" />
-                <div className="flex items-center gap-1">
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleBulkEnable}
-                        disabled={bulkActionLoading}
-                        className="h-7"
-                    >
-                        <PowerIcon className="h-3 w-3 mr-1 text-green-500" />
-                        {t('pluginManager.enable')}
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleBulkDisable}
-                        disabled={bulkActionLoading}
-                        className="h-7"
-                    >
-                        <PowerIcon className="h-3 w-3 mr-1 text-gray-400" />
-                        {t('pluginManager.disable')}
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleBulkDelete}
-                        disabled={bulkActionLoading}
-                        className="h-7 text-destructive hover:text-destructive"
-                    >
-                        <Trash2Icon className="h-3 w-3 mr-1" />
-                        {t('pluginManager.delete')}
-                    </Button>
-                </div>
-                <div className="flex-1" />
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleClearSelection}
-                    className="h-7"
-                >
-                    <XIcon className="h-3 w-3 mr-1" />
-                    {t('pluginManager.clear')}
-                </Button>
-            </div>
-        )}
-
         {/* Main Content Area */}
         <div className="relative flex-1 flex overflow-hidden min-w-0">
             {/* Plugin List */}
             <ScrollArea className={cn("flex-1 min-w-0", detailPlugin && "border-r")}>
                 <div className="p-2 space-y-1">
-                    {loading ? (
+                    {props.loadingPlugins ? (
                         <div className="flex items-center justify-center h-32">
                             <Loader2Icon className="h-6 w-6 animate-spin text-muted-foreground" />
+                        </div>
+                    ) : props.pluginsError ? (
+                        <div className="flex flex-col items-center justify-center gap-3 px-6 py-12 text-center">
+                            <p className="text-sm text-destructive">{props.pluginsError}</p>
+                            <Button variant="outline" size="sm" onClick={props.onRefresh}>
+                                {t('pluginManager.retry')}
+                            </Button>
                         </div>
                     ) : processedPlugins.length === 0 ? (
                         <EmptyState
@@ -668,29 +635,21 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                         />
                     ) : (
                         processedPlugins.map((item, index) => {
+                            const state = runtimeState(item);
                             const isActivating = activePluginId === item.id;
-                            const isActive = installState(item) === 'ACTIVE';
-                            const isSelected = selectedPlugins.has(item.id);
+                            const isActive = state.active;
                             const isDetailOpen = detailPlugin?.id === item.id;
+                            const canToggle = !(isActive && !state.removable);
 
                             return (
                                 <div
                                     key={item.id || index}
                                     className={cn(
                                         "px-3 py-2 rounded-md flex items-center gap-3 group w-full transition-colors overflow-hidden",
-                                        isSelected && "bg-primary/10",
                                         isDetailOpen && "bg-muted ring-1 ring-primary/20",
-                                        !isSelected && !isDetailOpen && "hover:bg-muted/50"
+                                        !isDetailOpen && "hover:bg-muted/50"
                                     )}
                                 >
-                                    {/* Checkbox */}
-                                    <Checkbox
-                                        checked={isSelected}
-                                        onCheckedChange={() => handleSelectPlugin(item.id)}
-                                        onClick={(e) => e.stopPropagation()}
-                                        className="flex-shrink-0"
-                                    />
-
                                     {/* Avatar */}
                                     <Avatar className="h-10 w-10 shrink-0">
                                         <img src={usePath(item.icon)} alt={item.name} />
@@ -703,23 +662,24 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                                     >
                                         <div className="flex items-center gap-2 overflow-hidden">
                                             <span className="text-sm font-medium truncate">{item.name}</span>
-                                            {item.currentVersion && (
-                                                <span className="text-xs text-muted-foreground flex-shrink-0">v{item.currentVersion}</span>
+                                            {versionLabel(item) && (
+                                                <span className="text-xs text-muted-foreground flex-shrink-0">v{versionLabel(item)}</span>
                                             )}
                                             <Badge
                                                 className="h-5 shrink-0 text-xs"
-                                                variant={getStatusBadgeVariant(installState(item))}
+                                                variant={getStatusBadgeVariant(installCode(item))}
                                             >
                                                 {installLabel(item)}
                                             </Badge>
                                         </div>
                                         <div className="text-xs text-muted-foreground truncate">
-                                            {item.developer} {item.maintainer && `/ ${item.maintainer}`}
+                                            {item.developer}
+                                            {item.maintainer && item.maintainer !== item.developer && ` / ${item.maintainer}`}
                                         </div>
                                     </div>
 
                                     {/* Actions */}
-                                    <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <div className="flex items-center gap-1 shrink-0 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100">
                                         <TooltipProvider>
                                             <Tooltip>
                                                 <TooltipTrigger asChild>
@@ -739,16 +699,20 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                                                         icon={
                                                             isActivating ? (
                                                                 <Loader2Icon className="h-4 w-4 animate-spin" />
+                                                            ) : !state.installed ? (
+                                                                <PlusIcon className="h-4 w-4" />
                                                             ) : (
-                                                                <PowerIcon className={cn("h-4 w-4", getStatusColor(installState(item)))} />
+                                                                <PowerIcon className={cn("h-4 w-4", getStatusColor(installCode(item)))} />
                                                             )
                                                         }
                                                         onClick={() => handleToggleActive(item)}
-                                                        disabled={isActivating}
+                                                        disabled={isActivating || !canToggle}
                                                     />
                                                 </TooltipTrigger>
                                                 <TooltipContent>
-                                                    {isActive ? t('pluginManager.deactivate') : t('pluginManager.activate')}
+                                                    {!canToggle
+                                                        ? t('pluginManager.systemPluginLocked')
+                                                        : primaryActionLabel(item)}
                                                 </TooltipContent>
                                             </Tooltip>
                                         </TooltipProvider>
@@ -759,29 +723,27 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="end">
                                                 {String(item.developerId || '') === String(userInfo?.id || '') && (
-                                                    <>
-                                                        <DropdownMenuItem onClick={() => handleEditPlugin(item)}>
-                                                            <EditIcon className="h-4 w-4 mr-2" />
-                                                            {t('pluginManager.edit')}
-                                                        </DropdownMenuItem>
-                                                        <DropdownMenuItem onClick={() => requestVersionPublish(item)}>
-                                                            <UploadIcon className="h-4 w-4 mr-2" />
-                                                            {t('pluginManager.publishNewVersion')}
-                                                        </DropdownMenuItem>
-                                                    </>
+                                                    <DropdownMenuItem onClick={() => requestVersionPublish(item)}>
+                                                        <UploadIcon className="h-4 w-4 mr-2" />
+                                                        {t('pluginManager.publishNewVersion')}
+                                                    </DropdownMenuItem>
                                                 )}
                                                 <DropdownMenuItem onClick={() => handleCopyPluginKey(item)}>
                                                     <CopyIcon className="h-4 w-4 mr-2" />
                                                     {t('pluginManager.copyPluginKey')}
                                                 </DropdownMenuItem>
-                                                <DropdownMenuSeparator />
-                                                <DropdownMenuItem
-                                                    onClick={() => handleDeletePlugin(item)}
-                                                    className="text-destructive focus:text-destructive"
-                                                >
-                                                    <Trash2Icon className="h-4 w-4 mr-2" />
-                                                    {t('pluginManager.delete')}
-                                                </DropdownMenuItem>
+                                                {state.installed && state.removable && (
+                                                    <>
+                                                        <DropdownMenuSeparator />
+                                                        <DropdownMenuItem
+                                                            onClick={() => handleDeletePlugin(item)}
+                                                            className="text-destructive focus:text-destructive"
+                                                        >
+                                                            <Trash2Icon className="h-4 w-4 mr-2" />
+                                                            {t('pluginManager.uninstall')}
+                                                        </DropdownMenuItem>
+                                                    </>
+                                                )}
                                             </DropdownMenuContent>
                                         </DropdownMenu>
                                     </div>
@@ -812,11 +774,16 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                                 <div>
                                     <h4 className="font-semibold">{detailPlugin.name}</h4>
                                     <div className="text-sm text-muted-foreground">
-                                        v{detailPlugin.currentVersion || '1.0.0'}
+                                        v{versionLabel(detailPlugin) || '1.0.0'}
                                     </div>
-                                    <Badge variant={getStatusBadgeVariant(installState(detailPlugin))} className="mt-1">
+                                    <Badge variant={getStatusBadgeVariant(installCode(detailPlugin))} className="mt-1">
                                         {installLabel(detailPlugin)}
                                     </Badge>
+                                    {runtimeState(detailPlugin).runtime && (
+                                        <Badge variant="outline" className="ml-1 mt-1">
+                                            {t(`pluginManager.source.${runtimeState(detailPlugin).runtime!.source}`)}
+                                        </Badge>
+                                    )}
                                 </div>
                             </div>
 
@@ -828,7 +795,7 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                                     <Label className="text-xs text-muted-foreground uppercase">{t('pluginManager.developer')}</Label>
                                     <p className="text-sm">{detailPlugin.developer}</p>
                                 </div>
-                                {detailPlugin.maintainer && (
+                                {detailPlugin.maintainer && detailPlugin.maintainer !== detailPlugin.developer && (
                                     <div>
                                         <Label className="text-xs text-muted-foreground uppercase">{t('pluginManager.maintainer')}</Label>
                                         <p className="text-sm">{detailPlugin.maintainer}</p>
@@ -840,11 +807,11 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                                         <p className="text-sm text-muted-foreground">{detailPlugin.description}</p>
                                     </div>
                                 )}
-                                {detailPlugin.key && (
+                                {(detailPlugin.pluginKey || detailPlugin.key) && (
                                     <div>
                                         <Label className="text-xs text-muted-foreground uppercase">{t('pluginManager.pluginKey')}</Label>
                                         <div className="flex items-center gap-1">
-                                            <code className="text-xs bg-muted px-2 py-1 rounded">{detailPlugin.key}</code>
+                                            <code className="text-xs bg-muted px-2 py-1 rounded">{detailPlugin.pluginKey || detailPlugin.key}</code>
                                             <IconButton
                                                 icon={<CopyIcon className="h-3 w-3" />}
                                                 onClick={() => handleCopyPluginKey(detailPlugin)}
@@ -864,10 +831,21 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                                         variant="outline"
                                         size="sm"
                                         className="justify-start"
+                                        disabled={
+                                            activePluginId === detailPlugin.id ||
+                                            (runtimeState(detailPlugin).active &&
+                                                !runtimeState(detailPlugin).removable)
+                                        }
                                         onClick={() => handleToggleActive(detailPlugin)}
                                     >
-                                        <PowerIcon className={cn("h-4 w-4 mr-2", getStatusColor(installState(detailPlugin)))} />
-                                        {installState(detailPlugin) === 'ACTIVE' ? t('pluginManager.disable') : t('pluginManager.enable')}
+                                        {activePluginId === detailPlugin.id ? (
+                                            <Loader2Icon className="h-4 w-4 mr-2 animate-spin" />
+                                        ) : !runtimeState(detailPlugin).installed ? (
+                                            <PlusIcon className="h-4 w-4 mr-2" />
+                                        ) : (
+                                            <PowerIcon className={cn("h-4 w-4 mr-2", getStatusColor(installCode(detailPlugin)))} />
+                                        )}
+                                        {primaryActionLabel(detailPlugin)}
                                     </Button>
                                     {String(detailPlugin.developerId || '') === String(userInfo?.id || '') && (
                                         <Button
@@ -880,49 +858,88 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                                             {t('pluginManager.publish')}
                                         </Button>
                                     )}
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="justify-start"
-                                        onClick={() => handleEditPlugin(detailPlugin)}
-                                    >
-                                        <SettingsIcon className="h-4 w-4 mr-2" />
-                                        {t('pluginManager.settings')}
-                                    </Button>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="justify-start text-destructive hover:text-destructive"
-                                        onClick={() => handleDeletePlugin(detailPlugin)}
-                                    >
-                                        <Trash2Icon className="h-4 w-4 mr-2" />
-                                        {t('pluginManager.delete')}
-                                    </Button>
+                                    {runtimeState(detailPlugin).installed && runtimeState(detailPlugin).removable && (
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="justify-start text-destructive hover:text-destructive"
+                                            onClick={() => handleDeletePlugin(detailPlugin)}
+                                        >
+                                            <Trash2Icon className="h-4 w-4 mr-2" />
+                                            {t('pluginManager.uninstall')}
+                                        </Button>
+                                    )}
                                 </div>
+                                {runtimeState(detailPlugin).active && !runtimeState(detailPlugin).removable && (
+                                    <p className="text-xs text-muted-foreground">
+                                        {t('pluginManager.systemPluginLocked')}
+                                    </p>
+                                )}
                             </div>
 
-                            <Separator />
-
-                            {/* Version History Placeholder */}
-                            <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                    <Label className="text-xs text-muted-foreground uppercase">{t('pluginManager.versionHistory')}</Label>
-                                    <Button variant="ghost" size="sm" className="h-6 text-xs">
-                                        {t('pluginManager.viewAll')}
-                                        <ChevronRightIcon className="h-3 w-3 ml-1" />
-                                    </Button>
-                                </div>
-                                <div className="space-y-2">
-                                    <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-md">
-                                        <HistoryIcon className="h-4 w-4 text-muted-foreground" />
-                                        <div className="flex-1">
-                                            <div className="text-sm font-medium">v{detailPlugin.currentVersion || '1.0.0'}</div>
-                                            <div className="text-xs text-muted-foreground">{t('pluginManager.currentVersion')}</div>
-                                        </div>
-                                        <Badge variant="secondary" className="text-xs">{t('pluginManager.latest')}</Badge>
+                            {isOwnPlugin(detailPlugin) && (
+                                <>
+                                    <Separator />
+                                    <div className="space-y-2">
+                                        <Label className="text-xs text-muted-foreground uppercase">
+                                            {t('pluginManager.versionHistory')}
+                                        </Label>
+                                        {versionsLoading ? (
+                                            <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
+                                                <Loader2Icon className="h-4 w-4 animate-spin" />
+                                                {t('pluginManager.loadingVersions')}
+                                            </div>
+                                        ) : versionsError ? (
+                                            <p className="text-xs text-destructive">{versionsError}</p>
+                                        ) : versions.length === 0 ? (
+                                            <p className="text-xs text-muted-foreground">{t('pluginManager.versionsEmpty')}</p>
+                                        ) : (
+                                            <div className="space-y-1.5">
+                                                {versions.map((item) => {
+                                                    const versionStatus = enumCode(item.status);
+                                                    const reviewCode = enumCode(item.reviewStatus);
+                                                    const rejected = reviewCode === 'REJECTED';
+                                                    const label = rejected
+                                                        ? t('pluginManager.submissions.status.rejected')
+                                                        : versionStatus === 'ACTIVE'
+                                                            ? t('pluginManager.currentVersion')
+                                                            : versionStatus === 'PENDING'
+                                                                ? t('pluginManager.submissions.status.pending')
+                                                                : versionStatus === 'IN_ACTIVE'
+                                                                    ? t('pluginManager.historyVersion')
+                                                                    : t('pluginManager.draftVersion');
+                                                    return (
+                                                        <div
+                                                            key={item.id || `${item.version}-${item.createTime}`}
+                                                            className="flex items-center gap-2 rounded-md bg-muted/50 p-2"
+                                                        >
+                                                            <div className="min-w-0 flex-1">
+                                                                <div className="text-sm font-medium">v{item.version || '-'}</div>
+                                                                {item.createTime && (
+                                                                    <div className="text-xs text-muted-foreground">
+                                                                        {formatDate(item.createTime)}
+                                                                    </div>
+                                                                )}
+                                                                {rejected && item.reviewComment && (
+                                                                    <p className="mt-1 text-xs text-destructive">
+                                                                        {item.reviewComment}
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                            <Badge
+                                                                variant={rejected ? 'destructive' : versionStatus === 'ACTIVE' ? 'default' : 'secondary'}
+                                                                className="shrink-0 text-xs"
+                                                            >
+                                                                {label}
+                                                            </Badge>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
                                     </div>
-                                </div>
-                            </div>
+                                </>
+                            )}
                         </div>
                     </ScrollArea>
                 </div>
@@ -997,8 +1014,8 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                                         if (requestId !== uploadSessionRef.current) return;
                                         setFile(uploaded);
                                         toast.success(t('pluginManager.fileUploaded'));
-                                    } catch {
-                                        if (requestId === uploadSessionRef.current) toast.error(t('pluginManager.operationFailed'));
+                                    } catch (error) {
+                                        if (requestId === uploadSessionRef.current) toast.error(getApiErrorMessage(error, t('pluginManager.operationFailed')));
                                     } finally {
                                         if (requestId === uploadSessionRef.current) setLoading(false);
                                     }
@@ -1137,9 +1154,9 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
             <AlertDialogTrigger />
             <AlertDialogContent>
                 <AlertDialogHeader>
-                    <AlertDialogTitle>{t('pluginManager.deletePlugin')}</AlertDialogTitle>
+                    <AlertDialogTitle>{t('pluginManager.uninstallPlugin')}</AlertDialogTitle>
                     <AlertDialogDescription>
-                        {t('pluginManager.deleteConfirm')} "{pluginToDelete?.name}"? {t('pluginManager.deleteWarning')}
+                        {t('pluginManager.uninstallConfirm')} "{pluginToDelete?.name}"? {t('pluginManager.uninstallWarning')}
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -1147,7 +1164,7 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                         {t('pluginManager.cancel')}
                     </AlertDialogCancel>
                     <AlertDialogAction onClick={confirmDelete}>
-                        {t('pluginManager.delete')}
+                        {t('pluginManager.uninstall')}
                     </AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>

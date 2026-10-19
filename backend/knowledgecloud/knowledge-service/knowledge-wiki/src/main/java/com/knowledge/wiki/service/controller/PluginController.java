@@ -1,5 +1,7 @@
 package com.knowledge.wiki.service.controller;
 
+import java.util.List;
+
 import javax.validation.Valid;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,6 +31,7 @@ import com.knowledge.wiki.service.entity.dto.PluginVersionPublishDTO;
 import com.knowledge.wiki.service.entity.dto.QueryPluginDTO;
 import com.knowledge.wiki.service.entity.vo.PluginRatingSummaryVO;
 import com.knowledge.wiki.service.entity.vo.PluginReportVO;
+import com.knowledge.wiki.service.entity.vo.PluginVersionVO;
 import com.knowledge.wiki.service.entity.vo.PluginVO;
 
 @RestController
@@ -91,6 +94,12 @@ public class PluginController {
     @GetMapping("/public/plugins")
     public R<IPage<PluginVO>> publicPlugin(QueryPluginDTO dto) {
         return R.data(pluginApplication.searchPlugin(dto));
+    }
+
+    /** 开发者查看自己插件的版本历史（新→旧）。 */
+    @GetMapping("/{id}/versions")
+    public R<List<PluginVersionVO>> versions(@PathVariable("id") Long id) {
+        return R.data(pluginApplication.myPluginVersions(id));
     }
 
     @GetMapping("/{id}")

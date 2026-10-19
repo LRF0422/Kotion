@@ -446,6 +446,13 @@ public class PluginApplication {
         return PluginVersionConverter.INSTANCE.convertVO(pluginVersionService.listVersions(id));
     }
 
+    /** The owner's version history (newest first). */
+    public List<PluginVersionVO> myPluginVersions(Long id) {
+        Plugin plugin = requirePlugin(id);
+        requireOwner(plugin, currentUserId());
+        return PluginVersionConverter.INSTANCE.convertVO(pluginVersionService.listVersions(id));
+    }
+
     public PluginVO detail(Long id) {
         Plugin plugin = requirePlugin(id);
         if (plugin.getStatus() != PluginStatus.DONE || Boolean.TRUE.equals(plugin.getSuspended())) {
@@ -506,6 +513,7 @@ public class PluginApplication {
                 .like(StrUtil.isNotBlank(dto.getSearchValue()), Plugin::getName, dto.getSearchValue())
                 .selectAll(Plugin.class)
                 .selectAs(PluginVersion::getId, PluginVO::getCurrentVersionId)
+                .selectAs(PluginVersion::getVersion, PluginVO::getCurrentVersionNumber)
                 .selectAs(PluginVersion::getResourcePath, PluginVO::getResourcePath)
                 .selectAs(PluginVersion::getIntegrity, PluginVO::getIntegrity)
                 .eq(dto.getCategory() != null, Plugin::getCategory, dto.getCategory())

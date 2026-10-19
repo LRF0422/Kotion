@@ -1,15 +1,16 @@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, Badge, Button, ScrollArea, Separator, cn, useResponsive } from "@kn/ui";
-import React, { PropsWithChildren, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { PropsWithChildren, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { PluginList } from "./PluginList";
 import { SubmissionList } from "./SubmissionList";
 import { DeveloperStatusCard } from "../../Developer/DeveloperStatusCard";
 import type { PluginSubmissionRecord } from "../PluginUploader/types";
-import { useApi } from "@kn/common";
+import { AppContext, useApi } from "@kn/common";
 import { APIS } from "@kn/common";
-import { BoxIcon, CheckCircleIcon, XCircleIcon, ClockIcon, LayoutGridIcon, CodeIcon, PaletteIcon, DatabaseIcon, SettingsIcon } from "@kn/icon";
-import { useTranslation } from "@kn/common";
+import { BoxIcon, CheckCircleIcon, XCircleIcon, ClockIcon, LayoutGridIcon } from "@kn/icon";
+import { usePluginState, useTranslation } from "@kn/common";
+import { resolvePluginRuntimeState } from "../plugin-runtime-state";
 
-// Plugin category definitions
+// Install-status categories. Review status (pending/rejected) is shown per row.
 const PLUGIN_CATEGORIES = [
     { id: 'all', labelKey: 'pluginManager.allPlugins', icon: LayoutGridIcon },
     { id: 'active', labelKey: 'pluginManager.active', icon: CheckCircleIcon },
@@ -17,19 +18,7 @@ const PLUGIN_CATEGORIES = [
     { id: 'uninstalled', labelKey: 'pluginManager.notInstalled', icon: ClockIcon },
 ] as const;
 
-// Backend serializes the install status enum as a bare string or { value, desc }.
-const installState = (p: { installStatus?: string | { value: string } | null }): string | undefined =>
-    typeof p.installStatus === 'string' ? p.installStatus : (p.installStatus?.value ?? undefined);
-
-const PLUGIN_TYPES = [
-    { id: 'feature', labelKey: 'pluginManager.feature', icon: CodeIcon },
-    { id: 'ui', labelKey: 'pluginManager.uiEnhancement', icon: PaletteIcon },
-    { id: 'integration', labelKey: 'pluginManager.integration', icon: DatabaseIcon },
-    { id: 'utility', labelKey: 'pluginManager.utility', icon: SettingsIcon },
-] as const;
-
 type CategoryId = typeof PLUGIN_CATEGORIES[number]['id'];
-type PluginTypeId = typeof PLUGIN_TYPES[number]['id'];
 
 const normalizeSubmission = (plugin: any): PluginSubmissionRecord => {
     const candidate = plugin.candidateVersion ?? plugin.currentVersion ?? {}
@@ -56,37 +45,85 @@ interface PluginData {
     name: string;
     icon: string;
     developer: string;
+    developerId?: string;
     maintainer: string;
     description?: string;
-    status: { code: string; desc: string };
+    status?: string | { value?: string; desc?: string };
     currentVersion?: string;
-    key?: string;
-    type?: string;
-    installStatus?: string | { value: string } | null;
+    currentVersionNumber?: string;
+    pluginKey?: string;
+    installStatus?: string | { value?: string } | null;
     currentVersionId?: string;
+    resourcePath?: string;
+    integrity?: string;
+    installeddVersions?: Array<{ id?: string }>;
+    permissions?: string[];
+    createTime?: string;
+    updateTime?: string;
 }
+
+const PAGE_SIZE = 100;
 
 export const PluginManager: React.FC<PropsWithChildren> = ({ children }) => {
 
     const { t } = useTranslation();
     const { isMobile } = useResponsive();
+    const { pluginManager } = useContext(AppContext);
+    const { loadedPluginNames, pluginVersion } = usePluginState();
     const [plugins, setPlugins] = useState<PluginData[]>([])
+    const [pluginsLoading, setPluginsLoading] = useState(true)
+    const [pluginsError, setPluginsError] = useState<string>()
     const [submissions, setSubmissions] = useState<PluginSubmissionRecord[]>([])
     const [submissionsLoading, setSubmissionsLoading] = useState(false)
     const [submissionsError, setSubmissionsError] = useState<string>()
     const [submissionPage, setSubmissionPage] = useState(1)
     const [submissionPages, setSubmissionPages] = useState(1)
+    const [submissionTotal, setSubmissionTotal] = useState(0)
     const submissionRequestRef = useRef(0)
     const [showSubmissions, setShowSubmissions] = useState(false)
     const [selectedCategory, setSelectedCategory] = useState<CategoryId>('all')
-    const [selectedType, setSelectedType] = useState<PluginTypeId | null>(null)
     const [refreshKey, setRefreshKey] = useState(0)
 
+    const runtimeEntries = useMemo(
+        () => pluginManager?.getPluginEntries() ?? [],
+        // loadedPluginNames/pluginVersion change on registry updates; the
+        // manager service itself is a stable object from AppContext.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [pluginManager, loadedPluginNames, pluginVersion],
+    )
+
+    // The catalogue endpoint defaults to 10 per page; the manager must show the
+    // whole catalogue, otherwise plugins silently disappear after the first ten.
     useEffect(() => {
-        useApi(APIS.GET_PLUGIN_LIST).then(res => {
-            setPlugins(res.data.records || [])
-        })
-    }, [refreshKey])
+        let cancelled = false;
+        const load = async () => {
+            setPluginsLoading(true);
+            setPluginsError(undefined);
+            try {
+                const records: PluginData[] = [];
+                let current = 1;
+                let pages = 1;
+                do {
+                    const response = await useApi(APIS.GET_PLUGIN_LIST, { current, pageSize: PAGE_SIZE });
+                    const pageRecords = response.data?.records ?? [];
+                    records.push(...pageRecords);
+                    pages = Number(response.data?.pages ?? 1) || 1;
+                    current += 1;
+                } while (current <= pages && !cancelled);
+                if (!cancelled) setPlugins(records);
+            } catch (error) {
+                if (!cancelled) {
+                    setPluginsError(error instanceof Error ? error.message : t('pluginManager.loadFailed'));
+                }
+            } finally {
+                if (!cancelled) setPluginsLoading(false);
+            }
+        };
+        void load();
+        return () => {
+            cancelled = true;
+        };
+    }, [refreshKey, t]);
 
     const refreshPlugins = useCallback(() => {
         setRefreshKey(k => k + 1)
@@ -103,6 +140,7 @@ export const PluginManager: React.FC<PropsWithChildren> = ({ children }) => {
                 setSubmissions(current => page === 1 ? records : [...current, ...records])
                 setSubmissionPage(page)
                 setSubmissionPages(res.data?.pages || 1)
+                setSubmissionTotal(res.data?.total ?? records.length)
             })
             .catch(error => {
                 if (requestId !== submissionRequestRef.current) return
@@ -113,39 +151,46 @@ export const PluginManager: React.FC<PropsWithChildren> = ({ children }) => {
             })
     }, [t])
 
+    // Load the first page even when the submissions tab is closed: the sidebar
+    // badge used to show 0 until the user happened to open the tab.
     useEffect(() => {
-        if (showSubmissions) refreshSubmissions()
-    }, [refreshKey, refreshSubmissions, showSubmissions])
+        refreshSubmissions(1)
+    }, [refreshKey, refreshSubmissions])
 
-    // Calculate statistics based on the runtime install status axis.
+    const resolveState = useCallback(
+        (plugin: PluginData) =>
+            resolvePluginRuntimeState(
+                plugin,
+                runtimeEntries,
+                (name) => pluginManager?.isPluginRemovable(name) ?? true,
+            ),
+        [runtimeEntries, pluginManager],
+    )
+
+    // Statistics combine backend install records with the runtime registry, so
+    // bundled/system plugins are not counted as "not installed".
     const stats = useMemo(() => {
-        const total = plugins.length;
-        const active = plugins.filter(p => installState(p) === 'ACTIVE').length;
-        const disabled = plugins.filter(p => installState(p) === 'DISABLED').length;
-        const uninstalled = plugins.filter(p => !installState(p)).length;
-        return { total, active, disabled, uninstalled };
-    }, [plugins]);
+        let active = 0;
+        let disabled = 0;
+        let uninstalled = 0;
+        for (const plugin of plugins) {
+            const state = resolveState(plugin);
+            if (state.active) active += 1;
+            else if (state.disabled) disabled += 1;
+            else if (!state.installed) uninstalled += 1;
+        }
+        return { total: plugins.length, active, disabled, uninstalled };
+    }, [plugins, resolveState]);
 
-    // Filter plugins based on selected category and type
     const filteredPlugins = useMemo(() => {
-        let result = [...plugins];
-
-        // Filter by install-status category
-        if (selectedCategory === 'active') {
-            result = result.filter(p => installState(p) === 'ACTIVE');
-        } else if (selectedCategory === 'disabled') {
-            result = result.filter(p => installState(p) === 'DISABLED');
-        } else if (selectedCategory === 'uninstalled') {
-            result = result.filter(p => !installState(p));
-        }
-
-        // Filter by type
-        if (selectedType) {
-            result = result.filter(p => p.type === selectedType);
-        }
-
-        return result;
-    }, [plugins, selectedCategory, selectedType]);
+        if (selectedCategory === 'all') return plugins;
+        return plugins.filter((plugin) => {
+            const state = resolveState(plugin);
+            if (selectedCategory === 'active') return state.active;
+            if (selectedCategory === 'disabled') return state.disabled;
+            return !state.installed;
+        });
+    }, [plugins, selectedCategory, resolveState]);
 
     const getCategoryCount = (categoryId: CategoryId): number => {
         switch (categoryId) {
@@ -169,7 +214,7 @@ export const PluginManager: React.FC<PropsWithChildren> = ({ children }) => {
                     {t('pluginManager.description')}
                 </DialogDescription>
             </DialogHeader>
-            <div className="flex min-h-0 flex-1 flex-col md:grid md:grid-cols-[220px_minmax(0,1fr)] md:gap-0">
+            <div className="flex min-h-0 flex-1 flex-col md:grid md:grid-cols-[240px_minmax(0,1fr)] md:gap-0">
                 {isMobile && (
                     <div className="flex shrink-0 flex-col gap-2 border-b p-3">
                         <div className="flex gap-2">
@@ -223,7 +268,7 @@ export const PluginManager: React.FC<PropsWithChildren> = ({ children }) => {
                                     <ClockIcon className="h-4 w-4" />
                                     {t('pluginManager.mySubmissions')}
                                 </span>
-                                <Badge variant={showSubmissions ? "secondary" : "outline"}>{submissions.length}</Badge>
+                                <Badge variant={showSubmissions ? "secondary" : "outline"}>{submissionTotal}</Badge>
                             </button>
                         </div>
 
@@ -264,42 +309,7 @@ export const PluginManager: React.FC<PropsWithChildren> = ({ children }) => {
                                 })}
                             </div>
                         </div>
-
-                        <Separator />
-
-                        {/* Plugin Types */}
-                        <div className="p-4">
-                            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">{t('pluginManager.type')}</h3>
-                            <div className="space-y-1">
-                                {PLUGIN_TYPES.map((type) => {
-                                    const Icon = type.icon;
-                                    const isSelected = selectedType === type.id;
-                                    return (
-                                        <button
-                                            key={type.id}
-                                            onClick={() => setSelectedType(isSelected ? null : type.id)}
-                                            className={cn(
-                                                "w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors",
-                                                isSelected
-                                                    ? "bg-primary/10 text-primary border border-primary/20"
-                                                    : "hover:bg-muted text-foreground"
-                                            )}
-                                        >
-                                            <Icon className="h-4 w-4" />
-                                            <span>{t(type.labelKey)}</span>
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
                     </ScrollArea>
-
-                    {/* Quick Actions */}
-                    <div className="p-4 border-t">
-                        <div className="text-xs text-muted-foreground">
-                            {filteredPlugins.length} {t('pluginManager.pluginsShown')}
-                        </div>
-                    </div>
                 </div>}
 
                 {/* Main Content */}
@@ -313,7 +323,12 @@ export const PluginManager: React.FC<PropsWithChildren> = ({ children }) => {
                             onLoadMore={() => refreshSubmissions(submissionPage + 1)}
                             onRefresh={() => refreshSubmissions(1)}
                         />
-                        : <PluginList data={filteredPlugins} onRefresh={refreshPlugins} />}
+                        : <PluginList
+                            data={filteredPlugins}
+                            onRefresh={refreshPlugins}
+                            loadingPlugins={pluginsLoading}
+                            pluginsError={pluginsError}
+                        />}
                 </div>
             </div>
         </DialogContent>

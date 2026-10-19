@@ -75,6 +75,7 @@ POST   /knowledge-wiki/plugin/submissions        # 提交上架（需开发者�
 PUT    /knowledge-wiki/plugin/submissions/{id}   # 驳回后重新提交（需开发者认证）
 GET    /knowledge-wiki/plugin/submissions/mine   # 我的提交
 POST   /knowledge-wiki/plugin/{id}/versions      # 发布新版本（需开发者认证）
+GET    /knowledge-wiki/plugin/{id}/versions      # 开发者查看自己的版本历史
 POST   /knowledge-wiki/plugin/install            # 安装插件
 GET    /knowledge-wiki/plugin/install/list       # 已安装插件
 POST   /knowledge-wiki/plugin/uninstall          # 卸载插件

@@ -35,6 +35,8 @@ public class PluginVO implements Serializable {
     private Long maintaineId;
     private PluginCategory category;
     private Long currentVersionId;
+    /** Semantic version of the active catalogue version (e.g. "1.2.0"). */
+    private String currentVersionNumber;
     private String installedVersion;
     private PluginVersionVO currentVersion;
     private List<PluginVersionVO> installeddVersions;

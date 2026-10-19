@@ -56,10 +56,10 @@ export const DeveloperStatusCard: React.FC<DeveloperStatusCardProps> = ({ classN
             >
                 <span className="flex min-w-0 items-center gap-2">
                     <Icon className={cn('size-4 shrink-0', verified ? 'text-emerald-600' : 'text-muted-foreground')} />
-                    <span className="truncate">{t('developerVerification.entry', '开发者认证')}</span>
+                    <span className="whitespace-nowrap">{t('developerVerification.entry', '开发者认证')}</span>
                 </span>
                 <span className="flex shrink-0 items-center gap-1">
-                    <Badge variant="outline" className={tone}>
+                    <Badge variant="outline" className={cn('h-5 px-1.5 text-[10px]', tone)}>
                         {label}
                     </Badge>
                     <ChevronRight className="size-3.5 text-muted-foreground" />
