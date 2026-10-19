@@ -21,10 +21,12 @@
  * thing this surface can hand a plugin, which is why it gets its own wording in
  * the dialog rather than riding on "this host was already allowed".
  *
- * Connection strategy: `exec`, every SFTP call and every transfer open a
- * short-lived connection and close it — stateless, and nothing stale lingers. An
- * interactive shell owns a dedicated connection for as long as it lives, and
- * streams over `desktop:event:ssh`.
+ * Connection strategy: `exec`, every SFTP call and every transfer go through the
+ * connection pool (`ssh-pool.mjs`) — one reused client and one lazily opened
+ * SFTP channel per `user@host:port` + host-key policy, reaped 60 s after the
+ * last call releases it. An interactive shell still owns a dedicated connection
+ * for as long as it lives (a pty is not a request/response call) and streams
+ * over `desktop:event:ssh`.
  */
 import { app, BrowserWindow, dialog, ipcMain, safeStorage } from 'electron'
 import { readFileSync, writeFileSync } from 'node:fs'
@@ -59,6 +61,7 @@ import {
     endSsh,
     execSsh,
     openShell,
+    openSftpSession,
     sftpDownload,
     sftpList,
     sftpMkdir,
@@ -67,6 +70,7 @@ import {
     sftpStat,
     sftpUpload,
 } from './ssh-client.mjs'
+import { createSshPool } from './ssh-pool.mjs'
 
 interface SshGrant {
     /** `user@host:port` — the identity `forget` revokes (all scopes at once). */
@@ -297,7 +301,17 @@ export function setupSshIpcHandlers({ assertAllowedPath }: SetupSshOptions) {
         return session
     }
 
-    /** Normalize + policy-check + grant-check, then run one short-lived connection. */
+    /**
+     * Reused connections: one ssh2 Client and one lazily opened SFTP channel per
+     * `user@host:port` + host-key policy, closed 60 s after the last call
+     * releases it. The pool never decides trust — `connect` above is still the
+     * only way in — and anything that changes that decision invalidates it
+     * (`forget` and credential changes below). A shell opts out (see
+     * `withConnection`) because a pty owns its connection.
+     */
+    const pool = createSshPool({ openSftp: openSftpSession, end: endSsh })
+
+    /** Normalize + policy-check + grant-check, then run one call on a pooled client. */
     const withConnection = async (
         event: Electron.IpcMainInvokeEvent,
         raw: unknown,
@@ -309,7 +323,10 @@ export function setupSshIpcHandlers({ assertAllowedPath }: SetupSshOptions) {
             params: Record<string, unknown>
             timeoutMs: number
             maxOutputBytes: number
+            /** The shared SFTP channel for this connection, opened on first use. */
+            openSftp: () => Promise<unknown>
         }) => Promise<unknown>,
+        { pooled = true }: { pooled?: boolean } = {},
     ) => {
         const params = asRecord(raw)
         const target = normalizeSshTarget(params)
@@ -318,23 +335,45 @@ export function setupSshIpcHandlers({ assertAllowedPath }: SetupSshOptions) {
         const maxOutputBytes = clampSshOutputBytes(params.maxOutputBytes)
         await assertTargetAllowed(target.host)
         await requireGrant(event, target, hostKeyPolicy, kind, detail)
-        const session = await connect({
-            target,
-            hostKeyPolicy,
-            credentialId: typeof params.credentialId === 'string' ? params.credentialId : undefined,
-        })
+
+        const credentialId = typeof params.credentialId === 'string' ? params.credentialId : undefined
+        // An interactive shell must not share a connection with request/response
+        // calls: it owns its client until `shellClose` (or the remote exit).
+        const lease = pooled
+            ? await pool.acquire({
+                  target,
+                  hostKeyPolicy,
+                  connect: () => connect({ target, hostKeyPolicy, credentialId }),
+              })
+            : null
+        const session = lease ? null : await connect({ target, hostKeyPolicy, credentialId })
+        const client = lease ? lease.client : session?.client
         let keepAlive = false
         try {
-            const outcome = await run({ client: session.client, target, params, timeoutMs, maxOutputBytes })
-            // An interactive shell keeps its connection: shellClose (or the exit
-            // event) owns it, not this call's scope.
+            const outcome = await run({
+                client,
+                target,
+                params,
+                timeoutMs,
+                maxOutputBytes,
+                openSftp: () => lease?.sftp() ?? Promise.reject(new Error('desktop ssh: no sftp channel')),
+            })
+            // A shell keeps its connection: shellClose (or the exit event) owns
+            // it, not this call's scope.
             if (outcome && typeof outcome === 'object' && (outcome as { keepAlive?: boolean }).keepAlive) {
                 keepAlive = true
                 return (outcome as { result: unknown }).result
             }
             return outcome
+        } catch (error) {
+            // A stalled SFTP operation leaves a request in flight on the shared
+            // channel (the server stopped answering), so the connection must not
+            // be handed to the next call.
+            if (lease && (error as { code?: string })?.code === 'SSH_SFTP_TIMEOUT') lease.invalidate()
+            throw error
         } finally {
-            if (!keepAlive) endSsh(session.client)
+            if (lease) lease.release()
+            else if (!keepAlive) endSsh(client)
         }
     }
 
@@ -349,15 +388,16 @@ export function setupSshIpcHandlers({ assertAllowedPath }: SetupSshOptions) {
 
     /* ---------------- file transfer ---------------- */
     const transfer = (direction: 'put' | 'get') => (event: Electron.IpcMainInvokeEvent, raw: unknown) =>
-        withConnection(event, raw, 'transfer', direction === 'put' ? '上传' : '下载', async ({ client, target, params }) => {
+        withConnection(event, raw, 'transfer', direction === 'put' ? '上传' : '下载', async ({ client, target, params, openSftp }) => {
             const localPath = assertAllowedPath(params.localPath, 'localPath')
             const remotePath = normalizeRemotePath(params.remotePath)
+            const session = await openSftp()
             // The upload/download helpers already report both paths and the
             // duration, so the result is just the target plus their report.
             const moved =
                 direction === 'put'
-                    ? await sftpUpload(client, { localPath, remotePath })
-                    : await sftpDownload(client, { remotePath, localPath })
+                    ? await sftpUpload(client, { localPath, remotePath }, { session })
+                    : await sftpDownload(client, { remotePath, localPath }, { session })
             return { ...target, direction, ok: true, ...moved }
         })
     ipcMain.handle('desktop:ssh.put', transfer('put'))
@@ -365,79 +405,95 @@ export function setupSshIpcHandlers({ assertAllowedPath }: SetupSshOptions) {
 
     /* ---------------- sftp directory calls ---------------- */
     ipcMain.handle('desktop:ssh.sftpList', (event, raw) =>
-        withConnection(event, raw, 'sftp', 'list', async ({ client, target, params }) => {
+        withConnection(event, raw, 'sftp', 'list', async ({ client, target, params, openSftp }) => {
             const path = normalizeRemotePath(params.path, 'path')
-            return { ...target, ...(await sftpList(client, { path })) }
+            return { ...target, ...(await sftpList(client, { path }, { session: await openSftp() })) }
         }),
     )
     ipcMain.handle('desktop:ssh.sftpStat', (event, raw) =>
-        withConnection(event, raw, 'sftp', 'stat', async ({ client, target, params }) => {
+        withConnection(event, raw, 'sftp', 'stat', async ({ client, target, params, openSftp }) => {
             const path = normalizeRemotePath(params.path, 'path')
-            return { ...target, ...(await sftpStat(client, { path })) }
+            return { ...target, ...(await sftpStat(client, { path }, { session: await openSftp() })) }
         }),
     )
     ipcMain.handle('desktop:ssh.sftpMkdir', (event, raw) =>
-        withConnection(event, raw, 'sftp', 'mkdir', async ({ client, target, params }) => {
+        withConnection(event, raw, 'sftp', 'mkdir', async ({ client, target, params, openSftp }) => {
             const path = normalizeRemotePath(params.path, 'path')
-            return { ...target, ...(await sftpMkdir(client, { path, recursive: params.recursive === true })) }
+            return {
+                ...target,
+                ...(await sftpMkdir(client, { path, recursive: params.recursive === true }, { session: await openSftp() })),
+            }
         }),
     )
     ipcMain.handle('desktop:ssh.sftpRename', (event, raw) =>
-        withConnection(event, raw, 'sftp', 'rename', async ({ client, target, params }) => {
+        withConnection(event, raw, 'sftp', 'rename', async ({ client, target, params, openSftp }) => {
             const from = normalizeRemotePath(params.from, 'from')
             const to = normalizeRemotePath(params.to, 'to')
-            return { ...target, ...(await sftpRename(client, { from, to, overwrite: params.overwrite === true })) }
+            return {
+                ...target,
+                ...(await sftpRename(client, { from, to, overwrite: params.overwrite === true }, { session: await openSftp() })),
+            }
         }),
     )
     ipcMain.handle('desktop:ssh.sftpRemove', (event, raw) =>
-        withConnection(event, raw, 'sftp', 'remove', async ({ client, target, params }) => {
+        withConnection(event, raw, 'sftp', 'remove', async ({ client, target, params, openSftp }) => {
             const path = normalizeRemotePath(params.path, 'path')
-            return { ...target, ...(await sftpRemove(client, { path, directory: params.directory === true })) }
+            return {
+                ...target,
+                ...(await sftpRemove(client, { path, directory: params.directory === true }, { session: await openSftp() })),
+            }
         }),
     )
 
     /* ---------------- interactive shell (pty) ---------------- */
     ipcMain.handle('desktop:ssh.shellOpen', (event, raw) =>
-        withConnection(event, raw, 'shell', '', async ({ client, target, params }) => {
-            const { cols, rows } = normalizeShellSize(params)
-            const term = normalizeTerm(params.term)
-            const id = `sh-${++nextShellId}-${Date.now().toString(36)}`
-            const handle = await openShell(client, {
-                term,
-                cols,
-                rows,
-                onData: (chunk) => broadcast({ type: 'shell-data', sessionId: id, data: toBase64(chunk) }),
-                onExit: (info) => {
-                    broadcast({ type: 'shell-exit', sessionId: id, code: info.code, signal: info.signal })
-                    const live = shells.get(id)
-                    shells.delete(id)
-                    endSsh(live?.client ?? client)
-                },
-                onError: (error) => {
-                    broadcast({ type: 'shell-error', sessionId: id, message: error.message })
-                    const live = shells.get(id)
-                    shells.delete(id)
-                    endSsh(live?.client ?? client)
-                },
-            })
-            const session: ShellSession = {
-                id,
-                host: target.host,
-                user: target.user,
-                port: target.port,
-                openedAt: Date.now(),
-                cols,
-                rows,
-                client,
-                handle,
-            }
-            shells.set(id, session)
-            // The shell owns its connection: `withConnection` must not close it.
-            return {
-                result: { sessionId: id, ...target, cols, rows, term },
-                keepAlive: true,
-            }
-        }),
+        withConnection(
+            event,
+            raw,
+            'shell',
+            '',
+            async ({ client, target, params }) => {
+                const { cols, rows } = normalizeShellSize(params)
+                const term = normalizeTerm(params.term)
+                const id = `sh-${++nextShellId}-${Date.now().toString(36)}`
+                const handle = await openShell(client, {
+                    term,
+                    cols,
+                    rows,
+                    onData: (chunk) => broadcast({ type: 'shell-data', sessionId: id, data: toBase64(chunk) }),
+                    onExit: (info) => {
+                        broadcast({ type: 'shell-exit', sessionId: id, code: info.code, signal: info.signal })
+                        const live = shells.get(id)
+                        shells.delete(id)
+                        endSsh(live?.client ?? client)
+                    },
+                    onError: (error) => {
+                        broadcast({ type: 'shell-error', sessionId: id, message: error.message })
+                        const live = shells.get(id)
+                        shells.delete(id)
+                        endSsh(live?.client ?? client)
+                    },
+                })
+                const session: ShellSession = {
+                    id,
+                    host: target.host,
+                    user: target.user,
+                    port: target.port,
+                    openedAt: Date.now(),
+                    cols,
+                    rows,
+                    client,
+                    handle,
+                }
+                shells.set(id, session)
+                // The shell owns its connection: `withConnection` must not close it.
+                return {
+                    result: { sessionId: id, ...target, cols, rows, term },
+                    keepAlive: true,
+                }
+            },
+            { pooled: false },
+        ),
     )
 
     ipcMain.handle('desktop:ssh.shellWrite', (_event, raw) => {
@@ -489,12 +545,23 @@ export function setupSshIpcHandlers({ assertAllowedPath }: SetupSshOptions) {
     ipcMain.handle('desktop:ssh.credentialsAvailable', () => credentialIo.canEncrypt())
     // Metadata only: the secret never crosses this boundary (see ssh-credentials.mjs).
     ipcMain.handle('desktop:ssh.credentialsList', () => listCredentials(credentialIo))
-    ipcMain.handle('desktop:ssh.credentialsSet', (_event, raw) => setCredential(credentialIo, asRecord(raw)))
+    ipcMain.handle('desktop:ssh.credentialsSet', (_event, raw) => {
+        const result = setCredential(credentialIo, asRecord(raw))
+        // A rotated secret must apply to the next call: any pooled connection for
+        // that target authenticated with the previous one (or with the agent).
+        if (result.ok && result.credential) pool.invalidate(result.credential)
+        return result
+    })
     ipcMain.handle('desktop:ssh.credentialsRemove', (_event, raw) => {
         const params = asRecord(raw)
         const id = typeof params.id === 'string' ? params.id : ''
         if (!id) return { ok: false, error: 'desktop ssh: "id" is required' }
-        return removeCredential(credentialIo, id)
+        // Resolve the target *before* deleting: removal may leave a pooled
+        // connection authenticated by that credential, which must not be reused.
+        const known = listCredentials(credentialIo).find((entry) => entry.id === id)
+        const result = removeCredential(credentialIo, id)
+        if (result.ok && known) pool.invalidate(known)
+        return result
     })
 
     /* ---------------- grants ---------------- */
@@ -504,17 +571,21 @@ export function setupSshIpcHandlers({ assertAllowedPath }: SetupSshOptions) {
         // Revoking a host revokes every scope the user allowed for it: leaving a
         // shell grant behind would be the surprise, not the other way round.
         const key = typeof params.key === 'string' && params.key ? params.key : sshGrantKey(normalizeSshTarget(params))
-        let removed = false
+        const revoked: SshGrant[] = []
         for (const [id, grant] of [...grants]) {
             if (grant.key !== key) continue
             grants.delete(id)
-            removed = true
+            revoked.push(grant)
         }
-        return removed
+        // A revoked host must lose its pooled connection too: the next call has
+        // to ask again rather than inherit a session allowed under the old grant.
+        for (const grant of revoked) pool.invalidate(grant)
+        return revoked.length > 0
     })
 
-    // A live shell must not outlive the app.
+    // Live shells and pooled connections must not outlive the app.
     app.on('will-quit', () => {
+        pool.dispose()
         for (const session of shells.values()) {
             try {
                 session.handle.close()

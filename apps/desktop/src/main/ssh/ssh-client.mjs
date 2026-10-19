@@ -11,6 +11,11 @@
  * Failure semantics: a remote non-zero exit is a *result* (`ok: false`), not a
  * throw. Only "could not connect / could not authenticate / refused host key"
  * rejects, because those are the caller's problems to fix.
+ *
+ * Connection lifetime is not decided here: `ssh-pool.mjs` owns reuse (one
+ * client + one SFTP channel per `user@host:port` + policy). The `sftp*` helpers
+ * accept an already-open channel through `deps.session` so a pooled call does
+ * not reopen the subsystem, and stay open/close-per-call when it is absent.
  */
 // ssh2 is CommonJS: a default import is the interop-safe form (named imports
 // only work when the bundler can see the CJS exports statically).
@@ -68,6 +73,9 @@ export const connectSsh = (
 ) =>
     new Promise((resolve, reject) => {
         const client = clientFactory()
+        /** Both declared before the auth check below, which settles the promise. */
+        let verdict = null
+        let settled = false
         const auth = buildConnectAuth({ homeDir, env, credential })
         if (auth.__authError) {
             settled = true
@@ -76,9 +84,6 @@ export const connectSsh = (
         }
         const entries = readKnownHosts({ homeDir })
         const known = readKnownHostStore(knownStorePath)
-        /** Set by the synchronous host-key callback below. */
-        let verdict = null
-        let settled = false
 
         const timer = setTimeout(() => {
             if (settled) return
@@ -256,14 +261,56 @@ export const execSsh = (client, { command, timeoutMs, maxOutputBytes }) =>
         })
     })
 
-/** Wrap ssh2's callback-style SFTP methods once per connection. */
+/**
+ * Open the SFTP subsystem on a connected client.
+ *
+ * ssh2's `sftp()` is callback-only, and a server that keeps the transport up but
+ * never answers the subsystem request would leave the caller pending forever —
+ * with the pool that is worse than before, because the open promise is cached
+ * and reused. The same deadline as a protocol call turns it into a normal
+ * failure (tagged so a pooled client is dropped when the open stalled).
+ */
 const sftp = (client) =>
     new Promise((resolve, reject) => {
+        let settled = false
+        const timer = setTimeout(() => {
+            if (settled) return
+            settled = true
+            const error = new Error('desktop ssh: opening the sftp channel timed out')
+            error.code = 'SSH_SFTP_TIMEOUT'
+            reject(error)
+        }, SFTP_TIMEOUT_MS)
+        timer.unref?.()
         client.sftp((error, sftpSession) => {
+            if (settled) {
+                // A channel that lands after the deadline is ours to close.
+                endSftpSession(sftpSession)
+                return
+            }
+            settled = true
+            clearTimeout(timer)
             if (error) reject(new Error(`desktop ssh: cannot open sftp: ${asMessage(error)}`))
             else resolve(sftpSession)
         })
     })
+
+/**
+ * Open the SFTP channel on an existing client.
+ *
+ * Exported for the connection pool (`ssh-pool.mjs`), which opens it once per
+ * pooled connection instead of once per call. One-shot callers keep using the
+ * `sftp*` helpers below, which do this internally.
+ */
+export const openSftpSession = (client) => sftp(client)
+
+/** Close an SFTP channel without throwing. */
+const endSftpSession = (session) => {
+    try {
+        session?.end()
+    } catch {
+        /* already closed */
+    }
+}
 
 /**
  * Run one SFTP method with a deadline.
@@ -280,7 +327,14 @@ const callSftp = (session, method, ...args) =>
         const timer = setTimeout(() => {
             if (settled) return
             settled = true
-            reject(new Error(`desktop ssh: sftp ${method} timed out`))
+            const error = new Error(`desktop ssh: sftp ${method} timed out`)
+            /**
+             * Tagged so the caller can tell "this protocol operation stalled"
+             * from an ordinary remote error (missing file, permission): a
+             * stalled channel means the connection must not be reused.
+             */
+            error.code = 'SSH_SFTP_TIMEOUT'
+            reject(error)
         }, SFTP_TIMEOUT_MS)
         session[method](...args, (error, result) => {
             if (settled) return
@@ -314,122 +368,137 @@ const toEntry = (entry, dir) => {
     }
 }
 
-/** List one remote directory. */
-export const sftpList = async (client, { path }) => {
-    const session = await sftp(client)
-    try {
-        const entries = await callSftp(session, 'readdir', path)
-        const mapped = entries.map((entry) => toEntry(entry, path))
-        const truncated = mapped.length > MAX_SFTP_ENTRIES
-        return { path, entries: truncated ? mapped.slice(0, MAX_SFTP_ENTRIES) : mapped, truncated }
-    } finally {
-        try {
-            session.end()
-        } catch {
-            /* already closed */
-        }
-    }
-}
-
-/** Stat one remote path. */
-export const sftpStat = async (client, { path }) => {
-    const session = await sftp(client)
-    try {
-        const stats = await callSftp(session, 'stat', path)
-        return {
-            path,
-            size: Number(stats.size ?? 0),
-            mode: Number(stats.mode ?? 0),
-            directory: Boolean(stats.isDirectory?.()),
-            file: Boolean(stats.isFile?.()),
-            symlink: Boolean(stats.isSymbolicLink?.()),
-            modifiedAt: Number(stats.mtime ?? 0) * 1000,
-            accessedAt: Number(stats.atime ?? 0) * 1000,
-            uid: Number(stats.uid ?? 0),
-            gid: Number(stats.gid ?? 0),
-        }
-    } finally {
-        try {
-            session.end()
-        } catch {
-            /* already closed */
-        }
-    }
-}
-
-/** Run one mutating SFTP call in its own session. */
-const withSftp = async (client, run) => {
-    const session = await sftp(client)
+/**
+ * Run SFTP calls on a channel that may outlive the call.
+ *
+ * `deps.session` is the pooled channel from `ssh-pool.mjs`: when it is passed,
+ * the caller owns it and it must stay open. Without it the helper opens a
+ * short-lived channel for this call and closes it, preserving the one-shot
+ * behaviour every existing caller and test relies on.
+ */
+const withSftp = async (client, run, { session: shared } = {}) => {
+    const session = shared ?? (await sftp(client))
     try {
         return await run(session)
     } finally {
-        try {
-            session.end()
-        } catch {
-            /* already closed */
-        }
+        if (!shared) endSftpSession(session)
     }
 }
 
-export const sftpMkdir = (client, { path, recursive = false }) =>
-    withSftp(client, async (session) => {
-        if (!recursive) {
-            await callSftp(session, 'mkdir', path)
-            return { path, created: true }
-        }
-        // ssh2 has no mkdir -p: create each missing segment in order.
-        const segments = String(path).split('/').filter(Boolean)
-        const absolute = String(path).startsWith('/')
-        let current = absolute ? '' : '.'
-        for (const segment of segments) {
-            current = current === '' ? `/${segment}` : `${current}/${segment}`
-            try {
-                await callSftp(session, 'mkdir', current)
-            } catch (error) {
-                // Already there is fine; anything else is not.
-                const existing = await callSftp(session, 'stat', current).catch(() => null)
-                if (!existing?.isDirectory?.()) throw error
+/** List one remote directory. */
+export const sftpList = (client, { path }, deps) =>
+    withSftp(
+        client,
+        async (session) => {
+            const entries = await callSftp(session, 'readdir', path)
+            const mapped = entries.map((entry) => toEntry(entry, path))
+            const truncated = mapped.length > MAX_SFTP_ENTRIES
+            return { path, entries: truncated ? mapped.slice(0, MAX_SFTP_ENTRIES) : mapped, truncated }
+        },
+        deps,
+    )
+
+/** Stat one remote path. */
+export const sftpStat = (client, { path }, deps) =>
+    withSftp(
+        client,
+        async (session) => {
+            const stats = await callSftp(session, 'stat', path)
+            return {
+                path,
+                size: Number(stats.size ?? 0),
+                mode: Number(stats.mode ?? 0),
+                directory: Boolean(stats.isDirectory?.()),
+                file: Boolean(stats.isFile?.()),
+                symlink: Boolean(stats.isSymbolicLink?.()),
+                modifiedAt: Number(stats.mtime ?? 0) * 1000,
+                accessedAt: Number(stats.atime ?? 0) * 1000,
+                uid: Number(stats.uid ?? 0),
+                gid: Number(stats.gid ?? 0),
             }
-        }
-        return { path, created: true }
-    })
+        },
+        deps,
+    )
 
-export const sftpRename = (client, { from, to, overwrite = false }) =>
-    withSftp(client, async (session) => {
-        // POSIX rename overwrites silently; make that a decision, not a surprise.
-        if (!overwrite) {
-            const target = await callSftp(session, 'stat', to).catch(() => null)
-            if (target) throw new Error(`desktop ssh: refusing to overwrite existing "${to}" (pass overwrite: true)`)
-        }
-        await callSftp(session, 'rename', from, to)
-        return { from, to }
-    })
+export const sftpMkdir = (client, { path, recursive = false }, deps) =>
+    withSftp(
+        client,
+        async (session) => {
+            if (!recursive) {
+                await callSftp(session, 'mkdir', path)
+                return { path, created: true }
+            }
+            // ssh2 has no mkdir -p: create each missing segment in order.
+            const segments = String(path).split('/').filter(Boolean)
+            const absolute = String(path).startsWith('/')
+            let current = absolute ? '' : '.'
+            for (const segment of segments) {
+                current = current === '' ? `/${segment}` : `${current}/${segment}`
+                try {
+                    await callSftp(session, 'mkdir', current)
+                } catch (error) {
+                    // Already there is fine; anything else is not.
+                    const existing = await callSftp(session, 'stat', current).catch(() => null)
+                    if (!existing?.isDirectory?.()) throw error
+                }
+            }
+            return { path, created: true }
+        },
+        deps,
+    )
 
-export const sftpRemove = (client, { path, directory = false }) =>
-    withSftp(client, async (session) => {
-        if (directory) {
-            await callSftp(session, 'rmdir', path)
+export const sftpRename = (client, { from, to, overwrite = false }, deps) =>
+    withSftp(
+        client,
+        async (session) => {
+            // POSIX rename overwrites silently; make that a decision, not a surprise.
+            if (!overwrite) {
+                const target = await callSftp(session, 'stat', to).catch(() => null)
+                if (target) throw new Error(`desktop ssh: refusing to overwrite existing "${to}" (pass overwrite: true)`)
+            }
+            await callSftp(session, 'rename', from, to)
+            return { from, to }
+        },
+        deps,
+    )
+
+export const sftpRemove = (client, { path, directory = false }, deps) =>
+    withSftp(
+        client,
+        async (session) => {
+            if (directory) {
+                await callSftp(session, 'rmdir', path)
+                return { path, removed: true }
+            }
+            await callSftp(session, 'unlink', path)
             return { path, removed: true }
-        }
-        await callSftp(session, 'unlink', path)
-        return { path, removed: true }
-    })
+        },
+        deps,
+    )
 
 /** Upload a local file (`fastPut`). */
-export const sftpUpload = (client, { localPath, remotePath }) =>
-    withSftp(client, async (session) => {
-        const startedAt = Date.now()
-        await callSftp(session, 'fastPut', localPath, remotePath)
-        return { localPath, remotePath, durationMs: Date.now() - startedAt }
-    })
+export const sftpUpload = (client, { localPath, remotePath }, deps) =>
+    withSftp(
+        client,
+        async (session) => {
+            const startedAt = Date.now()
+            await callSftp(session, 'fastPut', localPath, remotePath)
+            return { localPath, remotePath, durationMs: Date.now() - startedAt }
+        },
+        deps,
+    )
 
 /** Download a remote file (`fastGet`). */
-export const sftpDownload = (client, { remotePath, localPath }) =>
-    withSftp(client, async (session) => {
-        const startedAt = Date.now()
-        await callSftp(session, 'fastGet', remotePath, localPath)
-        return { localPath, remotePath, durationMs: Date.now() - startedAt }
-    })
+export const sftpDownload = (client, { remotePath, localPath }, deps) =>
+    withSftp(
+        client,
+        async (session) => {
+            const startedAt = Date.now()
+            await callSftp(session, 'fastGet', remotePath, localPath)
+            return { localPath, remotePath, durationMs: Date.now() - startedAt }
+        },
+        deps,
+    )
 
 /**
  * Open an interactive shell (remote pty) and stream it.

@@ -69,16 +69,25 @@ export interface SshSftpEntryMapped {
     gid: number
 }
 
-export function sftpList(client: unknown, options: { path: string }): Promise<{ path: string; entries: SshSftpEntryMapped[]; truncated: boolean }>
+/** Already-open SFTP channel (from the connection pool); the caller owns it. */
+export interface SshSftpDeps {
+    session?: unknown
+}
+
+/** Open the SFTP channel on an existing client (used by the connection pool). */
+export function openSftpSession(client: unknown): Promise<unknown>
+
+export function sftpList(client: unknown, options: { path: string }, deps?: SshSftpDeps): Promise<{ path: string; entries: SshSftpEntryMapped[]; truncated: boolean }>
 export function sftpStat(
     client: unknown,
     options: { path: string },
+    deps?: SshSftpDeps,
 ): Promise<{ path: string; size: number; mode: number; directory: boolean; file: boolean; symlink: boolean; modifiedAt: number; accessedAt: number; uid: number; gid: number }>
-export function sftpMkdir(client: unknown, options: { path: string; recursive?: boolean }): Promise<{ path: string; created: boolean }>
-export function sftpRename(client: unknown, options: { from: string; to: string; overwrite?: boolean }): Promise<{ from: string; to: string }>
-export function sftpRemove(client: unknown, options: { path: string; directory?: boolean }): Promise<{ path: string; removed: boolean }>
-export function sftpUpload(client: unknown, options: { localPath: string; remotePath: string }): Promise<{ localPath: string; remotePath: string; durationMs: number }>
-export function sftpDownload(client: unknown, options: { remotePath: string; localPath: string }): Promise<{ localPath: string; remotePath: string; durationMs: number }>
+export function sftpMkdir(client: unknown, options: { path: string; recursive?: boolean }, deps?: SshSftpDeps): Promise<{ path: string; created: boolean }>
+export function sftpRename(client: unknown, options: { from: string; to: string; overwrite?: boolean }, deps?: SshSftpDeps): Promise<{ from: string; to: string }>
+export function sftpRemove(client: unknown, options: { path: string; directory?: boolean }, deps?: SshSftpDeps): Promise<{ path: string; removed: boolean }>
+export function sftpUpload(client: unknown, options: { localPath: string; remotePath: string }, deps?: SshSftpDeps): Promise<{ localPath: string; remotePath: string; durationMs: number }>
+export function sftpDownload(client: unknown, options: { remotePath: string; localPath: string }, deps?: SshSftpDeps): Promise<{ localPath: string; remotePath: string; durationMs: number }>
 
 export interface SshShellHandle {
     write(data: string): boolean

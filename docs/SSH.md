@@ -9,6 +9,7 @@
   - `ssh-params.mjs` — 参数校验与钳位（纯函数）
   - `ssh-keys.mjs` — 凭证发现 + `known_hosts`（含 hash 形式）校验 + TOFU
   - `ssh-client.mjs` — `ssh2` 封装：连接 / exec / SFTP / pty 会话
+  - `ssh-pool.mjs` — 连接池：按 `user@host:port` + 主机密钥策略复用 Client 与 SFTP 通道，空闲 60s 回收
   - `index.ts` — 网络策略 + 用户授权 + IPC + 事件广播
 - 渲染层包装：[`packages/core/src/desktop/bridge.ts`](../packages/core/src/desktop/bridge.ts)（`desktop.ssh`，老版本宿主上为 `undefined`）
 - 打包：`apps/desktop/scripts/prepare-ssh-deps.cjs`（把 `ssh2` 物化进产物，见文末）
@@ -67,11 +68,27 @@
    - `accept-new`：首次信任，并把指纹记进 `<userData>/ssh-known-hosts.json`；此后该主机换密钥会**报错**（`HOST KEY CHANGED`），不会静默接受。
    - 非 22 端口用 `[host]:port` 形式匹配（与 ssh 一致）。
 
+## 连接复用（连接池）
+
+`exec` / 每次 `sftp*` / `put` / `get` 不再各开一条连接：`ssh-pool.mjs` 按 **`user@host:port` + `hostKeyPolicy`**
+复用一个 `ssh2` Client，并在其上**懒加载一条 SFTP 通道**（第一次用到 `sftp*` 时打开，之后复用）。
+
+- **空闲 60s 回收**：每次调用归还后开始计时；到期且没有在途调用（lease 计数为 0）就关掉连接与通道。计时器 `unref`，不会拖住应用退出。
+- **并发去重**：同一 key 的连接还在握手时，并发调用等同一个握手，不会连出一串。
+- **不跨信任策略**：`strict` 与 `accept-new` 是两个 key——按弱策略建立的连接不会被强策略的调用复用（反之亦然）。
+- **连接坏了就丢**：Client 的 `close` / `end` / `error` 会把条目移出池；SFTP 通道被服务器关闭时只丢通道，下次在同一连接上重开；SFTP 协议操作或打开子系统超时（60s）会丢弃整条连接，避免半死连接被下一次调用继承。服务器**明确拒绝** SFTP 子系统时只让本次调用失败，连接仍留给 `exec` 用。
+- **信任决定变了就失效**：`ssh.credentialsSet` / `credentialsRemove` 会让该目标的池内连接失效（旧凭据建立的会话不能继续用）；`ssh.forget` 也会丢掉该主机的池内连接。失效按**代际**处理：正在握手、尚未落地的连接也会被作废并关闭，之后的调用重新建连（重新解析凭据），不会加入变更前的握手。网络策略仍然**每次调用重判**，池不绕过它；用户确认（闸门 2）也仍然每次调用检查。
+- **`credentialId` 只在建连时生效**：池按目标复用，已有连接不会因为某次调用换了 `credentialId` 而重建；换凭据请用 `ssh.credentialsSet`（它会让该目标的池内连接失效，下一次调用重新认证）。
+- **交互式终端不进池**：pty 是长连接流，由 `shellOpen` 独占一条连接，直到 `shellClose` 或远端退出。
+- **有界（软上限）**：池的目标规模是 8 条连接；超过时按最近最少使用淘汰**空闲**条目，正在使用或刚握手完还没被领取的不会被淘汰，所以并发高峰会短暂超出（之后随空闲回收降到上限）。这让插件遍历大量主机时不至于攒住连接。
+
+> 复用不改变失败语义：连接在空闲期间被服务器关掉时，那一次调用会失败；下一次调用自动重连（不会重试有副作用的 `exec`）。
+
 ## 已知边界
 
 - **不读 `~/.ssh/config`**：主机别名、`ProxyJump`、`IdentityFile`、`Include`、`Host *` 选项都不生效；认证只用 ssh-agent（`SSH_AUTH_SOCK`）+ `~/.ssh/{id_ed25519,id_ecdsa,id_rsa,id_dsa}` 里第一个可用者。这是从系统 `ssh` 换到 `ssh2` 换来的代价；要恢复需要在宿主里实现一份 config 解析（未做）。
 - **不支持密码 / 键盘交互认证**：类型里**没有** password / privateKey 字段，宿主也不接受任何凭证入参。
-- **每次 exec / SFTP / 传送各开一条连接**（用完即关，无长连接池）；只有交互式终端持有一条专属连接，直到 `shellClose` 或远端退出。代价是每次调用付一次握手。
+- **池内连接可能已被对端关掉**：复用前无法探测半开连接（ssh2 没有可靠的 `isAlive`），空闲连接失效时**那一次调用会失败**；keepalive（15s × 3）会在约 45s 内发现并把它移出池，下一次调用重连。交互式终端仍独占一条连接，直到 `shellClose` 或远端退出。
 - **输出有界**：单次 `shellWrite` ≤64 KiB；exec 输出默认 1 MiB、上限 4 MiB（`truncated` 上报）。
 - **SFTP 不递归**：`sftpList` 只列一层；没有 `rm -r`、没有递归上传下载；`sftpRemove` 只能删空目录；`sftpRename` 默认拒绝覆盖。
 - **超时**：exec/SFTP 单次调用默认 30s（可调到 10min）；连接握手 20s；每个 `sftp*` 协议操作另有 60s 硬超时（否则一个不回包的服务器会让 IPC 永远挂着）。
@@ -160,10 +177,11 @@ electron-builder 的 `files` 只发 `out/**` 并排除 `node_modules`，而主�
 ## 验证
 
 ```bash
-pnpm test:ssh        # 95 项：80 协议/契约/凭据 + 15 打包
+pnpm test:ssh        # 162 项：67 连接池 + 80 协议/契约/凭据 + 15 打包
 ```
 
 - **契约与信任（纯函数）**：目标 / 命令 / 路径 / 会话校验、`known_hosts` 解析与匹配（明文、逗号列表、hash 形式、非 22 端口）、严格 / accept-new / 记住后换钥的判定、指纹格式（`SHA256:base64`）、凭证发现。
+- **连接池（纯函数 + 真实服务器）**：key 归一（`user@host:port` + 策略）、复用与并发去重、lease 未归还不回收、空闲到期回收、坏连接 / SFTP 通道被关后的重建、**握手途中失效（凭据轮换 / `forget` 走的就是这个 `invalidate`）**、超上限并发突发、LRU 上限、`dispose`；以及真实 `ssh2.Server` 上「两次 exec 只建一条连接」「两次 `sftpList` 只开一次 SFTP 子系统」「空闲后服务端观察到连接关闭」。
 - **协议（真实 ssh2 服务器）**：测试在进程内起一个 `ssh2.Server`（随机端口）跑真实协议——主机密钥校验通过 / 失败（失败时**确认没有发生认证尝试**）、exec 的输出与退出码、**pty 终端的双向数据与 window-change resize**、SFTP 分页 `READDIR`（以 `SSH_FX_EOF` 结束）、`stat`、递归 `mkdir`、`rename`（含拒绝覆盖）、上传 / 下载 / 删除。
 - **凭据**：加密存储的读/写/移除、**列表不含密文或明文字段**、按目标覆盖时 `id` 不变、无 keychain 时拒绝保存、
   PEM 校验、私钥+口令往返；以及两条真实协议用例——存了密码能连上 `password` 服务器、同一份密码也能应答
