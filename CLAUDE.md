@@ -59,12 +59,20 @@ pnpm clean:packages         # Clean all dist directories
 **packages/common** - 基础工具，被所有包依赖：
 - `src/core/PluginManager.ts` - 插件管理器
 - `src/core/editor.ts` - 编辑器类型定义（ExtensionWrapper）
-- `src/core/desktop-bridge.ts` - 桌面能力契约（含 `storage.*`、`ssh.*`）
+- `src/core/desktop-bridge.ts` - 桌面能力契约（含 `storage.*`、`ssh.*` 与下面的通用能力组）
   - `ssh.*` 在主进程用 `ssh2` 提供远程执行 / **交互式 pty 终端（流式）** / **SFTP 目录能力**：
     过网络策略 + 每个主机在本次运行内首次需用户确认（开终端会单独写明），主机密钥在认证**之前**校验
     （`known_hosts` 含 hash 形式 + TOFU 记住）。**宿主不接收也不保存任何凭证**（认证走 ssh-agent 与默认密钥）。
     只接受密码的机器用 `ssh.credentials*`（明文只进不出，落盘走 safeStorage）；**宿主只提供接口，凭据界面由插件实现**。
     打包时 `ssh2` 由 `scripts/prepare-ssh-deps.cjs` 物化进产物。详见 [docs/SSH.md](docs/SSH.md)。
+  - 通用能力组（`apps/desktop/src/main/capabilities/`，**宿主只给原语，不给协议客户端**）：
+    `net.socket*` 原始 TCP/TLS 字节流（插件自己实现 IMAP/SMTP 等协议，**没有 `mail.*`**）、
+    `shell.*` 系统浏览器 + `127.0.0.1` 回环 OAuth 回调、`storage.secret*` 插件级 safeStorage 加密 KV、
+    `notification.*` 系统通知与角标、`background.*` 主进程持有的定时器、
+    `http.request` 的二进制响应（`responseType` / `bodyBase64` / `charset`）。
+    出网一律走 `net.policy.*`，新目标/新来源首次使用前弹窗确认。
+    详见 [docs/DESKTOP_CAPABILITIES.md](docs/DESKTOP_CAPABILITIES.md)，
+    自测 `pnpm --filter @kn/desktop test:capabilities:electron`。
 - `src/storage/` - 存储契约 + 通用 KV 引擎 + 内存/localStorage 后端
 - HTTP 客户端、Logger、工具函数
 

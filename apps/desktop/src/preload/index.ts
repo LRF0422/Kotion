@@ -20,6 +20,50 @@ const CAPABILITIES = [
   // process owns the file, so a renderer reset cannot silently widen access.
   'net.policy.get',
   'net.policy.set',
+  // Raw TCP / TLS byte streams. The host is a transport, not a protocol client:
+  // it opens the connection, moves bytes and reports open/data/close, so a
+  // plugin can implement its own wire protocol (IMAP, SMTP, MQTT, …) in JS.
+  // Every target passes the network policy and, on first use in this app run, a
+  // user confirmation naming the host and port.
+  'net.socketOpen',
+  'net.socketWrite',
+  'net.socketClose',
+  'net.socketSessions',
+  // System browser + a loopback redirect listener, so a plugin can run an
+  // OAuth authorization-code flow without registering a custom URL scheme.
+  // `oauthStart` binds 127.0.0.1 and answers with the redirect_uri; `oauthWait`
+  // resolves with the callback query (never the body). Only http/https URLs can
+  // be opened, and the user confirms the origin once per app run.
+  'shell.browserOpen',
+  'shell.oauthStart',
+  'shell.oauthWait',
+  'shell.oauthSessions',
+  'shell.oauthCancel',
+  // Plugin-scoped encrypted key/value storage: values are sealed with
+  // safeStorage (OS keychain) before they touch disk, `list` is metadata only
+  // and `secretGet` is the one call that returns plaintext. Namespaces follow
+  // `plugin.<key>` / `app.<area>`.
+  'storage.secretAvailable',
+  'storage.secretSet',
+  'storage.secretGet',
+  'storage.secretHas',
+  'storage.secretList',
+  'storage.secretRemove',
+  'storage.secretClear',
+  'storage.secretNamespaces',
+  // OS notifications and the app badge. The click is reported back through the
+  // `notification.show` promise (`clicked`), which also focuses the window.
+  'notification.available',
+  'notification.show',
+  'notification.setBadge',
+  'notification.clear',
+  // Host-driven timers. The main process owns the clock, so a scheduled task
+  // keeps ticking while the plugin's panel is closed and wakes the renderer on
+  // `desktop:event:background`.
+  'background.schedule',
+  'background.list',
+  'background.cancel',
+  'background.cancelAll',
   'capture.sources',
   'capture.selectRegion',
   'capture.region.context',

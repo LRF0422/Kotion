@@ -54,6 +54,37 @@ export type DesktopCapability =
     // ---- network policy for http.request (SSRF switch) ---------------------
     | 'net.policy.get'
     | 'net.policy.set'
+    // ---- net: raw TCP / TLS byte streams (the transport plugins build
+    // application protocols on, e.g. a plugin's own IMAP/SMTP client) --------
+    | 'net.socketOpen'
+    | 'net.socketWrite'
+    | 'net.socketClose'
+    | 'net.socketSessions'
+    // ---- shell: system browser + a loopback OAuth redirect listener --------
+    | 'shell.browserOpen'
+    | 'shell.oauthStart'
+    | 'shell.oauthWait'
+    | 'shell.oauthSessions'
+    | 'shell.oauthCancel'
+    // ---- plugin-scoped encrypted key-value storage (safeStorage at rest) ---
+    | 'storage.secretAvailable'
+    | 'storage.secretSet'
+    | 'storage.secretGet'
+    | 'storage.secretHas'
+    | 'storage.secretList'
+    | 'storage.secretRemove'
+    | 'storage.secretClear'
+    | 'storage.secretNamespaces'
+    // ---- system notifications (badge + OS toast) ---------------------------
+    | 'notification.available'
+    | 'notification.show'
+    | 'notification.setBadge'
+    | 'notification.clear'
+    // ---- host-driven timers (a plugin panel may be closed) -----------------
+    | 'background.schedule'
+    | 'background.list'
+    | 'background.cancel'
+    | 'background.cancelAll'
     // ---- remembered login credentials (OS keychain via safeStorage) --------
     | 'credentials.available'
     | 'credentials.load'
@@ -295,7 +326,23 @@ export interface DesktopHttpRequest {
     bodyBase64?: string
     timeoutMs?: number
     maxResponseBytes?: number
+    /**
+     * How the response body should come back.
+     *
+     * - `auto` (default): text-ish content types (see
+     *   {@link DesktopHttpResponse.isText}) fill `bodyText`; anything else fills
+     *   `bodyBase64`. Either way the other field is empty, so a large binary
+     *   download never doubles its memory as UTF-8 mojibake.
+     * - `text`: decode as `bodyText` even when the content type says binary
+     *   (lossy for non-UTF-8 bytes, lossless for the UTF-8 payloads inside
+     *   JSON/HTML error pages).
+     * - `base64`: always carry the bytes in `bodyBase64`.
+     */
+    responseType?: DesktopHttpResponseType
 }
+
+/** Body representation for one `http.request`. See {@link DesktopHttpRequest.responseType}. */
+export type DesktopHttpResponseType = 'auto' | 'text' | 'base64'
 
 export interface DesktopHttpRedirect {
     status: number
@@ -318,7 +365,29 @@ export interface DesktopHttpResponse {
     status: number
     statusText: string
     headers: Record<string, string>
+    /**
+     * Decoded body, when {@link DesktopHttpResponse.isText} is true (or the
+     * caller asked for `responseType: 'text'`). Empty string for a binary body.
+     */
     bodyText: string
+    /**
+     * Exact response bytes, base64, when {@link DesktopHttpResponse.isText} is
+     * false (or the caller asked for `responseType: 'base64'`). Empty string
+     * when the body travelled as text.
+     */
+    bodyBase64: string
+    /** Which field above carries the body. */
+    bodyEncoding: 'text' | 'base64'
+    /**
+     * Whether the body was decoded as text rather than handed over as bytes.
+     *
+     * `auto` decides from the content type, and falls back to a strict-UTF-8
+     * sniff when the type cannot decide (no header, or a generic
+     * `application/octet-stream`) — a JPEG is then binary, a log file is text.
+     */
+    isText: boolean
+    /** `charset` used to decode the text body; defaults to `utf-8`. */
+    charset: string
     bodyBytes: number
     durationMs: number
     /** True when the body hit maxResponseBytes and was cut short. */
@@ -326,6 +395,464 @@ export interface DesktopHttpResponse {
     redirects: DesktopHttpRedirect[]
     /** Final URL after redirects. */
     finalUrl: string
+}
+
+/* ------------------------------------------------------------------ *
+ * net.socket — raw TCP / TLS byte streams
+ *
+ * The host is a *transport*, not a protocol client. It opens a TCP or TLS
+ * connection, moves bytes in both directions and reports open/data/close — so a
+ * plugin can implement its own wire protocol (IMAP, SMTP, MQTT, a custom
+ * line protocol) in TypeScript instead of depending on a host-provided client.
+ * There is deliberately no `mail.*` surface here: the mail protocol lives in the
+ * plugin that needs it.
+ *
+ * Every connection passes the same gates as `http.request`/`ssh.*`:
+ *   1. the network policy (`net.policy.*`) refuses loopback / RFC1918 /
+ *      link-local / cloud-metadata targets unless the user lifted it;
+ *   2. the first connection to `host:port` in this app run asks the user, in a
+ *      modal dialog naming the target and the port — because a raw stream to an
+ *      arbitrary host is a stronger thing to hand a plugin than an HTTP GET;
+ *   3. the session is capped in memory, and the *host* owns closing it: the
+ *      plugin cannot leave a socket behind that it no longer holds a handle to.
+ *
+ * TLS is verified by default (real chain + hostname), because the main process
+ * trusts the OS/Chromium root store, not a plugin's pinned key. `relaxed` exists
+ * only for a self-signed development server; it must be requested explicitly.
+ * ------------------------------------------------------------------ */
+
+export type DesktopNetSocketProtocol = 'tcp' | 'tls'
+
+/**
+ * How strictly a TLS connection is verified.
+ *
+ * `strict` (default) validates the certificate chain **and** the hostname.
+ * `relaxed` accepts a certificate that does not verify (self-signed, expired,
+ * wrong host) but keeps encryption on. There is no "no TLS" mode: use `tcp`.
+ */
+export type DesktopNetSocketTlsMode = 'strict' | 'relaxed'
+
+/** Open one TCP or TLS connection. */
+export interface DesktopNetSocketOpenOptions {
+    /** Hostname, IPv4 or IPv6 literal (no brackets needed). */
+    host: string
+    /** TCP port; 1–65535. */
+    port: number
+    /** `tcp` (default) or `tls`. */
+    protocol?: DesktopNetSocketProtocol
+    /**
+     * TLS server name, for the SNI extension and the hostname check. Defaults to
+     * `host`. Required in practice when `host` is an IP address and a `tls`
+     * server routes by SNI.
+     */
+    serverName?: string
+    /** TLS verification policy; defaults to `strict`. */
+    tlsMode?: DesktopNetSocketTlsMode
+    /** Idle timeout in ms (default 60s, max 10min). `0` disables it. */
+    timeoutMs?: number
+    /** Connect timeout in ms (default 15s, max 2min). */
+    connectTimeoutMs?: number
+    /**
+     * Host identity to report in the consent prompt and to key the grant on.
+     * Omitted means `host:port`; set it when the plugin dials an IP but the user
+     * thinks in names (e.g. `imap.example.com:993`).
+     */
+    label?: string
+}
+
+/** A live connection. Data arrives as {@link DesktopNetSocketEvent}s. */
+export interface DesktopNetSocketSession {
+    sessionId: string
+    host: string
+    port: number
+    protocol: DesktopNetSocketProtocol
+    /** SNI / hostname used for verification. */
+    serverName: string
+    /** True when the connection actually negotiated TLS. */
+    encrypted: boolean
+    /** Epoch ms. */
+    openedAt: number
+    /** Bytes received so far (both directions are counted separately). */
+    bytesIn: number
+    bytesOut: number
+}
+
+export interface DesktopNetSocketWriteOptions {
+    sessionId: string
+    /**
+     * Bytes to send. Base64 on purpose: a protocol frame is a byte sequence and
+     * a JS string round-trip would corrupt anything that is not valid UTF-8.
+     */
+    dataBase64: string
+}
+
+/** Close one session, optionally half-closing after flushing `dataBase64`. */
+export interface DesktopNetSocketCloseOptions {
+    sessionId: string
+    /** Bytes to write before closing (e.g. a protocol `LOGOUT`). */
+    dataBase64?: string
+    /**
+     * Wait for the remote to close first (`end()`) instead of destroying the
+     * socket. Defaults to false: `close` means close.
+     */
+    graceful?: boolean
+}
+
+/**
+ * One socket event, delivered on the `net` desktop event channel.
+ *
+ * `data` is base64 for the same reason `ssh.shell`'s is: chunks split multi-byte
+ * characters, so a plugin must decode bytes rather than trust a JSON string.
+ */
+export type DesktopNetSocketEvent =
+    | { type: 'socket-open'; sessionId: string; session: DesktopNetSocketSession }
+    | { type: 'socket-data'; sessionId: string; dataBase64: string }
+    | {
+          type: 'socket-close'
+          sessionId: string
+          /** True when the local side initiated the close. */
+          local: boolean
+          /** True for an orderly close (`end`/FIN), false for a reset/abort. */
+          graceful: boolean
+          bytesIn: number
+          bytesOut: number
+      }
+    | { type: 'socket-error'; sessionId: string; message: string; code?: string }
+
+/** The raw-socket surface of the desktop bridge (feature-detect `desktop.net`). */
+export interface NetBridge {
+    /** Open a connection. Resolves once the socket is established. */
+    open(options: DesktopNetSocketOpenOptions): Promise<DesktopNetSocketSession>
+    /** Send bytes. Resolves when the chunk is flushed to the kernel. */
+    write(options: DesktopNetSocketWriteOptions): Promise<boolean>
+    /** Close a session (idempotent; unknown ids resolve `false`). */
+    close(options: DesktopNetSocketCloseOptions): Promise<boolean>
+    /** Sessions that are currently open. */
+    sessions(): Promise<DesktopNetSocketSession[]>
+    /** Subscribe to socket events; returns an unsubscribe function. */
+    onEvent(listener: (event: DesktopNetSocketEvent) => void): () => void
+}
+
+/* ------------------------------------------------------------------ *
+ * shell — the system browser, and a loopback redirect for OAuth
+ *
+ * A plugin cannot complete an OAuth authorization-code flow on its own: the
+ * provider needs a *browser*, and the redirect has to land somewhere the app can
+ * read. These two capabilities are the smallest pair that makes it work:
+ * `browserOpen` hands a URL to the user's real browser, and `oauthStart` binds a
+ * single loopback port, resolves with the `redirect_uri` to register, and
+ * resolves again with the raw callback query once the browser comes back.
+ *
+ * The listener is deliberately tiny and short-lived: loopback only, one path,
+ * a bounded header size, a timeout, and only query + path handed to the plugin —
+ * never the request body, never a response the plugin controls. PKCE and `state`
+ * remain the plugin's job; the host just carries the redirect.
+ * ------------------------------------------------------------------ */
+
+/** Open a URL in the user's default browser. */
+export interface DesktopBrowserOpenOptions {
+    url: string
+}
+
+/** What `browserOpen` reports back. */
+export interface DesktopBrowserOpenResult {
+    /** True when the OS accepted the URL. */
+    opened: boolean
+    /** The final URL handed to the OS (after normalization). */
+    url: string
+    /**
+     * The origin the browser will visit. Present so a consent prompt can name
+     * the site instead of showing a raw URL, and so a plugin can key its own
+     * per-site preferences.
+     */
+    origin: string
+}
+
+/** Start a loopback OAuth redirect listener. */
+export interface DesktopOAuthStartOptions {
+    /** URL path the provider must redirect to; defaults to `/oauth/callback`. */
+    callbackPath?: string
+    /**
+     * Fixed loopback port. Omit (the normal case) to let the OS pick one and
+     * read it back from `redirectUri`. A fixed port is only useful for a
+     * provider whose console requires pre-registering the exact URI.
+     */
+    port?: number
+    /** Give up after this long (default 5min, max 30min). */
+    timeoutMs?: number
+    /** Shown in the OS browser tab title when the host serves the landing page. */
+    title?: string
+}
+
+/** The listener, before the browser comes back. */
+export interface DesktopOAuthCallbackSession {
+    sessionId: string
+    /** Loopback URL to register as `redirect_uri` (never leaves 127.0.0.1). */
+    redirectUri: string
+    host: string
+    port: number
+    path: string
+    createdAt: number
+    expiresAt: number
+}
+
+/** The completed round trip. */
+export interface DesktopOAuthCallbackResult {
+    sessionId: string
+    ok: boolean
+    /** The full URL the browser requested, including the query. */
+    callbackUrl: string
+    /** The path the browser requested. */
+    path: string
+    /** Query parameters, first value wins, as the provider sent them. */
+    query: Record<string, string>
+    /**
+     * `oauth` for a parsed authorization response (`code`, or `error`), `unknown`
+     * when the redirect carried neither (the plugin asked for a non-OAuth
+     * callback — a payment return URL, say).
+     */
+    kind: 'oauth' | 'unknown'
+    /** `error` / `error_description` when the provider refused the request. */
+    error?: string
+    errorDescription?: string
+    /** True when the deadline passed with no redirect. */
+    timedOut: boolean
+    /** True when the plugin cancelled it. */
+    cancelled: boolean
+    /** How long the round trip took, in ms. */
+    durationMs: number
+}
+
+/** The browser + loopback-redirect surface (feature-detect `desktop.browser`). */
+export interface BrowserBridge {
+    /** Open a URL in the system browser. Non-http(s) protocols are refused. */
+    open(options: DesktopBrowserOpenOptions): Promise<DesktopBrowserOpenResult>
+    /**
+     * Open `url` in the system browser and wait for the loopback redirect.
+     *
+     * One call does the whole round trip: it binds the listener, opens the URL,
+     * and resolves with the callback (or with `timedOut`/`cancelled` set). Use
+     * `startOAuth` + `waitForOAuth` when the plugin needs the `redirect_uri`
+     * *before* building the authorization URL.
+     */
+    oauth(options: DesktopOAuthAuthorizeOptions): Promise<DesktopOAuthCallbackResult>
+    /** Bind the redirect listener and resolve with the `redirect_uri`. */
+    startOAuth(options?: DesktopOAuthStartOptions): Promise<DesktopOAuthCallbackSession>
+    /** Wait for a session created by {@link BrowserBridge.startOAuth}. */
+    waitForOAuth(options: { sessionId: string }): Promise<DesktopOAuthCallbackResult>
+    /** Sessions that are waiting for a redirect. */
+    oauthSessions(): Promise<DesktopOAuthCallbackSession[]>
+    /** Give up on a session; its pending wait resolves with `cancelled`. */
+    cancelOAuth(options: { sessionId: string }): Promise<boolean>
+}
+
+/** Open the authorization URL and wait for the loopback redirect, in one call. */
+export interface DesktopOAuthAuthorizeOptions extends DesktopOAuthStartOptions {
+    /**
+     * The authorization URL to open. Omit when the plugin builds it from a
+     * `startOAuth` session; when present it is opened after the listener binds.
+     */
+    authorizeUrl?: string
+}
+
+/* ------------------------------------------------------------------ *
+ * storage.secret — plugin-scoped encrypted key-value storage
+ *
+ * Plugins need to keep a secret *between launches* (a refresh token, an app
+ * password). `storage.*` is durable but transparent, and reading another
+ * plugin's namespace is a directory listing away — so plugins that held a secret
+ * had nowhere honest to put it. This is that place:
+ *
+ *   - every value is encrypted with Electron `safeStorage` (OS keychain) before
+ *     it reaches disk; only the ciphertext is written, to
+ *     `<userData>/plugin-secrets.json` with mode 0600;
+ *   - secrets are grouped by `namespace`, and `plugin.<key>` is the convention
+ *     the host validates so `clear` can never touch another plugin's;
+ *   - `list` returns metadata only. `get` is the single deliberate door that
+ *     hands the plaintext back to the renderer, so the plugin can *use* the
+ *     token — it is not guarded, because no plugin-vs-plugin permission
+ *     boundary exists in this shell (see docs/PLUGIN_SECRETS.md).
+ * ------------------------------------------------------------------ */
+
+/** One stored secret, as the renderer sees it. Never carries the plaintext. */
+export interface DesktopSecretMetadata {
+    key: string
+    /** Length of the plaintext, so a UI can show "•••• (32)" without revealing it. */
+    size: number
+    createdAt: number
+    updatedAt: number
+}
+
+/** A successful read. `value` is plaintext: treat it as in-memory only. */
+export interface DesktopSecretEntry extends DesktopSecretMetadata {
+    value: string
+}
+
+export interface DesktopSecretSetOptions {
+    /** Namespace the key lives in, e.g. `plugin.mail`. */
+    namespace: string
+    key: string
+    value: string
+}
+
+export interface DesktopSecretKeyOptions {
+    namespace: string
+    key: string
+}
+
+/** Namespaces that currently hold at least one secret. */
+export interface DesktopSecretNamespaceInfo {
+    namespace: string
+    count: number
+}
+
+/** Result of a write/remove: failures report inline instead of rejecting. */
+export interface DesktopSecretMutationResult {
+    ok: boolean
+    metadata?: DesktopSecretMetadata
+    error?: string
+    /** `SECRET_NO_KEYCHAIN` when the OS cannot encrypt; the write is refused. */
+    code?: 'SECRET_NO_KEYCHAIN' | 'SECRET_INVALID_NAMESPACE' | 'SECRET_INVALID_KEY' | 'SECRET_TOO_LARGE'
+}
+
+/** The secret-keychain surface (feature-detect `desktop.secrets`). */
+export interface SecretBridge {
+    /** False when this machine cannot encrypt at rest; then writes are refused. */
+    available(): Promise<boolean>
+    set(options: DesktopSecretSetOptions): Promise<DesktopSecretMutationResult>
+    /** Read one secret, plaintext. `null` when absent. */
+    get(options: DesktopSecretKeyOptions): Promise<DesktopSecretEntry | null>
+    /** `list` without the plaintext. */
+    has(options: DesktopSecretKeyOptions): Promise<boolean>
+    list(options: { namespace: string }): Promise<DesktopSecretMetadata[]>
+    remove(options: DesktopSecretKeyOptions): Promise<DesktopSecretMutationResult>
+    /** Drop every secret in one namespace; answers with the removed count. */
+    clear(options: { namespace: string }): Promise<number>
+    /** Namespaces holding secrets (metadata only, no values). */
+    namespaces(): Promise<DesktopSecretNamespaceInfo[]>
+}
+
+/* ------------------------------------------------------------------ *
+ * notification — the OS notification center and the app badge
+ *
+ * A plugin panel that is closed cannot render its own toast, and a web
+ * `Notification` is invisible while the window is hidden. This hands the plugin
+ * the real thing: an OS notification (with click-to-focus routed back to the
+ * renderer) and the dock/taskbar badge.
+ * ------------------------------------------------------------------ */
+
+export interface DesktopNotificationOptions {
+    title: string
+    body?: string
+    /** Absolute path to a local image the host will load; refused when unreadable. */
+    iconPath?: string
+    /**
+     * Name of a notification group (a plugin key by convention). macOS keeps one
+     * thread per group; Windows/Linux ignore it.
+     */
+    group?: string
+    /** Replace a previous notification with the same id instead of stacking. */
+    id?: string
+    /** `silent` suppresses the sound. */
+    silent?: boolean
+    /** Auto-dismiss after this long (ms); 0 keeps it until the user acts. */
+    timeoutMs?: number
+}
+
+/** What a `notification.show` reports back. */
+export interface DesktopNotificationResult {
+    /** False when notifications are unavailable on this platform/session. */
+    shown: boolean
+    /** The id the notification is tracked under (the caller's, or generated). */
+    id: string
+    /** True when the user clicked it (resolves after the click). */
+    clicked: boolean
+    /** True when the OS dismissed it without a click. */
+    dismissed: boolean
+    /** Reason when `shown` is false. */
+    error?: string
+}
+
+/** The notification surface (feature-detect `desktop.notifications`). */
+export interface NotificationBridge {
+    available(): Promise<boolean>
+    show(options: DesktopNotificationOptions): Promise<DesktopNotificationResult>
+    /**
+     * Set the dock/taskbar badge. `count > 0` shows a number, `0` clears it, and
+     * `text` overrides the number with a short label where the OS supports it.
+     */
+    setBadge(options: { count?: number; text?: string }): Promise<boolean>
+    /** Close every notification this app has shown. */
+    clear(): Promise<boolean>
+}
+
+/* ------------------------------------------------------------------ *
+ * background — host-driven timers
+ *
+ * A plugin cannot poll reliably with `setInterval` in the renderer: Chromium
+ * throttles background timers, and the panel that owns the interval is unmounted
+ * the moment the user switches pages. `background.schedule` moves the *clock*
+ * into the main process, which then wakes the renderer on `desktop:event:background`
+ * even while the plugin's UI is closed. The plugin still runs the work — the
+ * host only owns the timing (and, optionally, keeps the machine awake for it).
+ * ------------------------------------------------------------------ */
+
+/** What one scheduled tick carries to the renderer. */
+export interface DesktopBackgroundTickEvent {
+    taskId: string
+    /** Scheduled occurrence time (epoch ms) — late ticks carry the intended time. */
+    scheduledAt: number
+    /** Actual dispatch time, for drift diagnostics. */
+    firedAt: number
+    /** How many occurrences were skipped while the host was asleep/busy. */
+    missed: number
+    /** Monotonic run counter, starting at 1. */
+    run: number
+}
+
+export interface DesktopBackgroundTask {
+    taskId: string
+    /** Opaque plugin label; the host echoes it back and never interprets it. */
+    name?: string
+    intervalMs: number
+    /** First run offset from registration; defaults to `intervalMs`. */
+    initialDelayMs: number
+    /** Epoch ms of the next occurrence. */
+    nextAt: number
+    createdAt: number
+    /** Occurrences dispatched so far. */
+    runs: number
+    /** Occurrences skipped because the host slept through them. */
+    missed: number
+    /** True when this task holds a power-save blocker. */
+    keepAwake: boolean
+}
+
+export interface DesktopBackgroundScheduleOptions {
+    /** Stable id the plugin owns; re-scheduling the same id replaces the task. */
+    taskId: string
+    name?: string
+    /** Interval in ms (min 1000, max 24h). */
+    intervalMs: number
+    /** Delay before the first tick (default `intervalMs`, max `intervalMs`). */
+    initialDelayMs?: number
+    /**
+     * Hold a `powerSaveBlocker` while the task is scheduled. Refused (falls back
+     * to false) when the OS blocks it; reported in the returned task.
+     */
+    keepAwake?: boolean
+}
+
+/** The timer surface (feature-detect `desktop.background`). */
+export interface BackgroundBridge {
+    /** Register or replace a task; ticks arrive on `background.onTick`. */
+    schedule(options: DesktopBackgroundScheduleOptions): Promise<DesktopBackgroundTask>
+    list(): Promise<DesktopBackgroundTask[]>
+    cancel(options: { taskId: string }): Promise<boolean>
+    /** Stop every task this caller owns (or all, when `scope` is `all`). */
+    cancelAll(options?: { scope?: 'all' }): Promise<number>
+    /** Subscribe to ticks; returns an unsubscribe function. */
+    onTick(listener: (event: DesktopBackgroundTickEvent) => void): () => void
 }
 
 /* ------------------------------------------------------------------ *
@@ -1147,6 +1674,46 @@ export interface DesktopCapabilityContract {
     'net.policy.get': { params?: void; result: DesktopNetPolicy }
     /** Replace the policy (the Settings toggle). Answers with the stored value. */
     'net.policy.set': { params: Partial<DesktopNetPolicy>; result: DesktopNetPolicy }
+    // ---- net.socket: raw TCP / TLS streams ---------------------------------
+    'net.socketOpen': { params: DesktopNetSocketOpenOptions; result: DesktopNetSocketSession }
+    'net.socketWrite': { params: DesktopNetSocketWriteOptions; result: boolean }
+    'net.socketClose': { params: DesktopNetSocketCloseOptions; result: boolean }
+    'net.socketSessions': { params?: void; result: DesktopNetSocketSession[] }
+    // ---- shell: system browser + loopback OAuth redirect --------------------
+    'shell.browserOpen': { params: DesktopBrowserOpenOptions; result: DesktopBrowserOpenResult }
+    'shell.oauthStart': { params?: DesktopOAuthStartOptions; result: DesktopOAuthCallbackSession }
+    /** Await a session's redirect; resolves with `timedOut`/`cancelled` set. */
+    'shell.oauthWait': { params: { sessionId: string }; result: DesktopOAuthCallbackResult }
+    'shell.oauthSessions': { params?: void; result: DesktopOAuthCallbackSession[] }
+    'shell.oauthCancel': { params: { sessionId: string }; result: boolean }
+    // ---- storage.secret: plugin-scoped encrypted KV -------------------------
+    'storage.secretAvailable': { params?: void; result: boolean }
+    'storage.secretSet': {
+        params: DesktopSecretSetOptions
+        result: DesktopSecretMutationResult
+    }
+    'storage.secretGet': { params: DesktopSecretKeyOptions; result: DesktopSecretEntry | null }
+    'storage.secretHas': { params: DesktopSecretKeyOptions; result: boolean }
+    'storage.secretList': { params: { namespace: string }; result: DesktopSecretMetadata[] }
+    'storage.secretRemove': { params: DesktopSecretKeyOptions; result: DesktopSecretMutationResult }
+    'storage.secretClear': { params: { namespace: string }; result: number }
+    'storage.secretNamespaces': { params?: void; result: DesktopSecretNamespaceInfo[] }
+    // ---- notifications ------------------------------------------------------
+    'notification.available': { params?: void; result: boolean }
+    'notification.show': {
+        params: DesktopNotificationOptions
+        result: DesktopNotificationResult
+    }
+    'notification.setBadge': { params: { count?: number; text?: string }; result: boolean }
+    'notification.clear': { params?: void; result: boolean }
+    // ---- host-driven timers -------------------------------------------------
+    'background.schedule': {
+        params: DesktopBackgroundScheduleOptions
+        result: DesktopBackgroundTask
+    }
+    'background.list': { params?: void; result: DesktopBackgroundTask[] }
+    'background.cancel': { params: { taskId: string }; result: boolean }
+    'background.cancelAll': { params?: { scope?: 'all' }; result: number }
     'capture.sources': {
         params?: { types?: DesktopCaptureSourceType[]; thumbnailWidth?: number }
         result: DesktopCaptureSource[]
@@ -1295,4 +1862,41 @@ export interface DesktopBridge {
      * execution, not as a silent utility.
      */
     readonly ssh?: SshBridge
+    /**
+     * Raw TCP / TLS byte streams. Present on desktop builds that expose the
+     * `net.socket*` capabilities. The host moves bytes; the protocol (and its
+     * framing, keep-alive and reconnection policy) belongs to the plugin.
+     *
+     * Every connection is gated by the network policy and by a per-target user
+     * confirmation on first use in this app run — a raw stream to an arbitrary
+     * host is a stronger capability than an HTTP request, so it always asks.
+     */
+    readonly net?: NetBridge
+    /**
+     * The system browser plus a loopback redirect listener, so a plugin can run
+     * an OAuth authorization-code flow. Present on desktop builds that expose the
+     * `shell.browserOpen` capability.
+     */
+    readonly browser?: BrowserBridge
+    /**
+     * Plugin-scoped encrypted key-value storage (OS keychain at rest). Present on
+     * desktop builds that expose the `storage.secret*` capabilities. Prefer this
+     * over `storage.*` for anything that is a credential.
+     */
+    readonly secrets?: SecretBridge
+    /** OS notifications and the app badge. Present when `notification.*` exists. */
+    readonly notifications?: NotificationBridge
+    /**
+     * Host-driven timers: the main process owns the clock, so a scheduled task
+     * keeps ticking while the plugin's panel is closed. Present when
+     * `background.*` exists.
+     */
+    readonly background?: BackgroundBridge
+    /**
+     * Subscribe to any capability event channel by name (the same names the
+     * main process broadcasts on: `ssh`, `net`, `background`, …). Prefer the
+     * typed helpers above; this exists so a new channel does not need a bridge
+     * change to become reachable.
+     */
+    on(event: string, listener: (value: unknown) => void): () => void
 }

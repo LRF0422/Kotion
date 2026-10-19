@@ -3,6 +3,11 @@
         "composite": true,
         "module": "ESNext",
         "moduleResolution": "bundler",
+        // The main process runs on Electron's modern V8 and the code iterates
+        // Map/Set with `for…of`. Without an explicit target that is a type error
+        // (`--downlevelIteration`) even though esbuild bundles it fine, so the
+        // target states what actually ships.
+        "target": "ES2022",
         "allowSyntheticDefaultImports": true,
         "esModuleInterop": true,
         "skipLibCheck": true,

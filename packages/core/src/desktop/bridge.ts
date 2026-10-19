@@ -1,9 +1,14 @@
 import { DESKTOP_BRIDGE_VERSION } from '@kn/plugin-api'
 import { createStorageBridge, type StorageHostBridge } from './storage-bridge'
 import type {
+    BackgroundBridge,
+    BrowserBridge,
+    DesktopBackgroundTickEvent,
     DesktopBridge,
     DesktopCapability,
     DesktopCapabilityContract,
+    DesktopNetSocketEvent,
+    DesktopOAuthCallbackResult,
     DesktopPlatform,
     DevBridge,
     DevScaffoldOptions,
@@ -27,6 +32,9 @@ import type {
     DevRemoveResult,
     DevDeleteFileOptions,
     DevDeleteFileResult,
+    NetBridge,
+    NotificationBridge,
+    SecretBridge,
     SshBridge,
     SshExecOptions,
     SshExecResult,
@@ -249,6 +257,181 @@ const createSshBridge = (
     }
 }
 
+/** Capabilities the net.socket group adds; their presence gates {@link NetBridge}. */
+const NET_CAPABILITIES: DesktopCapability[] = [
+    'net.socketOpen',
+    'net.socketWrite',
+    'net.socketClose',
+    'net.socketSessions',
+]
+
+const createNetBridge = (
+    host: DesktopHostBridge,
+    capabilities: readonly string[],
+): NetBridge | undefined => {
+    if (!NET_CAPABILITIES.some((capability) => capabilities.includes(capability))) {
+        // A host without the raw-socket group (or a web build): `desktop.net`
+        // stays undefined so a plugin degrades instead of throwing per call.
+        return undefined
+    }
+
+    const invoke = <C extends DesktopCapability>(capability: C, params?: unknown) =>
+        host.invoke(capability, params) as Promise<DesktopCapabilityContract[C]['result']>
+
+    return {
+        open: (options) => invoke('net.socketOpen', options),
+        write: (options) => invoke('net.socketWrite', options),
+        close: (options) => invoke('net.socketClose', options),
+        sessions: () => invoke('net.socketSessions'),
+        onEvent: (listener) => host.on('net', (value) => listener(value as DesktopNetSocketEvent)),
+    }
+}
+
+/** Capabilities the browser/OAuth group adds; gates {@link BrowserBridge}. */
+const BROWSER_CAPABILITIES: DesktopCapability[] = [
+    'shell.browserOpen',
+    'shell.oauthStart',
+    'shell.oauthWait',
+    'shell.oauthSessions',
+    'shell.oauthCancel',
+]
+
+const createBrowserBridge = (
+    host: DesktopHostBridge,
+    capabilities: readonly string[],
+): BrowserBridge | undefined => {
+    if (!BROWSER_CAPABILITIES.some((capability) => capabilities.includes(capability))) {
+        return undefined
+    }
+
+    const invoke = <C extends DesktopCapability>(capability: C, params?: unknown) =>
+        host.invoke(capability, params) as Promise<DesktopCapabilityContract[C]['result']>
+
+    return {
+        open: (options) => invoke('shell.browserOpen', options),
+        /**
+         * The one-call round trip: bind the listener, open the authorization
+         * URL, then await the redirect. The main process correlates the two
+         * halves (it owns the pending wait), so this needs no `shell.oauthWait`
+         * capability — an unclaimed session is simply cancelled on timeout.
+         */
+        oauth: async (options) => {
+            const session = await invoke('shell.oauthStart', options)
+            const wait = invoke('shell.oauthWait', { sessionId: session.sessionId }) as Promise<DesktopOAuthCallbackResult>
+            if (options?.authorizeUrl) {
+                try {
+                    await invoke('shell.browserOpen', { url: options.authorizeUrl })
+                } catch (error) {
+                    // The URL never reached the browser: stop waiting instead of
+                    // making the plugin sit out the full timeout.
+                    await invoke('shell.oauthCancel', { sessionId: session.sessionId }).catch(() => false)
+                    throw error
+                }
+            }
+            return wait
+        },
+        startOAuth: (options) => invoke('shell.oauthStart', options),
+        waitForOAuth: (options) =>
+            invoke('shell.oauthWait', options) as Promise<DesktopOAuthCallbackResult>,
+        oauthSessions: () => invoke('shell.oauthSessions'),
+        cancelOAuth: (options) => invoke('shell.oauthCancel', options),
+    }
+}
+
+/** Capabilities the secret-keychain group adds; gates {@link SecretBridge}. */
+const SECRET_CAPABILITIES: DesktopCapability[] = [
+    'storage.secretAvailable',
+    'storage.secretSet',
+    'storage.secretGet',
+    'storage.secretHas',
+    'storage.secretList',
+    'storage.secretRemove',
+    'storage.secretClear',
+    'storage.secretNamespaces',
+]
+
+const createSecretBridge = (
+    host: DesktopHostBridge,
+    capabilities: readonly string[],
+): SecretBridge | undefined => {
+    if (!SECRET_CAPABILITIES.some((capability) => capabilities.includes(capability))) {
+        return undefined
+    }
+
+    const invoke = <C extends DesktopCapability>(capability: C, params?: unknown) =>
+        host.invoke(capability, params) as Promise<DesktopCapabilityContract[C]['result']>
+
+    return {
+        available: () => invoke('storage.secretAvailable'),
+        set: (options) => invoke('storage.secretSet', options),
+        get: (options) => invoke('storage.secretGet', options),
+        has: (options) => invoke('storage.secretHas', options),
+        list: (options) => invoke('storage.secretList', options),
+        remove: (options) => invoke('storage.secretRemove', options),
+        clear: (options) => invoke('storage.secretClear', options),
+        namespaces: () => invoke('storage.secretNamespaces'),
+    }
+}
+
+/** Capabilities the notification group adds; gates {@link NotificationBridge}. */
+const NOTIFICATION_CAPABILITIES: DesktopCapability[] = [
+    'notification.available',
+    'notification.show',
+    'notification.setBadge',
+    'notification.clear',
+]
+
+const createNotificationBridge = (
+    host: DesktopHostBridge,
+    capabilities: readonly string[],
+): NotificationBridge | undefined => {
+    if (!NOTIFICATION_CAPABILITIES.some((capability) => capabilities.includes(capability))) {
+        return undefined
+    }
+
+    const invoke = <C extends DesktopCapability>(capability: C, params?: unknown) =>
+        host.invoke(capability, params) as Promise<DesktopCapabilityContract[C]['result']>
+
+    return {
+        available: () => invoke('notification.available'),
+        show: (options) => invoke('notification.show', options),
+        setBadge: (options) => invoke('notification.setBadge', options),
+        clear: () => invoke('notification.clear'),
+    }
+}
+
+/** Capabilities the background-timer group adds; gates {@link BackgroundBridge}. */
+const BACKGROUND_CAPABILITIES: DesktopCapability[] = [
+    'background.schedule',
+    'background.list',
+    'background.cancel',
+    'background.cancelAll',
+]
+
+const createBackgroundBridge = (
+    host: DesktopHostBridge,
+    capabilities: readonly string[],
+): BackgroundBridge | undefined => {
+    if (!BACKGROUND_CAPABILITIES.some((capability) => capabilities.includes(capability))) {
+        return undefined
+    }
+
+    const invoke = <C extends DesktopCapability>(capability: C, params?: unknown) =>
+        host.invoke(capability, params) as Promise<DesktopCapabilityContract[C]['result']>
+
+    return {
+        schedule: (options) => invoke('background.schedule', options),
+        list: () => invoke('background.list'),
+        cancel: (options) => invoke('background.cancel', options),
+        cancelAll: (options) => invoke('background.cancelAll', options),
+        onTick: (listener) =>
+            host.on('background', (value) => {
+                const payload = value as DesktopBackgroundTickEvent
+                if (payload?.taskId) listener(payload)
+            }),
+    }
+}
+
 /**
  * Build the `desktop` core service, or undefined on the web (where the preload
  * bridge is absent). The host registers it via PluginManager coreServices.
@@ -261,6 +444,11 @@ export const createDesktopBridge = (): DesktopBridge | undefined => {
     const dev = createDevBridge(host, capabilities)
     const storage = createStorageBridge(host, capabilities)
     const ssh = createSshBridge(host, capabilities)
+    const net = createNetBridge(host, capabilities)
+    const browser = createBrowserBridge(host, capabilities)
+    const secrets = createSecretBridge(host, capabilities)
+    const notifications = createNotificationBridge(host, capabilities)
+    const background = createBackgroundBridge(host, capabilities)
 
     return {
         version: DESKTOP_BRIDGE_VERSION,
@@ -273,8 +461,14 @@ export const createDesktopBridge = (): DesktopBridge | undefined => {
         ) => host.invoke(capability, params) as Promise<DesktopCapabilityContract[C]['result']>,
         onFullScreenChange: (listener) =>
             host.on('fullscreen', (value) => listener(Boolean(value))),
+        on: (event, listener) => host.on(event, listener),
         ...(dev ? { dev } : {}),
         ...(storage ? { storage } : {}),
         ...(ssh ? { ssh } : {}),
+        ...(net ? { net } : {}),
+        ...(browser ? { browser } : {}),
+        ...(secrets ? { secrets } : {}),
+        ...(notifications ? { notifications } : {}),
+        ...(background ? { background } : {}),
     }
 }

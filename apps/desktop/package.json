@@ -18,6 +18,7 @@
         "check:storage": "rm -rf .tmp-check/storage && tsc --noEmitOnError src/main/storage/sqlite-store.check.ts --rootDir src/main/storage --outDir .tmp-check/storage --module commonjs --target ES2020 --lib ES2020,DOM --types node --esModuleInterop --skipLibCheck --strict && node .tmp-check/storage/sqlite-store.check.js",
         "check:net-policy": "rm -rf .tmp-check/net-policy && tsc --noEmitOnError src/main/net-policy.check.ts --rootDir src/main --outDir .tmp-check/net-policy --module commonjs --target ES2020 --lib ES2020,DOM --types node --esModuleInterop --skipLibCheck --strict && node .tmp-check/net-policy/net-policy.check.js",
         "test:storage:electron": "ELECTRON_RUN_AS_NODE= electron src/main/storage/electron.smoke.cjs --no-sandbox --disable-gpu --user-data-dir=.tmp-check/electron-userdata",
+        "test:capabilities:electron": "ELECTRON_RUN_AS_NODE= electron src/main/capabilities/electron.smoke.cjs --no-sandbox --disable-gpu",
         "lint": "eslint . --ext .js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix"
     },
     "devDependencies": {

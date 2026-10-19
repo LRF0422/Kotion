@@ -3,10 +3,17 @@ import * as fs from 'fs-extra';
 import * as path from 'node:path';
 import { join } from 'node:path';
 import * as dns from 'node:dns';
+import { isIP } from 'node:net';
 import { setupDevIpcHandlers } from './plugin-dev/index';
 import { setupSshIpcHandlers } from './ssh/index';
 import { setupStorageHandlers } from './storage/index';
-import { decideResolvedAddress, decideTarget } from './net-policy';
+import { setupCapabilityHandlers, createElectronConfirm } from './capabilities/handlers';
+import {
+  chooseBodyRepresentation,
+  decodeBody,
+  detectCharset,
+} from './capabilities/http-body.mjs';
+import { classifyAddress, decideResolvedAddress, decideTarget } from './net-policy';
 import { getNetPolicy, setNetPolicy } from './net-policy-store';
 import {
   clearCredentials,
@@ -74,24 +81,66 @@ const assertAllowedPath = (target: unknown, field = 'path'): string => {
 // the LAN — unless the user lifted that refusal themselves: the decision lives
 // in ./net-policy and the user-facing switch in Settings (`net.policy.*`).
 // Cloud metadata endpoints stay refused either way.
+//
+// `assertTargetAllowed` is exported because the other outbound capabilities
+// (`ssh.*` in ./ssh, `net.socket*` in ./capabilities) must make the *same*
+// decision; re-implementing it per capability is how a guard quietly diverges.
 
-const resolveAllowedTarget = async (raw: string): Promise<URL> => {
-  const policy = getNetPolicy();
-  const decision = decideTarget(raw, policy);
-  if (decision.action === 'deny') throw new Error(decision.reason);
-  if (decision.action === 'allow') return decision.url;
+export const assertTargetAllowed = async (
+    raw: string,
+    denyMessage?: (detail: { resolved: boolean }) => string,
+): Promise<URL> => {
+    const policy = getNetPolicy()
+    const decision = decideTarget(raw, policy)
+    if (decision.action === 'deny') throw new Error(decision.reason)
+    if (decision.action === 'allow') return decision.url
 
-  // A hostname: resolve once, then judge every answer. Refusing when *any*
-  // answer is blocked keeps a round-robin/dns-rebinding record from being the
-  // one the connection happens to land on.
-  const records = await dns.promises.lookup(decision.host, { all: true });
-  if (!records.length) throw new Error('desktop http: cannot resolve host');
-  for (const record of records) {
-    const verdict = decideResolvedAddress(record.address, policy);
-    if (verdict.action === 'deny') throw new Error(verdict.reason);
-  }
-  return decision.url;
-};
+    // A hostname: resolve once, then judge every answer. Refusing when *any*
+    // answer is blocked keeps a round-robin/dns-rebinding record from being the
+    // one the connection happens to land on.
+    const records = await dns.promises.lookup(decision.host, { all: true })
+    if (!records.length) throw new Error('desktop http: cannot resolve host')
+    for (const record of records) {
+        const verdict = decideResolvedAddress(record.address, policy)
+        if (verdict.action === 'deny') {
+            // A capability with its own wording (ssh / net.socket) supplies its
+            // own message; `http.request` keeps the guard's.
+            throw new Error(denyMessage?.({ resolved: true }) ?? verdict.reason)
+        }
+    }
+    return decision.url
+}
+
+/**
+ * The same policy check for a bare `host` instead of a URL — what the raw-socket
+ * capability needs. Kept next to `assertTargetAllowed` so both paths read the
+ * same policy and the same address classifier.
+ */
+export const assertBareHostAllowed = async (
+    host: string,
+    reason: (detail: { resolved: boolean }) => string,
+): Promise<string> => {
+    const policy = getNetPolicy()
+    if (isIP(host) !== 0) {
+        const verdict = classifyAddress(host)
+        if (verdict === 'metadata') throw new Error(reason({ resolved: false }))
+        if (verdict === 'private' && !policy.allowPrivateNetwork) throw new Error(reason({ resolved: false }))
+        return host
+    }
+    let records: Array<{ address: string }>
+    try {
+        records = await dns.promises.lookup(host, { all: true })
+    } catch {
+        throw new Error(`net.socket: cannot resolve host "${host}"`)
+    }
+    if (!records.length) throw new Error(`net.socket: cannot resolve host "${host}"`)
+    for (const record of records) {
+        const verdict = classifyAddress(record.address)
+        if (verdict === 'metadata') throw new Error(reason({ resolved: true }))
+        if (verdict === 'private' && !policy.allowPrivateNetwork) throw new Error(reason({ resolved: true }))
+    }
+    return host
+}
 
 const toHeaderRecord = (value: unknown): Record<string, string> => {
   const result: Record<string, string> = {};
@@ -106,7 +155,21 @@ const toHeaderRecord = (value: unknown): Record<string, string> => {
 const asRecord = (value: unknown): Record<string, any> =>
   value && typeof value === 'object' ? (value as Record<string, any>) : {};
 
+// ---- http.request response decoding --------------------------------------
+// `bodyText` alone cannot carry a PNG or a PDF: the bytes are not UTF-8, so
+// every binary consumer had to route through some other service. The helpers
+// that decide text-vs-bytes (and which charset) live in
+// ./capabilities/http-body.mjs, so they can be exercised directly by the
+// capability smoke test. Re-exported below for that test's convenience.
+
 type CapabilityHandler = (event: Electron.IpcMainInvokeEvent, params: unknown) => unknown;
+
+/** Re-exported so the capability smoke test can exercise them directly. */
+export {
+  chooseBodyRepresentation as httpChooseBodyRepresentation,
+  decodeBody as httpDecodeBody,
+  detectCharset as httpDetectCharset,
+};
 
 const handle = (capability: string, fn: CapabilityHandler): void => {
   ipcMain.handle('desktop:' + capability, (event, params) => fn(event, params));
@@ -138,6 +201,20 @@ export function setupIpcHandlers() {
   // taking the window down with it.
   const storageRuntime = setupStorageHandlers();
   app.on('will-quit', () => storageRuntime.dispose());
+
+  // ==================== generic plugin capabilities ====================
+  // net.socket (raw TCP/TLS streams), shell (system browser + loopback OAuth
+  // redirect), storage.secret (keychain-encrypted plugin KV), notification.*
+  // and background.* (host-driven timers). All of it is protocol-agnostic: the
+  // host moves bytes and owns the clock, a plugin owns the protocol. Outbound
+  // connections go through `assertBareHostAllowed` so they obey the same
+  // network policy (and the same switch) as http.request.
+  const capabilityRuntime = setupCapabilityHandlers({
+    assertAllowedPath,
+    assertHostAllowed: (host, reason) => assertBareHostAllowed(host, reason),
+    confirm: createElectronConfirm(),
+  });
+  app.on('will-quit', () => capabilityRuntime.dispose());
 
   // ==================== system ====================
   handle('system.info', () => ({
@@ -354,7 +431,7 @@ export function setupIpcHandlers() {
     let response: Response | undefined;
 
     for (let hop = 0; hop <= 5; hop++) {
-      const target = await resolveAllowedTarget(current);
+      const target = await assertTargetAllowed(current);
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {
@@ -410,11 +487,32 @@ export function setupIpcHandlers() {
       responseHeaders[key] = value;
     });
 
+    // ---- text or bytes? ------------------------------------------------
+    // Attachments and inline images are not UTF-8, so a plugin that only has
+    // `bodyText` cannot download them at all (the old shape forced every binary
+    // consumer through a base64-JSON indirection in the backend). `auto` picks
+    // by content type, with a UTF-8 sniff for undecidable ones; `text`/`base64`
+    // override. Either way only ONE of the two fields carries the body, so a
+    // 20 MB image does not also cost 20 MB of mojibake string.
+    const responseBody = Buffer.concat(chunks);
+    const contentType = response.headers.get('content-type') || '';
+    const charset = detectCharset(contentType);
+    const representation = chooseBodyRepresentation(
+      params.responseType,
+      contentType,
+      responseBody,
+    );
+    const wantText = representation === 'text';
+
     return {
       status: response.status,
       statusText: response.statusText,
       headers: responseHeaders,
-      bodyText: Buffer.concat(chunks).toString('utf8'),
+      bodyText: wantText ? decodeBody(responseBody, charset) : '',
+      bodyBase64: wantText ? '' : responseBody.toString('base64'),
+      bodyEncoding: wantText ? 'text' : 'base64',
+      isText: wantText,
+      charset: wantText ? charset : '',
       bodyBytes: total,
       durationMs: Date.now() - started,
       truncated,
