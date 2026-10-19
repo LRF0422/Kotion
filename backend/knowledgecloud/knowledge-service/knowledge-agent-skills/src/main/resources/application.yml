@@ -91,11 +91,15 @@ agent:
     top-k: 5
     hot-ttl-days: 7
   # Derived low-sensitivity user profile (occupation / interests / preferences).
-  # Ships OFF behind an opt-in: users must consent before anything is derived.
+  # This is the deployment master switch; it does NOT grant consent. Per-user
+  # consent (agent_user_profile_consent, Settings → My Profile) is a separate
+  # gate: even with this on, nothing is derived until the user opts in, and
+  # opting out purges everything. Keep it on — with it off the user-facing
+  # toggle silently does nothing and the list can never fill up.
   # Sensitive attributes (gender, mental state, personality, ...) are never
   # inferred — see core/profile/ProfileSensitivity.
   profile:
-    enabled: false
+    enabled: true
     model:            # empty = follow the triggering run's model
     max-transcript-chars: 24000
     max-output-tokens: 1024

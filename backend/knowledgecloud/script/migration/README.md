@@ -141,3 +141,29 @@ LIMIT 20;
 Do not roll back to application code that downloads OSS objects through
 `file_key` after V18 has run. Restore the database backup if a full rollback is
 required.
+
+## V41 `agent_user_profile` schema reconciliation
+
+V4 (retired v2 harness) created `agent_user_profile` as a JSON-blob mirror,
+while V39 (derived traits) re-used the same table name behind
+`CREATE TABLE IF NOT EXISTS`. On databases that already ran V4, V39 silently
+skipped the create and the trait code failed at runtime
+(`Unknown column 'trait_id'`); opting in still worked, so the UI looked enabled
+but no trait could ever be listed, added or purged.
+
+`V41__agent_user_profile_schema_reconcile.sql` fixes the shape on any history:
+
+- trait shape already present → no-op;
+- legacy V4 shape → renamed to `agent_user_profile_v2_legacy` and the trait
+  table created (no repository code reads the legacy table any more);
+- table missing → created;
+- any other shape → `SIGNAL`, so the deploy stops instead of misbehaving.
+
+After migrating, confirm the shape and that the relation is usable:
+
+```sql
+SHOW COLUMNS FROM agent_user_profile;              -- must include trait_id/dimension/trait_value
+SELECT COUNT(*) FROM agent_user_profile_v2_legacy; -- archived V4 rows, safe to drop once verified
+```
+
+Do not edit V39: it is already applied and its checksum is recorded.

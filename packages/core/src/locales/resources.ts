@@ -1221,6 +1221,16 @@ export const resources = {
           sourceInferred: "自动推断",
           sourceUser: "我的设定",
           confidence: "置信度",
+          dimensions: {
+            occupation: "职业",
+            industry: "行业",
+            expertise: "专业主题",
+            tech_stack: "技术栈",
+            content_topic: "内容兴趣",
+            content_format: "内容形式偏好",
+            interaction_pref: "交互偏好",
+            active_hours: "活跃时段",
+          },
         },
         memory: {
           title: "记忆管理",
@@ -2721,6 +2731,16 @@ export const resources = {
           sourceInferred: "Inferred",
           sourceUser: "Declared",
           confidence: "Confidence",
+          dimensions: {
+            occupation: "Occupation",
+            industry: "Industry",
+            expertise: "Expertise",
+            tech_stack: "Tech stack",
+            content_topic: "Content interests",
+            content_format: "Content format",
+            interaction_pref: "Interaction preference",
+            active_hours: "Active hours",
+          },
         },
         memory: {
           title: "Memory",

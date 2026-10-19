@@ -6,19 +6,21 @@ import { SettingsPanel, SettingsRow, SettingsSection } from "./primitives";
 
 const client = new AgentClient();
 
-/** Local labels for the add selector; trait rows use the backend label. */
-const DIMENSION_LABELS: Record<string, string> = {
-    occupation: "职业",
-    industry: "行业",
-    expertise: "专业主题",
-    tech_stack: "技术栈",
-    content_topic: "内容兴趣",
-    content_format: "内容形式偏好",
-    interaction_pref: "交互偏好",
-    active_hours: "活跃时段",
-};
-
-const labelOf = (dimension: string): string => DIMENSION_LABELS[dimension] || dimension;
+/**
+ * Ordered fallback until the backend reports its allowlisted dimensions.
+ * Labels live in the locale files (`settings.profile.dimensions.*`) rather
+ * than here, so the UI follows the interface language.
+ */
+const DIMENSION_KEYS = [
+    "occupation",
+    "industry",
+    "expertise",
+    "tech_stack",
+    "content_topic",
+    "content_format",
+    "interaction_pref",
+    "active_hours",
+];
 
 /**
  * 「我的画像」— low-sensitivity traits derived from the user's AI sessions.
@@ -33,12 +35,21 @@ export const MyProfile: React.FC = () => {
     const [busy, setBusy] = useState(false);
     const [consent, setConsent] = useState(false);
     const [traits, setTraits] = useState<AgentProfileTrait[]>([]);
-    const [dimensions, setDimensions] = useState<string[]>(Object.keys(DIMENSION_LABELS));
+    const [dimensions, setDimensions] = useState<string[]>(DIMENSION_KEYS);
     const [newDimension, setNewDimension] = useState("content_topic");
     const [newValue, setNewValue] = useState("");
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editValue, setEditValue] = useState("");
     const [evidence, setEvidence] = useState<Record<string, AgentProfileEvidence[]>>({});
+
+    /** Translate by dimension key; backend label is only a last-resort fallback. */
+    const labelOf = useCallback(
+        (dimension: string, fallback?: string): string =>
+            t(`settings.profile.dimensions.${dimension}`, {
+                defaultValue: fallback || dimension,
+            }),
+        [t],
+    );
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -231,7 +242,7 @@ export const MyProfile: React.FC = () => {
                                     <div className="min-w-0 space-y-0.5">
                                         <div className="flex items-center gap-2">
                                             <span className="text-sm font-medium text-foreground">
-                                                {trait.dimensionLabel || labelOf(trait.dimension)}
+                                                {labelOf(trait.dimension, trait.dimensionLabel)}
                                             </span>
                                             <Badge variant="secondary" className="text-[10px] font-normal">
                                                 {trait.source === "user"
