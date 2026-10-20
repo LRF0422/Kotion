@@ -330,9 +330,14 @@ export const KernelConversation: React.FC<KernelConversationProps> = ({
         <div className="flex min-h-0 w-full flex-1 flex-col">
             {/* ChatMessageList owns the scroll container: it ships auto-follow
                 (useAutoScroll + a "back to bottom" affordance) and re-enables
-                following once the user returns to the bottom. */}
-            <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col px-3 md:px-4">
-                <ChatMessageList>
+                following once the user returns to the bottom.
+
+                The scrollport spans the whole panel (its scrollbar therefore
+                rides the panel's right edge instead of floating mid-window),
+                while the transcript column keeps its readable max-w-3xl width
+                by centering itself inside the scrollport. */}
+            <ChatMessageList>
+                <div className="mx-auto flex w-full max-w-3xl grow flex-col gap-1 px-5 md:px-6">
                     {loadingTranscript && messages.length === 0 && (
                         <div className="flex flex-col items-center justify-center gap-2 py-16 text-muted-foreground">
                             <LoaderCircle className="h-5 w-5 animate-spin" />
@@ -394,8 +399,8 @@ export const KernelConversation: React.FC<KernelConversationProps> = ({
                             )}
                         </div>
                     )}
-                </ChatMessageList>
-            </div>
+                </div>
+            </ChatMessageList>
 
             {/* No top divider: the composer draws its own outline, so a
                 full-bleed hairline over a max-w-3xl composer is just a stray
