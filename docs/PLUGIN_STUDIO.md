@@ -371,6 +371,14 @@ export const jenkins = new KPlugin({
 
 ### 身份、遮蔽与命名
 
+- **宿主自带的插件不会再从服务器列表装第二份**。开发（和公开分享）启动会打包源码插件，而同一账号的市场里
+  可能也装过同一插件：服务器用后端 slug 做键（`bitable`，发布校验 `^[a-z0-9-]+$`），宿主插件用展示名做键
+  （`Bitable`），精确比较认不出二者是同一个。过去这条 installed 记录会在 plan 阶段判成冲突并计入
+  `failedPlugins`，shell 于是报「插件加载失败」——**开发模式直接起不来**（报错原文
+  `Plugin bitable will not activate: it is the same plugin as "Bitable"`）。现在 `init()` 在**下载脚本之前**
+  按归一化身份跳过宿主已提供的 installed 记录（日志 `already provided by the host`），宿主打包的那份继续跑；
+  `installPlugin()` 远程安装同一插件也直接拒绝，而不是先下载执行再被 plan 拒。这条只针对「宿主已提供」：
+  两个第三方插件之间同名/同键仍按上面的 plan 规则只留一个并上报。
 - **改名不再是卸载+安装**：runtime 名字变了？注册键没变，那就是同一个条目的一次 reload
   （面板身份、状态都保住）。
 - **开发版遮蔽同 pluginKey 的已安装版本**；若清单的 pluginKey 被改过，还会按**工程根目录**（`sourceLabel`）

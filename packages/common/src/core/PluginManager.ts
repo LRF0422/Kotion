@@ -480,6 +480,12 @@ export class PluginManager {
      */
     plugins: KPlugin<any>[] = []
     _initialPlugins: KPlugin<any>[] = []
+    /**
+     * Normalized identities of the host's own plugins (the bundles it ships),
+     * so an installed-list copy of one of them is recognised as a duplicate
+     * *before* its script is fetched. See {@link _isProvidedByHost}.
+     */
+    private _hostIdentities = new Set<string>()
     private _serviceRegistry: ServiceRegistry
     private _serviceRegistryView: ServiceRegistryView
     private _resolveUrl: (resourcePath: string) => string
@@ -567,6 +573,14 @@ export class PluginManager {
             subscribe: (listener: (name: string) => void) => this._serviceRegistry.subscribe(listener),
         })
         this._initialPlugins = initalPlugins
+        const hostIdentities = new Set<string>()
+        for (const plugin of initalPlugins) {
+            for (const identity of [this._identityOf(plugin), plugin.name, plugin.pluginKey]) {
+                const normalized = identity ? normalizePluginName(identity) : ''
+                if (normalized) hostIdentities.add(normalized)
+            }
+        }
+        this._hostIdentities = hostIdentities
         // Host plugins are part of the app from the first render, so their entries
         // exist before any lifecycle call. Committing here (rather than only
         // filling a map) keeps every view of the registry consistent from boot.
@@ -661,6 +675,36 @@ export class PluginManager {
     /** Host-owned keys: part of the app, never installed from a bundle. */
     private _isInitialPluginKey(pluginKey?: string): boolean {
         return Boolean(pluginKey && this._initialPlugins.some(plugin => this._identityOf(plugin) === pluginKey))
+    }
+
+    /**
+     * True when the host itself ships the plugin an artifact names.
+     *
+     * The host bundles plugins under their *display* name (`Bitable`), while the
+     * marketplace files the same plugin under a lowercase slug (`bitable`, the
+     * backend regex is `^[a-z0-9-]+$`). Comparing the raw keys — which is all
+     * {@link _isInitialPluginKey} can do, because it also guards the dev-bundle
+     * path where identity must stay exact — misses exactly these plugins.
+     *
+     * Missing them is not benign: the installed-list copy then collides with the
+     * bundle in {@link _planEntries}, and `init()` reports plan conflicts through
+     * `failedPlugins`, which the shell treats as a fatal boot error ("failed to
+     * load the installed plugins"). A developer who installed the market builds of
+     * `Bitable` / `GitHub` in the production app therefore cannot start the dev
+     * build at all, even though the bundled source copies are already active.
+     *
+     * Normalizing both sides answers the question the caller actually asks — "does
+     * the host already provide this plugin?" — *before* the artifact is fetched.
+     * Both the artifact key and its record name are accepted: a publisher may file
+     * the plugin under a key that is not derived from its display name. It does not
+     * change what identity means for activation: {@link _planEntries} still
+     * compares names and keys exactly.
+     */
+    private _isProvidedByHost(...identifiers: Array<string | undefined>): boolean {
+        return identifiers.some(identifier => {
+            const normalized = identifier ? normalizePluginName(identifier) : ''
+            return Boolean(normalized) && this._hostIdentities.has(normalized)
+        })
     }
 
     /* ------------------------------------------------------------------ *
@@ -1068,7 +1112,18 @@ export class PluginManager {
             return []
         })
         const loadableRemotePlugins = normalizedRemotePlugins.filter(plugin => {
-            if (!this._isInitialPluginKey(plugin.pluginKey)) return true
+            /**
+             * The host's own build wins over the server's installed list.
+             *
+             * In development (and on public shares) the app bundles the source
+             * copies of the optional plugins, while the same account may also have
+             * their market builds installed — `init()` then got two candidates for
+             * one plugin and reported the loser as a failure, which the shell turns
+             * into "failed to load the installed plugins" at boot. Skipping the
+             * installed copy here is also why the duplicate is never fetched or
+             * evaluated: the copy that should run is already active.
+             */
+            if (!this._isProvidedByHost(plugin.pluginKey, plugin.name)) return true
             logger.info(`Skipping remote plugin ${plugin.pluginKey}: already provided by the host`)
             return false
         })
@@ -1517,7 +1572,7 @@ export class PluginManager {
             logger.error(`Plugin ${getRemotePluginInputName(input)} is missing required runtime metadata`)
             return false
         }
-        if (this._isInitialPluginKey(descriptor.pluginKey)) {
+        if (this._isProvidedByHost(descriptor.pluginKey, descriptor.name)) {
             logger.warn(`Plugin ${descriptor.pluginKey} is provided by the host and cannot be installed remotely`)
             return false
         }

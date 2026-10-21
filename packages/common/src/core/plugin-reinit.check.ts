@@ -58,7 +58,10 @@ const registryNames = (manager: PluginManager): string[] => {
 const run = async (): Promise<void> => {
   const originalLoad = pluginScriptLoader.load;
   const loadResults = new Map<string, PluginRegistration | Error>();
+  /** Keys whose scripts were actually fetched, to prove a skip happened first. */
+  const loadedKeys: string[] = [];
   pluginScriptLoader.load = async (url, packageName) => {
+    loadedKeys.push(packageName);
     const versionId = /[?&]v=([^&]+)/.exec(url)?.[1];
     const result = versionId
       ? loadResults.get(`${packageName}:${decodeURIComponent(versionId)}`)
@@ -247,6 +250,92 @@ const run = async (): Promise<void> => {
       "a plugin installed while an init is in flight must keep its install metadata",
     );
     registryNames(manager);
+
+    // 6. A plugin the host already bundles must never be loaded from the server's
+    //    installed list a second time.
+    //
+    //    The reported failure: development boot bundles the source build
+    //    (`Bitable`) *and* reads the market's installed list, where the same
+    //    plugin is filed under the backend's lowercase slug (`bitable`). The two
+    //    keys were compared exactly, so the installed copy was not recognised as
+    //    "already provided by the host": it collided with the bundle in the plan,
+    //    `init()` reported the loser through `failedPlugins`, and the shell
+    //    refused to boot ("failed to load the installed plugins"). The installed
+    //    copy must be skipped before its script is fetched — the bundled build is
+    //    the one that should run.
+    const bundled = new PluginManager(
+      { resolveUrl: (path) => path, hostApiVersion: "2.0.0" },
+      [
+        new KPlugin({
+          name: "Bitable",
+          status: "active",
+          menus: [{ name: "Bitable", key: "/bitable", icon: null, id: "/bitable" }],
+        }),
+      ],
+    );
+    loadResults.set("bitable", registration("Bitable", "2.0.0"));
+    const marketCopy = remotePlugin("bitable", "Bitable", "m-1", "1.0.0");
+    const bundledResult = await bundled.init([marketCopy]);
+    assert(
+      bundledResult.failedPlugins.length === 0,
+      `an installed copy of a host-bundled plugin must not fail the init: `
+      + JSON.stringify(bundledResult.failedPlugins),
+    );
+    assert(
+      !loadedKeys.includes("bitable"),
+      "the installed copy must be skipped before its script is fetched",
+    );
+    assert(
+      bundled.getAllPluginKeys().join() === "Bitable",
+      `exactly the host's own build stays active: ${JSON.stringify(bundled.getAllPluginKeys())}`,
+    );
+    assert(
+      bundled.resolveMenus().filter((menu) => menu.id === "/bitable").length === 1,
+      "the bundled plugin contributes its menu exactly once",
+    );
+    const repeated = await bundled.init([marketCopy]);
+    assert(
+      repeated.failedPlugins.length === 0 && bundled.getAllPluginKeys().join() === "Bitable",
+      "a re-init of the same installed list must stay quiet and idempotent",
+    );
+
+    // A publisher may file the plugin under a key that is not derived from its
+    // display name; the record name is the fallback that still recognises it.
+    const oddlyKeyed = remotePlugin("kn-bitable-market", "Bitable", "m-2", "1.0.0");
+    const oddlyKeyedResult = await bundled.init([oddlyKeyed]);
+    assert(
+      oddlyKeyedResult.failedPlugins.length === 0
+        && !bundled.hasPlugin("kn-bitable-market"),
+      `a record name matching a host bundle must be skipped too: `
+      + JSON.stringify(bundled.getAllPluginKeys()),
+    );
+    assert(
+      !loadedKeys.includes("kn-bitable-market"),
+      "the oddly-keyed installed copy must also be skipped before it is fetched",
+    );
+
+    // A host that does not bundle it still loads the installed build (the
+    // production main boot). The skip is about host-provided plugins, not keys.
+    const withoutBundle = new PluginManager(
+      { resolveUrl: (path) => path, hostApiVersion: "2.0.0" },
+      [new KPlugin({ name: "File Manager", status: "active" })],
+    );
+    const installedResult = await withoutBundle.init([marketCopy]);
+    assert(
+      installedResult.failedPlugins.length === 0 && withoutBundle.hasPlugin("Bitable"),
+      "a host that does not bundle the plugin must still load its installed build",
+    );
+
+    // Only the same plugin is skipped: a different key that merely shares a word
+    // is a genuine second plugin.
+    loadResults.set("bitable-extras", registration("Bitable Extras", "2.0.0"));
+    const sibling = remotePlugin("bitable-extras", "Bitable Extras", "x-1", "1.0.0");
+    const siblingResult = await bundled.init([sibling]);
+    assert(
+      siblingResult.failedPlugins.length === 0 && bundled.hasPlugin("Bitable Extras"),
+      `a different plugin must still load alongside the bundle: `
+      + JSON.stringify(bundled.getAllPluginKeys()),
+    );
   } finally {
     pluginScriptLoader.load = originalLoad;
   }
