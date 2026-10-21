@@ -96,10 +96,13 @@ export default defineConfig({
     build: {
       chunkSizeWarningLimit: 2000,
       rollupOptions: {
-        // Two entries: the app shell and the full-screen region-capture overlay.
+        // Three entries: the app shell, the full-screen region-capture overlay,
+        // and the frameless host-owned confirmation window (SSH/socket/browser
+        // consent — a separate webContents so plugins cannot answer it).
         input: {
           main: resolve(__dirname, 'src/renderer/index.html'),
           region: resolve(__dirname, 'src/renderer/region.html'),
+          confirm: resolve(__dirname, 'src/renderer/confirm.html'),
         },
         output: {
           manualChunks: {

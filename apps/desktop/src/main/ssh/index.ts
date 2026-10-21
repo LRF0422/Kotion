@@ -28,11 +28,12 @@
  * for as long as it lives (a pty is not a request/response call) and streams
  * over `desktop:event:ssh`.
  */
-import { app, BrowserWindow, dialog, ipcMain, safeStorage } from 'electron'
+import { app, BrowserWindow, ipcMain, safeStorage } from 'electron'
 import { readFileSync, writeFileSync } from 'node:fs'
 import * as dns from 'node:dns'
 import { join } from 'node:path'
 import { isIP } from 'node:net'
+import { askConfirmation } from '../confirm/index'
 import { classifyAddress } from '../net-policy'
 import { getNetPolicy } from '../net-policy-store'
 import {
@@ -119,7 +120,10 @@ const asRecord = (value: unknown): Record<string, unknown> =>
  */
 const toBase64 = (chunk: unknown) => Buffer.from(chunk as Buffer).toString('base64')
 
-/** Dialog copy follows the OS locale; the main process has no i18n runtime. */
+/**
+ * Confirmation copy follows the OS locale; the main process has no i18n runtime.
+ * Rows are rendered by the host's confirmation window (`renderer/src/confirm.tsx`).
+ */
 const dialogStrings = (locale: string) =>
     locale.toLowerCase().startsWith('zh')
         ? {
@@ -127,32 +131,32 @@ const dialogStrings = (locale: string) =>
               allow: '允许',
               deny: '拒绝',
               message: (key: string) => `有插件请求通过 SSH 连接 ${key}`,
+              labels: { action: '操作', hostKey: '主机密钥', credentials: '凭证' },
               kind: {
-                  command: '操作：远程执行命令',
-                  transfer: '操作：上传 / 下载文件',
-                  sftp: '操作：读取或修改远端目录',
-                  shell: '操作：打开「交互式终端」——远端 pty，可以输入任意命令',
+                  command: '远程执行命令',
+                  transfer: '上传 / 下载文件',
+                  sftp: '读取或修改远端目录',
+                  shell: '打开「交互式终端」——远端 pty，可以输入任意命令',
               } as Record<SshRequestKind, string>,
-              policyStrict: '主机密钥：严格校验（按 ~/.ssh/known_hosts）',
-              policyAcceptNew: '主机密钥：首次自动信任（accept-new，会记住该密钥）',
-              auth: (source: string) => `凭证：${source}（宿主不接收、不保存任何密码或私钥）`,
-              remember: '允许后，本次运行内该主机的后续调用不再询问（可在设置里“忘记”）。',
+              policyStrict: '严格校验（按 ~/.ssh/known_hosts）',
+              policyAcceptNew: '首次自动信任（accept-new，会记住该密钥）',
+              note: '宿主不会接收或保存任何密码或私钥。允许后，本次运行内该主机的后续调用不再询问（可在设置里「忘记」）。',
           }
         : {
               title: 'SSH connection request',
               allow: 'Allow',
               deny: 'Deny',
               message: (key: string) => `A plugin wants to connect to ${key} over SSH`,
+              labels: { action: 'Action', hostKey: 'Host key', credentials: 'Credentials' },
               kind: {
-                  command: 'Action: run a remote command',
-                  transfer: 'Action: upload / download a file',
-                  sftp: 'Action: read or modify a remote directory',
-                  shell: 'Action: open an INTERACTIVE TERMINAL (remote pty, arbitrary input)',
+                  command: 'Run a remote command',
+                  transfer: 'Upload / download a file',
+                  sftp: 'Read or modify a remote directory',
+                  shell: 'Open an INTERACTIVE TERMINAL (remote pty, arbitrary input)',
               } as Record<SshRequestKind, string>,
-              policyStrict: 'Host key: strict (verify against ~/.ssh/known_hosts)',
-              policyAcceptNew: 'Host key: accept-new (trust on first use, remembered)',
-              auth: (source: string) => `Credentials: ${source} (the host never receives or stores a password or key)`,
-              remember: 'Allowing covers later calls to this host for this app run (revocable at any time).',
+              policyStrict: 'Strict (verify against ~/.ssh/known_hosts)',
+              policyAcceptNew: 'Accept-new (trust on first use, remembered)',
+              note: 'The host never receives or stores a password or key. Allowing covers later calls to this host for this app run (revocable at any time).',
           }
 
 export function setupSshIpcHandlers({ assertAllowedPath }: SetupSshOptions) {
@@ -256,20 +260,33 @@ export function setupSshIpcHandlers({ assertAllowedPath }: SetupSshOptions) {
         const win = BrowserWindow.fromWebContents(event.sender)
         if (!win) throw new Error(`desktop ssh: no window is available to confirm "${key}"`)
         const t = dialogStrings(app.getLocale())
-        const { response } = await dialog.showMessageBox(win, {
-            type: 'question',
-            buttons: [t.allow, t.deny],
-            defaultId: 1,
-            cancelId: 1,
-            noLink: true,
-            title: t.title,
-            message: t.message(key),
-            detail:
-                `${t.kind[kind]}${detail ? `（${detail}）` : ''}\n\n` +
-                `${hostKeyPolicy === 'strict' ? t.policyStrict : t.policyAcceptNew}\n` +
-                `${t.auth(describeAuth(buildAuthConfig({})))}\n${t.remember}`,
-        })
-        if (response !== 0) throw new Error(`desktop ssh: the user refused the connection to "${key}"`)
+        const allowed = await askConfirmation(
+            {
+                kind: 'ssh',
+                title: t.title,
+                message: t.message(key),
+                rows: [
+                    {
+                        label: t.labels.action,
+                        value: `${t.kind[kind]}${detail ? `（${detail}）` : ''}`,
+                        tone: kind === 'shell' ? 'danger' : 'default',
+                    },
+                    {
+                        label: t.labels.hostKey,
+                        value: hostKeyPolicy === 'strict' ? t.policyStrict : t.policyAcceptNew,
+                    },
+                    {
+                        label: t.labels.credentials,
+                        value: describeAuth(buildAuthConfig({})),
+                    },
+                ],
+                note: t.note,
+                allowLabel: t.allow,
+                denyLabel: t.deny,
+            },
+            win,
+        )
+        if (!allowed) throw new Error(`desktop ssh: the user refused the connection to "${key}"`)
         const grant: SshGrant = { key, ...target, hostKeyPolicy, scope: kind, grantedAt: Date.now() }
         grants.set(grantId, grant)
         return grant

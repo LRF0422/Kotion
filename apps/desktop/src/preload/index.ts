@@ -72,6 +72,13 @@ const CAPABILITIES = [
   'dialog.openFolder',
   'dialog.saveFile',
   'dialog.message',
+  // Host-owned confirmation window (SSH grant, raw socket, system browser).
+  // `context` is readable only by that window and `confirmResult` is accepted
+  // only from its webContents, so a plugin calling these from the app window
+  // cannot answer its own prompt.
+  'dialog.confirm.context',
+  'dialog.confirmResult',
+  'dialog.confirmResize',
   'fs.readFile',
   'fs.writeFile',
   'fs.exists',

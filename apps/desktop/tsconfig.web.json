@@ -22,6 +22,7 @@
         "noFallthroughCasesInSwitch": true
     },
     "include": [
-        "src/renderer/src"
+        "src/renderer/src",
+        "src/shared/**/*"
     ]
 }

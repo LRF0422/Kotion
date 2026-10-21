@@ -15,8 +15,9 @@
  * host or opens a browser tab.
  */
 
-import { app, BrowserWindow, dialog, ipcMain, Notification, powerSaveBlocker, safeStorage, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, Notification, powerSaveBlocker, safeStorage, shell } from 'electron'
 import { randomUUID } from 'node:crypto'
+import { askConfirmation } from '../confirm/index'
 import { createSecretStore, secretFilePath } from './secrets.mjs'
 import {
     SOCKET_MAX_SESSIONS,
@@ -110,17 +111,17 @@ const copy = (locale: string) => {
                 zh
                     ? `有插件请求与 ${target} 建立原始网络连接`
                     : `A plugin wants to open a raw network connection to ${target}`,
-            detail: (protocol: string, tlsMode: string) =>
-                (zh
-                    ? `用途：在那条连接上发送和接收任意字节（插件自己实现协议，宿主只搬运数据）。\n` +
-                      `协议：${protocol}${tlsMode}\n` +
-                      `连接由本应用建立，目标可以读取你通过它发送的一切。`
-                    : `Purpose: send and receive arbitrary bytes on that connection (the plugin speaks the protocol; the host only moves data).\n` +
-                      `Protocol: ${protocol}${tlsMode}\n` +
-                      `The connection is made by this app, and the remote end can read everything you send through it.`) +
-                (zh
-                    ? '\n\n允许后，本次运行内该目标的后续连接不再询问。'
-                    : '\n\nAllowing covers later connections to this target for this app run.'),
+            labels: {
+                target: zh ? '目标' : 'Target',
+                protocol: zh ? '协议' : 'Protocol',
+                purpose: zh ? '用途' : 'Purpose',
+            },
+            purpose: zh
+                ? '在那条连接上发送和接收任意字节（插件自己实现协议，宿主只搬运数据）'
+                : 'Send and receive arbitrary bytes on that connection (the plugin speaks the protocol; the host only moves data)',
+            note: zh
+                ? '连接由本应用建立，目标可以读取你通过它发送的一切。允许后，本次运行内该目标的后续连接不再询问。'
+                : 'The connection is made by this app, and the remote end can read everything you send through it. Allowing covers later connections to this target for this app run.',
         },
         browser: {
             title: zh ? '打开系统浏览器' : 'Open the system browser',
@@ -128,10 +129,10 @@ const copy = (locale: string) => {
             deny: zh ? '取消' : 'Cancel',
             message: (origin: string) =>
                 zh ? `有插件请求在系统浏览器中打开 ${origin}` : `A plugin wants to open ${origin} in your browser`,
-            detail: (url: string) =>
-                (zh
-                    ? `地址：${url}\n浏览器会以你的身份访问该站点（例如授权登录）。确认地址无误后再继续。`
-                    : `URL: ${url}\nYour browser will visit this site with your credentials (e.g. to authorize sign-in). Check the address before continuing.`),
+            labels: { origin: zh ? '站点' : 'Site', url: zh ? '地址' : 'URL' },
+            note: zh
+                ? '浏览器会以你的身份访问该站点（例如授权登录）。确认地址无误后再继续。'
+                : 'Your browser will visit this site with your credentials (e.g. to authorize sign-in). Check the address before continuing.',
         },
     }
 }
@@ -145,27 +146,13 @@ const copy = (locale: string) => {
  */
 
 /**
- * The real prompts: a modal dialog per decision, with locale-appropriate copy.
- * Refusing — or having no window to ask in — fails closed.
+ * The real prompts: one host-owned confirmation window per decision, with
+ * locale-appropriate copy. Refusing — or having no window to ask in — fails
+ * closed. The window is a separate webContents, so a plugin cannot answer its
+ * own permission prompt (see `main/confirm/index.ts`).
  */
 export function createElectronConfirm(): CapabilityConfirm {
     const t = () => copy(app.getLocale())
-
-    /**
-     * One modal question. A dialog that cannot be shown (no window, a platform
-     * that refuses the call) answers `false` — every gate here fails closed.
-     */
-    const ask = async (options: Electron.MessageBoxOptions): Promise<boolean> => {
-        const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
-        if (!win) return false
-        try {
-            const { response } = await dialog.showMessageBox(win, options)
-            return response === 0
-        } catch (error) {
-            console.warn('[capabilities] consent dialog failed:', error)
-            return false
-        }
-    }
 
     return {
         async socket(prompt) {
@@ -180,28 +167,36 @@ export function createElectronConfirm(): CapabilityConfirm {
                           ? '（TLS：已放开证书校验）'
                           : ' (TLS: certificate verification relaxed)'
                     : ''
-            return ask({
-                type: 'question',
-                buttons: [strings.allow, strings.deny],
-                defaultId: 1,
-                cancelId: 1,
-                noLink: true,
+            return askConfirmation({
+                kind: 'network',
                 title: strings.title,
                 message: strings.message(prompt.label),
-                detail: strings.detail(prompt.protocol.toUpperCase(), tlsNote),
+                rows: [
+                    { label: strings.labels.target, value: prompt.label },
+                    {
+                        label: strings.labels.protocol,
+                        value: `${prompt.protocol.toUpperCase()}${tlsNote}`,
+                    },
+                    { label: strings.labels.purpose, value: strings.purpose },
+                ],
+                note: strings.note,
+                allowLabel: strings.allow,
+                denyLabel: strings.deny,
             })
         },
         async browser(prompt) {
             const strings = t().browser
-            return ask({
-                type: 'question',
-                buttons: [strings.allow, strings.deny],
-                defaultId: 1,
-                cancelId: 1,
-                noLink: true,
+            return askConfirmation({
+                kind: 'browser',
                 title: strings.title,
                 message: strings.message(prompt.origin),
-                detail: strings.detail(prompt.url),
+                rows: [
+                    { label: strings.labels.origin, value: prompt.origin },
+                    { label: strings.labels.url, value: prompt.url },
+                ],
+                note: strings.note,
+                allowLabel: strings.allow,
+                denyLabel: strings.deny,
             })
         },
     }

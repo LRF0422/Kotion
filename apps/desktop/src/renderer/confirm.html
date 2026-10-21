@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kotion</title>
+    <script>
+        // Same theme boot as the main renderer: the confirmation window shares
+        // localStorage, so it opens in the user's current theme without a flash.
+        (function () {
+            const root = document.documentElement;
+            const theme = localStorage.getItem('kn-ui-theme') || localStorage.getItem('theme');
+            if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                root.classList.add('dark');
+            }
+        })();
+    </script>
+    <style>
+        html,
+        body,
+        #root {
+            margin: 0;
+            height: 100%;
+            background: transparent;
+            overflow: hidden;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="root"></div>
+    <script type="module" src="./src/confirm.tsx"></script>
+</body>
+
+</html>

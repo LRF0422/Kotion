@@ -8,6 +8,7 @@ import { setupDevIpcHandlers } from './plugin-dev/index';
 import { setupSshIpcHandlers } from './ssh/index';
 import { setupStorageHandlers } from './storage/index';
 import { setupCapabilityHandlers, createElectronConfirm } from './capabilities/handlers';
+import { setupConfirmIpcHandlers } from './confirm/index';
 import {
   chooseBodyRepresentation,
   decodeBody,
@@ -176,6 +177,12 @@ const handle = (capability: string, fn: CapabilityHandler): void => {
 };
 
 export function setupIpcHandlers() {
+  // ==================== host-owned confirmations ====================
+  // Security gates (SSH, raw sockets, system browser) ask in their own
+  // frameless window that renders the app's UI kit. Registered first so a gate
+  // fired during plugin boot already has a place to ask.
+  setupConfirmIpcHandlers();
+
   // ==================== plugin development (plugin-studio) ====================
   // Installed from here so it shares this module's fs allowlist: a dev project
   // root is only reachable if it lives in a standard user directory or in a
