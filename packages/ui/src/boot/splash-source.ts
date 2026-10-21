@@ -3,11 +3,11 @@
  * {@link bootSplashPlugin}, so something on-brand paints **before** the app's
  * (very large) module graph and plugin bundles finish loading.
  *
- * Visual source of truth: `design/boot-splash-flat/` — the flat version of the
- * "Lumen" direction (brand tile, KOTION, stage line, flat progress rule; solid
- * colour fields, no shadows/glows/gradients). Keep `./boot-splash.ts` in sync
- * with the ids/classes declared here. This file must stay dependency-free and
- * side-effect free: the Vite and electron-vite configs import it from Node.
+ * The visual definition lives here (flat "Lumen" direction: brand tile, KOTION,
+ * stage line, flat progress rule; solid colour fields, no shadows/glows/
+ * gradients). Keep `./boot-splash.ts` in sync with the ids/classes declared
+ * here. This file must stay dependency-free and side-effect free: the Vite and
+ * electron-vite configs import it from Node.
  *
  * Design constraints the CSS relies on:
  * - Base surfaces are the app's own tokens (`#ffffff` / `#191919`), so there is
