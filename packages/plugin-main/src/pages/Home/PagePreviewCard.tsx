@@ -240,7 +240,7 @@ const PreviewBody: React.FC<{
             {/* Cover banner — mirrors the page's own cover crop position. A broken
                 cover must not take the whole preview down, so hide it on error. */}
             {coverUrl && !coverBroken && (
-                <div className="h-[96px] w-full shrink-0 overflow-hidden bg-muted/30">
+                <div className="h-[96px] w-full shrink-0 overflow-hidden bg-muted">
                     <img
                         src={coverUrl}
                         alt=""
@@ -252,7 +252,7 @@ const PreviewBody: React.FC<{
                 </div>
             )}
             {/* Header: icon + title + space name */}
-            <div className="flex items-center gap-2 border-b border-border/60 px-3 py-2">
+            <div className="flex items-center gap-2 border-b border-border px-3 py-2">
                 {pageIcon?.icon ? (
                     <PageItemIcon icon={pageIcon} size={16} />
                 ) : (
@@ -287,7 +287,6 @@ const PreviewBody: React.FC<{
                         {t("home.preview-empty", "This page is empty")}
                     </p>
                 )}
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-popover to-transparent" />
             </div>
         </div>
     );
@@ -454,11 +453,11 @@ export const PagePreviewProvider: React.FC<{ children: React.ReactNode }> = ({ c
                 <div
                     ref={cardRef}
                     className={cn(
-                        "fixed z-50 w-[400px] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md",
+                        "fixed z-50 w-[400px] overflow-hidden rounded-md border bg-popover text-popover-foreground",
                         // top/left transition makes the card glide between rows;
-                        // opacity/scale handle enter and exit.
+                        // opacity handles enter and exit (flat: no elevation/scale).
                         "transition-[top,left,opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
-                        visible ? "opacity-100 scale-100" : "opacity-0 scale-[0.97]",
+                        visible ? "opacity-100" : "opacity-0",
                         target.onOpenPage && "cursor-pointer"
                     )}
                     style={{ top: pos.top, left: pos.left }}

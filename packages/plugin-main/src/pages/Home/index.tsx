@@ -11,8 +11,8 @@ import { useTranslation } from "@kn/common";
 import { format, parseISO, formatDistanceToNow } from "@kn/ui";
 
 
-// Accent helpers. Icons carry the color directly — no chip backgrounds, so
-// the surfaces stay neutral and the color reads as an accent, not a block.
+// Colour accents stay colour *accent* only: icons carry the hue directly and
+// surfaces remain flat and solid (no gradients, shadows or alpha layers).
 const chipStyle = (hue: number): React.CSSProperties => ({
     color: "hsl(" + hue + " 72% 70%)",
 })
@@ -158,9 +158,8 @@ export const Home: React.FC = () => {
         return t("home.greeting.evening") || "Good evening"
     }
 
-    // Notion favors an emoji-like symbol next to the greeting rather than a
-    // colored icon tile. We keep the lucide icon but render it larger and
-    // without a colored plate so it feels closer to a page emoji.
+    // Notion favours an emoji-like symbol next to the greeting rather than a
+    // colored icon tile: larger lucide icon, no plate, time-of-day hue.
     const getGreetingIcon = () => {
         if (isMorning) return <Sun className="h-8 w-8 text-amber-500" strokeWidth={1.6} />
         if (isAfternoon) return <Sunset className="h-8 w-8 text-orange-500" strokeWidth={1.6} />
@@ -337,12 +336,12 @@ export const Home: React.FC = () => {
         }
     }
 
-    // Compact metric tile with a colored icon chip.
+    // Compact metric tile — flat surface, colour lives in the icon/label.
     const StatCard: React.FC<{ label: string; value: React.ReactNode; hint?: string; icon: React.ReactNode; hue: number }> = ({ label, value, hint, icon, hue }) => (
-        <Card className="group relative overflow-hidden border-border/60 shadow-none transition-all duration-200 hover:-translate-y-0.5 hover:border-border">
+        <Card className="group relative overflow-hidden border-border shadow-none transition-colors hover:border-foreground/20">
             <span
-                className="pointer-events-none absolute inset-x-0 top-0 h-px"
-                style={{ background: "hsl(" + hue + " 70% 62% / 0.7)" }}
+                className="pointer-events-none absolute inset-x-0 top-0 h-[2px]"
+                style={{ background: "hsl(" + hue + " 70% 62%)" }}
             />
             <CardContent className="flex items-center gap-3 p-4">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center" style={chipStyle(hue)}>
@@ -368,7 +367,7 @@ export const Home: React.FC = () => {
         action?: React.ReactNode
         children: React.ReactNode
     }> = ({ title, count, icon, hue, action, children }) => (
-        <Card className="border-border/60 shadow-none transition-colors hover:border-border">
+        <Card className="border-border shadow-none transition-colors hover:border-foreground/20">
             <div className="flex items-center justify-between px-4 pb-1.5 pt-3.5">
                 <div className="flex items-center gap-2">
                     {icon && hue != null && (
@@ -385,7 +384,7 @@ export const Home: React.FC = () => {
         </Card>
     )
 
-    const rowClass = "group/row flex cursor-pointer items-center gap-3 rounded-md px-2.5 py-2 transition-colors hover:bg-muted/60"
+    const rowClass = "group/row flex cursor-pointer items-center gap-3 rounded-md px-2.5 py-2 transition-colors hover:bg-muted"
     const iconChipClass = "flex h-7 w-7 shrink-0 items-center justify-center text-muted-foreground"
 
     return (
@@ -462,7 +461,7 @@ export const Home: React.FC = () => {
                     className="kn-home-in kn-home-in-3 mt-5 grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_280px]"
                     style={!isMobile ? { gridTemplateColumns: "minmax(0, 1fr) 280px" } : undefined}
                 >
-                    <Card className="border-border/60 shadow-none transition-colors hover:border-border">
+                    <Card className="border-border shadow-none transition-colors hover:border-foreground/20">
                         <Tabs value={activeTab} onValueChange={setActiveTab}>
                             <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-3">
                                 <TabsList className="h-8 gap-1 bg-transparent p-0">
@@ -507,13 +506,10 @@ export const Home: React.FC = () => {
                                                     key={tag}
                                                     type="button"
                                                     onClick={() => toggleTag(tag)}
-                                                    className={cn(
-                                                        "shrink-0 rounded-full border border-transparent px-2.5 py-0.5 text-[11px] font-medium transition-colors",
-                                                        active ? "" : "hover:brightness-125"
-                                                    )}
+                                                    className="shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors"
                                                     style={active
-                                                        ? { backgroundColor: "hsl(" + tagHue(tag) + " 70% 58% / 0.32)", color: "hsl(" + tagHue(tag) + " 80% 84%)" }
-                                                        : { backgroundColor: "hsl(" + tagHue(tag) + " 70% 58% / 0.13)", color: "hsl(" + tagHue(tag) + " 62% 72%)" }}
+                                                        ? { backgroundColor: "hsl(" + tagHue(tag) + " 62% 40%)", color: "#ffffff" }
+                                                        : { backgroundColor: "hsl(" + tagHue(tag) + " 72% 70%)", color: "#1a1a1a" }}
                                                 >
                                                     {tag}
                                                 </button>
@@ -773,8 +769,8 @@ const EmptyBlock: React.FC<{
     desc?: string
     action?: React.ReactNode
 }> = ({ icon, title, desc, action }) => (
-    <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border/60 py-8 text-center">
-        <div className="flex h-9 w-9 items-center justify-center rounded-md bg-muted/60 text-muted-foreground">
+    <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border py-8 text-center">
+        <div className="flex h-9 w-9 items-center justify-center rounded-md bg-muted text-muted-foreground">
             {icon}
         </div>
         <div className="flex flex-col items-center gap-1">
