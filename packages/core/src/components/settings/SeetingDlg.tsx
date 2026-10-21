@@ -66,10 +66,30 @@ const LoadingSpinner: React.FC = () => (
     </div>
 );
 
-export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
+export interface SettingDlgProps {
+    /**
+     * 受控开关。省略时保持原有用法：用 `children` 作为触发按钮。
+     * 账号菜单等外部入口需要直接打开弹窗时传 `open` + `onOpenChange`。
+     */
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
+    /**
+     * 打开时定位到的面板（对应 `NavItem.contentKey`），省略时为「我的账号」。
+     * 例如账号菜单的「邀请协作者」→ `Member`、「升级方案」→ `Subscription`。
+     */
+    initialKey?: string;
+}
+
+export const SettingDlg: React.FC<PropsWithChildren<SettingDlgProps>> = ({ children, open: controlledOpen, onOpenChange, initialKey }) => {
     const { userInfo } = useSelector((state: GlobalState) => state);
     const [currentKey, setCurrentKey] = useSafeState<string>("MyAccount");
-    const [open, setOpen] = useSafeState<boolean>(false);
+    const [uncontrolledOpen, setUncontrolledOpen] = useSafeState<boolean>(false);
+    const isControlled = controlledOpen !== undefined;
+    const open = isControlled ? controlledOpen : uncontrolledOpen;
+    const setOpen = (next: boolean) => {
+        if (!isControlled) setUncontrolledOpen(next);
+        onOpenChange?.(next);
+    };
     // 移动端：是否处于「详情」视图（false 时显示导航列表）。
     const [mobileDetail, setMobileDetail] = useSafeState<boolean>(false);
     const { usePath } = useUploadFile();
@@ -77,13 +97,14 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
     const { isMobile } = useResponsive();
     const { t } = useTranslation();
 
-    // 弹窗每次打开都回到默认页 + 列表视图。
+    // 弹窗每次打开都回到默认页 + 列表视图（外部入口可指定 initialKey 深链到某个面板）。
     useEffect(() => {
         if (open) {
-            setCurrentKey("MyAccount");
-            setMobileDetail(false);
+            const key = initialKey || "MyAccount";
+            setCurrentKey(key);
+            setMobileDetail(key !== "MyAccount");
         }
-    }, [open]);
+    }, [open, initialKey]);
 
     // 重新查看新手引导：关闭设置弹窗后，重置并启动 welcome tour。
     const replayOnboarding = () => {
@@ -357,7 +378,7 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>{children}</DialogTrigger>
+            {children ? <DialogTrigger asChild>{children}</DialogTrigger> : null}
             <DialogContent
                 aria-describedby={undefined}
                 className={cn(

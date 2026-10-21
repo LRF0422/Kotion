@@ -25,6 +25,7 @@ import {
     saveCredentials,
     saveRememberedAccount,
 } from "../../auth/saved-credentials"
+import { recordSignIn } from "../../auth/last-sign-in"
 
 
 export function Login() {
@@ -111,6 +112,9 @@ export function Login() {
             saveTokens(tokens.accessToken, tokens.refreshToken)
             notifyContextChanged("")
             localStorage.setItem("isLogin", "false")
+            // Remember when this session started so the account menu can show a
+            // real “上次登录” instead of a hard-coded placeholder.
+            void recordSignIn(account)
 
             // Only remember after the credentials are known to be valid, and
             // only what the user actually asked for: unchecking "remember"

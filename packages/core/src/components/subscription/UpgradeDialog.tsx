@@ -15,8 +15,30 @@ import {
 import { APIS, useApi, useEntitlements } from '@kn/common'
 
 /** 升级入口：本期不做支付，开通走兑换码或平台管理员，并提供试用。 */
-export const UpgradeDialog: React.FC<{ trigger?: React.ReactNode; initialPlanName?: string }> = ({ trigger, initialPlanName }) => {
-    const [open, setOpen] = useState(false)
+export interface UpgradeDialogProps {
+    trigger?: React.ReactNode
+    initialPlanName?: string
+    /**
+     * 受控开关。省略时保持原有用法：由 `trigger` 打开。
+     * 账号菜单等外部入口需要直接打开弹窗时传 `open` + `onOpenChange`。
+     */
+    open?: boolean
+    onOpenChange?: (open: boolean) => void
+}
+
+export const UpgradeDialog: React.FC<UpgradeDialogProps> = ({
+    trigger,
+    initialPlanName,
+    open: controlledOpen,
+    onOpenChange,
+}) => {
+    const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
+    const isControlled = controlledOpen !== undefined
+    const open = isControlled ? controlledOpen : uncontrolledOpen
+    const setOpen = (next: boolean) => {
+        if (!isControlled) setUncontrolledOpen(next)
+        onOpenChange?.(next)
+    }
     const [code, setCode] = useState('')
     const [busy, setBusy] = useState(false)
     const { refresh } = useEntitlements()
@@ -53,7 +75,14 @@ export const UpgradeDialog: React.FC<{ trigger?: React.ReactNode; initialPlanNam
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>{trigger ?? <Button>升级方案</Button>}</DialogTrigger>
+            {trigger ? (
+                <DialogTrigger asChild>{trigger}</DialogTrigger>
+            ) : !isControlled ? (
+                // Preserve the original default trigger for uncontrolled callers.
+                <DialogTrigger asChild>
+                    <Button>升级方案</Button>
+                </DialogTrigger>
+            ) : null}
             <DialogContent className="md:max-w-md">
                 <DialogHeader>
                     <DialogTitle>开通方案</DialogTitle>

@@ -1,21 +1,14 @@
 import { useNavigator } from "@kn/common";
-import { Blocks, LayoutDashboard, Power, Settings, UserRoundPlus, Github } from "@kn/icon";
-import React, { useContext, useMemo, useCallback, memo } from "react";
-import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider, useIsMobile, Button } from "@kn/ui";
+import { Blocks, Settings, Github } from "@kn/icon";
+import React, { useMemo, useCallback, memo } from "react";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider, useIsMobile, Button, ModeToggle } from "@kn/ui";
 import { useLocation } from "@kn/common";
 import { cn } from "@kn/ui";
-import { useSelector } from "@kn/common";
-import { GlobalState } from "@kn/common";
-import { Avatar, AvatarFallback, AvatarImage } from "@kn/ui";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@kn/ui";
-import { Badge } from "@kn/ui";
+import { SiderMenuItemProps, usePluginMenus } from "@kn/common";
 import { SettingDlg } from "./settings/SeetingDlg";
-import { ModeToggle } from "@kn/ui";
-import { AppContext, SiderMenuItemProps, usePluginMenus } from "@kn/common";
-import { useUploadFile } from "@kn/common";
 import { LanguageToggle } from "../locales/LanguageToggle";
 import { MessageBox } from "./MessageBox";
-import { APIS, clearContextSensitiveClientState, getRefreshToken, notifyContextChanged, signOut, useApi } from "@kn/common";
+import { UserMenu } from "./UserMenu";
 
 const GITHUB_URL = "https://github.com/LRF0422/knowledge-repo";
 
@@ -89,33 +82,6 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
     const isMobile = useIsMobile()
     const navigator = useNavigator()
     const location = useLocation()
-    const { userInfo } = useSelector((state: GlobalState) => state)
-    const { pluginManager } = useContext(AppContext)
-    const { usePath } = useUploadFile()
-
-    // Memoized handlers for better performance
-    const handleLogout = useCallback(() => {
-        // Revoke the server session first, then wipe every local trace of the
-        // sign-in (tokens, remembered account, remembered desktop credentials).
-        void useApi(APIS.LOGOUT, undefined, { refreshToken: getRefreshToken() || '' })
-            .catch(() => undefined).finally(() => {
-            clearContextSensitiveClientState()
-            notifyContextChanged("")
-            void signOut().finally(() => {
-                window.location.href = '/login'
-            })
-        })
-    }, [])
-
-    const handleGoToPersonalSpace = useCallback(() => {
-        // TODO: Implement personal space navigation
-        // useApi(APIS.PERSONAL_SPACE).then((res) => {
-        //     navigator.go({
-        //         to: `/space-detail/${res.data.id}`
-        //     })
-        // })
-    }, []);
-
 
     // Memoized menus construction.
     //
@@ -171,76 +137,6 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
         // Call onItemClick callback if provided (for mobile drawer close)
         onItemClick?.();
     }, [navigator, onItemClick]);
-
-    // User info dropdown - rendered separately at the bottom of sidebar
-    const userInfoMenu = useMemo(() => (
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-                <button
-                    type="button"
-                    className={cn(
-                        "rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                        isMobile ? "" : "kn-rail-control flex h-11 w-11 items-center justify-center lg:h-8 lg:w-8"
-                    )}
-                    aria-label="User menu"
-                >
-                    <Avatar className={cn(
-                        "transition-colors",
-                        isMobile ? "h-8 w-8 border-2" : "kn-rail-avatar h-8 w-8"
-                    )}>
-                        <AvatarImage src={usePath(userInfo?.avatar as string)} />
-                        <AvatarFallback className="text-[10px] font-medium">{userInfo?.account?.slice(0, 2).toUpperCase()}</AvatarFallback>
-                    </Avatar>
-                </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent side="right" align="start" className="w-[220px]" sideOffset={8}>
-                <DropdownMenuLabel className="p-3">
-                    <div className="flex flex-row gap-3 items-start justify-between">
-                        <div className="flex-1 min-w-0">
-                            <div className="font-bold flex gap-2 items-center text-sm">
-                                <span className="truncate">{userInfo?.name}</span>
-                                <Badge variant="secondary" className="h-4 text-xs px-1.5">Free</Badge>
-                            </div>
-                            <div className="text-xs text-muted-foreground mt-0.5 truncate">
-                                {userInfo?.account}
-                            </div>
-                        </div>
-                        <Avatar className="h-10 w-10 flex-shrink-0">
-                            <AvatarImage src={usePath(userInfo?.avatar as string)} />
-                            <AvatarFallback className="text-xs">{userInfo?.account?.slice(0, 2).toUpperCase()}</AvatarFallback>
-                        </Avatar>
-                    </div>
-                    <div className="text-[11px] text-muted-foreground mt-2">
-                        上次登录时间 2024年9月14日
-                    </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                    className="flex flex-row items-center gap-2 cursor-pointer"
-                    onClick={handleGoToPersonalSpace}
-                >
-                    <LayoutDashboard className="h-4 w-4" />
-                    <span>个人空间</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem className="flex flex-row items-center gap-2 cursor-pointer">
-                    <UserRoundPlus className="h-4 w-4" />
-                    <span>邀请协作者</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem className="flex flex-row items-center gap-2 cursor-pointer">
-                    <Settings className="h-4 w-4" />
-                    <span>设置</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                    className="flex flex-row items-center gap-2 cursor-pointer text-destructive focus:text-destructive"
-                    onClick={handleLogout}
-                >
-                    <Power className="h-4 w-4" />
-                    <span>注销账号</span>
-                </DropdownMenuItem>
-            </DropdownMenuContent>
-        </DropdownMenu>
-    ), [userInfo, usePath, isMobile, handleLogout, handleGoToPersonalSpace]);
 
     return (
         <>
@@ -301,7 +197,7 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
                                 <Github className="h-[1.2rem] w-[1.2rem]" />
                             </Button>
                         </div>
-                        {userInfoMenu}
+                        <UserMenu isMobile={isMobile} onNavigate={onItemClick} />
                     </div>
                 </nav>
             </TooltipProvider>

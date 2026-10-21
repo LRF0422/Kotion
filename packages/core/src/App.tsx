@@ -16,6 +16,7 @@ import { store } from '@kn/common'
 import { logger } from '@kn/common'
 import { createAppStorage } from './storage/app-storage'
 import { importLegacyLocalStorage } from './storage/legacy-local-storage'
+import { recordSignIn } from './auth/last-sign-in'
 import { Login } from "./components/Login";
 import { SignUpForm } from "./components/SignUp";
 import { Welcome } from "./components/Welcome";
@@ -131,6 +132,9 @@ const SessionExpiredDialog: React.FC<{ onSuccess: () => void; onStay: () => void
             saveTokens(tokens.accessToken, tokens.refreshToken)
             notifyContextChanged("")
             localStorage.setItem('isLogin', 'false')
+            // Same record as the login page: the session-expired dialog is a
+            // real re-login, so the account menu must not keep a stale time.
+            void recordSignIn(account)
             if (handled.current) return
             handled.current = true
             onSuccess()
