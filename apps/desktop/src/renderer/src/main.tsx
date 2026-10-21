@@ -1,6 +1,7 @@
 import ReactDOM from 'react-dom/client'
 import { App } from "@kn/core"
 import { DefaultPluginInstance } from '@kn/plugin-main'
+import { bootSplashDismiss, setBootPhase } from '@kn/ui'
 import "@kn/ui/globals.css"
 import './index.css'
 import React from 'react'
@@ -50,6 +51,8 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
     }
     componentDidCatch(error: Error, info: React.ErrorInfo) {
         console.error('React Error:', error, info)
+        // The error card below must not stay hidden under the boot splash.
+        bootSplashDismiss()
     }
     render() {
         if (this.state.hasError) {
@@ -118,6 +121,10 @@ const loadInitialPlugins = async () => {
 }
 
 void (async () => {
+    // The static boot splash (injected into index.html) covers the window while
+    // the plugin bundles compile/load; it is closed by the shell once the
+    // workspace (or an auth page) is actually ready.
+    setBootPhase('plugins')
     const plugins = await loadInitialPlugins()
     ReactDOM.createRoot(document.getElementById('root')!).render(
         <ErrorBoundary>

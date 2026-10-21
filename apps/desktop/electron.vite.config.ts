@@ -3,6 +3,7 @@ import { copyFile, mkdir } from 'fs/promises'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import tsconfigPaths from 'vite-tsconfig-paths'
+import { bootSplashPlugin } from '../../packages/ui/src/boot/splash-source'
 
 /**
  * The plugin studio's bundler runs in a **child process**, not in the main
@@ -108,6 +109,6 @@ export default defineConfig({
         }
       }
     },
-    plugins: [react(), tsconfigPaths()]
+    plugins: [react(), tsconfigPaths(), bootSplashPlugin()]
   }
 })

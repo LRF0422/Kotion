@@ -1,7 +1,7 @@
 
 import { SiderMenu } from "./components/SiderMenu"
 import { useContext, useEffect, useState } from "react"
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogTitle, AlertDialogTrigger, Badge, Item, ItemContent, ItemDescription, ItemTitle, Rate, SparklesText, cn, useIsMobile, useVirtualKeyboard, Button } from "@kn/ui"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogTitle, AlertDialogTrigger, Badge, Item, ItemContent, ItemDescription, ItemTitle, Rate, SparklesText, cn, useIsMobile, useVirtualKeyboard, Button, bootSplashDismiss, bootSplashReady, setBootPhase } from "@kn/ui"
 import { TourHost } from "./components/Tour/TourHost"
 import { ChevronLeft } from "@kn/icon"
 import { MobileTabBar } from "./components/mobile/MobileTabBar"
@@ -117,6 +117,23 @@ export function Layout({ onPluginsReady }: LayoutProps) {
     const [pluginsLoaded, setPluginsLoaded] = useState(false)
     const [pluginLoadError, setPluginLoadError] = useState<unknown>(null)
     const [refreshFlag, setRefreshFlag] = useState(0)
+
+    // The pre-mount boot splash (static HTML injected into index.html) is the
+    // only loading screen the user should see: this keeps its copy in sync with
+    // what the shell is doing, fades it out the moment the workspace is ready,
+    // and gets it out of the way when the plugin load fails and the retry card
+    // needs the viewport.
+    useEffect(() => {
+        if (pluginLoadError) {
+            bootSplashDismiss()
+            return
+        }
+        if (pluginsLoaded) {
+            bootSplashReady()
+        } else {
+            setBootPhase('workspace')
+        }
+    }, [pluginsLoaded, pluginLoadError])
     // Keep-alive is on by default; the localStorage escape hatch only needs to be
     // read once because toggling it requires a reload anyway (see route-cache.ts).
     const routeCacheDisabled = React.useMemo(() => isRouteCacheDisabledByFlag(), [])

@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { App } from "@kn/core";
 import { DefaultPluginInstance } from "@kn/plugin-main";
+import { bootSplashDismiss, setBootPhase } from "@kn/ui";
 
 import "@kn/ui/globals.css";
 
@@ -38,18 +39,16 @@ const loadInitialPlugins = async () => {
 const bootstrap = async () => {
   const root = ReactDOM.createRoot(document.getElementById("root")!);
 
-  if (shouldLoadBundledPlugins) {
-    root.render(
-      <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">
-        Loading plugins…
-      </div>,
-    );
-  }
+  // The static boot splash (injected into index.html) already covers the
+  // viewport; it only needs its copy to say what we are waiting for. Rendering
+  // React on top of it would flash a second, different loading screen.
+  if (shouldLoadBundledPlugins) setBootPhase("plugins");
 
   try {
     const plugins = await loadInitialPlugins();
     root.render(<App plugins={plugins} />);
   } catch (error) {
+    bootSplashDismiss();
     root.render(
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center">
         <p className="text-sm text-muted-foreground">

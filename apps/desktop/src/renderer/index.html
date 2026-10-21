@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 
 <head>
@@ -6,7 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>KN</title>
     <script>
-        // Apply saved theme immediately to prevent flash
+        // Apply the saved theme/language immediately to prevent a flash. The boot
+        // splash (injected by `bootSplashPlugin`) keys its copy and colours off
+        // `html.dark` / `html[lang]`, so this has to run before the body parses.
         (function () {
             const root = document.documentElement;
             const theme = localStorage.getItem('kn-ui-theme') || localStorage.getItem('theme');
@@ -15,51 +17,10 @@
             if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
                 root.classList.add('dark');
             }
+            const language = localStorage.getItem('language') || navigator.language || 'en';
+            root.lang = /^zh/i.test(language) ? 'zh' : 'en';
         })();
     </script>
-    <style>
-        /* Prevent white flash on load */
-        html {
-            background-color: hsl(0 0% 100%);
-        }
-
-        html.dark {
-            background-color: hsl(240 10% 3.9%);
-        }
-
-        /* Static loading indicator — visible before React mounts */
-        #root:empty {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            min-height: 100dvh;
-        }
-
-        #root:empty::after {
-            content: 'KN';
-            font-size: 60px;
-            font-weight: bold;
-            color: hsl(240 5.9% 10%);
-            animation: pulse 1.5s ease-in-out infinite;
-        }
-
-        html.dark #root:empty::after {
-            color: hsl(0 0% 98%);
-        }
-
-        @keyframes pulse {
-
-            0%,
-            100% {
-                opacity: 1;
-            }
-
-            50% {
-                opacity: 0.4;
-            }
-        }
-    </style>
 </head>
 
 <body>

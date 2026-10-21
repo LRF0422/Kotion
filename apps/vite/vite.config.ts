@@ -1,6 +1,7 @@
 import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import path from 'path'
+import { bootSplashPlugin } from '../../packages/ui/src/boot/splash-source'
 
 // Dev-only same-origin proxy for bookmark metadata fetching (bypasses browser CORS)
 const bookmarkMetadataProxy = (): Plugin => ({
@@ -57,7 +58,7 @@ export default defineConfig(({ mode }) => {
   );
 
   return {
-    plugins: [react(), bookmarkMetadataProxy()],
+    plugins: [react(), bookmarkMetadataProxy(), bootSplashPlugin()],
     define: clientEnvVars,
     build: {
       manifest: true,

@@ -1,4 +1,4 @@
-import { Button, Alert, AlertTitle, AlertDescription } from "@kn/ui";
+import { Button, Alert, AlertTitle, AlertDescription, bootSplashDismiss } from "@kn/ui";
 import { useNavigator } from "@kn/common";
 import React, { useState, useEffect } from "react";
 import { useRouteError } from "@kn/common";
@@ -21,6 +21,9 @@ export const ErrorPage: React.FC<ErrorPageProps> = ({ error: propsError, resetEr
         if (error) {
             console.error("ErrorPage caught:", error);
         }
+        // A route can throw before the shell is mounted; the boot splash must
+        // never sit on top of the error card that explains what happened.
+        bootSplashDismiss();
     }, [error]);
 
     const handleGoHome = () => {

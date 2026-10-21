@@ -11,7 +11,7 @@ import * as jsxRuntime from "react/jsx-runtime";
 import * as jsxDevRuntime from "react/jsx-dev-runtime";
 
 import { Layout } from "./Layout";
-import { ThemeProvider, Toaster, ResponsiveProvider } from "@kn/ui";
+import { ThemeProvider, Toaster, ResponsiveProvider, bootSplashReady } from "@kn/ui";
 import { store } from '@kn/common'
 import { logger } from '@kn/common'
 import { createAppStorage } from './storage/app-storage'
@@ -585,6 +585,20 @@ export const App: React.FC<AppProps> = (props) => {
         }
     }, [pluginsReady, pluginManager, refreshFlag])
 
+    // The pre-mount boot splash is dismissed by the shell once the plugin
+    // workspace is ready. Auth / onboarding routes are rendered outside
+    // `Layout`, so nothing else would ever close it — and leaving it up would
+    // cover the login form the user is being redirected to.
+    useEffect(() => {
+        if (!router) return
+        const path = window.location.pathname
+        const servesWithoutLayout = path === '/login'
+            || path === '/sign-up'
+            || path === '/welcome'
+            || path.startsWith('/organization-invite')
+        if (servesWithoutLayout) bootSplashReady()
+    }, [router])
+
     return <AppContext.Provider value={{
         pluginManager: pluginManager,
         serviceRegistry: pluginManager?.serviceRegistry
@@ -595,19 +609,9 @@ export const App: React.FC<AppProps> = (props) => {
                 {/* Kernel agent-pane state: surfaces mount <AgentPaneHost /> in
                     their own split layout (side peek, not an overlay). */}
                 <AgentPaneProvider>
-                {router
-                    ? <RouterProvider router={router} />
-                    : <div className="fixed inset-0 flex items-center justify-center bg-background">
-                        <div className="flex flex-col items-center gap-4">
-                            <div className="text-[60px] font-bold text-primary">KN</div>
-                            <div className="flex items-center gap-2 text-lg text-muted-foreground">
-                                <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '0ms' }} />
-                                <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '150ms' }} />
-                                <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '300ms' }} />
-                            </div>
-                        </div>
-                    </div>
-                }
+                {/* Until the router exists the static boot splash (index.html)
+                    is still on screen, so there is nothing to render here. */}
+                {router ? <RouterProvider router={router} /> : null}
                 </AgentPaneProvider>
                 <Toaster />
             </Provider>
