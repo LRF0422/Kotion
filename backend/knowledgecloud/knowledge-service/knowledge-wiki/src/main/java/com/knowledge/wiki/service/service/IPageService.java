@@ -1,5 +1,6 @@
 package com.knowledge.wiki.service.service;
 
+import java.util.Collection;
 import java.util.List;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
@@ -28,11 +29,42 @@ public interface IPageService extends ISubjectService<Page> {
 
     Page getPageContent(Long pageId);
 
+    /**
+     * Whether the page can be reached by a reader: neither the page itself nor
+     * any of its ancestors is in the trash. Moving a page to the trash hides its
+     * whole subtree, so a row that is still ACTIVE under a trashed parent is
+     * "effectively trashed" and must not be listed or opened.
+     *
+     * @param page the page to check (may be null)
+     * @return true when the page and its ancestor chain are live
+     */
+    boolean isLivePage(Page page);
+
+    /**
+     * Drop every page that is, effectively, in the trash. One batched ancestor
+     * query for the whole batch — use this on list results instead of calling
+     * {@link #isLivePage(Page)} per row.
+     */
+    List<Page> filterLivePages(Collection<Page> pages);
+
+    /**
+     * The page itself plus every descendant, resolved through the {@code ancestors}
+     * path with one {@code FIND_IN_SET} query. Used by trash/restore cascades and
+     * their index maintenance.
+     */
+    List<Page> getSubtree(Long pageId);
+
     void moveToTrash(Long pageId);
 
     void restore(Long pageId);
 
     void delete(Long pageId);
+
+    /**
+     * Permanently delete a page together with its subtree (admin purge). Pages
+     * already DELETED are left untouched.
+     */
+    void deleteSubtree(Long pageId);
 
     IPage<Page> queryRecentPage(QueryPageDTO dto);
 

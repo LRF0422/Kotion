@@ -225,11 +225,20 @@ public class SpaceApplication {
     }
 
     public List<PageVO> queryFavoritePage(QueryFavoriteDTO dto) {
+        Long currentUserId = SecurityContextUtil.getUserId();
         MPJLambdaWrapper<FavoriteItem> wrapper = MPJWrappers.lambdaJoin(FavoriteItem.class);
         wrapper.leftJoin(Page.class, Page::getId, FavoriteItem::getObjectId)
                 .selectAll(Page.class)
+                // Favorites are per user; without this filter a caller saw every
+                // member's favorites in the scope.
+                .eq(FavoriteItem::getUserId, currentUserId)
                 .eq(StrUtil.isNotBlank(dto.getScope()), FavoriteItem::getScope, dto.getScope());
-        return favoriteService.selectJoinList(PageVO.class, wrapper);
+        List<Page> pages = favoriteService.selectJoinList(Page.class, wrapper);
+        // A favorited page that was trashed must stop being a shortcut to it.
+        return pageService.filterLivePages(pages).stream()
+                .filter(this::hasReadPermission)
+                .map(PageConverter.INSTANCE::convertVO)
+                .collect(Collectors.toList());
     }
 
     /**
@@ -524,6 +533,13 @@ public class SpaceApplication {
         // Enforce unified permission model: viewer needs at least READ access.
         Long userId = SecurityContextUtil.getUserId();
         permissionService.checkPagePermission(userId, page, IPermissionService.PERMISSION_READ);
+        // A trashed page (or a live row under a trashed ancestor) is not a normal
+        // read target any more: sharing, AI tools and API clients must not keep
+        // reading a page the owner deleted. The editor maps this code to a
+        // "restore to open" state instead of a dead end.
+        if (!pageService.isLivePage(page)) {
+            throw WikiException.PAGE_IN_TRASH.newException();
+        }
         PageVO vo = PageConverter.INSTANCE.convertVO(page);
         vo.setPermission(permissionService.effectivePagePermission(userId, page));
         vo.setFavorite(favoriteService.checkFavorite(pageId, userId));
@@ -553,6 +569,9 @@ public class SpaceApplication {
         }
         permissionService.checkPagePermission(SecurityContextUtil.getUserId(), page,
                 IPermissionService.PERMISSION_READ);
+        if (!pageService.isLivePage(page)) {
+            throw WikiException.PAGE_IN_TRASH.newException();
+        }
 
         List<WikiLink> links = wikiLinkService.lambdaQuery()
                 .eq(WikiLink::getTargetType, "PAGE")
@@ -572,8 +591,8 @@ public class SpaceApplication {
         if (CollUtil.isNotEmpty(sourcePageIds)) {
             List<Page> pages = spaceService.getPageService().listByIds(sourcePageIds);
             if (CollUtil.isNotEmpty(pages)) {
-                pageMap = pages.stream()
-                        .filter(this::canReadPage)
+                pageMap = pageService.filterLivePages(pages).stream()
+                        .filter(this::hasReadPermission)
                         .collect(Collectors.toMap(Page::getId, p -> p));
             }
         }
@@ -635,8 +654,8 @@ public class SpaceApplication {
         if (CollUtil.isNotEmpty(sourcePageIds)) {
             List<Page> pages = spaceService.getPageService().listByIds(sourcePageIds);
             if (CollUtil.isNotEmpty(pages)) {
-                pageMap = pages.stream()
-                        .filter(this::canReadPage)
+                pageMap = pageService.filterLivePages(pages).stream()
+                        .filter(this::hasReadPermission)
                         .collect(Collectors.toMap(Page::getId, p -> p));
             }
         }
@@ -737,13 +756,14 @@ public class SpaceApplication {
             return graph;
         }
 
-        // 2) Page nodes: live pages in the visible spaces.
-        List<Page> pages = spaceService.getPageService().lambdaQuery()
+        // 2) Page nodes: live pages in the visible spaces. Rows hidden by a
+        // trashed ancestor (legacy data) are not live even though the row is.
+        List<Page> pages = pageService.filterLivePages(spaceService.getPageService().lambdaQuery()
                 .in(Page::getSpaceId, spaceIds)
                 .ne(Page::getStatus, PageStatus.DELETED)
                 .ne(Page::getStatus, PageStatus.TRASH)
                 .eq(Page::getIsTemplate, false)
-                .list();
+                .list());
 
         Set<Long> pageIdSet = new HashSet<>();
         List<GraphNodeVO> nodes = new ArrayList<>();
@@ -856,11 +876,18 @@ public class SpaceApplication {
         this.spaceService.getPageService().delete(templateId);
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public void movePageToTrash(Long pageId) {
         checkPageWritable(pageId);
+        List<Page> subtree = pageService.getSubtree(pageId).stream()
+                .filter(page -> page.getStatus() != PageStatus.DELETED)
+                .collect(Collectors.toList());
         spaceService.getPageService().moveToTrash(pageId);
-        // Evict blocks of this page from search index
-        wikiSearchService.evictPage(pageId);
+        // Trash cascades to the whole subtree (see PageService#moveToTrash), so
+        // every page that just disappeared from the tree also leaves search.
+        for (Page page : subtree) {
+            wikiSearchService.evictPage(page.getId());
+        }
     }
 
     /**
@@ -884,6 +911,10 @@ public class SpaceApplication {
             }
             permissionService.checkPagePermission(SecurityContextUtil.getUserId(), targetParent,
                     IPermissionService.PERMISSION_WRITE);
+            if (!pageService.isLivePage(targetParent)) {
+                // Moving a page under a hidden (trashed) parent would hide it too.
+                throw WikiException.PAGE_IN_TRASH.newException();
+            }
         }
         spaceService.getPageService().movePage(pageId, targetSpaceId, dto.getTargetParentId());
         // movePage updates the entire descendant subtree. Every Redis document
@@ -906,9 +937,10 @@ public class SpaceApplication {
         List<Page> templates = spaceService.getPageService().lambdaQuery()
                 .eq(Page::getIsTemplate, true)
                 .ne(Page::getStatus, PageStatus.DELETED)
+                .ne(Page::getStatus, PageStatus.TRASH)
                 .list();
-        return templates.stream()
-                .filter(this::canReadPage)
+        return pageService.filterLivePages(templates).stream()
+                .filter(this::hasReadPermission)
                 .map(page -> {
                     PageVO vo = PageConverter.INSTANCE.convertVO(page);
                     // Get content from block storage
@@ -1037,17 +1069,63 @@ public class SpaceApplication {
     public IPage<PageVO> queryRecentPage(QueryPageDTO dto) {
         IPage<Page> entityPage = spaceService.getPageService().queryRecentPage(dto);
         // Keep the recent widget consistent with the page-read model: never surface
-        // pages from spaces the caller cannot open.
-        entityPage.setRecords(entityPage.getRecords().stream()
-                .filter(this::canReadPage)
+        // trashed pages (including live rows under a trashed ancestor, which older
+        // data still contains) and never pages from spaces the caller cannot open.
+        entityPage.setRecords(pageService.filterLivePages(entityPage.getRecords()).stream()
+                .filter(this::hasReadPermission)
                 .collect(Collectors.toList()));
         return PageConverter.INSTANCE.convertVO(entityPage);
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public void restorePage(Long pageId) {
-        checkPageWritable(pageId);
-        spaceService.getPageService().restore(pageId);
-        wikiSearchService.reindexPage(pageId);
+        // Restoring is the one operation that must reach a trashed page.
+        Page page = requirePagePermission(pageId, IPermissionService.PERMISSION_WRITE, true);
+        if (page.getStatus() == PageStatus.DELETED) {
+            // Permanently deleted pages are gone; there is nothing to bring back.
+            throw WikiException.PAGE_NOT_FOUND.newException();
+        }
+        Page restoreRoot = resolveTrashRestoreRoot(page);
+        if (restoreRoot == null) {
+            // Already live, or hidden by a permanently deleted ancestor: no-op.
+            return;
+        }
+        if (!restoreRoot.getId().equals(page.getId())) {
+            // Legacy data: trash used to hide only the parent, leaving an ACTIVE
+            // child unreachable. Restoring the parent unhides the subtree, so the
+            // caller needs WRITE on that parent too.
+            permissionService.checkPagePermission(SecurityContextUtil.getUserId(), restoreRoot,
+                    IPermissionService.PERMISSION_WRITE);
+        }
+        List<Page> restored = pageService.getSubtree(restoreRoot.getId()).stream()
+                .filter(candidate -> candidate.getStatus() == PageStatus.TRASH)
+                .collect(Collectors.toList());
+        spaceService.getPageService().restore(restoreRoot.getId());
+        // The restore cascades the subtree back to ACTIVE; re-index every page it
+        // brought back, not just the page the user clicked.
+        for (Page restoredPage : restored) {
+            wikiSearchService.reindexPage(restoredPage.getId());
+        }
+    }
+
+    /**
+     * The page that has to leave the trash so {@code page} becomes readable: the
+     * highest TRASH ancestor (including the page itself when it is TRASH), so a
+     * child that was cascaded into the trash does not "restore" into an invisible
+     * state under a still-trashed parent.
+     *
+     * @return null when the page is already live or an ancestor was purged
+     */
+    private Page resolveTrashRestoreRoot(Page page) {
+        for (Page ancestor : pageService.getParents(page.getId())) {
+            if (ancestor.getStatus() == PageStatus.TRASH) {
+                return ancestor;
+            }
+            if (ancestor.getStatus() == PageStatus.DELETED) {
+                return null;
+            }
+        }
+        return page.getStatus() == PageStatus.TRASH ? page : null;
     }
 
     public void refreshBlock() {
@@ -1066,10 +1144,15 @@ public class SpaceApplication {
                 .ne(dto.getStatus() == null, Page::getStatus, PageStatus.TRASH)
                 .like(StrUtil.isNotEmpty(dto.getSearchValue()), Page::getTitle, dto.getSearchValue())
                 .page(dto.page());
+        // The trash view asks for status=TRASH explicitly and must see those rows;
+        // for every other listing, also hide rows hidden by a trashed ancestor.
+        boolean trashView = dto.getStatus() == PageStatus.TRASH;
+        List<Page> records = trashView
+                ? entityPage.getRecords()
+                : pageService.filterLivePages(entityPage.getRecords());
         // Cross-space search/mention pickers must not reveal titles from spaces the
-        // caller cannot open. Status is deliberately left to the query (the trash
-        // view needs TRASH rows), so only permission is checked here.
-        entityPage.setRecords(entityPage.getRecords().stream()
+        // caller cannot open.
+        entityPage.setRecords(records.stream()
                 .filter(this::hasReadPermission)
                 .collect(Collectors.toList()));
         return PageConverter.INSTANCE.convertVO(entityPage);
@@ -1173,6 +1256,18 @@ public class SpaceApplication {
     }
 
     private Page requirePagePermission(Long pageId, String requiredPermission) {
+        return requirePagePermission(pageId, requiredPermission, false);
+    }
+
+    /**
+     * Resolve a page and assert the caller's permission on it.
+     *
+     * @param allowTrashed true only for operations that must reach a page sitting
+     *                     in the trash (restoring it). Every read/write path
+     *                     denies trashed pages, including live rows whose ancestor
+     *                     is trashed.
+     */
+    private Page requirePagePermission(Long pageId, String requiredPermission, boolean allowTrashed) {
         if (pageId == null) {
             throw WikiException.INVALID_PARAMETER.newException();
         }
@@ -1181,6 +1276,9 @@ public class SpaceApplication {
             throw WikiException.PAGE_NOT_FOUND.newException();
         }
         permissionService.checkPagePermission(SecurityContextUtil.getUserId(), page, requiredPermission);
+        if (!allowTrashed && !pageService.isLivePage(page)) {
+            throw WikiException.PAGE_IN_TRASH.newException();
+        }
         return page;
     }
 
@@ -1241,18 +1339,19 @@ public class SpaceApplication {
         }
         permissionService.checkPagePermission(SecurityContextUtil.getUserId(), page,
                 IPermissionService.PERMISSION_READ);
+        // Realtime rooms and DB seeding follow the same rule as the REST reads: a
+        // trashed page has no live document to join.
+        if (!pageService.isLivePage(page)) {
+            throw WikiException.PAGE_IN_TRASH.newException();
+        }
     }
 
-    /** Permission-only variant of {@link #canReadPage(Page)} that keeps status handling to the caller. */
+    /**
+     * Permission-only read check. Status handling is the caller's job — list
+     * endpoints pair this with {@code pageService.filterLivePages(...)}.
+     */
     private boolean hasReadPermission(Page page) {
         return page != null
-                && permissionService.effectivePagePermission(SecurityContextUtil.getUserId(), page) != null;
-    }
-
-    private boolean canReadPage(Page page) {
-        return page != null
-                && page.getStatus() != PageStatus.DELETED
-                && page.getStatus() != PageStatus.TRASH
                 && permissionService.effectivePagePermission(SecurityContextUtil.getUserId(), page) != null;
     }
 
@@ -1682,6 +1781,9 @@ public class SpaceApplication {
         }
         // Only users who can edit the page may manage its share link
         permissionService.checkPagePermission(userId, page, IPermissionService.PERMISSION_WRITE);
+        if (!pageService.isLivePage(page)) {
+            throw WikiException.PAGE_IN_TRASH.newException();
+        }
 
         // One active link per page: regenerating invalidates the previous one
         shareLinkService.lambdaUpdate()
@@ -1773,6 +1875,12 @@ public class SpaceApplication {
         }
         Page page = pageService.getPageContent(shareLink.getPageId());
         if (page == null) {
+            throw WikiException.PAGE_NOT_FOUND.newException();
+        }
+        // A public visitor must not be able to read a page that was deleted after
+        // the link was minted. Report it as unavailable rather than leaking that
+        // the page still exists in someone's trash.
+        if (!pageService.isLivePage(page)) {
             throw WikiException.PAGE_NOT_FOUND.newException();
         }
 
@@ -1976,10 +2084,11 @@ public class SpaceApplication {
                 .distinct()
                 .collect(Collectors.toList());
 
-        // Get pages
-        List<Page> pages = pageService.lambdaQuery()
+        // Get pages (an invitation to a page that since moved to the trash is not
+        // a shortcut anymore; hidden rows are filtered too).
+        List<Page> pages = pageService.filterLivePages(pageService.lambdaQuery()
                 .in(Page::getId, pageIds)
-                .list();
+                .list());
 
         if (CollUtil.isEmpty(pages)) {
             return ListUtil.empty();
@@ -2205,10 +2314,11 @@ public class SpaceApplication {
                 .eq(Page::getSpaceId, spaceId)
                 .eq(Page::getIsTemplate, true)
                 .ne(Page::getStatus, PageStatus.DELETED)
+                .ne(Page::getStatus, PageStatus.TRASH)
                 .orderByDesc(Page::getUpdateTime)
                 .list();
-        return templates.stream()
-                .filter(this::canReadPage)
+        return pageService.filterLivePages(templates).stream()
+                .filter(this::hasReadPermission)
                 .map(page -> {
                     PageVO vo = PageConverter.INSTANCE.convertVO(page);
                     return vo;
@@ -2239,9 +2349,11 @@ public class SpaceApplication {
         List<Page> pages = pageService.lambdaQuery()
                 .eq(Page::getSpaceId, spaceId)
                 .eq(Page::getPinned, true)
+                .ne(Page::getStatus, PageStatus.DELETED)
+                .ne(Page::getStatus, PageStatus.TRASH)
                 .orderByDesc(Page::getUpdateTime)
                 .list();
-        return pages.stream()
+        return pageService.filterLivePages(pages).stream()
                 .map(PageConverter.INSTANCE::convertVO)
                 .collect(Collectors.toList());
     }
@@ -2264,6 +2376,9 @@ public class SpaceApplication {
         List<Page> pages = pageService.lambdaQuery()
                 .eq(Page::getSpaceId, spaceId)
                 .isNotNull(Page::getTags)
+                // Tags are a space-level index; a trashed page must not contribute.
+                .ne(Page::getStatus, PageStatus.DELETED)
+                .ne(Page::getStatus, PageStatus.TRASH)
                 .select(Page::getTags)
                 .list();
         return pages.stream()

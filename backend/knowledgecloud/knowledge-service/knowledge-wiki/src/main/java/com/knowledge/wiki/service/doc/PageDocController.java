@@ -254,6 +254,12 @@ public class PageDocController {
             throw WikiException.PAGE_NOT_FOUND.newException();
         }
         permissionService.checkPagePermission(SecurityContextUtil.getUserId(), page, permission);
+        // The document API is the save path: a page in the trash (or under a
+        // trashed parent) must be restored before it can be read or written again.
+        // Without this a stale tab / direct call kept editing a deleted page.
+        if (!pageService.isLivePage(page)) {
+            throw WikiException.PAGE_IN_TRASH.newException();
+        }
         // A page-level collaboration invitee may edit in realtime, but never owns the
         // write lease or persists: the invitee's client streams edits into the shared
         // Y.Doc and the inviter's client (the host) writes them. Denying here means a

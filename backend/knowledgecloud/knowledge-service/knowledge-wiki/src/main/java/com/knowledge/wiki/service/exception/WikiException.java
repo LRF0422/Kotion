@@ -75,6 +75,10 @@ public enum WikiException implements BusinessExceptionAssert {
     PAGE_WRITE_API_RETIRED(3014, "wiki.page.writeApiRetired", "旧页面写入接口已停用，请升级客户端"),
     PAGE_DOC_NOT_INITIALIZED(3015, "wiki.page.docNotInitialized", "页面尚未迁移到新文档存储"),
     PAGE_REVISION_CONFLICT(3016, "wiki.page.revisionConflict", "页面已被其他写入更新，请同步后重试"),
+    // A page in the trash (or a live row under a trashed ancestor) is not a normal
+    // read/write target: the client must restore it first. Kept distinct from
+    // PAGE_NOT_FOUND so the editor can offer "restore" instead of a dead end.
+    PAGE_IN_TRASH(3017, "wiki.page.inTrash", "页面在回收站中，请先恢复后再访问"),
 
     // Collaboration related (4000-4999)
     INVITATION_NOT_FOUND(4001, "wiki.collaboration.invitationNotFound", "邀请不存在"),

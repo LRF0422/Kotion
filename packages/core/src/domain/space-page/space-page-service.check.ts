@@ -259,6 +259,35 @@ async function main(): Promise<void> {
     assert(createdFromRecord?.id === "502" && createdFromRecord?.name === "团队空间",
         "record responses still normalize directly", createdFromRecord);
 
+    // ---- page status: the backend serializes PageStatus as { value, desc } ----
+    // A global IBaseEnum serializer (knowledge-core-mybatis EnumSerializer) turns
+    // the enum into an object, which used to leak into PageRecord/PageSummary and
+    // made every `status === "TRASH"` comparison in the apps silently false.
+    fake.reply("/knowledge-wiki/space/page/:id/content", {
+        id: 601,
+        spaceId: 202,
+        title: "回收中的页面",
+        status: { value: "TRASH", desc: "回收中" },
+    });
+    const trashedPage = await service.pages.getPage("601");
+    assert(trashedPage.status === "TRASH", "enum-shaped page status unwraps to its value", trashedPage.status);
+
+    fake.reply("/knowledge-wiki/space/page/recent", {
+        records: [
+            { id: 602, spaceId: 202, title: "Active", status: { value: "ACTIVE", desc: "激活" } },
+            { id: 603, spaceId: 202, title: "Trashed", status: { value: "TRASH", desc: "回收中" } },
+        ],
+        total: 2,
+    });
+    const recent = await service.pages.queryRecentPages({ spaceId: "202" });
+    assert(recent.records[0]?.status === "ACTIVE" && recent.records[1]?.status === "TRASH",
+        "page summaries normalize their status too", recent.records.map((item) => item.status));
+
+    // A plain-string status (older mock servers) stays untouched.
+    fake.reply("/knowledge-wiki/space/page/:id/content", { id: 604, spaceId: 202, title: "草稿", status: "DRAFT" });
+    const draftPage = await service.pages.getPage("604");
+    assert(draftPage.status === "DRAFT", "string page statuses pass through", draftPage.status);
+
     console.log("core space-page service checks passed");
 }
 

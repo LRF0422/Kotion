@@ -2,6 +2,8 @@ package com.knowledge.wiki.service.service.impl;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
@@ -134,6 +136,10 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
             Page parent = this.getById(page.getParentId());
             if (parent == null || !ObjectUtil.equal(parent.getSpaceId(), page.getSpaceId())) {
                 throw WikiException.PAGE_PARENT_NOT_FOUND.newException();
+            }
+            if (!isLivePage(parent)) {
+                // A new page under a hidden (trashed) parent would be born invisible.
+                throw WikiException.PAGE_IN_TRASH.newException();
             }
             page.setAncestors(appendAncestor(parent));
         } else {
@@ -295,6 +301,10 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
                 .like(StrUtil.isNotEmpty(searchValue), Page::getTitle, searchValue)
                 .eq(Page::getStatus, PageStatus.ACTIVE)
                 .list();
+        // Rows trashed before subtree cascading existed can still be ACTIVE under a
+        // parent that sits in the trash. They must not appear in the tree (the flat
+        // search branch below does not drop orphans the way TreeUtil.build does).
+        allPage = filterLivePages(allPage);
         if (StrUtil.isNotEmpty(searchValue)) {
             return allPage.stream().map(it -> {
                 Tree<Long> tree = new Tree<>();
@@ -538,6 +548,84 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
     }
 
     @Override
+    public boolean isLivePage(Page page) {
+        if (page == null) {
+            return false;
+        }
+        if (page.getStatus() == PageStatus.TRASH || page.getStatus() == PageStatus.DELETED) {
+            return false;
+        }
+        Set<Long> ancestors = parseAncestorIds(page);
+        if (ancestors.isEmpty()) {
+            return true;
+        }
+        return Collections.disjoint(ancestors, trashedAncestorIds(Collections.singletonList(page)));
+    }
+
+    @Override
+    public List<Page> filterLivePages(Collection<Page> pages) {
+        if (CollUtil.isEmpty(pages)) {
+            return new ArrayList<>();
+        }
+        Set<Long> trashedAncestors = trashedAncestorIds(pages);
+        return pages.stream()
+                .filter(page -> page != null
+                        && page.getStatus() != PageStatus.TRASH
+                        && page.getStatus() != PageStatus.DELETED)
+                .filter(page -> Collections.disjoint(parseAncestorIds(page), trashedAncestors))
+                .collect(Collectors.toList());
+    }
+
+    /** One batched lookup for every ancestor id referenced by the batch. */
+    private Set<Long> trashedAncestorIds(Collection<Page> pages) {
+        Set<Long> ancestorIds = new HashSet<>();
+        for (Page page : pages) {
+            ancestorIds.addAll(parseAncestorIds(page));
+        }
+        if (ancestorIds.isEmpty()) {
+            return Collections.emptySet();
+        }
+        return this.lambdaQuery()
+                .select(Page::getId)
+                .in(Page::getId, ancestorIds)
+                .in(Page::getStatus, PageStatus.TRASH, PageStatus.DELETED)
+                .list().stream()
+                .map(Page::getId)
+                .collect(Collectors.toSet());
+    }
+
+    private static Set<Long> parseAncestorIds(Page page) {
+        if (page == null || StrUtil.isBlank(page.getAncestors())) {
+            return Collections.emptySet();
+        }
+        Set<Long> ids = new HashSet<>();
+        for (String raw : page.getAncestors().split(",")) {
+            String value = raw.trim();
+            if (value.isEmpty()) {
+                continue;
+            }
+            try {
+                ids.add(Long.valueOf(value));
+            } catch (NumberFormatException ignored) {
+                // A malformed ancestor entry cannot hide a page; ignore it.
+            }
+        }
+        return ids;
+    }
+
+    @Override
+    public List<Page> getSubtree(Long pageId) {
+        if (pageId == null) {
+            return new ArrayList<>();
+        }
+        return this.lambdaQuery()
+                .select(Page::getId, Page::getStatus)
+                .and(w -> w.eq(Page::getId, pageId)
+                        .or().apply("FIND_IN_SET({0}, ancestors)", pageId))
+                .list();
+    }
+
+    @Override
     public IPage<Page> queryRecentPage(QueryPageDTO dto) {
         return this.lambdaQuery()
                 .eq(dto.getSpaceId() != null, Page::getSpaceId, dto.getSpaceId())
@@ -551,18 +639,36 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
                 .page(dto.page());
     }
 
+    /**
+     * Moving a page to the trash moves its whole subtree with it. Without the
+     * cascade a child stays ACTIVE (and reachable through Recent, search, direct
+     * links) while its parent is hidden, which made deletion look like a no-op.
+     * The row update uses the same {@code ancestors} path traversal as
+     * {@link #movePage(Long, Long, Long)} so it costs one statement.
+     */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void moveToTrash(Long pageId) {
         this.lambdaUpdate()
-                .eq(Page::getId, pageId)
+                .and(w -> w.eq(Page::getId, pageId)
+                        .or().apply("FIND_IN_SET({0}, ancestors)", pageId))
+                .ne(Page::getStatus, PageStatus.DELETED)
                 .set(Page::getStatus, PageStatus.TRASH)
                 .update();
     }
 
+    /**
+     * Restoring a page revives the TRASH descendants that were trashed with it.
+     * DELETED rows are left alone: restoring a parent must not resurrect a page
+     * that was already permanently deleted.
+     */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void restore(Long pageId) {
         this.lambdaUpdate()
-                .eq(Page::getId, pageId)
+                .and(w -> w.eq(Page::getId, pageId)
+                        .or().apply("FIND_IN_SET({0}, ancestors)", pageId))
+                .eq(Page::getStatus, PageStatus.TRASH)
                 .set(Page::getStatus, PageStatus.ACTIVE)
                 .update();
     }
@@ -571,6 +677,22 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
     public void delete(Long pageId) {
         this.lambdaUpdate()
                 .eq(Page::getId, pageId)
+                .set(Page::getStatus, PageStatus.DELETED)
+                .update();
+    }
+
+    /**
+     * Admin purge: deleting a trashed page must not leave its TRASH descendants
+     * behind. An orphaned TRASH row under a DELETED ancestor can never be restored,
+     * so it would sit in the user's trash forever.
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteSubtree(Long pageId) {
+        this.lambdaUpdate()
+                .and(w -> w.eq(Page::getId, pageId)
+                        .or().apply("FIND_IN_SET({0}, ancestors)", pageId))
+                .ne(Page::getStatus, PageStatus.DELETED)
                 .set(Page::getStatus, PageStatus.DELETED)
                 .update();
     }

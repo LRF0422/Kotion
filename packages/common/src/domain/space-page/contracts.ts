@@ -30,7 +30,13 @@ export type SpaceVisibility = "PUBLIC" | "PRIVATE";
 export type SpaceMemberRole = "OWNER" | "ADMIN" | "MEMBER" | "GUEST";
 export type MemberRole = SpaceMemberRole;
 export type PagePermission = "READ" | "WRITE" | "ADMIN";
-export type PageStatus = "DRAFT" | "PUBLISHED" | "TRASH" | "ARCHIVED" | (string & {});
+/**
+ * Lifecycle status of a page. The backend stores ACTIVE/DRAFT/TRASH/DELETED;
+ * PUBLISHED/ARCHIVED are kept for compatibility with other page sources.
+ * API payloads used to carry `{ value, desc }` objects here (the backend's
+ * IBaseEnum serializer) — the domain normalizer unwraps them to this union.
+ */
+export type PageStatus = "DRAFT" | "ACTIVE" | "TRASH" | "DELETED" | "PUBLISHED" | "ARCHIVED" | (string & {});
 
 export interface Space {
     id: SpaceId;

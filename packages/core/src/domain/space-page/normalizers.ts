@@ -16,6 +16,7 @@ import {
     type PageRecord,
     type PageRelation,
     type PageSessionState,
+    type PageStatus,
     type PageSummary,
     type PageTag,
     type PageTreeNode,
@@ -44,6 +45,29 @@ export const normalizePageType = (value: unknown): string | undefined => {
     const normalized = optionalString(value)?.trim();
     return normalized || undefined;
 };
+
+/**
+ * Unwrap a backend enum value.
+ *
+ * The backend serializes its `IBaseEnum` implementations (page status,
+ * invitation status, …) through a global Jackson serializer as
+ * `{ "value": "TRASH", "desc": "回收中" }` rather than `"TRASH"`. The contracts
+ * describe the bare value, so every boundary that reads an enum from a payload
+ * must unwrap it — otherwise comparisons fail silently against `[object Object]`.
+ */
+export const normalizeEnumValue = (value: unknown): string | undefined => {
+    const raw = value && typeof value === "object"
+        ? (value as Raw).value ?? (value as Raw).code ?? (value as Raw).name
+        : value;
+    if (raw == null) return undefined;
+    const normalized = String(raw).trim();
+    return normalized || undefined;
+};
+
+/** Normalize a page lifecycle status to the bare `PageStatus` string. */
+export const normalizePageStatus = (value: unknown): PageStatus | undefined =>
+    normalizeEnumValue(value) as PageStatus | undefined;
+
 const optionalBoolean = (value: unknown): boolean | undefined => value == null ? undefined : Boolean(value);
 const stringList = (value: unknown): string[] | undefined => Array.isArray(value) ? value.map(String) : undefined;
 
@@ -105,7 +129,7 @@ export const normalizePageMetadata = (value: unknown): PageMetadata => {
         icon: raw.icon,
         cover: raw.cover,
         summary: optionalString(raw.summary),
-        status: raw.status,
+        status: normalizePageStatus(raw.status),
         permission: raw.permission ?? undefined,
         tags: stringList(raw.tags),
         favorite: optionalBoolean(raw.favorite),
@@ -217,7 +241,7 @@ export const normalizeInvitation = (value: unknown): CollaborationInvitation => 
         inviteeName: optionalString(raw.inviteeName), inviteeEmail: optionalString(raw.inviteeEmail),
         inviterId: normalizeOptionalId(raw.inviterId, "invitation.inviterId"), inviterName: optionalString(raw.inviterName),
         permission: raw.permission, permissions: Array.isArray(raw.permissions) ? raw.permissions : undefined,
-        role: raw.role, message: optionalString(raw.message), status: optionalString(raw.status),
+        role: raw.role, message: optionalString(raw.message), status: normalizeEnumValue(raw.status),
         createdAt: raw.createdAt, expiresAt: raw.expiresAt, metadata: raw,
     };
 };

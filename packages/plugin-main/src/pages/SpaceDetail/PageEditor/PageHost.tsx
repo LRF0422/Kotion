@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import {
     hasPermission,
+    isPageInTrashError,
     type PageRecord,
     type ResolvedPageType,
     useNavigator,
@@ -14,6 +15,7 @@ import { Button, Separator, toast } from '@kn/ui'
 import { PageBreadcrumb } from '../../../components/PageBreadcrumb'
 import { SharePanel } from '../../components/SharePanel'
 import { PageEditor } from './index'
+import { TrashedPageNotice } from './TrashedPageNotice'
 
 interface PageHostProps {
     pageId: string
@@ -249,12 +251,23 @@ const MissingPageType: React.FC<{ page: PageRecord; spaceId: string; active: boo
     )
 }
 
+/** A page in the trash is never handed to an editor renderer. */
+const isTrashedStatus = (status?: string | null): boolean => status === 'TRASH' || status === 'DELETED'
+
 export const PageHost: React.FC<PageHostProps> = ({ pageId, spaceId: explicitSpaceId, active = true }) => {
     const service = useSpacePageService()
+    const navigator = useNavigator()
+    const { t } = useTranslation()
     const { updateMeta } = usePageTabs(explicitSpaceId)
     const [page, setPage] = useState<PageRecord | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(false)
+    // The page may be trashed while it is open (tree context menu, another tab,
+    // another client). The row we loaded says it is live, so the lifecycle
+    // change is the only signal that the editor must stop being reachable.
+    const [trashed, setTrashed] = useState(false)
+    const [restoring, setRestoring] = useState(false)
+    const [reloadKey, setReloadKey] = useState(0)
     const pageType = usePageType(page?.pageType)
 
     useEffect(() => {
@@ -272,6 +285,15 @@ export const PageHost: React.FC<PageHostProps> = ({ pageId, spaceId: explicitSpa
             })
             .catch((loadError) => {
                 if (cancelled) return
+                // The backend refuses trashed pages with PAGE_IN_TRASH (the
+                // status is no longer part of the payload once the read guard is
+                // authoritative). Turn that into the restore state instead of a
+                // broken editor; the request layer already toasted the reason.
+                if (isPageInTrashError(loadError)) {
+                    setTrashed(true)
+                    setError(false)
+                    return
+                }
                 console.error('Failed to load page host metadata:', loadError)
                 setError(true)
             })
@@ -279,7 +301,71 @@ export const PageHost: React.FC<PageHostProps> = ({ pageId, spaceId: explicitSpa
                 if (!cancelled) setLoading(false)
             })
         return () => { cancelled = true }
-    }, [pageId, service, updateMeta])
+    }, [pageId, reloadKey, service, updateMeta])
+
+    useEffect(() => {
+        // The component is reused across page switches: never carry the previous
+        // page's trashed state into the next one.
+        setTrashed(false)
+        setRestoring(false)
+    }, [pageId])
+
+    useEffect(() => {
+        const isThisPage = (eventPageId: unknown) => String(eventPageId) === String(pageId)
+        const unsubscribers = [
+            service.changes.subscribe('page.trashed', ({ payload }) => {
+                if (isThisPage(payload.pageId)) setTrashed(true)
+            }),
+            service.changes.subscribe('page.deleted', ({ payload }) => {
+                if (isThisPage(payload.pageId)) setTrashed(true)
+            }),
+            service.changes.subscribe('page.restoredFromTrash', ({ payload }) => {
+                if (!isThisPage(payload.pageId)) return
+                setTrashed(false)
+                setReloadKey((key) => key + 1)
+            }),
+        ]
+        return () => unsubscribers.forEach((unsubscribe) => unsubscribe())
+    }, [pageId, service])
+
+    const handleRestore = useCallback(async () => {
+        if (restoring) return
+        setRestoring(true)
+        try {
+            await service.pages.restorePageFromTrash(pageId)
+            // The restore event above also refreshes the record; this keeps the
+            // button responsive even if the stream has no subscriber yet.
+            setTrashed(false)
+            setReloadKey((key) => key + 1)
+            toast.success(t('editor.trash.restoreSuccess', 'Page restored'))
+        } catch (restoreError) {
+            console.error('Failed to restore page from trash:', restoreError)
+            toast.error(t('editor.trash.restoreFailed', 'Failed to restore the page'))
+        } finally {
+            setRestoring(false)
+        }
+    }, [pageId, restoring, service, t])
+
+    const handleBackToSpace = useCallback(() => {
+        const targetSpaceId = explicitSpaceId ?? page?.spaceId
+        if (targetSpaceId) navigator.go({ to: `/space-detail/${targetSpaceId}` })
+    }, [explicitSpaceId, navigator, page?.spaceId])
+
+    // A trashed page must not open like a normal one. Two ways in: the loaded
+    // row still carries the status (older backends, in-memory event state), or
+    // the backend refused the read with PAGE_IN_TRASH (the authoritative gate).
+    // This sits before the generic error branch because the refused read leaves
+    // `page` null but is not an error the user should see as "broken".
+    if (trashed || isTrashedStatus(page?.status)) {
+        return (
+            <TrashedPageNotice
+                pageTitle={page?.title}
+                restoring={restoring}
+                onRestore={() => void handleRestore()}
+                onBack={handleBackToSpace}
+            />
+        )
+    }
 
     if (loading) {
         return (
@@ -302,6 +388,7 @@ export const PageHost: React.FC<PageHostProps> = ({ pageId, spaceId: explicitSpa
 
     const spaceId = explicitSpaceId ?? page.spaceId
     if (!spaceId) return null
+
     const readOnly = page.permission != null && !hasPermission(page.permission, 'WRITE')
 
     if (!page.pageType) {

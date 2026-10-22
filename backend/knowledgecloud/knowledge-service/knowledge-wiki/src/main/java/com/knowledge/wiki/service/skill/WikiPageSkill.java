@@ -104,6 +104,11 @@ public class WikiPageSkill {
             }
             permissionService.checkPagePermission(SecurityContextUtil.getUserId(), page,
                     IPermissionService.PERMISSION_READ);
+            // AI tools are just another reader: a trashed page has no content to
+            // summarize until it is restored.
+            if (!pageService.isLivePage(page)) {
+                return "Error: Page " + pageId + " is in the trash; restore it first";
+            }
 
             StringBuilder result = new StringBuilder();
             result.append("# Page: ").append(page.getTitle()).append("\n\n");
@@ -265,8 +270,9 @@ public class WikiPageSkill {
             Space space = spaceService.getById(spaceId);
             String spaceName = space != null ? space.getName() : "Unknown Space";
 
-            // Get pages in the space
-            List<Page> pages = pageService.getBySpaceId(spaceId);
+            // Get pages in the space (live only: a row hidden under a trashed parent
+            // is not something the assistant should surface).
+            List<Page> pages = pageService.filterLivePages(pageService.getBySpaceId(spaceId));
 
             StringBuilder result = new StringBuilder();
             result.append("# Space: ").append(spaceName).append("\n");
@@ -409,6 +415,10 @@ public class WikiPageSkill {
                     return "Error: Page not found with id=" + pageId;
                 }
                 permissionService.checkPagePermission(actor, current, IPermissionService.PERMISSION_WRITE);
+                // The AI write path must not resurrect edits on a deleted page.
+                if (!pageService.isLivePage(current)) {
+                    return "Error: Page " + pageId + " is in the trash; restore it first";
+                }
 
                 PageDocVO currentDoc = pageDocService.readDoc(pageId);
                 Map<String, Object> doc;

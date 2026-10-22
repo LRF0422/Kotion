@@ -162,7 +162,7 @@ public class WikiBlockReadService {
             return null;
         }
         com.knowledge.wiki.service.entity.Page page = pageService.getById(block.getPageId());
-        if (!isLive(page)) {
+        if (!pageService.isLivePage(page)) {
             return null;
         }
         permissionService.checkPagePermission(SecurityContextUtil.getUserId(), page,
@@ -198,16 +198,20 @@ public class WikiBlockReadService {
             Iterable<com.knowledge.wiki.service.entity.Page> candidates) {
         Long userId = SecurityContextUtil.getUserId();
         Map<Long, com.knowledge.wiki.service.entity.Page> result = new LinkedHashMap<>();
+        List<com.knowledge.wiki.service.entity.Page> pages = new ArrayList<>();
         for (com.knowledge.wiki.service.entity.Page page : candidates) {
-            if (isLive(page) && permissionService.effectivePagePermission(userId, page) != null) {
+            if (page != null) {
+                pages.add(page);
+            }
+        }
+        // Batched status/ancestor check: block search must not read a page that is
+        // in the trash (or hidden under a trashed parent).
+        for (com.knowledge.wiki.service.entity.Page page : pageService.filterLivePages(pages)) {
+            if (permissionService.effectivePagePermission(userId, page) != null) {
                 result.put(page.getId(), page);
             }
         }
         return result;
-    }
-
-    private static boolean isLive(com.knowledge.wiki.service.entity.Page page) {
-        return page != null && page.getStatus() != PageStatus.DELETED && page.getStatus() != PageStatus.TRASH;
     }
 
     private Map<Long, Space> loadSpaces(Iterable<com.knowledge.wiki.service.entity.Page> pages) {

@@ -2,8 +2,10 @@ package com.knowledge.wiki.service.application;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -11,6 +13,7 @@ import static org.mockito.Mockito.when;
 import java.util.Collections;
 
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -30,7 +33,9 @@ import com.knowledge.wiki.service.entity.Space;
 import com.knowledge.wiki.service.entity.dto.InvitationAcceptResponseDTO;
 import com.knowledge.wiki.service.entity.dto.InvitationEnterResponseDTO;
 import com.knowledge.wiki.service.entity.enums.InvitationStatus;
+import com.knowledge.wiki.service.entity.enums.PageStatus;
 import com.knowledge.wiki.service.entity.vo.PageVO;
+import com.knowledge.wiki.service.exception.WikiException;
 import com.knowledge.wiki.service.service.ICollaborationInvitationService;
 import com.knowledge.wiki.service.service.IPageService;
 import com.knowledge.wiki.service.service.IPermissionService;
@@ -62,6 +67,13 @@ class CollaborationApplicationAuthorizationTest {
         SecurityContextHolder.clearContext();
     }
 
+    @BeforeEach
+    void pagesAreLiveUnlessATestSaysOtherwise() {
+        // The trash gate has its own test below; the authorization tests describe
+        // live pages. lenient(): not every test reaches the gate.
+        lenient().when(pageService.isLivePage(any(Page.class))).thenReturn(true);
+    }
+
     @Test
     void onlyInviteeCanAcceptInvitation() {
         authenticate(99L);
@@ -90,6 +102,21 @@ class CollaborationApplicationAuthorizationTest {
 
         assertThrows(BusinessException.class, () -> application.getInvitationPage("secret"));
         verify(pageService, never()).getPageContent(invitation.getPageId());
+    }
+
+    @Test
+    void trashedPageCannotBeEnteredThroughItsInvitation() {
+        authenticate(42L);
+        CollaborationInvitation invitation = invitation(42L, InvitationStatus.ACCEPTED);
+        Page page = page("doc");
+        page.setStatus(PageStatus.TRASH);
+        when(collaborationInvitationService.getByTokenForValidation("secret")).thenReturn(invitation);
+        when(pageService.getById(20L)).thenReturn(page);
+        when(pageService.isLivePage(page)).thenReturn(false);
+
+        BusinessException error = assertThrows(BusinessException.class, () -> application.enterInvitation("secret"));
+        assertEquals(WikiException.PAGE_IN_TRASH.getCode(), error.getCode());
+        verify(spaceService, never()).getById(anyLong());
     }
 
     @Test

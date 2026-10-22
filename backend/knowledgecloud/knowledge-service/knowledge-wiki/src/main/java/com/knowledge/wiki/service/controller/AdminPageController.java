@@ -85,11 +85,20 @@ public class AdminPageController {
         if (idList.isEmpty()) {
             return R.fail("请选择要恢复的页面");
         }
-        return withTenantBypass(() -> R.status(pageService.lambdaUpdate()
-                .in(Page::getId, idList)
-                .eq(Page::getStatus, PageStatus.TRASH)
-                .set(Page::getStatus, PageStatus.ACTIVE)
-                .update()));
+        return withTenantBypass(() -> {
+            int restored = 0;
+            for (Long id : idList) {
+                Page page = pageService.getById(id);
+                if (page == null || page.getStatus() != PageStatus.TRASH) {
+                    continue;
+                }
+                // restore() cascades the subtree: descendants trashed with this page
+                // must come back too, otherwise the tree shows a half-restored folder.
+                pageService.restore(id);
+                restored++;
+            }
+            return R.status(restored > 0);
+        });
     }
 
     /**
@@ -104,11 +113,20 @@ public class AdminPageController {
         if (idList.isEmpty()) {
             return R.fail("请选择要删除的页面");
         }
-        return withTenantBypass(() -> R.status(pageService.lambdaUpdate()
-                .in(Page::getId, idList)
-                .eq(Page::getStatus, PageStatus.TRASH)
-                .set(Page::getStatus, PageStatus.DELETED)
-                .update()));
+        return withTenantBypass(() -> {
+            int deleted = 0;
+            for (Long id : idList) {
+                Page page = pageService.getById(id);
+                if (page == null || page.getStatus() != PageStatus.TRASH) {
+                    continue;
+                }
+                // Purge the subtree with it: a TRASH child under a DELETED ancestor
+                // would otherwise be un-restorable but still listed in the trash.
+                pageService.deleteSubtree(id);
+                deleted++;
+            }
+            return R.status(deleted > 0);
+        });
     }
 
     private <T> T withTenantBypass(Supplier<T> action) {

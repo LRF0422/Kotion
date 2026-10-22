@@ -22,6 +22,7 @@ import com.knowledge.core.secure.utils.SecurityContextUtil;
 import com.knowledge.core.tool.api.R;
 import com.knowledge.wiki.service.collab.CollabSessionService;
 import com.knowledge.wiki.service.entity.CollaborationInvitation;
+import com.knowledge.wiki.service.entity.Page;
 import com.knowledge.wiki.service.entity.dto.ApplyOpsDTO;
 import com.knowledge.wiki.service.entity.dto.CreatePageCheckpointDTO;
 import com.knowledge.wiki.service.entity.dto.ReconcileDTO;
@@ -36,6 +37,7 @@ import com.knowledge.wiki.service.entity.vo.PageSessionVO;
 import com.knowledge.wiki.service.entity.vo.RestorePageDocVO;
 import com.knowledge.wiki.service.exception.WikiException;
 import com.knowledge.wiki.service.service.ICollaborationInvitationService;
+import com.knowledge.wiki.service.service.IPageService;
 import com.knowledge.wiki.service.service.IPermissionService;
 
 import cn.hutool.core.util.StrUtil;
@@ -79,6 +81,9 @@ public class CollaborationPageController {
 
     @Autowired
     private ICollaborationInvitationService collaborationInvitationService;
+
+    @Autowired
+    private IPageService pageService;
 
     // ------------------------------------------------------------------
     // Document read / write
@@ -274,6 +279,15 @@ public class CollaborationPageController {
         }
         if (!hasPermission(invitation.getPermission(), requiredPermission)) {
             throw WikiException.FORBIDDEN_ACCESS.newException();
+        }
+        // The invitation is an access key for one page; if that page has since been
+        // trashed, the token must not keep a live document (or write path) open.
+        Page invitedPage = pageService.getById(invitation.getPageId());
+        if (invitedPage == null) {
+            throw WikiException.PAGE_NOT_FOUND.newException();
+        }
+        if (!pageService.isLivePage(invitedPage)) {
+            throw WikiException.PAGE_IN_TRASH.newException();
         }
         // The invitee edits in realtime but never persists. The inviter is the host
         // and owns the write lease; a guest's writes would land without a host to

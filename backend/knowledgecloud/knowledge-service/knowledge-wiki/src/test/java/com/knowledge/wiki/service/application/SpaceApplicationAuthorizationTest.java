@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -14,6 +15,7 @@ import java.util.Collections;
 import java.util.List;
 
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -22,6 +24,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+import com.knowledge.core.entitlement.EntitlementGate;
 import com.knowledge.core.secure.auth.KnowledgeUserAuthentication;
 import com.knowledge.core.tool.KnowledgeUser;
 import com.knowledge.core.tool.exception.BusinessException;
@@ -36,7 +39,9 @@ import com.knowledge.wiki.service.entity.dto.TemplateDTO;
 import com.knowledge.wiki.service.entity.dto.UpdatePageTitleDTO;
 import com.knowledge.wiki.service.doc.PageDocCommandService;
 import com.knowledge.wiki.service.entity.enums.InvitationStatus;
+import com.knowledge.wiki.service.entity.enums.PageStatus;
 import com.knowledge.wiki.service.exception.WikiException;
+import com.knowledge.wiki.service.search.WikiSearchService;
 import com.knowledge.wiki.service.service.ICollaborationInvitationService;
 import com.knowledge.wiki.service.service.IPageService;
 import com.knowledge.wiki.service.service.IPermissionService;
@@ -58,9 +63,20 @@ class SpaceApplicationAuthorizationTest {
     @Mock
     private SpaceMemberApplication spaceMemberApplication;
     @Mock
+    private EntitlementGate entitlementGate;
+    @Mock
     private PageDocCommandService pageDocCommandService;
+    @Mock
+    private WikiSearchService wikiSearchService;
     @InjectMocks
     private SpaceApplication application;
+
+    @BeforeEach
+    void pagesAreLiveUnlessATestSaysOtherwise() {
+        // Status is covered by its own tests below; the authorization tests all
+        // describe live pages. lenient(): many tests never reach the guard.
+        lenient().when(pageService.isLivePage(any(Page.class))).thenReturn(true);
+    }
 
     @AfterEach
     void clearSecurityContext() {
@@ -175,6 +191,98 @@ class SpaceApplicationAuthorizationTest {
         assertThrows(BusinessException.class, () -> application.saveAsTemplate(dto));
         verify(spaceService, never()).createOrSave(any(Space.class));
         verify(pageService, never()).copySpacePage(any(), any());
+    }
+
+    // ---- Trash is not a normal read/write target ----
+
+    @Test
+    void trashedPageContentIsRefusedWithTheTrashCode() {
+        authenticate(42L);
+        Page page = page(20L, 10L);
+        page.setStatus(PageStatus.TRASH);
+        when(spaceService.getPageService()).thenReturn(pageService);
+        when(pageService.getPageContent(20L)).thenReturn(page);
+        when(pageService.isLivePage(page)).thenReturn(false);
+
+        BusinessException error = assertThrows(BusinessException.class, () -> application.getPageContent(20L));
+        assertEquals(WikiException.PAGE_IN_TRASH.getCode(), error.getCode());
+    }
+
+    @Test
+    void liveRowUnderATrashedAncestorCannotJoinTheCollaborationRoom() {
+        authenticate(42L);
+        Page page = page(20L, 10L);
+        page.setAncestors("5");
+        when(pageService.getById(20L)).thenReturn(page);
+        // The page row itself is ACTIVE, but its parent is in the trash.
+        when(pageService.isLivePage(page)).thenReturn(false);
+
+        BusinessException error = assertThrows(BusinessException.class, () -> application.authorizeCollabRoom(20L));
+        assertEquals(WikiException.PAGE_IN_TRASH.getCode(), error.getCode());
+    }
+
+    @Test
+    void restoreReachesATrashedPageAndReindexesTheSubtree() {
+        authenticate(42L);
+        Page parent = page(20L, 10L);
+        parent.setStatus(PageStatus.TRASH);
+        Page child = page(21L, 10L);
+        child.setAncestors("20");
+        child.setStatus(PageStatus.TRASH);
+        when(pageService.getById(20L)).thenReturn(parent);
+        when(pageService.getSubtree(20L)).thenReturn(java.util.Arrays.asList(parent, child));
+        when(spaceService.getPageService()).thenReturn(pageService);
+
+        application.restorePage(20L);
+
+        verify(pageService).restore(20L);
+        verify(wikiSearchService).reindexPage(20L);
+        verify(wikiSearchService).reindexPage(21L);
+        // The restore goes through; it must not be blocked by the trash guard.
+        verify(permissionService).checkPagePermission(42L, parent, IPermissionService.PERMISSION_WRITE);
+    }
+
+    @Test
+    void restoringALiveRowUnderATrashedAncestorRestoresTheAncestor() {
+        authenticate(42L);
+        Page child = page(21L, 10L);
+        child.setAncestors("20");
+        child.setStatus(PageStatus.ACTIVE);
+        Page parent = page(20L, 10L);
+        parent.setStatus(PageStatus.TRASH);
+        when(pageService.getById(21L)).thenReturn(child);
+        when(pageService.getParents(21L)).thenReturn(Collections.singletonList(parent));
+        when(pageService.getSubtree(20L)).thenReturn(Collections.singletonList(parent));
+        when(spaceService.getPageService()).thenReturn(pageService);
+
+        application.restorePage(21L);
+
+        // The legacy orphan becomes reachable only when its trashed parent returns.
+        verify(pageService).restore(20L);
+        verify(permissionService).checkPagePermission(42L, parent, IPermissionService.PERMISSION_WRITE);
+        verify(wikiSearchService).reindexPage(20L);
+    }
+
+    @Test
+    void restoringACascadedChildRestoresItsTrashedRoot() {
+        authenticate(42L);
+        Page parent = page(20L, 10L);
+        parent.setStatus(PageStatus.TRASH);
+        Page child = page(21L, 10L);
+        child.setAncestors("20");
+        child.setStatus(PageStatus.TRASH);
+        when(pageService.getById(21L)).thenReturn(child);
+        when(pageService.getParents(21L)).thenReturn(Collections.singletonList(parent));
+        when(pageService.getSubtree(20L)).thenReturn(java.util.Arrays.asList(parent, child));
+        when(spaceService.getPageService()).thenReturn(pageService);
+
+        application.restorePage(21L);
+
+        // The child cannot become visible on its own; the trashed root comes back.
+        verify(pageService).restore(20L);
+        verify(permissionService).checkPagePermission(42L, parent, IPermissionService.PERMISSION_WRITE);
+        verify(wikiSearchService).reindexPage(20L);
+        verify(wikiSearchService).reindexPage(21L);
     }
 
     private PageDTO createPageRequest() {

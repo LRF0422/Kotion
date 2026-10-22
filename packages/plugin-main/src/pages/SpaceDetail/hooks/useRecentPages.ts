@@ -1,106 +1,147 @@
-import { useState, useEffect, useCallback } from 'react'
-import { type PageSummary, useSpacePageService } from '@kn/common'
+import { useCallback, useEffect, useState } from 'react'
+import { useOnRouteCacheActivated, useSpacePageService } from '@kn/common'
+import {
+    MAX_RECENT_ITEMS,
+    RECENT_PAGES_STORAGE_KEY,
+    dropRecentPage,
+    parseRecentPages,
+    recordRecentPage,
+    serializeRecentPages,
+    toRecentPageItems,
+    type RecentPageItem,
+} from './recent-pages'
 
-export interface RecentPageItem {
-    id: string
-    title: string
-    icon?: { icon: string }
-    updatedAt?: string
-    spaceId?: string
-}
+export type { RecentPageItem } from './recent-pages'
 
-const STORAGE_KEY = 'kn:recent-pages'
-const MAX_RECENT_ITEMS = 8
-
-const toRecentPageItem = (page: PageSummary): RecentPageItem => ({
-    id: page.id,
-    title: page.title,
-    icon: page.icon && typeof page.icon === 'object' && 'icon' in page.icon
-        ? page.icon as RecentPageItem['icon']
-        : undefined,
-    updatedAt: page.updatedAt == null ? undefined : String(page.updatedAt),
-    spaceId: page.spaceId,
-})
+const storageKey = (spaceId: string) => `${RECENT_PAGES_STORAGE_KEY}:${spaceId}`
 
 /**
- * Custom hook to manage recently visited pages.
- * Uses localStorage as primary store with optional backend sync.
- * Call `recordVisit` whenever a page is opened to track history.
+ * Custom hook to manage recently visited pages for one workspace.
+ *
+ * The authoritative list comes from the server (`GET /space/page/recent`, which
+ * excludes trashed/deleted pages). The local list is only a fallback when that
+ * call fails, but it is still a live mirror: the workspace shell is kept alive
+ * by the route cache, so a page trashed while the sidebar stays mounted must be
+ * dropped here too — otherwise "Recent" keeps offering a link to a page the
+ * user just deleted. `page.trashed`/`page.deleted`/`page.restoredFromTrash`
+ * from `service.changes` are the invalidation signal.
  */
 export const useRecentPages = (spaceId: string | undefined) => {
     const [recentPages, setRecentPages] = useState<RecentPageItem[]>([])
     const [loading, setLoading] = useState(false)
     const service = useSpacePageService()
 
-    const loadFromLocalStorage = useCallback((sid: string) => {
-        try {
-            const raw = localStorage.getItem(`${STORAGE_KEY}:${sid}`)
-            if (raw) {
-                const parsed = JSON.parse(raw) as RecentPageItem[]
-                setRecentPages(parsed.slice(0, MAX_RECENT_ITEMS))
-            }
-        } catch {
-            setRecentPages([])
-        }
-    }, [])
-
-    // Try to load from backend first, fall back to localStorage
-    useEffect(() => {
+    const persist = useCallback((pages: RecentPageItem[]) => {
         if (!spaceId) return
+        try {
+            localStorage.setItem(storageKey(spaceId), serializeRecentPages(pages))
+        } catch { /* quota errors must not break navigation */ }
+    }, [spaceId])
 
+    const readFallback = useCallback((): RecentPageItem[] => {
+        if (!spaceId) return []
+        try {
+            return parseRecentPages(localStorage.getItem(storageKey(spaceId)))
+        } catch {
+            return []
+        }
+    }, [spaceId])
+
+    const load = useCallback(() => {
+        if (!spaceId) return
         setLoading(true)
         service.pages.queryRecentPages({ spaceId, pageSize: MAX_RECENT_ITEMS })
             .then((result) => {
-                setRecentPages(result.records.slice(0, MAX_RECENT_ITEMS).map(toRecentPageItem))
+                const items = toRecentPageItems(result.records)
+                setRecentPages(items)
+                persist(items)
             })
             .catch(() => {
-                // Fallback to localStorage on API failure
-                loadFromLocalStorage(spaceId)
+                // Fall back to the local mirror only when the server cannot answer.
+                setRecentPages(readFallback())
             })
             .finally(() => setLoading(false))
-    }, [loadFromLocalStorage, service, spaceId])
+    }, [persist, readFallback, service, spaceId])
+
+    // Try to load from backend first, fall back to localStorage on failure.
+    useEffect(() => {
+        load()
+    }, [load])
+
+    // The workspace is route-cached: coming back to it does not remount, so a
+    // trash performed elsewhere (other tab/device — the change stream is
+    // in-process only) has to be picked up on the visible transition.
+    useOnRouteCacheActivated(load, [load])
+
+    // Keep the list in step with page lifecycle changes while the workspace is
+    // mounted (the shell caches routes, so this component may never remount).
+    useEffect(() => {
+        if (!spaceId) return
+
+        const forget = (pageId: string) => {
+            setRecentPages((prev) => {
+                const next = dropRecentPage(prev, pageId)
+                persist(next)
+                return next
+            })
+        }
+        const matchesSpace = (eventSpaceId?: string) =>
+            !eventSpaceId || String(eventSpaceId) === String(spaceId)
+
+        const unsubscribers = [
+            service.changes.subscribe('page.trashed', ({ payload }) => {
+                if (!matchesSpace(payload.spaceId)) return
+                // Drop immediately (optimistic) and refetch so the freed slot is
+                // filled by the next candidate from the server.
+                forget(payload.pageId)
+                load()
+            }),
+            // `page.deleted` has no emitter in the client service yet (today a
+            // page leaves through trash), but the change map defines it — a
+            // future hard-delete path must invalidate the list without touching
+            // this hook.
+            service.changes.subscribe('page.deleted', ({ payload }) => {
+                if (!matchesSpace(payload.spaceId)) return
+                forget(payload.pageId)
+            }),
+            service.changes.subscribe('page.restoredFromTrash', ({ payload }) => {
+                if (!matchesSpace(payload.spaceId)) return
+                load()
+            }),
+        ]
+        return () => unsubscribers.forEach((unsubscribe) => unsubscribe())
+    }, [load, persist, service, spaceId])
 
     /**
      * Record a page visit. Adds the page to the top of the recent list
      * and persists to localStorage.
      */
-    const recordVisit = useCallback((page: RecentPageItem) => {
+    const recordVisit = useCallback((page: Omit<RecentPageItem, 'updatedAt'>) => {
         if (!spaceId) return
 
         setRecentPages((prev) => {
-            // Remove duplicate if already exists
-            const filtered = prev.filter((p) => p.id !== page.id)
-            // Add to front
-            const updated = [{ ...page, updatedAt: new Date().toISOString() }, ...filtered].slice(0, MAX_RECENT_ITEMS)
-
-            // Persist to localStorage
-            try {
-                localStorage.setItem(`${STORAGE_KEY}:${spaceId}`, JSON.stringify(updated))
-            } catch { /* ignore quota errors */ }
-
+            const updated = recordRecentPage(prev, page)
+            persist(updated)
             return updated
         })
-    }, [spaceId])
+    }, [persist, spaceId])
 
     /**
      * Remove a page from recent history.
      */
     const removeFromRecent = useCallback((pageId: string) => {
-        if (!spaceId) return
-
         setRecentPages((prev) => {
-            const updated = prev.filter((p) => p.id !== pageId)
-            try {
-                localStorage.setItem(`${STORAGE_KEY}:${spaceId}`, JSON.stringify(updated))
-            } catch { /* ignore */ }
+            const updated = dropRecentPage(prev, pageId)
+            persist(updated)
             return updated
         })
-    }, [spaceId])
+    }, [persist])
 
     return {
         recentPages,
         loading,
         recordVisit,
         removeFromRecent,
+        refresh: load,
     }
 }

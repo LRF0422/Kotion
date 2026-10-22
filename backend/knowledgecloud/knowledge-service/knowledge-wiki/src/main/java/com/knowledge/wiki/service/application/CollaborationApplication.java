@@ -92,6 +92,11 @@ public class CollaborationApplication {
 
         // Get page info
         Page page = pageService.getById(invitation.getPageId());
+        // The invitation is useless once its page is trashed; fail with the reason
+        // instead of validating a token that cannot lead anywhere.
+        if (page != null && !pageService.isLivePage(page)) {
+            throw WikiException.PAGE_IN_TRASH.newException();
+        }
         if (page != null) {
             response.setPageTitle(page.getTitle());
             response.setPageType(page.getPageType());
@@ -164,6 +169,9 @@ public class CollaborationApplication {
         if (page == null) {
             throw WikiException.PAGE_NOT_FOUND.newException();
         }
+        if (!pageService.isLivePage(page)) {
+            throw WikiException.PAGE_IN_TRASH.newException();
+        }
         requireMatchingSpace(invitation, page);
 
         // Accept the invitation and materialize its page grant/guest membership.
@@ -215,6 +223,9 @@ public class CollaborationApplication {
             Page page = pageService.getById(invitation.getPageId());
             if (page == null) {
                 throw WikiException.PAGE_NOT_FOUND.newException();
+            }
+            if (!pageService.isLivePage(page)) {
+                throw WikiException.PAGE_IN_TRASH.newException();
             }
             requireMatchingSpace(invitation, page);
 
@@ -331,6 +342,9 @@ public class CollaborationApplication {
             requireMatchingSpace(invitation, pageRecord);
             permissionService.checkPagePermission(SecurityContextUtil.getUserId(), pageRecord,
                     IPermissionService.PERMISSION_READ);
+            if (!pageService.isLivePage(pageRecord)) {
+                throw WikiException.PAGE_IN_TRASH.newException();
+            }
 
             Page page = pageService.getPageContent(invitation.getPageId());
             if (page == null) {
