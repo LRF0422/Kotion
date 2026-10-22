@@ -946,6 +946,9 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
 
     // ─── Derived UI flags ─────────────────────────────────────────
     const isEmpty = messages.length === 0 && !isActive && !loadingTranscript
+    // The document the next turn would act on: an explicit target wins, the
+    // open page is the default. It also ranks the empty state's suggestions.
+    const starterPage = targetPage ?? currentPage
 
     // ─── Render ───────────────────────────────────────────────────
     return (
@@ -967,7 +970,7 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
                     )}
 
                     {isEmpty && (
-                        <ChatEmptyState mode={chatMode} onSubmit={handleQuickSubmit} />
+                        <ChatEmptyState mode={chatMode} onSubmit={handleQuickSubmit} page={starterPage} />
                     )}
 
                     {messages.map((message) => (

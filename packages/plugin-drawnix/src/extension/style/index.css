@@ -30,16 +30,13 @@
   transform: translateX(-50%);
   border: 1px solid hsl(var(--border, 214 32% 91%));
   border-radius: 10px;
-  background: hsl(var(--popover, 0 0% 100%) / 0.98);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
-  backdrop-filter: blur(10px);
+  background: hsl(var(--popover, 0 0% 100%));
   user-select: none;
   scrollbar-width: thin;
 }
 
 .drawnix-dark .drawnix-toolbar {
-  background: hsl(var(--popover, 0 0% 13%) / 0.98);
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.48);
+  background: hsl(var(--popover, 0 0% 13%));
 }
 
 .drawnix-toolbar-group {
@@ -145,7 +142,6 @@
   border: 1px solid hsl(var(--border, 214 32% 91%));
   border-radius: 6px;
   background: hsl(var(--popover, 0 0% 100%));
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
 }
 
 .drawnix-toolbar-layout-option {
@@ -214,9 +210,6 @@
     --drawnix-node-background-color-light,
     hsl(var(--background, 0 0% 100%))
   );
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.08),
-    0 3px 10px rgba(0, 0, 0, 0.06);
   transition:
     border-color 120ms ease,
     box-shadow 120ms ease;
@@ -235,33 +228,16 @@
     --drawnix-node-background-color-dark,
     hsl(var(--background, 0 0% 100%))
   );
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.28),
-    0 4px 12px rgba(0, 0, 0, 0.22);
-}
-
-.drawnix-mind-node:hover {
-  box-shadow:
-    0 2px 4px rgba(0, 0, 0, 0.1),
-    0 5px 14px rgba(0, 0, 0, 0.1);
-}
-
-.drawnix-dark .drawnix-mind-node:hover {
-  box-shadow:
-    0 2px 5px rgba(0, 0, 0, 0.34),
-    0 6px 16px rgba(0, 0, 0, 0.3);
 }
 
 .drawnix-mind-node.is-selected {
   box-shadow:
-    0 0 0 3px hsl(var(--ring, 221 83% 53%) / 0.2),
-    0 9px 24px rgba(0, 0, 0, 0.12);
+    0 0 0 3px hsl(var(--ring, 221 83% 53%) / 0.2);
 }
 
 .drawnix-dark .drawnix-mind-node.is-selected {
   box-shadow:
-    0 0 0 3px hsl(var(--ring, 221 83% 53%) / 0.24),
-    0 10px 26px rgba(0, 0, 0, 0.38);
+    0 0 0 3px hsl(var(--ring, 221 83% 53%) / 0.24);
 }
 
 .drawnix-mind-node.is-root {
@@ -276,9 +252,6 @@
     --drawnix-node-background-color-light,
     hsl(var(--background, 0 0% 100%))
   );
-  box-shadow:
-    0 2px 5px rgba(0, 0, 0, 0.08),
-    0 5px 16px rgba(0, 0, 0, 0.08);
   font-weight: 700;
 }
 
@@ -295,21 +268,16 @@
     --drawnix-node-background-color-dark,
     hsl(var(--background, 0 0% 100%))
   );
-  box-shadow:
-    0 2px 5px rgba(0, 0, 0, 0.32),
-    0 6px 18px rgba(0, 0, 0, 0.3);
 }
 
 .drawnix-mind-node.is-root.is-selected {
   box-shadow:
-    0 0 0 3px hsl(var(--ring, 221 83% 53%) / 0.18),
-    0 8px 24px rgba(0, 0, 0, 0.1);
+    0 0 0 3px hsl(var(--ring, 221 83% 53%) / 0.18);
 }
 
 .drawnix-dark .drawnix-mind-node.is-root.is-selected {
   box-shadow:
-    0 0 0 3px hsl(var(--ring, 221 83% 53%) / 0.22),
-    0 9px 26px rgba(0, 0, 0, 0.38);
+    0 0 0 3px hsl(var(--ring, 221 83% 53%) / 0.22);
 }
 
 .drawnix-node-text {
@@ -354,14 +322,12 @@
   border: 1px solid hsl(var(--border, 214 32% 91%));
   border-radius: 10px;
   color: hsl(var(--foreground, 222 47% 11%));
-  background: hsl(var(--popover, 0 0% 100%) / 0.98);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  background: hsl(var(--popover, 0 0% 100%));
   scrollbar-width: thin;
 }
 
 .drawnix-dark .drawnix-node-format-toolbar {
-  background: hsl(var(--popover, 0 0% 13%) / 0.98);
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.48);
+  background: hsl(var(--popover, 0 0% 13%));
 }
 
 .drawnix-node-format-button {
@@ -399,13 +365,8 @@
   z-index: 10000;
   width: 80px;
   padding: 3px;
-  border-color: hsl(var(--border, 214 32% 91%));
+  border: 1px solid hsl(var(--border, 214 32% 91%));
   background: hsl(var(--popover, 0 0% 100%));
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
-}
-
-.dark .drawnix-node-font-size-popover {
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.52);
 }
 
 .drawnix-node-font-size-option {
@@ -429,13 +390,8 @@
 
 .drawnix-node-link-popover {
   width: min(320px, calc(100vw - 24px));
-  border-color: hsl(var(--border, 214 32% 91%));
+  border: 1px solid hsl(var(--border, 214 32% 91%));
   background: hsl(var(--popover, 0 0% 100%));
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
-}
-
-.dark .drawnix-node-link-popover {
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.52);
 }
 
 .drawnix-collapse-button {
@@ -452,7 +408,6 @@
   border-radius: 999px;
   color: hsl(var(--muted-foreground, 215 16% 47%));
   background: hsl(var(--background, 0 0% 100%));
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
   font-size: 11px;
   cursor: pointer;
 }

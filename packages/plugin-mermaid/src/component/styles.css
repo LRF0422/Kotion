@@ -7,7 +7,7 @@
     padding: 1rem;
     margin: 1rem 0;
     position: relative;
-    @apply rounded-lg border bg-card text-card-foreground shadow-sm;
+    @apply rounded-lg border bg-card text-card-foreground;
 }
 
 /* Preview zoomable container */
@@ -19,7 +19,6 @@
     margin: 0;
     padding: 0.5rem;
     border: none;
-    box-shadow: none;
 }
 
 .mermaid-preview-zoomable .mermaid-diagram {
@@ -33,11 +32,9 @@
     display: flex;
     align-items: center;
     gap: 0.125rem;
-    background-color: rgba(243, 244, 246, 0.8);
+    background-color: #f3f4f6;
     border-radius: 8px;
     padding: 0.125rem;
-    -webkit-backdrop-filter: blur(4px);
-    backdrop-filter: blur(4px);
 }
 
 .mermaid-actions {
@@ -80,7 +77,7 @@
 /* Error State Styles */
 .mermaid-error-container {
     position: relative;
-    @apply rounded-lg border bg-card text-card-foreground shadow-sm;
+    @apply rounded-lg border bg-card text-card-foreground;
 }
 
 .mermaid-code-renderer {
@@ -140,8 +137,8 @@
     max-height: 95vh;
     overflow: auto;
     background-color: #fff;
+    border: 1px solid hsl(var(--border, 40 6% 92%));
     border-radius: 12px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
     padding: 2rem;
 }
 

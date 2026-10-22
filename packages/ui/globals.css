@@ -328,6 +328,16 @@ html[data-ui-style="modern"] #root {
     box-shadow: 0 2px 8px hsl(0 0% 0% / 0.04);
   }
 
+  /* Classic: the editor pane *is* the document surface, so it takes the same
+     colour as the editor toolbar (`bg-background`) instead of letting the
+     shell's muted wash show through it. Before this, the toolbar band read as
+     a darker strip floating on a lighter page — the pane and the toolbar must
+     share one surface. Modern mode already gets this background above; keep
+     the two styles in sync so the editor never looks half-painted. */
+  html:not([data-ui-style="modern"]) .kn-workspace-editor {
+    background: hsl(var(--background));
+  }
+
   html[data-ui-style="modern"] .kn-app-rail,
   html[data-ui-style="modern"] .kn-workspace-dock,
   html[data-ui-style="modern"] .kn-dock-rail {

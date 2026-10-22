@@ -179,7 +179,7 @@
     box-sizing: border-box;
     overflow: visible;
     border-bottom: 1px solid hsl(var(--border, 40 6% 92%));
-    background: hsl(var(--muted, 40 6% 96%) / 0.5);
+    background: hsl(var(--muted, 40 6% 96%));
 }
 
 /* ── Sheet tabs ──────────────────────────────────────────────────────────── *
