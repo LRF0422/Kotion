@@ -63,6 +63,10 @@ export interface WorkspaceAgentApi {
     /**
      * Send one user turn. No-op only when the turn has neither text nor images
      * (the backend receives images as multimodal content parts, never as text).
+     *
+     * Resolves `true` when the turn was steered into a run that was already
+     * executing, `false` when it started a new one — the surface uses this to
+     * mark the bubble as an interruption rather than a fresh prompt.
      */
     send: (
         text: string,
@@ -73,7 +77,7 @@ export interface WorkspaceAgentApi {
             /** Per-turn volatile context (e.g. the working target). */
             contextNote?: string
         },
-    ) => Promise<void>
+    ) => Promise<boolean>
 }
 
 function newConversationId(): string {
@@ -175,7 +179,7 @@ export function useWorkspaceAgent(options: WorkspaceAgentOptions = {}): Workspac
     ) => {
         const content = text.trim()
         const images = startOptions?.images ?? []
-        if (!content && images.length === 0) return
+        if (!content && images.length === 0) return false
         // Images ride as multimodal content parts so the model's own vision sees
         // them; nothing here interprets an image locally.
         const contentParts = images.length > 0
@@ -185,7 +189,7 @@ export function useWorkspaceAgent(options: WorkspaceAgentOptions = {}): Workspac
         // A run is already executing: hand the turn to it instead of starting a
         // second one (which would cancel it mid-work). The loop folds the turn in
         // at its next safe boundary. Idle → no run id → immediate false, no request.
-        if (await agent.steer(messages)) return
+        if (await agent.steer(messages)) return true
         // A selected custom agent's guidance is context, never part of the prompt.
         const contextNote = [startOptions?.contextNote, buildCustomAgentNote(options.customAgent)]
             .filter(Boolean)
@@ -197,6 +201,7 @@ export function useWorkspaceAgent(options: WorkspaceAgentOptions = {}): Workspac
         })
         // agent.start is stable for the life of the hook.
         // eslint-disable-next-line react-hooks/exhaustive-deps
+        return false
     }, [agent])
 
     return { agent, conversationId, send }

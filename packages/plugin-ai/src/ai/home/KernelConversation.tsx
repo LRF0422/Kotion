@@ -265,19 +265,29 @@ export const KernelConversation: React.FC<KernelConversationProps> = ({
     }, [sessionId, agent, clear, controlsRef])
 
     const pushUserTurn = useCallback((text: string, images: AgentImageData[] = []) => {
+        const id = generateId()
+        // Typed mid-run: render it below the streaming answer immediately, then
+        // clear the flag if the run refused it (it then answers as a fresh run).
+        const typedMidRun = isActive
         setMessages(prev => [...prev, {
-            id: generateId(),
+            id,
             content: text,
             images: images.length > 0 ? images.map(toImageDataUrl) : undefined,
             sender: 'user',
             timestamp: Date.now(),
+            steered: typedMidRun,
         }])
         // Tell the model what it is operating on every turn. contextNote travels
         // behind the cacheable history, so a target switch never rewrites the
         // system prefix.
         void send(text, { model: selectedModel || undefined, images, contextNote })
+            .then(steered => {
+                if (typedMidRun && !steered) {
+                    setMessages(prev => prev.map(m => (m.id === id ? { ...m, steered: false } : m)))
+                }
+            })
             .catch(() => { /* surfaced via state.error */ })
-    }, [generateId, send, selectedModel, contextNote, setMessages])
+    }, [generateId, send, selectedModel, contextNote, isActive, setMessages])
 
     const handleAddImages = useCallback(async (files: File[]) => {
         // A model the backend knows cannot see images would have the parts
@@ -357,11 +367,20 @@ export const KernelConversation: React.FC<KernelConversationProps> = ({
                         </div>
                     )}
 
+                    {/* A steered turn is handled after the step that is still
+                        running, so while the run is live it sits below the
+                        streaming answer rather than in the history above it. */}
                     {messages.map(message => (
-                        <MessageBubble key={message.id} message={message} />
+                        isActive && message.steered ? null : (
+                            <MessageBubble key={message.id} message={message} />
+                        )
                     ))}
 
                     {isActive && <MessageBubble message={liveMessage} isStreaming />}
+
+                    {isActive && messages.filter(message => message.steered).map(message => (
+                        <MessageBubble key={message.id} message={message} />
+                    ))}
 
                     {state.phase === 'waiting-approval' && state.plan && (
                         <div className="mx-2 my-1.5">

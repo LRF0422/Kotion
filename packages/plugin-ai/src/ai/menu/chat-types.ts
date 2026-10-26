@@ -18,6 +18,12 @@ export interface Message {
     answerStepId?: string
     sender: "user" | "ai"
     timestamp: number
+    /**
+     * Set once the backend accepted this turn as a mid-run steer (the run was
+     * already executing and folds it in at its next safe boundary). A turn that
+     * was refused is re-sent as a fresh run and never carries this flag.
+     */
+    steered?: boolean
     steps?: ExecutionStep[]
     /** Sub-agent delegation records (AgentCore SubRunRecord). */
     subRuns?: SubRunRecord[]

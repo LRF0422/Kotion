@@ -765,6 +765,16 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
     )
 
     /**
+     * Set or clear a user bubble's steered flag. It is set when the turn is
+     * typed (so the bubble renders below the streaming answer right away, no
+     * jump once the request lands) and cleared if the run refuses it — a
+     * refused turn is re-sent as a fresh run and belongs back in the history.
+     */
+    const setSteered = useCallback((id: string, steered: boolean) => {
+        setMessages(prev => prev.map(m => (m.id === id ? { ...m, steered } : m)))
+    }, [setMessages])
+
+    /**
      * A turn typed while the run was already past its last safe boundary. It is
      * flushed as the next run the moment the current one finishes, so a message
      * sent into the closing milliseconds of a run is never dropped.
@@ -911,6 +921,9 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
             images: images.length > 0 ? images.map(toImageDataUrl) : undefined,
             sender: "user",
             timestamp: Date.now(),
+            // Typed mid-run: shown below the streaming answer until the run
+            // either takes it or refuses it (see the branch below).
+            steered: isActive,
         }
         setMessages((prev) => [...prev, userMessage])
         lastUserMessageRef.current = messageText
@@ -936,12 +949,13 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
             // It crossed its last safe boundary between typing and sending: keep
             // the turn (its bubble is already on screen) and answer it as the
             // next run once this one publishes its terminal state.
+            setSteered(userMessage.id, false)
             queuedTurnRef.current = agentMessages
             return
         }
 
         await startTurn(agentMessages)
-    }, [agent, generateMessageId, isActive, setMessages, startTurn])
+    }, [agent, generateMessageId, isActive, setMessages, setSteered, startTurn])
 
     const handleSend = useCallback(() => {
         const text = input.trim()
@@ -1012,12 +1026,18 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
                         <ChatEmptyState mode={chatMode} onSubmit={handleQuickSubmit} page={starterPage} />
                     )}
 
+                    {/* A steered turn is only handled after the step that is
+                        still running, so while the run is live it is rendered
+                        BELOW the streaming answer instead of being spliced into
+                        the history above it. */}
                     {messages.map((message) => (
-                        <MessageBubble
-                            key={message.id}
-                            message={message}
-                            onRevealReference={handleRevealReference}
-                        />
+                        isActive && message.steered ? null : (
+                            <MessageBubble
+                                key={message.id}
+                                message={message}
+                                onRevealReference={handleRevealReference}
+                            />
+                        )
                     ))}
 
                     {isActive && (
@@ -1027,6 +1047,14 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
                             onRevealReference={handleRevealReference}
                         />
                     )}
+
+                    {isActive && messages.filter(message => message.steered).map((message) => (
+                        <MessageBubble
+                            key={message.id}
+                            message={message}
+                            onRevealReference={handleRevealReference}
+                        />
+                    ))}
 
                     {agent.state.phase === 'waiting-approval' && agent.state.plan && (
                         <div className="mx-2 my-1.5">

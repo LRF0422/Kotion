@@ -5,7 +5,7 @@ import React, {
     useRef,
     useState,
 } from 'react'
-import { Send, Square, MessageCircle, Bot, FileDiff, ImagePlus, ImageOff, X } from '@kn/icon'
+import { Send, Square, CornerDownRight, MessageCircle, Bot, FileDiff, ImagePlus, ImageOff, X } from '@kn/icon'
 import {
     Button,
     ChatInput,
@@ -176,8 +176,8 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
     const blockedByAttachedImages = visionBlocked && hasImages
     // Sending while a run is in flight is allowed on purpose: the agent takes the
     // turn at its next safe boundary instead of the user having to wait for it to
-    // finish. `isLoading` therefore gates nothing here — it only adds the stop
-    // button next to send.
+    // finish. `isLoading` never blocks validation — it only renames the submit
+    // button to an explicit "steer" action and adds stop next to it.
     const isValid = (value.trim().length > 0 || hasImages)
         && !targetUnavailable && !blockedByAttachedImages
 
@@ -288,6 +288,25 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
                 hidden
                 onChange={handlePickFiles}
             />
+            {/* The run is executing: say so, and say what submitting does now.
+                Without this strip the composer looks identical to its idle self,
+                so the steer action has no visible entry point. */}
+            {isLoading && (
+                <div
+                    role="status"
+                    className="mx-2 mt-2 flex items-start gap-1.5 rounded-lg bg-muted/60 px-2.5 py-1.5 text-[11px] text-muted-foreground"
+                >
+                    <span aria-hidden="true" className="relative mt-1 flex h-1.5 w-1.5 shrink-0">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/60 motion-reduce:animate-none" />
+                        <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary" />
+                    </span>
+                    <span className="min-w-0 flex-1 leading-relaxed">
+                        {t('ai.chat.steerBanner', {
+                            defaultValue: 'Agent 正在执行 —— 现在发送会「插话」给当前任务，不必等它结束',
+                        })}
+                    </span>
+                </div>
+            )}
             <ChatInput
                 ref={inputRef}
                 value={value}
@@ -385,18 +404,39 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
                             </Tooltip>
                         </TooltipProvider>
                     )}
-                    {(!isLoading || isValid) && (
+                    {isLoading ? (
+                        // Mid-run the action is named: an icon alone read as a plain
+                        // send, so there was nowhere to click "steer".
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button
+                                        type="submit"
+                                        size="sm"
+                                        aria-label={t('ai.chat.steerSend', {
+                                            defaultValue: '发送给正在执行的任务',
+                                        })}
+                                        disabled={!isValid}
+                                        className="h-11 gap-1.5 rounded-xl bg-primary px-3 text-primary-foreground transition-all hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40 lg:h-8 lg:rounded-lg lg:px-2.5"
+                                    >
+                                        <CornerDownRight className="h-3.5 w-3.5 shrink-0" />
+                                        <span className="text-xs font-medium lg:text-[10px]">
+                                            {t('ai.chat.steerAction', { defaultValue: '插话' })}
+                                        </span>
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs">
+                                    {t('ai.chat.steerHint', {
+                                        defaultValue: '发送后会交给正在运行的 Agent，无需等它结束',
+                                    })}
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                    ) : (
                         <Button
                             type="submit"
                             size="sm"
-                            aria-label={isLoading
-                                ? t('ai.chat.steerSend', { defaultValue: '发送给正在执行的任务' })
-                                : t('ai.chat.send', { defaultValue: '发送消息' })}
-                            title={isLoading
-                                ? t('ai.chat.steerHint', {
-                                    defaultValue: '发送后会交给正在运行的 Agent，无需等它结束',
-                                })
-                                : undefined}
+                            aria-label={t('ai.chat.send', { defaultValue: '发送消息' })}
                             disabled={!isValid}
                             className="h-11 w-11 rounded-xl bg-primary p-0 text-primary-foreground transition-all hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40 lg:h-8 lg:w-8 lg:rounded-lg"
                         >

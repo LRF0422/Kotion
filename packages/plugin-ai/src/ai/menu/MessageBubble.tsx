@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react'
-import { AlertCircle, Loader2, StopCircle } from '@kn/icon'
+import { AlertCircle, CornerDownRight, Loader2, StopCircle } from '@kn/icon'
 import {
     ChatBubble,
     ChatBubbleMessage,
@@ -70,6 +70,16 @@ export const MessageBubble = React.memo(function MessageBubble({
                             ? <div className="whitespace-pre-wrap break-words">{message.content}</div>
                             : null}
                     </ChatBubbleMessage>
+                    {message.steered && (
+                        <div className="flex items-center gap-1 pr-0.5 text-[11px] text-muted-foreground">
+                            <CornerDownRight aria-hidden="true" className="h-3 w-3 shrink-0" />
+                            <span>
+                                {t('ai.chat.steeredBadge', {
+                                    defaultValue: '插话给正在执行的任务，本步结束后处理',
+                                })}
+                            </span>
+                        </div>
+                    )}
                 </div>
             </ChatBubble>
         )
