@@ -205,6 +205,13 @@ export const KernelConversation: React.FC<KernelConversationProps> = ({
         if (lastPhaseRef.current === phase) return
         lastPhaseRef.current = phase
         if (phase !== 'completed' && phase !== 'failed' && phase !== 'cancelled') return
+        // The steered turns belong to the run that just ended: the engine has
+        // persisted them in place, so the live view drops the pending marker too.
+        // Keeping it would drag them below whatever runs NEXT, and would disagree
+        // with a reload (the transcript comes from the backend).
+        setMessages(prev => prev.some(m => m.steered)
+            ? prev.map(m => (m.steered ? { ...m, steered: false } : m))
+            : prev)
         // Abandoning (clear / tab close): never snapshot the abandoned turn back
         // into the conversation.
         if (abandoningRef.current) {
