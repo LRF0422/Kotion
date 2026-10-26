@@ -412,6 +412,50 @@ class SessionTranscriptProjectorTest {
         assertTrue(childToolStepProjected, "the child's tool call must be projected with its subRunId");
     }
 
+    @Test
+    void terminalRunPersistsMidRunUserTurnsButNeverTheEngineNudge() throws Exception {
+        // Mid-run steering: the user keeps talking while the run executes. Those
+        // turns are real conversation and must survive a reload; the engine's own
+        // user-role scaffolding (the truncation nudge) must not.
+        AgentChatSessionEntity existing = new AgentChatSessionEntity();
+        existing.setSessionId("conv-1");
+        existing.setTenantId(1L);
+        existing.setUserId(2L);
+        existing.setTitle("hi");
+        existing.setModelMessagesJson("[{\"role\":\"user\",\"content\":\"hi\"}]");
+        when(store.get(1L, 2L, "conv-1")).thenReturn(existing);
+
+        Checkpoint checkpoint = new Checkpoint();
+        checkpoint.setRunId("run-1");
+        checkpoint.setInputMessageCount(2);
+        checkpoint.setMessages(new ArrayList<>(Arrays.asList(
+                ChatMessage.builder().role("system").content("sys").build(),
+                ChatMessage.builder().role("user").content("hi").build(),
+                ChatMessage.builder().role("assistant").content("working").build(),
+                ChatMessage.builder().role("user").content("also add a table").build(),
+                ChatMessage.builder().role("assistant").content("done").build(),
+                ChatMessage.builder().role("user").name(ContextManager.SYSTEM_NUDGE_NAME)
+                        .content("[系统] 继续").build()
+        )));
+        when(checkpointStore.load("run-1")).thenReturn(checkpoint);
+
+        projector.onRunTerminal(run("run-1"));
+
+        AgentChatSessionEntity saved = captureSaved();
+        JsonNode model = mapper.readTree(saved.getModelMessagesJson());
+        // user + assistant + user(steer) + assistant — the nudge is dropped.
+        assertEquals(4, model.size());
+        assertEquals("working", model.get(1).path("m").path("content").asText());
+        assertEquals("also add a table", model.get(2).path("m").path("content").asText());
+        assertEquals("done", model.get(3).path("m").path("content").asText());
+
+        JsonNode ui = mapper.readTree(saved.getMessagesJson());
+        // The steered turn becomes its own user bubble between the two answers.
+        assertEquals(4, ui.size());
+        assertEquals("user", ui.get(2).path("sender").asText());
+        assertEquals("also add a table", ui.get(2).path("content").asText());
+    }
+
     private AgentChatSessionEntity captureSaved() {
         ArgumentCaptor<AgentChatSessionEntity> captor = ArgumentCaptor.forClass(AgentChatSessionEntity.class);
         verify(store).saveTranscriptCas(captor.capture());

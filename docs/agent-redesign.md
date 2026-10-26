@@ -166,6 +166,7 @@ POST   /api/agent/v1/runs                       创建并启动 run → { runId,
 GET    /api/agent/v1/runs/{runId}               状态视图 { status, finishReason, lastSeq, usage, pendingTools }
 GET    /api/agent/v1/runs/{runId}/events?afterSeq=N   SSE（回放 + 实时 + 心跳注释帧）
 POST   /api/agent/v1/runs/{runId}/resume        SSE；{ action: tool_results|approve_plan|continue, ... }
+POST   /api/agent/v1/runs/{runId}/messages      运行中插话；{ content, contentParts? } → { runId, accepted }
 POST   /api/agent/v1/runs/{runId}/cancel        → { status: CANCELLED }
 DELETE /api/agent/v1/threads/{threadId}/active-run    取消会话活跃 run
 GET    /api/agent/v1/threads/{threadId}         会话摘要/标题/活跃 run（前端恢复用）
@@ -190,9 +191,10 @@ DELETE /api/agent/v1/memory/{memoryId}          删除单条记忆（UI）
 {"seq":8,"type":"sub.completed","callId":"c3","subRunId":"…","ok":true,"result":"…"}
 {"seq":9,"type":"plan.proposed","callId":"c4","plan":{…}}
 {"seq":10,"type":"run.suspended","reason":"plan_approval|budget","pendingCallIds":["c1"]}
-{"seq":11,"type":"run.completed","finishReason":"stop","usage":{…}}
-{"seq":12,"type":"run.failed","code":"tool_timeout","error":"…"}
-{"seq":13,"type":"run.cancelled"}
+{"seq":11,"type":"user.message","content":"顺便加个表格","pending":0}      // 运行中插话已被采纳
+{"seq":12,"type":"run.completed","finishReason":"stop","usage":{…}}
+{"seq":13,"type":"run.failed","code":"tool_timeout","error":"…"}
+{"seq":14,"type":"run.cancelled"}
 ```
 
 `tool.requested` / `tool.completed` 可带可选 `subRunId`：调用由子 agent 发起，父 run 负责转发
@@ -200,6 +202,17 @@ DELETE /api/agent/v1/memory/{memoryId}          删除单条记忆（UI）
 对应子 agent 节点，不能混进主 agent 的步骤带；`pendingTools`（RunView）同样带 `subRunId`。子 run 终态
 （`sub.completed` / `sub.failed` / 委派超时）之后，父 run 会丢弃该子 agent 未完成的 pending 调用，
 不会再为此暂停。
+
+**运行中插话（steering）**：`POST /runs/{runId}/messages` 把一条 user turn 交给正在执行的 run，
+不必再等它结束（旧行为是新建 run 并取消旧 run）。语义边界：
+
+- 只在**安全边界**（两次模型调用之间、所有 pending 工具结果已写回）入队，不会打断正在流的 token；
+  `user.message` 事件就在这一刻发出，客户端据此知道消息落在哪一步之前。
+- run 即将 `complete()` 时会先原子地「排空或封口」队列：有插话则继续跑同一 run，否则封口，
+  之后到达的消息 `accepted=false`，调用方改为新开 run（会重读 transcript，不会丢）。
+- 队列上限 8 条；`accepted=false` 也用于「run 由其他节点驱动」的情况。
+- 插话的 user turn 由 loop 追加到 checkpoint，run 终止时随同 assistant/tool 一起投影进 model log；
+  引擎自己写的 user turn（`__context__` / `__nudge__`）仍然排除在投影与 UI 之外。
 
 ## 9. 数据库迁移（V7__agentcore.sql，旧表保留数据不删）
 

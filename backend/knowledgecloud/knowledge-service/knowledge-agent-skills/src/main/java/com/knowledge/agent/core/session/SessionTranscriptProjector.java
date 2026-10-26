@@ -208,8 +208,16 @@ public class SessionTranscriptProjector {
                                 continue;
                             }
                             String role = role(message);
-                            if ("system".equals(role) || "user".equals(role)) {
-                                continue; // internal truncation nudges are never context
+                            if ("system".equals(role)) {
+                                continue;
+                            }
+                            // User turns adopted mid-run ARE conversation and must
+                            // land in the log; the engine's own user turns (the
+                            // injected context block and the truncation nudge) are
+                            // prompt scaffolding and never context.
+                            if ("user".equals(role)
+                                    && ContextManager.isEngineAuthoredUserTurn(message)) {
+                                continue;
                             }
                             produced.add(forLog(message));
                         }
@@ -448,10 +456,10 @@ public class SessionTranscriptProjector {
             long timestamp = state.timeAt(index);
             String role = role(message);
             if ("user".equals(role)) {
-                if (ContextManager.isInjectedContext(message)) {
-                    // Engine-injected per-turn context: part of the model log
-                    // (and therefore of the cacheable prefix) but never a
-                    // user-visible turn.
+                if (ContextManager.isEngineAuthoredUserTurn(message)) {
+                    // Engine-authored user turn (per-turn context block or the
+                    // truncation nudge): part of the model log (and therefore of
+                    // the cacheable prefix) but never a user-visible turn.
                     continue;
                 }
                 finalizeRun(run, runActivity, runSteps, answerStepId, answerText, runReasoning);

@@ -175,6 +175,26 @@ export class AgentClient {
         await this.request('/runs/' + encodeURIComponent(runId) + '/cancel', { method: 'POST' })
     }
 
+    /**
+     * Send a user turn to a run that is already executing — the agent keeps
+     * working and folds the turn in between two model calls, so nothing already
+     * streaming is interrupted.
+     *
+     * Resolves to `false` when the run is past its last safe boundary (or is
+     * driven by another node): the caller answers the turn by starting a new run
+     * instead, which re-reads the transcript so the turn is still handled.
+     */
+    async sendRunMessage(
+        runId: string,
+        input: { content?: string; contentParts?: unknown[] },
+    ): Promise<boolean> {
+        const result = await this.request<{ runId?: string; accepted?: boolean }>(
+            '/runs/' + encodeURIComponent(runId) + '/messages',
+            { method: 'POST', body: JSON.stringify(input) }
+        )
+        return result?.accepted === true
+    }
+
     async deleteActiveRun(conversationId: string): Promise<void> {
         await this.request('/threads/' + encodeURIComponent(conversationId) + '/active-run', {
             method: 'DELETE',

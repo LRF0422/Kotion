@@ -182,6 +182,10 @@ export function useWorkspaceAgent(options: WorkspaceAgentOptions = {}): Workspac
             ? buildImageContentParts(content, images)
             : undefined
         const messages: AgentChatMessage[] = [{ role: 'user', content, contentParts }]
+        // A run is already executing: hand the turn to it instead of starting a
+        // second one (which would cancel it mid-work). The loop folds the turn in
+        // at its next safe boundary. Idle → no run id → immediate false, no request.
+        if (await agent.steer(messages)) return
         // A selected custom agent's guidance is context, never part of the prompt.
         const contextNote = [startOptions?.contextNote, buildCustomAgentNote(options.customAgent)]
             .filter(Boolean)

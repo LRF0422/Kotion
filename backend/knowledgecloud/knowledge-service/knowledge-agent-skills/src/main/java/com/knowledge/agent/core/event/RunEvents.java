@@ -27,6 +27,14 @@ public final class RunEvents {
     public static final String RUN_FAILED = "run.failed";
     public static final String RUN_CANCELLED = "run.cancelled";
 
+    /**
+     * A user turn that arrived mid-run and was folded into the running
+     * conversation (see {@code AgentLoop.enqueueUserTurn}). Emitted at the safe
+     * boundary where it is adopted, before the next {@code step.started}, so a
+     * client never has to guess where the message landed.
+     */
+    public static final String USER_MESSAGE = "user.message";
+
     public static Map<String, Object> payload(Object... kv) {
         Map<String, Object> map = new LinkedHashMap<>();
         for (int i = 0; i + 1 < kv.length; i += 2) {
@@ -95,6 +103,14 @@ public final class RunEvents {
 
     public static Map<String, Object> runSuspended(String reason, Object pendingCallIds) {
         return payload("reason", reason, "pendingCallIds", pendingCallIds);
+    }
+
+    /**
+     * Echo of a user turn adopted mid-run. {@code pending} is the number of
+     * utterances still queued behind it (0 for the common case).
+     */
+    public static Map<String, Object> userMessage(String content, int pending) {
+        return payload("content", content, "pending", pending);
     }
 
     /**

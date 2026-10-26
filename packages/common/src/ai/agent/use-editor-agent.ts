@@ -133,6 +133,15 @@ export interface StartTurnOptions {
 export interface EditorAgentApi {
     state: EditorAgentState
     start: (messages: AgentChatMessage[], options?: StartTurnOptions) => Promise<void>
+    /**
+     * Talk to the run that is already executing. Only the last user turn of
+     * `messages` is sent — the run holds the rest of the conversation.
+     *
+     * Resolves to `false` when the run can no longer take a turn (it is past its
+     * last safe boundary, or another tab/node drives it): the caller answers the
+     * turn by starting a new run instead.
+     */
+    steer: (messages: AgentChatMessage[]) => Promise<boolean>
     /** Re-attach to a saved run (断点恢复). Returns false when nothing to restore. */
     attach: (runId?: string) => Promise<boolean>
     approvePlan: (approved: boolean, feedback?: string) => Promise<void>
@@ -547,6 +556,32 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
         await resumeControl({ action: 'continue' })
     }, [resumeControl])
 
+    const steer = useCallback(async (messages: AgentChatMessage[]): Promise<boolean> => {
+        const current = stateRef.current
+        if (!current.runId) return false
+        let utterance: AgentChatMessage | undefined
+        for (let index = messages.length - 1; index >= 0; index -= 1) {
+            if (messages[index]?.role === 'user') {
+                utterance = messages[index]
+                break
+            }
+        }
+        if (!utterance) return false
+        const hasText = Boolean(utterance.content && utterance.content.trim())
+        const hasParts = Boolean(utterance.contentParts && utterance.contentParts.length > 0)
+        if (!hasText && !hasParts) return false
+        try {
+            return await client.sendRunMessage(current.runId, {
+                content: utterance.content ?? '',
+                contentParts: utterance.contentParts,
+            })
+        } catch {
+            // Falls back to a new run, which re-reads the transcript: a steer that
+            // could not be delivered costs a round trip, never the message.
+            return false
+        }
+    }, [client])
+
     const retryConnection = useCallback(() => {
         const current = stateRef.current
         if (!current.runId) {
@@ -676,5 +711,5 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
         enabled: Boolean(options.onBackgroundTaskSettled),
     })
 
-    return { state, start, attach, approvePlan, continueRun, retryConnection, cancel, reset }
+    return { state, start, steer, attach, approvePlan, continueRun, retryConnection, cancel, reset }
 }

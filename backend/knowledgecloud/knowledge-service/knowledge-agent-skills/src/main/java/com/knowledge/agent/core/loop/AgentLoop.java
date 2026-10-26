@@ -264,6 +264,35 @@ public class AgentLoop implements Runnable {
     /** Working-memory holder backed by the checkpoint scratchpad. */
     private final ToolContext.ScratchpadHolder scratchpad = new ToolContext.ScratchpadHolder();
 
+    /**
+     * Cap on user turns buffered while the run is busy. Steering is meant for a
+     * sentence of redirection, not for replaying a backlog: past this depth the
+     * caller is told to start a new run instead (which re-reads the transcript
+     * anyway), so one run can never grow its prompt without bound.
+     */
+    private static final int MAX_QUEUED_USER_TURNS = 8;
+
+    /**
+     * User turns that arrived mid-run, waiting for the next safe boundary. They
+     * cannot be written into {@code checkpoint.getMessages()} on arrival: a user
+     * message injected between an assistant turn's {@code tool_calls} and its
+     * {@code tool} results makes the conversation invalid for the provider.
+     * Adoption happens in {@link #run()} where that pairing is complete.
+     */
+    private final java.util.concurrent.ConcurrentLinkedQueue<ChatMessage> pendingUserTurns =
+            new java.util.concurrent.ConcurrentLinkedQueue<>();
+
+    /**
+     * Guards {@link #pendingUserTurns} against {@link #acceptingUserTurns}. Both
+     * the enqueue (any HTTP thread) and the seal (loop thread, right before the
+     * run completes) run under this lock, so a message either lands in the
+     * queue and is adopted, or is rejected and the caller starts a new run.
+     */
+    private final Object userTurnLock = new Object();
+
+    /** False once the run reached its last safe boundary — no more steering. */
+    private boolean acceptingUserTurns = true;
+
     public AgentLoop(AgentRun run, Checkpoint checkpoint, RunInput runInput,
                      RunStore runStore, CheckpointStore checkpointStore, RunEventLog eventLog,
                      LlmGateway llmGateway, ToolGateway toolGateway, ContextManager contextManager,
@@ -366,6 +395,84 @@ public class AgentLoop implements Runnable {
         return gate;
     }
 
+    /**
+     * Accept a user turn into the running conversation. Returns false when this
+     * run can no longer take one (already sealed, terminal, or the queue is
+     * full) — the caller is expected to start a new run in that case.
+     *
+     * <p>The message is only buffered here; {@link #run()} folds it into the
+     * checkpoint at the next safe boundary, so the model sees it on the next
+     * step instead of the current one. A turn already streaming is never cut
+     * off.
+     */
+    public boolean enqueueUserTurn(ChatMessage message) {
+        if (message == null) {
+            return false;
+        }
+        if (message.getRole() == null || message.getRole().trim().isEmpty()) {
+            message.setRole("user");
+        }
+        if (run.statusEnum().isTerminal()) {
+            return false;
+        }
+        synchronized (userTurnLock) {
+            if (!acceptingUserTurns || pendingUserTurns.size() >= MAX_QUEUED_USER_TURNS) {
+                return false;
+            }
+            pendingUserTurns.add(message);
+        }
+        log.info("Run {}: queued mid-run user turn (role={}, content prefix: {})",
+                run.getRunId(), message.getRole(), contentPrefix(message.getContent()));
+        return true;
+    }
+
+    /** True while the loop can still take a steering message. */
+    public boolean isAcceptingUserTurns() {
+        return acceptingUserTurns;
+    }
+
+    /**
+     * Move every queued user turn into the conversation. Called from the loop
+     * thread only, at points where no tool call is left unanswered.
+     *
+     * <p>Package-private so {@code AgentLoopSteeringTest} can assert the
+     * boundary without driving a whole run.
+     */
+    int adoptPendingUserTurns() {
+        List<ChatMessage> adopted = new ArrayList<>();
+        synchronized (userTurnLock) {
+            ChatMessage message;
+            while ((message = pendingUserTurns.poll()) != null) {
+                checkpoint.getMessages().add(message);
+                adopted.add(message);
+            }
+        }
+        for (ChatMessage message : adopted) {
+            emit(RunEvents.USER_MESSAGE, RunEvents.userMessage(message.getContent(), 0));
+        }
+        return adopted.size();
+    }
+
+    /**
+     * Last-boundary arbitration between "complete this run" and "the user just
+     * said something": either adopt the queued turns (the run continues), or
+     * atomically seal the queue so no message can be accepted after the caller
+     * decided to finish. Without the seal, a message landing between the empty
+     * check and {@code complete()} would be silently dropped.
+     */
+    int closeOrAdoptPendingUserTurns() {
+        synchronized (userTurnLock) {
+            if (pendingUserTurns.isEmpty()) {
+                acceptingUserTurns = false;
+                return 0;
+            }
+        }
+        int adopted = adoptPendingUserTurns();
+        log.info("Run {}: {} mid-run user turn(s) adopted — continuing instead of completing",
+                run.getRunId(), adopted);
+        return adopted;
+    }
+
     @Override
     public void run() {
         try {
@@ -438,6 +545,10 @@ public class AgentLoop implements Runnable {
                 // while we were busy, before this step's inference sees it. The
                 // parent never blocks on a spawn — only on an explicit wait.
                 deliverChildResults();
+                // Steering: user turns that arrived during the previous step
+                // belong to this one. Safe here — no tool call is unanswered at
+                // the top of a step, so the conversation stays well-formed.
+                adoptPendingUserTurns();
                 run.setStatus(RunStatus.RUNNING.name());
                 run.touch();
                 persist();
@@ -520,9 +631,12 @@ public class AgentLoop implements Runnable {
                                     .build());
                         }
                         // user role (not system) so providers that only accept a
-                        // leading system message do not reject the follow-up.
+                        // leading system message do not reject the follow-up; the
+                        // name marker keeps it out of every persistence/UI
+                        // projection (it is not something the user said).
                         checkpoint.getMessages().add(ChatMessage.builder()
                                 .role("user")
+                                .name(ContextManager.SYSTEM_NUDGE_NAME)
                                 .content(TRUNCATION_CONTINUE_NUDGE)
                                 .build());
                         log.warn("Run {}: response truncated (finishReason={}) — auto-continuing {}/{}",
@@ -548,6 +662,13 @@ public class AgentLoop implements Runnable {
                                 .role("assistant")
                                 .content(result.getText())
                                 .build());
+                    }
+                    // The turn is over, but the user may have spoken while it
+                    // streamed: fold those turns in and answer them in the same
+                    // run instead of finishing and forcing a second one.
+                    if (closeOrAdoptPendingUserTurns() > 0) {
+                        truncationContinues = 0;
+                        continue;
                     }
                     complete(finishReason);
                     return;

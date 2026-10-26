@@ -351,6 +351,7 @@ export type AgentEvent =
     | { seq: number; type: 'sub.completed'; callId: string; subRunId: string; ok: boolean; result?: unknown }
     | { seq: number; type: 'sub.failed'; callId: string; subRunId: string; ok: false; error?: string }
     | { seq: number; type: 'plan.proposed'; callId: string; plan: string }
+    | { seq: number; type: 'user.message'; content: string; pending?: number }
     | { seq: number; type: 'run.suspended'; reason: 'waiting_tools' | 'plan_approval' | 'budget' | 'children'; pendingCallIds?: string[] }
     | { seq: number; type: 'run.completed'; finishReason?: string; usage?: RunUsage }
     | { seq: number; type: 'run.failed'; code?: string; error?: string }

@@ -1,5 +1,6 @@
 package com.knowledge.agent.core.web;
 
+import com.knowledge.agent.api.dto.ChatMessage;
 import com.knowledge.agent.core.context.ContextManager;
 import com.knowledge.agent.core.loop.ResumePayload;
 import com.knowledge.agent.core.memory.MemoryEntry;
@@ -14,6 +15,7 @@ import com.knowledge.agent.core.tool.ToolSpec;
 import com.knowledge.agent.core.web.dto.CreateMemoryRequest;
 import com.knowledge.agent.core.web.dto.CreateRunRequest;
 import com.knowledge.agent.core.web.dto.ResumeRequest;
+import com.knowledge.agent.core.web.dto.SendRunMessageRequest;
 import com.knowledge.agent.core.web.dto.ThreadView;
 import com.knowledge.core.secure.utils.SecurityContextUtil;
 import com.knowledge.core.tool.api.R;
@@ -46,6 +48,7 @@ import java.util.Map;
  * GET    /api/agent/v1/runs/{runId}               run state view
  * GET    /api/agent/v1/runs/{runId}/events        SSE replay + live
  * POST   /api/agent/v1/runs/{runId}/resume        SSE (tool results / continue / approve)
+ * POST   /api/agent/v1/runs/{runId}/messages      send a user turn to the running run
  * POST   /api/agent/v1/runs/{runId}/cancel        cancel
  * DELETE /api/agent/v1/threads/{threadId}/active-run   cancel conversation's run
  * GET    /api/agent/v1/threads/{threadId}         thread view (session memory)
@@ -224,6 +227,36 @@ public class EditorAgentController {
             return streamer.error("RUN_BUSY", "任务正在其他节点执行，请稍后重试");
         }
         return streamer.stream(runId, afterSeq);
+    }
+
+    @ApiOperation("Send a user message to a running run (mid-run steering)")
+    @PostMapping("/runs/{runId}/messages")
+    public R<Map<String, Object>> sendMessage(@PathVariable String runId,
+                                              @RequestBody SendRunMessageRequest request) {
+        boolean hasText = request != null && request.getContent() != null
+                && !request.getContent().trim().isEmpty();
+        boolean hasParts = request != null && request.getContentParts() != null
+                && !request.getContentParts().isEmpty();
+        if (!hasText && !hasParts) {
+            return R.fail("消息内容不能为空");
+        }
+        try {
+            supervisor.requireOwned(runId, SecurityContextUtil.getUserId(), parseTenantId());
+        } catch (IllegalArgumentException e) {
+            return R.fail(e.getMessage());
+        }
+        ChatMessage message = ChatMessage.builder()
+                .role("user")
+                .content(hasText ? request.getContent() : "")
+                .contentParts(hasParts ? request.getContentParts() : null)
+                .build();
+        boolean accepted = supervisor.steer(runId, message);
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("runId", runId);
+        // Rejected means the run is past its last safe boundary: the caller
+        // answers the turn as a new run (the transcript already holds everything).
+        data.put("accepted", accepted);
+        return R.data(data);
     }
 
     @ApiOperation("Cancel a run")

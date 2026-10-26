@@ -56,4 +56,15 @@ class EditorAgentControllerMappingTest {
         assertNotNull(resumeMapping);
         assertEquals("/runs/{runId}/resume", resumeMapping.value()[0]);
     }
+
+    @Test
+    void sendMessageEndpointIsPostMessagesOnTheRun() throws NoSuchMethodException {
+        Method send = EditorAgentController.class.getMethod("sendMessage", String.class,
+                com.knowledge.agent.core.web.dto.SendRunMessageRequest.class);
+        PostMapping mapping = send.getAnnotation(PostMapping.class);
+        assertNotNull(mapping);
+        // Mid-run steering is addressed to the RUN, not to the conversation: the
+        // client already holds the run id and must not create a new run for it.
+        assertEquals("/runs/{runId}/messages", mapping.value()[0]);
+    }
 }

@@ -310,12 +310,14 @@ export const KernelConversation: React.FC<KernelConversationProps> = ({
     const handleSend = useCallback(() => {
         const text = input.trim()
         const images = pendingImages
-        if ((!text && images.length === 0) || isActive) return
+        // Sending mid-run is allowed: useWorkspaceAgent hands the turn to the
+        // running run, so the workbench composer never waits for it to finish.
+        if (!text && images.length === 0) return
         if (visionBlocked && images.length > 0) return
         setInput('')
         setPendingImages([])
         pushUserTurn(text, images)
-    }, [input, pendingImages, isActive, visionBlocked, pushUserTurn])
+    }, [input, pendingImages, visionBlocked, pushUserTurn])
 
     const handleQuickSubmit = useCallback((prompt: string) => {
         if (isActive) return

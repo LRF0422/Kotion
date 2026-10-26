@@ -222,6 +222,15 @@ public class ContextManager {
      */
     public static final String STABLE_CONTEXT_NAME = "__context_stable__";
 
+    /**
+     * Marker for engine-authored user turns that only steer the model — the
+     * truncation-continue nudge is the only producer today. They must reach the
+     * provider as {@code user} (a second system message is rejected by some
+     * providers) but they are not something the user said, so every projection
+     * and every "is this a real turn?" check filters them out.
+     */
+    public static final String SYSTEM_NUDGE_NAME = "__nudge__";
+
     private static final String INJECTED_CONTEXT_OPEN = "<context>";
     private static final String INJECTED_CONTEXT_CLOSE = "</context>";
     private static final String INJECTED_CONTEXT_FOOTER =
@@ -442,6 +451,22 @@ public class ContextManager {
     /** True for either injected-context marker (stable or per-turn). */
     public static boolean isInjectedContextName(String name) {
         return INJECTED_CONTEXT_NAME.equals(name) || STABLE_CONTEXT_NAME.equals(name);
+    }
+
+    /** True when the turn was written by the engine as a steering nudge. */
+    public static boolean isSystemNudge(ChatMessage message) {
+        return message != null
+                && "user".equalsIgnoreCase(message.getRole())
+                && SYSTEM_NUDGE_NAME.equals(message.getName());
+    }
+
+    /**
+     * True for a {@code user} turn the engine authored itself (injected context
+     * or steering nudge) rather than one the user actually sent. Persistence and
+     * UI projections keep real user turns and drop these.
+     */
+    public static boolean isEngineAuthoredUserTurn(ChatMessage message) {
+        return isInjectedContext(message) || isSystemNudge(message);
     }
 
     /**

@@ -764,6 +764,66 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
         [],
     )
 
+    /**
+     * A turn typed while the run was already past its last safe boundary. It is
+     * flushed as the next run the moment the current one finishes, so a message
+     * sent into the closing milliseconds of a run is never dropped.
+     */
+    const queuedTurnRef = useRef<AgentChatMessage[] | null>(null)
+
+    /**
+     * Start a fresh run for one user turn: freeze the page this turn edits and
+     * attach the per-turn context note. Shared by a normal send and by the flush
+     * of a turn that arrived while the previous run was already finishing.
+     */
+    const startTurn = useCallback(async (agentMessages: AgentChatMessage[]) => {
+        // Freeze the page this turn edits. Navigation during the run then only
+        // moves the viewport; the agent keeps editing the same page (through an
+        // off-screen editor once it is no longer the visible one).
+        const runTarget = targetPage ?? (currentPage?.pageId
+            ? { pageId: currentPage.pageId, title: currentPage.title, spaceId: currentPage.spaceId }
+            : undefined)
+        if (!targetPage && runTarget) {
+            autoPinnedPageIdRef.current = runTarget.pageId
+            setTargetPage(runTarget)
+        }
+
+        // The bound-page notice is volatile model context, not part of the
+        // user turn and not an invariant system rule. Send it as contextNote so
+        // the backend persists it as an append-only <context> block behind the
+        // cacheable history.
+        const boundPageNote = runTarget
+            ? t('ai.chat.boundPagePrefix', { title: runTarget.title })
+            : undefined
+        // Per-turn context only: the bound page, and a selected custom agent's
+        // guidance (which must not be able to rewrite the backend's prompt).
+        const contextNote = [boundPageNote, buildCustomAgentNote(selectedAgent)]
+            .filter(Boolean)
+            .join('\n\n') || undefined
+
+        try {
+            await agent.start(agentMessages, {
+                model: selectedModel || undefined,
+                mode: 'execute',
+                temperature: modelParams.temperature,
+                maxTokens: modelParams.maxTokens,
+                contextNote,
+            })
+        } catch (err: any) {
+            setError(classifyError(err))
+        }
+    }, [
+        agent, targetPage, currentPage, setTargetPage,
+        selectedModel, modelParams, t, selectedAgent,
+    ])
+
+    const flushQueuedTurn = useCallback(() => {
+        const queued = queuedTurnRef.current
+        if (!queued) return
+        queuedTurnRef.current = null
+        void startTurn(queued)
+    }, [startTurn])
+
     // ─── Run lifecycle: snapshot terminal turns into history ─────
     const abandoningRef = useRef(false)
     const lastPhaseRef = useRef(agent.state.phase)
@@ -774,6 +834,7 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
         if (phase === 'completed' || phase === 'failed' || phase === 'cancelled') {
             releaseRunTargetPin()
             if (abandoningRef.current) {
+                queuedTurnRef.current = null
                 agent.reset()
                 return
             }
@@ -805,6 +866,7 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
                 setMessages(prev => [...prev, snapshot])
             }
             agent.reset()
+            flushQueuedTurn()
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [agent.state.phase])
@@ -854,30 +916,6 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
         lastUserMessageRef.current = messageText
         setError(null)
 
-        // Freeze the page this turn edits. Navigation during the run then only
-        // moves the viewport; the agent keeps editing the same page (through an
-        // off-screen editor once it is no longer the visible one).
-        const runTarget = targetPage ?? (currentPage?.pageId
-            ? { pageId: currentPage.pageId, title: currentPage.title, spaceId: currentPage.spaceId }
-            : undefined)
-        if (!targetPage && runTarget) {
-            autoPinnedPageIdRef.current = runTarget.pageId
-            setTargetPage(runTarget)
-        }
-
-        // The bound-page notice is volatile model context, not part of the
-        // user turn and not an invariant system rule. Send it as contextNote so
-        // the backend persists it as an append-only <context> block behind the
-        // cacheable history.
-        const boundPageNote = runTarget
-            ? t('ai.chat.boundPagePrefix', { title: runTarget.title })
-            : undefined
-        // Per-turn context only: the bound page, and a selected custom agent's
-        // guidance (which must not be able to rewrite the backend's prompt).
-        const contextNote = [boundPageNote, buildCustomAgentNote(selectedAgent)]
-            .filter(Boolean)
-            .join('\n\n') || undefined
-
         // Conversation history is engine-owned (session model log); the client
         // only sends the new turn. Images ride as multimodal content parts so
         // the model's own vision sees them (never interpreted here).
@@ -890,26 +928,27 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
             contentParts,
         }]
 
-        try {
-            await agent.start(agentMessages, {
-                model: selectedModel || undefined,
-                mode: 'execute',
-                temperature: modelParams.temperature,
-                maxTokens: modelParams.maxTokens,
-                contextNote,
-            })
-        } catch (err: any) {
-            setError(classifyError(err))
+        // A run is already executing: hand the turn to it instead of waiting for
+        // it to finish. The loop folds it in between two model calls, so the
+        // answer keeps streaming into the same run and no run is cancelled.
+        if (isActive) {
+            if (await agent.steer(agentMessages)) return
+            // It crossed its last safe boundary between typing and sending: keep
+            // the turn (its bubble is already on screen) and answer it as the
+            // next run once this one publishes its terminal state.
+            queuedTurnRef.current = agentMessages
+            return
         }
-    }, [
-        agent, generateMessageId, targetPage, currentPage, setTargetPage,
-        selectedModel, modelParams, setMessages, t, selectedAgent,
-    ])
+
+        await startTurn(agentMessages)
+    }, [agent, generateMessageId, isActive, setMessages, startTurn])
 
     const handleSend = useCallback(() => {
         const text = input.trim()
         const images = pendingImages
-        if ((!text && images.length === 0) || isActive || !targetToolsReady) return
+        // Sending while a run is in flight is allowed: the turn is handed to that
+        // run (see submitMessage), so the composer is never a waiting room.
+        if ((!text && images.length === 0) || !targetToolsReady) return
         // Images attached before switching to a non-vision model: don't send a
         // turn whose attachments the backend would strip.
         if (visionBlocked && images.length > 0) {
@@ -926,7 +965,7 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
             if (composerRef.current) composerRef.current.style.height = 'auto'
             composerRef.current?.focus()
         })
-    }, [input, pendingImages, isActive, targetToolsReady, submitMessage, visionBlocked, selectedModel, t])
+    }, [input, pendingImages, targetToolsReady, submitMessage, visionBlocked, selectedModel, t])
 
     const handleInputChange = useCallback((value: string) => {
         setInput(value)

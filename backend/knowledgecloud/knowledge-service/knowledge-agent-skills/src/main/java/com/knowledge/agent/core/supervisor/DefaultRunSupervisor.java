@@ -454,6 +454,31 @@ public class DefaultRunSupervisor {
         return false;
     }
 
+    /**
+     * Hand a user turn to a RUNNING run instead of starting a new one — the
+     * caller keeps talking to the agent mid-turn. The loop folds it in at its
+     * next safe boundary (between two model calls), so this is not an interrupt:
+     * text already streaming finishes first.
+     *
+     * <p>Rejected ({@code false}) when the run is terminal, already past its last
+     * boundary, or owned by another instance. Callers fall back to creating a
+     * new run — which also re-reads the transcript, so nothing is lost.
+     */
+    public boolean steer(String runId, ChatMessage message) {
+        AgentRun run = runStore.load(runId);
+        if (run == null) {
+            throw new IllegalArgumentException("RUN_NOT_FOUND");
+        }
+        if (message == null || run.statusEnum().isTerminal()) {
+            return false;
+        }
+        LoopHandle handle = handles.get(runId);
+        if (handle == null) {
+            return false; // driven by another instance — a new run is the fallback
+        }
+        return handle.loop.enqueueUserTurn(message);
+    }
+
     /** Idempotent cancel — authoritative terminal marking happens here. */
     public void cancel(String runId) {
         AgentRun run = runStore.load(runId);

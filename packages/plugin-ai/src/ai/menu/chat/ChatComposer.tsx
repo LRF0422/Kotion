@@ -174,8 +174,12 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
         })
         : t('ai.chat.attachImage', { defaultValue: '上传图片（模型可直接查看）' })
     const blockedByAttachedImages = visionBlocked && hasImages
+    // Sending while a run is in flight is allowed on purpose: the agent takes the
+    // turn at its next safe boundary instead of the user having to wait for it to
+    // finish. `isLoading` therefore gates nothing here — it only adds the stop
+    // button next to send.
     const isValid = (value.trim().length > 0 || hasImages)
-        && !isLoading && !targetUnavailable && !blockedByAttachedImages
+        && !targetUnavailable && !blockedByAttachedImages
 
     const handleFormSubmit = (e: FormEvent) => {
         e.preventDefault()
@@ -293,11 +297,15 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
                 placeholder={
                     connecting
                         ? t('ai.chat.targetPageConnectingPlaceholder', { defaultValue: '正在连接目标页面…' })
-                        : mode === 'ask'
-                            ? t('ai.chat.askPlaceholder', { defaultValue: '向 AI 提问关于文档的问题…' })
-                            : t('ai.chat.agentPlaceholder', { defaultValue: '提问、编辑或自动化任何事情…' })
+                        : isLoading
+                            ? t('ai.chat.steerPlaceholder', {
+                                defaultValue: 'Agent 正在执行，可继续输入，它会在当前步骤结束后处理…',
+                            })
+                            : mode === 'ask'
+                                ? t('ai.chat.askPlaceholder', { defaultValue: '向 AI 提问关于文档的问题…' })
+                                : t('ai.chat.agentPlaceholder', { defaultValue: '提问、编辑或自动化任何事情…' })
                 }
-                disabled={isLoading}
+                disabled={targetUnavailable}
                 rows={1}
                 className="min-h-[48px] max-h-[120px] resize-none overflow-y-auto rounded-xl border-0 bg-transparent px-3 pb-1 pt-2.5 text-sm leading-relaxed shadow-none placeholder:text-muted-foreground/45 focus-visible:ring-0 lg:min-h-[38px] lg:pt-2 lg:text-[13px]"
             />
@@ -353,8 +361,8 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
                         <FileDiff className="h-3 w-3 shrink-0" />
                     </button>
                 )}
-                <div className="ml-auto shrink-0">
-                    {isLoading ? (
+                <div className="ml-auto flex shrink-0 items-center gap-1">
+                    {isLoading && (
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>
@@ -376,11 +384,19 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
                                 </TooltipContent>
                             </Tooltip>
                         </TooltipProvider>
-                    ) : (
+                    )}
+                    {(!isLoading || isValid) && (
                         <Button
                             type="submit"
                             size="sm"
-                            aria-label={t('ai.chat.send', { defaultValue: '发送消息' })}
+                            aria-label={isLoading
+                                ? t('ai.chat.steerSend', { defaultValue: '发送给正在执行的任务' })
+                                : t('ai.chat.send', { defaultValue: '发送消息' })}
+                            title={isLoading
+                                ? t('ai.chat.steerHint', {
+                                    defaultValue: '发送后会交给正在运行的 Agent，无需等它结束',
+                                })
+                                : undefined}
                             disabled={!isValid}
                             className="h-11 w-11 rounded-xl bg-primary p-0 text-primary-foreground transition-all hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40 lg:h-8 lg:w-8 lg:rounded-lg"
                         >
