@@ -154,13 +154,23 @@ export const MessageBubble = React.memo(function MessageBubble({
             {message.todos && message.todos.length > 0 && (
                 <TodoPanel
                     todos={message.todos}
+                    ended={!isStreaming}
                     labels={{
                         title: t('ai.chat.todos.title', { defaultValue: '任务清单' }),
-                        completed: (done: number) =>
-                            t('ai.chat.todos.completed', {
+                        completed: (done: number, total: number) => done >= total
+                            ? t('ai.chat.todos.completed', {
                                 count: done,
                                 defaultValue: '{{count}} 项已完成',
+                            })
+                            : t('ai.chat.todos.completedOf', {
+                                done,
+                                total,
+                                defaultValue: '{{done}}/{{total}} 项已完成',
                             }),
+                        unfinished: (count: number) => t('ai.chat.todos.unfinished', {
+                            count,
+                            defaultValue: '{{count}} 项未完成',
+                        }),
                     }}
                 />
             )}

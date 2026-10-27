@@ -1172,6 +1172,8 @@ export const resources = {
           todos: {
             title: "任务清单",
             completed: "{{count}} 项已完成",
+            completedOf: "{{done}}/{{total}} 项已完成",
+            unfinished: "{{count}} 项未完成",
           },
           stopGeneration: "停止生成",
           send: "发送消息",
@@ -2810,6 +2812,8 @@ export const resources = {
           todos: {
             title: "To-dos",
             completed: "{{count}} completed",
+            completedOf: "{{done}}/{{total}} completed",
+            unfinished: "{{count}} unfinished",
           },
           stopGeneration: "Stop generation",
           send: "Send message",

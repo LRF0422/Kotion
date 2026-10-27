@@ -159,6 +159,16 @@ public class AgentLoop implements Runnable {
             "[系统] 你的上一条回复因输出长度上限被截断，当前任务尚未完成。请从中断处继续，"
             + "直接调用必要的工具把任务做完；不要重复已完成的步骤，也不要只描述计划。";
 
+    /**
+     * Bounded auto-continue when a turn ends with items still open on the task
+     * list. Without it the model can summarize and stop while five of six rows
+     * are untouched, leaving a panel that claims work the run never did.
+     */
+    private static final int MAX_TODO_CONTINUES = 2;
+
+    /** How many open titles the nudge spells out (a long list is not a reminder). */
+    private static final int TODO_NUDGE_MAX_TITLES = 10;
+
     private final AgentRun run;
 
     /** Replaced by initFreshCheckpoint on fresh runs; restored on recovery. */
@@ -299,6 +309,16 @@ public class AgentLoop implements Runnable {
 
     /** False once the run reached its last safe boundary — no more steering. */
     private boolean acceptingUserTurns = true;
+
+    /** Auto-continue counter for turns that ended with an unfinished task list. */
+    private int todoContinues = 0;
+
+    /**
+     * The open items as they looked at the last nudge. A model that stops again
+     * without touching its list is blocked, not forgetful: a second identical
+     * nudge would only burn a step.
+     */
+    private String lastTodoNudgeKey;
 
     public AgentLoop(AgentRun run, Checkpoint checkpoint, RunInput runInput,
                      RunStore runStore, CheckpointStore checkpointStore, RunEventLog eventLog,
@@ -478,6 +498,78 @@ public class AgentLoop implements Runnable {
         log.info("Run {}: {} mid-run user turn(s) adopted — continuing instead of completing",
                 run.getRunId(), adopted);
         return adopted;
+    }
+
+    /**
+     * A turn that ends with rows still open on the task list is not a finished
+     * turn: either the model has work left, or it hit a blocker and never told
+     * the user. Inject one nudge per distinct open list (bounded) asking it to
+     * continue — or to name the blocker and leave those rows pending.
+     *
+     * <p>Package-private so {@code AgentLoopTodoGuardTest} can assert the
+     * boundary without driving a whole run.
+     *
+     * @return true when the run must continue instead of completing
+     */
+    boolean continueForUnfinishedTodos() {
+        if (checkpoint.isNoTools() || "plan".equalsIgnoreCase(run.getMode())) {
+            return false;
+        }
+        List<TodoItem> open = new ArrayList<>();
+        if (checkpoint.getTodos() != null) {
+            for (TodoItem todo : checkpoint.getTodos()) {
+                if (todo != null && !TodoItem.COMPLETED.equals(todo.getStatus())) {
+                    open.add(todo);
+                }
+            }
+        }
+        if (open.isEmpty()) {
+            lastTodoNudgeKey = null;
+            return false;
+        }
+        String key = todoKey(open);
+        if (todoContinues >= MAX_TODO_CONTINUES) {
+            log.warn("Run {}: {} task(s) still open after {} nudges — completing anyway",
+                    run.getRunId(), open.size(), todoContinues);
+            return false;
+        }
+        if (key.equals(lastTodoNudgeKey)) {
+            return false;
+        }
+        todoContinues++;
+        lastTodoNudgeKey = key;
+        StringBuilder titles = new StringBuilder();
+        for (int i = 0; i < open.size() && i < TODO_NUDGE_MAX_TITLES; i++) {
+            TodoItem todo = open.get(i);
+            titles.append("- ").append(todo.getTitle())
+                    .append('（').append(todo.getStatus()).append("）\n");
+        }
+        if (open.size() > TODO_NUDGE_MAX_TITLES) {
+            titles.append("- …另有 ").append(open.size() - TODO_NUDGE_MAX_TITLES).append(" 项\n");
+        }
+        // user role (not system) so providers that only accept a leading system
+        // message do not reject the follow-up; the name marker keeps it out of
+        // every persistence/UI projection (it is not something the user said).
+        checkpoint.getMessages().add(ChatMessage.builder()
+                .role("user")
+                .name(ContextManager.SYSTEM_NUDGE_NAME)
+                .content("[系统] 任务清单里还有 " + open.size() + " 项没有完成：\n" + titles
+                        + "不要在这里结束本轮。能继续就继续做：每完成一项立刻用 update_todos 重发整份清单，"
+                        + "把那一项标成 completed。确实做不下去（缺工具、缺权限、必须等用户操作）就保持 "
+                        + "pending，并在回答里说明卡在哪、需要用户做什么。")
+                .build());
+        log.warn("Run {}: turn ended with {} unfinished task(s) — nudging {}/{}",
+                run.getRunId(), open.size(), todoContinues, MAX_TODO_CONTINUES);
+        return true;
+    }
+
+    /** Identity of an open list: a changed row or status earns a fresh nudge. */
+    private static String todoKey(List<TodoItem> open) {
+        StringBuilder key = new StringBuilder();
+        for (TodoItem todo : open) {
+            key.append(todo.getId()).append(':').append(todo.getStatus()).append('|');
+        }
+        return key.toString();
     }
 
     @Override
@@ -674,6 +766,19 @@ public class AgentLoop implements Runnable {
                                 .role("assistant")
                                 .content(result.getText())
                                 .build());
+                    }
+                    // Ending the turn with rows still open on its own task list is
+                    // not finishing. Nudge once per distinct open list (bounded) so
+                    // the model either keeps working or says what blocked it — never
+                    // a panel left half-done next to a chatty summary. Deciding this
+                    // BEFORE the seal keeps mid-run steering open for the extra
+                    // rounds it buys.
+                    if (continueForUnfinishedTodos()) {
+                        // Fold in anything typed while this turn streamed; the run
+                        // is continuing either way. The truncation budget is left
+                        // alone: only a real user turn earns a fresh one.
+                        adoptPendingUserTurns();
+                        continue;
                     }
                     // The turn is over, but the user may have spoken while it
                     // streamed: fold those turns in and answer them in the same
