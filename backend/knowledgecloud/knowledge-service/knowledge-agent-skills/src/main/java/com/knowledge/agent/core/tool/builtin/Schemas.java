@@ -48,4 +48,27 @@ final class Schemas {
         prop.put("description", description);
         return prop;
     }
+
+    /**
+     * Array-of-object property. Each item is a closed object schema, so the model
+     * learns the exact item shape from the tool definition instead of guessing.
+     */
+    static Map<String, Object> objArray(String description, Map<String, Object> itemProps,
+                                        String... itemRequired) {
+        Map<String, Object> items = object(itemProps, itemRequired);
+        Map<String, Object> prop = new LinkedHashMap<>();
+        prop.put("type", "array");
+        prop.put("items", items);
+        prop.put("description", description);
+        return prop;
+    }
+
+    /** String property restricted to a fixed set of values. */
+    static Map<String, Object> enumStr(String description, String... values) {
+        Map<String, Object> prop = new LinkedHashMap<>();
+        prop.put("type", "string");
+        prop.put("enum", Arrays.asList(values));
+        prop.put("description", description);
+        return prop;
+    }
 }

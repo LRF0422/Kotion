@@ -5,10 +5,11 @@ import {
     ChatBubbleMessage,
     Streamdown,
     SubAgentTree,
+    TodoPanel,
     buildSubAgentTreeLabels,
 } from '@kn/ui'
 import { useTranslation } from '@kn/common'
-import { Message, extractBlockReferences, subToolCallsFromSteps } from './chat-types'
+import { Message, TODO_TOOL_NAME, extractBlockReferences, subToolCallsFromSteps } from './chat-types'
 import type { BlockReference } from './chat-types'
 import { AgentActivityTimeline } from './ExecutionStepsDisplay'
 import { ShimmerText } from './chat/ShimmerText'
@@ -31,8 +32,9 @@ export const MessageBubble = React.memo(function MessageBubble({
     const isAI = message.sender === 'ai'
     const blockReferences = useMemo(() => extractBlockReferences(message.steps), [message.steps])
     // A delegated child's steps belong to the sub-agent tree, not this timeline.
+    // `update_todos` is folded into the task panel instead of rendering a row.
     const parentSteps = useMemo(
-        () => message.steps?.filter(step => !step.subRunId),
+        () => message.steps?.filter(step => !step.subRunId && step.toolName !== TODO_TOOL_NAME),
         [message.steps]
     )
     const subToolCalls = useMemo(() => subToolCallsFromSteps(message.steps), [message.steps])
@@ -147,6 +149,20 @@ export const MessageBubble = React.memo(function MessageBubble({
 
             {blockReferences.length > 0 && (
                 <BlockReferences references={blockReferences} onReveal={onRevealReference} />
+            )}
+
+            {message.todos && message.todos.length > 0 && (
+                <TodoPanel
+                    todos={message.todos}
+                    labels={{
+                        title: t('ai.chat.todos.title', { defaultValue: '任务清单' }),
+                        completed: (done: number) =>
+                            t('ai.chat.todos.completed', {
+                                count: done,
+                                defaultValue: '{{count}} 项已完成',
+                            }),
+                    }}
+                />
             )}
 
             {message.stopped && (

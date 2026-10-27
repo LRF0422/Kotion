@@ -566,6 +566,10 @@ public class SessionTranscriptProjector {
         if (steps != null && steps.size() > 0) {
             run.set("steps", steps);
         }
+        JsonNode todos = lastTodoList(steps);
+        if (todos != null && todos.size() > 0) {
+            run.set("todos", todos);
+        }
         if (answerText != null && !answerText.isEmpty()) {
             run.put("content", answerText);
         }
@@ -575,6 +579,29 @@ public class SessionTranscriptProjector {
         if (reasoning != null && reasoning.length() > 0) {
             run.put("reasoningContent", reasoning.toString());
         }
+    }
+
+    /**
+     * The run's final task list: the whole-list snapshot carried by the LAST
+     * successful {@code update_todos} tool result. A turn that never called the
+     * tool contributes nothing, so the panel simply does not exist for it — the
+     * projection never invents a list.
+     */
+    private JsonNode lastTodoList(ArrayNode steps) {
+        if (steps == null) {
+            return null;
+        }
+        JsonNode latest = null;
+        for (JsonNode stepNode : steps) {
+            if (!"update_todos".equals(stepNode.path("toolName").asText())) {
+                continue;
+            }
+            JsonNode items = stepNode.path("result").path("items");
+            if (items.isArray()) {
+                latest = items;
+            }
+        }
+        return latest;
     }
 
     /** Rebuild canonical state from a pre-refactor UI projection. */

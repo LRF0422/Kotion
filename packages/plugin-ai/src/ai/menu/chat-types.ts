@@ -1,4 +1,4 @@
-import type { AgentStepRecord, SubRunRecord, RunUsage } from '@kn/common'
+import type { AgentStepRecord, SubRunRecord, RunUsage, AgentTodoItem } from '@kn/common'
 import type { SubToolCallView } from '@kn/ui'
 
 // Types
@@ -14,6 +14,11 @@ export interface Message {
     reasoningContent?: string
     /** Step-scoped activity used to rebuild the reasoning/tool timeline. */
     activitySteps?: AgentStepRecord[]
+    /**
+     * The run's task list (whole-list snapshot). Rendered as a checklist under
+     * the turn; absent for a turn whose agent never planned with todos.
+     */
+    todos?: AgentTodoItem[]
     /** Canonical step selected by AgentCore as the user-facing answer. */
     answerStepId?: string
     sender: "user" | "ai"
@@ -175,6 +180,13 @@ export function classifyError(err: any): ChatError {
 /** Tool name that produces document-block citations. */
 export const REFERENCE_TOOL_NAME = 'referenceBlocks'
 
+/**
+ * Builtin task-list tool. Its result IS the todo panel, so it never becomes a
+ * row in the activity timeline / sub-agent tree — rendering both would show the
+ * same thing twice.
+ */
+export const TODO_TOOL_NAME = 'update_todos'
+
 /** A single document-block citation produced by the referenceBlocks tool. */
 export interface BlockReference {
     blockId: string
@@ -229,6 +241,7 @@ export function subToolCallsFromSteps(steps?: ExecutionStep[]): SubToolCallView[
     const calls: SubToolCallView[] = []
     for (const step of steps ?? []) {
         if (!step.subRunId || !step.callId) continue
+        if (step.toolName === TODO_TOOL_NAME) continue
         calls.push({
             callId: step.callId,
             tool: step.toolName,

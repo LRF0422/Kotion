@@ -22,6 +22,13 @@ public final class RunEvents {
     public static final String SUB_COMPLETED = "sub.completed";
     public static final String SUB_FAILED = "sub.failed";
     public static final String PLAN_PROPOSED = "plan.proposed";
+
+    /**
+     * The run's task list changed (whole-list snapshot). Emitted after a backend
+     * batch that called {@code update_todos}; the client replaces its list with
+     * {@code items} instead of applying a delta.
+     */
+    public static final String TODO_UPDATED = "todo.updated";
     public static final String RUN_SUSPENDED = "run.suspended";
     public static final String RUN_COMPLETED = "run.completed";
     public static final String RUN_FAILED = "run.failed";
@@ -99,6 +106,11 @@ public final class RunEvents {
 
     public static Map<String, Object> planProposed(String callId, String planJson) {
         return payload("callId", callId, "plan", planJson);
+    }
+
+    /** Whole task list snapshot (see {@link #TODO_UPDATED}). */
+    public static Map<String, Object> todoUpdated(Object items) {
+        return payload("items", items);
     }
 
     public static Map<String, Object> runSuspended(String reason, Object pendingCallIds) {

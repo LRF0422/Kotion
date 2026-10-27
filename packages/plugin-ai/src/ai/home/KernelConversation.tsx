@@ -144,8 +144,9 @@ export const KernelConversation: React.FC<KernelConversationProps> = ({
         timestamp: Date.now(),
         steps: currentSteps,
         subRuns: state.subRuns,
+        todos: state.todos,
     }), [
-        state.answerStepId, state.reasoning, state.steps, state.subRuns, state.text, currentSteps,
+        state.answerStepId, state.reasoning, state.steps, state.subRuns, state.text, state.todos, currentSteps,
     ])
 
     // ─── Artifacts shelf (kernel abstraction) ────────────────────────
@@ -235,6 +236,7 @@ export const KernelConversation: React.FC<KernelConversationProps> = ({
                 timestamp: Date.now(),
                 steps,
                 subRuns: state.subRuns.slice(),
+                todos: state.todos.slice(),
                 usage: state.usage ?? undefined,
                 error: phase === 'failed',
                 errorMessage: state.error ?? undefined,

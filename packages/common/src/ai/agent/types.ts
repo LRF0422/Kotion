@@ -310,6 +310,18 @@ export interface AgentProfileEvidence {
 
 // ============ Events ============
 
+/**
+ * One row of the agent's task list, as carried by {@code todo.updated}.
+ *
+ * <p>The list is a whole-list snapshot: every event replaces the previous one,
+ * so a reconnecting client only needs the last event it saw.
+ */
+export interface AgentTodoItem {
+    id: string
+    title: string
+    status: 'pending' | 'in_progress' | 'completed'
+}
+
 export interface RunUsage {
     promptTokens: number
     completionTokens: number
@@ -351,6 +363,7 @@ export type AgentEvent =
     | { seq: number; type: 'sub.completed'; callId: string; subRunId: string; ok: boolean; result?: unknown }
     | { seq: number; type: 'sub.failed'; callId: string; subRunId: string; ok: false; error?: string }
     | { seq: number; type: 'plan.proposed'; callId: string; plan: string }
+    | { seq: number; type: 'todo.updated'; items: AgentTodoItem[] }
     | { seq: number; type: 'user.message'; content: string; pending?: number }
     | { seq: number; type: 'run.suspended'; reason: 'waiting_tools' | 'plan_approval' | 'budget' | 'children'; pendingCallIds?: string[] }
     | { seq: number; type: 'run.completed'; finishReason?: string; usage?: RunUsage }

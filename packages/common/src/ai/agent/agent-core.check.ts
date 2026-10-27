@@ -768,6 +768,35 @@ function checkAckPendingSettlesTheTape(): void {
     assert.equal(done.phase, 'streaming', 'with nothing outstanding the phase leaves waiting-tools')
 }
 
+function checkTodoSnapshotsReplaceTheList(): void {
+    // `todo.updated` carries the WHOLE list, so a reconnect that only saw the
+    // last frame still lands on the authoritative state — never a half-merged one.
+    const first = reducer(initialState, {
+        type: 'event',
+        event: {
+            seq: 1,
+            type: 'todo.updated',
+            items: [
+                { id: 't1', title: '读现状', status: 'completed' },
+                { id: 't2', title: '改代码', status: 'in_progress' },
+            ],
+        },
+    })
+    assert.equal(first.todos.length, 2)
+    assert.equal(first.todos[1].status, 'in_progress')
+
+    const second = reducer(first, {
+        type: 'event',
+        event: { seq: 2, type: 'todo.updated', items: [{ id: 't2', title: '改代码', status: 'completed' }] },
+    })
+    assert.equal(second.todos.length, 1, 'the snapshot replaces the previous list')
+    assert.equal(second.todos[0].status, 'completed')
+
+    // A new run must not inherit the previous run's task list.
+    const fresh = reducer(second, { type: 'run-created', runId: 'run-2', lastSeq: 0, text: '', phase: 'streaming' })
+    assert.deepEqual(fresh.todos, [])
+}
+
 async function waitFor(predicate: () => boolean, timeoutMs: number): Promise<void> {
     const deadline = Date.now() + timeoutMs
     while (Date.now() < deadline) {
@@ -786,6 +815,7 @@ async function main(): Promise<void> {
     checkEditorIndependentBatchRunsWithoutGate()
     checkPendingCandidatesComeFromTheTapeToo()
     checkAckPendingSettlesTheTape()
+    checkTodoSnapshotsReplaceTheList()
     checkSerializableResults()
     checkStreamSequenceRules()
     await checkCrlfSseFrames()

@@ -1169,6 +1169,10 @@ export const resources = {
           steerAction: "插话",
           steerBanner: "Agent 正在执行 —— 现在发送会「插话」给当前任务，不必等它结束",
           steeredBadge: "插话给正在执行的任务，本步结束后处理",
+          todos: {
+            title: "任务清单",
+            completed: "{{count}} 项已完成",
+          },
           stopGeneration: "停止生成",
           send: "发送消息",
           attachImage: "上传图片（模型可直接查看）",
@@ -2803,6 +2807,10 @@ export const resources = {
           steerAction: "Steer",
           steerBanner: "The agent is working — sending now steers the running task instead of waiting for it to finish",
           steeredBadge: "Steered into the running task; handled after the current step",
+          todos: {
+            title: "To-dos",
+            completed: "{{count}} completed",
+          },
           stopGeneration: "Stop generation",
           send: "Send message",
           attachImage: "Attach image (the model can view it)",

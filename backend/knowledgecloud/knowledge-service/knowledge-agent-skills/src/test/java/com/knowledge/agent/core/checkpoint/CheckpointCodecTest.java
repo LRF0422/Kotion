@@ -3,6 +3,7 @@ package com.knowledge.agent.core.checkpoint;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.knowledge.agent.api.dto.ChatMessage;
 import com.knowledge.agent.core.run.PendingToolCall;
+import com.knowledge.agent.core.run.TodoItem;
 import com.knowledge.agent.core.savedskill.SavedSkillProvenance;
 import com.knowledge.agent.core.tool.ToolKind;
 import com.knowledge.agent.core.tool.ToolSpec;
@@ -35,6 +36,8 @@ class CheckpointCodecTest {
         checkpoint.setToken("jwt-token");
         checkpoint.setDelegateDepth(1);
         checkpoint.setScratchpad("step1 done");
+        checkpoint.getTodos().add(TodoItem.of("t1", "扫全文标题", TodoItem.COMPLETED));
+        checkpoint.getTodos().add(TodoItem.of("t2", "重排目录", TodoItem.IN_PROGRESS));
 
         ChatMessage system = ChatMessage.builder().role("system").content("sys").build();
         ChatMessage assistant = new ChatMessage();
@@ -80,6 +83,11 @@ class CheckpointCodecTest {
         assertNull(restored.getToken());
         assertEquals(1, restored.getDelegateDepth());
         assertEquals("step1 done", restored.getScratchpad());
+        // The task list is run state: a resumed run must keep its plan (and the
+        // finished turn must still project the tasks it claimed).
+        assertEquals(2, restored.getTodos().size());
+        assertEquals("t2", restored.getTodos().get(1).getId());
+        assertEquals(TodoItem.IN_PROGRESS, restored.getTodos().get(1).getStatus());
         assertEquals(2, restored.getMessages().size());
         assertEquals("sys", restored.getMessages().get(0).getContent());
         assertEquals(1, restored.getClientTools().size());

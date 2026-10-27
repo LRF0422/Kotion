@@ -731,7 +731,8 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
         timestamp: Date.now(),
         steps: currentSteps,
         subRuns: agent.state.subRuns,
-    }), [agent.state.answerStepId, agent.state.reasoning, agent.state.steps, agent.state.subRuns, agent.state.text, currentSteps])
+        todos: agent.state.todos,
+    }), [agent.state.answerStepId, agent.state.reasoning, agent.state.steps, agent.state.subRuns, agent.state.text, agent.state.todos, currentSteps])
 
     // ─── Tab status reporting ─────────────────────────────────────
     // Report only MEANINGFUL transitions: the container owns unread/failed
@@ -875,6 +876,7 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
                     timestamp: Date.now(),
                     steps,
                     subRuns: agent.state.subRuns.slice(),
+                    todos: agent.state.todos.slice(),
                     usage: agent.state.usage ?? undefined,
                     error: phase === 'failed',
                     errorType: classifiedError?.type,

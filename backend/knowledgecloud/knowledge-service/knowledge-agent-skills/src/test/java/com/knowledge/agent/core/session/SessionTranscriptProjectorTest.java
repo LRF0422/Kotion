@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -131,6 +132,9 @@ class SessionTranscriptProjectorTest {
         assertEquals(activity.get(1).path("id").asText(), assistant.path("answerStepId").asText());
         assertTrue(activity.get(0).path("startedSeq").asLong() < step.path("sequence").asLong());
         assertTrue(step.path("sequence").asLong() < activity.get(1).path("startedSeq").asLong());
+        // A turn that never planned has no task list — the projector never
+        // invents a panel for it.
+        assertFalse(assistant.has("todos"));
     }
 
     @Test
@@ -157,6 +161,48 @@ class SessionTranscriptProjectorTest {
         assertEquals(3, model.size());
         assertEquals("answer-1", model.get(1).path("m").path("content").asText());
         assertEquals("next", model.get(2).path("m").path("content").asText());
+    }
+
+    @Test
+    void terminalRunProjectsTheLastTaskListSnapshot() throws Exception {
+        // The panel is re-derived on every write, so the run node must carry the
+        // LAST whole-list snapshot the model sent: a resumed/re-projected turn
+        // may not merge two lists.
+        AgentChatSessionEntity existing = new AgentChatSessionEntity();
+        existing.setSessionId("conv-1");
+        existing.setTitle("hi");
+        existing.setModelMessagesJson("[{\"role\":\"user\",\"content\":\"hi\"}]");
+        when(store.get(1L, 2L, "conv-1")).thenReturn(existing);
+
+        Checkpoint checkpoint = new Checkpoint();
+        checkpoint.setRunId("run-1");
+        checkpoint.setInputMessageCount(2);
+        checkpoint.setMessages(new ArrayList<>(Arrays.asList(
+                ChatMessage.builder().role("system").content("sys").build(),
+                ChatMessage.builder().role("user").content("hi").build(),
+                ChatMessage.builder().role("assistant").content("第一步")
+                        .toolCalls(Collections.singletonList(namedToolCall("call-1", "update_todos"))).build(),
+                ChatMessage.builder().role("tool").toolCallId("call-1").name("update_todos")
+                        .content("{\"ok\":true,\"count\":1,\"items\":[{\"id\":\"t1\",\"title\":\"读现状\","
+                                + "\"status\":\"completed\"}]}").build(),
+                ChatMessage.builder().role("assistant").content("第二步")
+                        .toolCalls(Collections.singletonList(namedToolCall("call-2", "update_todos"))).build(),
+                ChatMessage.builder().role("tool").toolCallId("call-2").name("update_todos")
+                        .content("{\"ok\":true,\"count\":2,\"items\":[{\"id\":\"t1\",\"title\":\"读现状\","
+                                + "\"status\":\"completed\"},{\"id\":\"t2\",\"title\":\"改代码\","
+                                + "\"status\":\"in_progress\"}]}").build(),
+                ChatMessage.builder().role("assistant").content("done").build()
+        )));
+        when(checkpointStore.load("run-1")).thenReturn(checkpoint);
+
+        projector.onRunTerminal(run("run-1"));
+
+        JsonNode assistant = mapper.readTree(captureSaved().getMessagesJson()).get(1);
+        JsonNode todos = assistant.path("todos");
+        assertEquals(2, todos.size(), "the last snapshot wins, never a merged diff");
+        assertEquals("读现状", todos.get(0).path("title").asText());
+        assertEquals("completed", todos.get(0).path("status").asText());
+        assertEquals("in_progress", todos.get(1).path("status").asText());
     }
 
     @Test
@@ -480,5 +526,10 @@ class SessionTranscriptProjectorTest {
     private ChatMessage.ToolCallInfo toolCall(String id) {
         return new ChatMessage.ToolCallInfo(id, "function",
                 new ChatMessage.ToolCallInfo.FunctionInfo("search", "{\"q\":\"x\"}"));
+    }
+
+    private ChatMessage.ToolCallInfo namedToolCall(String id, String name) {
+        return new ChatMessage.ToolCallInfo(id, "function",
+                new ChatMessage.ToolCallInfo.FunctionInfo(name, "{\"items\":[]}"));
     }
 }

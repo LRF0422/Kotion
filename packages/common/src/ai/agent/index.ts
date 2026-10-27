@@ -122,6 +122,7 @@ export type {
     AgentProfileTrait,
     AgentSkillInput,
     AgentToolCallInfo,
+    AgentTodoItem,
     AgentToolSpec,
     CreateMemoryInput,
     CreateRunInput,

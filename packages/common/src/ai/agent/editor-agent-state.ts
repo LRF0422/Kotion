@@ -5,7 +5,7 @@
  * separate from view-state derivation; this module has no React or I/O deps.
  */
 
-import type { AgentEvent, RunUsage } from './types'
+import type { AgentEvent, AgentTodoItem, RunUsage } from './types'
 import { parseToolArgs } from './types'
 
 // ==================== state ====================
@@ -95,6 +95,11 @@ export interface EditorAgentState {
     toolCalls: ToolCallRecord[]
     subRuns: SubRunRecord[]
     plan: { callId: string; text: string } | null
+    /**
+     * The run's task list (latest whole-list snapshot from `todo.updated`).
+     * Empty until the agent calls `update_todos`.
+     */
+    todos: AgentTodoItem[]
     pendingToolIds: string[]
     suspendReason: string | null
     error: string | null
@@ -118,6 +123,7 @@ export const initialState: EditorAgentState = {
     toolCalls: [],
     subRuns: [],
     plan: null,
+    todos: [],
     pendingToolIds: [],
     suspendReason: null,
     error: null,
@@ -638,6 +644,10 @@ function applyEvent(state: EditorAgentState, event: AgentEvent): EditorAgentStat
                 phase: 'waiting-approval',
                 suspendReason: 'plan_approval',
             }
+        case 'todo.updated':
+            // Whole-list snapshot: the latest event wins, which is what makes a
+            // reconnect safe without replaying every intermediate state.
+            return { ...next, todos: event.items ?? [] }
         case 'run.suspended':
             if (event.reason === 'waiting_tools') {
                 return {

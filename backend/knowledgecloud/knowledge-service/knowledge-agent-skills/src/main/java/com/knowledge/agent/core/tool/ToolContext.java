@@ -1,5 +1,6 @@
 package com.knowledge.agent.core.tool;
 
+import com.knowledge.agent.core.run.TodoItem;
 import com.knowledge.agent.core.savedskill.SavedSkillProvenance;
 import lombok.Data;
 
@@ -70,6 +71,9 @@ public class ToolContext {
     /** Working-memory scratchpad holder (read/write). */
     private ScratchpadHolder scratchpad = new ScratchpadHolder();
 
+    /** Task-list holder (read/write) — mirrors the checkpoint's todo list. */
+    private TodoHolder todos = new TodoHolder();
+
     /** Free-form working memory (agent-managed string). */
     @Data
     public static class ScratchpadHolder {
@@ -81,6 +85,25 @@ public class ToolContext {
 
         public void write(String newValue) {
             this.value = newValue == null ? "" : newValue;
+        }
+    }
+
+    /**
+     * Run-scoped todo list handed to tools. The loop owns the checkpoint copy and
+     * re-syncs it after a backend batch, so a tool only has to write this holder.
+     * Both sides copy on the way in and out: the holder outlives one tool call and
+     * a shared list would let the checkpoint silently alias live run state.
+     */
+    @Data
+    public static class TodoHolder {
+        private List<TodoItem> value = new ArrayList<>();
+
+        public List<TodoItem> read() {
+            return new ArrayList<>(value == null ? new ArrayList<TodoItem>() : value);
+        }
+
+        public void write(List<TodoItem> items) {
+            this.value = items == null ? new ArrayList<TodoItem>() : new ArrayList<>(items);
         }
     }
 }

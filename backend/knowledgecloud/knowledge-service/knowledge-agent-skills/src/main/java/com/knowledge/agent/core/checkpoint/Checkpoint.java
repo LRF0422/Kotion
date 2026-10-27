@@ -3,6 +3,7 @@ package com.knowledge.agent.core.checkpoint;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.knowledge.agent.api.dto.ChatMessage;
 import com.knowledge.agent.core.run.PendingToolCall;
+import com.knowledge.agent.core.run.TodoItem;
 import com.knowledge.agent.core.savedskill.SavedSkillProvenance;
 import lombok.Data;
 
@@ -124,6 +125,13 @@ public class Checkpoint {
 
     /** Working-memory scratchpad (free-form, agent-managed). */
     private String scratchpad;
+
+    /**
+     * Task list the model maintains through {@code update_todos} — the whole
+     * list, latest write wins. Persisted so a resumed run keeps its plan and a
+     * finished turn can still be projected with the tasks it claimed.
+     */
+    private List<TodoItem> todos = new ArrayList<>();
 
     private long promptTokens;
 

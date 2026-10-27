@@ -21,6 +21,7 @@ import com.knowledge.agent.core.run.PendingToolCall;
 import com.knowledge.agent.core.run.RunCancelFlag;
 import com.knowledge.agent.core.run.RunStatus;
 import com.knowledge.agent.core.run.RunStore;
+import com.knowledge.agent.core.run.TodoItem;
 import com.knowledge.agent.core.savedskill.SavedSkillProvenance;
 import com.knowledge.agent.core.tool.BackendTool;
 import com.knowledge.agent.core.tool.ClientToolActivation;
@@ -264,6 +265,12 @@ public class AgentLoop implements Runnable {
     /** Working-memory holder backed by the checkpoint scratchpad. */
     private final ToolContext.ScratchpadHolder scratchpad = new ToolContext.ScratchpadHolder();
 
+    /** Task-list holder backed by the checkpoint's todo list. */
+    private final ToolContext.TodoHolder todos = new ToolContext.TodoHolder();
+
+    /** Last task list announced to the client (whole-list snapshots). */
+    private List<TodoItem> emittedTodos = new ArrayList<>();
+
     /**
      * Cap on user turns buffered while the run is busy. Steering is meant for a
      * sentence of redirection, not for replaying a backlog: past this depth the
@@ -482,6 +489,11 @@ public class AgentLoop implements Runnable {
                 // Recovery: rebuild working memory + accumulated text.
                 run.setAssistantText(checkpoint.getAssistantText() != null ? checkpoint.getAssistantText() : "");
                 scratchpad.write(checkpoint.getScratchpad());
+                // The task list is part of the run's state, not of the model log:
+                // restore it (and treat it as already announced) so a resumed run
+                // neither loses its plan nor re-emits a stale snapshot.
+                todos.write(checkpoint.getTodos());
+                emittedTodos = new ArrayList<>(todos.read());
                 // Plan approval survives a crash: the gate is only hot state,
                 // so an approved plan must be restored from the checkpoint or
                 // every write tool would be re-blocked as PLAN_MODE_BLOCKED.
@@ -1476,7 +1488,25 @@ public class AgentLoop implements Runnable {
             checkpoint.getMessages().add(toolMessage(call, outcome));
             appendImageVisionMessage(images);
             checkpoint.setScratchpad(scratchpad.read());
+            syncTodos();
         }
+    }
+
+    /**
+     * Mirror the task-list holder into the checkpoint and announce it when it
+     * actually changed. Called per backend tool result (on the loop thread, so
+     * event order stays stable): a batch may contain several updates, and the
+     * client only ever needs the last complete snapshot.
+     */
+    private void syncTodos() {
+        List<TodoItem> current = todos.read();
+        if (current.equals(emittedTodos)) {
+            checkpoint.setTodos(current);
+            return;
+        }
+        emittedTodos = new ArrayList<>(current);
+        checkpoint.setTodos(new ArrayList<>(current));
+        emit(RunEvents.TODO_UPDATED, RunEvents.todoUpdated(current));
     }
 
     /**
@@ -2688,6 +2718,7 @@ public class AgentLoop implements Runnable {
         context.setClientTools(new ArrayList<>(clientToolSpecs.values()));
         context.setDeferredTools(new ArrayList<>(deferredToolSpecs.values()));
         context.setScratchpad(scratchpad);
+        context.setTodos(todos);
         // Frozen creation context, so a delegated child inherits the parent's
         // editor rules / skill fragments / memory instead of a bare prompt.
         context.setSystemPrompt(checkpoint.getSystemPrompt());
@@ -2708,6 +2739,7 @@ public class AgentLoop implements Runnable {
         checkpoint.setNextStep(checkpoint.getNextStep());
         checkpoint.setAssistantText(run.getAssistantText());
         checkpoint.setScratchpad(scratchpad.read());
+        checkpoint.setTodos(todos.read());
         checkpoint.setPromptTokens(checkpoint.getPromptTokens());
         checkpoint.setCompletionTokens(checkpoint.getCompletionTokens());
         checkpoint.setCachedPromptTokens(checkpoint.getCachedPromptTokens());
