@@ -33,6 +33,7 @@ import java.util.Map;
  *     compaction-threshold: 0.75
  *     keep-recent-messages: 16
  *     tool-result-max-chars: 12000
+ *     client-tool-payload-max-chars: 48000
  *     evict-tool-results-after-steps: 10
  *   checkpoint:
  *     enabled: true
@@ -155,6 +156,21 @@ public class AgentCoreProperties {
         private int keepRecentMessages = 16;
         /** Tool results longer than this (chars) are truncated. */
         private int toolResultMaxChars = 12000;
+        /**
+         * Budget for a client-tool DISCOVERY payload — a frontend tool result that
+         * hands back tool specs under {@code activateTools} (see
+         * {@code ClientToolActivation}).
+         *
+         * <p>These payloads are indivisible: a head/tail cut leaves invalid JSON
+         * and silently drops whole schemas, and a schema that is half present is
+         * worth less than none — the model cannot call the tool either way. So
+         * they get their own, larger budget instead of
+         * {@link #toolResultMaxChars}. One skill's bundle measures tens of KB
+         * (a 38-tool skill is ~20k chars), and it is read once per load, not per
+         * step; a payload that still does not fit is answered with its tool names
+         * plus a note rather than cut.
+         */
+        private int clientToolPayloadMaxChars = 48000;
         /**
          * Tool results older than this many steps are evicted first (L1).
          * Must stay comfortably above the number of read steps a single task

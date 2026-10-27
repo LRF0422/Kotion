@@ -1716,7 +1716,7 @@ public class AgentLoop implements Runnable {
      * Results for sub-agent tools are routed to the owning child run; parent
      * results are written into the conversation.
      */
-    private void applyToolResults(List<ResumePayload.ToolResultItem> items) {
+    void applyToolResults(List<ResumePayload.ToolResultItem> items) {
         java.util.Map<String, List<ResumePayload.ToolResultItem>> bySub = new java.util.LinkedHashMap<>();
         for (ResumePayload.ToolResultItem item : items) {
             if (item == null || item.getCallId() == null) {
@@ -1740,10 +1740,7 @@ public class AgentLoop implements Runnable {
                 List<Map<String, Object>> images = item.isOk()
                         ? extractAgentImages(item.getResult())
                         : java.util.Collections.emptyList();
-                String rendered = item.isOk()
-                        ? (images.isEmpty() ? renderResult(item.getResult()) : imageToolSummaryJson(images))
-                        : "{\"error\":\"" + escapeJson(item.getError()) + "\"}";
-                String toolContent = render(rendered);
+                String toolContent = toolMessageContent(item, images);
                 if (frozenDeferredTools()) {
                     String schemaNote = deferredSchemaNote(match.getTool());
                     if (schemaNote != null) {
@@ -2615,7 +2612,19 @@ public class AgentLoop implements Runnable {
     /** Event payload for a tool result: base64 images are replaced by a summary. */
     private Object imageAwareEventResult(Object result) {
         List<Map<String, Object>> images = extractAgentImages(result);
-        return images.isEmpty() ? boundResult(result) : imageToolSummary(images);
+        return images.isEmpty() ? boundResult(result, toolResultBudget(result)) : imageToolSummary(images);
+    }
+
+    /**
+     * Budget for one client result. A discovery payload is indivisible and gets
+     * its own, larger budget; everything else uses the ordinary per-result cap.
+     */
+    private int toolResultBudget(Object result) {
+        int base = properties.getContext().getToolResultMaxChars();
+        if (ClientToolActivation.extract(result).isEmpty()) {
+            return base;
+        }
+        return Math.max(base, properties.getContext().getClientToolPayloadMaxChars());
     }
 
     /**
@@ -2895,8 +2904,76 @@ public class AgentLoop implements Runnable {
         }
     }
 
+    /**
+     * Content of the tool message one client result becomes.
+     *
+     * <p>Ordinary results are bounded at {@code tool-result-max-chars}, which is
+     * enough for a page read and keeps Redis/MySQL and the prompt small. A
+     * DISCOVERY result (the tool specs a skill hands over) is handled separately:
+     * see {@link #discoveryContent}.
+     */
+    private String toolMessageContent(ResumePayload.ToolResultItem item, List<Map<String, Object>> images) {
+        if (!item.isOk()) {
+            return render("{\"error\":\"" + escapeJson(item.getError()) + "\"}");
+        }
+        if (!images.isEmpty()) {
+            return render(imageToolSummaryJson(images));
+        }
+        List<ToolSpec> specs = ClientToolActivation.extract(item.getResult());
+        if (!specs.isEmpty()) {
+            return discoveryContent(item.getResult(), specs);
+        }
+        return render(renderResult(item.getResult()));
+    }
+
+    /**
+     * Content for the message that hands the model a skill's tool specs.
+     *
+     * <p>The ordinary budget cannot apply: it cuts head + tail out of one string,
+     * which here means invalid JSON and silently missing schemas — and the model
+     * needs EVERY schema to call those tools. So the payload is serialized whole
+     * at its own budget ({@code client-tool-payload-max-chars}), which covers a
+     * real skill bundle with room to spare.
+     *
+     * <p>Beyond even that, cutting is still the wrong answer: the message degrades
+     * to valid JSON that names every tool and says what to do. Nothing is lost on
+     * the routing side ({@link #registerClientActivatedTools} reads the ORIGINAL
+     * result), and the first call of any of those tools returns its schema (see
+     * {@link #deferredSchemaNote}) — an honest smaller answer beats a corrupt one.
+     */
+    private String discoveryContent(Object result, List<ToolSpec> specs) {
+        int budget = toolResultBudget(result);
+        // The limiter counts BYTES while this budget (and the token estimate) count
+        // chars, and a Chinese schema carries 2–3 bytes per char. Serialize with
+        // room for the worst case so the decision below is made on characters: a
+        // bundle that fits is delivered whole instead of being mistaken for huge.
+        String whole = renderResult(result, budget * 4);
+        if (!ToolResultLimiter.isTruncated(whole) && whole.length() <= budget) {
+            return whole;
+        }
+        Map<String, Object> fallback = new java.util.LinkedHashMap<>();
+        fallback.put("success", true);
+        Object skill = result instanceof Map ? ((Map<?, ?>) result).get("skill") : null;
+        if (skill != null) {
+            fallback.put("skill", skill);
+        }
+        fallback.put("schemasOmitted", true);
+        fallback.put("toolNames", specs.stream().map(ToolSpec::getName).toList());
+        fallback.put("note", "这些工具的参数结构合计超过单条工具结果的上限（" + budget
+                + " 字符），未随本结果返回。它们已经可以按名字直接调用：首次调用会返回该工具的参数结构，之后再按它传参。");
+        try {
+            return objectMapper.writeValueAsString(fallback);
+        } catch (Exception e) {
+            return "{\"success\":true,\"schemasOmitted\":true}";
+        }
+    }
+
     private String renderResult(Object result) {
-        Object bounded = boundResult(result);
+        return renderResult(result, properties.getContext().getToolResultMaxChars());
+    }
+
+    private String renderResult(Object result, int maxChars) {
+        Object bounded = boundResult(result, maxChars);
         if (bounded == null) {
             return "null";
         }
@@ -2914,9 +2991,8 @@ public class AgentLoop implements Runnable {
      * Hard-cap a tool result before it reaches the checkpoint, the event log,
      * Redis/MySQL or a log line (see {@link ToolResultLimiter}).
      */
-    private Object boundResult(Object result) {
-        return ToolResultLimiter.bound(result, objectMapper,
-                properties.getContext().getToolResultMaxChars());
+    private Object boundResult(Object result, int maxChars) {
+        return ToolResultLimiter.bound(result, objectMapper, maxChars);
     }
 
     /** Truncate long tool results so the context stays bounded (L1-friendly). */

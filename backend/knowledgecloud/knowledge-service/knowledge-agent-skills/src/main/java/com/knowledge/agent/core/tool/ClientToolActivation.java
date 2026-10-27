@@ -29,7 +29,24 @@ public final class ClientToolActivation {
     /** Result field carrying the specs: a list of OpenAI-shaped tool objects. */
     public static final String FIELD = "activateTools";
 
+    /** The field as it appears inside a serialized tool message. */
+    private static final String FIELD_TOKEN = "\"" + FIELD + "\"";
+
     private ClientToolActivation() {
+    }
+
+    /**
+     * Whether a SERIALIZED tool message carries the handover field.
+     *
+     * <p>Used by the context layers, which only see the rendered text: a
+     * discovery payload must never be pruned by character count (a head/tail cut
+     * leaves invalid JSON and drops whole schemas), so they need to recognize one
+     * without parsing it — the same "field, not tool name" rule this class is
+     * built on. The cost is one substring scan of a message that is already over
+     * the ordinary budget, which is a handful per conversation.
+     */
+    public static boolean carriesSpecs(String content) {
+        return content != null && content.contains(FIELD_TOKEN);
     }
 
     /**

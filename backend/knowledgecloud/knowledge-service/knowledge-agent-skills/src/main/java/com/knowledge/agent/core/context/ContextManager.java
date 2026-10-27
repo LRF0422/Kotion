@@ -6,6 +6,7 @@ import com.knowledge.agent.core.llm.LlmGateway;
 import com.knowledge.agent.core.llm.LlmInferRequest;
 import com.knowledge.agent.core.llm.LlmResult;
 import com.knowledge.agent.core.run.AgentRun;
+import com.knowledge.agent.core.tool.ClientToolActivation;
 import com.knowledge.agent.core.tool.ToolSpec;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -740,7 +741,12 @@ public class ContextManager {
         for (int i = 1; i < messages.size(); i++) {
             ChatMessage msg = messages.get(i);
             if ("tool".equals(roleOf(msg)) && msg.getContent() != null
-                    && msg.getContent().length() > toolResultMaxChars) {
+                    && msg.getContent().length() > toolResultMaxChars
+                    // A discovery payload (the specs a skill hands over) is
+                    // indivisible: it was bounded when it was written, and a
+                    // head/tail cut here would leave invalid JSON and drop whole
+                    // schemas — the model needs every one of them to call them.
+                    && !ClientToolActivation.carriesSpecs(msg.getContent())) {
                 messages.set(i, prunedToolResult(msg, toolResultMaxChars));
             }
         }

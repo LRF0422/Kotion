@@ -70,6 +70,35 @@ class ContextManagerSanitizationTest {
     }
 
     @Test
+    void discoveryPayloadIsNeverMiddlePruned() {
+        // The tool specs a skill hands over are indivisible: half a schema is a
+        // schema the model cannot use, and the head/tail cut also breaks the JSON.
+        StringBuilder specs = new StringBuilder("{\"success\":true,\"activateTools\":[");
+        for (int i = 0; i < 400; i++) {
+            specs.append(i == 0 ? "" : ",")
+                    .append("{\"name\":\"tool").append(i)
+                    .append("\",\"inputSchema\":{\"type\":\"object\"}}");
+        }
+        specs.append("]}");
+        String payload = specs.toString();
+        assertTrue(payload.length() > 12000, "the fixture must be over the ordinary budget");
+
+        List<ChatMessage> input = new ArrayList<>(Arrays.asList(
+                ChatMessage.builder().role("system").content("sys").build(),
+                ChatMessage.builder().role("assistant").content("loading")
+                        .toolCalls(Collections.singletonList(new ChatMessage.ToolCallInfo(
+                                "call-1", "function",
+                                new ChatMessage.ToolCallInfo.FunctionInfo("load_skill", "{}")))).build(),
+                ChatMessage.builder().role("tool").toolCallId("call-1").name("load_skill")
+                        .content(payload).build()));
+
+        List<ChatMessage> assembled = contextManager.assemble(input);
+
+        assertEquals(payload, assembled.get(2).getContent(),
+                "a discovery payload must reach the model byte-identically");
+    }
+
+    @Test
     void keepsWellFormedConversationIntact() {
         List<ChatMessage> input = new ArrayList<>(Arrays.asList(
                 ChatMessage.builder().role("system").content("sys").build(),

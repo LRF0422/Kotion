@@ -49,6 +49,18 @@ public final class ToolResultLimiter {
         }
     }
 
+    /**
+     * Whether {@code text} is the cut output of {@link #bound} rather than a
+     * complete serialization.
+     *
+     * <p>The budget is bytes and the caller's decision is usually chars (what the
+     * token estimate and the model see), so "too long" cannot be inferred from
+     * the length alone: a Chinese payload carries 2–3 bytes per char.
+     */
+    public static boolean isTruncated(String text) {
+        return text != null && text.endsWith(TRUNCATED_SUFFIX);
+    }
+
     /** OutputStream that aborts serialization once the byte budget is spent. */
     private static final class CappedOutputStream extends OutputStream {
         private final OutputStream delegate;

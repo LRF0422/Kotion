@@ -56,14 +56,23 @@ function readUserChoice(
     return { question, waiting: false }
 }
 
-function formatDetails(value: unknown): string {
+/**
+ * One step's payload is capped for DISPLAY only — a `load_skill` result is a
+ * couple of tens of KB of schemas, unusable as a wall of text in the timeline.
+ * The cap says so instead of trailing off with a naked "…", which read like the
+ * tool itself had returned a torn-off payload.
+ */
+const DETAILS_MAX_CHARS = 4000
+
+function formatDetails(value: unknown, cappedNote: (total: number) => string): string {
     if (value === undefined) return ''
     try {
         const formatted = typeof value === 'string'
             ? String(sanitizeToolPayload(value))
             : JSON.stringify(sanitizeToolPayload(value), null, 2)
-        return formatted.length > 4000 ? `${formatted.slice(0, 4000)}
-…` : formatted
+        return formatted.length > DETAILS_MAX_CHARS
+            ? `${formatted.slice(0, DETAILS_MAX_CHARS)}\n${cappedNote(formatted.length)}`
+            : formatted
     } catch {
         return String(value)
     }
@@ -307,17 +316,18 @@ function ToolItem({ step }: { step: ExecutionStep }) {
 
 function ToolDetails({ step }: { step: ExecutionStep }) {
     const { t } = useTranslation()
+    const cappedNote = (total: number) => t('ai.chat.toolOutputCapped', { total })
 
     return (
         <div className="mt-1.5 space-y-2 text-[11px] text-muted-foreground">
             {hasInspectableValue(step.args) && (
-                <DetailBlock label={t('ai.chat.toolInput')} value={formatDetails(step.args)} />
+                <DetailBlock label={t('ai.chat.toolInput')} value={formatDetails(step.args, cappedNote)} />
             )}
             {hasInspectableValue(step.result) && (
-                <DetailBlock label={t('ai.chat.toolOutput')} value={formatDetails(step.result)} />
+                <DetailBlock label={t('ai.chat.toolOutput')} value={formatDetails(step.result, cappedNote)} />
             )}
             {hasInspectableValue(step.error) && (
-                <DetailBlock label={t('ai.chat.toolError')} value={formatDetails(step.error)} destructive />
+                <DetailBlock label={t('ai.chat.toolError')} value={formatDetails(step.error, cappedNote)} destructive />
             )}
         </div>
     )
