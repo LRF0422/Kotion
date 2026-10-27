@@ -70,6 +70,7 @@ import {
     formatBytes,
 } from './studio-service'
 import { usePublishProject } from './StudioMarketplacePanel'
+import { CodeView } from './files/CodeView'
 import { applyPluginIcon, writePluginIconSvg } from './icons/icon-art'
 import {
     AI_ICON_MAX_CHARS,
@@ -121,7 +122,7 @@ const EmptyHint: React.FC<{ icon: React.ReactNode; text: string }> = ({ icon, te
     </div>
 )
 
-/** Viewer cap — larger files render their first lines only. */
+/** Viewer cap — larger files render their first lines only (`CodeView`). */
 const MAX_VIEW_LINES = 2000
 
 interface FileTreeNode {
@@ -822,29 +823,6 @@ export const StudioPage: React.FC = () => {
             )
         })
 
-    /** Numbered source lines; capped so a huge file cannot stall the window. */
-    const renderFileLines = (text: string) => {
-        const lines = text.split('\n')
-        const capped = lines.length > MAX_VIEW_LINES ? lines.slice(0, MAX_VIEW_LINES) : lines
-        return (
-            <>
-                {capped.map((line, index) => (
-                    <div key={index} className="flex">
-                        <span className="w-10 shrink-0 select-none pr-2 text-right text-muted-foreground/40 tabular-nums">
-                            {index + 1}
-                        </span>
-                        <span className="min-w-0 flex-1 whitespace-pre-wrap break-words pr-3">
-                            {line || ' '}
-                        </span>
-                    </div>
-                ))}
-                {capped.length < lines.length ? (
-                    <div className="px-3 py-1 text-muted-foreground/70">…</div>
-                ) : null}
-            </>
-        )
-    }
-
     if (!isDesktop || !capability) {
         return (
             <div className="flex h-full flex-col bg-background">
@@ -1287,7 +1265,11 @@ export const StudioPage: React.FC = () => {
                                                     </pre>
                                                 ) : fileContent !== null ? (
                                                     <div className="py-2 font-mono text-[11px] leading-relaxed">
-                                                        {renderFileLines(fileContent)}
+                                                        <CodeView
+                                                            text={fileContent}
+                                                            path={selectedFile ?? ''}
+                                                            maxLines={MAX_VIEW_LINES}
+                                                        />
                                                     </div>
                                                 ) : selectedFile ? (
                                                     <div className="flex items-center justify-center py-8">
