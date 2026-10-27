@@ -1584,7 +1584,7 @@ public class AgentLoop implements Runnable {
             // Never fan image bytes into the event log / SSE: the client already
             // holds the result it produced, and base64 would bloat Redis + MySQL.
             Object eventResult = images.isEmpty()
-                    ? boundResult(outcome.getResult())
+                    ? boundResult(outcome.getResult(), toolResultBudget(outcome.getResult()))
                     : imageToolSummary(images);
             emit(RunEvents.TOOL_COMPLETED,
                     RunEvents.toolCompleted(outcome.getCallId(), outcome.getTool(),
@@ -2066,7 +2066,7 @@ public class AgentLoop implements Runnable {
         }
         delegation.setDelivered(true);
         boolean ok = Boolean.TRUE.equals(result.get("ok"));
-        Object bounded = boundResult(result);
+        Object bounded = boundResult(result, toolResultBudget(result));
         if (ok) {
             emit(RunEvents.SUB_COMPLETED,
                     RunEvents.subCompleted(delegation.getCallId(), delegation.getSubRunId(), true, bounded));
@@ -2273,7 +2273,7 @@ public class AgentLoop implements Runnable {
                 payload.put("unmatched", unmatched);
                 payload.put("note", "这些 subRunId 未匹配到正在运行或刚结束的子 agent");
             }
-            Object bounded = boundResult(payload);
+            Object bounded = boundResult(payload, toolResultBudget(payload));
             checkpoint.getMessages().add(ChatMessage.builder()
                     .role("tool")
                     .toolCallId(wait.call.getCallId())
