@@ -28,18 +28,21 @@ import { event, PLUGIN_INCOMPATIBLE } from "../event";
 import { Editor } from "@tiptap/core";
 import {
     agentScopeMatches,
+    deriveRequiresEditor,
     filterContributionByScope,
     getAgentToolImplementation,
     isAgentContextAllowed,
-    normalizeAgentScopes,
     resolveAgentToolNames,
     toAgentWireName,
-} from "../ai/plugin-agent";import type {
+} from "../ai/plugin-agent";
+import { pickLiveEditor } from "../ai/plugin-agent/live-editor";
+import type {
     AgentContribution,
     AgentScope,
     AgentSkillDefinition,
     AgentToolContext,
     AgentToolDefinition,
+    AgentToolExecutor,
     ResolvedAgentCapabilities,
     ResolvedAgentContribution,
     ResolvedAgentScope,
@@ -2133,7 +2136,6 @@ export class PluginManager {
      */
     resolvePluginToolGroups(editor: Editor | null): ResolvedPluginToolGroup[] {
         const scope: ResolvedAgentScope = editor ? 'page' : 'workspace'
-        const ctx = this.buildAgentToolContext(editor, scope)
         const groups: ResolvedPluginToolGroup[] = []
 
         for (const entry of this.resolveAgentContributions()) {
@@ -2151,34 +2153,73 @@ export class PluginManager {
                     scope?: AgentScope | AgentScope[]
                 },
             ) => {
-                try {
-                    const execute = create(ctx)
-                    if (typeof execute !== 'function') return
-                    if (record[wireName]) logger.warn(`Tool ${wireName} already exists, overwriting`)
-                    // Carry the declared scope down as `requiresEditor`: a tool that
-                    // is only valid in the page scope needs a live editor, while a
-                    // scope-wide one (`any`/`workspace`, or an undeclared scope,
-                    // which normalizes to `any`) does not. The chat's frontend-tool
-                    // execution gate reads this, so a studio/host tool can never be
-                    // blocked behind an editor that happens not to be ready.
-                    const scopes = normalizeAgentScopes(def.scope)
-                    const requiresEditor = scopes.includes('page')
-                        && !scopes.includes('any')
-                        && !scopes.includes('workspace')
-                    record[wireName] = {
-                        description: def.description,
-                        inputSchema: def.inputSchema,
-                        readOnly: def.readOnly,
-                        // Ranks this tool against the provider's tool ceiling; see
-                        // ToolProvider#registerPluginTools.
-                        priority: def.priority,
-                        requiresEditor,
-                        execute,
+                // One executor per editor the tool is actually CALLED against.
+                //
+                // The editor published here dies with the surface that owns it
+                // (page switch, plugin route, re-opened document) while the tool
+                // stays advertised for the rest of the run, so a factory that
+                // closed over it answers "no editor" for the rest of that run.
+                // Each call resolves the live editor instead and, when it is not
+                // the one this instance was built with, gets an instance built
+                // for it.
+                //
+                // The mapping lives with THIS tool, keyed by editor: it holds no
+                // "current call" state, so one instance serving a parent and a
+                // delegated run can never confuse their documents.
+                const built = new WeakMap<object, AgentToolExecutor>()
+                const buildFor = (targetEditor: Editor | null): AgentToolExecutor | null => {
+                    try {
+                        // `scope` stays the RUN's scope: it says where the run
+                        // operates, while only the editor moves.
+                        const ctx = this.buildAgentToolContext(targetEditor, scope)
+                        const produced = create(ctx)
+                        return typeof produced === 'function' ? (produced as AgentToolExecutor) : null
+                    } catch (error) {
+                        // A factory that needs a live editor must not take the
+                        // whole catalog down with it: skip that tool and keep the
+                        // rest.
+                        logger.warn(`Tool ${wireName} could not be instantiated`, error)
+                        return null
                     }
-                } catch (error) {
-                    // A factory that needs a live editor must not take the whole
-                    // catalog down with it: skip that tool and keep the rest.
-                    logger.warn(`Tool ${wireName} could not be instantiated`, error)
+                }
+                const primary = buildFor(editor)
+                if (!primary) return
+
+                const execute: AgentToolExecutor = (params, callId, execCtx) => {
+                    const live = pickLiveEditor(execCtx)
+                    if (live && live !== editor) {
+                        let executor = built.get(live)
+                        if (!executor) {
+                            const rebuilt = buildFor(live)
+                            if (rebuilt) {
+                                built.set(live, rebuilt)
+                                executor = rebuilt
+                            }
+                        }
+                        if (executor) return executor(params, callId, execCtx)
+                    }
+                    // Nothing live to move to (no binding, or no editor yet):
+                    // run the instance we have so the tool reports its own state.
+                    return primary(params, callId, execCtx)
+                }
+
+                if (record[wireName]) logger.warn(`Tool ${wireName} already exists, overwriting`)
+                // Carry the declared scope down as `requiresEditor`: a tool that
+                // is only valid in the page scope needs a live editor, while a
+                // scope-wide one (`any`/`workspace`, or an undeclared scope,
+                // which normalizes to `any`) does not. The chat's frontend-tool
+                // execution gate reads this, so a studio/host tool can never be
+                // blocked behind an editor that happens not to be ready.
+                const requiresEditor = deriveRequiresEditor(def.scope)
+                record[wireName] = {
+                    description: def.description,
+                    inputSchema: def.inputSchema,
+                    readOnly: def.readOnly,
+                    // Ranks this tool against the provider's tool ceiling; see
+                    // ToolProvider#registerPluginTools.
+                    priority: def.priority,
+                    requiresEditor,
+                    execute,
                 }
             }
 

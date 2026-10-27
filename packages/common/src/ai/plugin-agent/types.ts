@@ -40,7 +40,15 @@ export interface AgentNavigationTarget {
 export interface AgentToolContext {
     /** The scope the run was created with. */
     scope: ResolvedAgentScope
-    /** Present only for `page` scope when the host has published an editor. */
+    /**
+     * The editor the agent is editing — read it INSIDE your executor.
+     *
+     * The host builds one executor per editor a tool is called against, so this
+     * is the current edit target, not a value frozen when the catalog was built:
+     * a page switch or a re-opened document yields a fresh instance bound to the
+     * new editor. Absent when the agent has no page to edit, in which case a
+     * document tool must report that instead of guessing.
+     */
     editor?: any
     /**
      * Resolve a host service (e.g. `spacePageService`). Subject to the
@@ -241,4 +249,20 @@ export function agentScopeMatches(
 ): boolean {
     const scopes = normalizeAgentScopes(declared)
     return scopes.includes('any') || scopes.includes(runScope)
+}
+
+/**
+ * Whether a tool declared with these scopes cannot run without a live editor.
+ *
+ * ONE rule, shared by every path that turns a declaration into a tool
+ * (`PluginManager#resolvePluginToolGroups`, `liftLegacyTools`) and, through the
+ * `requiresEditor` flag they carry, by the chat's execution gate: a tool is
+ * editor-bound only when `page` is its ONLY scope. A declaration that also
+ * covers `any`/`workspace` must stay runnable without one — waiting for an
+ * editor it may never get is how an editor-independent batch used to sit until
+ * the server's tool timeout.
+ */
+export function deriveRequiresEditor(declared: AgentScope | AgentScope[] | undefined): boolean {
+    const scopes = normalizeAgentScopes(declared)
+    return scopes.includes('page') && !scopes.includes('any') && !scopes.includes('workspace')
 }

@@ -452,6 +452,7 @@ function checkEntryPointsStayCallableWhenAClaimedByASkill(): void {
 function checkRequiresEditorFollowsDeclaredScope(): void {
     const scoped = [legacyTool('hostFileTool')]
     const pageBound = [legacyTool('documentOnlyTool')]
+    const mixed = [legacyTool('mixedScopeTool')]
     const pluginInstance = new KPlugin<any>({
         name: 'Scoped',
         status: 'active',
@@ -459,6 +460,7 @@ function checkRequiresEditorFollowsDeclaredScope(): void {
         tools: [
             ...liftLegacyTools(scoped as any, { scope: 'any' }),
             ...liftLegacyTools(pageBound as any, { scope: 'page' }),
+            ...liftLegacyTools(mixed as any, { scope: ['page', 'workspace'] }),
         ],
     })
     const manager = new PluginManager({} as any, [pluginInstance])
@@ -480,6 +482,20 @@ function checkRequiresEditorFollowsDeclaredScope(): void {
         'the flag must reach the tool metadata the gate reads')
     assert(toolProvider.getToolMetadata('documentOnlyTool')?.requiresEditor === true,
         'a page-scoped plugin tool must stay editor-bound in the metadata')
+
+    // A declaration that ALSO covers `workspace` is not editor-bound: the run it
+    // might serve has no document, so it must be instantiated there and answer
+    // for itself rather than park the batch behind an editor that may never come.
+    const mixedTool = [...groups.flatMap(group => Object.values(group.tools)) as any[]]
+        .find(tool => tool && tool.description?.startsWith('mixedScopeTool')) as any
+    assert(mixedTool && mixedTool.requiresEditor === false,
+        'page+workspace must not be treated as editor-bound')
+    const workspaceTools = [...manager.resolvePluginToolGroups(null)
+        .flatMap(group => Object.values(group.tools)) as any[]]
+    assert(workspaceTools.some(tool => tool?.description?.startsWith('mixedScopeTool')),
+        'a page+workspace tool must still be instantiated where no editor exists')
+    assert(!workspaceTools.some(tool => tool?.description?.startsWith('documentOnlyTool')),
+        'a page-only tool has nothing to act on where no editor exists')
 }
 
 /**
@@ -542,9 +558,161 @@ function checkPluginArtifactsReachTheKernel(): void {
         'an unmappable result must contribute no artifact')
 }
 
+/**
+ * A page-scoped plugin tool outlives the surface that published its editor: a
+ * page switch, a plugin route or a re-opened document destroys that instance
+ * while the tool stays advertised for the rest of the run. Reading the closed-over
+ * instance inside the executor made real plugins answer "当前没有可用的页面编辑器"
+ * and retry, even though the conversation still had an edit target.
+ *
+ * The call now decides: the conversation's binding names the editor the agent
+ * edits right now, and a tool built for a different one gets an instance built
+ * for it — per editor, never through shared "current call" state, because one
+ * instance serves both the parent and delegated runs.
+ */
+async function checkPluginToolsFollowTheLiveEditor(): Promise<void> {
+    const builtFor: any[] = []
+    const liveTool = (name: string) => ({
+        name,
+        description: `${name} writes the page`,
+        inputSchema: { type: 'object', properties: {} },
+        scope: 'page' as const,
+        create: (ctx: any) => {
+            builtFor.push(ctx.editor)
+            return async () => ({ editor: ctx.editor })
+        },
+    })
+    const pluginInstance = new KPlugin<any>({
+        name: 'Flow',
+        status: 'active',
+        editorExtension: [],
+        tools: [liveTool('writeDiagram')],
+    })
+    const manager = new PluginManager({} as any, [pluginInstance])
+    manager.plugins = [pluginInstance]
+
+    // Liveness is `isDestroyed` alone: a real Tiptap editor's `state` carries no
+    // `view` of its own, so a deeper probe would reject every editor that works.
+    const published = { id: 'editor-a' }
+    const target = { id: 'editor-b' }
+    const child = { id: 'editor-child' }
+    const toolOf = (editor: any) => {
+        builtFor.length = 0
+        const groups = manager.resolvePluginToolGroups(editor)
+        return groups[0]?.tools?.writeDiagram as any
+    }
+
+    // No call context (a host that resolves nothing): the published instance.
+    const tool = toolOf(published)
+    assert(!!tool, 'the page tool must resolve')
+    assert.equal((await tool.execute({}, 'call-1')).editor, published,
+        'without a call context the tool keeps the editor it was built with')
+
+    // The binding names the editor the agent edits now: a fresh instance for it.
+    const moved = await tool.execute({}, 'call-2', {
+        sessionBinding: { getEditor: () => target },
+    })
+    assert.equal(moved.editor, target, 'a call must act on the editor its binding names')
+    assert.equal(builtFor.length, 2, 'the tool is re-instantiated for that editor')
+
+    // …and that instance is reused, not rebuilt per call.
+    await tool.execute({}, 'call-3', { sessionBinding: { getEditor: () => target } })
+    assert.equal(builtFor.length, 2, 'the per-editor instance must be cached')
+
+    // A delegated run reads ITS OWN editor, never the conversation's.
+    const delegated = await tool.execute({}, 'call-4', {
+        owner: 'child-a',
+        sessionBinding: { getEditor: () => target, getEditorFor: () => child },
+    })
+    assert.equal(delegated.editor, child, 'a child must not be handed the parent document')
+
+    // A destroyed instance is never used: the live one takes over.
+    const dead = { isDestroyed: true }
+    const afterDeath = toolOf(dead)
+    const revived = await afterDeath.execute({}, 'call-5', {
+        sessionBinding: { getEditor: () => target },
+    })
+    assert.equal(revived.editor, target, 'a destroyed editor must be replaced, not used')
+}
+
+/**
+ * A plugin tool must survive an editor swap in the provider map.
+ *
+ * `updateEditor` used to clear every tool, and the re-registration that follows
+ * only returns what the CURRENT editor can host — so navigating to a plugin route
+ * silently removed the page tools from the execution map while the run had
+ * already been told they exist. The model then got an unknown-tool error and
+ * suggestions from the remaining, unrelated catalog.
+ */
+function checkPluginToolsSurviveAnEditorSwap(): void {
+    const provider = new ToolProvider({ editor: { id: 'stub-editor' } as any })
+    provider.registerPluginTools({
+        writeDiagram: {
+            description: 'writes the page',
+            inputSchema: { type: 'object', properties: {} },
+            // eslint-disable-next-line require-await
+            execute: async () => ({ ok: true }),
+        },
+    } as any, 'Flow')
+    assert(!!provider.getToolExecutor('writeDiagram'), 'the plugin tool must be registered')
+
+    provider.updateEditor(null)
+    assert(!!provider.getToolExecutor('writeDiagram'),
+        'a plugin tool must stay executable after the editor goes away: it resolves the editor per call')
+}
+
+/**
+ * Keeping plugin tools across editor swaps moves the removal responsibility to
+ * `syncPluginTools`: it is now the only place that can drop the tools of a
+ * plugin that was disabled, uninstalled, or no longer resolves.
+ *
+ * Without it the catalog would keep advertising a tool nobody can run, and the
+ * model would keep calling it for the rest of the session.
+ */
+function checkDisabledPluginToolsAreDropped(): void {
+    const provider = new ToolProvider({ editor: { id: 'stub-editor' } as any })
+    const writePage = {
+        description: 'writes the page',
+        inputSchema: { type: 'object', properties: {} },
+        // eslint-disable-next-line require-await
+        execute: async () => ({ ok: true }),
+    }
+    provider.syncPluginTools([
+        { pluginName: 'Flow', tools: { writeDiagram: writePage } },
+        { pluginName: 'Other', tools: { doSomethingElse: writePage } },
+    ])
+    assert(!!provider.getToolExecutor('doSomethingElse'), 'both plugins register on the first sync')
+
+    // `Other` is gone from the resolution (disabled / uninstalled / failed).
+    provider.syncPluginTools([{ pluginName: 'Flow', tools: { writeDiagram: writePage } }])
+    assert(!!provider.getToolExecutor('writeDiagram'), 'a still-contributing tool must survive the sync')
+    assert(!provider.getToolExecutor('doSomethingElse'),
+        'a tool no plugin contributes any more must leave the execution map')
+    assert(!provider.getToolMetadata('doSomethingElse'),
+        'and its metadata must go with it, or `needsEditor` keeps gating a tool that cannot run')
+
+    provider.syncPluginTools([])
+    assert(!provider.getToolExecutor('writeDiagram'), 'an empty resolution drops every plugin tool')
+    assert(!!provider.getToolExecutor('load_skill'),
+        'while the built-ins, which no plugin owns, are untouched')
+
+    // A plugin may shadow a built-in by name (one slot in the map). Dropping the
+    // plugin must restore that built-in, not leave the slot empty.
+    provider.syncPluginTools([{ pluginName: 'Shadow', tools: { load_skill: writePage } }])
+    assert.equal(provider.getToolMetadata('load_skill')?.source, 'plugin',
+        'the plugin takes over the name')
+    provider.syncPluginTools([])
+    assert(!!provider.getToolExecutor('load_skill'), 'the shadowed built-in must be restored')
+    assert(provider.getToolMetadata('load_skill')?.source !== 'plugin',
+        'and its own metadata with it')
+}
+
 async function main(): Promise<void> {
     checkSchemasAreWithheldButNamed()
     checkRequiresEditorFollowsDeclaredScope()
+    checkPluginToolsFollowTheLiveEditor()
+    checkPluginToolsSurviveAnEditorSwap()
+    checkDisabledPluginToolsAreDropped()
     checkDiscoveryCanBeTurnedOff()
     checkDefaultSkillToolsStayAdvertised()
     checkEntryPointsStayCallableWhenAClaimedByASkill()

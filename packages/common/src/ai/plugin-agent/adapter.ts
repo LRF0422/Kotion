@@ -20,7 +20,7 @@
  * @deprecated Author `AgentToolDefinition` directly for new capabilities.
  */
 
-import { normalizeAgentScopes } from './types'
+import { deriveRequiresEditor } from './types'
 import type { ExtensionWrapper } from '../../core/editor'
 import type {
     AgentScope,
@@ -60,9 +60,11 @@ function liftLegacyTool(
     options: LiftLegacyOptions,
 ): AgentToolDefinition {
     const scope = options.scope ?? 'page'
-    const scopes = normalizeAgentScopes(scope)
-    const requiresEditor = options.requiresEditor
-        ?? (scopes.includes('page') && !scopes.includes('any'))
+    // Same rule as every other path that instantiates a declared tool (see
+    // deriveRequiresEditor), including the `create` guard below: a group that
+    // also covers `workspace` is editor-optional, exactly as LiftLegacyOptions
+    // documents. `any` already behaved that way; `workspace` used to be missed.
+    const requiresEditor = options.requiresEditor ?? deriveRequiresEditor(scope)
     return {
         name: tool.name,
         description: tool.description,

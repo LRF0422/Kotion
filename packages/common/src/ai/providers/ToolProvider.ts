@@ -38,6 +38,8 @@ export class ToolProvider {
     private toolMetadata: Map<string, ToolMetadata> = new Map()
     // Every executable tool is instantiated eagerly and kept here.
     private tools: Map<string, ToolDefinition> = new Map()
+    /** Names registered by a plugin — the entries an editor swap must NOT drop. */
+    private pluginToolNames: Set<string> = new Set()
 
     // Version tracking for reactive UI updates (bumped when the catalog changes)
     private version: number = 0
@@ -64,7 +66,15 @@ export class ToolProvider {
     }
 
     private instantiateBuiltinTools(): void {
-        this.tools.clear()
+        // Only BUILT-INS are rebuilt here. A plugin executor resolves the editor
+        // at CALL time (see PluginManager#resolvePluginToolGroups), so an editor
+        // swap does not invalidate it — while dropping it made a tool the run had
+        // already been advertised disappear from the execution map, which the
+        // executor reports as an unknown tool with suggestions from whatever was
+        // left in the catalog.
+        for (const name of this.tools.keys()) {
+            if (!this.pluginToolNames.has(name)) this.tools.delete(name)
+        }
         const allTools: ToolsRecord = {}
         for (const factory of getToolFactories()) {
             const tools = factory(this.editor, this.onUserChoiceRequest)
@@ -132,7 +142,6 @@ export class ToolProvider {
         pluginName: string,
         options?: { deferred?: boolean },
     ): void {
-        let changed = false
         for (const [name, tool] of Object.entries(tools)) {
             const metadata: ToolMetadata = {
                 name,
@@ -154,13 +163,47 @@ export class ToolProvider {
                 ...(options?.deferred ? { deferred: true } : {}),
             }
 
-            const existing = this.tools.get(name)
             this.toolMetadata.set(name, metadata)
             this.tools.set(name, this.tagAsAIEdit(tool as ToolDefinition))
-            if (!existing) changed = true
+            this.pluginToolNames.add(name)
         }
 
-        if (changed) this.incrementVersion()
+        // Registering REPLACES each executor even when the names are unchanged
+        // (the factory was resolved against the editor active at that moment), so
+        // the version has to move either way: the memoized `allTools` /
+        // `wrappedTools` snapshots are keyed on it and would otherwise keep an
+        // executor bound to a dead editor.
+        if (Object.keys(tools).length > 0) this.incrementVersion()
+    }
+
+    /**
+     * Replace the whole plugin tool set: drop what no plugin contributes any
+     * more (a disabled plugin, a failed resolution) and register the current
+     * groups.
+     *
+     * {@link updateEditor} keeps plugin tools because their executors resolve
+     * the editor per call — so nothing else would ever remove them.
+     */
+    syncPluginTools(groups: Array<{ tools: ToolsRecord; pluginName: string }>): void {
+        const kept = new Set<string>()
+        for (const group of groups) {
+            for (const name of Object.keys(group.tools)) kept.add(name)
+        }
+        let removed = false
+        for (const name of Array.from(this.pluginToolNames)) {
+            if (kept.has(name)) continue
+            this.pluginToolNames.delete(name)
+            this.tools.delete(name)
+            // A built-in of the same name keeps its own metadata record.
+            if (this.toolMetadata.get(name)?.source === 'plugin') this.toolMetadata.delete(name)
+            removed = true
+        }
+        // A removed plugin tool may have been shadowing a built-in of the same
+        // name, which this map held only one slot for: restore those BEFORE the
+        // current groups re-apply their own shadows.
+        if (removed) this.instantiateBuiltinTools()
+        for (const group of groups) this.registerPluginTools(group.tools, group.pluginName)
+        if (removed) this.incrementVersion()
     }
 
     /**
@@ -213,11 +256,11 @@ export class ToolProvider {
     /**
      * Swap the editor reference and rebuild the built-in tools against it.
      *
-     * Plugin tools are deliberately NOT carried over: their executors come from
-     * `pluginManager.resolvePluginToolGroups(editor)` and close over that
-     * editor, so preserving them would silently target the previous editor. The
-     * caller (`useCapabilityProviders.rebindEditor`) re-resolves and
-     * re-registers them for the new editor right after this returns.
+     * Plugin tools are KEPT: their executors resolve the editor from the call's
+     * session binding, so they re-target themselves on the next call instead of
+     * vanishing from the catalog. The caller
+     * (`useCapabilityProviders.rebindEditor`) still re-resolves them for the new
+     * editor right after this returns.
      */
     updateEditor(editor: any): void {
         this.editor = editor

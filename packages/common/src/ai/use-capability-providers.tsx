@@ -228,8 +228,10 @@ export function useCapabilityProviders(
      * Resolved even with NO active editor: plugin tools are editor-INDEPENDENT
      * in general (they may drive the desktop host or the workspace, not the
      * document). Page-scoped tools that truly need an editor are skipped per
-     * tool inside resolvePluginToolGroups, and ToolProvider#updateEditor clears
-     * every plugin tool on an editor swap, so the next rebind re-registers them.
+     * tool inside resolvePluginToolGroups; the ones that do register resolve the
+     * editor at CALL time (see `plugin-agent/live-editor`), so an editor swap
+     * neither drops them from the provider nor leaves them bound to a dead
+     * instance.
      */
     const collectPluginToolsByPlugin = useCallback((targetEditor: Editor | null): ResolvedPluginToolGroup[] => {
         if (!pluginManager) return []
@@ -254,13 +256,17 @@ export function useCapabilityProviders(
         // for delegated agents must not keep serving the previous instances.
         perEditorToolsRef.current = new WeakMap()
 
-        for (const group of collectPluginToolsByPlugin(nextEditor)) {
+        const groups = collectPluginToolsByPlugin(nextEditor)
+        for (const group of groups) {
             const count = Object.keys(group.tools).length
             if (count > 0) {
                 console.log(`[Agent] Registering ${count} tools from plugin "${group.pluginName}"`)
             }
-            toolProvider.registerPluginTools(group.tools, group.pluginName)
         }
+        // Sync (not just add): the provider keeps plugin tools across editor
+        // swaps, so this is the only place that drops the ones a disabled or
+        // no-longer-resolvable plugin stopped contributing.
+        toolProvider.syncPluginTools(groups)
         return toolProvider.getAllTools()
     }, [toolProvider, pluginManager, registerPluginSkills, collectPluginToolsByPlugin])
 
