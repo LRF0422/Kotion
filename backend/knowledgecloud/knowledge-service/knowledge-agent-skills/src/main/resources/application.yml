@@ -37,7 +37,11 @@ agent:
     max-steps: 100
     max-delegate-depth: 2
     delegate-timeout-seconds: 600
-    waiting-tools-timeout-seconds: 600
+    # A frontend tool call is answered in seconds; the client's own watchdog
+    # forces its batch after ~21s. Ten minutes of silence only turned a stranded
+    # batch into a hang the user could not tell apart from a frozen app, so fail
+    # visibly while the conversation is still recoverable.
+    waiting-tools-timeout-seconds: 180
   llm:
     timeout-seconds: 120
     idle-timeout-seconds: 30

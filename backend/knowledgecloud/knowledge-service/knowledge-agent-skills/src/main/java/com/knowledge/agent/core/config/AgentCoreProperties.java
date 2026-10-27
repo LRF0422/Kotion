@@ -21,7 +21,7 @@ import java.util.Map;
  *     max-steps: 100
  *     max-delegate-depth: 2
  *     delegate-timeout-seconds: 600
- *     waiting-tools-timeout-seconds: 600
+ *     waiting-tools-timeout-seconds: 180
  *   llm:
  *     timeout-seconds: 120
  *     idle-timeout-seconds: 30
@@ -95,7 +95,7 @@ public class AgentCoreProperties {
         /** Timeout for a delegated sub-agent run (seconds). */
         private int delegateTimeoutSeconds = 600;
         /** How long a run may wait for frontend tool results (seconds). */
-        private int waitingToolsTimeoutSeconds = 600;
+        private int waitingToolsTimeoutSeconds = 180;
         /** Min interval between hot-state flushes carrying assistantText (ms). */
         private long assistantFlushIntervalMs = 1000;
     }

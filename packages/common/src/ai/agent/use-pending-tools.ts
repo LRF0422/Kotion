@@ -15,6 +15,7 @@ import {
     createPendingToolBatch,
     decidePendingAck,
     matchesPendingToolBatch,
+    PENDING_ACK_FORCE_ATTEMPT,
     pendingAckBackoffMs,
     pendingAckForcesExecution,
     pendingBatchIsEditorIndependent,
@@ -425,10 +426,21 @@ export function usePendingToolExecution(
         }
 
         const decision = decidePendingAck(view, candidates)
-        if (decision === 'wait') {
-            // Unknown run state (the view request failed). Keep the batch and look
-            // again instead of leaving it unsubmitted forever.
-            scheduleAckPass(pendingAckBackoffMs(ackAttemptsRef.current))
+        // Unknown run state (the view request failed). Re-check a few times, but
+        // never indefinitely: a GET that keeps failing (expired token, a proxy
+        // dropping it) parked the batch in total silence — no log the user could
+        // act on, no execution — until the server's ten-minute tool timeout. Past
+        // the force threshold the batch is executed and re-submitted blind; the
+        // journal makes that safe (a completed call is never executed twice) and
+        // the POST is idempotent by callId.
+        const viewUnreadable = decision === 'wait'
+        if (viewUnreadable && ackAttemptsRef.current < PENDING_ACK_FORCE_ATTEMPT) {
+            // The pass is COUNTED here as well: an early return that left the
+            // counter alone made this branch re-arm forever, which is the very
+            // silent stall it is meant to bound.
+            const waitPasses = ackAttemptsRef.current
+            ackAttemptsRef.current = waitPasses + 1
+            scheduleAckPass(pendingAckBackoffMs(waitPasses))
             return
         }
         if (decision === 'ack' && ackAttemptsRef.current >= PENDING_ACK_MAX_RESUBMITS) {
@@ -464,6 +476,7 @@ export function usePendingToolExecution(
             // trusting a single "not waiting" answer.
             console.warn(
                 `[agent] 工具结果未被服务端确认，重新提交（第 ${waitPasses + 1} 次）`
+                + (viewUnreadable ? '（服务端状态读取失败，按超时处理）' : '')
                 + ` run ${current.runId} calls ${candidates.join(', ')}`
             )
         }
