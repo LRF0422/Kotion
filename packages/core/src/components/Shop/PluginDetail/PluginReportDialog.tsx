@@ -71,10 +71,10 @@ export const PluginReportDialog: React.FC<PluginReportDialogProps> = ({
       <DialogTrigger asChild>
         <Button
           type="button"
-          variant="outline"
-          className="h-11 w-full gap-2 text-muted-foreground"
+          variant="ghost"
+          className="h-9 w-full justify-start gap-2 px-0 text-xs text-muted-foreground hover:bg-transparent hover:text-foreground"
         >
-          <FlagIcon className="size-4" />
+          <FlagIcon className="size-3.5" />
           {t("pluginHub.report.trigger")}
         </Button>
       </DialogTrigger>

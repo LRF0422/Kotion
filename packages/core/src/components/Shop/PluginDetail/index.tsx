@@ -12,7 +12,7 @@ import {
   useUploadFile,
 } from "@kn/common";
 import { AlertCircleIcon, ArrowLeft, BoxIcon } from "@kn/icon";
-import { Button, Card, Skeleton, toast } from "@kn/ui";
+import { Button, Skeleton, toast } from "@kn/ui";
 import React, { useContext, useMemo, useState } from "react";
 import { PluginDetailHero } from "./PluginDetailHero";
 import { PluginDocumentationCard } from "./PluginDocumentationCard";
@@ -27,55 +27,58 @@ import {
 } from "../plugin-model";
 
 const PluginDetailSkeleton = () => (
-  <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-5 md:px-6 md:py-6 lg:px-8 lg:py-8">
-    <Card className="overflow-hidden border-border/70 p-5 shadow-sm md:p-6 lg:p-7">
-      <div className="grid gap-5 md:grid-cols-[96px_minmax(0,1fr)] xl:grid-cols-[112px_minmax(0,1fr)_180px] xl:gap-7">
-        <Skeleton className="size-20 rounded-2xl md:size-24 xl:size-28" />
-        <div className="space-y-3">
-          <Skeleton className="h-8 w-2/5" />
-          <Skeleton className="h-4 w-1/4" />
-          <div className="space-y-2 pt-2">
+  <div className="mx-auto w-full max-w-7xl space-y-5 px-4 py-5 md:px-6 md:py-6 lg:px-8">
+    <div className="border-b border-border/60 pb-5 sm:pb-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-5">
+        <Skeleton className="size-14 shrink-0 rounded-lg sm:size-16" />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+            <div className="min-w-0 flex-1 space-y-2">
+              <Skeleton className="h-6 w-2/5" />
+              <Skeleton className="h-4 w-1/4" />
+            </div>
+            <Skeleton className="h-10 w-full rounded-md sm:w-44" />
+          </div>
+          <div className="space-y-2 pt-3">
             <Skeleton className="h-3.5 w-full" />
             <Skeleton className="h-3.5 w-4/5" />
           </div>
-          <div className="flex gap-2 pt-2">
-            <Skeleton className="h-8 w-24 rounded-full" />
-            <Skeleton className="h-8 w-16 rounded-full" />
-            <Skeleton className="h-8 w-20 rounded-full" />
+          <div className="flex gap-3 pt-3">
+            <Skeleton className="h-3.5 w-24" />
+            <Skeleton className="h-3.5 w-16" />
+            <Skeleton className="h-3.5 w-20" />
           </div>
         </div>
-        <Skeleton className="h-11 w-full rounded-lg md:col-start-2 md:w-44 xl:col-start-auto" />
       </div>
-    </Card>
+    </div>
 
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
-      <Card className="min-h-[480px] overflow-hidden border-border/70 shadow-none">
-        <div className="border-b p-5">
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_280px] xl:gap-10">
+      <div className="min-w-0">
+        <div className="flex items-end justify-between gap-4 border-b border-border/60 pb-2">
           <Skeleton className="h-5 w-32" />
-          <div className="mt-4 flex gap-3">
-            <Skeleton className="h-8 w-20" />
-            <Skeleton className="h-8 w-20" />
-            <Skeleton className="h-8 w-24" />
+          <div className="flex gap-3">
+            <Skeleton className="h-4 w-16" />
+            <Skeleton className="h-4 w-12" />
+            <Skeleton className="h-4 w-20" />
           </div>
         </div>
-        <div className="space-y-3 p-6">
+        <div className="space-y-3 pt-4">
+          <Skeleton className="h-6 w-40" />
           <Skeleton className="h-4 w-full" />
           <Skeleton className="h-4 w-11/12" />
           <Skeleton className="h-4 w-4/5" />
         </div>
-      </Card>
+      </div>
       <div className="space-y-4">
-        {Array.from({ length: 2 }).map((_, index) => (
-          <Card
+        {Array.from({ length: 3 }).map((_, index) => (
+          <div
             key={index}
-            className="space-y-3 border-border/70 p-4 shadow-none"
+            className="space-y-3 border-t border-border/60 pt-4 first:border-t-0 first:pt-0"
           >
-            <Skeleton className="h-4 w-24" />
-            <Skeleton className="h-px w-full" />
+            <Skeleton className="h-3.5 w-20" />
             <Skeleton className="h-4 w-full" />
             <Skeleton className="h-4 w-5/6" />
-            <Skeleton className="h-4 w-full" />
-          </Card>
+          </div>
         ))}
       </div>
     </div>
@@ -102,7 +105,7 @@ const DetailMessage: React.FC<DetailMessageProps> = ({
   backLabel,
 }) => (
   <div className="mx-auto flex min-h-[60vh] w-full max-w-xl items-center justify-center px-4 py-10">
-    <div className="w-full rounded-2xl border border-border/70 bg-card p-7 text-center shadow-sm">
+    <div className="w-full text-center">
       <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
         {icon}
       </div>
@@ -231,8 +234,8 @@ export const PluginDetail: React.FC = () => {
       : undefined;
 
   return (
-    <div className="min-h-full bg-muted/10">
-      <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-5 md:px-6 md:py-6 lg:px-8 lg:py-8">
+    <div className="min-h-full">
+      <div className="mx-auto w-full max-w-7xl space-y-5 px-4 py-5 md:px-6 md:py-6 lg:px-8">
         <PluginDetailHero
           plugin={plugin}
           iconUrl={plugin.icon ? usePath(plugin.icon) : undefined}
@@ -245,7 +248,7 @@ export const PluginDetail: React.FC = () => {
           onInstall={() => void handleInstall()}
         />
 
-        <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_280px] xl:gap-10">
           <PluginDocumentationCard
             pluginId={String(plugin.id)}
             versionId={versionId}
@@ -254,11 +257,13 @@ export const PluginDetail: React.FC = () => {
           <div className="space-y-4">
             <PluginRatingCard plugin={plugin} onRated={() => void refresh()} />
             <PluginFactsPanel plugin={plugin} />
-            <PluginReportDialog
-              pluginId={plugin.id}
-              pluginName={plugin.name}
-              versionId={versionId}
-            />
+            <div className="border-t border-border/60 pt-3">
+              <PluginReportDialog
+                pluginId={plugin.id}
+                pluginName={plugin.name}
+                versionId={versionId}
+              />
+            </div>
           </div>
         </div>
       </div>

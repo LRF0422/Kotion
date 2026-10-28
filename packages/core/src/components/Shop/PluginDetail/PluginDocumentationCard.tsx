@@ -1,7 +1,7 @@
 import { useTranslation } from "@kn/common";
 import { EditorRender } from "@kn/editor";
 import { AlertCircleIcon, FileTextIcon } from "@kn/icon";
-import { Card, Empty, Tabs, TabsContent, TabsList, TabsTrigger } from "@kn/ui";
+import { Empty, Tabs, TabsContent, TabsList, TabsTrigger, cn } from "@kn/ui";
 import React, { useEffect, useMemo, useState } from "react";
 import { NormalizedDocumentationSection } from "../plugin-model";
 
@@ -30,58 +30,58 @@ export const PluginDocumentationCard: React.FC<
 
   if (!activeSection) {
     return (
-      <Card className="overflow-hidden border-border/70 shadow-none">
-        <div className="border-b border-border/60 px-5 py-4 md:px-6">
-          <h2 className="text-base font-semibold">
+      <div className="min-w-0">
+        <div className="border-b border-border/60 pb-2">
+          <h2 className="text-sm font-semibold">
             {t("pluginHub.detail.documentation")}
           </h2>
         </div>
         <Empty
-          className="min-h-72 px-6"
-          icon={<FileTextIcon className="size-6" />}
+          className="min-h-64"
+          icon={<FileTextIcon className="size-5" />}
           title={t("pluginHub.detail.docsEmpty")}
           desc={t("pluginHub.detail.docsEmptyDesc")}
         />
-      </Card>
+      </div>
     );
   }
 
   return (
-    <Card className="min-w-0 overflow-hidden border-border/70 shadow-none">
+    <div className="min-w-0">
       <Tabs value={activeSection.id} onValueChange={setActiveSectionId}>
-        <div className="border-b border-border/60 bg-card">
-          <div className="px-5 pt-4 md:px-6">
-            <h2 className="text-base font-semibold">
+        <div className="border-b border-border/60">
+          <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
+            <h2 className="pb-2 text-sm font-semibold">
               {t("pluginHub.detail.documentation")}
             </h2>
-          </div>
-          <div className="mt-2 overflow-x-auto px-3 md:px-4">
-            <TabsList className="h-auto min-w-max border-0 bg-transparent p-0">
-              {sections.map((section) => (
-                <TabsTrigger
-                  key={section.id}
-                  value={section.id}
-                  className="h-11 rounded-none border-b-2 border-transparent px-3 text-sm text-muted-foreground shadow-none transition-colors hover:text-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none lg:h-10"
-                >
-                  {section.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
+            <div className="-ml-3 overflow-x-auto">
+              <TabsList className="h-auto min-w-max border-0 bg-transparent p-0">
+                {sections.map((section) => (
+                  <TabsTrigger
+                    key={section.id}
+                    value={section.id}
+                    className="h-9 rounded-none border-b-2 border-transparent px-3 text-[13px] text-muted-foreground shadow-none transition-colors hover:text-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
+                  >
+                    {section.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </div>
           </div>
         </div>
 
         <TabsContent
           value={activeSection.id}
-          className="m-0 min-h-[420px] focus-visible:outline-none"
+          className="m-0 min-h-[240px] pt-4 focus-visible:outline-none"
         >
           {activeSection.malformed || !activeSection.content ? (
-            <div className="flex min-h-72 items-center justify-center p-6">
-              <div className="max-w-md rounded-xl border border-destructive/20 bg-destructive/5 p-5 text-center">
-                <AlertCircleIcon className="mx-auto size-6 text-destructive" />
-                <h3 className="mt-3 text-sm font-semibold">
+            <div className="flex min-h-64 items-center justify-center py-8">
+              <div className="max-w-md border-l-2 border-destructive/40 pl-4">
+                <AlertCircleIcon className="size-5 text-destructive" />
+                <h3 className="mt-2 text-sm font-medium">
                   {t("pluginHub.detail.docsMalformed")}
                 </h3>
-                <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
                   {t("pluginHub.detail.docsMalformedDesc")}
                 </p>
               </div>
@@ -97,10 +97,18 @@ export const PluginDocumentationCard: React.FC<
               isEditable={false}
               width="w-full"
               withTitle={false}
+              // 只读文档：去掉编辑器的 900px 阅读列与 40px 内缩，让正文与
+              // 页签左对齐；标题字号收到与页面层级匹配的大小。
+              className={cn(
+                "[&_.kn-editor]:!max-w-none [&_.kn-editor]:!px-0 [&_.kn-editor]:!pb-6",
+                "[&_.kn-editor_h1]:!mb-3 [&_.kn-editor_h1]:!mt-1 [&_.kn-editor_h1]:!text-xl",
+                "[&_.kn-editor_h2]:!mt-5 [&_.kn-editor_h2]:!text-base",
+                "[&_.kn-editor_h3]:!text-sm",
+              )}
             />
           )}
         </TabsContent>
       </Tabs>
-    </Card>
+    </div>
   );
 };

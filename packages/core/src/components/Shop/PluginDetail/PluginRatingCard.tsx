@@ -1,6 +1,6 @@
 import { APIS, getApiErrorMessage, useApi, useTranslation } from "@kn/common";
 import { Star } from "@kn/icon";
-import { Card, cn, toast } from "@kn/ui";
+import { cn, toast } from "@kn/ui";
 import React from "react";
 
 import { toFiniteNumber, type PluginRecord } from "../plugin-model";
@@ -51,10 +51,12 @@ export const PluginRatingCard: React.FC<PluginRatingCardProps> = ({
   };
 
   return (
-    <Card className="border-border/70 p-4 shadow-none">
-      <h2 className="text-sm font-semibold">{t("pluginHub.rating.title")}</h2>
-      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
-        <span className="text-2xl font-bold tabular-nums">
+    <section className="border-t border-border/60 pt-4 xl:border-t-0 xl:pt-0">
+      <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {t("pluginHub.rating.title")}
+      </h2>
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+        <span className="text-xl font-semibold tabular-nums">
           {rating.toFixed(1)}
         </span>
         <div
@@ -71,7 +73,7 @@ export const PluginRatingCard: React.FC<PluginRatingCardProps> = ({
               aria-label={t("pluginHub.rating.scoreLabel", { score })}
               disabled={submitting}
               className={cn(
-                "flex size-8 items-center justify-center rounded-md transition-colors",
+                "flex size-7 items-center justify-center rounded-md transition-colors",
                 "hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 submitting && "cursor-not-allowed opacity-60",
               )}
@@ -83,7 +85,7 @@ export const PluginRatingCard: React.FC<PluginRatingCardProps> = ({
             >
               <Star
                 className={cn(
-                  "size-5",
+                  "size-4",
                   score <= active
                     ? "fill-yellow-500 text-yellow-500"
                     : "text-muted-foreground",
@@ -96,11 +98,11 @@ export const PluginRatingCard: React.FC<PluginRatingCardProps> = ({
           {t("pluginHub.rating.reviews", { count: reviews })}
         </span>
       </div>
-      <p className="mt-2 text-xs text-muted-foreground">
+      <p className="mt-1.5 text-xs text-muted-foreground">
         {mine > 0
           ? t("pluginHub.rating.yourRating", { score: mine })
           : t("pluginHub.rating.prompt")}
       </p>
-    </Card>
+    </section>
   );
 };
