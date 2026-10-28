@@ -124,10 +124,11 @@ interface ChatComposerProps {
 }
 
 /**
- * Composer surface — a single rounded card with an auto-grow textarea and a
- * subtle toolbar row (mode toggle, model selector, send button).  Removed
- * legacy "attach"/"settings" placeholder buttons so the affordance stays
- * focused on what actually works.
+ * Composer surface — a single rounded card with a controls row above the
+ * auto-grow textarea (mode toggle, agent picker, model picker) and the send
+ * action pinned to the input's bottom-right.  Removed legacy
+ * "attach"/"settings" placeholder buttons so the affordance stays focused on
+ * what actually works.
  */
 export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(function ChatComposer(
     {
@@ -307,48 +308,16 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
                     </span>
                 </div>
             )}
-            <ChatInput
-                ref={inputRef}
-                value={value}
-                onChange={(e) => onChange(e.target.value)}
-                onKeyDown={handleKeyDown}
-                onPaste={handlePaste}
-                placeholder={
-                    connecting
-                        ? t('ai.chat.targetPageConnectingPlaceholder', { defaultValue: '正在连接目标页面…' })
-                        : isLoading
-                            ? t('ai.chat.steerPlaceholder', {
-                                defaultValue: 'Agent 正在执行，可继续输入，它会在当前步骤结束后处理…',
-                            })
-                            : mode === 'ask'
-                                ? t('ai.chat.askPlaceholder', { defaultValue: '向 AI 提问关于文档的问题…' })
-                                : t('ai.chat.agentPlaceholder', { defaultValue: '提问、编辑或自动化任何事情…' })
-                }
-                disabled={targetUnavailable}
-                rows={1}
-                className="min-h-[48px] max-h-[120px] resize-none overflow-y-auto rounded-xl border-0 bg-transparent px-3 pb-1 pt-2.5 text-sm leading-relaxed shadow-none placeholder:text-muted-foreground/45 focus-visible:ring-0 lg:min-h-[38px] lg:pt-2 lg:text-[13px]"
-            />
-            {/* Toolbar. Secondary controls stay icon-only (the change-tracking
-                toggle is temporarily hidden — see SHOW_TRACKING_TOGGLE) and
-                sampling params are folded into the model menu, so the row fits one
-                line even in the narrow side dock. `flex-wrap` remains as a safety
-                net; `ml-auto` keeps send right-aligned on whichever line it lands
-                on. */}
-            <div className="flex flex-wrap items-center gap-1 px-2 pb-1.5 pt-0.5">
+            {/* Controls sit ABOVE the input: sharing one row with send made the
+                footer read as a single crowded strip once the mode toggle, agent
+                picker and model picker all landed there. Secondary controls stay
+                icon-only (the change-tracking toggle is temporarily hidden — see
+                SHOW_TRACKING_TOGGLE) and sampling params are folded into the model
+                menu, so the row still fits one line in the narrow side dock;
+                `flex-wrap` remains as a safety net. */}
+            <div className="flex flex-wrap items-center gap-1 px-2 pt-1.5">
                 <ModeToggle mode={mode} onModeChange={onModeChange} disabled={isLoading} />
                 <AgentSelector disabled={isLoading} triggerClassName="hover:bg-muted/60" />
-                {onAddImages && (
-                    <button
-                        type="button"
-                        disabled={isLoading || visionBlocked}
-                        onClick={() => fileInputRef.current?.click()}
-                        title={attachImageLabel}
-                        aria-label={attachImageLabel}
-                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground disabled:opacity-50 lg:h-7 lg:w-7 lg:rounded-md"
-                    >
-                        <ImagePlus className="h-3.5 w-3.5 shrink-0" />
-                    </button>
-                )}
                 <ModelSelector
                     model={model}
                     onModelChange={onModelChange}
@@ -378,6 +347,46 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
                         }
                     >
                         <FileDiff className="h-3 w-3 shrink-0" />
+                    </button>
+                )}
+            </div>
+            {/* Input takes the full card width; the attach button sits in the
+                bottom-LEFT corner and send/stop in the bottom-right, on their
+                own row below the textarea. */}
+            <div className="px-0.5">
+                <ChatInput
+                    ref={inputRef}
+                    value={value}
+                    onChange={(e) => onChange(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    onPaste={handlePaste}
+                    placeholder={
+                        connecting
+                            ? t('ai.chat.targetPageConnectingPlaceholder', { defaultValue: '正在连接目标页面…' })
+                            : isLoading
+                                ? t('ai.chat.steerPlaceholder', {
+                                    defaultValue: 'Agent 正在执行，可继续输入，它会在当前步骤结束后处理…',
+                                })
+                                : mode === 'ask'
+                                    ? t('ai.chat.askPlaceholder', { defaultValue: '向 AI 提问关于文档的问题…' })
+                                    : t('ai.chat.agentPlaceholder', { defaultValue: '提问、编辑或自动化任何事情…' })
+                    }
+                    disabled={targetUnavailable}
+                    rows={1}
+                    className="min-h-[48px] max-h-[120px] w-full resize-none overflow-y-auto rounded-xl border-0 bg-transparent px-3 pb-1 pt-1.5 text-sm leading-relaxed shadow-none placeholder:text-muted-foreground/45 focus-visible:ring-0 lg:min-h-[38px] lg:pb-1 lg:pt-1 lg:text-[13px]"
+                />
+            </div>
+            <div className="flex items-center gap-1 px-2 pb-1.5">
+                {onAddImages && (
+                    <button
+                        type="button"
+                        disabled={isLoading || visionBlocked}
+                        onClick={() => fileInputRef.current?.click()}
+                        title={attachImageLabel}
+                        aria-label={attachImageLabel}
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground disabled:opacity-50 lg:h-8 lg:w-8 lg:rounded-md"
+                    >
+                        <ImagePlus className="h-3.5 w-3.5 shrink-0" />
                     </button>
                 )}
                 <div className="ml-auto flex shrink-0 items-center gap-1">
