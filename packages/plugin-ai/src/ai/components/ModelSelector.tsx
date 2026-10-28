@@ -18,6 +18,7 @@ import {
 } from '@kn/common'
 
 import { ModelParamsPopover, isModelParamsCustomized } from '../menu/chat/ModelParamsPopover'
+import { ProviderLogo, providerBrand } from './ProviderLogo'
 import { loadModelCatalog, useModelCatalog } from './model-catalog'
 
 const DEFAULT_VALUE = '__backend_default__'
@@ -95,7 +96,14 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                 title={displayLabel}
                 className={`relative flex h-11 max-w-[180px] shrink-0 items-center gap-1.5 rounded-md px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 ${densityClass} ${triggerClassName}`}
             >
-                <Sparkles aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+                {/* The trigger carries the selected model's vendor mark, so the
+                    current provider is readable without opening the menu. The
+                    backend-default entry has no provider and keeps the sparkle. */}
+                {providerBrand(selectedModel?.provider) ? (
+                    <ProviderLogo provider={selectedModel?.provider} className="h-3.5 w-3.5" />
+                ) : (
+                    <Sparkles aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+                )}
                 <span className="truncate">{displayLabel}</span>
                 <ChevronDown aria-hidden="true" className="h-3 w-3 shrink-0" />
                 {paramsCustomized && (
@@ -133,6 +141,10 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                     onValueChange={(value) => onModelChange(value === DEFAULT_VALUE ? '' : value)}
                 >
                     <DropdownMenuRadioItem value={DEFAULT_VALUE} className="min-h-11 lg:min-h-8">
+                        <Sparkles
+                            aria-hidden="true"
+                            className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground/70"
+                        />
                         <span className="truncate">
                             {t('ai.modelSelector.defaultOption', {
                                 model: DEFAULT_MODEL,
@@ -143,6 +155,10 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
 
                     {hasUnknownSelection && (
                         <DropdownMenuRadioItem value={model} className="min-h-11 lg:min-h-8">
+                            <Sparkles
+                                aria-hidden="true"
+                                className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground/70"
+                            />
                             <span className="truncate">{model}</span>
                         </DropdownMenuRadioItem>
                     )}
@@ -163,6 +179,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
 
                         {Array.from(grouped.entries()).map(([provider, providerModels]) => (
                             <React.Fragment key={provider}>
+                                {/* The label is already the vendor name — repeating its
+                                    mark here only adds noise above every group. */}
                                 <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
                                     {provider}
                                 </DropdownMenuLabel>
@@ -172,6 +190,16 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                                         value={item.id}
                                         className="min-h-11 lg:min-h-8"
                                     >
+                                        <ProviderLogo
+                                            provider={item.provider || provider}
+                                            className="mr-2"
+                                            fallback={
+                                                <Sparkles
+                                                    aria-hidden="true"
+                                                    className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground/70"
+                                                />
+                                            }
+                                        />
                                         <span className="truncate">{item.name || item.id}</span>
                                         {item.supportsVision === true && (
                                             <span
