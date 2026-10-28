@@ -636,6 +636,88 @@ async function checkPluginToolsFollowTheLiveEditor(): Promise<void> {
 }
 
 /**
+ * "Which editor, which page, and may I switch?" — the three questions an
+ * editor-bound plugin tool could not answer for itself.
+ *
+ * The conversation keeps ONE edit target resident (visible editor, claimed
+ * pane, off-screen session). The catalog must resolve THAT instead of whatever
+ * instance React happened to publish, a tool must know which page its editor
+ * edits, and a tool that must reach another page switches the target itself —
+ * never as a side effect of the host "helping" a read.
+ */
+async function checkAgentToolContextKeepsAResidentEditor(): Promise<void> {
+    const contexts: any[] = []
+    const tool = (name: string, readOnly: boolean) => ({
+        name,
+        description: `${name} writes the page`,
+        inputSchema: { type: 'object', properties: {} },
+        scope: 'page' as const,
+        readOnly,
+        create: (ctx: any) => {
+            contexts.push(ctx)
+            return async () => ({ editor: ctx.editor })
+        },
+    })
+    const pluginInstance = new KPlugin<any>({
+        name: 'Flow',
+        status: 'active',
+        editorExtension: [],
+        tools: [tool('writeDiagram', false), tool('readDiagram', true)],
+    })
+    const manager = new PluginManager({} as any, [pluginInstance])
+    manager.plugins = [pluginInstance]
+
+    const page = { pageId: 'page-1', title: 'Flow page', spaceId: 'space-1' }
+    let live: any = { id: 'editor-live' }
+    let acquired = 0
+    const binding = {
+        getEditor: () => live,
+        getEditorFor: () => null,
+        getBoundPage: () => page,
+        getPageForEditor: (targetEditor: any) => (targetEditor === live ? { ...page } : null),
+        editPage: async (next: any) => {
+            acquired += 1
+            live = { id: `editor-${acquired}` }
+            return { ...next, editor: live }
+        },
+    }
+    manager.setAgentBindingResolver(() => binding as any)
+
+    // The UI published NO editor while the conversation still owns one: the page
+    // tools must stay in the catalog instead of collapsing to workspace.
+    const groups = manager.resolvePluginToolGroups(null)
+    const writeTool = groups[0]?.tools?.writeDiagram as any
+    assert(!!writeTool, 'a page tool must stay resolvable while the conversation keeps an editor')
+    const ctx = contexts[0]
+    assert.equal(ctx.page?.pageId, 'page-1', 'the tool context names the page its editor edits')
+    assert.equal(ctx.editor, live, 'and carries the resident editor')
+
+    const switched = await ctx.editPage({ pageId: 'page-2', title: 'Other page' })
+    assert.equal(switched.pageId, 'page-2', 'a tool may switch the edit target explicitly')
+    assert.equal(switched.editor, live, 'and receives the new target\'s editor')
+
+    // The instance the tool was built around is gone and the binding names no
+    // live editor: a WRITE re-acquires the conversation's own target...
+    live = null
+    const beforeWrite = acquired
+    const written = await writeTool.execute({}, 'call-write', { sessionBinding: binding })
+    assert.equal(acquired, beforeWrite + 1, 'a write must re-acquire the target instead of failing')
+    assert.equal(written.editor?.id, `editor-${acquired}`, 'and act on the re-acquired editor')
+
+    // ...while a READ reports instead of moving the user's edit target.
+    live = null
+    const beforeRead = acquired
+    const readGroups = manager.resolvePluginToolGroups({ id: 'dead', isDestroyed: true } as any)
+    const readTool = readGroups[0]?.tools?.readDiagram as any
+    assert(!!readTool, 'a destroyed instance still names a page context for the next call')
+    const read = await readTool.execute({}, 'call-read', { sessionBinding: binding })
+    assert.equal(acquired, beforeRead, 'a read must never claim an editor on its own')
+    assert.equal(read.editor?.id, 'dead', 'it reports the instance it has instead')
+
+    manager.setAgentBindingResolver(undefined)
+}
+
+/**
  * A plugin tool must survive an editor swap in the provider map.
  *
  * `updateEditor` used to clear every tool, and the re-registration that follows
@@ -711,6 +793,7 @@ async function main(): Promise<void> {
     checkSchemasAreWithheldButNamed()
     checkRequiresEditorFollowsDeclaredScope()
     checkPluginToolsFollowTheLiveEditor()
+    await checkAgentToolContextKeepsAResidentEditor()
     checkPluginToolsSurviveAnEditorSwap()
     checkDisabledPluginToolsAreDropped()
     checkDiscoveryCanBeTurnedOff()

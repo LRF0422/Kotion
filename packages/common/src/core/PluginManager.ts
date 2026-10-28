@@ -35,7 +35,17 @@ import {
     resolveAgentToolNames,
     toAgentWireName,
 } from "../ai/plugin-agent";
-import { pickLiveEditor } from "../ai/plugin-agent/live-editor";
+import {
+    acquireCallEditor,
+    isLiveEditor,
+    pickLiveEditor,
+    pickTargetEditor,
+} from "../ai/plugin-agent/live-editor";
+import {
+    getSessionPageBinding,
+    type SessionPageBinding,
+    type SessionPageBindingPage,
+} from "../ai/session-page-binding";
 import type {
     AgentContribution,
     AgentScope,
@@ -515,6 +525,12 @@ export class PluginManager {
     private _cacheDockPanels: ResolvedDockPanel[] | null = null
     private _cachePageTypes: ResolvedPageType[] | null = null
     private _cacheAgentContributions: ResolvedAgentContribution[] | null = null
+    /**
+     * The session binding THIS agent surface belongs to. Defaults to the global
+     * registry (the focused chat); a host with several conversations injects
+     * its own so an agent's tools resolve ITS edit target, not the visible one.
+     */
+    private _agentBindingResolver?: () => SessionPageBinding | null
 
     /**
      * The registry — the *only* place the active set lives.
@@ -1907,9 +1923,38 @@ export class PluginManager {
      * otherwise workspace-scoped. Editor-free tools simply ignore `editor`.
      */
     private buildAgentToolContext(editor: Editor | null, scope: ResolvedAgentScope): AgentToolContext {
+        const binding = this.currentAgentBinding()
+        // Which page this editor edits. Editor-bound resolution first: asking the
+        // conversation target while an editor exists could name ANOTHER document
+        // (a delegated run's editor, a background session's), and a tool whose
+        // result claims the wrong page is worse than one that does not know.
+        // Only an editor-less context falls back to the conversation target.
+        const page = editor
+            ? (binding?.getPageForEditor?.(editor) ?? undefined)
+            : (binding?.getBoundPage?.() ?? undefined)
+        const editPage = binding?.editPage?.bind(binding)
         return {
             scope,
             editor: editor ?? undefined,
+            page: page ?? undefined,
+            // Explicit target switching for a tool that must reach a page it was
+            // not built for. Never invoked by the host on a tool's behalf, so a
+            // read-only tool can never move the user's edit target.
+            editPage: editPage
+                ? async (next: SessionPageBindingPage) => {
+                    const resolved = await editPage({
+                        pageId: String(next.pageId),
+                        title: next.title,
+                        spaceId: next.spaceId,
+                    })
+                    return {
+                        pageId: String(resolved.pageId),
+                        title: resolved.title,
+                        spaceId: resolved.spaceId,
+                        editor: resolved.editor,
+                    }
+                }
+                : undefined,
             resolveService: (name: string) => this._serviceRegistryView.get(name as keyof Services),
         }
     }
@@ -2129,13 +2174,36 @@ export class PluginManager {
     }
 
     /**
+     * Point agent-tool resolution at a conversation's own page binding.
+     *
+     * Without one the global registry is used — right for a single-window host,
+     * wrong for a background chat tab whose document tools must never read the
+     * focused conversation's editor.
+     */
+    setAgentBindingResolver(resolver?: () => SessionPageBinding | null): void {
+        this._agentBindingResolver = resolver
+    }
+
+    private currentAgentBinding(): SessionPageBinding | null {
+        return this._agentBindingResolver?.() ?? getSessionPageBinding()
+    }
+
+    /**
      * Instantiate every plugin's agent tools for `editor`, grouped by plugin.
      * The single resolution path shared by {@link resolveTools} and the
      * capability provider, so a tool can never be advertised in one place and
      * missing in the other.
      */
     resolvePluginToolGroups(editor: Editor | null): ResolvedPluginToolGroup[] {
-        const scope: ResolvedAgentScope = editor ? 'page' : 'workspace'
+        // The caller's editor is the UI's CURRENT one, not necessarily the
+        // agent's edit target: a conversation keeps its target alive (visible
+        // editor, claimed pane, off-screen session) while no page route owns an
+        // editor. Ask the binding before downgrading every page-scoped tool to a
+        // workspace catalog — "no editor right now" is not "no document". A
+        // destroyed instance still names a page context: the call resolves the
+        // live editor, and the catalog must not collapse to workspace meanwhile.
+        const target = isLiveEditor(editor) ? editor : (pickTargetEditor(this.currentAgentBinding()) ?? editor)
+        const scope: ResolvedAgentScope = target ? 'page' : 'workspace'
         const groups: ResolvedPluginToolGroup[] = []
 
         for (const entry of this.resolveAgentContributions()) {
@@ -2182,12 +2250,19 @@ export class PluginManager {
                         return null
                     }
                 }
-                const primary = buildFor(editor)
+                const primary = buildFor(target)
                 if (!primary) return
 
-                const execute: AgentToolExecutor = (params, callId, execCtx) => {
+                const execute: AgentToolExecutor = async (params, callId, execCtx) => {
+                    // The call decides: the conversation's binding names the
+                    // editor it edits right now. When it names none — the
+                    // surface that published it is gone — a WRITE re-acquires
+                    // the conversation's own target instead of failing, so the
+                    // agent keeps a resident editor rather than "the instance
+                    // that existed at registration time".
                     const live = pickLiveEditor(execCtx)
-                    if (live && live !== editor) {
+                        ?? await acquireCallEditor(execCtx, { mutating: def.readOnly !== true })
+                    if (live && live !== target) {
                         let executor = built.get(live)
                         if (!executor) {
                             const rebuilt = buildFor(live)

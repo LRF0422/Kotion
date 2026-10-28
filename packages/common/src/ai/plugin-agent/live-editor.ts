@@ -9,10 +9,15 @@
  * `owner`, so the editor can be resolved at the moment of use instead of being
  * frozen at instantiation.
  *
- * Resolution here is deliberately SYNC and side-effect free: it never switches
- * an edit target on the tool's behalf. A tool that has no editor yet must not
- * silently retarget the conversation — that is `page-tools#resolveEditorForPage`'s
- * job for page tools, which run inside the writing lifecycle.
+ * Resolution here is deliberately split in two:
+ *  - {@link pickLiveEditor} / {@link pickTargetEditor} are SYNC and side-effect
+ *    free. They never switch an edit target on a tool's behalf.
+ *  - {@link acquireCallEditor} is the async last resort for a call that found
+ *    none, and only a WRITE may use it: re-acquiring the conversation's own
+ *    target keeps an editor resident for the agent, while a read that quietly
+ *    claimed one would move the user's edit target for a tool that only wanted
+ *    to look. Crossing documents on purpose stays
+ *    `page-tools#resolveEditorForPage`'s job, inside the writing lifecycle.
  */
 
 import type { SessionPageBinding } from '../session-page-binding'
@@ -52,4 +57,65 @@ export function pickLiveEditor(execCtx?: ToolCallEditorContext): any | undefined
     const owner = execCtx?.owner ?? null
     const candidate = owner ? binding.getEditorFor?.(owner) : binding.getEditor?.()
     return isLiveEditor(candidate) ? candidate : undefined
+}
+
+/**
+ * The editor the conversation's edit target publishes right now, if any.
+ *
+ * Used when building the catalog rather than answering a call: a chat session
+ * keeps its target alive (visible editor, claimed pane, off-screen session)
+ * even while no page route owns an editor, and those tools must not fall out of
+ * the catalog because the UI momentarily published none.
+ */
+export function pickTargetEditor(binding?: SessionPageBinding | null): any | undefined {
+    const candidate = binding?.getEditor?.()
+    return isLiveEditor(candidate) ? candidate : undefined
+}
+
+/**
+ * A live editor for a call whose executor found none.
+ *
+ * The executor was built around the editor published when the catalog was
+ * built; between two calls that instance can be destroyed (tab closed, route
+ * changed, document re-opened) while the conversation still HAS an edit
+ * target. Re-acquiring it here is what keeps an editor resident for the agent
+ * instead of "whatever instance happened to exist at registration time".
+ *
+ * A READ never claims a target: acquiring one can move the conversation's edit
+ * target on behalf of a tool that only wanted to look, so a read without a live
+ * editor reports that instead. A WRITE may, because the page is already the
+ * conversation's target and re-acquiring it cannot redirect the user.
+ */
+export async function acquireCallEditor(
+    execCtx: ToolCallEditorContext | undefined,
+    options: { mutating?: boolean } = {},
+): Promise<any | undefined> {
+    const binding = execCtx?.sessionBinding
+    if (!binding) return undefined
+    const owner = execCtx?.owner ?? null
+
+    // A delegated run asks for ITS OWN target first: the host can fork or
+    // acquire that document on demand, while a read is served by the live page.
+    if (owner && binding.getEditorForAsync) {
+        try {
+            const acquired = await binding.getEditorForAsync(owner, { mutating: options.mutating })
+            if (isLiveEditor(acquired)) return acquired
+        } catch {
+            // No private document for this owner — try the conversation target.
+        }
+    }
+
+    if (!options.mutating || !binding.editPage) return undefined
+    const page = binding.getPageFor?.(owner) ?? binding.getBoundPage?.()
+    if (!page?.pageId) return undefined
+    try {
+        const target = await binding.editPage({
+            pageId: String(page.pageId),
+            title: page.title,
+            spaceId: page.spaceId,
+        })
+        return isLiveEditor(target?.editor) ? target.editor : undefined
+    } catch {
+        return undefined
+    }
 }

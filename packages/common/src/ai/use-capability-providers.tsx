@@ -44,6 +44,7 @@ import {
 import { wrapToolsWithCallback } from "./utils/tool-wrapper"
 import { metadataNeedsEditor } from "./discovery/tool-metadata"
 import { getSessionPageBinding, type SessionPageBinding } from "./session-page-binding"
+import { isLiveEditor } from "./plugin-agent/live-editor"
 
 /**
  * Progressive skill discovery (`VITE_KN_SKILL_DISCOVERY=false` opts out).
@@ -198,6 +199,21 @@ export function useCapabilityProviders(
     editorRef.current = editor
 
     /**
+     * The conversation's LIVE editor for a rebind.
+     *
+     * The editor React publishes is the visible one; between two renders it can
+     * be gone (page route left, tab closed) while the conversation still has an
+     * edit target — a claimed pane or an off-screen session. Resolving through
+     * the binding keeps exactly ONE editor resident for the tools, built-ins
+     * and plugin tools alike, instead of a map half-bound to a dead instance.
+     */
+    const resolveBoundEditor = useCallback((nextEditor: Editor | null): Editor | null => {
+        if (isLiveEditor(nextEditor)) return nextEditor
+        const bound = sessionBindingRef.current?.()?.getEditor?.()
+        return isLiveEditor(bound) ? (bound as Editor) : null
+    }, [])
+
+    /**
      * Tool records built for delegated agents' editors, keyed by editor instance.
      * Building one runs every tool factory plus plugin resolution, and an agent's
      * editor is stable for the life of its target, so cache per instance.
@@ -250,13 +266,14 @@ export function useCapabilityProviders(
      * plugin tool can never mutate the previous page.
      */
     const rebindEditor = useCallback((nextEditor: Editor | null): ToolsRecord => {
-        toolProvider.updateEditor(nextEditor)
+        const target = resolveBoundEditor(nextEditor)
+        toolProvider.updateEditor(target)
         registerPluginSkills()
         // A rebind may pick up different plugin tools; per-editor builds cached
         // for delegated agents must not keep serving the previous instances.
         perEditorToolsRef.current = new WeakMap()
 
-        const groups = collectPluginToolsByPlugin(nextEditor)
+        const groups = collectPluginToolsByPlugin(target)
         for (const group of groups) {
             const count = Object.keys(group.tools).length
             if (count > 0) {
@@ -268,7 +285,7 @@ export function useCapabilityProviders(
         // no-longer-resolvable plugin stopped contributing.
         toolProvider.syncPluginTools(groups)
         return toolProvider.getAllTools()
-    }, [toolProvider, pluginManager, registerPluginSkills, collectPluginToolsByPlugin])
+    }, [toolProvider, pluginManager, registerPluginSkills, collectPluginToolsByPlugin, resolveBoundEditor])
 
     /**
      * Build (or reuse) the tool record bound to an arbitrary editor: the same
@@ -318,6 +335,15 @@ export function useCapabilityProviders(
     useLayoutEffect(() => {
         rebindEditor(editor)
     }, [rebindEditor, editor])
+    // Hand the plugin manager THIS conversation's binding: agent tool contexts
+    // resolve their edit target, its page and the switch operation through it,
+    // instead of the app-global registry (another conversation's, in a host with
+    // background tabs).
+    useEffect(() => {
+        if (!pluginManager?.setAgentBindingResolver) return
+        pluginManager.setAgentBindingResolver(() => sessionBindingRef.current())
+        return () => pluginManager.setAgentBindingResolver(undefined)
+    }, [pluginManager])
     // Register plugin skills + tools when plugins are loaded/changed, against
     // the editor that is active at that moment.
     useEffect(() => {

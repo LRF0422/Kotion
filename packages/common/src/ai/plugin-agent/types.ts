@@ -20,6 +20,7 @@
  */
 
 import type { ComponentType } from 'react'
+import type { SessionPageBindingPage } from '../session-page-binding'
 
 /** Where a run operates. `any` means "usable in every scope". */
 export type AgentScope = 'workspace' | 'space' | 'page' | 'any'
@@ -51,6 +52,28 @@ export interface AgentToolContext {
      */
     editor?: any
     /**
+     * The page {@link editor} is editing, when the host can name it.
+     *
+     * An editor-bound tool only carries its editor, so this is how it answers
+     * "which page am I writing to?" — for a tool result the model can act on
+     * ("page X has no flowchart block yet") instead of a bare "no editor".
+     * Absent when the host cannot tell the document apart from another session's.
+     */
+    page?: SessionPageBindingPage
+    /**
+     * Make `page` THIS agent's edit target and return its live editor.
+     *
+     * The conversation's target normally moves through the page tools; a
+     * document tool that must act on a page it was not built for ("draw this
+     * diagram on page Y") has no other way to reach it. Explicit by design: it
+     * is never called on your behalf, so a read-only tool can never steal the
+     * user's edit target.
+     *
+     * The returned editor is the one to write with — the instance this context
+     * was built around belongs to the previous page.
+     */
+    editPage?: (page: SessionPageBindingPage) => Promise<AgentToolPageTarget>
+    /**
      * Resolve a host service (e.g. `spacePageService`). Subject to the
      * per-plugin service whitelist (decision 3) — an unauthorized name returns
      * `undefined` rather than throwing, so tools can fail gracefully.
@@ -59,6 +82,11 @@ export interface AgentToolContext {
     /** Ask the host to navigate. Optional; absent in headless contexts. */
     navigate?: (target: AgentNavigationTarget) => void
     signal?: AbortSignal
+}
+
+/** A page made editable for an agent tool, with the editor that edits it. */
+export interface AgentToolPageTarget extends SessionPageBindingPage {
+    editor: any
 }
 
 /** Executor returned by {@link AgentToolDefinition.create}. */
