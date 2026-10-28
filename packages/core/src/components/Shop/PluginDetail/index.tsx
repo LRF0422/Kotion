@@ -11,8 +11,20 @@ import {
   useTranslation,
   useUploadFile,
 } from "@kn/common";
-import { AlertCircleIcon, ArrowLeft, BoxIcon } from "@kn/icon";
-import { Button, Skeleton, toast } from "@kn/ui";
+import { AlertCircleIcon, ArrowLeft, BoxIcon, Loader2, Trash2 } from "@kn/icon";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  Button,
+  Skeleton,
+  toast,
+} from "@kn/ui";
 import React, { useContext, useMemo, useState } from "react";
 import { PluginDetailHero } from "./PluginDetailHero";
 import { PluginDocumentationCard } from "./PluginDocumentationCard";
@@ -24,6 +36,7 @@ import {
   toRemotePluginDescriptor,
   getPluginInstallState,
   normalizeDocumentationSections,
+  pluginRuntimeIdentity,
 } from "../plugin-model";
 
 const PluginDetailSkeleton = () => (
@@ -138,6 +151,8 @@ export const PluginDetail: React.FC = () => {
   const { loadedPluginNames, incompatiblePlugins } = usePluginState();
   const { status, plugin, retry, refresh } = usePluginDetail(pluginId);
   const [installing, setInstalling] = useState(false);
+  const [uninstallOpen, setUninstallOpen] = useState(false);
+  const [uninstalling, setUninstalling] = useState(false);
 
   const installState = useMemo(
     () =>
@@ -196,6 +211,42 @@ export const PluginDetail: React.FC = () => {
     }
   };
 
+  const handleUninstall = async () => {
+    if (!plugin || !installState.installed || uninstalling) return;
+
+    // Prefer the installed record's id: the marketplace's current version can be
+    // newer than the one actually installed.
+    const versionId =
+      plugin.installeddVersions?.[0]?.id ??
+      plugin.currentVersionId ??
+      plugin.currentVersion?.id;
+    if (versionId === undefined || versionId === null) {
+      toast.error(t("pluginHub.uninstall.failed"));
+      return;
+    }
+
+    setUninstalling(true);
+    try {
+      // silent: the failure toast below already carries the backend's reason.
+      await useApi(
+        APIS.UNINSTALL_PLUGIN,
+        { versionId },
+        undefined,
+        undefined,
+        true,
+      );
+      pluginManager?.uninstallPlugin(pluginRuntimeIdentity(plugin));
+      setUninstallOpen(false);
+      // The shop shell refreshes its installed list and this page from the event.
+      event.emit(PLUGIN_CHANGED, { source: "uninstall" });
+      toast.success(t("pluginHub.uninstall.success"));
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, t("pluginHub.uninstall.failed")));
+    } finally {
+      setUninstalling(false);
+    }
+  };
+
   if (status === "loading") {
     return <PluginDetailSkeleton />;
   }
@@ -246,6 +297,8 @@ export const PluginDetail: React.FC = () => {
             runtimePayload.versionId !== null
           }
           onInstall={() => void handleInstall()}
+          onUninstall={() => setUninstallOpen(true)}
+          uninstalling={uninstalling}
         />
 
         <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_280px] xl:gap-10">
@@ -267,6 +320,58 @@ export const PluginDetail: React.FC = () => {
           </div>
         </div>
       </div>
+
+      <AlertDialog
+        open={uninstallOpen}
+        onOpenChange={(open) => {
+          if (!open && !uninstalling) setUninstallOpen(false);
+        }}
+      >
+        <AlertDialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-md">
+          <AlertDialogHeader>
+            <div className="mb-2 flex items-start gap-3">
+              <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+                <AlertCircleIcon className="size-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <AlertDialogTitle>
+                  {t("pluginHub.uninstall.title")}
+                </AlertDialogTitle>
+                <AlertDialogDescription className="mt-1">
+                  {t("pluginHub.uninstall.warning")}
+                </AlertDialogDescription>
+              </div>
+            </div>
+          </AlertDialogHeader>
+          <div className="rounded-xl border border-border/70 bg-muted/30 p-4 text-sm leading-relaxed">
+            {t("pluginHub.uninstall.description", {
+              name: plugin.name ?? t("pluginHub.detail.unavailable"),
+            })}
+          </div>
+          <AlertDialogFooter className="gap-2 sm:gap-2">
+            <AlertDialogCancel disabled={uninstalling} className="h-11 sm:h-10">
+              {t("pluginHub.uninstall.cancel")}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="h-11 bg-destructive text-destructive-foreground hover:bg-destructive/90 sm:h-10"
+              disabled={uninstalling}
+              onClick={(event) => {
+                event.preventDefault();
+                void handleUninstall();
+              }}
+            >
+              {uninstalling ? (
+                <Loader2 className="mr-2 size-4 animate-spin" />
+              ) : (
+                <Trash2 className="mr-2 size-4" />
+              )}
+              {uninstalling
+                ? t("pluginHub.uninstall.pending")
+                : t("pluginHub.uninstall.confirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

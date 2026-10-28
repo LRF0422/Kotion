@@ -6,6 +6,7 @@ import {
   Loader2,
   PowerIcon,
   Star,
+  Trash2,
 } from "@kn/icon";
 import { Badge, Button, cn } from "@kn/ui";
 import React, { useMemo } from "react";
@@ -24,6 +25,8 @@ interface PluginDetailHeroProps {
   installing: boolean;
   packageAvailable: boolean;
   onInstall: () => void;
+  onUninstall: () => void;
+  uninstalling: boolean;
 }
 
 export const PluginDetailHero: React.FC<PluginDetailHeroProps> = ({
@@ -33,6 +36,8 @@ export const PluginDetailHero: React.FC<PluginDetailHeroProps> = ({
   installing,
   packageAvailable,
   onInstall,
+  onUninstall,
+  uninstalling,
 }) => {
   const { t, i18n } = useTranslation();
   const numberFormatter = useMemo(
@@ -112,7 +117,7 @@ export const PluginDetailHero: React.FC<PluginDetailHeroProps> = ({
                   )}
                 </div>
               ) : (
-                <div className="sm:text-right">
+                <div className="flex flex-col items-start gap-2 sm:items-end">
                   <div
                     className={cn(
                       "inline-flex items-center gap-1.5 text-sm font-medium",
@@ -134,7 +139,7 @@ export const PluginDetailHero: React.FC<PluginDetailHeroProps> = ({
                     {t(`pluginHub.detail.${statusKey}`)}
                   </div>
                   {statusKey !== "active" && (
-                    <p className="mt-1 text-left text-xs leading-5 text-muted-foreground sm:text-right">
+                    <p className="text-left text-xs leading-5 text-muted-foreground sm:text-right">
                       {statusKey === "incompatible"
                         ? incompatibility?.apiVersion &&
                           incompatibility.hostApiVersion
@@ -150,6 +155,21 @@ export const PluginDetailHero: React.FC<PluginDetailHeroProps> = ({
                           )}
                     </p>
                   )}
+                  <Button
+                    variant="ghost"
+                    className="-mr-2 h-7 gap-1.5 px-2 text-xs font-normal text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                    disabled={uninstalling}
+                    onClick={onUninstall}
+                  >
+                    {uninstalling ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="size-3.5" />
+                    )}
+                    {uninstalling
+                      ? t("pluginHub.uninstall.pending")
+                      : t("pluginHub.sidebar.uninstall")}
+                  </Button>
                 </div>
               )}
             </div>
