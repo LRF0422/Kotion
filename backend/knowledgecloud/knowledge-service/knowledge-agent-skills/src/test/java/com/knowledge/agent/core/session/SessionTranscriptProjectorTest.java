@@ -2,6 +2,8 @@ package com.knowledge.agent.core.session;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.knowledge.agent.api.dto.ChatMessage;
 import com.knowledge.agent.core.checkpoint.Checkpoint;
 import com.knowledge.agent.core.checkpoint.CheckpointStore;
@@ -500,6 +502,57 @@ class SessionTranscriptProjectorTest {
         assertEquals(4, ui.size());
         assertEquals("user", ui.get(2).path("sender").asText());
         assertEquals("also add a table", ui.get(2).path("content").asText());
+    }
+
+    /**
+     * History falling out of the model window used to be deleted without a trace,
+     * so a long conversation looked to the model like it had started mid-task. The
+     * fold replaces it with one engine-side digest that survives the next fold.
+     */
+    @Test
+    void overflowingModelLogIsFoldedIntoOneDigestInsteadOfDeleted() throws Exception {
+        ArrayNode seeded = mapper.createArrayNode();
+        ObjectNode oldFold = mapper.createObjectNode();
+        oldFold.put("role", "system");
+        oldFold.put("name", "__folded_history__");
+        oldFold.put("content", "[较早对话已折叠] 之前的折叠\n用户早前的诉求（较早在前，已截断）：\n- 上一次的诉求");
+        seeded.add(oldFold);
+        for (int i = 0; i < 404; i++) {
+            ObjectNode node = mapper.createObjectNode();
+            node.put("role", i % 2 == 0 ? "user" : "assistant");
+            node.put("content", "msg-" + i);
+            seeded.add(node);
+        }
+
+        AgentChatSessionEntity existing = new AgentChatSessionEntity();
+        existing.setSessionId("conv-1");
+        existing.setTenantId(1L);
+        existing.setUserId(2L);
+        existing.setTitle("hi");
+        existing.setModelMessagesJson(mapper.writeValueAsString(seeded));
+        when(store.get(1L, 2L, "conv-1")).thenReturn(existing);
+
+        projector.prepareHistory(run("run-2"), Collections.singletonList(user("新问题")));
+
+        AgentChatSessionEntity saved = captureSaved();
+        JsonNode model = mapper.readTree(saved.getModelMessagesJson());
+        assertEquals(400, model.size(), "the window still has to hold");
+
+        JsonNode head = model.get(0).path("m");
+        assertEquals("system", head.path("role").asText());
+        assertEquals("__folded_history__", head.path("name").asText());
+        String digest = head.path("content").asText();
+        assertTrue(digest.startsWith("[较早对话已折叠]"), digest);
+        assertTrue(digest.contains("上一次的诉求"),
+                "a re-fold must keep what the previous fold rescued: " + digest);
+        assertTrue(digest.contains("- msg-0"),
+                "the dropped user turns must survive as asks: " + digest);
+
+        JsonNode ui = mapper.readTree(saved.getMessagesJson());
+        for (JsonNode node : ui) {
+            assertFalse("system".equals(node.path("sender").asText()),
+                    "the digest is engine bookkeeping, never a visible turn");
+        }
     }
 
     private AgentChatSessionEntity captureSaved() {

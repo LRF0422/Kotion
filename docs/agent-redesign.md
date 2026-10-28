@@ -155,9 +155,34 @@ loop(run):
 
 ## 7. 上下文管理（ContextManager）
 
-- 预算：maxContextTokens（按模型配置），组装后估算 token（字符/4 启发式 + 工具 schema 开销）。
-- 三级压缩：L1 淘汰超龄工具结果（默认 3 轮，替换为占位说明）→ L2 摘要中段轮次（独立模型调用）→ L3 硬截断。
-- 稳定前缀：system + tools schema + 记忆注入保持不变，只压缩中段（命中 provider 缓存）。
+唯一入口 `ContextManager.assemble(messages, model, scope, toolsJson)`，每个 step 推理前调用一次。
+压缩只在内存副本上进行，结果从不写回 checkpoint，也不写回 `model_messages_json`（该列同时是 UI
+历史来源，把它压掉会让用户可见的对话凭空消失）。
+
+- **预算**：`messages 预算 = max-context-tokens × compaction-threshold − toolsJson.length()/4`。
+  工具 schema 与消息共用同一个窗口，不能只算消息。预算不设人为下限。
+- **L1 确定性工具结果剪裁**（每次 assemble 无条件执行）：`role=tool` 且超过
+  `tool-result-max-chars` 的消息改写为「头 60% + 中间省略标记 + 尾 20%」。规则只依赖消息自身，
+  因而幂等——同一条消息在每一步渲染出的字节一致。旧版按「年龄/步数」淘汰会每步改写更早的消息、
+  击穿 provider 前缀缓存，已废弃。写入侧（`ToolResultLimiter`）把截断标记长度算进上限，保证输出
+  不超过同一个字符上限，避免被 L1 二次剪裁而丢掉「结果不完整」信号。例外：技能下发的工具发现
+  载荷（`ClientToolActivation.carriesSpecs`）不可分割，跳过剪裁。
+- **L2 首端锚定追加式压缩**：把「最老的一段可折叠 span」折叠成一条 system 摘要（`[较早对话摘要（L2 压缩）]`）。
+  约束：index 0 的 system prompt 永不触碰；尾部 `keep-recent-messages` 条逐字保留；span 起止点不能落在
+  已有摘要、孤儿 tool result、discovery 载荷上；span 尾部切进工具组时整组吞下或整组退回。
+  因为日志 append-only 且每个 span 锚定在前一个的结尾，一条摘要一旦写出永不改变，前缀缓存可复用。
+  摘要请求 = system 前缀原样 + 已有摘要作为背景（明确要求不要重复）+ 仅当前 span 作为主体。
+- **L3 兜底阶梯**（L2 后仍超预算）：① 合并摘要链（唯一能再缩小而不丢尾部的一步，也是唯一需要
+  改写已缓存区域的步骤，因此只在这里做）→ ② `keep-recent-messages` 逐次减半重压 → ③ 单条消息
+  裁到 `max(4000, 预算×4/3)` 字符再压 → 仍超只记日志。system 前缀永不被丢弃。
+- **摘要缓存两级**：进程内 LRU（256 条）+ Redis（`agent:compaction:summary:{scope}:{sha256(model+文本)}`，
+  TTL 30 天，fail-open）。key 取内容指纹而非位置，换 JVM/换节点后重新推导出同一 span 仍能命中。
+- **可观测**：每次真正发生压缩时输出一行 `Context [scope]: before -> after tokens (budget), folds=, rolledUp=, prunedResults=, L3=`。
+- **稳定前缀**：system 只含固定 persona/plan/子 agent 规则；记忆、画像、skill 片段、deferred 工具目录、
+  会话摘要全部后移到 append-only 的注入块，避免每步改动前缀。
+- **会话边界另一套机制**：run 完成时 `ThreadSummarizer` 异步把 checkpoint 末尾 `thread-summary-tail-messages`
+  条滚动合并进 `agent_thread.summary`，下次同会话 create 时作为「近期进展」注入；跨 run 历史仍由 session
+  log 全量重建，摘要只提供进度提示。
 
 ## 8. API 契约（全新，旧端点删除）
 
@@ -354,13 +379,16 @@ agent/
    带工具的自定义能力由 skills 系统承接；**前端新增轻量自定义 Agent**：用户可以起名并写自定义指引（不含工具），
    定义与当前选择存放在 plugin-config（key `ai-custom-agents`，服务端优先 + localStorage 回退），
    run 创建时通过 `systemPrompt` 追加在编辑器规则之后（`packages/common/src/ai/agent/custom-agents.ts`）。
-8. 上下文压缩三层全部启用（ContextManager）：L1 淘汰旧工具结果、L2 用 `context.compaction-model`
-   （缺省跟随 run 模型）对中段做有界摘要、L3 对齐 tool 分组后截断。
+8. 上下文压缩三层全部启用（ContextManager），细节以 §7 为准：L1 按大小确定性头尾剪裁（不再按年龄）、
+   L2 用 `context.compaction-model`（缺省跟随 run 模型）对最老的 span 做追加式摘要、L3 是兜底阶梯
+   （合并摘要链 → 缩小逐字窗口 → 单条裁剪）。
 
 ### 14.4 验证
 
-- 后端：`mvn -pl knowledge-service/knowledge-agent-skills -am test` → BUILD SUCCESS，19/19 测试通过
-  （含 EditorAgentControllerMappingTest 回归守卫：URL 契约 + spring.factories 注册）。
+- 后端：`mvn -o -B -pl knowledge-service/knowledge-agent-skills -am clean test` → BUILD SUCCESS
+  （含 `EditorAgentControllerMappingTest` 回归守卫：URL 契约 + spring.factories 注册；
+  上下文压缩行为由 `ContextManager*Test` 与 `ThreadSummarizerTest` 覆盖）。
+  具体用例数随迭代变化，以命令输出为准。
 - 前端：common/ui/plugin-ai tsc 通过；core 中旧栈消费方（AiInlineMenu/AIAssistantPage 等）由 M5 扫尾清理。
 
 ### 14.5 修复记录：组件扫描与包结构（最终方案）

@@ -73,6 +73,18 @@ public class SessionTranscriptProjector {
     /** Bounded compare-and-swap retries before giving up on a transcript write. */
     private static final int MAX_CAS_ATTEMPTS = 5;
 
+    /**
+     * Marker name of the system message that stands in for history that fell out
+     * of the model window. A {@code system} message is skipped by the UI
+     * projection, so a fold never shows up as a user-visible turn.
+     */
+    private static final String FOLDED_HISTORY_NAME = "__folded_history__";
+    private static final String FOLDED_HISTORY_PREFIX = "[较早对话已折叠]";
+    /** Budget for the rescued user asks carried inside one fold message. */
+    private static final int FOLD_DIGEST_MAX_CHARS = 2000;
+    /** Per-ask truncation inside the digest. */
+    private static final int FOLD_INTENT_MAX_CHARS = 120;
+
     private final ChatSessionStore store;
     private final CheckpointStore checkpointStore;
     private final ObjectMapper objectMapper;
@@ -163,7 +175,7 @@ public class SessionTranscriptProjector {
                             state.add(forLog(newUser));
                         }
                     }
-                    trim(state);
+                    trim(state, run.getConversationId());
                     history = state.messages;
                     if (persist(run, existing, state, titleOf(existing, input), run.getLastSeq(), null)) {
                         return history;
@@ -231,7 +243,7 @@ public class SessionTranscriptProjector {
                                 state.messages.size());
                         state.insertAll(insertAt, produced);
                     }
-                    trim(state);
+                    trim(state, run.getConversationId());
                     // Reduce this run's delegated children from the durable log so
                     // the reloaded panel comes from the DB, not a client cache. A
                     // projection failure must never cost us the transcript itself.
@@ -420,13 +432,114 @@ public class SessionTranscriptProjector {
         return parts.isEmpty() ? null : parts;
     }
 
-    private void trim(State state) {
-        while (state.messages.size() > MAX_MODEL_MESSAGES) {
-            state.removeFirst();
+    private void trim(State state, String conversationId) {
+        if (state.messages.size() > MAX_MODEL_MESSAGES) {
+            foldOverflow(state, conversationId);
         }
         while (!state.messages.isEmpty() && "tool".equals(role(state.messages.get(0)))) {
             state.removeFirst();
         }
+    }
+
+    /**
+     * Replace the messages that fall out of the window with ONE system message
+     * that records them, instead of deleting them silently.
+     *
+     * <p>The log used to be trimmed by dropping its head: a long conversation lost
+     * its early turns with no trace in the model context and no trace in the
+     * transcript, so the model saw a conversation that appeared to start
+     * mid-task. There is no summarizer on this path — it runs inside the
+     * prepare-history CAS loop, before the run exists — so the fold is
+     * deterministic: the count, plus the user's earlier asks, newest last.
+     */
+    private void foldOverflow(State state, String conversationId) {
+        int drop = state.messages.size() - MAX_MODEL_MESSAGES + 1;
+        // Never leave the kept head on a tool result whose call was folded away.
+        while (drop < state.messages.size() && "tool".equals(role(state.messages.get(drop)))) {
+            drop++;
+        }
+        List<ChatMessage> folded = new ArrayList<>(state.messages.subList(0, drop));
+        for (int i = 0; i < drop; i++) {
+            state.removeFirst();
+        }
+        state.insertAt(0, foldedHistory(folded));
+        log.warn("Session {} model log over {} messages: folded {} into a digest",
+                conversationId, MAX_MODEL_MESSAGES, drop);
+    }
+
+    /** The digest that takes the folded messages' place at the head of the log. */
+    private ChatMessage foldedHistory(List<ChatMessage> dropped) {
+        List<String> intents = new ArrayList<>();
+        int userTurns = 0;
+        for (ChatMessage message : dropped) {
+            if (FOLDED_HISTORY_NAME.equals(message.getName())) {
+                // Carry over the asks an earlier fold already rescued, or the
+                // second fold would erase the first one's digest.
+                intents.addAll(previousIntents(message.getContent()));
+                continue;
+            }
+            if (!"user".equals(role(message)) || ContextManager.isEngineAuthoredUserTurn(message)) {
+                continue;
+            }
+            if (message.getContent() == null || message.getContent().trim().isEmpty()) {
+                continue;
+            }
+            userTurns++;
+            intents.add(intentLine(message.getContent()));
+        }
+        StringBuilder content = new StringBuilder(FOLDED_HISTORY_PREFIX)
+                .append(' ').append(dropped.size()).append(" 条较早消息（含 ")
+                .append(userTurns).append(" 个用户轮次）已折叠，仅保留诉求要点。");
+        appendIntents(content, intents);
+        content.append("\n（被折叠的原文不可再引用；需要时请重新读取页面或文件，")
+                .append("任务进展以每轮注入的会话记忆为准。）");
+        return ChatMessage.builder()
+                .role("system")
+                .name(FOLDED_HISTORY_NAME)
+                .content(content.toString())
+                .build();
+    }
+
+    /** Append the newest asks that fit the digest budget. */
+    private void appendIntents(StringBuilder content, List<String> intents) {
+        List<String> kept = new ArrayList<>();
+        int used = 0;
+        for (int i = intents.size() - 1; i >= 0; i--) {
+            String line = intents.get(i);
+            if (used + line.length() > FOLD_DIGEST_MAX_CHARS) {
+                break;
+            }
+            kept.add(0, line);
+            used += line.length();
+        }
+        if (kept.isEmpty()) {
+            return;
+        }
+        content.append("\n用户早前的诉求（较早在前，已截断）：");
+        for (String line : kept) {
+            content.append("\n- ").append(line);
+        }
+    }
+
+    private static String intentLine(String text) {
+        String flat = text.replaceAll("\\s+", " ").trim();
+        return flat.length() > FOLD_INTENT_MAX_CHARS
+                ? flat.substring(0, FOLD_INTENT_MAX_CHARS) + "…" : flat;
+    }
+
+    /** {@code - } lines of an earlier fold, so a re-fold keeps them. */
+    private static List<String> previousIntents(String content) {
+        List<String> lines = new ArrayList<>();
+        if (content == null) {
+            return lines;
+        }
+        for (String line : content.split("\n")) {
+            String trimmed = line.trim();
+            if (trimmed.startsWith("- ")) {
+                lines.add(trimmed.substring(2));
+            }
+        }
+        return lines;
     }
 
     // ==================== UI projection (pure fold) ====================

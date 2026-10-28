@@ -34,7 +34,6 @@ import java.util.Map;
  *     keep-recent-messages: 16
  *     tool-result-max-chars: 12000
  *     client-tool-payload-max-chars: 48000
- *     evict-tool-results-after-steps: 10
  *   checkpoint:
  *     enabled: true
  *   event:
@@ -172,11 +171,14 @@ public class AgentCoreProperties {
          */
         private int clientToolPayloadMaxChars = 48000;
         /**
-         * Tool results older than this many steps are evicted first (L1).
-         * Must stay comfortably above the number of read steps a single task
-         * needs, or the model loses earlier reads and re-reads in a loop.
+         * How many trailing messages of a finished run feed the conversation
+         * (thread) summary. The summary is the only thing carried across runs, so
+         * a window too small — or one that ends mid-tool-call — describes the
+         * middle of the work instead of its outcome.
          */
-        private int evictToolResultsAfterSteps = 10;
+        private int threadSummaryTailMessages = 24;
+        /** Max characters of one message inside the thread summary prompt. */
+        private int threadSummaryMessageMaxChars = 1200;
         /** Model used for L2 summarization; empty = follow the run model. */
         private String compactionModel = "";
         /** Max output tokens for one L2 summarization call. */

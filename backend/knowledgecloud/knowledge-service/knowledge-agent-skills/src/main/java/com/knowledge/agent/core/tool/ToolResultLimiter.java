@@ -29,6 +29,10 @@ public final class ToolResultLimiter {
      * @return the original object when it fits {@code maxChars} (keeps it
      *         structured for the client), otherwise a truncated JSON-text
      *         string; {@code null} when the input is null.
+     *
+     *         <p>The emitted string never exceeds {@code maxChars} CHARACTERS, so
+     *         the reader-side pruner — which compares characters — never cuts a
+     *         result this method already cut.
      */
     public static Object bound(Object result, ObjectMapper mapper, int maxChars) {
         if (result == null) {
@@ -39,7 +43,7 @@ public final class ToolResultLimiter {
         }
         ByteArrayOutputStream buffer = new ByteArrayOutputStream(Math.min(maxChars, 8192));
         try {
-            mapper.writeValue(new CappedOutputStream(buffer, maxChars), result);
+            mapper.writeValue(new CappedOutputStream(buffer, contentBudget(maxChars)), result);
             return result;
         } catch (Exception e) {
             if (e instanceof LimitExceeded || e.getCause() instanceof LimitExceeded) {
@@ -47,6 +51,36 @@ public final class ToolResultLimiter {
             }
             return UNREPRESENTABLE;
         }
+    }
+
+    /**
+     * Char-budgeted truncation of an already-rendered string.
+     *
+     * <p>{@code maxChars} counts the marker, so a result truncated here is still
+     * <= {@code maxChars} and the L1 pruner leaves it alone. {@link #bound} used
+     * to spend its whole budget on payload bytes and then append the marker on top,
+     * which put an ASCII result 14 chars ABOVE the cap: L1 cut it a second time
+     * and, because its marker is fixed text, silently deleted the
+     * "truncated" signal the model relies on to know the result is incomplete.
+     */
+    public static String truncateText(String text, int maxChars) {
+        if (text == null || maxChars <= 0 || text.length() <= maxChars) {
+            return text;
+        }
+        int keep = Math.min(contentBudget(maxChars), text.length());
+        return text.substring(0, keep) + TRUNCATED_SUFFIX;
+    }
+
+    /**
+     * Payload budget, leaving room for {@link #TRUNCATED_SUFFIX} inside the cap.
+     *
+     * <p>The cap is expressed in characters because that is the unit the token
+     * estimate and the L1 pruner work in. ASCII is the common case and the only
+     * one where bytes and chars coincide, so reserving the marker's length is
+     * enough; multi-byte text comes out well below the char cap either way.
+     */
+    private static int contentBudget(int maxChars) {
+        return Math.max(1, maxChars - TRUNCATED_SUFFIX.length());
     }
 
     /**

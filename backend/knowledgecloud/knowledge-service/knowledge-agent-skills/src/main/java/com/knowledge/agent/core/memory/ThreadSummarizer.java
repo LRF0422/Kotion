@@ -3,6 +3,7 @@ package com.knowledge.agent.core.memory;
 import com.knowledge.agent.api.dto.ChatMessage;
 import com.knowledge.agent.core.checkpoint.Checkpoint;
 import com.knowledge.agent.core.checkpoint.CheckpointStore;
+import com.knowledge.agent.core.config.AgentCoreProperties;
 import com.knowledge.agent.core.context.ContextManager;
 import com.knowledge.agent.core.entity.AgentThreadEntity;
 import com.knowledge.agent.core.llm.LlmGateway;
@@ -47,6 +48,7 @@ public class ThreadSummarizer {
     private final LlmGateway llmGateway;
     /** Optional (tests); when present, summary token usage is billed to the run. */
     private final RunStore runStore;
+    private final AgentCoreProperties properties;
     private final ExecutorService executor = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "agentcore-thread-summary");
         t.setDaemon(true);
@@ -55,16 +57,18 @@ public class ThreadSummarizer {
 
     public ThreadSummarizer(ThreadStore threadStore, CheckpointStore checkpointStore,
                             LlmGateway llmGateway) {
-        this(threadStore, checkpointStore, llmGateway, null);
+        this(threadStore, checkpointStore, llmGateway, null, new AgentCoreProperties());
     }
 
     @Autowired
     public ThreadSummarizer(ThreadStore threadStore, CheckpointStore checkpointStore,
-                            LlmGateway llmGateway, RunStore runStore) {
+                            LlmGateway llmGateway, RunStore runStore,
+                            AgentCoreProperties properties) {
         this.threadStore = threadStore;
         this.checkpointStore = checkpointStore;
         this.llmGateway = llmGateway;
         this.runStore = runStore;
+        this.properties = properties;
     }
 
     /** Fire-and-forget rolling summary update for a completed run. */
@@ -136,9 +140,7 @@ public class ThreadSummarizer {
     private LlmResult generateSummary(Checkpoint checkpoint, String model, String previousSummary) {
         List<ChatMessage> messages = checkpoint.getMessages() != null
                 ? checkpoint.getMessages() : Collections.emptyList();
-        // Take the tail (last 12 messages) as the summarization source.
-        int from = Math.max(1, messages.size() - 12);
-        List<ChatMessage> tail = new ArrayList<>(messages.subList(from, messages.size()));
+        List<ChatMessage> tail = tailOf(messages);
 
         boolean rolling = previousSummary != null && !previousSummary.trim().isEmpty();
         List<ChatMessage> prompt = new ArrayList<>();
@@ -160,18 +162,42 @@ public class ThreadSummarizer {
         return result;
     }
 
+    /**
+     * The window this summary is built from: the trailing messages, moved forward
+     * past any tool result whose call falls outside it.
+     *
+     * <p>The window used to be a hard-coded 12 messages, which for a run with a
+     * long tool loop describes the middle of the work instead of its outcome. It
+     * also could start on a tool result whose assistant call sat outside it, which
+     * reads to the summarizer as an answer to a question nobody asked.
+     */
+    private List<ChatMessage> tailOf(List<ChatMessage> messages) {
+        int size = messages.size();
+        int tailMessages = Math.max(1, properties.getContext().getThreadSummaryTailMessages());
+        int from = Math.max(1, size - tailMessages);
+        while (from < size - 1 && "tool".equalsIgnoreCase(messages.get(from).getRole())) {
+            from++;
+        }
+        return new ArrayList<>(messages.subList(from, size));
+    }
+
+    /**
+     * The tail as the summarizer reads it. Shares
+     * {@link ContextManager#renderForSummary} with L2: the same head+tail clip and
+     * the same tool-call names, so an action is described the same way by both
+     * summary tiers.
+     */
     private String renderConversation(List<ChatMessage> messages) {
+        int maxChars = Math.max(200, properties.getContext().getThreadSummaryMessageMaxChars());
         StringBuilder builder = new StringBuilder();
         for (ChatMessage message : messages) {
-            if (message == null || ContextManager.isInjectedContext(message)) {
+            // Injected context blocks are per-turn scaffolding, and an engine-authored
+            // user turn (the truncation nudge) is not something the user asked for.
+            if (message == null || ContextManager.isInjectedContext(message)
+                    || ContextManager.isEngineAuthoredUserTurn(message)) {
                 continue;
             }
-            builder.append("[").append(message.getRole()).append("] ");
-            if (message.getContent() != null) {
-                String content = message.getContent();
-                builder.append(content.length() > 500 ? content.substring(0, 500) : content);
-            }
-            builder.append("\n");
+            builder.append(ContextManager.renderForSummary(message, maxChars)).append('\n');
         }
         return builder.toString();
     }

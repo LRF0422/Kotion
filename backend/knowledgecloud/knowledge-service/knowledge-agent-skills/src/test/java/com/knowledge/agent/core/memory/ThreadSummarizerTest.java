@@ -58,6 +58,45 @@ class ThreadSummarizerTest {
         assertTrue(user.contains("整理周报"));
     }
 
+    /**
+     * The window was a hard-coded 12 messages, so a run with a long tool loop was
+     * described by its middle instead of its outcome — and the window could start
+     * on a tool result whose assistant call sat outside it, reading as an answer
+     * to a question nobody asked.
+     */
+    @Test
+    void tailWindowIsWiderThanTwelveAndSkipsOrphanToolResults() throws InterruptedException {
+        Fixture fixture = new Fixture();
+        // 34 messages, so the default 24-message window starts at index 10.
+        // Eight fillers put a tool result exactly on that boundary: its assistant
+        // call is outside the window, so it must be dropped.
+        for (int i = 0; i < 8; i++) {
+            fixture.checkpoint.getMessages().add(ChatMessage.builder()
+                    .role("user").content("filler-" + i).build());
+        }
+        fixture.checkpoint.getMessages().add(ChatMessage.builder()
+                .role("tool").toolCallId("c9").name("readPage")
+                .content("orphaned result").build());
+        for (int i = 8; i < 30; i++) {
+            fixture.checkpoint.getMessages().add(ChatMessage.builder()
+                    .role("user").content("filler-" + i).build());
+        }
+        fixture.checkpoint.getMessages().add(ChatMessage.builder()
+                .role("assistant").content("收尾结论：模板已发布").build());
+        fixture.gatewayAnswer("已发布");
+
+        fixture.summarizer.summarizeAsync("run-1", "conv-1", "deepseek-chat");
+
+        await(() -> verify(fixture.threadStore)
+                .updateSummaryIfUnchanged(eq("conv-1"), isNull(), eq("已发布")));
+        String user = fixture.capturedRequest().getMessages().get(1).getContent();
+        // 32 messages, default window 24: the old 12-message window would have
+        // started at filler-22 and missed both of these.
+        assertTrue(user.contains("filler-8"), "the window must reach further back than 12 messages");
+        assertTrue(user.contains("收尾结论：模板已发布"), "the outcome must be inside the window");
+        assertFalse(user.contains("orphaned result"), "no tool result without its call");
+    }
+
     /** Poll the async single-thread executor until the assertion passes. */
     private static void await(ThrowingRunnable assertion) throws InterruptedException {
         long deadline = System.currentTimeMillis() + 5000;
@@ -85,9 +124,9 @@ class ThreadSummarizerTest {
         private final LlmGateway gateway = mock(LlmGateway.class);
         private final ThreadSummarizer summarizer =
                 new ThreadSummarizer(threadStore, checkpointStore, gateway);
+        private final Checkpoint checkpoint = new Checkpoint();
 
         private Fixture() {
-            Checkpoint checkpoint = new Checkpoint();
             checkpoint.getMessages().add(ChatMessage.builder()
                     .role("user").content("整理周报").build());
             checkpoint.getMessages().add(ChatMessage.builder()

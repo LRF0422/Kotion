@@ -64,12 +64,15 @@ agent:
   context:
     max-context-tokens: 60000
     compaction-threshold: 0.75
-    # Keep more of the window verbatim: the editor agent reads documents in
-    # several chunks, and evicting read results after only 3 steps made the
-    # model lose what it had just read and re-read it in a loop.
+    # Kept verbatim and never folded. The editor agent reads documents in several
+    # chunks, so a tail that is too short makes the model re-read what it just
+    # read. L1 caps each tool result by its own size, not by its age.
     keep-recent-messages: 16
     tool-result-max-chars: 12000
-    evict-tool-results-after-steps: 10
+    # Trailing messages of a finished run that feed the cross-run thread summary
+    # — the only context carried into the next run of the same conversation.
+    thread-summary-tail-messages: 24
+    thread-summary-message-max-chars: 1200
     # Optional cheaper model for L2 summarization; empty = follow the run model.
     compaction-model:
     summary-max-tokens: 1024

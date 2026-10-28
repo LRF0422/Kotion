@@ -660,12 +660,17 @@ public class AgentLoop implements Runnable {
                 saveCheckpoint(); // safe boundary BEFORE inference
                 emit(RunEvents.STEP_STARTED, RunEvents.stepStarted(checkpoint.getNextStep()));
 
+                // Build the tool block once and reuse it: it is part of the prompt
+                // budget compaction must respect, not just of the request.
+                String toolsJson = checkpoint.isNoTools()
+                        ? null
+                        : toolGateway.buildToolsJson(new ArrayList<>(clientToolSpecs.values()));
                 List<ChatMessage> messages = contextManager.assemble(checkpoint.getMessages(),
-                        checkpoint.getModel(), run.getConversationId());
+                        checkpoint.getModel(), run.getConversationId(), toolsJson);
                 int toolCount = clientToolSpecs.size() + toolGateway.backendSpecs().size();
-                long estimatedTokens = contextManager.estimateTokens(messages, toolCount);
+                long estimatedTokens = contextManager.estimateTokens(messages, toolsJson);
                 if (estimatedTokens > properties.getContext().getMaxContextTokens() * 1.5) {
-                    log.warn("Run {} context over budget: {} tokens (budget {}) — M3 compacts",
+                    log.warn("Run {} context over budget after compaction: {} tokens (budget {})",
                             run.getRunId(), estimatedTokens,
                             properties.getContext().getMaxContextTokens());
                 }
@@ -673,9 +678,7 @@ public class AgentLoop implements Runnable {
                 LlmInferRequest inferRequest = LlmInferRequest.builder()
                         .model(checkpoint.getModel())
                         .messages(messages)
-                        .toolsJson(checkpoint.isNoTools()
-                                ? null
-                                : toolGateway.buildToolsJson(new ArrayList<>(clientToolSpecs.values())))
+                        .toolsJson(toolsJson)
                         .temperature(checkpoint.getTemperature() != null ? checkpoint.getTemperature() : 0.7)
                         .maxTokens(checkpoint.getMaxTokens() != null ? checkpoint.getMaxTokens() : 8192)
                         .build();
@@ -2995,16 +2998,21 @@ public class AgentLoop implements Runnable {
         return ToolResultLimiter.bound(result, objectMapper, maxChars);
     }
 
-    /** Truncate long tool results so the context stays bounded (L1-friendly). */
+    /**
+     * Truncate long tool results so the context stays bounded (L1-friendly).
+     *
+     * <p>Shares {@link ToolResultLimiter#truncateText} with the serializer cap: an
+     * ad-hoc {@code substring(maxChars) + marker} emitted {@code marker.length()}
+     * characters ABOVE {@code toolResultMaxChars}, so L1 (which compares
+     * characters) cut the result a second time and deleted the marker that told
+     * the model its result was incomplete.
+     */
     private String render(String content) {
-        int maxChars = properties.getContext().getToolResultMaxChars();
         if (content == null) {
             return "";
         }
-        if (content.length() <= maxChars) {
-            return content;
-        }
-        return content.substring(0, maxChars) + "\n...[truncated]";
+        return ToolResultLimiter.truncateText(content,
+                properties.getContext().getToolResultMaxChars());
     }
 
     private String escapeJson(String value) {
