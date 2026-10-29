@@ -8,7 +8,7 @@ import {
     AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@kn/ui";
 import {
-    CollaborationEditor, exportToPDF, usePageSave, useHostPresence,
+    CollaborationEditor, exportToPDF, usePageSave, useHostPresence, presentCollaborators,
     HOST_AWARENESS_FIELD, HOST_AWARENESS_HOST, TiptapCollabProvider, chooseSeed, toRev,
 } from "@kn/editor";
 import type { BlockStoreRead } from "@kn/editor";
@@ -262,12 +262,13 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
             token: collabToken,
             document: doc,
             onAwarenessUpdate: ({ states }) => {
-                const updatedUsers = states
-                    .map((state) => ({
-                        clientId: state.clientId,
-                        user: state.user
-                    }))
-                    .filter(u => u.user); // Filter out states without user info
+                // The room also contains clients that are not people — above all
+                // the AI agent's hidden off-screen editor, which joins with THIS
+                // user's identity. Mapping raw states would show that user twice
+                // and make an agent-touched page read as if it were being
+                // co-edited; `presentCollaborators` drops those sessions and
+                // keeps one avatar per person.
+                const updatedUsers = presentCollaborators(states);
 
                 if (!deepEqual(updatedUsers, lastAwarenessRef.current)) {
                     setUsers(updatedUsers);

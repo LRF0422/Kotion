@@ -12,3 +12,7 @@ export * from "./seed-source";
 export * from "./rev";
 export * from "./use-page-session";
 export * from "./use-host-presence";
+// Who the presence UI may show: hidden agent sessions are not people, and one
+// person is one avatar. Crosses the package boundary for the same reason as
+// `use-host-presence` — the reader lives in the page editor.
+export * from "./presence";

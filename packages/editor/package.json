@@ -18,7 +18,8 @@
     "check:rev": "tsc src/hooks/rev.check.ts --outDir .tmp-check --module commonjs --target ES2020 --skipLibCheck && node .tmp-check/rev.check.js",
     "check:exit": "tsc src/hooks/exit-flush.check.ts --outDir .tmp-check --module commonjs --target ES2020 --skipLibCheck && node .tmp-check/exit-flush.check.js",
     "check:plugin-content": "tsc src/editor/plugin-content-migration.check.ts --outDir .tmp-check --module commonjs --target ES2020 --skipLibCheck --esModuleInterop && node .tmp-check/plugin-content-migration.check.js",
-    "check": "pnpm check:ops && pnpm check:session && pnpm check:merge && pnpm check:seed && pnpm check:rev && pnpm check:exit && pnpm check:plugin-content",
+    "check:presence": "tsc src/hooks/presence.check.ts --outDir .tmp-check --module commonjs --target ES2020 --skipLibCheck && node .tmp-check/presence.check.js",
+    "check": "pnpm check:ops && pnpm check:session && pnpm check:merge && pnpm check:seed && pnpm check:rev && pnpm check:exit && pnpm check:plugin-content && pnpm check:presence",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {

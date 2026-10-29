@@ -20,6 +20,7 @@ import {
     usePageSave,
     HOST_AWARENESS_FIELD,
     HOST_AWARENESS_HOST,
+    AGENT_AWARENESS_FIELD,
     type Editor,
     type BlockStoreRead,
 } from "@kn/editor"
@@ -208,6 +209,17 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
             session.isHost ? HOST_AWARENESS_HOST : 'collaborator',
         )
     }, [provider, session.isHost])
+
+    // This editor is not a person. It joins the room under the user's identity
+    // (the AI acts for them), so without a marker every page the agent edits
+    // shows that user a second time and looks like it is being co-edited. The
+    // presence UI drops states carrying this field; the role above still keeps
+    // the hidden session's write-lease/host semantics intact.
+    useEffect(() => {
+        const awareness = provider?.awareness
+        if (!awareness) return
+        awareness.setLocalStateField(AGENT_AWARENESS_FIELD, true)
+    }, [provider])
 
     // Latest flush behind a stable ref — the closure handed to the manager must
     // survive re-renders.
