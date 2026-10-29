@@ -38,6 +38,10 @@ export const SpaceDetail: React.FC = () => {
     const params = useParams()
     usePageTabsStorage(params.id)
     const isPageEdit = !!useMatch("/space-detail/:id/page/edit/:pageId")
+    // The *space landing* route specifically (`/space-detail/:id`), not "any URL
+    // without a pageId": settings / graph / team-home are children of this route
+    // and must not be forwarded away.
+    const isSpaceLanding = !!useMatch("/space-detail/:id")
     const navigator = useNavigator()
     const [searchValue, setSearchValue] = useState<string>()
     const [loading, { toggle: toggleLoading }] = useToggle(true)
@@ -162,17 +166,20 @@ export const SpaceDetail: React.FC = () => {
     }, [params.id, service])
 
     useEffect(() => {
-        // Also re-run when the shell brings this route back to the foreground: a
-        // cached workspace returning to a page-less URL (`/space-detail/:id`,
-        // e.g. from the sidebar) must forward to the space's home page, just like
-        // a fresh mount would.
-        if (!routeCacheActive) return
-        if (!params.pageId && space) {
-            navigator.go({
-                to: `/space-detail/${params.id}/page/edit/${space?.homePageId}`
-            })
-        }
-    }, [space, routeCacheActive])
+        // The bare space route (`/space-detail/:id`) forwards to the space's home
+        // page — on a fresh deep link AND when closing the last tab lands here.
+        // Two mistakes this deliberately avoids:
+        //  - matching "no pageId" instead of the exact landing route, which sent
+        //    `/settings`, `/graph` and `/home` deep links back to the home page;
+        //  - leaving `isSpaceLanding`/`params.id` out of the deps, which made the
+        //    in-session transition to `/space-detail/:id` (last tab closed,
+        //    trashed page → back) render an empty pane because the effect never
+        //    re-ran.
+        if (!routeCacheActive || !isSpaceLanding) return
+        const homePageId = space?.homePageId
+        if (!homePageId) return
+        navigator.go({ to: `/space-detail/${params.id}/page/edit/${homePageId}` })
+    }, [routeCacheActive, isSpaceLanding, space?.homePageId, params.id, navigator])
 
     // --- Keyboard shortcut: Ctrl+K for search ---
     useEffect(() => {
@@ -420,7 +427,10 @@ export const SpaceDetail: React.FC = () => {
                 {isPageEdit ? (
                     <>
                         <Outlet />
-                        <TabbedEditorArea spaceId={params.id} />
+                        {/* Keyed by space: the workspace route slot is reused when
+                            switching spaces, and the LRU pool must not carry the
+                            previous space's tab state into the new one. */}
+                        <TabbedEditorArea key={params.id} spaceId={params.id} />
                     </>
                 ) : (
                     <Outlet />

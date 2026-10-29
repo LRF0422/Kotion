@@ -847,6 +847,17 @@ export const resources = {
         "team-badge": "团队",
         "clear-tags": "清除",
       },
+      shortcuts: {
+        untitled: "未命名页面",
+        open: "打开页面",
+        copyLink: "复制链接",
+        copyFailed: "复制链接失败",
+        setAsHome: "设为主页",
+        unsetHome: "取消主页",
+        unpin: "取消固定",
+        notSaved: "暂时无法保存：这个快捷方式只在本次运行有效",
+        pinLimit: "主菜单最多固定 {{max}} 个页面",
+      },
       auth: {
         common: {
           email: "邮箱地址",
@@ -2483,6 +2494,17 @@ export const resources = {
         "no-page-match": "No matching pages",
         "team-badge": "Team",
         "clear-tags": "Clear",
+      },
+      shortcuts: {
+        untitled: "Untitled page",
+        open: "Open page",
+        copyLink: "Copy link",
+        copyFailed: "Failed to copy link",
+        setAsHome: "Set as home page",
+        unsetHome: "Unset home page",
+        unpin: "Unpin from main menu",
+        notSaved: "Not saved right now: this shortcut lasts until you quit",
+        pinLimit: "The main menu holds at most {{max}} pinned pages",
       },
       auth: {
         common: {

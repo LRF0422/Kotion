@@ -110,9 +110,16 @@ export function Layout({ onPluginsReady }: LayoutProps) {
     const isShareRoute = location.pathname.startsWith('/share/')
     // Space / page the shell dock renders against. Parsed from the route so the
     // dock can live in the app shell instead of the workspace page subtree.
-    const workspaceMatch = location.pathname.match(/^\/space-detail\/([^/]+)(?:\/page\/edit\/([^/]+))?/)
-    const workspaceSpaceId = workspaceMatch?.[1]
-    const workspacePageId = workspaceMatch?.[2]
+    //
+    // Two page surfaces exist: the workspace editor
+    // (`/space-detail/:id[/page/edit/:pageId]`) and the standalone page a pinned
+    // shortcut / startup page opens (`/page/:spaceId/:pageId`). Both must hand
+    // the dock a page context, or its panels lose the editor on pinned pages.
+    const workspaceMatch = location.pathname.match(
+        /^\/(?:space-detail\/([^/]+)(?:\/page\/edit\/([^/]+))?|page\/([^/]+)\/([^/]+))/
+    )
+    const workspaceSpaceId = workspaceMatch?.[1] ?? workspaceMatch?.[3]
+    const workspacePageId = workspaceMatch?.[2] ?? workspaceMatch?.[4]
     const { pluginManager } = useContext(AppContext)
     const [pluginsLoaded, setPluginsLoaded] = useState(false)
     const [pluginLoadError, setPluginLoadError] = useState<unknown>(null)

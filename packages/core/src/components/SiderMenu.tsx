@@ -1,14 +1,18 @@
 import { useNavigator } from "@kn/common";
 import { Blocks, Settings, Github } from "@kn/icon";
 import React, { useMemo, useCallback, memo } from "react";
-import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider, useIsMobile, Button, ModeToggle } from "@kn/ui";
+import {
+    Tooltip, TooltipContent, TooltipTrigger, TooltipProvider, useIsMobile, Button, ModeToggle,
+    ContextMenu, ContextMenuContent, ContextMenuTrigger,
+} from "@kn/ui";
 import { useLocation } from "@kn/common";
 import { cn } from "@kn/ui";
-import { SiderMenuItemProps, usePluginMenus } from "@kn/common";
+import { RuntimeMenuItem, SiderMenuItemProps, usePluginMenus, useRuntimeMenus } from "@kn/common";
 import { SettingDlg } from "./settings/SeetingDlg";
 import { LanguageToggle } from "../locales/LanguageToggle";
 import { MessageBox } from "./MessageBox";
 import { UserMenu } from "./UserMenu";
+import { usePinnedPagesPresentation } from "./pinned-pages";
 
 const GITHUB_URL = "https://github.com/LRF0422/knowledge-repo";
 
@@ -18,9 +22,11 @@ interface MenuItemProps {
     isActive: boolean;
     onClick: () => void;
     isMobile?: boolean;
+    /** Body of the entry's right-click menu; absent for static rail entries. */
+    contextMenu?: React.ReactNode;
 }
 
-const MenuItem = memo<MenuItemProps>(({ item, isActive, onClick, isMobile }) => {
+const MenuItem = memo<MenuItemProps>(({ item, isActive, onClick, isMobile, contextMenu }) => {
     // Mobile layout with text labels
     if (isMobile) {
         return (
@@ -45,27 +51,52 @@ const MenuItem = memo<MenuItemProps>(({ item, isActive, onClick, isMobile }) => 
         );
     }
 
-    // Desktop layout with tooltip
+    const button = (
+        <button
+            type="button"
+            onClick={onClick}
+            data-tour={item.key}
+            data-active={isActive}
+            data-tone={item.id === '/ai-assistant' ? 'ai' : undefined}
+            className={cn(
+                "kn-rail-control flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg lg:h-9 lg:w-9",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                item.className
+            )}
+            aria-label={typeof item.name === 'string' ? item.name : item.key}
+            aria-current={isActive ? 'page' : undefined}
+        >
+            {item.icon}
+        </button>
+    )
+
+    // Desktop layout with tooltip. Entries with a context menu (pinned pages
+    // today) compose Radix's ContextMenu *around* the trigger: the trigger has
+    // to wrap the same button the tooltip wraps, so one button is both.
+    if (contextMenu) {
+        return (
+            <ContextMenu>
+                <Tooltip>
+                    <ContextMenuTrigger asChild>
+                        <TooltipTrigger asChild>{button}</TooltipTrigger>
+                    </ContextMenuTrigger>
+                    <TooltipContent side="right" className="font-medium">
+                        {item.name}
+                    </TooltipContent>
+                </Tooltip>
+                {/* No `side`: Radix positions a top-level context menu at the
+                    pointer (side/sideOffset are sub-content props and are
+                    dropped from ContextMenuContent's type). */}
+                <ContextMenuContent className="w-48">
+                    {contextMenu}
+                </ContextMenuContent>
+            </ContextMenu>
+        )
+    }
+
     return (
         <Tooltip>
-            <TooltipTrigger asChild>
-                <button
-                    type="button"
-                    onClick={onClick}
-                    data-tour={item.key}
-                    data-active={isActive}
-                    data-tone={item.id === '/ai-assistant' ? 'ai' : undefined}
-                    className={cn(
-                        "kn-rail-control flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg lg:h-9 lg:w-9",
-                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                        item.className
-                    )}
-                    aria-label={typeof item.name === 'string' ? item.name : item.key}
-                    aria-current={isActive ? 'page' : undefined}
-                >
-                    {item.icon}
-                </button>
-            </TooltipTrigger>
+            <TooltipTrigger asChild>{button}</TooltipTrigger>
             <TooltipContent side="right" className="font-medium">
                 {item.name}
             </TooltipContent>
@@ -93,9 +124,19 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
     // its dock panel had already hot-reloaded.
     const pluginMenus = usePluginMenus()
 
-    const menus: SiderMenuItemProps[] = useMemo(() => {
+    // Live entries the host publishes while the app runs — today the pages the
+    // user pinned to the rail. They are user state, not a plugin declaration, so
+    // they arrive through their own registry subscription and are merged next to
+    // the plugin entries, above the fixed Shop/Message/Setting ones.
+    const runtimeMenus: RuntimeMenuItem[] = useRuntimeMenus()
+    // Injects the shell's title/glyph/right-click menu into the pinned-page
+    // service; the service re-publishes its rail entries once it is registered.
+    usePinnedPagesPresentation()
+
+    const menus: Array<SiderMenuItemProps & { contextMenu?: React.ReactNode }> = useMemo(() => {
         return [
             ...pluginMenus as SiderMenuItemProps[],
+            ...runtimeMenus,
             {
                 name: 'Shop',
                 icon: <Blocks className="h-5 w-5" id="welcome-title" />,
@@ -125,7 +166,7 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
                 onClick: () => { }
             }
         ]
-    }, [pluginMenus])
+    }, [pluginMenus, runtimeMenus])
 
     // Memoized click handler
     const handleMenuClick = useCallback((item: SiderMenuItemProps) => {
@@ -166,6 +207,7 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
                                     isActive={isActive}
                                     onClick={() => handleMenuClick(item)}
                                     isMobile={isMobile}
+                                    contextMenu={item.contextMenu}
                                 />
                             );
                         })}

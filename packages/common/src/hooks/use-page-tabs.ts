@@ -78,6 +78,17 @@ function persistTabs(spaceId: string, snapshot: string) {
 }
 
 /**
+ * How long a metadata-only tab change waits before it is written.
+ *
+ * The tab strip mirrors the document title/icon while the user edits, so a
+ * title keystroke is a `PAGE_TAB_UPDATE_META` dispatch — writing the whole list
+ * to `localStorage` on every one of them is sync I/O for a change that is only
+ * cosmetic. Structural changes (open/close) are written immediately; this only
+ * coalesces title/icon churn.
+ */
+const TAB_PERSIST_DEBOUNCE_MS = 250
+
+/**
  * Owns localStorage synchronization for one space. Mount exactly once at the
  * space shell boundary; `usePageTabs` consumers remain side-effect-free.
  */
@@ -103,6 +114,33 @@ export const usePageTabsStorage = (spaceId?: string) => {
 
         let previousBucket = store.getState().pageTabs?.bySpace?.[spaceId]
         let persistedSnapshot: string | undefined
+        /** Page ids of the last successful write; a changed set means a structural write. */
+        let persistedIds = ""
+        let pending: { snapshot: string; ids: string } | null = null
+        let timer: ReturnType<typeof setTimeout> | null = null
+
+        const flush = () => {
+            if (timer) {
+                clearTimeout(timer)
+                timer = null
+            }
+            if (!pending) return
+            const { snapshot, ids } = pending
+            pending = null
+            if (persistTabs(spaceId, snapshot)) {
+                persistedSnapshot = snapshot
+                persistedIds = ids
+            }
+        }
+
+        const schedule = (snapshot: string, ids: string) => {
+            pending = { snapshot, ids }
+            if (timer) return
+            timer = setTimeout(() => {
+                timer = null
+                flush()
+            }, TAB_PERSIST_DEBOUNCE_MS)
+        }
 
         // Re-entry with an explicit empty bucket must retry clearing stale
         // storage, while a brand-new empty space waits for route activation and
@@ -112,20 +150,41 @@ export const usePageTabsStorage = (spaceId?: string) => {
             (wasAlreadyHydrated || hadPersistedSnapshot || previousBucket.openPages.length > 0)
         ) {
             const snapshot = serializeTabs(previousBucket.openPages)
-            if (persistTabs(spaceId, snapshot)) persistedSnapshot = snapshot
+            const ids = previousBucket.openPages.map(page => page.pageId).join(",")
+            if (persistTabs(spaceId, snapshot)) {
+                persistedSnapshot = snapshot
+                persistedIds = ids
+            }
         }
 
-        return store.subscribe(() => {
+        const unsubscribe = store.subscribe(() => {
             const bucket = store.getState().pageTabs?.bySpace?.[spaceId]
             if (!bucket || bucket === previousBucket) return
             previousBucket = bucket
 
             const snapshot = serializeTabs(bucket.openPages)
+            const ids = bucket.openPages.map(page => page.pageId).join(",")
             // Activation only changes lastActiveAt, which is intentionally not
             // persisted. Avoid blocking dispatch with an identical full write.
             if (snapshot === persistedSnapshot) return
-            if (persistTabs(spaceId, snapshot)) persistedSnapshot = snapshot
+            if (ids !== persistedIds) {
+                // Open/close changes the durable shape: write it now.
+                pending = { snapshot, ids }
+                flush()
+                return
+            }
+            schedule(snapshot, ids)
         })
+
+        // A tab switch does not unmount this hook, but a window close must not
+        // lose the last debounced title write.
+        window.addEventListener("pagehide", flush)
+
+        return () => {
+            unsubscribe()
+            flush()
+            window.removeEventListener("pagehide", flush)
+        }
     }, [dispatch, spaceId, store])
 }
 
@@ -144,6 +203,15 @@ export const usePageTabs = (spaceId?: string) => {
     const openPages = bucket?.openPages ?? []
     const activePageId = bucket?.activePageId
 
+    /**
+     * Ensure a page exists in the strip **without** making it the active tab.
+     *
+     * Preloading / "open in background" is the only shape this exposes; the
+     * shell never needs it today (navigation goes through `activateTab`, which
+     * opens and activates in one action), but the reducer action stays for the
+     * API's completeness. Callers that mean "show this page" want
+     * {@link activateTab}.
+     */
     const openTab = useCallback((pageId: string, title?: string, icon?: string) => {
         if (!spaceId || !pageId) return
         dispatch({ type: "PAGE_TAB_OPEN", payload: { spaceId, pageId, title, icon, lastActiveAt: Date.now() } })

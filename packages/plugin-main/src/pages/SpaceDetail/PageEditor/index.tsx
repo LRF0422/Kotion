@@ -14,8 +14,7 @@ import {
 import type { BlockStoreRead } from "@kn/editor";
 import { deepEqual, useUploadFile, parseMarkdownToNodes, useTranslation, getAccessToken, getAppEnv, useSpacePageService, useEntitlements, ENTITLEMENT_CODES } from "@kn/common";
 import type { PageRecord, PageDocumentOperations } from "@kn/common";
-import { useNavigator, usePageTabs } from "@kn/common";
-import { setPageNavigationBridge, clearPageNavigationBridge, type PageNavigationBridge } from "@kn/common";
+import { useNavigator, usePageTabs, useRouteCacheActive } from "@kn/common";
 import { setActiveEditor, clearActiveEditor } from "@kn/common";
 // Host-wide UI events remain separate from Space/Page domain changes.
 import { event as hostEvent, TOGGLE_DOCK_PANEL } from "@kn/common";
@@ -176,6 +175,14 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
     const pageId = props.pageId ?? params.pageId
     const spaceId = props.spaceId ?? params.id
     const componentPresentation = props.presentation === 'component'
+    // A kept-alive workspace stays mounted while the user is on another route.
+    // "Current editing page" is a *visible* page concept: a backgrounded editor
+    // must not keep publishing itself as the app's active editor / navigation
+    // bridge (an AI panel on /home would otherwise edit the hidden page), and a
+    // cached editor must republish when its route comes back to the foreground —
+    // that is what makes it retain the page after another route (e.g. a pinned
+    // `/page/...` view) published and then cleared the global state.
+    const routeCacheActive = useRouteCacheActive()
     const { updateMeta } = usePageTabs(spaceId)
     const { userInfo } = useSelector((state: GlobalState) => state)
     const [pageLoading, { toggle: toggleLoading }] = useToggle(false)
@@ -436,44 +443,21 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         if (payload.pageId === pageId) refreshFavoriteState()
     }), [pageId, refreshFavoriteState, service])
 
-    // Expose active-page context and shell navigation. Persistent page search and
-    // creation now go through SpacePageService rather than an editor-owned bridge.
-    useEffect(() => {
-        if (props.active === false || !pageId) return
-
-        const bridge: PageNavigationBridge = {
-            getCurrentPage: () => ({
-                pageId: pageId ? String(pageId) : undefined,
-                spaceId: spaceId ? String(spaceId) : undefined,
-                title: page?.title,
-                parentId: page?.parentId ? String(page.parentId) : undefined
-            }),
-            openPage: (targetPageId, targetSpaceId) => {
-                navigator.go({ to: `/space-detail/${targetSpaceId ?? spaceId}/page/edit/${targetPageId}` })
-            },
-            // A space artifact has no editor to bind, so the side pane can only
-            // hand the user over to the space's own landing route. Without this
-            // the pane hides its "open" action for spaces.
-            openSpace: (targetSpaceId) => {
-                navigator.go({ to: `/space-detail/${targetSpaceId}` })
-            }
-        }
-
-        setPageNavigationBridge(bridge)
-        return () => clearPageNavigationBridge(bridge)
-    }, [pageId, spaceId, page, props.active, navigator])
-
     // Publish this tab's editor for views living outside the editor subtree —
-    // dock panels such as the outline. Same rule as the navigation bridge above: only
-    // the active tab publishes, so panels always follow the visible document.
+    // dock panels such as the outline. The *page* the user is looking at is
+    // published one level up by `PageHost` (it also covers plugin page types and
+    // pages with no editor); this effect only contributes the live editor
+    // instance, and only for the active, visible tab.
     useEffect(() => {
-        if (componentPresentation || props.active === false || !pageId || !editorContentReady) return
+        if (!routeCacheActive || componentPresentation || props.active === false || !pageId || !editorContentReady) return
         const instance = editor.current
         if (!instance) return
 
         setActiveEditor(instance, { pageId: String(pageId), spaceId: spaceId ? String(spaceId) : undefined })
-        return () => clearActiveEditor(String(pageId))
-    }, [componentPresentation, pageId, spaceId, props.active, editorContentReady])
+        // Pass the instance too: the same page may also be open in a standalone
+        // view, and its cleanup must not clear this publication.
+        return () => clearActiveEditor(String(pageId), instance)
+    }, [routeCacheActive, componentPresentation, pageId, spaceId, props.active, editorContentReady])
 
     const toggleFavorite = useCallback(async () => {
         if (!pageId || favoriteToggling) return
@@ -825,7 +809,9 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
     }, [editor]);
 
     const createUserCheckpoint = useCallback(async () => {
-        if (props.active === false || !pageId || checkpointInFlightRef.current) return
+        // Ctrl+S is a document-level shortcut: a hidden, cached workspace must
+        // not checkpoint a page the user cannot see.
+        if (!routeCacheActive || props.active === false || !pageId || checkpointInFlightRef.current) return
         checkpointInFlightRef.current = true
         try {
             // A checkpoint must describe everything visible in the editor. Do not
@@ -848,7 +834,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         } finally {
             checkpointInFlightRef.current = false
         }
-    }, [props.active, pageId, saveNow, clientId, service, t])
+    }, [routeCacheActive, props.active, pageId, saveNow, clientId, service, t])
 
     useKeyPress(["ctrl.s"], (e) => {
         e.preventDefault()

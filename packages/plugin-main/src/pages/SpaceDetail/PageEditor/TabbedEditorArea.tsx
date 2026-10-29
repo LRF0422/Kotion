@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react"
+import React, { useEffect, useMemo, useRef, useState } from "react"
 import { useNavigator, usePageTabs } from "@kn/common"
 import { cn, useResponsive } from "@kn/ui"
 import { PageHost } from "./PageHost"
@@ -6,6 +6,68 @@ import { TabBar } from "./TabBar"
 
 export interface TabbedEditorAreaProps {
     spaceId?: string
+}
+
+interface EditorTabLayerProps {
+    pageId: string
+    spaceId?: string
+    isActive: boolean
+}
+
+/**
+ * One stacked editor layer.
+ *
+ * Inactive editors stay mounted (keep-alive) but must be invisible *and*
+ * unreachable: `aria-hidden` alone leaves their controls in the tab order, and
+ * Tiptap can move focus into a contenteditable programmatically. `inert` — the
+ * same mechanism the route cache uses for background pages — closes both holes;
+ * focus that is already inside is dropped before the attribute is set.
+ */
+const EditorTabLayer: React.FC<EditorTabLayerProps> = ({ pageId, spaceId, isActive }) => {
+    const layerRef = useRef<HTMLDivElement>(null)
+
+    useEffect(() => {
+        const node = layerRef.current
+        if (!node) return
+        if (isActive) {
+            node.removeAttribute("inert")
+            node.removeAttribute("aria-hidden")
+            return
+        }
+        node.setAttribute("inert", "")
+        const focused = document.activeElement
+        if (focused instanceof HTMLElement && node.contains(focused)) focused.blur()
+        // Set after blurring: a focused descendant's ancestor is (correctly)
+        // rejected by the browser when it becomes aria-hidden.
+        node.setAttribute("aria-hidden", "true")
+    }, [isActive])
+
+    return (
+        // Editors are kept mounted (LRU) and stacked; crossfade by opacity
+        // instead of hard display toggle so switching is smooth. Inactive layers
+        // sit behind and are non-interactive. `transform-gpu` promotes each
+        // editor to its own compositor layer so the opacity fade is GPU-only (no
+        // per-frame repaint of the editor subtree).
+        //
+        // `data-editor-tab-layer` is consumed by editor hooks (see
+        // `use-margin-cards`) that need to detect "my tab was backgrounded"
+        // without being tricked by Radix modals stamping aria-hidden on the app
+        // root when a Dialog / Sheet / DropdownMenu opens.
+        <div
+            ref={layerRef}
+            data-editor-tab-layer
+            className={cn(
+                // animate-in fades freshly-mounted (uncached) tabs in;
+                // transition-opacity crossfades switches between the two
+                // kept-alive editors. fade-in-0 targets each layer's own
+                // opacity, so inactive mounts stay invisible.
+                "absolute inset-0 h-full w-full transform-gpu animate-in fade-in-0 transition-opacity duration-150 ease-out motion-reduce:animate-none motion-reduce:transition-none",
+                isActive ? "z-10 opacity-100" : "z-0 opacity-0 pointer-events-none"
+            )}
+        >
+            <PageHost pageId={pageId} spaceId={spaceId} active={isActive} />
+        </div>
+    )
 }
 
 /**
@@ -96,14 +158,18 @@ export const TabbedEditorArea: React.FC<TabbedEditorAreaProps> = ({ spaceId }) =
         handleCloseMany(openPages.map(p => p.pageId))
     }
 
-    // Always render the active editor even if the LRU effect hasn't caught up
-    // yet (avoids a blank frame on first navigation to a page).
+    // The LRU pool is pruned in an effect (after paint). Filtering against the
+    // *current* space's open tabs at render time is what keeps a space switch
+    // from painting the previous space's page ids under the new `spaceId` for a
+    // frame (the workspace route slot is reused across spaces).
     const visibleIds = useMemo(() => {
-        if (activePageId && !keepAlive.includes(activePageId)) {
-            return [...keepAlive, activePageId]
-        }
-        return keepAlive
-    }, [keepAlive, activePageId])
+        const openIds = new Set(openPages.map(page => page.pageId))
+        const kept = keepAlive.filter(id => openIds.has(id))
+        // Always render the active editor even if the LRU effect hasn't caught up
+        // yet (avoids a blank frame on first navigation to a page).
+        if (activePageId && !kept.includes(activePageId)) kept.push(activePageId)
+        return kept
+    }, [keepAlive, openPages, activePageId])
 
     return (
         <div className="flex h-full w-full flex-col">
@@ -119,38 +185,14 @@ export const TabbedEditorArea: React.FC<TabbedEditorAreaProps> = ({ spaceId }) =
                 />
             )}
             <div className="relative flex-1 min-h-0">
-                {visibleIds.map(pid => {
-                    const isActive = pid === activePageId
-                    return (
-                        // Editors are kept mounted (LRU) and stacked; crossfade by
-                        // opacity instead of hard display toggle so switching is
-                        // smooth. Inactive layers sit behind and are non-interactive.
-                        // transform-gpu promotes each editor to its own compositor
-                        // layer so the opacity fade is GPU-only (no per-frame repaint
-                        // of the editor subtree) — key to staying smooth under rapid
-                        // switching.
-                        <div
-                            key={pid}
-                            // Consumed by editor hooks (see `use-margin-cards`)
-                            // that need to detect "my tab was backgrounded"
-                            // without being tricked by Radix modals stamping
-                            // aria-hidden on the app root when a Dialog /
-                            // Sheet / DropdownMenu opens.
-                            data-editor-tab-layer
-                            aria-hidden={!isActive}
-                            className={cn(
-                                // animate-in fades freshly-mounted (uncached) tabs in;
-                                // transition-opacity crossfades switches between the two
-                                // kept-alive editors. fade-in-0 targets each layer's own
-                                // opacity, so inactive mounts stay invisible.
-                                "absolute inset-0 h-full w-full transform-gpu animate-in fade-in-0 transition-opacity duration-150 ease-out motion-reduce:animate-none motion-reduce:transition-none",
-                                isActive ? "z-10 opacity-100" : "z-0 opacity-0 pointer-events-none"
-                            )}
-                        >
-                            <PageHost pageId={pid} spaceId={spaceId} active={isActive} />
-                        </div>
-                    )
-                })}
+                {visibleIds.map(pid => (
+                    <EditorTabLayer
+                        key={pid}
+                        pageId={pid}
+                        spaceId={spaceId}
+                        isActive={pid === activePageId}
+                    />
+                ))}
             </div>
         </div>
     )

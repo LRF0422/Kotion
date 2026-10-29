@@ -1,4 +1,6 @@
 import { Home } from './pages/Home'
+import { StartPage } from './pages/StartPage'
+import { StandalonePage } from './pages/StandalonePage'
 import { Spaces } from './pages/Spaces'
 import { SpaceDetail } from './pages/SpaceDetail'
 import { SpaceGraph } from './pages/SpaceGraph'
@@ -36,8 +38,16 @@ export const DefaultPluginInstance = new DefaultPlugin({
   name: 'Basic plugin',
   status: 'ACTIVE',
   routes: [
-    { name: '/', path: '/', element: <Home /> },
+    { name: '/', path: '/', element: <StartPage /> },
     { name: '/home', path: '/home', element: <Home /> },
+    {
+      name: '/page/:spaceId/:pageId',
+      path: '/page/:spaceId/:pageId',
+      element: <StandalonePage />,
+      // A shortcut opens the page on its own: no page tree, no tab strip. Caching
+      // it would keep an off-screen editor alive for every pinned page.
+      keepAlive: false
+    },
     { name: '/spaces', path: '/spaces', element: <Spaces /> },
     { name: '/all-spaces', path: '/all-spaces', element: <SpaceHub /> },
     // { name: '/ai-assistant', path: '/ai-assistant', element: <AIAssistantPage /> },
@@ -557,7 +567,13 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "createSibling": "新建同级页面",
           "copyLink": "复制链接",
           "editInWindow": "小窗编辑",
-          "moveToTrash": "移动到回收站"
+          "moveToTrash": "移动到回收站",
+          "pinToMenu": "固定到主菜单",
+          "unpinFromMenu": "取消固定",
+          "setAsHome": "设为主页",
+          "unsetHome": "取消主页",
+          "pinLimit": "主菜单最多固定 {{max}} 个页面",
+          "pinNotSaved": "暂时无法保存：这个快捷方式只在本次运行有效"
         },
         "editor": {
           "versionHistory": "版本历史",
@@ -1183,7 +1199,13 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "createSibling": "New Sibling Page",
           "copyLink": "Copy link",
           "editInWindow": "Edit in window",
-          "moveToTrash": "Move to trash"
+          "moveToTrash": "Move to trash",
+          "pinToMenu": "Pin to main menu",
+          "unpinFromMenu": "Unpin from main menu",
+          "setAsHome": "Set as home page",
+          "unsetHome": "Unset home page",
+          "pinLimit": "The main menu holds at most {{max}} pinned pages",
+          "pinNotSaved": "Not saved right now: this shortcut lasts until you quit"
         },
         "editor": {
           "versionHistory": "Version history",

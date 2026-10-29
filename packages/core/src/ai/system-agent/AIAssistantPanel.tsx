@@ -40,7 +40,7 @@ import {
     useCapabilityProviders,
     buildAgentRunInputs,
     useLoadedSkills,
-    getPageNavigationBridge,
+    useCurrentPage,
     cacheHitRate,
     useTranslation,
     buildCustomAgentNote,
@@ -190,7 +190,11 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
         () => buildAgentRunInputs(catalog, { loadedSkills }),
         [catalog, loadedSkills],
     )
-    const currentPage = getPageNavigationBridge()?.getCurrentPage()
+    // The page the user is looking at, as published by the visible page surface
+    // (`PageHost` covers every route, including plugin page types). Subscribing
+    // rather than reading once matters: the panel stays mounted across
+    // navigation, and the agent's target must follow the visible page.
+    const currentPage = useCurrentPage()
 
     // Custom agent selected for this panel. Its guidance rides in the per-turn
     // context note, never in the backend-owned system prompt.

@@ -27,18 +27,24 @@ const notify = () => {
  * is ready and whenever it becomes the active tab.
  */
 export const setActiveEditor = (editor: Editor | undefined, meta?: { pageId?: string; spaceId?: string }) => {
-    if (state.editor === editor && state.pageId === meta?.pageId) return
+    if (state.editor === editor && state.pageId === meta?.pageId && state.spaceId === meta?.spaceId) return
     state = { editor, pageId: meta?.pageId, spaceId: meta?.spaceId }
     notify()
 }
 
 /**
- * Clear the published editor, but only if it is still the one `pageId` owns —
+ * Clear the published editor, but only if it is still the one this caller owns —
  * a tab unmounting after another tab already took over must not wipe the new
  * editor (unmount cleanup order is not guaranteed).
+ *
+ * `editor` narrows the check to the exact instance. That matters when the same
+ * page is open twice (the workspace tab and a standalone `/page/...` view): the
+ * `pageId` alone cannot tell the two publications apart, so the outgoing view's
+ * cleanup would clear the incoming one's editor.
  */
-export const clearActiveEditor = (pageId?: string) => {
+export const clearActiveEditor = (pageId?: string, editor?: Editor) => {
     if (pageId && state.pageId !== pageId) return
+    if (editor && state.editor !== editor) return
     if (!state.editor && !state.pageId) return
     state = {}
     notify()

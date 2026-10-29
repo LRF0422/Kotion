@@ -9,6 +9,7 @@ import {
 import { FileText } from "@kn/icon";
 import React, { useMemo } from "react";
 import { PageEditor } from "../SpaceDetail/PageEditor";
+import { usePublishPageContext } from "../../utils/use-publish-page-context";
 
 export interface CollaborationWorkspaceProps {
     token: string;
@@ -46,6 +47,16 @@ export const CollaborationWorkspace: React.FC<CollaborationWorkspaceProps> = ({
         [token],
     );
     const readOnly = (invitation.permission ?? "READ") === "READ";
+
+    // This surface renders the editor directly (no `PageHost`), so it publishes
+    // the page context itself — the agent must know which page the invitee is
+    // reading even on the collaboration route.
+    usePublishPageContext({
+        pageId: page.id,
+        spaceId: page.spaceId,
+        title: page.title,
+        parentId: page.parentId,
+    });
 
     return (
         <div className="flex h-screen w-full flex-col bg-background">

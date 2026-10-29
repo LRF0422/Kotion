@@ -17,6 +17,7 @@ import {
     AgentPaneHost,
     getAgentDocumentBridge,
     getPageNavigationBridge,
+    useCurrentPage,
     setSessionPageBinding,
     clearSessionPageBinding,
     revealBlockById,
@@ -263,25 +264,18 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
 
     const handleRetryPage = useCallback(() => setAcquireAttempt(n => n + 1), [])
 
-    const [currentPage, setCurrentPage] = useState<ChatTargetPage | undefined>()
-    useEffect(() => {
-        let tries = 0
-        const read = () => {
-            const info = getPageNavigationBridge()?.getCurrentPage()
-            if (!info?.pageId) return false
-            setCurrentPage({
-                pageId: String(info.pageId),
-                title: info.title || '',
-                spaceId: info.spaceId,
-            })
-            return !!info.title
+    // The page the user is looking at. It is published by the visible page
+    // surface (`PageHost`) and *subscribed* to, so the "当前页面" chip and the
+    // implicit default target follow navigation instead of freezing at mount.
+    const visiblePage = useCurrentPage()
+    const currentPage = useMemo<ChatTargetPage | undefined>(() => {
+        if (!visiblePage?.pageId) return undefined
+        return {
+            pageId: String(visiblePage.pageId),
+            title: visiblePage.title || '',
+            spaceId: visiblePage.spaceId,
         }
-        if (read()) return
-        const timer = setInterval(() => {
-            if (read() || ++tries >= 20) clearInterval(timer)
-        }, 500)
-        return () => clearInterval(timer)
-    }, [editor])
+    }, [visiblePage])
 
     // ─── Working-target pane (artifact cards → preview) ───────────
     // The dock is a narrow panel, so it splits its behaviour by what the

@@ -345,6 +345,13 @@ export const App: React.FC<AppProps> = (props) => {
         // stay absent on the web, so plugins use useOptionalService("desktop").
         const desktop = createDesktopBridge()
         const storage = createAppStorage(desktop)
+        // The rail's live entries (pinned pages today) are user state, not a plugin
+        // declaration: they appear/disappear while the app runs. The host owns this
+        // registry; the pinned-page service publishes its entries through it.
+        const runtimeMenus = new common.RuntimeMenuRegistry((reason, owner, key) => {
+            logger.warn(`runtimeMenus: dropped "${key}" from ${owner} (${reason})`)
+        })
+        const pinnedPages = common.createPinnedPagesService({ storage, menus: runtimeMenus })
         const manager = new common.PluginManager({
             // Plugin artifacts are served from the public (no-auth) plugin endpoint
             // so script tags need no Authorization query param and SRI/CORS work.
@@ -396,6 +403,14 @@ export const App: React.FC<AppProps> = (props) => {
         // desktop bridge, `localStorage` on the web, memory as the last resort.
         // Always present, so consumers never need a null check for it.
         manager.registerCoreService('storage', storage)
+        // Pages pinned to the main rail + the startup page. Registered on every
+        // platform: on a host without durable storage the shortcuts live for one session.
+        manager.registerCoreService('runtimeMenus', runtimeMenus)
+        manager.registerCoreService('pinnedPages', pinnedPages)
+        // Read the durable list once, as early as possible — the rail paints from it.
+        void pinnedPages.hydrate().catch((error) => {
+            logger.warn('pinnedPages: hydrate failed', error)
+        })
         // Move pre-storage localStorage data into the durable store, once per
         // database. Fire-and-forget on purpose: it is housekeeping, and the
         // marker + "never overwrite" rules make a duplicate run harmless.

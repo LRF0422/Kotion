@@ -4,6 +4,8 @@ import type { PluginHostService } from "./plugin-host";
 import type { PluginDevHostService } from "./plugin-dev-host";
 import type { PluginManagementService } from "./plugin-management";
 import type { PluginMarketplaceService } from "./plugin-marketplace";
+import type { RuntimeMenuService } from "./runtime-menu";
+import type { PinnedPagesService } from "./pinned-pages";
 import type { StorageService } from "../storage/types";
 
 export type KeysWithTypeOf<T, Type> = { [P in keyof T]: T[P] extends Type ? P : never }[keyof T];
@@ -340,4 +342,16 @@ export interface Services {
      * inside their own `plugin.<key>` namespace — use `useStorageScope`.
      */
     storage?: StorageService;
+    /**
+     * Rail entries that may appear and disappear while the app runs (pages the
+     * user pinned, session shortcuts). Merged next to the plugin menus by the
+     * shell rail; read through `useRuntimeMenus()`. Registered by the host.
+     */
+    runtimeMenus?: RuntimeMenuService;
+    /**
+     * Pages pinned to the main rail and the page the app opens at `/` on.
+     * Registered by the host; the page surfaces (`plugin-main`) use it to pin,
+     * unpin and choose the startup page.
+     */
+    pinnedPages?: PinnedPagesService;
 }

@@ -14,6 +14,7 @@ import { AlertCircle, Copy, Link, Loader2, Puzzle, Star, Trash2, UserPlus } from
 import { Button, Separator, toast } from '@kn/ui'
 import { PageBreadcrumb } from '../../../components/PageBreadcrumb'
 import { SharePanel } from '../../components/SharePanel'
+import { usePublishPageContext } from '../../../utils/use-publish-page-context'
 import { PageEditor } from './index'
 import { TrashedPageNotice } from './TrashedPageNotice'
 
@@ -269,6 +270,25 @@ export const PageHost: React.FC<PageHostProps> = ({ pageId, spaceId: explicitSpa
     const [restoring, setRestoring] = useState(false)
     const [reloadKey, setReloadKey] = useState(0)
     const pageType = usePageType(page?.pageType)
+
+    // "The page the user is looking at" is the page surface's signal, not the
+    // editor's. This component is what every page route renders through, so it
+    // is also what plugin page types (no `PageEditor`), loading states and the
+    // trashed-page notice publish from — the agent must know which page the user
+    // means even when there is no document editor to bind to. Published as soon
+    // as the ids are known (the title follows when the record loads), withdrawn
+    // while the page is trashed or the tab is backgrounded.
+    usePublishPageContext(
+        pageId
+            ? {
+                pageId,
+                spaceId: explicitSpaceId ?? page?.spaceId,
+                title: page?.title,
+                parentId: page?.parentId,
+            }
+            : null,
+        active !== false && !trashed,
+    )
 
     useEffect(() => {
         let cancelled = false

@@ -1,8 +1,8 @@
 import React, { useCallback, useMemo, useState } from 'react'
 import { Button, Input, TreeView, cn } from '@kn/ui'
-import { Plus, MoreHorizontal, Star, Trash2, Package, Link, AppWindow, LocateFixed } from '@kn/icon'
-import { type PageTreeNode, type ResolvedPageType, useTranslation, PageEditWindow } from '@kn/common'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@kn/ui'
+import { Plus, MoreHorizontal, Star, Trash2, Package, Link, AppWindow, LocateFixed, Pin, PinOff, Home } from '@kn/icon'
+import { type PageTreeNode, type ResolvedPageType, useTranslation, PageEditWindow, usePinnedPages, MAX_PINNED_PAGES } from '@kn/common'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@kn/ui'
 import { SiderMenuItemProps } from '../../../pages/components/SiderMenu'
 import { PageItemIcon } from './PageItemIcon'
 import { CreatePageTypeMenu } from '../../../components/CreatePageTypeMenu'
@@ -41,6 +41,9 @@ export const PageTreeSection: React.FC<PageTreeSectionProps> = ({
     className,
 }) => {
     const { t } = useTranslation()
+    const { available, pages, home, persistent, toggle, setHome } = usePinnedPages()
+    const pinnedPageIds = useMemo(() => new Set(pages.map((page) => page.pageId)), [pages])
+    const pinLimitReached = pages.length >= MAX_PINNED_PAGES
     // Pages currently opened in floating PageEditWindows (multiple windows cascade)
     const [editWindowPageIds, setEditWindowPageIds] = useState<string[]>([])
     // Locate request passed to TreeView; token bump re-triggers expand + scroll
@@ -68,6 +71,16 @@ export const PageTreeSection: React.FC<PageTreeSectionProps> = ({
     }, [spaceId])
 
     const resolve = useCallback((treeNode: PageTreeNode): SiderMenuItemProps => {
+        // The menu below reads all three, and the `name` JSX (which contains the
+        // menu) is built before them, so they must be declared first.
+        const isPinned = pinnedPageIds.has(treeNode.id)
+        const isHomePage = home?.pageId === treeNode.id
+        const pinInput = {
+            pageId: treeNode.id,
+            spaceId,
+            title: treeNode.name || treeNode.title || '',
+            icon: treeNode.icon ?? undefined,
+        }
         const name = (
             <div className="flex flex-row gap-1 items-center group w-full overflow-hidden text-ellipsis relative">
                 <div className="text-left text-ellipsis text-nowrap overflow-hidden flex-1 min-w-0 flex items-center w-full">
@@ -119,6 +132,44 @@ export const PageTreeSection: React.FC<PageTreeSectionProps> = ({
                             >
                                 <Star className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> {t('favorites.add') || 'Add to favorites'}
                             </DropdownMenuItem>
+                            {available && (
+                                <>
+                                    <DropdownMenuItem
+                                        className="flex flex-row gap-2 text-xs sm:text-sm"
+                                        disabled={!isPinned && pinLimitReached}
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            toggle(pinInput)
+                                        }}
+                                    >
+                                        {isPinned
+                                            ? <PinOff className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                                            : <Pin className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
+                                        {isPinned
+                                            ? t('page.unpinFromMenu') || 'Unpin from menu'
+                                            : pinLimitReached
+                                                ? t('page.pinLimit', { max: MAX_PINNED_PAGES })
+                                                : t('page.pinToMenu') || 'Pin to menu'}
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                        className="flex flex-row gap-2 text-xs sm:text-sm"
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            setHome(isHomePage ? null : pinInput)
+                                        }}
+                                    >
+                                        <Home className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                                        {isHomePage
+                                            ? t('page.unsetHome') || 'Stop opening this page'
+                                            : t('page.setAsHome') || 'Open this page on startup'}
+                                    </DropdownMenuItem>
+                                    {!persistent && isPinned && (
+                                        <DropdownMenuLabel className="text-[11px] font-normal leading-snug text-amber-600">
+                                            {t('page.pinNotSaved') || 'Not saved right now: this shortcut lasts until you quit'}
+                                        </DropdownMenuLabel>
+                                    )}
+                                </>
+                            )}
                             {!treeNode.pageType && <DropdownMenuItem
                                 className="flex flex-row gap-2 text-xs sm:text-sm"
                                 onClick={(e) => {
@@ -169,7 +220,7 @@ export const PageTreeSection: React.FC<PageTreeSectionProps> = ({
         }
 
         return baseItem
-    }, [spaceId, onCreatePage, onMoveToTrash, onAddFavorite, onPageClick, handleCopyLink, t])
+    }, [spaceId, onCreatePage, onMoveToTrash, onAddFavorite, onPageClick, handleCopyLink, t, available, pinnedPageIds, home, persistent, pinLimitReached, toggle, setHome])
 
     const elements: SiderMenuItemProps[] = useMemo(() => {
         if (!pageTree || pageTree.length === 0) return []
