@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.knowledge.agent.core.entity.AgentChatSessionEntity;
 import com.knowledge.agent.core.session.ChatSessionStore;
 import com.knowledge.agent.core.supervisor.ThreadStore;
+import com.knowledge.agent.core.task.SessionTaskStore;
 import com.knowledge.agent.core.web.dto.ChatSessionView;
 import com.knowledge.agent.core.web.dto.SaveChatSessionRequest;
 import com.knowledge.core.secure.utils.SecurityContextUtil;
@@ -57,11 +58,14 @@ public class ChatSessionController {
 
     private final ChatSessionStore store;
     private final ThreadStore threadStore;
+    private final SessionTaskStore sessionTaskStore;
     private final ObjectMapper objectMapper;
 
-    public ChatSessionController(ChatSessionStore store, ThreadStore threadStore, ObjectMapper objectMapper) {
+    public ChatSessionController(ChatSessionStore store, ThreadStore threadStore,
+                                 SessionTaskStore sessionTaskStore, ObjectMapper objectMapper) {
         this.store = store;
         this.threadStore = threadStore;
+        this.sessionTaskStore = sessionTaskStore;
         this.objectMapper = objectMapper;
     }
 
@@ -214,6 +218,9 @@ public class ChatSessionController {
             // projected session: reset it too, otherwise the next run is still
             // primed with the cleared conversation's context.
             threadStore.clearMemory(sessionId.trim(), identity.tenantId, identity.userId);
+            // A cleared conversation must not keep showing its old tasks in the
+            // cross-session "unfinished tasks" entry.
+            clearSessionTasks(identity.tenantId, identity.userId, sessionId);
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("sessionId", sessionId);
             result.put("cleared", cleared);
@@ -232,6 +239,9 @@ public class ChatSessionController {
             boolean removed = store.delete(identity.tenantId, identity.userId, sessionId);
             // Do not leave the deleted conversation's session memory behind.
             threadStore.clearMemory(sessionId.trim(), identity.tenantId, identity.userId);
+            // Nor its task rows: they are keyed by session id and would otherwise
+            // linger in the cross-session task index forever.
+            clearSessionTasks(identity.tenantId, identity.userId, sessionId);
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("sessionId", sessionId);
             result.put("removed", removed);
@@ -242,6 +252,22 @@ public class ChatSessionController {
     }
 
     // ==================== internals ====================
+
+    /**
+     * Best-effort cleanup of a session's task rows. Deleting the session itself
+     * already succeeded, so a task-index failure is only logged — it must never
+     * turn the user's delete/clear into an error.
+     */
+    private void clearSessionTasks(Long tenantId, Long userId, String sessionId) {
+        if (sessionTaskStore == null) {
+            return;
+        }
+        try {
+            sessionTaskStore.deleteSession(tenantId, userId, sessionId);
+        } catch (Exception e) {
+            log.warn("Session task cleanup failed for {}: {}", sessionId, e.toString());
+        }
+    }
 
     /** Length of the stored UI projection, or 0 when absent/unparseable. */
     private int uiCount(AgentChatSessionEntity existing) {

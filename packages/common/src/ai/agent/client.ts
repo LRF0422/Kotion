@@ -26,6 +26,7 @@ import type {
     AgentProfile,
     AgentProfileEvidence,
     AgentProfileTrait,
+    AgentSessionTask,
     CreateMemoryInput,
     CreateRunInput,
     ImportAgentChatSessionInput,
@@ -410,6 +411,19 @@ export class AgentClient {
         await this.request('/sessions/' + encodeURIComponent(sessionId) + '/transcript', {
             method: 'DELETE',
         })
+    }
+
+    /**
+     * Unfinished task-list items across ALL of the caller's chat sessions, most
+     * recently updated first. The engine persists each session's latest
+     * `update_todos` snapshot separately from the transcript, so these rows
+     * survive leaving the conversation (see docs/AGENT_SESSION_TASKS.md).
+     */
+    async listOpenSessionTasks(limit = 200): Promise<AgentSessionTask[]> {
+        const data = await this.request<{ items?: AgentSessionTask[] }>(
+            '/session-tasks?limit=' + encodeURIComponent(String(limit)),
+        )
+        return Array.isArray(data?.items) ? data!.items! : []
     }
 
     /**

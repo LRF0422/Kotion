@@ -191,6 +191,29 @@ export interface AgentChatSession {
 }
 
 /**
+ * One unfinished task-list row of a chat session, as returned by
+ * `/api/agent/v1/session-tasks` (see docs/AGENT_SESSION_TASKS.md).
+ *
+ * The agent's `update_todos` list is persisted separately from the transcript,
+ * so a task that was still open when the user left the chat can be found again
+ * from any other conversation.
+ */
+export interface AgentSessionTask {
+    /** Chat session (== conversationId) that owns the task list. */
+    sessionId: string
+    /** Session title for the overview; empty when the session has none. */
+    sessionTitle: string
+    /** Stable item id inside that session's latest task-list snapshot. */
+    taskId: string
+    title: string
+    status: 'pending' | 'in_progress' | 'completed'
+    /** Position inside the latest whole-list snapshot. */
+    position?: number
+    /** Epoch millis of the last `update_todos` that touched this row. */
+    updatedAt?: number
+}
+
+/**
  * Client-writable session metadata only — the transcript is engine-owned and
  * must not travel through this payload.
  */

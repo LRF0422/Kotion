@@ -82,6 +82,13 @@ UI transcript 只是它的**纯投影**（可重建缓存）。这是对 DSH 分
 | DELETE | `/api/agent/v1/sessions/{id}/transcript` | 清空对话 |
 | DELETE | `/api/agent/v1/sessions/{id}` | 删除（幂等） |
 
+## 会话任务清单（todos）单独持久化
+
+任务清单（`update_todos`）在 transcript 里只是"某轮回复的附属数据"，且只有 run 到终态才落投影——
+用户中途离开会话就找不回未完成任务。现在它另存一份：引擎在 `update_todos` 执行成功时写入
+`agent_session_task`，并通过 `GET /api/agent/v1/session-tasks` 暴露跨会话的未完成任务。
+详见 **[docs/AGENT_SESSION_TASKS.md](AGENT_SESSION_TASKS.md)**。
+
 ## 与 DSH 的剩余差距
 
 - **无 live follow / 全局 seq**：读仍是快照式 `GET`，没有 `dsh-api-session-controller` 那种

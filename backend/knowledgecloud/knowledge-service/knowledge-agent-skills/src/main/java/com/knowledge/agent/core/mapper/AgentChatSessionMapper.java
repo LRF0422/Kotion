@@ -116,4 +116,23 @@ public interface AgentChatSessionMapper extends BaseMapper<AgentChatSessionEntit
     int deleteOwned(@Param("tenantId") Long tenantId,
                     @Param("userId") Long userId,
                     @Param("sessionId") String sessionId);
+
+    /**
+     * One-time backfill work queue: sessions that predate the cross-session task
+     * index ({@code tasks_indexed = 0}) and still have a projected transcript to
+     * mine. Only the columns the backfill needs are selected.
+     */
+    @Select("SELECT id, tenant_id, user_id, session_id, messages_json "
+            + "FROM agent_chat_session "
+            + "WHERE tasks_indexed = 0 AND messages_json IS NOT NULL AND messages_json <> '[]' "
+            + "ORDER BY update_time DESC LIMIT #{limit}")
+    List<AgentChatSessionEntity> selectTasksBackfillCandidates(@Param("limit") int limit);
+
+    /**
+     * Mark one backfilled session as done. Deliberately does not touch
+     * {@code update_time}: that column drives the session-list ordering, and a
+     * migration/backfill must never reorder the user's conversation list.
+     */
+    @Update("UPDATE agent_chat_session SET tasks_indexed = 1 WHERE id = #{id}")
+    int markTasksIndexed(@Param("id") Long id);
 }

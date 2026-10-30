@@ -1,6 +1,7 @@
 package com.knowledge.agent.core.tool.builtin;
 
 import com.knowledge.agent.core.run.TodoItem;
+import com.knowledge.agent.core.task.SessionTaskRecorder;
 import com.knowledge.agent.core.tool.ToolContext;
 import org.junit.jupiter.api.Test;
 
@@ -15,11 +16,17 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 /** Task-list tool contract: normalisation, whole-list overwrite, statuses. */
 class UpdateTodosToolTest {
 
-    private final UpdateTodosTool tool = new UpdateTodosTool();
+    /** Partial wiring (null recorder) must keep the tool usable. */
+    private final UpdateTodosTool tool = new UpdateTodosTool(null);
 
     @Test
     void normalisesItemsAndFillsIds() {
@@ -87,6 +94,52 @@ class UpdateTodosToolTest {
             raw.add(item("任务 " + i, "pending", null));
         }
         assertEquals(UpdateTodosTool.MAX_ITEMS, UpdateTodosTool.normalize(raw).size());
+    }
+
+    @Test
+    void mirrorsTheNormalisedSnapshotToTheSessionTaskRecorder() {
+        SessionTaskRecorder recorder = mock(SessionTaskRecorder.class);
+        UpdateTodosTool wired = new UpdateTodosTool(recorder);
+        ToolContext context = new ToolContext();
+        context.setTenantId(1L);
+        context.setUserId(2L);
+        context.setConversationId("s-1");
+
+        wired.execute(single("items", Arrays.asList(item("一", "done", null), item("二", "running", null))),
+                context);
+
+        // The recorder receives the already normalised list (ids filled, statuses
+        // coerced) — not the raw model payload.
+        verify(recorder).record(eq(context), argThat(items -> items != null
+                && items.size() == 2
+                && "t1".equals(items.get(0).getId())
+                && TodoItem.COMPLETED.equals(items.get(0).getStatus())
+                && "t2".equals(items.get(1).getId())
+                && TodoItem.IN_PROGRESS.equals(items.get(1).getStatus())));
+    }
+
+    @Test
+    void worksWithoutARecorder() {
+        // Partial wiring / unit tests may leave the recorder null; the tool must
+        // still maintain the run's todo holder and produce its result.
+        ToolContext context = new ToolContext();
+
+        Map<String, Object> result = executeWith(context, Arrays.asList(item("一", "pending", null)));
+
+        assertEquals(1, context.getTodos().read().size());
+        assertEquals(true, result.get("ok"));
+    }
+
+    @Test
+    void doesNotCallTheRecorderWhenItemsAreRejected() {
+        SessionTaskRecorder recorder = mock(SessionTaskRecorder.class);
+        UpdateTodosTool wired = new UpdateTodosTool(recorder);
+        ToolContext context = new ToolContext();
+
+        assertThrows(IllegalArgumentException.class,
+                () -> wired.execute(single("items", "not a list"), context));
+
+        verifyNoInteractions(recorder);
     }
 
     @SuppressWarnings("unchecked")

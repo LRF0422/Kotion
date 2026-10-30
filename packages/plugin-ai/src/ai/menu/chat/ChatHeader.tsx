@@ -11,6 +11,7 @@ import {
     useChatContext,
 } from '@kn/ui'
 import { SessionSwitcher } from './SessionSwitcher'
+import { SessionTasksPanel } from './SessionTasksPanel'
 import { ChatTabs, type ChatTabInfo } from './ChatTabs'
 import type { ChatSessionMeta } from '../chat-sessions'
 
@@ -73,6 +74,14 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
 }) => {
     const chatContext = useChatContext()
     const { t } = useTranslation()
+    // The cross-session task list is refreshed when an open tab's run state
+    // changes: a turn that just finished may have rewritten its snapshot. The
+    // key is derived from the tabs already passed by both hosts, so the header
+    // needs no extra props from Chat.tsx / KernelHomePage.tsx.
+    const tasksRefreshKey = React.useMemo(
+        () => tabs.map((tab) => `${tab.id}:${tab.status}`).join('|'),
+        [tabs],
+    )
     return (
         <div className={cn(
             'flex w-full items-center gap-1 px-2 h-9 bg-background/95 backdrop-blur-sm',
@@ -106,6 +115,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
             )}
             <div className="flex items-center gap-px shrink-0">
                 <TooltipProvider>
+                    <SessionTasksPanel onOpenSession={onSwitch} refreshKey={tasksRefreshKey} />
                     <SessionSwitcher
                         variant="icon"
                         sessions={sessions}

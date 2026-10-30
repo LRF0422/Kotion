@@ -141,6 +141,21 @@ export const ai = new AiPlugin({
                             "history": "All chats",
                             "queuedHint": "{{count}} chat(s) are waiting for a stream slot — the number of simultaneously streaming chats is capped. A queued run attaches automatically as soon as one frees up; nothing is lost."
                         },
+                        "tasks": {
+                            "title": "Unfinished tasks",
+                            "button": "Unfinished tasks",
+                            "badge": "{{count}} unfinished",
+                            "empty": "No unfinished tasks",
+                            "emptyHint": "Task lists the agent leaves open are collected here, across all your chats.",
+                            "loading": "Loading tasks…",
+                            "loadFailed": "Couldn't load unfinished tasks",
+                            "retry": "Retry",
+                            "refresh": "Refresh",
+                            "jump": "Open the chat",
+                            "untitledSession": "Untitled chat",
+                            "inProgress": "In progress",
+                            "pending": "Not started"
+                        },
                         "loadingSession": "Loading conversation…",
                         "clearChat": "Clear current chat",
                         "close": "Close",
@@ -292,6 +307,21 @@ export const ai = new AiPlugin({
                             "newTab": "新建标签页",
                             "history": "全部对话",
                             "queuedHint": "{{count}} 个会话正在排队等待并发流（同时流式运行的会话数有上限）。有会话结束或暂停后会自动接上，进度不会丢失。"
+                        },
+                        "tasks": {
+                            "title": "未完成任务",
+                            "button": "未完成任务",
+                            "badge": "{{count}} 项未完成",
+                            "empty": "没有未完成任务",
+                            "emptyHint": "智能体留下的未完成任务会汇总在这里，跨会话也能找回。",
+                            "loading": "正在加载任务…",
+                            "loadFailed": "未完成任务加载失败",
+                            "retry": "重试",
+                            "refresh": "刷新",
+                            "jump": "打开所在会话",
+                            "untitledSession": "未命名对话",
+                            "inProgress": "进行中",
+                            "pending": "未开始"
                         },
                         "loadingSession": "正在加载会话…",
                         "clearChat": "清空当前对话",

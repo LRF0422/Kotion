@@ -132,6 +132,7 @@ export type {
     AgentProfile,
     AgentProfileEvidence,
     AgentProfileTrait,
+    AgentSessionTask,
     AgentSkillInput,
     AgentToolCallInfo,
     AgentTodoItem,

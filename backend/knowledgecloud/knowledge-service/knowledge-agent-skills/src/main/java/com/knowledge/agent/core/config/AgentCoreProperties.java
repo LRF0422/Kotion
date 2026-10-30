@@ -62,6 +62,10 @@ import java.util.Map;
  *   skill:
  *     web-search: {...}
  *     web-fetch: {...}
+ *   session-tasks:
+ *     backfill-enabled: true
+ *     backfill-limit: 500
+ *     backfill-batch-size: 50
  * </pre>
  */
 @Data
@@ -81,6 +85,7 @@ public class AgentCoreProperties {
     private Lease lease = new Lease();
     private Skill skill = new Skill();
     private Profile profile = new Profile();
+    private SessionTasks sessionTasks = new SessionTasks();
 
     /** Run loop / task lifecycle settings. */
     @Data
@@ -393,6 +398,23 @@ public class AgentCoreProperties {
         /** Evidence rows kept per trait. */
         private int maxEvidencePerTrait = 20;
         /** Sessions processed per backfill batch (P1). */
+        private int backfillBatchSize = 50;
+    }
+
+    /**
+     * Cross-session task index ({@code agent_session_task}) settings.
+     *
+     * <p>Writes are immediate from {@code update_todos} on; this section only
+     * controls the ONE-TIME startup backfill of sessions that predate the index
+     * (their last task list is mined from {@code agent_chat_session.messages_json}).
+     */
+    @Data
+    public static class SessionTasks {
+        /** Master switch for the one-time historical backfill (default on). */
+        private boolean backfillEnabled = true;
+        /** Max session rows the backfill processes per boot (0 = skip). */
+        private int backfillLimit = 500;
+        /** Rows read per batch; bounds one query's payload. */
         private int backfillBatchSize = 50;
     }
 }

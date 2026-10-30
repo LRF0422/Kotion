@@ -1,6 +1,7 @@
 package com.knowledge.agent.core.tool.builtin;
 
 import com.knowledge.agent.core.run.TodoItem;
+import com.knowledge.agent.core.task.SessionTaskRecorder;
 import com.knowledge.agent.core.tool.BackendTool;
 import com.knowledge.agent.core.tool.ToolContext;
 import com.knowledge.agent.core.tool.ToolKind;
@@ -24,6 +25,11 @@ import java.util.Set;
  *
  * <p>Read-only in the plan-mode sense: listing what you are going to do has no
  * side effect on the user's document, so it stays allowed while edits are gated.
+ *
+ * <p>After handing the list to the run's {@code TodoHolder} it also mirror-writes
+ * it to the cross-session task index through {@link SessionTaskRecorder} (root
+ * run only, best effort — see that class). The recorder may be {@code null} in
+ * unit tests / partial wiring, in which case the write-through is skipped.
  */
 @Component
 public class UpdateTodosTool implements BackendTool {
@@ -33,6 +39,12 @@ public class UpdateTodosTool implements BackendTool {
 
     /** Per-title cap so the event payload (and the transcript) stays small. */
     static final int MAX_TITLE_CHARS = 300;
+
+    private final SessionTaskRecorder sessionTaskRecorder;
+
+    public UpdateTodosTool(SessionTaskRecorder sessionTaskRecorder) {
+        this.sessionTaskRecorder = sessionTaskRecorder;
+    }
 
     @Override
     public ToolSpec spec() {
@@ -64,6 +76,12 @@ public class UpdateTodosTool implements BackendTool {
         }
         List<TodoItem> items = normalize((List<Object>) raw);
         context.getTodos().write(items);
+        // Cross-session index: written at the tool call (not at run-terminal
+        // projection) so the list survives a user leaving a running/suspended
+        // run. The recorder swallows storage failures; it never fails the tool.
+        if (sessionTaskRecorder != null) {
+            sessionTaskRecorder.record(context, items);
+        }
 
         int completed = 0;
         for (TodoItem item : items) {

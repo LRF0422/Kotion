@@ -149,6 +149,16 @@ agent:
     max-concurrent-per-tenant: 0  # 0 = unlimited concurrent tasks
   lease:
     ttl-seconds: 30
+  # Cross-session "unfinished tasks" index (agent_session_task). Writes happen
+  # live from update_todos; these knobs only control the ONE-TIME startup
+  # backfill of sessions that predate the index (their last task list is mined
+  # from agent_chat_session.messages_json). Post-migration sessions are marked
+  # tasks_indexed=1 by column default, so the scan only touches pre-upgrade rows.
+  session-tasks:
+    backfill-enabled: true
+    # Max session rows processed per boot (0 = skip the pass).
+    backfill-limit: 500
+    backfill-batch-size: 50
   skill:
     web-search:
       enabled: true
