@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react'
 import { Check, ChevronDown, Loader2, Sparkles } from '@kn/icon'
-import { Streamdown, useAutoScroll } from '@kn/ui'
+import { Streamdown, ToolApprovalCard, useAutoScroll } from '@kn/ui'
 import type { AgentStepRecord } from '@kn/common'
 import { AgentToolResultCard, useTranslation } from '@kn/common'
 import { ExecutionStep, formatToolName, sanitizeToolPayload } from './chat-types'
@@ -285,12 +285,18 @@ function ToolItem({ step }: { step: ExecutionStep }) {
             </div>
             {/* Plugin-registered card for this tool's result. Renders nothing
                 when no plugin declared a renderer, so the JSON block below
-                remains the universal fallback. */}
+                remains the universal fallback. While the call is waiting for
+                approval it renders the approval card instead (plugin card by
+                request.kind, else the host's generic ToolApprovalCard). */}
             <AgentToolResultCard
                 tool={step.toolName}
                 args={step.args}
                 result={step.result}
                 owner={step.subRunId}
+                callId={step.callId ?? step.id}
+                status={step.status}
+                approval={step.approval}
+                ApprovalCard={ToolApprovalCard}
             />
             {userChoice && (
                 <div className="mt-1 space-y-0.5 pl-[22px] text-[11px]">

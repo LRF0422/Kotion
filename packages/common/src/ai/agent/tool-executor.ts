@@ -9,7 +9,13 @@
  *  - execution callbacks for the UI (start/success/error)
  */
 
-import type { OnToolExecution, ToolDefinition, ToolsRecord } from '../types'
+import type {
+    OnToolExecution,
+    ToolApprovalDecision,
+    ToolApprovalRequest,
+    ToolDefinition,
+    ToolsRecord,
+} from '../types'
 import type { SessionPageBinding } from '../session-page-binding'
 import { AGENT_IMAGES_KEY } from '../image/agent-image-contract'
 import { withDocumentWrite } from './document-write-lock'
@@ -96,6 +102,20 @@ export interface EditorToolExecutorOptions {
      * the next (a new run) instead of having to be loaded again.
      */
     conversationId?: string | null
+    /**
+     * Human-approval channel. Injected into every execution context so editor
+     * tools and plugin tools get the capability from ONE place; the host decides
+     * how the decision is surfaced (see `agent/tool-approval.ts` for the host
+     * registry). The `callId` scopes the request so concurrent/replayed calls
+     * never share an approval.
+     *
+     * Absent → tools that ask are denied ("no approval channel"), i.e. the
+     * safe default rather than silently running an unconfirmed operation.
+     */
+    requestApproval?: (
+        callId: string,
+        request: ToolApprovalRequest,
+    ) => Promise<ToolApprovalDecision>
 }
 
 export class EditorToolExecutor {
@@ -106,6 +126,7 @@ export class EditorToolExecutor {
     private readonly getSessionBinding?: EditorToolExecutorOptions['getSessionBinding']
     private readonly isToolAvailable?: EditorToolExecutorOptions['isToolAvailable']
     private readonly conversationId?: string | null
+    private readonly requestApproval?: EditorToolExecutorOptions['requestApproval']
     /** Idempotency cache: callId → result (replays/reconnects reuse it). */
     private readonly cache = new Map<string, ToolExecutionResult>()
     /** In-flight calls share one promise so rerenders cannot repeat side effects. */
@@ -119,6 +140,7 @@ export class EditorToolExecutor {
         this.getSessionBinding = options.getSessionBinding
         this.isToolAvailable = options.isToolAvailable
         this.conversationId = options.conversationId
+        this.requestApproval = options.requestApproval
     }
 
     /** Execute a frontend tool call; cached/in-flight results are shared by callId. */
@@ -186,6 +208,8 @@ export class EditorToolExecutor {
                     conversationId: this.conversationId ?? null,
                     sessionBinding: this.getSessionBinding?.() ?? null,
                     isToolAvailable: this.isToolAvailable,
+                    requestApproval: (request: ToolApprovalRequest) =>
+                        this.askForApproval(callId, request),
                 })
                 const documentId = mutating ? (this.resolveDocumentId?.(owner) ?? null) : null
                 const result = documentId
@@ -211,6 +235,28 @@ export class EditorToolExecutor {
             callId,
         })
         return outcome
+    }
+
+    /**
+     * Resolve one approval request for a call. Fails CLOSED: a missing channel
+     * or a throwing channel both become a denial, so a tool can never proceed
+     * unconfirmed by accident.
+     */
+    private async askForApproval(
+        callId: string,
+        request: ToolApprovalRequest,
+    ): Promise<ToolApprovalDecision> {
+        if (!this.requestApproval) {
+            return { allowed: false, reason: '当前环境不支持人工审批，已拒绝该操作' }
+        }
+        try {
+            return await this.requestApproval(callId, request)
+        } catch (error: any) {
+            return {
+                allowed: false,
+                reason: '审批通道失败，已拒绝该操作: ' + (error?.message ?? String(error)),
+            }
+        }
     }
 
     /** Drop cached results (a new run with fresh call ids is safe to reset). */

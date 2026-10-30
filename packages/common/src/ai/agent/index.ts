@@ -37,6 +37,18 @@ export {
 export type { AgentPersistence, AgentRunStore, AgentTabLock } from './persistence'
 export { EditorToolExecutor } from './tool-executor'
 export type { EditorToolExecutorOptions, ToolExecutionResult } from './tool-executor'
+export {
+    DEFAULT_TOOL_APPROVAL_TIMEOUT_MS,
+    TOOL_APPROVAL_CANCELLED_REASON,
+    ToolApprovalRegistry,
+    createToolApprovalRegistry,
+    toolApprovals,
+} from './tool-approval'
+export type {
+    PendingToolApproval,
+    ToolApprovalListener,
+    ToolApprovalRequestOptions,
+} from './tool-approval'
 export { describeSignature, resolveToolName, suggestToolNames, unknownToolError } from './tool-name-recovery'
 export type { ToolSuggestion } from './tool-name-recovery'
 export { SubRunWorker, DEFAULT_MAX_PARALLEL_CALLS } from './sub-run-worker'

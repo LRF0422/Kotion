@@ -59,6 +59,12 @@ export interface ExecutionStep {
      * step belongs to the sub-agent tree, not to the parent's activity timeline.
      */
     subRunId?: string
+    /**
+     * Human-approval state of this call, mirrored from ToolCallRecord. While
+     * `status === 'running' && approval.status === 'pending'` the timeline
+     * shows an approval card in place of the (still empty) result.
+     */
+    approval?: import('@kn/common').ToolCallRecord['approval']
 }
 
 // Pending user choice state

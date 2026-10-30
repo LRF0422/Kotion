@@ -8,6 +8,13 @@ export type {
 } from './SubAgentTree'
 export { PlanApprovalCard } from './PlanApprovalCard'
 export type { PlanApprovalCardProps } from './PlanApprovalCard'
+export { ToolApprovalCard } from './ToolApprovalCard'
+export type {
+    ToolApprovalCardProps,
+    ToolApprovalCardRequest,
+    ToolApprovalCardDecision,
+    ToolApprovalCardLabels,
+} from './ToolApprovalCard'
 export { TodoPanel } from './TodoPanel'
 export type { TodoItemView, TodoPanelLabels, TodoPanelProps } from './TodoPanel'
 export { Streamdown } from './Streamdown'

@@ -21,6 +21,7 @@
 
 import type { ComponentType } from 'react'
 import type { SessionPageBindingPage } from '../session-page-binding'
+import type { ToolApprovalDecision, ToolApprovalRequest } from '../types'
 
 /** Where a run operates. `any` means "usable in every scope". */
 export type AgentScope = 'workspace' | 'space' | 'page' | 'any'
@@ -82,6 +83,16 @@ export interface AgentToolContext {
     /** Ask the host to navigate. Optional; absent in headless contexts. */
     navigate?: (target: AgentNavigationTarget) => void
     signal?: AbortSignal
+    /**
+     * Ask the user to confirm a call (see {@link ToolApprovalRequest}).
+     *
+     * Declared here for tools that want to reference the capability from their
+     * factory; the AUTHORITATIVE per-call binding is the execution context the
+     * tool's executor receives as its third argument — that one is bound to the
+     * concrete callId, so concurrent calls never share an approval. Hosts that
+     * cannot bind it at factory time leave this undefined.
+     */
+    requestApproval?: (req: ToolApprovalRequest) => Promise<ToolApprovalDecision>
 }
 
 /** A page made editable for an agent tool, with the editor that edits it. */
@@ -204,6 +215,19 @@ export interface AgentToolResultProps {
     artifact?: AgentArtifact | null
     /** Delegated sub-run that issued the call, when any. */
     owner?: string | null
+    /**
+     * Call status. A card rendered BEFORE the result exists sees `running` —
+     * that is how an approval card (or a live progress card) is drawn in place.
+     */
+    status?: 'running' | 'success' | 'error'
+    /**
+     * Pending approval for this call, when the tool asked for one. Cards may
+     * render their own confirmation UI and resolve it through {@link onDecide};
+     * when absent (or already resolved) the card renders the normal result.
+     */
+    approval?: { request: ToolApprovalRequest; decision?: ToolApprovalDecision } | null
+    /** Resolve the pending approval for this call (idempotent by callId). */
+    onDecide?: (decision: ToolApprovalDecision) => void
     /** Open this artifact in the host's side sheet. */
     openArtifact: (artifact: AgentArtifact) => void
     /** Leave the conversation and open the artifact's page. */

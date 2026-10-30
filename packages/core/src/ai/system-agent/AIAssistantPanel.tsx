@@ -31,6 +31,7 @@ import {
     TooltipTrigger,
     TooltipProvider,
     ScrollArea,
+    ToolApprovalCard,
     cn
 } from '@kn/ui'
 import type { Editor } from '@kn/editor'
@@ -46,6 +47,7 @@ import {
     buildCustomAgentNote,
     useCustomAgents,
     isImeComposing,
+    toolApprovals,
     type AgentChatMessage,
     type EditorAgentApi,
 } from '@kn/common'
@@ -464,13 +466,25 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
                                     {parentToolCalls.length > 0 && (
                                         <div className="mt-2 space-y-1.5">
                                             {parentToolCalls.map(call => (
-                                                <div key={call.callId} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                                                    {call.status === 'success' && <CheckCircle2 className="h-3 w-3 text-emerald-500" />}
-                                                    {call.status === 'error' && <XCircle className="h-3 w-3 text-destructive" />}
-                                                    {call.status === 'running' && <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-primary" />}
-                                                    <span className="font-mono">{call.tool}</span>
-                                                    {call.error && <span className="text-destructive">失败: {call.error}</span>}
-                                                </div>
+                                                <React.Fragment key={call.callId}>
+                                                    <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                                                        {call.status === 'success' && <CheckCircle2 className="h-3 w-3 text-emerald-500" />}
+                                                        {call.status === 'error' && <XCircle className="h-3 w-3 text-destructive" />}
+                                                        {call.status === 'running' && <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-primary" />}
+                                                        <span className="font-mono">{call.tool}</span>
+                                                        {call.error && <span className="text-destructive">失败: {call.error}</span>}
+                                                    </div>
+                                                    {/* 需要人工确认的调用：卡片就地展开；决策后状态机
+                                                        记录结果，条件不再满足，卡片自动消失 */}
+                                                    {call.approval?.status === 'pending' && (
+                                                        <ToolApprovalCard
+                                                            request={call.approval.request}
+                                                            onDecide={decision => {
+                                                                toolApprovals.decide(call.callId, decision)
+                                                            }}
+                                                        />
+                                                    )}
+                                                </React.Fragment>
                                             ))}
                                         </div>
                                     )}

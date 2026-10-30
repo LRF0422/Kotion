@@ -15,7 +15,7 @@
  * constant). Bump the MAJOR part on breaking contract changes; plugins built
  * against a different major version are skipped by the host at load time.
  */
-export const PLUGIN_API_VERSION = "2.2.0"
+export const PLUGIN_API_VERSION = "2.3.0"
 
 /**
  * Desktop capability bridge contract version (Electron only).
@@ -69,6 +69,11 @@ export type {
     AgentActionDefinition,
     AgentToolInclude,
     AgentContribution,
+    // ── Approval: ask the user before a side-effecting call ───────────────
+    /** What a tool passes to `context.requestApproval` before running. */
+    ToolApprovalRequest,
+    /** The host's answer; `allowed: false` must be handled like a refusal. */
+    ToolApprovalDecision,
     // ── Artifacts (产物): the result a plugin makes openable ──────────────
     /** What a tool result / `focusArtifact` turns into: a `kind:id` the host can render. */
     AgentArtifact,

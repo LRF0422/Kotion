@@ -112,6 +112,53 @@ export interface ToolDefinition {
     [key: string]: any
 }
 
+// ============ Tool Approval Types ============
+
+/**
+ * A tool's request for explicit human confirmation before it runs.
+ *
+ * This is the ONLY approval contract a tool sees: whether the confirmation is
+ * rendered as the host's generic card, a plugin's custom card, or not at all
+ * (no approval channel) is the host's business. The executor injects
+ * {@link ToolExecutionContext.requestApproval} on every call, so a tool encodes
+ * "this operation is reversible?" next to the operation itself instead of
+ * knowing how the surface asks.
+ *
+ * Tools should still self-reject when approval is impossible:
+ *  - `level: 'block'` means the tool must refuse on its own (the request is a
+ *    declaration, not something the user can approve); the host denies it
+ *    immediately as a defensive default.
+ *  - when `requestApproval` is absent, the host has no channel — the executor
+ *    resolves with a denial, so the tool must handle that like a user refusal.
+ */
+export interface ToolApprovalRequest {
+    /** Card title, e.g. "执行 shell 命令" */
+    title: string
+    /** Body: the command, the risk explanation — the thing being approved. */
+    message: string
+    /** Short risk reasons rendered as a list, e.g. ["会修改 3 个文件"]. */
+    reasons?: string[]
+    /**
+     * `confirm` (default) asks the user; `block` declares the operation as
+     * non-approvable — the tool itself must reject instead of relying on a card.
+     */
+    level?: 'confirm' | 'block'
+    /** Structured, small, already-sanitized payload for custom renderers. */
+    meta?: Record<string, unknown>
+    /**
+     * Renderer key for a plugin-defined approval card. The host falls back to
+     * its generic card when nothing is registered for this kind.
+     */
+    kind?: string
+    /** Auto-deny after this long; defaults to 5 minutes. */
+    timeoutMs?: number
+}
+
+/** The user's answer to a {@link ToolApprovalRequest}. */
+export type ToolApprovalDecision =
+    | { allowed: true; note?: string }
+    | { allowed: false; reason?: string }
+
 /**
  * Who a tool call belongs to. `owner` is the delegated sub-run id when a child
  * agent issued the call, and null/undefined for the main agent of the run.
@@ -140,6 +187,16 @@ export interface ToolExecutionContext {
      * could not execute, and one that just acquired a document sees what appeared.
      */
     isToolAvailable?: (name: string) => boolean
+    /**
+     * Ask the user to confirm THIS call. Injected by the executor on every
+     * execution, so tools never talk to an approval channel directly (there is
+     * exactly one execution point — see `agent/tool-executor.ts`).
+     *
+     * Resolves with the decision and never rejects. Absent means the host has
+     * no approval channel: the executor answers with a denial, so the tool must
+     * fail closed exactly as it would for a user refusal.
+     */
+    requestApproval?: (req: ToolApprovalRequest) => Promise<ToolApprovalDecision>
 }
 
 export type ToolsRecord = Record<string, ToolDefinition>

@@ -53,6 +53,7 @@ export const toolCallsToSteps = (calls: ToolCallRecord[]): ExecutionStep[] =>
         sequence: tc.startedSeq ?? tc.completedSeq,
         duration: tc.durationMs,
         subRunId: tc.subRunId,
+        approval: tc.approval,
     }))
 
 /** Read the canonical user-facing answer chosen by the shared Agent state. */

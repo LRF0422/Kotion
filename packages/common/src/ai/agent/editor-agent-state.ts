@@ -7,6 +7,7 @@
 
 import type { AgentEvent, AgentTodoItem, RunUsage } from './types'
 import { parseToolArgs } from './types'
+import type { ToolApprovalDecision, ToolApprovalRequest } from '../types'
 
 // ==================== state ====================
 
@@ -21,6 +22,13 @@ export interface AgentStepRecord {
     startedSeq: number
     reasoning: string
     text: string
+}
+
+/** One call's human-approval state, mirroring the execution-time channel. */
+export interface ToolCallApproval {
+    request: ToolApprovalRequest
+    status: 'pending' | 'allowed' | 'denied'
+    decision?: ToolApprovalDecision
 }
 
 export interface ToolCallRecord {
@@ -41,6 +49,13 @@ export interface ToolCallRecord {
     result?: unknown
     error?: string
     durationMs?: number
+    /**
+     * Human approval for this call (only present when the tool asked). While
+     * `status === 'running' && approval.status === 'pending'` the conversation
+     * shows an approval card in place; the executor's promise settles when it
+     * resolves (see `agent/tool-approval.ts`).
+     */
+    approval?: ToolCallApproval
 }
 
 export interface SubRunRecord {
@@ -141,6 +156,8 @@ export type Action =
     | { type: 'sub-event'; subRunId: string; event: AgentEvent }
     | { type: 'sub-merged'; subRunId: string; report: SubRunRecord['merge'] }
     | { type: 'tool-result'; callId: string; ok: boolean; result?: unknown; error?: string }
+    | { type: 'tool-approval-requested'; callId: string; request: ToolApprovalRequest }
+    | { type: 'tool-approval-resolved'; callId: string; decision: ToolApprovalDecision }
     | { type: 'ack-pending'; callIds: string[] }
     | { type: 'transport-error'; error: string }
     | { type: 'connection-stopped'; error: string }
@@ -189,6 +206,10 @@ export function reducer(state: EditorAgentState, action: Action): EditorAgentSta
             )
             return { ...state, toolCalls }
         }
+        case 'tool-approval-requested':
+            return applyToolApprovalRequested(state, action.callId, action.request)
+        case 'tool-approval-resolved':
+            return applyToolApprovalResolved(state, action.callId, action.decision)
         case 'ack-pending': {
             // The server is no longer waiting for these calls (verified against
             // its run view): stop treating them as outstanding, and stop their
@@ -447,6 +468,70 @@ function finishRunningCalls(
     return changed ? updated : calls
 }
 
+/**
+ * A tool asked the user to confirm a call before it runs. The call record
+ * already exists (execution always follows the `tool.requested` entry on the
+ * tape); an unmatched callId is ignored so a replayed/late approval can never
+ * resurrect a finished turn.
+ *
+ * While the approval is pending the run is parked on the USER, so the phase is
+ * the shared `waiting-approval` (the same one plan approval uses) and
+ * `suspendReason` tells the copy apart. This is also what drives the tab's
+ * "needs attention" state.
+ */
+function applyToolApprovalRequested(
+    state: EditorAgentState,
+    callId: string,
+    request: ToolApprovalRequest,
+): EditorAgentState {
+    if (!state.toolCalls.some(call => call.callId === callId)) return state
+    const toolCalls = state.toolCalls.map(call =>
+        call.callId === callId
+            ? { ...call, approval: { request, status: 'pending' as const } }
+            : call
+    )
+    const terminal = state.phase === 'completed' || state.phase === 'failed' || state.phase === 'cancelled'
+    if (terminal) return { ...state, toolCalls }
+    return {
+        ...state,
+        toolCalls,
+        phase: 'waiting-approval',
+        suspendReason: 'tool_approval',
+    }
+}
+
+/**
+ * The user (or a timeout / a run cancellation) settled an approval. Record the
+ * decision on the call; when nothing else is waiting on a human, leave the
+ * suspended phase — back to `waiting-tools` if the run still owes tool results,
+ * otherwise back to streaming.
+ */
+function applyToolApprovalResolved(
+    state: EditorAgentState,
+    callId: string,
+    decision: ToolApprovalDecision,
+): EditorAgentState {
+    const target = state.toolCalls.find(call => call.callId === callId)
+    if (!target?.approval) return state
+    const status: ToolCallApproval['status'] = decision.allowed ? 'allowed' : 'denied'
+    const toolCalls = state.toolCalls.map(call =>
+        call.callId === callId
+            ? { ...call, approval: { request: call.approval!.request, status, decision } }
+            : call
+    )
+    const stillPending = toolCalls.some(call => call.approval?.status === 'pending')
+    if (stillPending || state.phase !== 'waiting-approval' || state.suspendReason !== 'tool_approval') {
+        return { ...state, toolCalls }
+    }
+    const waitingForTools = state.pendingToolIds.length > 0
+    return {
+        ...state,
+        toolCalls,
+        phase: waitingForTools ? 'waiting-tools' : 'streaming',
+        suspendReason: waitingForTools ? 'waiting_tools' : null,
+    }
+}
+
 function appendToCurrentStep(
     steps: AgentStepRecord[],
     activeStepId: string | null,
@@ -650,11 +735,15 @@ function applyEvent(state: EditorAgentState, event: AgentEvent): EditorAgentStat
             return { ...next, todos: event.items ?? [] }
         case 'run.suspended':
             if (event.reason === 'waiting_tools') {
+                // A replayed suspend frame can arrive while the user is still
+                // looking at an approval card. Keep the run "waiting on the
+                // user" instead of dropping the attention state under the card.
+                const awaitingApproval = next.toolCalls.some(call => call.approval?.status === 'pending')
                 return {
                     ...next,
-                    phase: 'waiting-tools',
+                    phase: awaitingApproval ? 'waiting-approval' : 'waiting-tools',
                     pendingToolIds: event.pendingCallIds ?? next.pendingToolIds,
-                    suspendReason: event.reason,
+                    suspendReason: awaitingApproval ? 'tool_approval' : event.reason,
                     error: null,
                 }
             }

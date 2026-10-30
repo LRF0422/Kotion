@@ -12,6 +12,7 @@ import type { OnToolExecution, ToolsRecord } from '../types'
 import { AgentClient } from './client'
 import { AgentControlError } from './events'
 import { EditorToolExecutor, type ToolExecutionResult } from './tool-executor'
+import { TOOL_APPROVAL_CANCELLED_REASON, toolApprovals } from './tool-approval'
 import { useSubRuns } from './use-sub-runs'
 import { usePendingToolExecution } from './use-pending-tools'
 import { useAgentStream } from './use-agent-stream'
@@ -249,8 +250,27 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
             // this conversation, so the next turn's run can call those tools without
             // loading them again (see skills/loaded-skill-cache).
             conversationId,
+            // The ONE approval channel: every editor/plugin tool reaches it
+            // through its execution context (see editor-agent-state's approval
+            // actions and agent/tool-approval.ts). The state machine renders the
+            // pending card; the registry settles the tool's promise and scopes
+            // cancellation to this conversation.
+            requestApproval: (callId, request) => {
+                const settled = toolApprovals.request(callId, request, { scope: conversationId })
+                // Only a genuinely PENDING request gets a card. `level: 'block'`
+                // (and a replayed callId that was already decided) resolves
+                // immediately in the registry and must never flash a pending
+                // card in the state machine.
+                if (toolApprovals.get(callId)) {
+                    dispatch({ type: 'tool-approval-requested', callId, request })
+                }
+                return settled.then(decision => {
+                    dispatch({ type: 'tool-approval-resolved', callId, decision })
+                    return decision
+                })
+            },
         }),
-        [resolveTools, isReadOnlyTool, resolveDocumentId, onToolExecution, getSessionBinding, conversationId]
+        [resolveTools, isReadOnlyTool, resolveDocumentId, onToolExecution, getSessionBinding, conversationId, dispatch]
     )
 
     /**
@@ -606,6 +626,9 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
         generationRef.current += 1
         startInFlightRef.current = null
         abortRef.current?.abort()
+        // A pending approval's promise must settle NOW: the tool is awaiting it
+        // and the surface is being torn down. Denying is the only safe answer.
+        toolApprovals.cancelScope(conversationId, TOOL_APPROVAL_CANCELLED_REASON)
         resetPending()
         executor.clearCache()
         stopSubRuns()
@@ -636,6 +659,7 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
         generationRef.current += 1
         startInFlightRef.current = null
         abortRef.current?.abort()
+        toolApprovals.cancelScope(conversationId, TOOL_APPROVAL_CANCELLED_REASON)
         resetPending()
         executor.clearCache()
         stopSubRuns()
@@ -656,6 +680,9 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
         generationRef.current += 1
         startInFlightRef.current = null
         abortRef.current?.abort()
+        // The previous conversation's cards are gone with the switch: settle
+        // its approvals instead of leaving tools awaiting a decision forever.
+        toolApprovals.cancelScope(conversationRef.current, TOOL_APPROVAL_CANCELLED_REASON)
         resetPending()
         executor.clearCache()
         resetReconnect()
@@ -680,12 +707,25 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
             // Children keep running server-side; this tab simply stops driving
             // them (another tab / a later re-attach picks them up). useSubRuns
             // disposes its worker on unmount; usePendingToolExecution clears its
-            // own retry timer.
+            // own retry timer. An approval the user never answered is denied so
+            // its tool promise settles.
+            toolApprovals.cancelScope(conversationId, '界面已关闭，审批自动拒绝')
             clearReconnectTimer()
             if (attachRetryTimerRef.current) clearTimeout(attachRetryTimerRef.current)
             lock.release()
         }
-    }, [lock])
+    }, [lock, conversationId])
+
+    /**
+     * A run that reaches a terminal phase can no longer deliver its pending
+     * tool results, so no card will ever be answered. Deny the approvals it
+     * still owes instead of leaving the executor awaiting until the timeout.
+     */
+    useEffect(() => {
+        if (state.phase === 'completed' || state.phase === 'failed' || state.phase === 'cancelled') {
+            toolApprovals.cancelScope(conversationId, '运行已结束，审批自动拒绝')
+        }
+    }, [state.phase, conversationId])
 
     /**
      * A finished background task becomes a note in the conversation — but only
