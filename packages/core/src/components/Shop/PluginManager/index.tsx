@@ -264,11 +264,13 @@ export const PluginManager: React.FC<PropsWithChildren> = ({ children }) => {
                                     showSubmissions ? "bg-primary text-primary-foreground" : "bg-muted/50 hover:bg-muted"
                                 )}
                             >
-                                <span className="flex items-center gap-2">
-                                    <ClockIcon className="h-4 w-4" />
-                                    {t('pluginManager.mySubmissions')}
+                                <span className="flex min-w-0 items-center gap-2">
+                                    <ClockIcon className="h-4 w-4 shrink-0" />
+                                    <span className="truncate">{t('pluginManager.mySubmissions')}</span>
                                 </span>
-                                <Badge variant={showSubmissions ? "secondary" : "outline"}>{submissionTotal}</Badge>
+                                <Badge variant={showSubmissions ? "secondary" : "outline"} className="shrink-0">
+                                    {submissionTotal}
+                                </Badge>
                             </button>
                         </div>
 
@@ -294,13 +296,13 @@ export const PluginManager: React.FC<PropsWithChildren> = ({ children }) => {
                                                     : "hover:bg-muted text-foreground"
                                             )}
                                         >
-                                            <div className="flex items-center gap-2">
-                                                <Icon className="h-4 w-4" />
-                                                <span>{t(category.labelKey)}</span>
+                                            <div className="flex min-w-0 items-center gap-2">
+                                                <Icon className="h-4 w-4 shrink-0" />
+                                                <span className="truncate">{t(category.labelKey)}</span>
                                             </div>
                                             <Badge
                                                 variant={isSelected ? "secondary" : "outline"}
-                                                className="h-5 min-w-[20px] justify-center"
+                                                className="h-5 min-w-[20px] shrink-0 justify-center"
                                             >
                                                 {count}
                                             </Badge>
