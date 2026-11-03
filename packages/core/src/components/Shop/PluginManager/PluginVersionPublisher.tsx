@@ -1,8 +1,11 @@
 /**
- * Host-owned "publish a new version" dialog, extracted from PluginList so the
- * plugin studio can open it through pluginMarketplace.openPublisher({ pluginId }).
+ * Host-owned "publish a new version" dialog.
  *
- * Same UI, validation and API as the plugin center's own flow.
+ * Single implementation for both entry points: the plugin center's list renders
+ * it directly, and the plugin studio opens it through
+ * pluginMarketplace.openPublisher({ pluginId }). The dialog loads the plugin by
+ * id, so callers only pass the target id (plus optional pre-uploaded artifact /
+ * icon).
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { APIS, useApi, useUploadFile } from '@kn/common'

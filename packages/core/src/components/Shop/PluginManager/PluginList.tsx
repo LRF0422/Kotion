@@ -1,25 +1,25 @@
-import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { PluginArtifactFile, GlobalState, useApi, useUploadFile, useSelector, APIS, AppContext, event, PLUGIN_CHANGED, logger, usePluginState, getApiErrorMessage } from "@kn/common";
+import React, { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { GlobalState, useApi, useUploadFile, useSelector, APIS, AppContext, event, PLUGIN_CHANGED, logger, usePluginState, getApiErrorMessage } from "@kn/common";
 import {
-    Avatar, Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, DialogTrigger,
-    IconButton, Input, Label, Tabs, TabsContent, TabsList, TabsTrigger, AlertDialog, AlertDialogAction,
+    Avatar, Badge, Button,
+    IconButton, Input, Label, AlertDialog, AlertDialogAction,
     AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
     AlertDialogTitle, AlertDialogTrigger, EmptyState, toast, Select, SelectContent, SelectItem,
     SelectTrigger, SelectValue, Separator, ScrollArea, cn, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
     DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator
 } from "@kn/ui";
 import {
-    PlusIcon, SearchIcon, UploadIcon, XIcon, Loader2Icon, CheckCircleIcon,
+    PlusIcon, SearchIcon, UploadIcon, XIcon, Loader2Icon,
     PowerIcon, BoxIcon, Trash2Icon, MoreVerticalIcon, ArrowUpDownIcon, EyeIcon, CopyIcon, RefreshCwIcon
 } from "@kn/icon";
 import { PluginUploader } from "../PluginUploader";
 import { useDeveloperProfile } from "../../Developer/developer-api";
 import { DeveloperVerificationDialog } from "../../Developer/DeveloperVerificationDialog";
 import { resolvePluginRuntimeState } from "../plugin-runtime-state";
+import { PluginVersionPublisher } from "./PluginVersionPublisher";
 
-import { CollaborationEditor } from "@kn/editor";
 import { useTranslation } from "@kn/common";
-import { hasDocumentationContent, pluginRuntimeIdentity, toRemotePluginDescriptor } from "../plugin-model";
+import { pluginRuntimeIdentity, toRemotePluginDescriptor } from "../plugin-model";
 
 interface Plugin {
     id: string;
@@ -69,57 +69,6 @@ const pluginRuntimeDescriptor = (plugin: Plugin) => {
     return descriptor;
 };
 
-const nextPatchVersion = (version?: string) => {
-    const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version || '');
-    return match ? `${match[1]}.${match[2]}.${(BigInt(match[3]) + 1n).toString()}` : '1.0.0';
-};
-
-/**
- * Serialize a description payload exactly once. Content loaded from the API is
- * already a JSON string, so stringify only plain objects/arrays — otherwise the
- * stored value ends up double-encoded and unreadable on the detail page.
- */
-const toVersionContentString = (content: any): string => {
-    if (typeof content === 'string') {
-        const trimmed = content.trim();
-        if (!trimmed) return '{}';
-        try {
-            return JSON.stringify(JSON.parse(trimmed));
-        } catch {
-            return '{}';
-        }
-    }
-    return JSON.stringify(content ?? {});
-};
-
-/** Coerce persisted content into an editor-friendly object without throwing. */
-const resolveEditorContent = (content: any): any => {
-    if (content && typeof content === 'object') return content;
-    if (typeof content === 'string') {
-        try {
-            const parsed = JSON.parse(content);
-            return parsed && typeof parsed === 'object' ? parsed : {};
-        } catch {
-            return {};
-        }
-    }
-    return {};
-};
-
-const pickPluginFile = () => new Promise<File | null>((resolve) => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.js,application/javascript,text/javascript';
-    input.onchange = () => resolve(input.files?.[0] ?? null);
-    input.addEventListener('cancel', () => resolve(null));
-    input.click();
-});
-
-interface PluginVersion {
-    label: string;
-    content: any;
-}
-
 /** One row of the owner-only version history. */
 interface PluginVersionHistoryItem {
     id?: string;
@@ -159,7 +108,7 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
 
     const { t } = useTranslation();
     const { userInfo } = useSelector((state: GlobalState) => state);
-    const { usePath, uploadPluginFile } = useUploadFile();
+    const { usePath } = useUploadFile();
     const { pluginManager } = useContext(AppContext);
     const { loadedPluginNames, pluginVersion } = usePluginState();
     const [open, setOpen] = useState(false);
@@ -170,22 +119,10 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
     // Remember which row asked to publish, so "继续" after verification opens
     // that plugin's version dialog instead of dropping the user's intent.
     const [pendingPublishId, setPendingPublishId] = useState<string>();
-    const [currentPlugin, setCurrentPlugin] = useState<Plugin>();
-    const [file, setFile] = useState<PluginArtifactFile>();
-    const [version, setVersion] = useState("1.0.0");
-    const uploadSessionRef = useRef(0);
-    // Live editor instances per description tab, read at publish time so unsaved
-    // edits are never dropped (and content is never stringified twice).
-    const editorRefs = useRef<Record<number, any>>({});
-    const [descriptions, setDescriptions] = useState<PluginVersion[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
-    const [loading, setLoading] = useState(false);
-    const [publishing, setPublishing] = useState(false);
     const [activePluginId, setActivePluginId] = useState<string>();
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [pluginToDelete, setPluginToDelete] = useState<Plugin>();
-    const [newTabName, setNewTabName] = useState("");
-    const [addingTab, setAddingTab] = useState(false);
     const [sortBy, setSortBy] = useState<SortOption>('name');
     const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
     const [detailPlugin, setDetailPlugin] = useState<Plugin | null>(null);
@@ -255,33 +192,6 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
         return result;
     }, [props.data, searchQuery, sortBy, sortDirection, runtimeState]);
 
-    const handleAddTab = useCallback(() => {
-        if (!newTabName.trim()) {
-            toast.error(t('pluginManager.tabNameEmpty'));
-            return;
-        }
-
-        if (descriptions.some(desc => desc.label === newTabName)) {
-            toast.error(t('pluginManager.tabNameExists'));
-            return;
-        }
-
-        setDescriptions(prev => [...prev, { label: newTabName, content: {} }]);
-        setNewTabName("");
-        setAddingTab(false);
-        toast.success(t('pluginManager.tabAdded'));
-    }, [newTabName, descriptions, t]);
-
-    const handleRemoveTab = useCallback((index: number) => {
-        if (descriptions.length <= 1) {
-            toast.error(t('pluginManager.cannotRemoveLastTab'));
-            return;
-        }
-
-        setDescriptions(prev => prev.filter((_, i) => i !== index));
-        toast.success(t('pluginManager.tabRemoved'));
-    }, [descriptions, t]);
-
     const isOwnPlugin = useCallback(
         (plugin: Plugin) => String(plugin.developerId || '') === String(userInfo?.id || ''),
         [userInfo?.id],
@@ -315,18 +225,18 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
         };
     }, [detailPlugin, isOwnPlugin, t]);
 
+    // Opens the shared publisher dialog (single implementation used by the
+    // plugin studio as well) with the target plugin. The dialog itself loads the
+    // plugin record, so the caller only needs to pick the id.
     const requestVersionPublish = useCallback((plugin: Plugin) => {
         if (!developerVerified) {
             setPendingPublishId(plugin.id);
             setVerifyOpen(true);
             return;
         }
-        if (currentId === plugin.id) {
-            setOpen(true);
-        } else {
-            setCurrentId(plugin.id);
-        }
-    }, [currentId, developerVerified]);
+        setCurrentId(plugin.id);
+        setOpen(true);
+    }, [developerVerified]);
 
     const handleInstall = useCallback(async (plugin: Plugin) => {
         const versionId = plugin.currentVersionId;
@@ -444,65 +354,6 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
         navigator.clipboard.writeText(plugin.pluginKey || plugin.key || plugin.id);
         toast.success(t('pluginManager.keyCopied'));
     }, [t]);
-
-    const publish = useCallback(async () => {
-        if (!file) {
-            toast.error(t('pluginManager.uploadFile'));
-            return;
-        }
-
-        if (!currentPlugin) {
-            toast.error(t('pluginManager.noPluginSelected'));
-            return;
-        }
-
-        if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)) {
-            toast.error(t('pluginUploader.validation.versionFormat'));
-            return;
-        }
-        // Pull the latest editor state before validating/sending: blur alone is
-        // not reliable when the user clicks Publish straight from the editor.
-        const synchronized = descriptions.map((item, index) => {
-            const editor = editorRefs.current[index];
-            return editor && typeof editor.getJSON === 'function'
-                ? { ...item, content: editor.getJSON() }
-                : item;
-        });
-        const normalizedLabels = synchronized.map(item => item.label.trim().toLowerCase());
-        if (!synchronized.length || synchronized.length > 20
-            || normalizedLabels.some(label => !label)
-            || new Set(normalizedLabels).size !== normalizedLabels.length
-            || !synchronized.some(item => hasDocumentationContent(item.content))) {
-            toast.error(t('pluginUploader.validation.descriptionContent'));
-            return;
-        }
-
-        const versionDescs = synchronized
-            .filter(item => item.label.trim() && hasDocumentationContent(item.content))
-            .map(item => ({
-                label: item.label.trim(),
-                content: toVersionContentString(item.content),
-            }));
-
-        setPublishing(true);
-        try {
-            await useApi(APIS.PUBLISH_PLUGIN_VERSION, { id: currentPlugin.id }, {
-                version,
-                resourcePath: file.name,
-                integrity: file.integrity,
-                versionDescs,
-            });
-            toast.success(t('pluginManager.publishSuccess'));
-            setOpen(false);
-            setFile(undefined);
-            props.onRefresh?.();
-        } catch (error) {
-            console.error('Failed to publish plugin:', error);
-            toast.error(getApiErrorMessage(error, t('pluginManager.operationFailed')));
-        } finally {
-            setPublishing(false);
-        }
-    }, [currentPlugin, file, version, descriptions, props.onRefresh, t]);
 
     // Badge/color/label are driven by the merged runtime state: a bundled or
     // dev plugin is active even without a backend install record.
@@ -945,210 +796,17 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                 </div>
             )}
         </div>
-        <Dialog open={open} onOpenChange={(value) => {
-            setOpen(value);
-            if (!value) {
-                uploadSessionRef.current += 1;
-                setFile(undefined);
-                setVersion("1.0.0");
-                setCurrentId(undefined);
-                setCurrentPlugin(undefined);
-            }
-        }}>
-            <DialogTrigger />
-            <DialogContent className="max-w-4xl w-full max-h-[85vh] flex flex-col">
-                <DialogTitle className="flex items-center gap-3 flex-shrink-0">
-                    <Avatar className="h-10 w-10">
-                        <img src={usePath(currentPlugin?.icon || '')} alt={currentPlugin?.name || ''} />
-                    </Avatar>
-                    <div className="min-w-0 flex-1">
-                        <div className="truncate">{currentPlugin?.name}</div>
-                        <div className="text-sm text-muted-foreground font-normal">
-                            {t('pluginManager.publishVersion')}
-                        </div>
-                    </div>
-                </DialogTitle>
-                <DialogDescription />
-
-                <div className="space-y-4 overflow-y-auto flex-1 min-h-0 pr-2">
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <Label>{t('pluginManager.developer')}</Label>
-                            <Input value={currentPlugin?.developer || ''} disabled />
-                        </div>
-                        <div className="space-y-2">
-                            <Label>{t('pluginManager.maintainer')}</Label>
-                            <Input value={currentPlugin?.maintainer || ''} disabled />
-                        </div>
-                    </div>
-
-                    <div className="space-y-2">
-                        <Label>{t('pluginManager.version')}</Label>
-                        <Input
-                            value={version}
-                            onChange={(event) => setVersion(event.target.value)}
-                            placeholder="1.0.0"
-                            className="font-mono"
-                        />
-                    </div>
-
-                    <div className="space-y-2">
-                        <Label className="flex items-center gap-2">
-                            {t('pluginManager.uploadPluginFile')}
-                            <span className="text-xs text-muted-foreground">({t('pluginManager.required')})</span>
-                        </Label>
-                        <div className="flex items-center gap-2">
-                            <Button
-                                variant="outline"
-                                onClick={async () => {
-                                    const selected = await pickPluginFile();
-                                    if (!selected) return;
-                                    if (selected.size > 100 * 1024 * 1024) {
-                                        toast.error(t('pluginUploader.uploadSection.fileLimit'));
-                                        return;
-                                    }
-                                    const requestId = ++uploadSessionRef.current;
-                                    setLoading(true);
-                                    try {
-                                        const uploaded = await uploadPluginFile(selected);
-                                        if (requestId !== uploadSessionRef.current) return;
-                                        setFile(uploaded);
-                                        toast.success(t('pluginManager.fileUploaded'));
-                                    } catch (error) {
-                                        if (requestId === uploadSessionRef.current) toast.error(getApiErrorMessage(error, t('pluginManager.operationFailed')));
-                                    } finally {
-                                        if (requestId === uploadSessionRef.current) setLoading(false);
-                                    }
-                                }}
-                                disabled={loading}
-                            >
-                                <UploadIcon className="h-4 w-4 mr-2" />
-                                {t('pluginManager.chooseFile')}
-                            </Button>
-                            {file && (
-                                <div className="flex items-center gap-2 px-3 py-2 bg-muted rounded-md flex-1">
-                                    <CheckCircleIcon className="h-4 w-4 text-green-500 shrink-0" />
-                                    <span className="text-sm truncate flex-1">{file.originalName}</span>
-                                    <IconButton
-                                        icon={<XIcon className="h-4 w-4" />}
-                                        onClick={() => setFile(undefined)}
-                                    />
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    <div className="space-y-2">
-                        <Label>{t('pluginManager.versionDescription')}</Label>
-                        {descriptions && descriptions.length > 0 && (
-                            <Tabs defaultValue={descriptions[0].label} className="w-full">
-                                <div className="flex items-center gap-2 mb-2 flex-wrap">
-                                    <TabsList className="flex-shrink-0">
-                                        {descriptions.map((item, index) => (
-                                            <TabsTrigger key={index} value={item.label}>
-                                                {item.label}
-                                            </TabsTrigger>
-                                        ))}
-                                    </TabsList>
-                                    {addingTab ? (
-                                        <div className="flex items-center gap-2 flex-shrink-0">
-                                            <Input
-                                                placeholder="Tab name"
-                                                value={newTabName}
-                                                onChange={(e) => setNewTabName(e.target.value)}
-                                                className="h-8 w-28"
-                                                onKeyPress={(e) => {
-                                                    if (e.key === 'Enter') {
-                                                        handleAddTab();
-                                                    }
-                                                }}
-                                            />
-                                            <IconButton
-                                                icon={<CheckCircleIcon className="h-4 w-4" />}
-                                                onClick={handleAddTab}
-                                            />
-                                            <IconButton
-                                                icon={<XIcon className="h-4 w-4" />}
-                                                onClick={() => {
-                                                    setAddingTab(false);
-                                                    setNewTabName("");
-                                                }}
-                                            />
-                                        </div>
-                                    ) : (
-                                        <IconButton
-                                            icon={<PlusIcon className="h-4 w-4" />}
-                                            onClick={() => setAddingTab(true)}
-                                            className="flex-shrink-0"
-                                        />
-                                    )}
-                                </div>
-                                <div className="border rounded-md overflow-hidden">
-                                    {descriptions.map((item, index) => (
-                                        <TabsContent key={index} value={item.label} className="m-0 p-0">
-                                            <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/30">
-                                                <span className="text-sm font-medium">{item.label}</span>
-                                                {descriptions.length > 1 && (
-                                                    <IconButton
-                                                        icon={<XIcon className="h-4 w-4" />}
-                                                        onClick={() => handleRemoveTab(index)}
-                                                    />
-                                                )}
-                                            </div>
-                                            <CollaborationEditor
-                                                ref={(editor: any) => {
-                                                    editorRefs.current[index] = editor;
-                                                }}
-                                                id=""
-                                                content={resolveEditorContent(item.content)}
-                                                isEditable
-                                                width="w-full"
-                                                withTitle={false}
-                                                toc={false}
-                                                toolbar={true}
-                                                user={null}
-                                                token=""
-                                                className="h-[250px] prose-sm"
-                                                onBlur={(editor) => {
-                                                    const content = editor.getJSON();
-                                                    setDescriptions((data) => data.map((it, i) => i === index ? { ...it, content } : it));
-                                                }}
-                                            />
-                                        </TabsContent>
-                                    ))}
-                                </div>
-                            </Tabs>
-                        )}
-                    </div>
-                </div>
-
-                <DialogFooter className="mt-4 flex-shrink-0 border-t pt-4">
-                    <Button
-                        variant="outline"
-                        onClick={() => {
-                            setOpen(false);
-                            setFile(undefined);
-                        }}
-                        disabled={publishing}
-                    >
-                        {t('pluginManager.cancel')}
-                    </Button>
-                    <Button
-                        onClick={publish}
-                        disabled={publishing || !file}
-                    >
-                        {publishing ? (
-                            <>
-                                <Loader2Icon className="h-4 w-4 mr-2 animate-spin" />
-                                {t('pluginManager.publishing')}
-                            </>
-                        ) : (
-                            t('pluginManager.publish')
-                        )}
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+        {/* Single implementation shared with the plugin studio: it loads the
+            plugin by id, seeds the version-description tabs and publishes. */}
+        <PluginVersionPublisher
+            open={open}
+            onOpenChange={(value) => {
+                setOpen(value);
+                if (!value) setCurrentId(undefined);
+            }}
+            pluginId={currentId}
+            onPublished={() => props.onRefresh?.()}
+        />
 
         <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
             <AlertDialogTrigger />
@@ -1179,7 +837,6 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                 if (pendingPublishId) {
                     setCurrentId(pendingPublishId);
                     setPendingPublishId(undefined);
-                } else if (currentId) {
                     setOpen(true);
                 }
             }}
