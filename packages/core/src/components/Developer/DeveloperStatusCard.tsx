@@ -50,7 +50,12 @@ export const DeveloperStatusCard: React.FC<DeveloperStatusCardProps> = ({ classN
                 type="button"
                 onClick={() => setOpen(true)}
                 className={cn(
-                    'flex min-h-11 w-full items-center justify-between gap-2 rounded-lg bg-muted/50 px-3 py-2 text-sm transition-colors hover:bg-muted',
+                    // Wrap instead of overflowing: this card lives in the 240px
+                    // plugin-manager sidebar, where the label + status badge do
+                    // not fit on one line in English. A flex line that cannot
+                    // fit would otherwise widen Radix ScrollArea's inner table
+                    // and clip the whole sidebar column on the right.
+                    'flex min-h-11 w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-muted/50 px-3 py-2 text-sm transition-colors hover:bg-muted',
                     className,
                 )}
             >
@@ -58,7 +63,7 @@ export const DeveloperStatusCard: React.FC<DeveloperStatusCardProps> = ({ classN
                     <Icon className={cn('size-4 shrink-0', verified ? 'text-emerald-600' : 'text-muted-foreground')} />
                     <span className="whitespace-nowrap">{t('developerVerification.entry', '开发者认证')}</span>
                 </span>
-                <span className="flex shrink-0 items-center gap-1">
+                <span className="ml-auto flex shrink-0 items-center gap-1">
                     <Badge variant="outline" className={cn('h-5 px-1.5 text-[10px]', tone)}>
                         {label}
                     </Badge>
