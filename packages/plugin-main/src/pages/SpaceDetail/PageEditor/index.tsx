@@ -483,15 +483,36 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         }
     }, [pageId, isFavorited, favoriteToggling, service])
 
-    // Seed the wide/narrow toggle from the page's persisted state once the
-    // editor content is ready (the title node attr is the source of truth,
-    // synced from the Y.Doc / backend). Re-runs per page.
+    // Keep the wide/narrow toggle in sync with the document.
+    //
+    // The title node's `fullWidth` attr is the persisted source of truth (it rides
+    // the existing PATCH + Yjs sync chain), and this state is what feeds *both*
+    // columns: `StyledEditor` ($fullWidth) and `PageHeader` (fullWidth prop). So it
+    // must not be seeded once and then forgotten — a remote collaborator flipping
+    // the toggle, a version restore, or the collaboration doc replacing our seed
+    // rewrites the attr after mount. A stale state here renders the body column and
+    // the header column at different widths, which looks exactly like
+    // "标题/元信息缩进了，跟下方内容没对齐". Subscribe to doc changes instead,
+    // mirroring the tab-strip title/icon sync below.
     useEffect(() => {
         if (!editorContentReady) return
-        const node = editor.current?.state.doc.firstChild
-        if (node && node.type.name === 'title') {
-            setFullWidth(!!node.attrs.fullWidth)
+        const ed = editor.current
+        if (!ed) return
+
+        const read = () => {
+            const node = ed.state.doc.firstChild
+            if (node && node.type.name === 'title') {
+                setFullWidth(!!node.attrs.fullWidth)
+            }
         }
+        read()
+
+        const onTransaction = ({ transaction }: { transaction: { docChanged: boolean } }) => {
+            if (!transaction.docChanged) return
+            read()
+        }
+        ed.on('transaction', onTransaction)
+        return () => { ed.off('transaction', onTransaction) }
     }, [editorContentReady, pageId])
 
     // Keep the tab strip's icon (and title) in sync with the editor doc.

@@ -302,7 +302,10 @@
   box-sizing: border-box;
   width: 100%;
   /* 全宽模式铺满编辑区，否则保持默认阅读宽度。用 100%（而非 none）才能与
-     900px 之间做平滑过渡。 */
+     900px 之间做平滑过渡。
+     ⚠️ 这里的宽度/内边距必须与 PageHeader 头部栏严格一致（mx-auto max-w-[900px]
+     / max-w-full + px-4 md:px-10），否则标题、元信息、Add icon 按钮会跟正文
+     和下方插件内容对不齐。改一边就要同步改另一边。 */
   max-width: 900px;
   /* 宽窄切换时让正文列平滑展开/收拢，避免生硬跳变。 */
   transition: max-width 0.28s cubic-bezier(0.4, 0, 0.2, 1);
@@ -321,7 +324,10 @@
 }
   }
 
-@media (max-width: 768px) {
+/* 767.98px（而不是 768px）：Tailwind 的 `md:` 是 min-width: 768px，若这里写
+   max-width: 768px，窗口正好 768px 宽时两边会同时命中 —— 正文 16px、头部
+   40px，二者相差 24px。 */
+@media (max-width: 767.98px) {
 
 .kn-editor {
     padding-left: 16px;

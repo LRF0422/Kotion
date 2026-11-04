@@ -51,9 +51,18 @@ function formatDateTime(value?: string): string | null {
 
 interface PageHeaderProps {
 	editor: Editor;
+	/**
+	 * 页面当前是否处于「全宽」模式。
+	 *
+	 * 必须由**渲染正文列的同一个值**传进来（即 `StyledEditor` 的 `$fullWidth`），
+	 * 所以故意是必填项：头部栏不允许自己从 title 节点 attrs 里再算一次宽度，
+	 * 两个真源只要有一刻不同步，就会出现「正文铺满、头部仍停在 900px 居中」，
+	 * 也就是标题 / 元信息 / Add icon 按钮与下方内容对不齐。
+	 */
+	fullWidth: boolean;
 }
 
-export const PageHeader: React.FC<PageHeaderProps> = ({ editor }) => {
+export const PageHeader: React.FC<PageHeaderProps> = ({ editor, fullWidth }) => {
 	const { t } = useTranslation()
 	const { createTime, updateTime, createBy, createUserName, createUserAvatar, updateUserName } = useContext(PageContext)
 
@@ -111,6 +120,10 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ editor }) => {
 	const cover = (attrs?.cover ?? null) as CoverConfig | null
 	const hasCover = !!cover?.url
 	const tags: string[] = Array.isArray(attrs?.tags) ? attrs.tags : []
+	// 头部栏宽度只跟传进来的 `fullWidth` 走（它同时决定了 StyledEditor 的宽度），
+	// 保证两列永远同宽；见 PageHeaderProps。用 !!(而不是 === true) 与 StyledEditor
+	// 的 `$fullWidth ? ... : ...` 保持完全相同的真值语义。
+	const isFullWidth = !!fullWidth
 
 	const getCoverUrl = useCallback((url: string) => {
 		if (!url) return ""
@@ -242,7 +255,14 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ editor }) => {
 
 					{isEditable && isCoverHovered && !isDragging && (
 						<div className="absolute inset-0 flex items-end justify-center pointer-events-none">
-							<div className="w-full max-w-4xl px-4 pb-3 flex justify-end pointer-events-auto">
+							<div
+								className={cn(
+									"w-full mx-auto px-4 md:px-10 pb-3 flex justify-end pointer-events-auto",
+									// 与下方标题/正文列同一列宽，否则封面上的这排按钮
+									// 右缘会和正文右缘差一截（旧写法 max-w-4xl + px-4）。
+									isFullWidth ? "max-w-full" : "max-w-[900px]"
+								)}
+							>
 								<div className="flex items-center gap-2">
 									<Button
 										variant="secondary"
@@ -290,14 +310,17 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ editor }) => {
 				</div>
 			)}
 
-			{/* Icon / Add buttons / metadata area — kept aligned with the centred
-			    text column below (mirrors StyledEditor: max-w 900px → 100% in full
-			    width, 40px / 16px padding, and the same width transition). */}
+			{/* Icon / Add buttons / metadata area — kept aligned with the text column
+			    below (mirrors StyledEditor: 900px reading column → 100% in full width,
+			    40px / 16px padding, and the same width transition). */}
 			<div
 				className={cn(
 					"flex flex-col gap-4 w-full mx-auto px-4 md:px-10",
-					"transition-[max-width] duration-[280ms] ease-in-out",
-					attrs?.fullWidth ? "max-w-full" : "max-w-[900px]",
+					// 与正文列同样的 280ms 展开/收拢；reduced-motion 时一起关掉
+					// （正文列在 editor.css 的 prefers-reduced-motion 里是 none，
+					// 这里也要同步，否则切换全宽时两列会短暂错位）。
+					"transition-[max-width] duration-[280ms] ease-in-out motion-reduce:transition-none",
+					isFullWidth ? "max-w-full" : "max-w-[900px]",
 					hasCover ? "pt-6 pb-1" : "pt-12 pb-1"
 				)}
 				onMouseEnter={() => setIsTitleAreaHovered(true)}

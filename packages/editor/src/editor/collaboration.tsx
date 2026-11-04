@@ -395,8 +395,10 @@ const CollaborationEditorInner = forwardRef<
           )}
           <div className="flex-1 min-h-0 w-full overflow-y-auto" id="editor-container">
             {/* Cover/header spans the full pane width; rendered outside the
-                centred StyledEditor column. */}
-            {withTitle && contentReady && <PageHeader editor={editor} />}
+                centred StyledEditor column. `fullWidth` is the *same* value that
+                drives StyledEditor below — the header column must never resolve
+                its width independently, or it drifts from the body column. */}
+            {withTitle && contentReady && <PageHeader editor={editor} fullWidth={!!fullWidth} />}
             <StyledEditor $fullWidth={fullWidth}>
               <EditorContent editor={editor} />
               {extensionPageFooters && contentReady && (extensionWrappers as ExtensionWrapper[])
