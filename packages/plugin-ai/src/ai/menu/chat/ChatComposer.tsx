@@ -13,6 +13,7 @@ import {
     TooltipContent,
     TooltipProvider,
     TooltipTrigger,
+    ZoomableImage,
 } from '@kn/ui'
 import type { ChatMode, ChatModelParams } from '@kn/common'
 import { isImeComposing, useTranslation } from '@kn/common'
@@ -21,6 +22,7 @@ import { ModelSelector } from '../../components/ModelSelector'
 import { AgentSelector } from '../../components/AgentSelector'
 import type { ChatTargetPage } from '../chat-sessions'
 import { PageMentionPicker, TargetPageStatus } from './PageMentionPicker'
+import { useImageViewerLabels } from './image-viewer-labels'
 
 // TEMP(chat): the change-tracking toggle is hidden in the chat composer for now.
 // Flip this back to `true` to restore the button.
@@ -142,6 +144,7 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
     ref,
 ) {
     const { t } = useTranslation()
+    const imageViewer = useImageViewerLabels()
     const inputRef = useRef<HTMLTextAreaElement | null>(null)
     const fileInputRef = useRef<HTMLInputElement | null>(null)
     // Popover of the @-page picker; typing `@` at a word boundary opens it.
@@ -264,10 +267,14 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
                 <div className="flex flex-wrap gap-1.5 px-3 pt-2.5">
                     {images.map((src, index) => (
                         <div key={index} className="group/image relative">
-                            <img
+                            <ZoomableImage
                                 src={src}
                                 alt=""
-                                className="h-14 w-14 rounded-lg border border-border/50 object-cover"
+                                gallery={images}
+                                index={index}
+                                zoomLabel={imageViewer.zoomLabel}
+                                labels={imageViewer.labels}
+                                className="h-14 w-14 border border-border/50 object-cover"
                             />
                             <button
                                 type="button"

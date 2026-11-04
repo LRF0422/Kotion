@@ -6,6 +6,7 @@ import {
     Streamdown,
     SubAgentTree,
     TodoPanel,
+    ZoomableImage,
     buildSubAgentTreeLabels,
 } from '@kn/ui'
 import { useTranslation } from '@kn/common'
@@ -15,6 +16,7 @@ import { AgentActivityTimeline } from './ExecutionStepsDisplay'
 import { ShimmerText } from './chat/ShimmerText'
 import { BlockReferences } from './BlockReferences'
 import { TurnUsageMeta } from './chat/TurnUsageMeta'
+import { useImageViewerLabels } from './chat/image-viewer-labels'
 
 interface MessageBubbleProps {
     message: Message
@@ -29,6 +31,7 @@ export const MessageBubble = React.memo(function MessageBubble({
     onRevealReference,
 }: MessageBubbleProps) {
     const { t } = useTranslation()
+    const imageViewer = useImageViewerLabels()
     const isAI = message.sender === 'ai'
     const blockReferences = useMemo(() => extractBlockReferences(message.steps), [message.steps])
     // A delegated child's steps belong to the sub-agent tree, not this timeline.
@@ -59,11 +62,15 @@ export const MessageBubble = React.memo(function MessageBubble({
                         {message.images && message.images.length > 0 && (
                             <div className="mb-1.5 flex flex-wrap justify-end gap-1.5">
                                 {message.images.map((src, index) => (
-                                    <img
+                                    <ZoomableImage
                                         key={index}
                                         src={src}
                                         alt=""
-                                        className="max-h-40 max-w-[180px] rounded-lg border border-border/40 object-cover"
+                                        gallery={message.images}
+                                        index={index}
+                                        zoomLabel={imageViewer.zoomLabel}
+                                        labels={imageViewer.labels}
+                                        className="max-h-40 max-w-[180px] border border-border/40 object-cover"
                                     />
                                 ))}
                             </div>
