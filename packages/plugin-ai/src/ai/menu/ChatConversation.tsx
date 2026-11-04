@@ -156,11 +156,14 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
         meta: session,
     })
 
-    // Every transcript change (a load included) is reported to the container:
-    // it needs the size for the clear affordance and derives the auto title.
+    // Every SETTLED transcript change is reported to the container: it needs the
+    // size for the clear affordance, derives the auto title and bumps the
+    // conversation's recency. The load itself is held back (`loadingTranscript`)
+    // so that opening an old chat is a baseline, not "the user just took a turn".
     useEffect(() => {
+        if (loadingTranscript) return
         onMessagesChange(sessionId, messages)
-    }, [messages, onMessagesChange, sessionId])
+    }, [loadingTranscript, messages, onMessagesChange, sessionId])
 
     const targetPage = session?.targetPage
     const setTargetPage = useCallback((page: ChatTargetPage | null) => {

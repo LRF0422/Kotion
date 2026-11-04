@@ -317,9 +317,10 @@ export interface SessionTasksPanelProps {
 /**
  * Header entry point for the cross-session unfinished-task list.
  *
- * Lives inside {@link ChatHeader}, which both hosts (side dock and the /ai
- * page) render: desktop gets a right-aligned popover, mobile a bottom sheet;
- * the list body itself is shared.
+ * Lives in the shared chat-header action cluster ({@link ChatHeaderActions}),
+ * which both hosts render (side dock via ChatHeader, the /ai page directly):
+ * desktop gets a right-aligned popover, mobile a bottom sheet; the list body
+ * itself is shared.
  */
 export const SessionTasksPanel: React.FC<SessionTasksPanelProps> = ({
     onOpenSession,

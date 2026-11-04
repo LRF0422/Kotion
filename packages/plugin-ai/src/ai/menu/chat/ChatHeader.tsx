@@ -1,18 +1,7 @@
 import React from 'react'
-import { useTranslation } from '@kn/common'
-import { Trash2, X, Loader2 } from '@kn/icon'
-import {
-    Button,
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-    cn,
-    useChatContext,
-} from '@kn/ui'
-import { SessionSwitcher } from './SessionSwitcher'
-import { SessionTasksPanel } from './SessionTasksPanel'
+import { useChatContext } from '@kn/ui'
 import { ChatTabs, type ChatTabInfo } from './ChatTabs'
+import { ChatHeaderActions } from './ChatHeaderActions'
 import type { ChatSessionMeta } from '../chat-sessions'
 
 interface ChatHeaderProps {
@@ -38,22 +27,22 @@ interface ChatHeaderProps {
      * notice, not an error.
      */
     queuedCount?: number
-    /**
-     * Paint the bottom divider. Hosts that already draw the divider on their own
-     * header row (e.g. the kernel home page, where the row also carries the
-     * artifacts shelf) pass `false` so the line is not painted twice.
-     */
-    divided?: boolean
 }
 
 /**
- * Chat header: the open-conversation TAB STRIP plus a small cluster of actions.
+ * Chat header of the SIDE DOCK: the open-conversation TAB STRIP plus the shared
+ * {@link ChatHeaderActions} cluster.
  *
- * The strip is the whole point of the surface's tab model — every tab is a
- * mounted conversation, so the header shows at a glance which ones are working,
- * which finished in the background and which one is blocked on the user. The
- * history dropdown next to it still lists EVERY conversation, including the ones
- * whose tab was closed.
+ * The strip is the whole point of the dock's tab model — every tab is a mounted
+ * conversation, so the header shows at a glance which ones are working, which
+ * finished in the background and which one is blocked on the user. The history
+ * dropdown next to it still lists EVERY conversation, including the ones whose
+ * tab was closed.
+ *
+ * The full-page `/ai` surface no longer uses this header: its conversations live
+ * in the left session column instead of a strip (see `SessionSidebar`), so it
+ * composes a title row + the same {@link ChatHeaderActions} directly. Both
+ * surfaces share one set of actions, i18n and behaviour.
  *
  * Doubles as the dock panel's whole header (the host title bar is hidden via
  * `hideHeader`), so it carries the close button in embedded mode too.
@@ -70,23 +59,16 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
     onDelete,
     onClear,
     queuedCount = 0,
-    divided = true,
 }) => {
     const chatContext = useChatContext()
-    const { t } = useTranslation()
     // The cross-session task list is refreshed when an open tab's run state
-    // changes: a turn that just finished may have rewritten its snapshot. The
-    // key is derived from the tabs already passed by both hosts, so the header
-    // needs no extra props from Chat.tsx / KernelHomePage.tsx.
+    // changes: a turn that just finished may have rewritten its snapshot.
     const tasksRefreshKey = React.useMemo(
         () => tabs.map((tab) => `${tab.id}:${tab.status}`).join('|'),
         [tabs],
     )
     return (
-        <div className={cn(
-            'flex w-full items-center gap-1 px-2 h-9 bg-background/95 backdrop-blur-sm',
-            divided && 'border-b',
-        )}>
+        <div className="flex w-full items-center gap-1 border-b px-2 h-9 bg-background/95 backdrop-blur-sm">
             <ChatTabs
                 tabs={tabs}
                 activeTabId={activeTabId}
@@ -94,67 +76,18 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                 onClose={onCloseTab}
                 onNewTab={onNewTab}
             />
-            {queuedCount > 0 && (
-                <TooltipProvider>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <span className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
-                                <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                                <span>{queuedCount}</span>
-                            </span>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" className="max-w-[240px] text-xs">
-                            {t('ai.chat.tabs.queuedHint', {
-                                count: queuedCount,
-                                defaultValue:
-                                    '{{count}} 个会话正在排队等待并发流（同时运行的会话数有上限）。前一个会话结束或暂停后会自动接上，进度不会丢失。',
-                            })}
-                        </TooltipContent>
-                    </Tooltip>
-                </TooltipProvider>
-            )}
-            <div className="flex items-center gap-px shrink-0">
-                <TooltipProvider>
-                    <SessionTasksPanel onOpenSession={onSwitch} refreshKey={tasksRefreshKey} />
-                    <SessionSwitcher
-                        variant="icon"
-                        sessions={sessions}
-                        activeSessionId={activeTabId}
-                        onSwitch={onSwitch}
-                        onNewSession={onNewTab}
-                        onDelete={onDelete}
-                    />
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={onClear}
-                                disabled={!hasMessages}
-                                className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive disabled:opacity-30 transition-colors"
-                            >
-                                <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" className="text-xs">{t('ai.chat.clearChat')}</TooltipContent>
-                    </Tooltip>
-                    {/* Floating mode toggles the bubble; in the dock,
-                        toggleChat is wired to the host's `close` (collapse). */}
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => chatContext?.toggleChat()}
-                                className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground transition-colors"
-                            >
-                                <X className="h-3.5 w-3.5" />
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" className="text-xs">{t('ai.chat.close')}</TooltipContent>
-                    </Tooltip>
-                </TooltipProvider>
-            </div>
+            <ChatHeaderActions
+                sessions={sessions}
+                activeSessionId={activeTabId}
+                hasMessages={hasMessages}
+                onSwitch={onSwitch}
+                onNewSession={onNewTab}
+                onDelete={onDelete}
+                onClear={onClear}
+                onClose={() => chatContext?.toggleChat()}
+                tasksRefreshKey={tasksRefreshKey}
+                queuedCount={queuedCount}
+            />
         </div>
     )
 }

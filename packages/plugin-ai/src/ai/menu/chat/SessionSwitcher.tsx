@@ -9,10 +9,7 @@ import {
     DropdownMenuTrigger,
 } from '@kn/ui'
 import type { ChatSessionMeta } from '../chat-sessions'
-
-/** Page shown next to a session: the page it belongs to wins, else its off-screen target. */
-const sessionPageTitle = (session?: ChatSessionMeta): string | undefined =>
-    session?.boundPage?.title || session?.targetPage?.title
+import { sessionPageTitle } from './session-list'
 
 interface SessionSwitcherProps {
     sessions: ChatSessionMeta[]

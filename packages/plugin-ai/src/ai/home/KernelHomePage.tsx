@@ -1,5 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { cn, useResponsive } from '@kn/ui'
+import {
+    Button,
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+    cn,
+    useResponsive,
+    useUiStyle,
+} from '@kn/ui'
+import { AtSign, PanelLeft, Plus } from '@kn/icon'
 import {
     agentStreamBudgetSnapshot,
     agentTargetKey,
@@ -12,8 +22,10 @@ import {
     type ChatModelParams,
 } from '@kn/common'
 import { ArtifactsShelf } from './ArtifactsShelf'
-import { ChatHeader } from '../menu/chat/ChatHeader'
-import type { ChatTabInfo, ChatTabStatus } from '../menu/chat/ChatTabs'
+import { ChatHeaderActions } from '../menu/chat/ChatHeaderActions'
+import { ChatTabStatusLight, type ChatTabStatus } from '../menu/chat/ChatTabs'
+import { SessionSidebar, SessionSidebarSheet } from '../menu/chat/SessionSidebar'
+import { sessionPageTitle } from '../menu/chat/session-list'
 import { KernelConversation } from './KernelConversation'
 import { useChatSessions } from '../menu/useChatSessions'
 import { useSessionActions, type ChatPanelControls } from '../menu/use-session-actions'
@@ -37,9 +49,22 @@ import type { ChatSessionMeta } from '../menu/chat-sessions'
  *    conversation acquiring a page, not by binding the open editor;
  *  - the working target is per conversation and survives a reload with it.
  *
- * Session AND TAB management is SHARED with the side dock: the same
- * conversation list, the same open tabs, the same engine-owned transcripts, so
- * opening a chat here and closing the dock shows the same thing.
+ * Session management is SHARED with the side dock: the same conversation list,
+ * the same open conversations, the same engine-owned transcripts, so opening a
+ * chat here and closing the dock shows the same thing.
+ *
+ * Layout note: the dock's session switcher is a tab strip (no room for a list in
+ * a narrow panel); this full-width surface keeps sessions in a dedicated LEFT
+ * COLUMN — new chat + every conversation grouped by recency, with the same run
+ * status lights — instead of the strip. The header keeps only the focused
+ * conversation's title and the shared action cluster.
+ *
+ * UI style: the route declares `fullBleed`, so the shell leaves the pane frame
+ * to this page. In "modern" style the conversation column and the chat are two
+ * floating panes (`kn-workspace-sidebar` / `kn-workspace-editor`) separated by
+ * the shell's pane gap — the same language as the workspace page, and the
+ * artifacts peek becomes a third pane. "Classic" style keeps the flat surface
+ * with a single column divider, exactly as before.
  */
 
 const PANE_WIDTH_KEY = 'kn_agent_pane_width'
@@ -47,6 +72,10 @@ const DEFAULT_PANE_WIDTH = 520
 const PANE_MIN_WIDTH = 320
 const PANE_MAX_RATIO = 0.68
 const PANE_TRANSITION_MS = 200
+/** Width of the conversation column (px). */
+const SESSION_SIDEBAR_WIDTH = 232
+/** Remembered open/collapsed state of the conversation column. */
+const SESSION_SIDEBAR_KEY = 'kn_ai_session_sidebar_collapsed'
 
 const clampPaneWidth = (value: number): number => {
     const max = typeof window === 'undefined'
@@ -57,8 +86,15 @@ const clampPaneWidth = (value: number): number => {
 
 export const KernelHomePage: React.FC = () => {
     const { t } = useTranslation()
+    // Device tier drives STRUCTURE here, not just styling: the conversation
+    // column is inline from tablet up, and a left sheet on a phone.
+    const { isMobile, isMobileOrTablet } = useResponsive()
+    // Modern UI style lays a page out as floating panes (workspace-style). This
+    // route declares `fullBleed`, so the shell leaves the pane frame to us.
+    const { uiStyle } = useUiStyle()
+    const isModernSurface = !isMobile && uiStyle === 'modern'
 
-    // ─── Session + tab index (shared with the dock) ──────────────────
+    // ─── Session index (shared with the dock) ────────────────────────
     const {
         sessions: allSessions,
         activeSessionId,
@@ -77,6 +113,31 @@ export const KernelHomePage: React.FC = () => {
     activeIdRef.current = activeSessionId
 
     const controlsRef = useRef<Map<string, ChatPanelControls>>(new Map())
+
+    // ─── Conversation column (open by default on real desktop widths) ──
+    // The stored preference wins; without one, narrow layouts start collapsed
+    // so the chat is not squeezed before the user has expressed a preference.
+    const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+        try {
+            const stored = window.localStorage.getItem(SESSION_SIDEBAR_KEY)
+            if (stored === '1') return true
+            if (stored === '0') return false
+        } catch { /* preference is best-effort */ }
+        return isMobileOrTablet
+    })
+    const toggleSidebar = useCallback(() => {
+        setSidebarCollapsed(prev => {
+            const next = !prev
+            try { window.localStorage.setItem(SESSION_SIDEBAR_KEY, next ? '1' : '0') } catch { /* ignore */ }
+            return next
+        })
+    }, [])
+    /** Phone only: the column becomes a left sheet. */
+    const [historySheetOpen, setHistorySheetOpen] = useState(false)
+    const openSessionList = useCallback(() => {
+        if (isMobile) setHistorySheetOpen(true)
+        else toggleSidebar()
+    }, [isMobile, toggleSidebar])
 
     // ─── Shared preferences ──────────────────────────────────────────
     const [chatMode, setChatMode] = useState<ChatMode>('agent')
@@ -157,7 +218,6 @@ export const KernelHomePage: React.FC = () => {
     const [resizing, setResizing] = useState(false)
     // Narrow viewports have no room for a split: the pane takes over the
     // surface (push navigation) instead of squeezing the conversation.
-    const { isMobile } = useResponsive()
 
     useEffect(() => {
         if (pane.open && pane.target) {
@@ -239,12 +299,14 @@ export const KernelHomePage: React.FC = () => {
         window.addEventListener('pointerup', handleUp)
     }, [paneWidth])
 
-    // ─── Session/tab commands (shared with the dock) ─────────────────
+    // ─── Session commands (shared with the dock) ────────────────────
+    // No tab strip on this surface, so `handleCloseTab` is unused: the dock is
+    // the only place where closing an open conversation (and stopping its run)
+    // is a user gesture.
     const {
         handleClearChat,
         handleNewSession,
         handleSelectSession,
-        handleCloseTab,
         handleDeleteSession,
     } = useSessionActions({
         activeSessionId,
@@ -268,42 +330,189 @@ export const KernelHomePage: React.FC = () => {
     const activeArtifacts = artifactsByTab[activeSessionId] ?? []
     const shelfActiveKey = agentTargetKey(pane.target)
 
-    const tabs = useMemo<ChatTabInfo[]>(() => openSessionIds.map(id => {
-        const meta = allSessions.find(session => session.id === id)
-        return {
-            id,
-            title: meta?.title || t('ai.chat.newChat'),
-            pageTitle: meta?.boundPage?.title || meta?.targetPage?.title,
-            status: runStatus[id] ?? 'idle',
+    // ─── Focused conversation, as the header shows it ───────────────
+    const sessionListLabel = isMobile
+        ? t('ai.chat.sessions.open', { defaultValue: '会话历史' })
+        : sidebarCollapsed
+            ? t('ai.chat.sessions.expand', { defaultValue: '展开会话列表' })
+            : t('ai.chat.sessions.collapse', { defaultValue: '收起会话列表' })
+    const activeTitle = activeSession?.title || t('ai.chat.newChat')
+    const activePageTitle = sessionPageTitle(activeSession)
+    const activeStatus = runStatus[activeSessionId] ?? 'idle'
+    const hasActiveMessages = (messageCounts[activeSessionId] ?? 0) > 0
+    // A finished turn may have rewritten the open-task snapshot of ANY open
+    // conversation, not only the focused one: key the task index on the whole
+    // run-status map so the badge never goes stale in the background.
+    const tasksRefreshKey = useMemo(
+        () => openSessionIds.map(id => `${id}:${runStatus[id] ?? 'idle'}`).join('|'),
+        [openSessionIds, runStatus],
+    )
+    // Only conversations mounted HERE can report a live status. A row whose tab
+    // was closed (or evicted by the open-tab ceiling) must show no marker
+    // rather than a stale "running" light nobody can clear.
+    const sessionStatuses = useMemo(() => {
+        const visible: Record<string, ChatTabStatus> = {}
+        for (const id of openSessionIds) {
+            const status = runStatus[id]
+            if (status) visible[id] = status
         }
-    }), [openSessionIds, allSessions, runStatus, t])
+        return visible
+    }, [openSessionIds, runStatus])
 
     return (
-        <div className="flex h-full min-h-0 bg-background">
-            <div className={cn('flex min-w-0 flex-1 flex-col', paneOpen && isMobile && 'hidden')}>
-                <div className="flex shrink-0 items-center gap-1 border-b pr-2">
-                    <div className="min-w-0 flex-1">
-                        <ChatHeader
-                            tabs={tabs}
-                            activeTabId={activeSessionId}
-                            onSelectTab={handleSelectSession}
-                            onCloseTab={handleCloseTab}
-                            onNewTab={handleNewSession}
+        <div
+            className={cn(
+                'flex h-full min-h-0 w-full',
+                // Modern: the pane shell's gap separates the conversation pane
+                // from the chat pane, exactly like the workspace page.
+                isModernSurface ? 'kn-workspace-shell bg-muted/40' : 'bg-background',
+            )}
+        >
+            {/* ── Conversation column (session management) ──────────────
+                Full-page chat only: the narrow dock keeps its tab strip. The
+                column is ALWAYS mounted so its collapsed width is a painted
+                state and expanding animates from it; the inner layer keeps the
+                full width so rows never reflow while the width transitions. */}
+            {!isMobile && (
+                <aside
+                    aria-hidden={sidebarCollapsed}
+                    aria-label={t('ai.chat.sessions.title', { defaultValue: '会话' })}
+                    className={cn(
+                        'relative flex shrink-0 flex-col overflow-hidden',
+                        isModernSurface
+                            ? 'kn-workspace-sidebar h-full min-h-0'
+                            : 'border-r',
+                        sidebarCollapsed && 'border-0',
+                    )}
+                    style={{
+                        width: sidebarCollapsed ? 0 : SESSION_SIDEBAR_WIDTH,
+                        // Collapsed, the pane keeps its (zero) width but the
+                        // MODERN pane gap would still offset the chat pane;
+                        // cancel it. Classic has no pane gap (the variable is
+                        // inherited even there), so applying this margin would
+                        // pull the chat left and clip it under the shell.
+                        marginRight: sidebarCollapsed && isModernSurface
+                            ? 'calc(-1 * var(--kn-workspace-gap, 0px))'
+                            : 0,
+                        // Width alone keeps the rows keyboard-focusable while
+                        // invisible; visibility takes the subtree out of both
+                        // the a11y and the tab order.
+                        visibility: sidebarCollapsed ? 'hidden' : 'visible',
+                        transition: 'width 160ms ease-out',
+                    }}
+                >
+                    <div className="h-full min-h-0" style={{ width: SESSION_SIDEBAR_WIDTH }}>
+                        <SessionSidebar
                             sessions={allSessions}
-                            hasMessages={(messageCounts[activeSessionId] ?? 0) > 0}
-                            onSwitch={handleSelectSession}
+                            activeSessionId={activeSessionId}
+                            runStatus={sessionStatuses}
+                            onSelect={handleSelectSession}
+                            onNewSession={handleNewSession}
                             onDelete={handleDeleteSession}
-                            onClear={handleClear}
-                            queuedCount={queuedCount}
-                            // This row owns the divider so it can span the artifacts
-                            // shelf too; the header must not draw a second one.
-                            divided={false}
+                            // A floating pane already separates the list from
+                            // the chat; the tint is only needed in the flat
+                            // (classic) layout.
+                            className={isModernSurface ? 'bg-background' : 'bg-muted/20'}
                         />
+                    </div>
+                </aside>
+            )}
+
+            {/* Phone: the same list arrives as a left sheet from the header. */}
+            {isMobile && (
+                <SessionSidebarSheet
+                    open={historySheetOpen}
+                    onOpenChange={setHistorySheetOpen}
+                    content={
+                        <SessionSidebar
+                            sessions={allSessions}
+                            activeSessionId={activeSessionId}
+                            runStatus={sessionStatuses}
+                            onSelect={handleSelectSession}
+                            onNewSession={handleNewSession}
+                            onDelete={handleDeleteSession}
+                            onNavigate={() => setHistorySheetOpen(false)}
+                            onClose={() => setHistorySheetOpen(false)}
+                            className="bg-background"
+                        />
+                    }
+                />
+            )}
+
+            <div className={cn(
+                'flex min-w-0 flex-1 flex-col',
+                isModernSurface && 'kn-workspace-editor h-full min-h-0 overflow-hidden',
+                paneOpen && isMobile && 'hidden',
+            )}>
+                {/* Header: conversation list toggle + the FOCUSED conversation's
+                    title, then the shared action cluster (tasks / clear) and the
+                    artifacts shelf. The tab strip lives only in the dock now. */}
+                <div className="flex h-9 shrink-0 items-center gap-1 border-b bg-background/95 pl-1.5 pr-2 backdrop-blur-sm">
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={openSessionList}
+                                    aria-label={sessionListLabel}
+                                    aria-expanded={isMobile ? historySheetOpen : !sidebarCollapsed}
+                                    className="h-6 w-6 shrink-0 p-0 text-muted-foreground transition-colors hover:text-foreground"
+                                >
+                                    <PanelLeft className="h-3.5 w-3.5" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" className="text-xs">
+                                {sessionListLabel}
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={handleNewSession}
+                                    aria-label={t('ai.chat.newChat')}
+                                    className="h-6 w-6 shrink-0 p-0 text-muted-foreground transition-colors hover:text-foreground"
+                                >
+                                    <Plus className="h-3.5 w-3.5" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" className="text-xs">
+                                {t('ai.chat.newChat')}
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                    <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                        <ChatTabStatusLight status={activeStatus} />
+                        <span className="truncate text-xs font-medium" title={activeTitle}>
+                            {activeTitle}
+                        </span>
+                        {activePageTitle && (
+                            <span className="flex min-w-0 max-w-[40%] shrink-0 items-center gap-0.5 text-[10px] text-muted-foreground">
+                                <AtSign className="h-2.5 w-2.5 shrink-0" />
+                                <span className="truncate">{activePageTitle}</span>
+                            </span>
+                        )}
                     </div>
                     <ArtifactsShelf
                         artifacts={activeArtifacts}
                         activeKey={shelfActiveKey}
                         onOpen={pane.openArtifact}
+                    />
+                    <ChatHeaderActions
+                        sessions={allSessions}
+                        activeSessionId={activeSessionId}
+                        hasMessages={hasActiveMessages}
+                        onSwitch={handleSelectSession}
+                        onNewSession={handleNewSession}
+                        onDelete={handleDeleteSession}
+                        onClear={handleClear}
+                        showHistory={false}
+                        tasksRefreshKey={tasksRefreshKey}
+                        queuedCount={queuedCount}
                     />
                 </div>
 
@@ -345,12 +554,20 @@ export const KernelHomePage: React.FC = () => {
                 aria-hidden={!paneOpen}
                 className={cn(
                     'relative flex shrink-0 overflow-hidden bg-background',
-                    paneOpen && 'border-l border-border',
+                    paneOpen && !isModernSurface && 'border-l border-border',
+                    paneOpen && isModernSurface && 'kn-workspace-editor h-full min-h-0',
                 )}
                 style={{
                     // Mobile: full-width pane (the conversation is hidden above).
                     // Desktop: the resizable inline column (side peek).
                     width: paneOpen ? (isMobile ? '100%' : paneWidth) : 0,
+                    // A closed pane is still a flex child of the modern pane
+                    // shell: its gap would inset the chat pane's right edge by
+                    // one gutter even though nothing is there. Cancel it once
+                    // the collapse animation has fully let go of the space.
+                    marginLeft: isModernSurface && !paneOpen && !paneDisplay
+                        ? 'calc(-1 * var(--kn-workspace-gap, 0px))'
+                        : 0,
                     transition: resizing ? 'none' : 'width 200ms ease-out',
                 }}
             >

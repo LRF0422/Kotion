@@ -130,6 +130,12 @@ export function useChatSessions(): UseChatSessionsResult {
     activeIdRef.current = activeSessionId
     const tabsRef = useRef(openSessionIds)
     tabsRef.current = openSessionIds
+    /**
+     * Last transcript length observed per conversation. The first observation
+     * after mount is the transcript LOAD (not activity); a change after that is
+     * a real turn and moves the conversation to "today" in the recency list.
+     */
+    const transcriptCountRef = useRef<Map<string, number>>(new Map())
 
     const commitTabs = useCallback((next: string[]) => {
         tabsRef.current = next
@@ -163,13 +169,22 @@ export function useChatSessions(): UseChatSessionsResult {
     }, [focus, openTab])
 
     // ── Engine metadata sync (session list) ─────────────────────────
+    /**
+     * Rewrite one session's metadata.
+     *
+     * `syncRemote: false` keeps a change LOCAL — used for recency bumps only.
+     * The engine already advances the server's `updateTime` on every transcript
+     * write, so pushing our clock back would add a metadata PUT per turn and
+     * could overwrite a newer server-side title/binding with the local copy.
+     */
     const updateMeta = useCallback(
-        (id: string, patch: (session: ChatSessionMeta) => ChatSessionMeta) => {
+        (id: string, patch: (session: ChatSessionMeta) => ChatSessionMeta, options?: { syncRemote?: boolean }) => {
             const prev = sessionsRef.current
             const next = prev.map(session => (session.id === id ? patch(session) : session))
             sessionsRef.current = next
             saveIndex(next)
             setSessions(next)
+            if (options?.syncRemote === false) return
             const updated = next.find(session => session.id === id)
             if (updated && isSessionApiAvailable()) {
                 void upsertRemoteSession(updated).catch(() => markSessionApiUnavailable())
@@ -317,16 +332,35 @@ export function useChatSessions(): UseChatSessionsResult {
     /**
      * Reflect a conversation's transcript activity: derive the auto title on the
      * first user turn and keep "most recent" ordering honest. Called by the tab
-     * panel that owns the transcript, so a busy background tab also promotes
-     * itself in the history list without stealing focus.
+     * panel that owns the transcript, so a busy background conversation also
+     * promotes itself in the recency list without stealing focus.
+     *
+     * `updatedAt` advances on every APPENDED turn, not only when the title is
+     * derived: the left conversation column buckets by `updatedAt`, and a chat
+     * continued today must move from "Yesterday" to "Today" immediately. The
+     * first observation after mount is the transcript LOAD and is deliberately
+     * not counted — merely opening an old chat must not restamp it.
      */
     const noteSessionMessages = useCallback((id: string, messages: Message[]) => {
         const current = sessionsRef.current.find(session => session.id === id)
         if (!current) return
+        const observed = transcriptCountRef.current.get(id)
+        transcriptCountRef.current.set(id, messages.length)
+        const isActivity = observed !== undefined && observed !== messages.length
         const shouldAutoTitle = !current.title || current.title === 'New chat'
         const title = shouldAutoTitle ? deriveTitle(messages) : current.title
-        if (title === current.title) return
-        updateMeta(id, session => ({ ...session, title, updatedAt: Date.now() }))
+        const titleChanged = title !== current.title
+        if (!isActivity && !titleChanged) return
+        updateMeta(
+            id,
+            // Only an APPENDED turn advances the clock: a title derived while
+            // LOADING an imported/foreign transcript is a metadata fix, not
+            // activity, and must not move the chat to "today".
+            session => ({ ...session, title, updatedAt: isActivity ? Date.now() : session.updatedAt }),
+            // A derived title is a real metadata change and is synced; a pure
+            // recency bump stays local (the engine owns the server timestamp).
+            { syncRemote: titleChanged },
+        )
     }, [updateMeta])
 
     const clearSessionMessages = useCallback((id: string) => {

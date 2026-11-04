@@ -51,7 +51,10 @@ export const ai = new AiPlugin({
      * installing/uninstalling this plugin adds/removes the surface.
      */
     routes: [
-        { name: '/ai', path: '/ai', element: <KernelHomePage /> },
+        // `fullBleed`: the page lays out its own shell panes (conversation column
+        // + chat), so the shell must not wrap it in the single route card —
+        // see RouteConfig.fullBleed.
+        { name: '/ai', path: '/ai', element: <KernelHomePage />, fullBleed: true },
     ],
     menus: [
         {
@@ -153,6 +156,23 @@ export const ai = new AiPlugin({
                             "newTab": "New tab",
                             "history": "All chats",
                             "queuedHint": "{{count}} chat(s) are waiting for a stream slot — the number of simultaneously streaming chats is capped. A queued run attaches automatically as soon as one frees up; nothing is lost."
+                        },
+                        "sessions": {
+                            "title": "Chats",
+                            "empty": "No chats yet",
+                            "open": "Chat history",
+                            "expand": "Show chat list",
+                            "collapse": "Hide chat list",
+                            "today": "Today",
+                            "yesterday": "Yesterday",
+                            "previous7": "Previous 7 days",
+                            "earlier": "Earlier",
+                            "status": {
+                                "running": "Running",
+                                "attention": "Waiting for you",
+                                "done": "Finished in the background",
+                                "failed": "Last run failed"
+                            }
                         },
                         "tasks": {
                             "title": "Unfinished tasks",
@@ -357,6 +377,23 @@ export const ai = new AiPlugin({
                             "newTab": "新建标签页",
                             "history": "全部对话",
                             "queuedHint": "{{count}} 个会话正在排队等待并发流（同时流式运行的会话数有上限）。有会话结束或暂停后会自动接上，进度不会丢失。"
+                        },
+                        "sessions": {
+                            "title": "会话",
+                            "empty": "还没有会话",
+                            "open": "会话历史",
+                            "expand": "展开会话列表",
+                            "collapse": "收起会话列表",
+                            "today": "今天",
+                            "yesterday": "昨天",
+                            "previous7": "近 7 天",
+                            "earlier": "更早",
+                            "status": {
+                                "running": "运行中",
+                                "attention": "等待你的决定",
+                                "done": "后台已完成",
+                                "failed": "上次运行失败"
+                            }
                         },
                         "tasks": {
                             "title": "未完成任务",

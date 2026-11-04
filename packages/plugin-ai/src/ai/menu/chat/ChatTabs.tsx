@@ -34,7 +34,7 @@ interface ChatTabsProps {
 }
 
 /** Tabs are a status light as much as a switcher, so every state is visible. */
-const TabStatusLight: React.FC<{ status: ChatTabStatus }> = ({ status }) => {
+export const ChatTabStatusLight: React.FC<{ status: ChatTabStatus }> = ({ status }) => {
     if (status === 'running') {
         return <Loader2 aria-hidden className="h-3 w-3 shrink-0 animate-spin text-primary" />
     }
@@ -108,7 +108,7 @@ export const ChatTabs: React.FC<ChatTabsProps> = ({
                             }
                             className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
                         >
-                            <TabStatusLight status={tab.status} />
+                            <ChatTabStatusLight status={tab.status} />
                             <span className={cn('truncate text-xs', isActive && 'font-medium')}>
                                 {label}
                             </span>

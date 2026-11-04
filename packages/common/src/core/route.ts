@@ -19,6 +19,22 @@ export interface RouteConfig {
      * nested child route inherits its parent's lifetime.
      */
     keepAlive?: boolean
+    /**
+     * The page draws its OWN shell panes (workspace-style: a sidebar pane and a
+     * content pane separated by the shell's pane gap) instead of being wrapped
+     * in the shell's single route card.
+     *
+     * In "modern" UI style the shell normally puts every route page inside one
+     * rounded `.kn-route-pane` card. A page that splits itself into panes must
+     * opt out, or the panes would be nested in a second frame. Such a page is
+     * responsible for its own pane layout — the canonical implementation is the
+     * workspace's `.kn-workspace-shell` + `.kn-workspace-sidebar` +
+     * `.kn-workspace-editor` (see `SpaceDetail`), and the AI page mirrors it.
+     *
+     * Only meaningful for the route rendered directly inside the app shell; it
+     * rides the route `handle` (see `createRouteCacheHandle`).
+     */
+    fullBleed?: boolean
 }
 
 /**

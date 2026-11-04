@@ -92,11 +92,15 @@ export const KernelConversation: React.FC<KernelConversationProps> = ({
         meta: session,
     })
 
-    // Every transcript change (a load included) reaches the container: it needs
-    // the size for the clear affordance and derives the auto title from it.
+    // Every SETTLED transcript change reaches the container: it needs the size
+    // for the clear affordance, derives the auto title and bumps the recency of
+    // the conversation. The load itself is held back (`loadingTranscript`) so
+    // that opening an old chat reports its history as the baseline instead of
+    // looking like a turn the user just took.
     useEffect(() => {
+        if (loadingTranscript) return
         onMessagesChange(sessionId, messages)
-    }, [messages, onMessagesChange, sessionId])
+    }, [loadingTranscript, messages, onMessagesChange, sessionId])
 
     // The conversation's own working target is what the model is told about:
     // a background tab must not describe the artifact the USER is looking at.

@@ -72,7 +72,7 @@ const reslove = (config: common.RouteConfig) => {
     // Route cache participation and the route's *pattern* travel on `handle`:
     // `useMatches()` does not expose the route object, and the shell's
     // RouteCacheOutlet keys keep-alive slots by pattern. See routing/route-cache.ts.
-    const handle = createRouteCacheHandle(config.path, config.keepAlive)
+    const handle = createRouteCacheHandle(config.path, config.keepAlive, config.fullBleed)
 
     if (config.children) {
         return <Route path={config.path} element={wrappedElement} handle={handle} key={config.path} >

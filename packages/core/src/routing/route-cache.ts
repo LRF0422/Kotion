@@ -197,13 +197,24 @@ export interface RouteCacheHandle {
         /** `false` opts the route out of keep-alive. */
         keepAlive?: boolean
     }
+    /**
+     * The page lays out its own shell panes; the shell must not wrap it in the
+     * single route card. See `RouteConfig.fullBleed`.
+     */
+    fullBleed?: boolean
 }
 
 /** Build the `handle` a page route carries for the route cache. */
-export function createRouteCacheHandle(pattern: string, keepAlive?: boolean): RouteCacheHandle {
-    return {
+export function createRouteCacheHandle(
+    pattern: string,
+    keepAlive?: boolean,
+    fullBleed?: boolean,
+): RouteCacheHandle {
+    const handle: RouteCacheHandle = {
         routeCache: keepAlive === undefined ? { pattern } : { pattern, keepAlive },
     }
+    if (fullBleed) handle.fullBleed = true
+    return handle
 }
 
 /** The subset of a plugin `RouteConfig` the policy needs. */

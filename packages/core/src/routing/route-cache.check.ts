@@ -140,6 +140,21 @@ assert.deepEqual(
     { key: 'plugin:/home', cacheable: true },
 )
 
+// The page-surface flag rides the same handle as the cache policy (the shell
+// reads it to decide whether to draw the route card) and never affects
+// retention.
+const aiHandle = createRouteCacheHandle('/ai', undefined, true)
+assert.equal(aiHandle.fullBleed, true)
+assert.equal(aiHandle.routeCache.pattern, '/ai')
+assert.equal(createRouteCacheHandle('/home').fullBleed, undefined)
+assert.deepEqual(
+    policy({
+        matches: handles(undefined, aiHandle),
+        pathname: '/ai',
+    }),
+    { key: 'route:/ai', cacheable: true },
+)
+
 // Public share / one-shot invite routes never keep a slot, even though their
 // route config did not opt out.
 assert.deepEqual(

@@ -5,7 +5,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { TourHost } from "./components/Tour/TourHost"
 import { ChevronLeft } from "@kn/icon"
 import { MobileTabBar } from "./components/mobile/MobileTabBar"
-import { useApi, APIS, useAsyncEffect, useLocation, useNavigator, useUploadFile, getAccessToken, getRefreshToken, getTokenContextState, clearContextSensitiveClientState, clearTokens, normalizeTokenResponse, notifyContextChanged, saveTokens, useDispatch, AppContext, event, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS, REMOTE_PLUGIN_CHANGE_SOURCES, type PluginChangeSource, TOGGLE_AI_ASSISTANT, TOGGLE_DOCK_PANEL, dockRuntime, logger, useDesktop } from "@kn/common"
+import { useApi, APIS, useAsyncEffect, useLocation, useMatches, useNavigator, usePluginRoutes, useUploadFile, matchPath, getAccessToken, getRefreshToken, getTokenContextState, clearContextSensitiveClientState, clearTokens, normalizeTokenResponse, notifyContextChanged, saveTokens, useDispatch, AppContext, event, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS, REMOTE_PLUGIN_CHANGE_SOURCES, type PluginChangeSource, TOGGLE_AI_ASSISTANT, TOGGLE_DOCK_PANEL, dockRuntime, logger, useDesktop } from "@kn/common"
 import { toast } from "@kn/ui"
 import React from "react"
 import { MobilePageHeaderProvider, useMobilePageHeader } from "@kn/common"
@@ -120,6 +120,22 @@ export function Layout({ onPluginsReady }: LayoutProps) {
     )
     const workspaceSpaceId = workspaceMatch?.[1] ?? workspaceMatch?.[3]
     const workspacePageId = workspaceMatch?.[2] ?? workspaceMatch?.[4]
+    // A page can opt out of the shell's single route card and lay out its own
+    // panes (workspace-style). Baked routes carry the flag on their route
+    // `handle`; a route registered after the router was built (plugin studio's
+    // dev build) is only known to the live registry, so fall back to matching it.
+    const matches = useMatches()
+    const pluginRoutes = usePluginRoutes()
+    // `matches[0]` is the shell layout route, `matches[1]` the page route inside
+    // it — the same index `resolveRouteCachePolicy` reads, so a full-bleed page
+    // with nested children keeps the flag on every child path.
+    const pageHandle = matches[1]?.handle as { fullBleed?: boolean } | undefined
+    const routeFullBleed = pageHandle?.fullBleed === true
+        || pluginRoutes.some((route) => (
+            route.fullBleed === true
+            && Boolean(route.path)
+            && Boolean(matchPath(route.path as string, location.pathname))
+        ))
     const { pluginManager } = useContext(AppContext)
     const [pluginsLoaded, setPluginsLoaded] = useState(false)
     const [pluginLoadError, setPluginLoadError] = useState<unknown>(null)
@@ -507,7 +523,7 @@ export function Layout({ onPluginsReady }: LayoutProps) {
                             <main className={cn(
                                 "w-full overflow-hidden",
                                 isMobile ? "flex-1 min-h-0" : "h-full min-h-0",
-                                !isMobile && !isWorkspaceRoute && "kn-route-pane"
+                                !isMobile && !isWorkspaceRoute && !routeFullBleed && "kn-route-pane"
                             )}>
                                 {/* `<Outlet />` with Vue-`<keep-alive>` semantics: the
                                     last few page routes stay mounted while the user is
