@@ -89,7 +89,9 @@
 | 框架 | [`packages/common/src/ai/tools/background-tools.ts`](../packages/common/src/ai/tools/background-tools.ts) | 上表三个工具（按 `execCtx.conversationId` 限定在调用方会话） |
 | 框架 | [`packages/common/src/ai/agent/use-background-task-notifications.ts`](../packages/common/src/ai/agent/use-background-task-notifications.ts) | 完成通知：run 忙时先攒着，空闲了再认领并交给宿主 |
 | 框架 | [`use-editor-agent.ts`](../packages/common/src/ai/agent/use-editor-agent.ts) | 新增 `onBackgroundTaskSettled(tasks, note)` 选项；`useWorkspaceAgent` 透传 |
-| 框架 | [`use-background-tasks.ts`](../packages/common/src/ai/agent/use-background-tasks.ts) | `useBackgroundTasks` / `useBackgroundTask`：订阅任务板（卡片、产物架据此实时更新） |
+| 框架 | [`use-background-tasks.ts`](../packages/common/src/ai/agent/use-background-tasks.ts) | `useBackgroundTasks` / `useBackgroundTask`：订阅任务板（看板、卡片、产物架据此实时更新） |
+| 框架 | [`background-tasks.ts`](../packages/common/src/ai/agent/background-tasks.ts) | 看板纯函数：`sortBackgroundTasks` / `groupBackgroundTasks` / `formatBackgroundTaskDuration`（运行中在前、终态按结束时间倒序、人类可读时长） |
+| UI | [`BackgroundTasksPanel.tsx`](../packages/plugin-ai/src/ai/menu/chat/BackgroundTasksPanel.tsx) | header 的「后台任务」入口 + 看板：全体会话的任务、实时进度、耗时、结果/错误、不再等待、打开所在会话（桌面 popover / 移动端 bottom sheet） |
 | 框架 | [`agent-artifacts.ts`](../packages/common/src/ai/kernel/agent-artifacts.ts) | 产物架把任务的产物合并到会话派生的产物之上（`mergeAgentArtifacts`，纯函数可测） |
 | 工具注册 | [`packages/core/src/ai/tools/register.ts`](../packages/core/src/ai/tools/register.ts) | `createBackgroundTaskTools` 与 `load_skill` 并列注册 |
 | 元数据 | [`discovery/tool-metadata.ts`](../packages/common/src/ai/discovery/tool-metadata.ts) | 三个工具 `scope: 'any'` + `requiresEditor: false`：工作台（没有文档）也要能等到、能查 |
@@ -110,8 +112,13 @@
   容量上限 100 条：**待投递的完成结果最后才被淘汰**（丢掉它就等于永远不告诉 agent）。
 - **不做跨会话共享。** 一个会话看不到（也不会被通知）另一个会话的任务；
   显式传 `taskId` 能读，但列表与"省略 taskId"的解析只认自己的会话。
-- **没有新增 UI 卡片。** 后台构建跑完仍会走原来的产物链路（`plugin-build` 产物、
-  右侧预览、dev host 自动热更），会话里多的是那条通知消息。
+- **有看板，但没有新的产物卡片。** 会话 header 有一个「后台任务」入口（`BackgroundTasksPanel`，
+  侧边 dock 与 `/ai` 页共用同一个 `ChatHeader`）：图标上的角标是**进行中**的数量，点开是一个看板，
+  列出**整个窗口**的任务（不只是当前会话——之前会话里的构建正是要找回的那一个），按「进行中 /
+  已结束」分组，实时显示进度与耗时；展开一行能看到 taskId、结果/错误（截断显示）、
+  「不再等待」（= `cancelBackgroundTask`，只说"不再等"，不承诺杀进程）和「打开所在会话」。
+  后台构建跑完仍会走原来的产物链路（`plugin-build` 产物、右侧预览、dev host 自动热更），
+  会话里多的是那条通知消息——看板只是让"任务本身"可见，不改产物契约。
 - **面板关着（`AIAssistantPanel` 的 `open=false`）时不推进对话**：那会是一次用户看不见的
   模型调用；等用户打开面板再补上。会话标签页（`ChatConversation`）与之相反——多会话并行保活是
   它的既有语义，所以后台标签也会推进。
@@ -131,6 +138,8 @@ pnpm --filter @kn/plugin-plugin-studio test       # 开发台 4 个工具的 bac
 `check:background-tasks` 覆盖：立即返回、等待消费结果、超时不消费、失败文案、
 **任务的产物（运行/成功/失败/取消）与产物架的合并规则、`listSnapshot` 的引用稳定性**、
 取消不复活（含"迟到成功不复活"）、会话隔离、进度/owner 标记、容量裁剪（待投递结果优先保留）、
-"空闲才投递且只投一次"，以及工具层的 wait/超时/作用域/未知 id。此外它还**用真实的
-`ToolProvider` + 真实的作用域规则**断言三件容易写错又看不见的事：工作台（无文档）也能拿到这三个
+"空闲才投递且只投一次"，以及工具层的 wait/超时/作用域/未知 id；**看板纯函数**
+（`sortBackgroundTasks` / `groupBackgroundTasks` / `formatBackgroundTaskDuration`：运行中在前且最久的
+最靠前、终态按结束时间倒序、稳定排序不修改入参、时长在 ms / 秒 / 分钟 / 小时之间切换且时钟回拨钳到 0）。
+此外它还**用真实的 `ToolProvider` + 真实的作用域规则**断言三件容易写错又看不见的事：工作台（无文档）也能拿到这三个
 工具（元数据 `scope: 'any'`）、它们都带 schema、都不占文档写锁。`check` 总入口已包含它。

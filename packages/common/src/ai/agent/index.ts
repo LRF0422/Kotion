@@ -79,6 +79,9 @@ export {
     clipForNote,
     DEFAULT_BACKGROUND_WAIT_MS,
     MAX_BACKGROUND_WAIT_MS,
+    formatBackgroundTaskDuration,
+    groupBackgroundTasks,
+    sortBackgroundTasks,
 } from './background-tasks'
 export type {
     BackgroundTaskAck,

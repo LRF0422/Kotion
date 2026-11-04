@@ -21,10 +21,24 @@ import {
     BackgroundTaskRegistry,
     MAX_BACKGROUND_WAIT_MS,
     clipForNote,
+    formatBackgroundTaskDuration,
+    groupBackgroundTasks,
+    sortBackgroundTasks,
 } from './background-tasks'
+import type { BackgroundTaskView } from './background-tasks'
 import { createBackgroundTaskTools } from '../tools/background-tools'
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
+/**
+ * The board helpers are pure functions over views: take a REAL registry snapshot
+ * and pin its clocks, so ordering/format assertions do not depend on how many
+ * milliseconds the event loop happened to take.
+ */
+const withClock = (
+    view: BackgroundTaskView,
+    clock: { startedAt: number; finishedAt?: number },
+): BackgroundTaskView => ({ ...view, ...clock })
 
 /** Resolve/reject control for a task whose work we drive by hand. */
 const deferred = () => {
@@ -458,6 +472,188 @@ async function checkToolWiringInCatalog(): Promise<void> {
     }
 }
 
+/**
+ * Board order: running first (longest-running on top), then terminal (most
+ * recently finished first), and equal clocks keep the input order so the board
+ * does not flicker between renders.
+ */
+async function checkBoardSortOrder(): Promise<void> {
+    const registry = new BackgroundTaskRegistry()
+    const gate = deferred()
+    const startRunning = (title: string) =>
+        registry.start({ tool: 'buildPluginProject', title, conversationId: 'c-board', run: () => gate.promise })
+    const runningSlow = startRunning('running slow')
+    const runningFast = startRunning('running fast')
+    const runningTieA = startRunning('running tie a')
+    const runningTieB = startRunning('running tie b')
+    const startFinished = (title: string) =>
+        registry.start({ tool: 'publishPluginProject', title, conversationId: 'c-board', run: async () => title })
+    const finishedOld = startFinished('finished old')
+    const finishedNew = startFinished('finished new')
+    const finishedTieA = startFinished('finished tie a')
+    const finishedTieB = startFinished('finished tie b')
+    await sleep(5)
+
+    // Input is deliberately mixed; equal clocks appear in the order shown here.
+    const originalOrder = [
+        'finished old',
+        'running fast',
+        'finished new',
+        'running tie a',
+        'finished tie a',
+        'running slow',
+        'finished tie b',
+        'running tie b',
+    ]
+    const frozenInput = Object.freeze([
+        withClock(registry.get(finishedOld.id)!, { startedAt: 8_000, finishedAt: 10_000 }),
+        withClock(registry.get(runningFast.id)!, { startedAt: 2_000 }),
+        withClock(registry.get(finishedNew.id)!, { startedAt: 20_000, finishedAt: 30_000 }),
+        withClock(registry.get(runningTieA.id)!, { startedAt: 3_000 }),
+        withClock(registry.get(finishedTieA.id)!, { startedAt: 15_000, finishedAt: 20_000 }),
+        withClock(registry.get(runningSlow.id)!, { startedAt: 1_000 }),
+        withClock(registry.get(finishedTieB.id)!, { startedAt: 16_000, finishedAt: 20_000 }),
+        withClock(registry.get(runningTieB.id)!, { startedAt: 3_000 }),
+    ])
+
+    const sorted = sortBackgroundTasks(frozenInput)
+    assert.deepEqual(
+        sorted.map(task => task.title),
+        [
+            'running slow', // startedAt 1_000: running the longest
+            'running fast', // startedAt 2_000
+            'running tie a', // startedAt 3_000, input index 3
+            'running tie b', // startedAt 3_000, input index 7
+            'finished new', // finishedAt 30_000
+            'finished tie a', // finishedAt 20_000, input index 4
+            'finished tie b', // finishedAt 20_000, input index 6
+            'finished old', // finishedAt 10_000
+        ],
+        'running ascending by startedAt, terminal descending by finishedAt',
+    )
+    assert.equal(sorted.length, frozenInput.length, 'sorting must not drop tasks')
+    assert.notEqual(sorted, frozenInput, 'sort must return a new array')
+    // Frozen input proves the helper never sorts in place.
+    assert.deepEqual(frozenInput.map(task => task.title), originalOrder, 'the input array must keep its order')
+    gate.resolve()
+    await sleep(5)
+}
+
+/** Both sections the panel renders are already ordered; nothing is re-sorted UI-side. */
+async function checkBoardGrouping(): Promise<void> {
+    const registry = new BackgroundTaskRegistry()
+    const gate = deferred()
+    const startRunning = (title: string) =>
+        registry.start({ tool: 'buildPluginProject', title, conversationId: 'c-board', run: () => gate.promise })
+    const runningLong = startRunning('running long')
+    const runningShort = startRunning('running short')
+    const finishedOld = registry.start({
+        tool: 'publishPluginProject',
+        title: 'finished old',
+        conversationId: 'c-board',
+        run: async () => 'old',
+    })
+    const finishedNew = registry.start({
+        tool: 'publishPluginProject',
+        title: 'finished new',
+        conversationId: 'c-board',
+        run: async () => 'new',
+    })
+    await sleep(5)
+
+    const frozenInput = Object.freeze([
+        withClock(registry.get(finishedOld.id)!, { startedAt: 8_000, finishedAt: 10_000 }),
+        withClock(registry.get(runningShort.id)!, { startedAt: 2_000 }),
+        withClock(registry.get(finishedNew.id)!, { startedAt: 10_000, finishedAt: 30_000 }),
+        withClock(registry.get(runningLong.id)!, { startedAt: 1_000 }),
+    ])
+    const groups = groupBackgroundTasks(frozenInput)
+
+    assert.deepEqual(groups.running.map(task => task.title), ['running long', 'running short'], 'running: oldest first')
+    assert.deepEqual(groups.finished.map(task => task.title), ['finished new', 'finished old'], 'finished: newest first')
+    assert.equal(groups.running.length + groups.finished.length, frozenInput.length, 'every task lands in exactly one group')
+    assert.ok(groups.running.every(task => task.status === 'running'), 'the running section holds only running tasks')
+    assert.ok(groups.finished.every(task => task.status !== 'running'), 'the finished section holds only terminal tasks')
+    gate.resolve()
+}
+
+/**
+ * The duration a person reads: ms / tenths / `m ss` / `h mm`, measured start →
+ * now while running and start → finish once settled. Backwards clocks clamp to
+ * `0ms` rather than showing a negative time.
+ */
+async function checkBoardDuration(): Promise<void> {
+    const registry = new BackgroundTaskRegistry()
+    const gate = deferred()
+    const running = registry.start({
+        tool: 'buildPluginProject',
+        title: 'running demo',
+        conversationId: 'c-board',
+        run: () => gate.promise,
+    })
+    const finished = registry.start({
+        tool: 'publishPluginProject',
+        title: 'finished demo',
+        conversationId: 'c-board',
+        run: async () => 'ok',
+    })
+    await sleep(5)
+    const runningView = registry.get(running.id)!
+    const finishedView = registry.get(finished.id)!
+    assert.equal(runningView.status, 'running', 'the pending gate keeps a task running for the `now` branch')
+    assert.equal(finishedView.status, 'succeeded', 'the fast task covers the terminal branches')
+
+    const terminal = (ms: number) => formatBackgroundTaskDuration({ ...finishedView, startedAt: 1_000, finishedAt: 1_000 + ms })
+    assert.equal(terminal(120), '120ms', 'sub-second durations stay in ms')
+    assert.equal(terminal(4_200), '4.2s', 'under a minute keeps one decimal')
+    assert.equal(terminal(65_000), '1m 05s', 'minutes pad the seconds to two digits')
+    assert.equal(terminal(3_780_000), '1h 03m', 'hours pad the minutes to two digits')
+    assert.equal(terminal(999), '999ms', 'just under one second stays in ms')
+    assert.equal(terminal(1_000), '1.0s', 'exactly one second switches to the seconds branch')
+    assert.equal(terminal(60_000), '1m 00s', 'exactly one minute switches to the minutes branch')
+    assert.equal(terminal(3_600_000), '1h 00m', 'exactly one hour switches to the hours branch')
+    assert.equal(
+        formatBackgroundTaskDuration({ ...finishedView, startedAt: 1_000, finishedAt: 1_000 }),
+        '0ms',
+        'a zero-length task is "0ms", not "0.0s"',
+    )
+    assert.equal(
+        formatBackgroundTaskDuration({ ...finishedView, startedAt: 1_000, finishedAt: 900 }),
+        '0ms',
+        'a clock that jumped backwards clamps to 0ms',
+    )
+
+    // Running tasks measure against the caller's clock, so a board render and
+    // the notification text agree on "now".
+    const now = 50_000
+    assert.equal(
+        formatBackgroundTaskDuration({ ...runningView, startedAt: now - 4_200 }, now),
+        '4.2s',
+        'a running task measures start → now',
+    )
+    assert.equal(
+        formatBackgroundTaskDuration({ ...runningView, startedAt: now - 65_000 }, now),
+        '1m 05s',
+        'running tasks use the same scale switch as terminal ones',
+    )
+    assert.equal(
+        formatBackgroundTaskDuration({ ...runningView, startedAt: now + 1_000 }, now),
+        '0ms',
+        'a running task started in the future clamps too',
+    )
+    assert.equal(
+        formatBackgroundTaskDuration({ ...finishedView, startedAt: 1_000, finishedAt: 2_000 }, 999_999),
+        '1.0s',
+        'a terminal task is start → finish and ignores `now`',
+    )
+
+    // describe() is the notification path; it must use the same formatter.
+    const note = registry.describe([{ ...finishedView, startedAt: 1_000, finishedAt: 66_000 }])
+    assert.match(note, /耗时 1m 05s/, 'the completion note and the board agree on the duration')
+    gate.resolve()
+    await sleep(5)
+}
+
 /* ------------------------------------------------------------------ *
  * Tools
  * ------------------------------------------------------------------ */
@@ -579,6 +775,9 @@ async function main(): Promise<void> {
     await checkTrimBounds()
     checkClipForNote()
     checkWaitBudgetIsClamped()
+    await checkBoardSortOrder()
+    await checkBoardGrouping()
+    await checkBoardDuration()
     await checkToolWiringInCatalog()
     await checkFlushIsBusyAwareAndExactlyOnce()
     await checkTaskCarriesItsArtifact()

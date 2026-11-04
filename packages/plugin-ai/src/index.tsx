@@ -169,6 +169,30 @@ export const ai = new AiPlugin({
                             "inProgress": "In progress",
                             "pending": "Not started"
                         },
+                        "backgroundTasks": {
+                            "title": "Background tasks",
+                            "button": "Background tasks",
+                            "runningBadge": "{{count}} running",
+                            "runningSection": "Running",
+                            "finishedSection": "Finished",
+                            "status": {
+                                "running": "Running",
+                                "succeeded": "Succeeded",
+                                "failed": "Failed",
+                                "cancelled": "Cancelled"
+                            },
+                            "empty": "No background tasks",
+                            "emptyHint": "Long tools — builds, installs, publishes — run in the background. Running and recently finished tasks are listed here.",
+                            "workbench": "Workbench",
+                            "otherConversation": "Another conversation",
+                            "openConversation": "Open conversation",
+                            "stopWaiting": "Stop waiting",
+                            "stopWaitingHint": "Only stops waiting — the background build or install keeps running, and a late result is discarded.",
+                            "result": "Result",
+                            "error": "Error",
+                            "cancelReason": "Cancel reason",
+                            "footer": "Only tasks of this page session are listed; a refresh clears the list. A running build is still visible from the Studio."
+                        },
                         "loadingSession": "Loading conversation…",
                         "clearChat": "Clear current chat",
                         "close": "Close",
@@ -348,6 +372,30 @@ export const ai = new AiPlugin({
                             "untitledSession": "未命名对话",
                             "inProgress": "进行中",
                             "pending": "未开始"
+                        },
+                        "backgroundTasks": {
+                            "title": "后台任务",
+                            "button": "后台任务",
+                            "runningBadge": "{{count}} 个进行中",
+                            "runningSection": "进行中",
+                            "finishedSection": "已结束",
+                            "status": {
+                                "running": "进行中",
+                                "succeeded": "已完成",
+                                "failed": "失败",
+                                "cancelled": "已取消"
+                            },
+                            "empty": "没有后台任务",
+                            "emptyHint": "构建、装依赖、发布这类长工具会在后台执行，进行中和最近完成的任务都会列在这里。",
+                            "workbench": "工作台",
+                            "otherConversation": "其他会话",
+                            "openConversation": "打开所在会话",
+                            "stopWaiting": "不再等待",
+                            "stopWaitingHint": "只停止等待，不会终止已在后台执行的构建 / 安装；迟到的结果会被丢弃。",
+                            "result": "结果",
+                            "error": "错误",
+                            "cancelReason": "取消原因",
+                            "footer": "只显示本页面会话中的后台任务，刷新页面后列表清空；进行中的构建仍可在开发台查看。"
                         },
                         "loadingSession": "正在加载会话…",
                         "clearChat": "清空当前对话",

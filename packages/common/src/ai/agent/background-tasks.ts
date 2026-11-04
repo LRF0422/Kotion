@@ -198,10 +198,94 @@ export const clipForNote = (value: unknown, maxChars = 2_000): string => {
     return text.length > maxChars ? text.slice(0, maxChars) + `…（已截断，完整内容用 getBackgroundTask 取）` : text
 }
 
-const formatDuration = (task: BackgroundTaskView): string => {
-    if (!task.finishedAt) return ''
-    const ms = task.finishedAt - task.startedAt
-    return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`
+/* ------------------------------------------------------------------ *
+ * Board view helpers (pure)
+ *
+ * The header board needs an ORDER and a human duration, and the tools /
+ * notifications must describe a task the same way the board shows it. Keeping
+ * these functions free of registry state is what makes that shared reading
+ * possible (and testable) — the registry itself never sorts or formats.
+ * ------------------------------------------------------------------ */
+
+/**
+ * Board order: running tasks first (longest-running on top), then terminal
+ * tasks, most recently finished first.
+ *
+ * Equal timestamps keep the INPUT order. We decorate with the input index and
+ * use it as an explicit tie-break instead of trusting the engine's sort
+ * stability: the board re-renders from a fresh snapshot on every change, so a
+ * task hopping position between renders would be visible flicker.
+ *
+ * The returned array is always new; the input (often a frozen registry
+ * snapshot) is never reordered.
+ */
+export function sortBackgroundTasks(tasks: readonly BackgroundTaskView[]): BackgroundTaskView[] {
+    return tasks
+        .map((task, index) => ({ task, index }))
+        .sort((a, b) => {
+            const aRunning = a.task.status === 'running'
+            const bRunning = b.task.status === 'running'
+            // Running beats terminal: what is happening NOW is what the board is
+            // opened for, and the settle of one task must not reshuffle the rest.
+            if (aRunning !== bRunning) return aRunning ? -1 : 1
+            if (aRunning) {
+                const byStarted = a.task.startedAt - b.task.startedAt
+                return byStarted !== 0 ? byStarted : a.index - b.index
+            }
+            // `finishedAt` is optional in the view; a terminal entry without it
+            // can only be ordered by its start (should not happen in practice).
+            const aFinished = a.task.finishedAt ?? a.task.startedAt
+            const bFinished = b.task.finishedAt ?? b.task.startedAt
+            const byFinished = bFinished - aFinished
+            return byFinished !== 0 ? byFinished : a.index - b.index
+        })
+        .map(entry => entry.task)
+}
+
+/**
+ * Split the board into the two sections the UI renders (进行中 / 已完成), each
+ * already in {@link sortBackgroundTasks} order — the panel can render both
+ * lists without sorting anything again.
+ */
+export function groupBackgroundTasks(tasks: readonly BackgroundTaskView[]): {
+    running: BackgroundTaskView[]
+    finished: BackgroundTaskView[]
+} {
+    // Sort once, then partition: running tasks are a prefix of the sorted array,
+    // so a single pass keeps both halves ordered by construction.
+    const sorted = sortBackgroundTasks(tasks)
+    const running: BackgroundTaskView[] = []
+    const finished: BackgroundTaskView[] = []
+    for (const task of sorted) {
+        if (task.status === 'running') running.push(task)
+        else finished.push(task)
+    }
+    return { running, finished }
+}
+
+/**
+ * Human duration for one board row.
+ *
+ * Running tasks measure start → `now` (the caller passes its render clock so a
+ * whole board agrees on one instant); terminal tasks measure start → finish. A
+ * clock that jumped backwards clamps to `0ms` instead of rendering a negative
+ * duration.
+ *
+ * Granularity follows what a person reads at each scale: ms under a second,
+ * tenths under a minute, `m ss` under an hour, then `h mm` (a build that ran an
+ * hour does not need its seconds).
+ */
+export function formatBackgroundTaskDuration(task: BackgroundTaskView, now: number = Date.now()): string {
+    const end = task.status === 'running' ? now : task.finishedAt ?? now
+    const ms = Math.max(0, end - task.startedAt)
+    if (ms < 1_000) return `${ms}ms`
+    if (ms < 60_000) return `${(ms / 1_000).toFixed(1)}s`
+    if (ms < 3_600_000) {
+        const seconds = Math.floor((ms % 60_000) / 1_000)
+        return `${Math.floor(ms / 60_000)}m ${String(seconds).padStart(2, '0')}s`
+    }
+    const minutes = Math.floor((ms % 3_600_000) / 60_000)
+    return `${Math.floor(ms / 3_600_000)}h ${String(minutes).padStart(2, '0')}m`
 }
 
 export class BackgroundTaskRegistry {
@@ -489,7 +573,7 @@ export class BackgroundTaskRegistry {
         return tasks.map(task => {
             const head = `【后台任务${task.status === 'succeeded' ? '完成' : task.status === 'cancelled' ? '已取消' : '失败'}】`
                 + `${task.tool}「${task.title}」(taskId ${task.id})`
-                + (task.finishedAt ? `，耗时 ${formatDuration(task)}` : '')
+                + (task.finishedAt ? `，耗时 ${formatBackgroundTaskDuration(task)}` : '')
             if (task.status === 'succeeded') {
                 return `${head}\n结果：${clipForNote(task.result)}`
             }
