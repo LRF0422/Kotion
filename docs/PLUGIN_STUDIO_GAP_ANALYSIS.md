@@ -27,7 +27,9 @@
 > 文档漂移：PLUGIN_STUDIO.md 第 597 行写「合计 486 项」、第 591 行写 `studio-tools.test.mjs` 182 项，
 > 实际更多（studio-tools 203）；测试表里也漏了 `icon-ai.test.mjs`（14 项）。数字本身不影响结论，但说明文档没有跟着代码走。
 >
-> **本轮已修 A0**（`react/jsx-runtime`，见 §5.2）：改动 4 个文件 + 2 处回归测试，全部验证通过。
+> **已修 A0**（`react/jsx-runtime`，见 §5.2）：改动 4 个文件 + 2 处回归测试，全部验证通过。
+> **已修 B15**（单个插件失败不再阻塞启动 + 失败带原因，见 §5.2）：`PluginInitResult.failures`、`plugin-boot.ts`、
+> `Layout` 降级启动、`@kn/core check:plugin-boot` 与 `@kn/common` 回归断言。
 > 其余缺口尚未改动代码。
 
 **做法**：除自己逐行读的关键路径外，另开了 4 路互不重叠的只读深挖
@@ -108,8 +110,10 @@
 `globalRoutes`（无 getter、`resolveRoutes` 只读 `routes`）、`agent.actions`（只有类型与 resolver，无渲染方）、
 `agent.context`（deny-all 且 App 明确 `setAgentContextWhitelist([])`，恒不生效）、`status`（**必填**却从不被读取）；
 `desktopOnly` 则只被展示、不做门禁（见 B13）。
-另外宿主**没有任何生命周期钩子**（无 `activate`/`deactivate`/`dispose`，`uninstallPlugin` 不回调插件实例），
-以及**一个插件的初始化失败会让应用启动直接失败**（`Layout.tsx:242-244`，且只报名字不报原因，见 B14/B15）。
+另外宿主**没有任何生命周期钩子**（无 `activate`/`deactivate`/`dispose`，`uninstallPlugin` 不回调插件实例）；
+~~一个插件的初始化失败会让应用启动直接失败~~ **✅ 已修（B15）**：单个插件的加载/契约/规划失败
+（`descriptor`/`load`/`timeout`/`invalid`/`conflict`）降级为「跳过 + 一条可重试的提示」，
+失败项现在带 `stage`/`reason`（`PluginInitResult.failures`）；只有**拿不到已安装插件列表**时才保留重试页。
 （贡献点组件自身的错误隔离是有的：`HotComponentBoundary` 随组件走，见 B15 更正。）
 
 宿主侧 dev 绑定 `plugin-dev-host.ts`（302 行）：订阅 `desktop:event:dev`，按 `buildCount@updatedAt` 去重，
@@ -170,7 +174,7 @@
 | B12 | **配置只能写组件，没有声明式 schema** | `PluginSettingsConfig` 必填 `component`（`PluginManager.ts:41-71`），没有字段/类型/默认值/是否密钥的描述；密钥还要在四处手工登记（`usePluginConfig({secretFields})`、`PluginSecretFields.DECLARED`、settings UI、`isSecretMask` 判断，见 PLUGIN_CONFIG_SECRETS.md「新增一个带密钥的插件」） | 每个插件都要手搓设置面板与「已配置」状态，宿主也没法统一渲染/自动加密/迁移/校验。一个声明式 `configSchema`（fields + secret 标记）能同时消化开发台的 A13 缺口与密钥登记的重复劳动 | P1 |
 | B13 | **`desktopOnly` 端到端不生效**（HIGH，与文档矛盾） | `PluginConfig.desktopOnly` 运行时只被存储与展示（`PluginManager.ts:1271,1737,1970`），无任何门禁。市场侧的拦截条件依赖 `plugin.desktopOnly` **或** `currentVersion.permissions`（`Shop/plugin-model.ts:240-259`、`Marketplace/index.tsx:548-549`），而后端**列表接口不投影 `permissions`、也不设 `currentVersion`**（`PluginApplication.searchPlugin:496-504`），`PluginVO` 里根本没有这两个字段（`PluginVO.java:14-56`）；已安装列表同样不选 `permissions`（`PluginServiceImpl.java:48-62`），服务端安装也不校验平台（`PluginController.install:114-118`） | Web 端可以安装并在启动时加载一个 `desktopOnly` 插件，然后在运行期因为 `desktop` service 不存在而失败。「桌面专用」这个承诺目前只在 UI 文案里 | **P0** |
 | B14 | **没有生命周期钩子（activate/deactivate/dispose）** | `KPlugin` 无任何生命周期方法；`uninstallPlugin`（`PluginManager.ts:1302-1326`）只删条目、释放热更槽位（`:802`）、移除 CSS（`:1323`），**从不回调插件实例** | 插件在构造期创建的定时器/全局监听在卸载时（以及每次热更时）泄漏；authoring skill 也没教「怎么清理」，因为它不存在 | P1 |
-| B15 | **一个坏插件会挡住整个应用启动；失败只报名字不报原因** | `init` 阶段**任意一个插件失败**都会让 `Layout` 直接 throw（`packages/core/src/Layout.tsx:242-244`「Failed to load required plugins: …」），把应用卡在错误页直到用户重试；而 `failedPlugins` 里只有**名字没有原因**（`PluginManager.ts:1139-1147,1231-1234`；原因只有 `installBundle` 会返回）。<br>（更正一个容易误判的点：**贡献点组件本身是有错误边界的** —— `mapComponents`（`PluginManager.ts:254-364`）把 `HotComponentBoundary` 装到 dockPanel / pageType(component) / settings / toolRenderer / artifactRenderer / editor 各组件位上（`plugin-hot-component.tsx:191-212`，其注释明确写了「app shell 不会自己包边界，所以边界随组件走」），所以「面板一抛就把外壳带走」不成立。真正**没被包**的是 ReactNode 形式的贡献（如 `menus[].icon`）与非 React 的执行面（`agent.include` 实现、`pageType` 的 `editor-component` 工厂） | 一个第三方插件的 bug 就能让用户打不开应用，且用户/作者都拿不到原因；这是当前最影响「敢不敢装第三方插件」的一条 | **P0** |
+| B15 | ~~**一个坏插件会挡住整个应用启动；失败只报名字不报原因**~~ **✅ 已修** | 原：`init` 阶段**任意一个插件失败**都会让 `Layout` 直接 throw（`packages/core/src/Layout.tsx`「Failed to load required plugins: …」），把应用卡在错误页直到用户重试；而 `failedPlugins` 里只有**名字没有原因**（原因只有 `installBundle` 会返回）。现：①`PluginInitResult.failures: PluginFailure[]` 给出 `{key, stage, reason}`（stage = `descriptor` / `load` / `timeout` / `invalid` / `conflict`，与 `failedPlugins` 同键同序，见 `PluginManager.ts` 的 `recordFailure`；`_extractPlugin` 还会 smoke-test 插件自身的 `services`/`desktopOnly`/`pluginKey` getter，抛异常归为 `invalid` 而不是让 `init()` 挂掉）；②`Layout` 只把**拿不到已安装插件列表**当致命——请求失败、响应不是数组、或 `init()` 自身抛错（宿主 commit 级异常），此时仍走重试页；`/share/` 只读分支始终降级（无例外）；③单个插件失败改为**降级启动**：`packages/core/src/plugin-boot.ts` 的 `resolvePluginBootOutcome` 编码「插件级失败永不阻断」的策略，`Layout` 再把失败汇总成一条非阻塞 toast（最多 3 条、单条原因 160 字、总长 300 字、带「重试」且重试前 dismiss），完整列表与原因写入日志，随后照常 `setPluginsLoaded(true)` 并 `emit(PLUGIN_INIT_SUCCESS)`。回归：`@kn/core check:plugin-boot`（策略 + 摘要 + 防回退源码守卫）、`@kn/common check:plugin-reinit`（一个坏插件不影响健康插件、同身份冲突带原因、抛异常的 getter 只降级不 reject）、`check:plugins`（`load` / `invalid` / `descriptor` 的 stage 断言）。<br>（注意：**坏插件同样会让文档 schema 缺节点**，本修复只是让缺失可归因、可操作（toast + 日志 + 插件管理里卸载/更新）；「完全不可知」的列表级失败才必须阻断。更正一个容易误判的点：**贡献点组件本身是有错误边界的** —— `mapComponents`（`PluginManager.ts:254-364`）把 `HotComponentBoundary` 装到 dockPanel / pageType(component) / settings / toolRenderer / artifactRenderer / editor 各组件位上（`plugin-hot-component.tsx:191-212`，其注释明确写了「app shell 不会自己包边界，所以边界随组件走」），所以「面板一抛就把外壳带走」不成立。真正**没被包**的是 ReactNode 形式的贡献（如 `menus[].icon`）与非 React 的执行面（`agent.include` 实现、`pageType` 的 `editor-component` 工厂）；后两者仍未纳入隔离） | 第三方插件的**加载/契约/规划**期 bug 不再让用户打不开应用，失败原因（404 / 超时 / 非插件 / 身份或 service 冲突）在提示与日志里可见；宿主自身 commit 异常仍会落到重试页；仍待做：ReactNode 类贡献（`menus[].icon`）的隔离 | 已修 |
 | B16 | **两个「pluginKey」概念混在一个 prop 名里** | 设置组件收到的是**设置项的 key**，prop 名却叫 `pluginKey`（`SeetingDlg.tsx:106,190-193` 传 `plugin.key`，例如 `github-settings`）；而 storage/service 用的是**注册键**（`github`） | 插件作者按 prop 名理解去拼存储命名空间/服务名就会错位；密钥配置与插件数据落在两个不同的命名空间下，且没有任何地方说明这件事 | P1 |
 | B17 | **插件文案与宿主共用 `translation` 命名空间，后者覆盖前者** | `resolveLocales()` 用 lodash `merge`（`PluginManager.ts:2154-2168`），App 侧按 `(lng, ns)` 以 `overwrite: true` 注册（`App.tsx:434-447`） | 两个插件（或插件与宿主）用了同一个 key 就互相覆盖，且没有任何告警；应给每个插件一个 `plugin.<key>` 命名空间 | P1 |
 | B18 | **三个「声明了但没用」的字段/贡献点** | `PluginConfig.status` 是**必填**却从不被读取（ctor `PluginManager.ts:163-179` 不读，全仓 grep 无消费）；`agent.actions` 只有类型、re-export 与 resolver，**无渲染方**；`agent.context` 是 deny-all 且 `App.tsx:306` 明确 `setAgentContextWhitelist([])`，等于恒不生效；`DESKTOP_BRIDGE_VERSION`（`plugin-api/src/index.ts:27`）被导出成 `desktop.version` 但**全仓无任何比较** | 契约面看起来比实际能力大；作者按类型写出来的东西不会生效，也不会报错 | P1 |
@@ -218,8 +222,9 @@
    安装接口按平台拒绝；否则 Web 端会装上一个注定运行时失败的插件。
 0f. **升版带上能力声明**（C6）：`PluginVersionInput` 加 `permissions`，开发台与宿主对话框都传，
    后端在升版路径上也走 `normalizePermissions`；补一条「升版后能力清单不被清空」的回归断言。
-0g. **让一个坏插件不再阻塞启动**（B15）：`Layout` 不因单个插件失败而 throw（降级为「跳过 + 提示 + 可重试」），
-   `failedPlugins` 带上原因；顺带把 ReactNode 类贡献（`menus[].icon`）也纳入隔离。
+0g. ~~**让一个坏插件不再阻塞启动**（B15）~~ **✅ 已完成**：`Layout` 不因单个插件失败而 throw（降级为「跳过 + 可重试提示」），
+   `failedPlugins` 带上原因（`PluginInitResult.failures` / `packages/core/src/plugin-boot.ts`）；回归见 §5.2。
+   剩余：ReactNode 类贡献（`menus[].icon`）与非 React 执行面（`agent.include`、`pageType.editor-component` 工厂）仍未纳入隔离。
 1. `dev.typecheck`：在子进程里跑 esbuild + `tsc --noEmit`（宿主标准包 `dist/*.d.ts` 已在 `Resources/kn-studio-runtime`，可直接 group 进去）；
    把诊断按文件/行列结构化返回，工具面加 `typecheckPluginProject`，页面显示红点。
    前置动作很小但收益很大：**脚手架补 `tsconfig.json` + `.gitignore` + `scripts` + 把 `@kn/*` 的 `.d.ts` 以 `devDependencies`/路径映射方式落进工程**（A11），
@@ -344,6 +349,30 @@
 - 修法：把 `path.join(process.resourcesPath, 'kn-studio-runtime', 'host-api')` 加进 `workspaceRootCandidates()`，
   并让回归测试改为「在没有源码树的前提下 `dev.hostApi` 能列出包 / 搜到符号」。
 
+**一个插件的加载失败会挡住整个应用启动，且只报名字不报原因。** — ✅ **已修（本次）**
+
+- 原：`Layout` 在 `pluginManager.init()` 之后只要 `failedPlugins` 非空就 throw（`Layout.tsx`「Failed to load required plugins: …」），
+  外层 catch 把它变成「Retry」错误页。也就是说：装了一个后来坏掉的插件，用户连「插件管理」都打不开，也就删不掉它。
+  而 `PluginInitResult.failedPlugins` 只有名字——原因（fetch 404 / 超时 / 不是插件 / 身份冲突）只进了本机 logger。
+- 现：`init()` 的结果新增 `failures: PluginFailure[]`，每项 `{key, stage, reason}`，stage 取值
+  `descriptor | load | timeout | invalid | conflict`，与 `failedPlugins` 同键同序（`PluginManager.ts` 的 `recordFailure`，
+  `describePluginFailure` 保证 reason 是可展示的一行文本、不带堆栈）。`_extractPlugin` 还会 smoke-test 插件自身的
+  `services` / `desktopOnly` / `pluginKey` getter，抛异常归为 `invalid`，而不是让 `init()` 直接 reject。
+- 只有**拿不到已安装插件列表**仍然致命，且只有这一类：`GET_INSTALLED_PLUGINS` 请求失败、响应不是数组、
+  或 `init()` 因宿主自身 commit 异常而抛错。此时宿主连「缺了哪些插件」都说不出来（空列表与「没装插件」无法区分），
+  用不完整 schema 去编辑会破坏文档，因此保留重试页；`/share/` 公开只读分支始终降级。
+  **注意**：单个插件失败同样会让文档 schema 缺节点，本修复只是让缺失可归因、可操作（toast + 日志 + 插件管理里卸载/更新），
+  不是「坏插件下编辑一定安全」的保证。
+- 单个插件失败改为**降级启动**：纯函数 `packages/core/src/plugin-boot.ts` 的 `resolvePluginBootOutcome` 编码这一策略，
+  并把名字+原因合并、去重、截断（每条原因 160 字、总长 300 字）且最多展示 3 条；`Layout` 用它发一条带「重试」动作的
+  非阻塞 toast（重试前 dismiss 旧 toast，通知路径自身有 try/catch），完整列表与原因写入日志；随后照常
+  `setPluginsLoaded(true)` / `onPluginsReady(true)` / `emit(PLUGIN_INIT_SUCCESS)`，路由与编辑器照常挂载。
+  文案走 i18n（`pluginBoot.*`，zh/en）。
+- 回归：`@kn/core check:plugin-boot`（启动策略、摘要合并/去重/顺序/截断/预览上限，以及「`Layout` 不得再 throw」的源码守卫）；
+  `@kn/common check:plugin-reinit` 新增「一个坏插件不影响健康插件，且 reason 带 loader 消息」「同名身份冲突按 `conflict` 报告」
+  「契约 getter 抛异常只降级、不 reject `init()`」；
+  `check:plugins` 新增 `descriptor` / `load` / `invalid` 三个 stage 断言。
+
 **CSS 作用域在两条「无 payload」路径上对错了键 ⇒ 预览丢样式。**
 
 - 预览给组件套的 `data-kn-plugin` 优先取 `status.plugin.pluginKey`，取不到时**回退到运行时显示名**
@@ -464,7 +493,7 @@
 
 4. `desktopOnly` 在 Web 上拦不住任何东西（B13）——后端列表/已安装接口不返回 `permissions`/`desktopOnly`。
 5. 发布新版本会**清空**该版本的能力声明（C6）——`PluginVersionInput` 没有 `permissions` 字段。
-6. 任意一个已安装插件的加载失败会**阻塞应用启动**，且只给出插件名、没有原因（B15）。
+6. ~~任意一个已安装插件的加载失败会**阻塞应用启动**，且只给出插件名、没有原因（B15）~~ **✅ 已修（见 §5.2）**。
 
 > 现有链路的成熟度值得肯定：身份/提交/回滚/CSS 事务这几条硬骨头是用真实断言钉住的。
 > 上面这些缺口的共同点是——**它们大多不是「再多写几个工具」能解决的，而是宿主必须先开出对应的能力面**。

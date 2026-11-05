@@ -157,6 +157,8 @@ export type {
     RemotePluginInput,
     PluginApiIncompatibility,
     PluginInitResult,
+    PluginFailure,
+    PluginFailureStage,
     TourConfig,
     DockPanelConfig,
     DockPanelContext,

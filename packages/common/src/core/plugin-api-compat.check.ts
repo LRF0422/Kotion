@@ -284,6 +284,10 @@ const run = async (): Promise<void> => {
       malformedResult.failedPlugins.includes("Malformed plugin"),
       "plugins without a resource path should be rejected before loading",
     );
+    assert(
+      malformedResult.failures[0]?.stage === "descriptor",
+      "a record without a resource path should be reported at the descriptor stage",
+    );
 
     const failedManager = new PluginManager(
       {
@@ -313,11 +317,36 @@ const run = async (): Promise<void> => {
     assert(
       failedResult.failedPlugins.includes(broken.name) &&
         failedResult.failedPlugins.includes(invalid.name),
-      "script and contract failures should remain generic fatal plugin failures",
+      "script and contract failures should remain in the generic failure list",
     );
     assert(
       failedResult.incompatiblePlugins.length === 0,
       "non-version failures should not be classified as incompatibilities",
+    );
+    // The names alone are not actionable (the old shell could only show them);
+    // each failure now carries the stage and the loader/plan message.
+    const failureByKey = new Map(
+      failedResult.failures.map(failure => [failure.key, failure]),
+    );
+    assert(
+      failureByKey.size === 2 && failedResult.failures.length === 2,
+      "each failed plugin should be reported once with a reason",
+    );
+    assert(
+      failureByKey.get(broken.name)?.stage === "load",
+      "a script that rejected should be reported at the 'load' stage",
+    );
+    assert(
+      /script failed/.test(failureByKey.get(broken.name)?.reason ?? ""),
+      "a load failure should carry the loader's message",
+    );
+    assert(
+      failureByKey.get(invalid.name)?.stage === "invalid",
+      "a bundle without a plugin instance should be reported at the 'invalid' stage",
+    );
+    assert(
+      (failureByKey.get(invalid.name)?.reason ?? "").length > 0,
+      "an invalid artifact should still carry a reason",
     );
 
     const installManager = new PluginManager(

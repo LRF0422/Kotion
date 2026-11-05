@@ -336,6 +336,124 @@ const run = async (): Promise<void> => {
       `a different plugin must still load alongside the bundle: `
       + JSON.stringify(bundled.getAllPluginKeys()),
     );
+
+    // 7. One bad plugin must not take the healthy ones with it.
+    //
+    //    This is the boot the shell now renders as "degraded" instead of the old
+    //    retry-only error screen: the round isolates the failure, activates
+    //    everything that did load, and reports the failure **with its reason**
+    //    (`failures`) so the toast and log can say why — not just the name.
+    const isolatedManager = new PluginManager(
+      { resolveUrl: (path) => path, hostApiVersion: "2.0.0" },
+      [new KPlugin({ name: "host-plugin", status: "active" })],
+    );
+    const healthy = remotePlugin("healthy-plugin", "healthy-plugin", "h-1", "1.0.0");
+    loadResults.set("healthy-plugin", registration("healthy-plugin", "2.0.0"));
+    const broken = remotePlugin("broken-plugin", "broken-plugin", "b-1", "1.0.0");
+    loadResults.set(
+      "broken-plugin",
+      new Error("Failed to fetch https://cdn.example/broken-plugin.js: 500"),
+    );
+    const isolated = await isolatedManager.init([healthy, broken]);
+    assert(
+      isolated.failedPlugins.length === 1 && isolated.failedPlugins[0] === "broken-plugin",
+      `exactly the broken plugin should be reported: ${JSON.stringify(isolated.failedPlugins)}`,
+    );
+    assert(
+      isolatedManager.hasPlugin("healthy-plugin"),
+      "a healthy plugin must still activate when a sibling fails to load",
+    );
+    assert(
+      !isolatedManager.hasPlugin("broken-plugin"),
+      "the broken plugin must not be active",
+    );
+    assert(
+      isolated.failures.length === 1 && isolated.failures[0]?.key === "broken-plugin",
+      "every failed plugin should be reported once with a reason",
+    );
+    assert(
+      isolated.failures[0]?.stage === "load",
+      `a script that rejected should be reported at the 'load' stage: `
+      + JSON.stringify(isolated.failures[0]),
+    );
+    assert(
+      (isolated.failures[0]?.reason ?? "").includes("500"),
+      `the failure reason must carry the loader's error: `
+      + JSON.stringify(isolated.failures[0]),
+    );
+    registryNames(isolatedManager);
+
+    // 8. A duplicate identity is a plan conflict, and reports the plan's reason.
+    const conflictManager = new PluginManager(
+      { resolveUrl: (path) => path, hostApiVersion: "2.0.0" },
+      [],
+    );
+    loadResults.set("dup-a", registration("Duplicate Plugin", "2.0.0"));
+    loadResults.set("dup-b", registration("Duplicate Plugin", "2.0.0"));
+    const conflictResult = await conflictManager.init([
+      remotePlugin("dup-a", "Duplicate Plugin", "a-1", "1.0.0"),
+      remotePlugin("dup-b", "Duplicate Plugin", "b-2", "1.0.0"),
+    ]);
+    assert(
+      conflictResult.failedPlugins.length === 1,
+      `one of two identical plugins should be rejected: ${JSON.stringify(conflictResult.failedPlugins)}`,
+    );
+    assert(
+      conflictResult.failures[0]?.stage === "conflict"
+        && /same plugin/.test(conflictResult.failures[0]?.reason ?? ""),
+      `a duplicate identity should be reported as a conflict with the plan's reason: `
+      + JSON.stringify(conflictResult.failures),
+    );
+    assert(
+      conflictManager.plugins.length === 1,
+      "the first candidate (render order) wins the conflict",
+    );
+
+    // 9. A contract getter that throws must be a plugin failure, not an init() throw.
+    //
+    //    `_extractPlugin` smoke-tests the getters that activation and the service
+    //    plan read *outside* any per-plugin try/catch. Before that, a plugin class
+    //    with a throwing getter rejected `init()` and the shell fell back to the
+    //    retry-only screen — i.e. a bad plugin could still block the app through a
+    //    different door than the one the shell fix closed.
+    class ThrowingGettersPlugin extends KPlugin<any> {
+      get services(): any {
+        throw new Error("services exploded");
+      }
+    }
+    const throwingManager = new PluginManager(
+      { resolveUrl: (path) => path, hostApiVersion: "2.0.0" },
+      [],
+    );
+    loadResults.set("throwing-plugin", {
+      exports: {
+        default: new ThrowingGettersPlugin({
+          name: "Throwing plugin",
+          status: "active",
+        } as any),
+      },
+      meta: { apiVersion: "2.0.0" },
+    });
+    const throwingResult = await throwingManager.init([
+      remotePlugin("throwing-plugin", "Throwing plugin", "t-1", "1.0.0"),
+    ]);
+    assert(
+      throwingResult.failedPlugins.includes("Throwing plugin"),
+      "a plugin whose contract getter throws must be reported, not reject init()",
+    );
+    assert(
+      throwingResult.failures[0]?.stage === "invalid",
+      `a throwing contract getter should be reported at the 'invalid' stage: `
+      + JSON.stringify(throwingResult.failures),
+    );
+    assert(
+      !throwingManager.hasPlugin("Throwing plugin"),
+      "the plugin with the throwing getter must not be active",
+    );
+    assert(
+      throwingManager.plugins.length === 0,
+      "a throwing getter must not take the plugin registry down with it",
+    );
   } finally {
     pluginScriptLoader.load = originalLoad;
   }

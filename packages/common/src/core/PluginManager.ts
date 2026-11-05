@@ -411,9 +411,71 @@ export interface PluginApiIncompatibility {
     hostApiVersion: string
 }
 
+/** The stage of a boot round at which a plugin was dropped. */
+export type PluginFailureStage =
+    /** The installed-list record was unusable (no name or resourcePath). */
+    | "descriptor"
+    /** The script could not be fetched, parsed or evaluated. */
+    | "load"
+    /** The plugin did not settle within the boot budget. */
+    | "timeout"
+    /** The artifact loaded, but exports no usable plugin (missing instance or throwing contract getter). */
+    | "invalid"
+    /** The plan rejected it: same plugin as an active one, or a service already owned. */
+    | "conflict"
+
+/**
+ * One plugin a boot round could not activate, **with the reason**.
+ *
+ * `failedPlugins` stays the stable, order-preserving list of names; this is its
+ * diagnostic half.
+ *
+ * A plugin failure **this round can attribute** is recorded here and skipped
+ * instead of being thrown: the host boots with the plugins that did load and
+ * reports the others (`Layout` shows them in a non-blocking toast, the log keeps
+ * the full list). That covers the descriptor, script, contract and plan stages —
+ * including a plugin whose contract getters throw, because `_extractPlugin`
+ * smoke-tests them. It does **not** make `init()` infallible: an exception from
+ * the registry's own commit (a half-planned registry would be a host bug) still
+ * rejects, and the shell then shows its retry screen.
+ */
+export interface PluginFailure {
+    /** Registry key, or the best identifier the round had (display name). */
+    key: string
+    stage: PluginFailureStage
+    /** Human-readable reason, already safe to log/display (never a stack trace). */
+    reason: string
+}
+
 export interface PluginInitResult {
+    /**
+     * Names of the plugins this round could not load or activate. The host boots
+     * without them; nothing here is fatal.
+     */
     failedPlugins: string[]
+    /**
+     * The same failures with their reasons, in the order they were discovered.
+     * Keys match `failedPlugins`.
+     */
+    failures: PluginFailure[]
     incompatiblePlugins: PluginApiIncompatibility[]
+}
+
+/**
+ * A one-line, display-safe description of why a plugin script failed.
+ *
+ * Loader rejections are usually `Error`s with a useful message ("Failed to fetch
+ * … 404", "Script does not export a plugin"), but a rejected value can be
+ * anything. Never returns a stack: the failure travels to the shell's toast.
+ */
+const describePluginFailure = (error: unknown): string => {
+    const message = error instanceof Error
+        ? error.message || error.name
+        : typeof error === 'string'
+            ? error
+            : ''
+    const text = message.replace(/\s+/g, ' ').trim()
+    return text || 'the script could not be loaded'
 }
 
 // The bundle/outcome contract lives in its own module: the core services and the
@@ -706,11 +768,12 @@ export class PluginManager {
      * path where identity must stay exact — misses exactly these plugins.
      *
      * Missing them is not benign: the installed-list copy then collides with the
-     * bundle in {@link _planEntries}, and `init()` reports plan conflicts through
-     * `failedPlugins`, which the shell treats as a fatal boot error ("failed to
-     * load the installed plugins"). A developer who installed the market builds of
-     * `Bitable` / `GitHub` in the production app therefore cannot start the dev
-     * build at all, even though the bundled source copies are already active.
+     * bundle in {@link _planEntries}. That collision is reported as a conflict
+     * (non-fatal — see `PluginInitResult.failures`), but it also means a plugin
+     * the application already runs is needlessly fetched and evaluated, and the
+     * user is told about a failure that is not one. A developer who installed the
+     * market builds of `Bitable` / `GitHub` would otherwise see a degraded-boot
+     * warning every time, even though the bundled source copies are active.
      *
      * Normalizing both sides answers the question the caller actually asks — "does
      * the host already provide this plugin?" — *before* the artifact is fetched.
@@ -1053,6 +1116,13 @@ export class PluginManager {
     /**
      * Extract the KPlugin instance from a load result and sanity-check it
      * (name present, contract getters accessible) before activation.
+     *
+     * The smoke test covers every getter the rest of the boot reads outside a
+     * per-plugin try/catch — activation reads `pluginKey`/`desktopOnly`, and the
+     * commit's service plan reads `services`. A subclass with a throwing getter
+     * must be rejected here (reported as a normal plugin failure, see
+     * `PluginInitResult.failures`) instead of taking the whole `init()` down with
+     * it and leaving the user on the retry screen.
      */
     private _extractPlugin(registration: PluginRegistration): KPlugin<any> | null {
         const plugin = Object.values(registration.exports)
@@ -1070,6 +1140,11 @@ export class PluginManager {
             void plugin.routes
             void plugin.editorExtensions
             void plugin.pageTypes
+            // Read by activation (_entryForInstance) and by the service plan, so
+            // prove them accessible before the plugin can reach either.
+            void plugin.pluginKey
+            void plugin.desktopOnly
+            void plugin.services
         } catch (error) {
             logger.error('Plugin contract getters are not accessible:', error)
             return null
@@ -1120,13 +1195,33 @@ export class PluginManager {
         const localEntries = this._runtimeLocalEntries(incomingKeys)
 
         const failedPlugins = new Set<string>()
+        /** Reasons behind `failedPlugins`, first failure per key wins. */
+        const failures = new Map<string, PluginFailure>()
         const incompatiblePlugins = new Map<string, PluginApiIncompatibility>()
+
+        /**
+         * Record one skipped plugin, with why.
+         *
+         * The name list stays the public, order-preserving contract; the map is
+         * the diagnostic half. First reason wins because it is the root cause —
+         * a script that failed to load and then lost a placeholder plan conflict
+         * should be reported as a load failure.
+         */
+        const recordFailure = (
+            identifier: string | undefined,
+            stage: PluginFailureStage,
+            reason: string,
+        ) => {
+            const key = (identifier ?? '').trim() || 'unknown'
+            failedPlugins.add(key)
+            if (!failures.has(key)) failures.set(key, { key, stage, reason })
+        }
 
         const normalizedRemotePlugins = (remotePlugins ?? []).flatMap(input => {
             const plugin = normalizeRemotePluginDescriptor(input)
             if (plugin) return [plugin]
             const name = getRemotePluginInputName(input)
-            failedPlugins.add(name)
+            recordFailure(name, 'descriptor', 'the installed record has no name or resourcePath')
             logger.warn(`Skipping remote plugin ${name}: missing name or resourcePath`)
             return []
         })
@@ -1137,10 +1232,10 @@ export class PluginManager {
              * In development (and on public shares) the app bundles the source
              * copies of the optional plugins, while the same account may also have
              * their market builds installed — `init()` then got two candidates for
-             * one plugin and reported the loser as a failure, which the shell turns
-             * into "failed to load the installed plugins" at boot. Skipping the
-             * installed copy here is also why the duplicate is never fetched or
-             * evaluated: the copy that should run is already active.
+             * one plugin. Skipping the installed copy here is also why the
+             * duplicate is never fetched or evaluated: the copy that should run is
+             * already active, and a plugin that is already running is not a
+             * failure worth reporting.
              */
             if (!this._isProvidedByHost(plugin.pluginKey, plugin.name)) return true
             logger.info(`Skipping remote plugin ${plugin.pluginKey}: already provided by the host`)
@@ -1178,10 +1273,14 @@ export class PluginManager {
                 this._remotePluginKeys = new Set()
                 this._incompatiblePlugins = new Map()
                 this._init = true
+                for (const conflict of result.conflicts) {
+                    recordFailure(conflict.key, 'conflict', conflict.reason)
+                }
                 logger.info('Plugins loaded:', this.plugins.length)
                 logger.debug('Services loaded:', this._serviceRegistry.getAll())
                 return {
-                    failedPlugins: [...failedPlugins, ...result.conflicts.map(c => c.key)],
+                    failedPlugins: [...failedPlugins],
+                    failures: [...failures.values()],
                     incompatiblePlugins: [],
                 }
             }
@@ -1208,13 +1307,19 @@ export class PluginManager {
             })
             await this._settleWithin(loadPromises, this._bootstrapTimeoutMs)
             loadableRemotePlugins.forEach((plugin, index) => {
+                const name = plugin.name || plugin.pluginKey || 'unknown'
                 const outcome = loadOutcomes.get(index)
                 if (outcome) {
-                    if ('error' in outcome) failedPlugins.add(plugin.name || plugin.pluginKey || 'unknown')
+                    if ('error' in outcome) {
+                        recordFailure(name, 'load', describePluginFailure(outcome.error))
+                    }
                     return
                 }
-                const name = plugin.name || plugin.pluginKey || 'unknown'
-                failedPlugins.add(name)
+                recordFailure(
+                    name,
+                    'timeout',
+                    `did not finish loading within ${this._bootstrapTimeoutMs}ms`,
+                )
                 logger.warn(
                     `Plugin ${name} did not finish loading within ${this._bootstrapTimeoutMs}ms; ` +
                     'skipping it so the workspace can start'
@@ -1262,7 +1367,11 @@ export class PluginManager {
                 const instance = this._extractPlugin(registration)
                 if (!instance) {
                     logger.warn(`Invalid plugin ${plugin.name} detected, skipping`)
-                    failedPlugins.add(plugin.name || plugin.pluginKey)
+                    recordFailure(
+                        plugin.name || plugin.pluginKey,
+                        'invalid',
+                        'the bundle exports no usable plugin instance (missing or throwing contract getters)',
+                    )
                     return
                 }
                 const key = plugin.pluginKey || this._identityOf(instance)
@@ -1284,7 +1393,7 @@ export class PluginManager {
 
             const result = this._commit(candidates, isReinit ? 'reinit' : 'init')
             for (const conflict of result.conflicts) {
-                failedPlugins.add(conflict.key)
+                recordFailure(conflict.key, 'conflict', conflict.reason)
             }
 
             this._incompatiblePlugins = incompatiblePlugins
@@ -1304,6 +1413,7 @@ export class PluginManager {
             }
             return {
                 failedPlugins: [...failedPlugins],
+                failures: [...failures.values()],
                 incompatiblePlugins: [...incompatiblePlugins.values()],
             }
         } catch (error) {

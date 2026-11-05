@@ -5,10 +5,11 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { TourHost } from "./components/Tour/TourHost"
 import { ChevronLeft } from "@kn/icon"
 import { MobileTabBar } from "./components/mobile/MobileTabBar"
-import { useApi, APIS, useAsyncEffect, useLocation, useMatches, useNavigator, usePluginRoutes, useUploadFile, matchPath, getAccessToken, getRefreshToken, getTokenContextState, clearContextSensitiveClientState, clearTokens, normalizeTokenResponse, notifyContextChanged, saveTokens, useDispatch, AppContext, event, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS, REMOTE_PLUGIN_CHANGE_SOURCES, type PluginChangeSource, TOGGLE_AI_ASSISTANT, TOGGLE_DOCK_PANEL, dockRuntime, logger, useDesktop } from "@kn/common"
+import { useApi, APIS, useAsyncEffect, useLocation, useMatches, useNavigator, usePluginRoutes, useUploadFile, matchPath, getAccessToken, getRefreshToken, getTokenContextState, clearContextSensitiveClientState, clearTokens, normalizeTokenResponse, notifyContextChanged, saveTokens, useDispatch, AppContext, event, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS, REMOTE_PLUGIN_CHANGE_SOURCES, type PluginChangeSource, TOGGLE_AI_ASSISTANT, TOGGLE_DOCK_PANEL, dockRuntime, logger, useDesktop, i18n } from "@kn/common"
 import { toast } from "@kn/ui"
 import React from "react"
 import { MobilePageHeaderProvider, useMobilePageHeader } from "@kn/common"
+import { resolvePluginBootOutcome, summarizePluginBootFailures, type PluginBootFailure } from "./plugin-boot"
 import { OffscreenEditorHost } from "./ai/offscreen"
 import { CaptureTitleButton } from "./capture/CaptureTitleButton"
 import { AppMenuButton } from "./components/AppMenuButton"
@@ -23,12 +24,23 @@ interface LayoutProps {
     onPluginsReady: (ready: boolean) => void
 }
 
+/**
+ * Normalize the installed-plugin response into descriptors.
+ *
+ * A record missing its runtime metadata is a *plugin-level* problem: skip it and
+ * keep the rest, the boot degrades (see `plugin-boot.ts`). A response that is not
+ * a list at all is a *discovery* problem: the shell has no idea which plugins the
+ * account has — an empty list looks exactly like "no plugins installed" — so it
+ * must not mount editable documents. That case returns `discoveryFailed` and
+ * `Layout` turns it into the retry screen instead of a toast.
+ */
 const normalizeInstalledPlugins = (value: unknown) => {
     if (!Array.isArray(value)) {
-        logger.warn('Installed plugin response is not an array')
+        logger.warn('Installed plugin response is not an array; treating the installed set as unknown')
         return {
             plugins: [],
-            invalidPlugins: ['installed-plugin-response'],
+            invalidPlugins: [] as string[],
+            discoveryFailed: true,
         }
     }
 
@@ -53,7 +65,7 @@ const normalizeInstalledPlugins = (value: unknown) => {
         })
     })
 
-    return { plugins, invalidPlugins }
+    return { plugins, invalidPlugins, discoveryFailed: false }
 }
 
 // Mobile top app bar. Navigation lives in the bottom MobileTabBar; this bar is
@@ -140,6 +152,76 @@ export function Layout({ onPluginsReady }: LayoutProps) {
     const [pluginsLoaded, setPluginsLoaded] = useState(false)
     const [pluginLoadError, setPluginLoadError] = useState<unknown>(null)
     const [refreshFlag, setRefreshFlag] = useState(0)
+    /** Id of the current degraded-boot toast, so a retry/report can dismiss it. */
+    const bootFailureToastRef = React.useRef<string | number | null>(null)
+
+    /**
+     * Report plugins that failed to load without stopping the boot.
+     *
+     * One broken artifact used to throw right after `pluginManager.init()`, which
+     * put the whole application behind a retry-only screen ("Failed to load
+     * required plugins: <name>"): installing any plugin that later broke made the
+     * workspace unreachable, including the plugin manager needed to remove it. A
+     * failed plugin is a missing feature, not a broken app, so the shell boots with
+     * what did load, logs every failure with its reason, and shows one non-blocking
+     * toast — with a retry, because a transient fetch/404 is the common case.
+     *
+     * The report is best-effort: a broken toast/i18n must not turn a degraded boot
+     * into a fatal one, so the whole notification path is guarded.
+     *
+     * Only a failure to *discover* the installed set is still fatal; see
+     * `plugin-boot.ts` for the policy and the catch block below for the reason.
+     */
+    const reportPluginBootFailures = React.useCallback(
+        (failedPlugins: string[], failures: PluginBootFailure[]) => {
+            const report = summarizePluginBootFailures(failedPlugins, failures)
+            if (report.total === 0) return
+
+            logger.warn(
+                `Booting without ${report.total} plugin(s) that failed to load: ${report.summary}`,
+                { failedPlugins, failures },
+            )
+
+            try {
+                const more = report.hidden > 0
+                    ? i18n.t('pluginBoot.moreFailed', {
+                        count: report.hidden,
+                        defaultValue: '(+{{count}} more)',
+                    })
+                    : ''
+                const description = i18n.t('pluginBoot.failedDescription', {
+                    count: report.total,
+                    details: report.summary,
+                    defaultValue: 'Skipped {{count}} plugin(s): {{details}}. The workspace started without them.',
+                })
+                // Replace a previous degraded-boot toast instead of stacking stale
+                // ones when a re-init (or a retry) fails the same plugins again.
+                if (bootFailureToastRef.current !== null) {
+                    toast.dismiss(bootFailureToastRef.current)
+                }
+                bootFailureToastRef.current = toast.warning(
+                    i18n.t('pluginBoot.failedTitle', { defaultValue: 'Some plugins failed to load' }),
+                    {
+                        description: more ? `${description} ${more}` : description,
+                        duration: 12000,
+                        action: {
+                            label: i18n.t('pluginBoot.retry', { defaultValue: 'Retry' }),
+                            onClick: () => {
+                                if (bootFailureToastRef.current !== null) {
+                                    toast.dismiss(bootFailureToastRef.current)
+                                    bootFailureToastRef.current = null
+                                }
+                                setRefreshFlag(flag => flag + 1)
+                            },
+                        },
+                    },
+                )
+            } catch (error) {
+                logger.warn('Failed to show the degraded-boot notice; continuing without it', error)
+            }
+        },
+        [],
+    )
 
     // The pre-mount boot splash (static HTML injected into index.html) is the
     // only loading screen the user should see: this keeps its copy in sync with
@@ -260,11 +342,15 @@ export function Layout({ onPluginsReady }: LayoutProps) {
                         logger.warn('Failed to load viewer plugins for public share; using compatibility plugins only', error)
                     }
                 }
+                // Public shares are read-only viewers: a non-list response simply
+                // means "compatibility plugins only" here. There is no document to
+                // corrupt and no plugin manager to reach, so this branch always
+                // degrades instead of blocking (unchanged behaviour).
                 const { plugins: runtimePlugins, invalidPlugins } = normalizeInstalledPlugins(installedPlugins)
-                const { failedPlugins, incompatiblePlugins } = await pluginManager.init(runtimePlugins)
+                const { failedPlugins, failures, incompatiblePlugins } = await pluginManager.init(runtimePlugins)
                 const allFailedPlugins = [...invalidPlugins, ...failedPlugins]
                 if (allFailedPlugins.length > 0) {
-                    logger.warn('Some viewer plugins failed on public share:', allFailedPlugins)
+                    logger.warn('Some viewer plugins failed on public share:', allFailedPlugins, failures)
                 }
                 if (incompatiblePlugins.length > 0) {
                     logger.warn('Some viewer plugins were skipped on public share because their API versions are incompatible:', incompatiblePlugins)
@@ -279,14 +365,26 @@ export function Layout({ onPluginsReady }: LayoutProps) {
             if (token) {
                 console.log('Loading plugins in Layout, refreshFlag:', refreshFlag)
                 const installedPlugins = (await useApi(APIS.GET_INSTALLED_PLUGINS)).data
-                const { plugins: runtimePlugins, invalidPlugins } = normalizeInstalledPlugins(installedPlugins)
-                const { failedPlugins, incompatiblePlugins } = await pluginManager.init(runtimePlugins)
+                const { plugins: runtimePlugins, invalidPlugins, discoveryFailed } = normalizeInstalledPlugins(installedPlugins)
+                // A 200 that is not a list means the installed set is unknown — the
+                // same class of failure as the request rejecting, and the one case a
+                // plugin-level failure must never be confused with. Do not init the
+                // registry against a set we could not read; require a retry.
+                if (resolvePluginBootOutcome({ installedListUnavailable: discoveryFailed }) === 'fatal') {
+                    throw new Error('The installed plugin list could not be read')
+                }
+                const { failedPlugins, failures, incompatiblePlugins } = await pluginManager.init(runtimePlugins)
                 if (incompatiblePlugins.length > 0) {
                     logger.warn('Some installed plugins were skipped because their API versions are incompatible:', incompatiblePlugins)
                 }
+                // Degrade, never block. A single bad artifact must not cost the
+                // user the workspace (and with it the plugin manager needed to
+                // remove that artifact): boot with the plugins that loaded, report
+                // the others through a toast + the log, keep going.
                 const allFailedPlugins = [...invalidPlugins, ...failedPlugins]
-                if (allFailedPlugins.length > 0) {
-                    throw new Error(`Failed to load required plugins: ${allFailedPlugins.join(', ')}`)
+                const bootOutcome = resolvePluginBootOutcome({ failedPlugins: allFailedPlugins.length })
+                if (bootOutcome === 'degraded') {
+                    reportPluginBootFailures(allFailedPlugins, failures)
                 }
 
                 setPluginsLoaded(true)
@@ -304,8 +402,13 @@ export function Layout({ onPluginsReady }: LayoutProps) {
             logger.error('Failed to load plugins:', error)
 
             if (getAccessToken() && !window.location.pathname.startsWith('/share/')) {
-                // Never mount an editable document with an incomplete schema after
-                // the installed-plugin request fails. Require an explicit retry.
+                // Only a failure to *discover* the installed set is fatal — the
+                // request failed, its body was not a list, or the registry itself
+                // threw. Without that list the shell cannot know which editor
+                // extensions a document may contain, and mounting an incomplete
+                // schema would edit those documents destructively. Require an
+                // explicit retry. (Individual plugin failures never reach here:
+                // they are reported and skipped inside `init()`.)
                 setPluginLoadError(error)
                 return
             }
@@ -314,7 +417,7 @@ export function Layout({ onPluginsReady }: LayoutProps) {
             setPluginsLoaded(true)
             onPluginsReady(true)
         }
-    }, [pluginManager, refreshFlag])
+    }, [pluginManager, refreshFlag, reportPluginBootFailures])
 
     useEffect(() => {
         if (requestPluginId) {

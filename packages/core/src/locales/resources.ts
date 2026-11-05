@@ -7,6 +7,13 @@ export const resources = {
         close: "关闭",
         noRenderer: "没有插件为「{{kind}}」提供预览视图。",
       },
+      // 插件加载失败的降级提示：单个插件坏掉不阻断启动（见 plugin-boot.ts）。
+      pluginBoot: {
+        failedTitle: "部分插件加载失败",
+        failedDescription: "已跳过 {{count}} 个插件：{{details}}。工作区已启动，其余功能可正常使用。",
+        moreFailed: "（另有 {{count}} 个未显示）",
+        retry: "重试",
+      },
       // 请求层兜底文案（见 packages/common/src/utils/request.tsx）。
       // 后端返回的 msg 优先展示；只有后端没给消息（网络错误/5xx 无 body）时才用这里。
       apiError: {
@@ -1632,6 +1639,13 @@ export const resources = {
         openPage: "Open page",
         close: "Close",
         noRenderer: "No plugin provides a preview for “{{kind}}”.",
+      },
+      // Degraded-boot notice for plugins that failed to load (see plugin-boot.ts).
+      pluginBoot: {
+        failedTitle: "Some plugins failed to load",
+        failedDescription: "Skipped {{count}} plugin(s): {{details}}. The workspace started without them.",
+        moreFailed: "(+{{count}} more)",
+        retry: "Retry",
       },
       // Fallbacks for the request layer (see packages/common/src/utils/request.tsx).
       // The backend's own `msg` wins; these are only used when it sent none
