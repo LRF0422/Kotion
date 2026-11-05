@@ -96,7 +96,9 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
         const collabProvider = new TiptapCollabProvider({
             baseUrl: COLLAB_WS_BASE_URL,
             name: `page:${pageId}`,
-            token: getAccessToken() || '',
+            // Getter, not a captured value: reconnects re-authenticate, and an
+            // access token captured at mount can expire before the agent is done.
+            token: () => getAccessToken() || '',
             document: doc,
             onSynced: () => {
                 setSynced(true)
@@ -122,6 +124,7 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
 
     useEffect(() => {
         if (page?.pageType) return
+        setSynced(false)
         setSyncTimedOut(false)
         const timer = setTimeout(() => setSyncTimedOut(true), 8000)
         return () => clearTimeout(timer)
@@ -193,6 +196,9 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
         editor: editorInstance,
         pageId,
         enabled: !!page && !page.pageType && contentReady && !!seed?.trusted,
+        // A room that never synced holds a placeholder, not the page; writing it
+        // would reconcile the page down to nothing.
+        collaborationSynced: synced,
         clientId,
         presence: { connected: connectionStatus === 'connected', hostPresent, hostSeen },
         reconcileOnly: syncTimedOut && !synced,
@@ -232,6 +238,17 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
         if (readyReportedRef.current) return
         if (editorInstance && contentReady && seed && (synced || syncTimedOut)) {
             readyReportedRef.current = true
+            if (!synced) {
+                // The room never delivered the document. The writer is gated off
+                // (see `collaborationSynced`), so anything the agent "edits" here
+                // would only live in this in-memory placeholder and vanish with
+                // the session. Fail loudly instead of reporting success.
+                offscreenSessionManager.markError(
+                    pageId,
+                    new Error('Collaboration room did not sync; refusing to edit the page offline'),
+                )
+                return
+            }
             offscreenSessionManager.markReady(pageId, {
                 editor: editorInstance,
                 title: page?.title,

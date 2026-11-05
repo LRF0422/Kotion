@@ -553,9 +553,15 @@ export const CollaborationEditor = forwardRef<
           const clientId = String(provider.document.clientID);
           const pageId = pageIdRef.current;
           const seedClaim = await claimSeedRight(pageDocumentsRef.current, pageId, clientId);
-          if (cancelled) return;
+          if (cancelled) {
+            // This editor will not seed after all; hand the claim back so the next
+            // opener is not locked out for the whole TTL.
+            releaseSeedRight(seedClaim.documents, pageId, clientId);
+            return;
+          }
 
           if (seedClaim.granted) {
+            let seeded = false;
             try {
               const exts = extensionsRef.current as AnyExtension[];
               const processed = rewriteUnknownContent(
@@ -568,15 +574,20 @@ export const CollaborationEditor = forwardRef<
               if (processed && isYDocEmpty(provider.document)) {
                 const seededDoc = TiptapTransformer.toYdoc(processed, COLLAB_FIELD, exts);
                 Y.applyUpdate(provider.document, Y.encodeStateAsUpdate(seededDoc));
+                seeded = true;
               }
             } catch (e) {
               logger.error("[CollaborationEditor] failed to seed Y.Doc from REST content", e);
-            } finally {
-              // Hand the claim back rather than making the next opener wait out
-              // the TTL. Safe either way: by now the doc is either seeded or
-              // known to be non-empty.
-              releaseSeedRight(seedClaim.documents, pageId, clientId);
             }
+            // Deliberately do NOT release a successful claim. Releasing here only
+            // saves the next opener a TTL wait on a page it can already see is
+            // non-empty — but a concurrent opener whose SyncStep2 completed while
+            // the fragment was still empty may claim right after the release,
+            // before this update has reached it, and seed the same REST content a
+            // second time. Yjs merges the two copies instead of de-duplicating
+            // them, which is the duplicate-blocks failure the arbitration exists
+            // to prevent. Letting the claim expire (20s) prices the race out.
+            if (!seeded) releaseSeedRight(seedClaim.documents, pageId, clientId);
           }
           // Denied: another client is seeding this page right now. Its content
           // reaches us over the collaboration channel — writing our own copy is

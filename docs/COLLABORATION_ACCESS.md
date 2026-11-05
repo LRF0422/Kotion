@@ -109,3 +109,58 @@ mvn -o -pl knowledge-service/knowledge-wiki -am test \
   -Dtest=CollabSessionServiceTest,CollaborationApplicationAuthorizationTest,PageDocControllerGuestClaimTest \
   -Dsurefire.failIfNoSpecifiedTests=false
 ```
+
+## 7. 编辑器协同保存链路（复审结论）
+
+保存链路：`Y.Doc（房间内共享）→ OpTracker 派生 op → useOpSave（防抖/重试/reconcile）
+→ usePageSave（写租约门禁）→ 后端按租约写入 wiki_block`。本轮复审确认/修复了以下问题：
+
+已修复：
+
+- **远端编辑被当成"整页改动"**：`@tiptap/y-tiptap` 应用远端 Yjs 更新时用一次
+  `tr.replace(0, size, …)` 替换整篇文档，原来按 changed range 归因会把所有顶层块标脏
+  （一次协同按键 = 整页 replace，且 `absorbServerDoc` 的 dirty 集被污染，会把 AI/导入的
+  服务端写入"本地优先"地回滚）。现在对"整篇替换"形状的事务改为按顶层块内容 diff 归因
+  （`op-tracker.ts` `forEachActuallyChangedTopBlock`）。
+- **协同文档未同步时禁止落库**：`usePageSave` 新增 `collaborationSynced` 门禁（PageEditor /
+  页面浮窗 / 隐藏 AI 编辑器都传实际 `synced`）。未同步时既不领租约也不写库——此前会在
+  8s 超时后用空文档 reconcile，把有内容的页面清空；状态栏显示 "Not synced"。
+- **首次 claim 失败不再永久失写**：心跳收到 NONE 且从未持有会话时，`decideHeartbeat` 返回
+  新的 `claim` 决策并重试 claim（服务端幂等，占用中会返回 COLLABORATOR）；同时通过
+  `claimFailed` 在状态栏显示 "Not saved yet"，不再谎报 "Saved"。
+- **按 pageId 重挂载编辑器**：`/page/:spaceId/:pageId` 等路由复用同一个 PageEditor 实例，
+  原来切换页面时旧页面的写租约、rev 水位、待写队列和 flush 闭包会串到新页面（尾部编辑写到
+  错误页面、新页面 baseRev 永远 409 而静默停止保存）。现在 PageEditor 外层按 pageId 加 key。
+- **seed 抢占成功后不再立即释放**：并发打开同一空白页面时，后到者可能在广播到达前拿到
+  释放掉的 claim 并再次 seed，Yjs 合并出重复块；现在成功 seed 后保留 claim 至 TTL。
+- **降级后再提升时补一次 reconcile**：被 host 抢占租约期间 Y.Doc 里可能有从未落库的编辑；
+  重新拿到租约时用 `markWriteOwed + requireReconcile` 补一次整篇收敛（对齐时是无操作）。
+- **catch-up 竞态**：新增"已确认 rev 水位"并在 fetch 返回后再次检查写入状态，避免把旧快照
+  合并进来删掉刚保存的块；catch-up 被并发触发时改为排队重试而不是丢弃；完成后恢复挂起写入。
+- **重连认证**：房间 token 改为 getter（每次重连取最新 access token；邀请令牌信封保留
+  invitationToken），避免 token 过期后房间永久无法重连或因为 token 变化重建 Y.Doc。
+- **后台标签页的会话结束**：只在可见编辑器上弹窗/自动跳转，不再劫持前台页面。
+- **隐藏 AI 编辑器**同样受同步门禁：未同步时不再报告 ready（改为 markError），页面浮窗状态栏显示
+  "Not synced"，不会再显示 "Saved" 却静默丢弃内容。
+- **未同步/非写者期间的编辑不会丢失**：写者关闭期间监听文档事务——按变更范围识别"远端整篇替换"
+  （Yjs 绑定的远端更新形状，未写过时由当前 host 落库，不计为本机欠写），其余变化（同步前打字、
+  被降级后的任何变化）记为欠写；重新拿到写权（或房间同步完成）时先整篇 reconcile，把此前只存在于
+  Y.Doc 的内容落库。该判定只做 O(steps) 的范围比较，不会对每次远端按键做全文档 diff。
+
+仍未解决（按风险排序）：
+
+1. 客户端 "guest" 语义仍由入口路由（协作工作区）决定：同租户的页面级协作者从空间树进入时，
+   在 host 会话结束后按普通成员语义被只读，而不是接管。要统一需后端在 `PageSessionVO`
+   返回身份级的 guest 标记，客户端据此驱动 `decideHeartbeat`。
+2. 实时通道断开但 HTTP 心跳仍在时：持有租约的客户端仍可从陈旧文档写入；被降级瞬间的
+   批次按"编辑已在共享 Y.Doc"假设静默丢弃——通道断开时这个假设不成立。
+3. 退出 flush 不检查 `behindServer`：落后于服务端时发送的 reconcile/op 批次可能被 3016 拒绝且
+   被吞掉（数据仍在 Y.Doc，但关闭后无法保证落库）。
+   （`reconcileOnly` 现在在三条编辑器链路上已被 `collaborationSynced` 门禁取代——未同步的客户端
+   根本不写；该开关保留给没有协同房间的编辑场景。）
+4. 房间授权只在建连时校验：邀请被撤销/过期后，已连接的 guest 仍可编辑 Y.Doc（写库已拒绝）。
+5. seed 被拒的客户端不会重试；对方若在 seed 前取消，需等 TTL（20s）或刷新页面。
+6. "写者关闭期间"的欠写判定按"变更范围是否为整篇替换"区分本地/远端：在**从未写过且未同步**的窗口里，
+   本地整篇 `setContent`（例如 Markdown 导入）会被当成远端更新忽略。要精确区分需引入 y-tiptap 的
+   `ySyncPluginKey` 元数据（该包目前不是 `@kn/editor` 的直接依赖），属于已知窄边界。
+

@@ -54,7 +54,8 @@ const getStatusDisplay = (
         | { reason: 'collaborator'; hostName: string | null }
         | { reason: 'behind' }
         | { reason: 'waitingForHost'; hostName: string | null }
-        | { reason: 'guestNoSession' }
+        | { reason: 'noSession' }
+        | { reason: 'notSynced' }
         | null,
 ) => {
     if (saving) {
@@ -70,12 +71,18 @@ const getStatusDisplay = (
         // currently keeping: with the host away, nothing is being persisted.
         return { text: 'Host disconnected', icon: <CloudOff className="h-3 w-3 text-amber-500" />, className: 'text-amber-600 dark:text-amber-500' };
     }
-    if (notWriting?.reason === 'guestNoSession') {
-        // An invited collaborator editing before it holds the lease (the inviter
-        // has not joined yet, or this client is in the middle of claiming it).
-        // Its edits live in the shared document but nothing has persisted them
+    if (notWriting?.reason === 'noSession') {
+        // The write lease is not held and the last claim did not land (a guest
+        // before its first claim, or any client whose claim request was dropped).
+        // The edits live in the shared document but nothing has persisted them
         // yet — not a failure, and emphatically not "Saved".
         return { text: 'Not saved yet', icon: <CloudOff className="h-3 w-3 text-amber-500" />, className: 'text-amber-600 dark:text-amber-500' };
+    }
+    if (notWriting?.reason === 'notSynced') {
+        // The collaboration server never delivered the document. Any write from
+        // this state would be a whole-document reconcile of a placeholder, so the
+        // writer stays off and the user must know their edits are not being saved.
+        return { text: 'Not synced', icon: <CloudOff className="h-3 w-3 text-amber-500" />, className: 'text-amber-600 dark:text-amber-500' };
     }
     if (notWriting?.reason === 'behind') {
         // Writing is suspended because the page moved on without us. Not an
@@ -140,7 +147,25 @@ export interface PageEditorProps {
     onGuestExit?: () => void
 }
 
+/**
+ * Page-scoped collaboration state must not outlive the page it describes.
+ *
+ * The standalone `/page/:spaceId/:pageId` route reuses one PageEditor subtree
+ * across pinned-page navigation — only the route params change. The Y.Doc and
+ * provider are recreated for the new page, but the hooks' state (the write
+ * lease, the rev watermark, the autosave queue and its flushed closures) would
+ * survive the switch: the old page's last edits get flushed to the new page's
+ * endpoint, the old lease leaks until its TTL, and the destination page inherits
+ * a baseRev the backend can never accept — so it silently stops saving.
+ * Keying the session on the page id makes every one of those page-scoped.
+ */
 export const PageEditor: React.FC<PageEditorProps> = (props) => {
+    const params = useParams()
+    const pageId = props.pageId ?? params.pageId
+    return <PageEditorSession key={pageId ? String(pageId) : 'no-page'} {...props} />
+}
+
+const PageEditorSession: React.FC<PageEditorProps> = (props) => {
     const { t } = useTranslation()
     const { hasFeature } = useEntitlements()
     const [showToc, setShowToc] = useState(true)
@@ -163,6 +188,10 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
     // that is what makes it retain the page after another route (e.g. a pinned
     // `/page/...` view) published and then cleared the global state.
     const routeCacheActive = useRouteCacheActive()
+    // Whether this editor is the one the user is looking at. A keep-alive tab
+    // pool keeps up to two editors mounted, so a backgrounded page must not put
+    // a modal over (or navigate away from) the page in the foreground.
+    const editorVisible = routeCacheActive && props.active !== false
     const { updateMeta } = usePageTabs(spaceId)
     const { userInfo } = useSelector((state: GlobalState) => state)
     const [pageLoading, { toggle: toggleLoading }] = useToggle(false)
@@ -180,7 +209,24 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
     // Invitation guests inject a token-bound capability because the page is in a
     // different identity context than the caller.
     const documentOps = props.documentOps ?? service.documents
-    const collabToken = props.collabToken ?? getAccessToken() ?? ''
+    // A getter, not the value: the room re-authenticates on every (re)connect, so
+    // a token captured at mount would be refused once refreshed, and rebuilding
+    // the provider on every token change would discard the live Y.Doc (and the
+    // user's unsaved typing) mid-session.
+    const getCollabToken = React.useCallback(() => {
+        if (!props.collabToken) return getAccessToken() ?? ''
+        // Invitation envelope: keep the page-scoped invitation token, refresh the
+        // OAuth access token that authorizes the invitee.
+        try {
+            const parsed = JSON.parse(props.collabToken)
+            if (parsed && typeof parsed === 'object') {
+                return JSON.stringify({ ...parsed, accessToken: getAccessToken() ?? '' })
+            }
+        } catch {
+            // Not our envelope — send it verbatim.
+        }
+        return props.collabToken
+    }, [props.collabToken])
     const { usePath } = useUploadFile();
     const [editorContentReady, setEditorContentReady] = useState(false)
     const [versionHistoryOpen, setVersionHistoryOpen] = useState(false)
@@ -238,6 +284,10 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
             return;
         }
 
+        // A disposed provider's late callbacks must not feed the next room's
+        // state (a `synced` from the old socket would mark the new, unsynced room
+        // as writable).
+        let disposed = false;
         const doc = new Y.Doc();
         const collabProvider = new TiptapCollabProvider({
             // Env-configurable collab endpoint. The token is the user's OAuth2
@@ -246,7 +296,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
             // page-scoped invitation token. Never the bare pageId.
             baseUrl: getAppEnv('VITE_COLLABORATION_WS_URL') || 'wss://kotion.top:8877/ws',
             name: `page:${deferredPageId}`,
-            token: collabToken,
+            token: getCollabToken,
             document: doc,
             onAwarenessUpdate: ({ states }) => {
                 // The room also contains clients that are not people — above all
@@ -263,10 +313,12 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                 }
             },
             onSynced: () => {
+                if (disposed) return;
                 setSyncStatus(true);
                 setConnectionStatus('connected');
             },
             onStatus: (status: any) => {
+                if (disposed) return;
                 if (status.status === 'connected') {
                     setConnectionStatus('connected');
                 } else if (status.status === 'disconnected') {
@@ -280,22 +332,26 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         setProvider(collabProvider);
 
         return () => {
+            disposed = true;
             collabProvider.awareness?.destroy();
             collabProvider.disconnect();
             collabProvider.destroy();
         };
-    }, [deferredPageId, collabToken]);
+    }, [deferredPageId, getCollabToken]);
 
     useEffect(() => {
-        // Both flags describe *this* page's sync. This component is reused across
-        // page switches rather than remounted, so leaving `syncStatus` set would
-        // carry the previous page's success into the next one — and "we synced" is
-        // exactly what decides whether this client may send anchored ops.
-        setSyncStatus(false)
+        // Both flags describe *this* room's sync. A provider is recreated when
+        // the page changes, and (defensively) should it ever be recreated for any
+        // other reason, the previous room's success must not be carried into the
+        // new one — "we synced" is exactly what decides whether this client may
+        // write. Reset on `provider` as well as `pageId`. Seed from the
+        // provider's own flag: `onSynced` can fire before this effect runs, and
+        // clearing that would leave the writer off for a room that is synced.
+        setSyncStatus(provider?.synced === true)
         setSyncTimedOut(false)
         const t = setTimeout(() => setSyncTimedOut(true), 8000)
         return () => clearTimeout(t)
-    }, [pageId])
+    }, [pageId, provider])
 
     useEffect(() => {
         let cancelled = false
@@ -611,6 +667,9 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         // `seed.trusted` is part of the gate rather than a warning: the one thing
         // worse than not saving is saving content we could not verify.
         enabled: !props.readOnly && !!page && !!pageId && editorContentReady && !!seed?.trusted,
+        // An editor mounted after the sync timeout is holding a placeholder, not
+        // the page; persist nothing until the room has answered at least once.
+        collaborationSynced: syncStatus,
         clientId,
         // An invited guest may host the page itself when nobody holds the lease
         // (the inviter may not have opened it yet); the server preempts the
@@ -656,7 +715,10 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
     useEffect(() => {
         if (!session.sessionEnded) return
         editor.current?.setEditable(false)
-    }, [session.sessionEnded])
+        // The inner editor can be recreated (schema migration, provider change)
+        // after the session ended; its editable state is seeded from props, so
+        // re-apply whenever a new editor instance becomes ready.
+    }, [session.sessionEnded, editorContentReady])
 
     // ...then leave. Automatic so an unattended tab does not sit on a dead
     // session, with a button for anyone who would rather not wait.
@@ -665,10 +727,10 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
     }, [navigator, spaceId])
 
     useEffect(() => {
-        if (!session.sessionEnded) return
+        if (!session.sessionEnded || !editorVisible) return
         const timer = setTimeout(leaveEndedSession, 6000)
         return () => clearTimeout(timer)
-    }, [session.sessionEnded, leaveEndedSession])
+    }, [session.sessionEnded, editorVisible, leaveEndedSession])
 
     // Copy a shareable link to the current page to the clipboard
     const handleCopyLink = useCallback(async () => {
@@ -878,13 +940,15 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         // not persisted yet.
         session.hostDisconnected && !props.guestMode
             ? { reason: 'waitingForHost' as const, hostName: session.lastHostName }
-            : props.guestMode && !props.readOnly && !session.isHost && !session.alive
-                ? { reason: 'guestNoSession' as const }
-                : behindServer
-                    ? { reason: 'behind' as const }
-                    : session.alive && !session.isHost
-                        ? { reason: 'collaborator' as const, hostName: session.hostName }
-                        : null)
+            : !props.readOnly && syncTimedOut && !syncStatus
+                ? { reason: 'notSynced' as const }
+                : !props.readOnly && !session.isHost && !session.alive && (session.claimFailed || props.guestMode)
+                    ? { reason: 'noSession' as const }
+                    : behindServer
+                        ? { reason: 'behind' as const }
+                        : session.alive && !session.isHost
+                            ? { reason: 'collaborator' as const, hostName: session.hostName }
+                            : null)
 
 
     return pageLoading ? <div className="w-full h-full">
@@ -1196,7 +1260,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
             any more. The editor is already read-only by this point; this only
             explains why and gets the user out. Intentionally not dismissible:
             staying would mean looking at a document that cannot be edited. */}
-        <AlertDialog open={session.sessionEnded}>
+        <AlertDialog open={session.sessionEnded && editorVisible}>
             <AlertDialogContent>
                 <AlertDialogHeader>
                     <AlertDialogTitle>

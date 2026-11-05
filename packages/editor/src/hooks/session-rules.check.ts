@@ -66,10 +66,18 @@ check(
 )
 
 check(
-  'NONE before the first claim is not an ended session',
+  'NONE before the first claim is not an ended session — it re-claims',
   // The heartbeat that races the opening claim. Reading this as "ended" would
-  // eject every client as it opened the page.
-  decideHeartbeat('NONE', { wasHost: false, wasCollaborator: false }) === 'adopt',
+  // eject every client as it opens the page; reading it as "carry on" would
+  // strand a client whose opening claim was dropped, with the writer off and no
+  // error shown. Claiming again is safe: the server answers COLLABORATOR when
+  // somebody else holds the lease.
+  decideHeartbeat('NONE', { wasHost: false, wasCollaborator: false, mayHost: true }) === 'claim',
+)
+
+check(
+  'a client that may not host adopts a missing session',
+  decideHeartbeat('NONE', { wasHost: false, wasCollaborator: false, mayHost: false }) === 'adopt',
 )
 
 // ─── Invited collaborators (guests) ───────────────────────────────────

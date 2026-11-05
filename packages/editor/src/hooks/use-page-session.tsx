@@ -134,6 +134,14 @@ export interface UsePageSessionReturn {
   /** Claim again now, rather than waiting for the next heartbeat. */
   reclaim: () => Promise<void>
   /**
+   * The last claim attempt failed (a dropped request, an unreachable server).
+   *
+   * A caller that may write but holds no session should surface this instead of
+   * "Saved": the local document is not being persisted until a retry lands. The
+   * heartbeat retries on its own, so this is a diagnostic, not a terminal state.
+   */
+  claimFailed: boolean
+  /**
    * Ask the server for this client's role right now, without claiming.
    *
    * Used by the writer when a save is refused because this client is not the
@@ -167,6 +175,7 @@ export function usePageSession(options: UsePageSessionOptions): UsePageSessionRe
   const [state, setState] = useState<PageSessionState>({ role: 'NONE', alive: false })
   const [hostDisconnected, setHostDisconnected] = useState(false)
   const [sessionEnded, setSessionEnded] = useState(false)
+  const [claimFailed, setClaimFailed] = useState(false)
 
   const onClaimRef = useRef(onClaim)
   onClaimRef.current = onClaim
@@ -209,6 +218,9 @@ export function usePageSession(options: UsePageSessionOptions): UsePageSessionRe
     // transition — that value is exactly what decides between the two.
     if (next.role !== 'NONE') lastHostSelfRef.current = next.hostSelf === true
     if (next.hostName) lastHostNameRef.current = next.hostName
+    // A live answer means the claim path succeeded (or somebody else holds the
+    // lease and this client is a collaborator) — either way not a failed claim.
+    if (next.role !== 'NONE') setClaimFailed(false)
     setState(next)
   }, [])
 
@@ -219,9 +231,12 @@ export function usePageSession(options: UsePageSessionOptions): UsePageSessionRe
     try {
       apply(await onClaimRef.current(clientId))
     } catch (err) {
-      // A failed claim is not fatal: the next heartbeat tick tries again. Going
-      // read-only on one dropped request would make a flaky network look like
-      // somebody else is holding the page.
+      // A failed claim is not fatal: the next heartbeat answers NONE and the
+      // `claim` decision re-tries (see `decideHeartbeat`). Going read-only on one
+      // dropped request would make a flaky network look like somebody else is
+      // holding the page. Flagged so the caller can say "not saved yet" instead
+      // of showing a confident "Saved".
+      setClaimFailed(true)
       console.error('[usePageSession] claim failed:', err)
     } finally {
       claimingRef.current = false
@@ -248,6 +263,19 @@ export function usePageSession(options: UsePageSessionOptions): UsePageSessionRe
         // "claim it": a read-only invitation has nothing to do with `NONE`.
         mayHost: canHost,
       })
+
+      if (decision === 'claim') {
+        // No session has ever existed for this client and the heartbeat raced or
+        // lost the opening claim. Claim again rather than carrying on with the
+        // writer permanently off; a claim that finds somebody else's lease comes
+        // back as COLLABORATOR, so this cannot steal an active session.
+        apply(next)
+        if (canHost) {
+          console.info('[usePageSession] no session yet; claiming')
+          await claim()
+        }
+        return
+      }
 
       if (decision === 'reclaim') {
         // Either our own lease expired while the page was still open — a
@@ -383,6 +411,7 @@ export function usePageSession(options: UsePageSessionOptions): UsePageSessionRe
       setState({ role: 'NONE', alive: false })
       setHostDisconnected(false)
       setSessionEnded(false)
+      setClaimFailed(false)
     }
   }, [enabled])
 
@@ -397,5 +426,6 @@ export function usePageSession(options: UsePageSessionOptions): UsePageSessionRe
     sessionEnded,
     reclaim: claim,
     refresh: beat,
+    claimFailed,
   }
 }

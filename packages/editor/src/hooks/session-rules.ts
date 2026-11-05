@@ -14,11 +14,15 @@ export type SessionRole = 'HOST' | 'COLLABORATOR' | 'NONE'
  * What to do with the role the server just reported.
  *
  * - `adopt` — believe it and carry on.
- * - `reclaim` — our own lease lapsed; take the answer, then claim again.
+ * - `reclaim` — our own (or a same-user sibling's) lease lapsed; take the
+ *   answer, then claim again.
+ * - `claim` — we have never held a session and there is none: the opening claim
+ *   is still in flight or it failed. Claim again; one dropped request must not
+ *   leave the writer off for the rest of the session.
  * - `ended` — the session we were part of is gone; go read-only and leave.
  *   Never returned for an invited guest: a guest takes the page over instead.
  */
-export type HeartbeatDecision = 'adopt' | 'reclaim' | 'ended'
+export type HeartbeatDecision = 'adopt' | 'reclaim' | 'claim' | 'ended'
 
 export interface HeartbeatContext {
   /** Was this client the host as of the last answer? */
@@ -89,8 +93,13 @@ export function decideHeartbeat(role: SessionRole, ctx: HeartbeatContext): Heart
 
   // No session, and we have never been in one: this is the answer that arrives
   // when a heartbeat races the very first claim. Reading it as an ended session
-  // would eject every client as it opened the page.
-  return 'adopt'
+  // would eject every client as it opens the page — but reading it as "carry on"
+  // is worse: a claim that failed on a dropped request would never be retried,
+  // the writer would stay off, and the editor would keep showing "Saved" while
+  // nothing reached the database. Claiming is idempotent (the server answers
+  // COLLABORATOR when somebody else holds the lease), so retry.
+  if (ctx.mayHost === false) return 'adopt'
+  return 'claim'
 }
 
 export interface GraceContext {

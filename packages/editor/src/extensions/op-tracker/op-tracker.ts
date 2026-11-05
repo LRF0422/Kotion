@@ -142,6 +142,15 @@ export interface OpTrackerStorage {
   /** Give up on incremental tracking; the next write reconciles. */
   requireReconcile(): void
   /**
+   * Record that a write is owed even though no block counter changed.
+   *
+   * Used on re-promotion to the write lease: the document may hold edits no
+   * writer ever persisted (they arrived while this client was a collaborator),
+   * so the next write must happen and must be a reconcile. `needsReconcile`
+   * alone answers *how* to write, never *whether* — this is the "whether".
+   */
+  markWriteOwed(): void
+  /**
    * Re-baseline from the current document and drop all pending state. Valid only
    * straight after a successful reconcile or a fresh load, when the document and
    * the database are known to agree.
@@ -255,6 +264,38 @@ function forEachChangedTopBlock(
   }
 }
 
+/**
+ * Visit every top-level block whose content actually changed between two docs.
+ *
+ * The Yjs binding (`@tiptap/y-tiptap`) applies a remote update by replacing the
+ * *entire* document in a single step: `tr.replace(0, size, Slice(fragmentContent))`.
+ * `getChangedRanges` therefore reports one range spanning the whole page, and
+ * attributing that range to blocks would mark every block dirty. That is not a
+ * cosmetic problem: a collaborator's keystroke would make the host rewrite the
+ * whole page on every save, and — worse — the catch-up merge treats a dirty block
+ * as "local work the server has not seen", so every server-side (AI/import) write
+ * would be skipped as if it were ours to overwrite. Diffing top-level nodes
+ * recovers the per-block granularity for exactly this transaction shape.
+ */
+function forEachActuallyChangedTopBlock(
+  oldDoc: ProseMirrorNode,
+  newDoc: ProseMirrorNode,
+  attr: string,
+  visit: (node: ProseMirrorNode) => void,
+): void {
+  const previous = new Map<string, ProseMirrorNode>()
+  oldDoc.forEach(node => {
+    const id = resolveBlockId(node, attr)
+    if (id) previous.set(id, node)
+  })
+  newDoc.forEach(node => {
+    const id = resolveBlockId(node, attr)
+    if (!id) return
+    const before = previous.get(id)
+    if (!before || !before.eq(node)) visit(node)
+  })
+}
+
 // ─── Extension ───────────────────────────────────────────────────────
 
 const opTrackerPluginKey = new PluginKey('opTracker')
@@ -304,6 +345,7 @@ export const OpTracker = Extension.create<OpTrackerOptions, OpTrackerStorage>({
       commitBatch(_batch: OpBatch) {},
       commitReconcile(_snapshot: ReconcileSnapshot) {},
       requireReconcile() {},
+      markWriteOwed() {},
       resetBaseline() {},
       absorbServerDoc(_serverDoc: JSONContent) { return null },
       subscribeIdle(_cb: () => void, _ms: number) { return () => {} },
@@ -396,6 +438,10 @@ export const OpTracker = Extension.create<OpTrackerOptions, OpTrackerStorage>({
 
     storage.requireReconcile = () => {
       storage.needsReconcile = true
+    }
+
+    storage.markWriteOwed = () => {
+      storage.dirty = true
     }
 
     storage.resetBaseline = () => {
@@ -582,7 +628,7 @@ export const OpTracker = Extension.create<OpTrackerOptions, OpTrackerStorage>({
 
         state: {
           init: () => null,
-          apply: (tr, value, _oldState, newState) => {
+          apply: (tr, value, oldState, newState) => {
             const storage = ext.storage
             if (!storage.initialized) return value
             // A collaborator tracks nothing at all.
@@ -595,10 +641,28 @@ export const OpTracker = Extension.create<OpTrackerOptions, OpTrackerStorage>({
             if (!ext.options.filterTransaction(tr)) return value
 
             const seq = ++storage.seq
-            forEachChangedTopBlock(tr, newState.doc, node => {
-              const id = resolveBlockId(node, blockIdAttribute)
-              if (id) storage.dirtyBlocks.set(id, seq)
-            })
+            const ranges = getChangedRanges(tr)
+            // A whole-document replace is how the Yjs binding applies *every*
+            // remote update (see forEachActuallyChangedTopBlock). Diffing is what
+            // keeps a collaborator's edit attributed to the blocks it touched
+            // instead of to the entire page.
+            const wholeDocumentReplace = ranges.length > 0 && ranges.some(range =>
+              range.oldStart === 0
+              && range.newStart === 0
+              && range.oldEnd >= oldState.doc.content.size
+              && range.newEnd >= newState.doc.content.size,
+            )
+            if (wholeDocumentReplace) {
+              forEachActuallyChangedTopBlock(oldState.doc, newState.doc, blockIdAttribute, node => {
+                const id = resolveBlockId(node, blockIdAttribute)
+                if (id) storage.dirtyBlocks.set(id, seq)
+              })
+            } else {
+              forEachChangedTopBlock(tr, newState.doc, node => {
+                const id = resolveBlockId(node, blockIdAttribute)
+                if (id) storage.dirtyBlocks.set(id, seq)
+              })
+            }
             storage.dirty = true
             return value
           },

@@ -73,6 +73,17 @@ export interface UsePageSaveOptions {
      */
     presence: { connected: boolean; hostPresent: boolean; hostSeen: boolean }
     /**
+     * Whether the collaborative document has actually synced at least once.
+     *
+     * False means the editor is holding a document the room never confirmed —
+     * at open time that is the schema placeholder, not the page. Writing it is
+     * not an edit, it is a whole-document overwrite (the first write of a
+     * session is a reconcile), so the session and the writer stay off until the
+     * relay has answered. Callers whose editor has no collaboration room leave
+     * this undefined.
+     */
+    collaborationSynced?: boolean
+    /**
      * Forces every write through reconcile. Set when the collaboration server
      * never synced, so this client's anchors cannot be trusted.
      */
@@ -102,7 +113,15 @@ export interface UsePageSaveReturn {
  * should go through this rather than owning its own copy.
  */
 export function usePageSave(options: UsePageSaveOptions): UsePageSaveReturn {
-    const { editor, pageId, enabled, clientId, canHost = true, guest = false, presence, reconcileOnly, documents, onSaved } = options
+    const { editor, pageId, enabled, clientId, canHost = true, guest = false, presence, reconcileOnly, documents, onSaved,
+        collaborationSynced = true } = options
+
+    // "This editor is ready to edit" and "this editor may persist" are different
+    // questions: an unsynced collaborative document is a placeholder, and the
+    // first write of a session is a reconcile, so persisting it would replace
+    // the page with that placeholder. Gate both the lease and the writer on the
+    // sync answer rather than on `enabled` alone.
+    const writeEnabled = enabled && collaborationSynced
 
     // Read at call time rather than captured, so the caller can hand in a fresh
     // service capability (or a stable one) without this hook re-subscribing.
@@ -150,7 +169,7 @@ export function usePageSave(options: UsePageSaveOptions): UsePageSaveReturn {
     const sessionRef = useRef<UsePageSessionReturn | null>(null)
 
     const session = usePageSession({
-        enabled,
+        enabled: writeEnabled,
         clientId,
         canHost,
         guest,
@@ -287,7 +306,8 @@ export function usePageSave(options: UsePageSaveOptions): UsePageSaveReturn {
         // accident. An invited guest is a host until the inviter preempts its
         // lease; from that moment it is a collaborator again, and the edits it
         // makes still reach the database through the host's shared Y.Doc.
-        enabled: enabled && session.isHost,
+        // `writeEnabled` also keeps an unsynced document from being persisted.
+        enabled: writeEnabled && session.isHost,
         clientId,
         onApplyOps: handleApplyOps,
         onReconcile: handleReconcile,

@@ -85,6 +85,7 @@ const MESSAGES = {
         statusEditing: 'Editing',
         statusSavedByHost: 'Saved by host',
         statusReadOnly: 'Read-only',
+        statusNotSynced: 'Not synced',
         componentPage: 'This page type can only be opened in the full-page view.',
         minimize: 'Minimize',
         restore: 'Restore',
@@ -101,6 +102,7 @@ const MESSAGES = {
         statusEditing: '编辑中',
         statusSavedByHost: '已由主机保存',
         statusReadOnly: '只读',
+        statusNotSynced: '未同步',
         componentPage: '此页面类型只能在完整页面中打开。',
         minimize: '缩小',
         restore: '还原',
@@ -430,7 +432,9 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, em
             // any page's collaboration room).
             baseUrl: getAppEnv('VITE_COLLABORATION_WS_URL') || 'wss://kotion.top:8877/ws',
             name: `page:${pageId}`,
-            token: getAccessToken() || '',
+            // Getter, not a captured value: the room re-authenticates on every
+            // reconnect, and a token captured at mount expires mid-session.
+            token: () => getAccessToken() || '',
             document: doc,
             onSynced: () => {
                 setSynced(true)
@@ -456,6 +460,7 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, em
 
     useEffect(() => {
         if (page?.pageType) return;
+        setSynced(false);
         setSyncTimedOut(false);
         const timer = setTimeout(() => setSyncTimedOut(true), 8000);
         return () => clearTimeout(timer);
@@ -519,6 +524,9 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, em
         editor: editorInstance,
         pageId,
         enabled: !!page && !page.pageType && contentReady && !!seed?.trusted,
+        // Never persist the placeholder an unsynced room leaves behind: the first
+        // write of a session is a whole-document reconcile.
+        collaborationSynced: synced,
         clientId,
         presence: { connected: connectionStatus === 'connected', hostPresent, hostSeen },
         reconcileOnly: syncTimedOut && !synced,
@@ -661,6 +669,11 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, em
             ? { icon: <CloudOff className="h-3 w-3" />, text: t('statusSaveFailed'), className: 'text-destructive' }
             : seed && !seed.trusted
                 ? { icon: <CloudOff className="h-3 w-3" />, text: t('statusReadOnly'), className: 'text-muted-foreground' }
+                : syncTimedOut && !synced
+                    // The collaboration room never answered: the writer is held
+                    // off (persisting would reconcile a placeholder over the
+                    // page), so this window must not claim "Saved".
+                    ? { icon: <CloudOff className="h-3 w-3" />, text: t('statusNotSynced'), className: 'text-amber-600 dark:text-amber-500' }
                 : session.alive && !session.isHost
                     ? { icon: <Check className="h-3 w-3" />, text: t('statusSavedByHost'), className: 'text-muted-foreground' }
                     : dirty

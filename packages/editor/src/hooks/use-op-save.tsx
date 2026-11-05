@@ -3,6 +3,7 @@ import type { Editor, JSONContent } from '@tiptap/core'
 import type { ApplyOpsRequest, ApplyOpsResult, PageDocResult, ReconcileRequest } from '@kn/common'
 import type { OpBatch, OpTrackerStorage, ReconcileSnapshot } from '../extensions/op-tracker'
 import { OP_TRACKER_ABSORB } from '../extensions/op-tracker'
+import getChangedRanges from '../extensions/unique-id/utilities/get-changed-ranges'
 import { decideExitFlush } from './exit-flush'
 import { toRev } from './rev'
 
@@ -212,6 +213,21 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
   const catchingUpRef = useRef(false)
   const catchUpRef = useRef<() => Promise<void>>()
   const catchUpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // The highest rev the server has actually acknowledged for a write of ours.
+  // Separate from `revRef` on purpose: `revRef` is deliberately left behind on a
+  // missed revision so the heartbeat catch-up cannot be masked, which also means
+  // it cannot answer "has anything of mine already landed since this snapshot
+  // was fetched?". This one can.
+  const lastAckedRevRef = useRef<number | null>(null)
+  // Set when the shared document changes while this client is not the writer.
+  // Those edits live in the Y.Doc; if the client is re-promoted, a whole-document
+  // reconcile is the only way to be sure the database has them.
+  const missedWhileDisabledRef = useRef(false)
+  // Whether this client has ever been the writer on this page. Used to tell the
+  // two "writer is off" cases apart without an expensive document diff: while
+  // this client has never written, remote room updates are persisted by the host
+  // and can be ignored; after a demotion they are the ones at risk.
+  const hasBeenWriterRef = useRef(false)
   // Whether the exit flush has already gone out for the work currently on the
   // tracker. Two things ask for it — the closing session, and this hook's own
   // cleanup — and deriving a batch twice would mint a second idempotency key for
@@ -262,6 +278,21 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
     setBehindServer(ahead != null && ahead > parsed)
   }, [])
 
+  /** Record a rev the server acknowledged for a write (see `lastAckedRevRef`). */
+  const noteAckedRev = useCallback((next: number | string | null | undefined) => {
+    const parsed = toRev(next)
+    if (parsed != null) lastAckedRevRef.current = parsed
+  }, [])
+
+  /** Retry a catch-up that could not run or that raced a write (per hook). */
+  const scheduleCatchUpRetry = useCallback(() => {
+    if (catchUpTimerRef.current != null) return
+    catchUpTimerRef.current = setTimeout(() => {
+      catchUpTimerRef.current = null
+      void catchUpRef.current?.()
+    }, 1000)
+  }, [])
+
   /**
    * Fold the server's document into the local one, so this client can write again.
    *
@@ -278,7 +309,15 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
    * stops autosaving until a reload reads it cleanly.
    */
   const catchUp = useCallback(async (): Promise<void> => {
-    if (!enabled || catchingUpRef.current) return
+    if (!enabled) return
+    if (catchingUpRef.current) {
+      // A fetch is already in flight. The heartbeat that triggered this one may
+      // carry a newer rev than that fetch will return, and the effect that calls
+      // us only re-runs when a state value changes — so dropping the trigger
+      // silently could leave writing suspended forever. Retry instead.
+      scheduleCatchUpRetry()
+      return
+    }
     const fetchDoc = onFetchDocRef.current
     if (!fetchDoc) return
     const tracker = getTracker(editor)
@@ -290,12 +329,7 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
       // that `commitBatch` will install as the baseline — overwriting the
       // baseline this catch-up installs, and with it the fact that the server's
       // blocks are already saved. The next save would then insert them again.
-      if (catchUpTimerRef.current == null) {
-        catchUpTimerRef.current = setTimeout(() => {
-          catchUpTimerRef.current = null
-          void catchUpRef.current?.()
-        }, 1000)
-      }
+      scheduleCatchUpRetry()
       return
     }
 
@@ -304,6 +338,15 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
     try {
       const result = await fetchDoc()
       if (!editor || editor.isDestroyed) return
+      // A write may have started and even landed while the fetch was in flight;
+      // this snapshot can then predate it. The acknowledged-rev watermark is the
+      // only guard that still sees that — `revRef` is left behind on a missed
+      // revision by design — and merging an older document after a successful
+      // write would delete or revert locally exactly what was just saved.
+      if (savingRef.current || pendingRef.current) {
+        scheduleCatchUpRetry()
+        return
+      }
 
       const doc = result?.doc as JSONContent | null | undefined
       if (!doc) {
@@ -317,6 +360,14 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
       const fetchedRev = toRev(result?.rev)
       if (fetchedRev == null) {
         console.warn('[useOpSave] catch-up returned no rev; not merging')
+        return
+      }
+      if (lastAckedRevRef.current != null && fetchedRev < lastAckedRevRef.current) {
+        // The server answered with a document older than a write it already
+        // acknowledged — a lagging read. Applying it would revert that write.
+        console.warn(
+          `[useOpSave] catch-up read rev ${fetchedRev}, behind our last acknowledged write at ${lastAckedRevRef.current}; ignoring`,
+        )
         return
       }
       if (revRef.current != null && fetchedRev < revRef.current) {
@@ -337,13 +388,17 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
       console.info(
         `[useOpSave] caught up to rev ${fetchedRev}: +${summary.inserted} -${summary.removed} ~${summary.replaced} moved ${summary.moved}, ${summary.localOnly} local block(s) still unsaved`,
       )
+      // Writing is no longer suspended, so resume anything that was owed while
+      // the watermark held it back (a promotion reconcile, a queued edit). Left
+      // to the next keystroke it could wait forever on a page nobody types into.
+      if (tracker.dirty || tracker.needsReconcile) void doSaveRef.current?.()
     } catch (err) {
       console.warn('[useOpSave] catch-up failed:', err)
     } finally {
       catchingUpRef.current = false
       setCatchingUp(false)
     }
-  }, [editor, enabled, noteRev])
+  }, [editor, enabled, noteRev, scheduleCatchUpRetry])
   catchUpRef.current = catchUp
 
   const settleManualSaveWaiters = useCallback((failure?: Error) => {
@@ -447,6 +502,7 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
     try {
       if (pending.kind === 'reconcile') {
         const result = await onReconcileRef.current(pending.request)
+        noteAckedRev(result?.rev)
         noteRev(result?.rev)
         if (editor && !editor.isDestroyed) tracker.commitReconcile(pending.snapshot)
       } else {
@@ -455,6 +511,7 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
         while (pending.cursor < total) {
           const request = pending.requests[pending.cursor]
           const result = await onApplyOpsRef.current(request)
+          noteAckedRev(result?.rev)
           const acknowledgedRev = toRev(result?.rev)
           const expectedOwnRev = request.baseRev == null ? null : request.baseRev + pending.cursor + 1
           if (expectedOwnRev != null && acknowledgedRev != null && acknowledgedRev > expectedOwnRev) {
@@ -557,7 +614,7 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
         settleManualSaveWaiters()
       }
     }
-  }, [editor, enabled, clientId, batchThreshold, batchSize, noteRev, settleManualSaveWaiters])
+  }, [editor, enabled, clientId, batchThreshold, batchSize, noteRev, noteAckedRev, settleManualSaveWaiters])
   doSaveRef.current = doSave
 
   useEffect(() => () => {
@@ -603,6 +660,56 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
       // no longer allowed to make; a later re-promotion re-baselines below.
       setError(null)
       setDirty(false)
+      if (editor) {
+        // Watch the document while this client is not allowed to write. Two
+        // cases need what it sees:
+        //  - a demoted writer: the shared document may gain edits (the new
+        //    host's, or collaborators' relayed through Yjs) that nobody ever
+        //    persists, so a re-promotion must reconcile instead of re-baselining
+        //    them as "already saved";
+        //  - a writer held off by the unsynced-room gate: anything typed before
+        //    the room answers lives only in the in-memory Y.Doc.
+        // Remote room updates arrive as a single whole-document replace (that is
+        // how the Yjs binding applies them) and are cheap to recognise from the
+        // changed ranges — no document diff per remote keystroke. While this
+        // client has never written, those updates are persisted by the host and
+        // are not its debt; after a demotion they are exactly what can be lost.
+        const seen = { doc: editor.state.doc }
+        const handler = ({ transaction }: { transaction: any }) => {
+          if (!transaction.docChanged) return
+          if (transaction.getMeta(OP_TRACKER_ABSORB)) return
+          const previousDoc = seen.doc
+          seen.doc = transaction.doc
+          const ranges = getChangedRanges(transaction)
+          const wholeDocumentReplace = ranges.some(range =>
+            range.oldStart === 0
+            && range.newStart === 0
+            && range.oldEnd >= previousDoc.content.size
+            && range.newEnd >= transaction.doc.content.size,
+          )
+          if (wholeDocumentReplace && !hasBeenWriterRef.current) return
+          missedWhileDisabledRef.current = true
+        }
+        editor.on('transaction', handler)
+        return () => { editor.off('transaction', handler) }
+      }
+      return
+    }
+    hasBeenWriterRef.current = true
+    const missed = missedWhileDisabledRef.current
+    missedWhileDisabledRef.current = false
+    if (missed) {
+      // The first write after a period without the lease has to be a reconcile:
+      // only the whole document can carry edits no writer confirmed, and a
+      // reconcile is a no-op when they were saved after all. `dirty` is cleared
+      // for the normal case (nothing is owed until the user types) but not here —
+      // nobody may ever type again.
+      tracker.resetBaseline()
+      tracker.markWriteOwed()
+      tracker.requireReconcile()
+      flushedRef.current = false
+      setDirty(true)
+      void doSaveRef.current?.()
       return
     }
     // Becoming host: re-baseline against what is actually on screen (content
