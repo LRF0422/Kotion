@@ -48,4 +48,19 @@ public interface IPermissionService {
      * collaborator grants on. Used to filter the page tree for GUEST users.
      */
     Set<Long> getGrantedPageIds(Long userId, Long spaceId);
+
+    /**
+     * Whether the user holds an explicit page-level collaborator grant on this
+     * page — i.e. was added as an invited collaborator rather than getting
+     * access through their own space role.
+     * <p>
+     * The grant is materialized when a collaboration invitation is accepted and
+     * outlives the invitation row (acceptance is permanent; expiry only closes
+     * the token route). It is therefore the stable provenance that write-lease
+     * arbitration needs: a page-level collaborator is a guest whose lease the
+     * page's own side may always take back, however that collaborator reached
+     * the page and whatever became of the invitation token.
+     * </p>
+     */
+    boolean hasPageGrant(Long userId, Long pageId);
 }

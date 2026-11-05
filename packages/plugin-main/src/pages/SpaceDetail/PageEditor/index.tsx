@@ -54,6 +54,7 @@ const getStatusDisplay = (
         | { reason: 'collaborator'; hostName: string | null }
         | { reason: 'behind' }
         | { reason: 'waitingForHost'; hostName: string | null }
+        | { reason: 'guestNoSession' }
         | null,
 ) => {
     if (saving) {
@@ -68,6 +69,13 @@ const getStatusDisplay = (
         // above 'collaborator' because "Saved by X" would be a promise nobody is
         // currently keeping: with the host away, nothing is being persisted.
         return { text: 'Host disconnected', icon: <CloudOff className="h-3 w-3 text-amber-500" />, className: 'text-amber-600 dark:text-amber-500' };
+    }
+    if (notWriting?.reason === 'guestNoSession') {
+        // An invited collaborator editing before it holds the lease (the inviter
+        // has not joined yet, or this client is in the middle of claiming it).
+        // Its edits live in the shared document but nothing has persisted them
+        // yet — not a failure, and emphatically not "Saved".
+        return { text: 'Not saved yet', icon: <CloudOff className="h-3 w-3 text-amber-500" />, className: 'text-amber-600 dark:text-amber-500' };
     }
     if (notWriting?.reason === 'behind') {
         // Writing is suspended because the page moved on without us. Not an
@@ -111,53 +119,25 @@ export interface PageEditorProps {
     /** Collab provider token. Defaults to the current OAuth access token. */
     collabToken?: string
     /**
-     * Invited collaborator mode: never take the page's write lease and never
-     * persist. The inviter is the host; this client's edits reach the database
-     * only through the shared Y.Doc. The editor also waits for the inviter to be
-     * present before opening.
+     * Invited collaborator mode: this client persists the page through the
+     * invitation's token-bound document capability, and may take the page's
+     * write lease when nobody holds it — an accepted invitation with write
+     * access is a legitimate host. When the real host opens the page the
+     * backend preempts this client's lease; from then on it is a collaborator
+     * and its edits reach the database through the host's shared Y.Doc. Either
+     * way the editor is usable immediately: it no longer waits for the inviter.
      */
     guestMode?: boolean
-    /** The inviter's user id; the editor waits for this presence in guest mode. */
+    /**
+     * The inviter's user id. Retained for callers that already pass it; no
+     * editor behaviour depends on it — the session lease, not presence
+     * matching, decides who writes.
+     */
     hostUserId?: string
-    /** Display name of the inviter, for the waiting/ended notice. */
+    /** Display name of the inviter. Retained; the save indicator names whoever holds the lease. */
     guestHostName?: string
-    /** Leave the guest editor (session ended, or the user chose to exit). */
+    /** Leave the guest editor. Retained for callers; the invitation header owns the exit action. */
     onGuestExit?: () => void
-}
-
-/**
- * Shown to an invited collaborator while the inviter (the session host) is not in
- * the page. A guest may not open the editor first: with no host present nobody is
- * persisting, so edits typed into the shared document would never reach the DB.
- */
-const GuestWaiting: React.FC<{ waiting: boolean; hostName?: string; onExit?: () => void }> = ({ waiting, hostName, onExit }) => {
-    const { t } = useTranslation()
-    return (
-        <div className="w-full h-full flex flex-col items-center justify-center gap-5 p-8 text-center">
-            <div className={`p-4 rounded-full ${waiting ? 'bg-primary/10' : 'bg-amber-100 dark:bg-amber-900/30'}`}>
-                {waiting
-                    ? <UserPlus className="h-10 w-10 text-primary" />
-                    : <CloudOff className="h-10 w-10 text-amber-600 dark:text-amber-400" />}
-            </div>
-            <div className="max-w-md">
-                <h2 className="text-xl font-semibold">
-                    {waiting
-                        ? t('inviteCollaboration.waitingForHost.title', 'Waiting for the host')
-                        : t('inviteCollaboration.sessionEnded.title', 'Session ended')}
-                </h2>
-                <p className="mt-2 text-sm text-muted-foreground">
-                    {waiting
-                        ? `${hostName ? hostName + ' · ' : ''}${t('inviteCollaboration.waitingForHost.autoOpen', 'The editor will open once the host connects.')}`
-                        : t('inviteCollaboration.sessionEnded.message', { name: hostName || 'The host' })}
-                </p>
-            </div>
-            {!waiting && onExit && (
-                <Button variant="outline" onClick={onExit}>
-                    {t('inviteCollaboration.sessionEnded.exitNow', 'Exit')}
-                </Button>
-            )}
-        </div>
-    )
 }
 
 export const PageEditor: React.FC<PageEditorProps> = (props) => {
@@ -620,22 +600,9 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
 
     // Watch awareness for the host's presence. This is the fast half of noticing
     // a host leaving; the server still decides whether the session is over.
+    // A guest uses the same signal, but never the countdown: it persists the
+    // page itself when nobody holds the lease.
     const { hostPresent, hostSeen } = useHostPresence(provider?.awareness as any)
-
-    // Guest mode: the inviter is the host. Match presence by user id rather than the
-    // generic host flag, because the guest announces a role in awareness too.
-    const inviterPresent = React.useMemo(() => {
-        if (!props.guestMode) return true
-        if (!props.hostUserId) return false
-        const target = String(props.hostUserId)
-        return users.some((entry: any) => entry?.user?.id != null && String(entry.user.id) === target)
-    }, [props.guestMode, props.hostUserId, users])
-    const [inviterSeen, setInviterSeen] = useState(false)
-    React.useEffect(() => {
-        if (props.guestMode && inviterPresent && !inviterSeen) setInviterSeen(true)
-    }, [props.guestMode, inviterPresent, inviterSeen])
-    const guestWaiting = !!props.guestMode && !inviterPresent && !inviterSeen
-    const guestEnded = !!props.guestMode && !inviterPresent && inviterSeen
 
     const pageSave = usePageSave({
         editor: editor.current,
@@ -645,8 +612,11 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         // worse than not saving is saving content we could not verify.
         enabled: !props.readOnly && !!page && !!pageId && editorContentReady && !!seed?.trusted,
         clientId,
-        // A guest never hosts: the inviter owns the write lease.
-        canHost: !props.guestMode,
+        // An invited guest may host the page itself when nobody holds the lease
+        // (the inviter may not have opened it yet); the server preempts the
+        // guest's lease once the real host claims it, so no `canHost: false`
+        // here — writers are still gated on `session.isHost` below.
+        guest: !!props.guestMode,
         presence: {
             connected: connectionStatus === 'connected',
             hostPresent,
@@ -903,13 +873,18 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
 
     // Get current status display
     const statusDisplay = getStatusDisplay(saving, dirty, saveError, saveProgress,
-        session.hostDisconnected
+        // A guest never shows the disconnected-host countdown: it hosts the page
+        // itself when the lease is free, and before that its changes are simply
+        // not persisted yet.
+        session.hostDisconnected && !props.guestMode
             ? { reason: 'waitingForHost' as const, hostName: session.lastHostName }
-            : behindServer
-                ? { reason: 'behind' as const }
-                : session.alive && !session.isHost
-                    ? { reason: 'collaborator' as const, hostName: session.hostName }
-                    : null)
+            : props.guestMode && !props.readOnly && !session.isHost && !session.alive
+                ? { reason: 'guestNoSession' as const }
+                : behindServer
+                    ? { reason: 'behind' as const }
+                    : session.alive && !session.isHost
+                        ? { reason: 'collaborator' as const, hostName: session.hostName }
+                        : null)
 
 
     return pageLoading ? <div className="w-full h-full">
@@ -947,13 +922,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                 </div>
             </div>
         </main>
-    </div> : guestWaiting || guestEnded ? (
-        <GuestWaiting
-            waiting={guestWaiting}
-            hostName={props.guestHostName}
-            onExit={props.onGuestExit}
-        />
-    ) : (page && <div className="w-full h-full flex flex-col">
+    </div> : (page && <div className="w-full h-full flex flex-col">
         <header className="h-11 flex-shrink-0 w-full flex flex-row justify-between px-1 border-b relative">
             <div className="flex flex-row items-center gap-2 px-1 text-sm flex-1 min-w-0 overflow-hidden">
                 <PageBreadcrumb
@@ -1009,13 +978,14 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                             </>
                         )}
 
-                        {/* Share Button */}
-                        <SharePanel pageTitle={page?.title}>
+                        {/* Share Button — hidden for invitation guests: sharing is a
+                            space-membership action this token-scoped client cannot take. */}
+                        {!props.guestMode && <SharePanel pageTitle={page?.title}>
                             <Button variant="ghost" size="sm" className="h-7 px-2 gap-1 text-muted-foreground hover:text-foreground">
                                 <UserPlus className="h-3.5 w-3.5" />
                                 <span className="hidden sm:inline text-xs">Share</span>
                             </Button>
-                        </SharePanel>
+                        </SharePanel>}
 
                         <Separator orientation="vertical" className="h-5" />
                     </>
@@ -1027,7 +997,8 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                     <span>{statusDisplay.text}</span>
                 </div>
                 <Separator orientation="vertical" className="h-5" />
-                <Button
+                {/* Favorite — hidden for guests: favorites belong to a space identity. */}
+                {!props.guestMode && <Button
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7"
@@ -1037,7 +1008,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                     title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
                 >
                     <Star className={`h-3.5 w-3.5 ${isFavorited ? 'fill-yellow-400 text-yellow-400' : ''}`} />
-                </Button>
+                </Button>}
                 <DropdownMenu>
                     <DropdownMenuTrigger><Button variant="ghost" size="icon" className="h-7 w-7"><MoreHorizontal className="h-3.5 w-3.5" /></Button></DropdownMenuTrigger>
                     <DropdownMenuContent className="w-[260px]">
@@ -1065,7 +1036,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                         </DropdownMenuGroup>
                         <DropdownMenuSeparator className={componentPresentation ? "hidden" : undefined} />
                         <DropdownMenuGroup>
-                            {!componentPresentation && <TemplateCreator mode="page" pageId={pageId!} defaultName={page?.title} beforeSave={saveNow} getCoverContent={getTemplateCoverContent} className="flex flex-row items-center gap-2 w-full relative select-none rounded-sm px-2 py-1.5 text-sm outline-none cursor-default hover:bg-accent hover:text-accent-foreground">
+                            {!componentPresentation && !props.guestMode && <TemplateCreator mode="page" pageId={pageId!} defaultName={page?.title} beforeSave={saveNow} getCoverContent={getTemplateCoverContent} className="flex flex-row items-center gap-2 w-full relative select-none rounded-sm px-2 py-1.5 text-sm outline-none cursor-default hover:bg-accent hover:text-accent-foreground">
                                 <BookTemplate className="h-4 w-4" />
                                 <span>{t('editor.saveAsTemplate', 'Save as template')}</span>
                             </TemplateCreator>}
@@ -1075,7 +1046,8 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                                     <span>{t('editor.copyLink', 'Copy link')}</span>
                                 </div>
                             </DropdownMenuItem>
-                            <DropdownMenuItem
+                            {/* Relation graph — a space-level dock panel, not part of the guest workspace. */}
+                            {!props.guestMode && <DropdownMenuItem
                                 onClick={() => hostEvent.emit(TOGGLE_DOCK_PANEL, { id: 'graph' })}
                                 disabled={!pageId || !spaceId}
                             >
@@ -1083,7 +1055,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                                     <Network className="h-4 w-4" />
                                     <span>{t('editor.relationGraph', 'Relation graph')}</span>
                                 </div>
-                            </DropdownMenuItem>
+                            </DropdownMenuItem>}
                             <DropdownMenuItem
                                 className={componentPresentation ? "hidden" : undefined}
                                 onClick={() => setPresentationOpen(true)}
@@ -1094,7 +1066,8 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                                     <span>{t('editor.presentation', '演示模式')}</span>
                                 </div>
                             </DropdownMenuItem>
-                            <DropdownMenuItem
+                            {/* Version history — not offered in the guest workspace. */}
+                            {!props.guestMode && <DropdownMenuItem
                                 className={componentPresentation ? "hidden" : undefined}
                                 onClick={() => setVersionHistoryOpen(true)}
                                 disabled={!pageId}
@@ -1103,8 +1076,9 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                                     <History className="h-4 w-4" />
                                     <span>{t('editor.versionHistory', 'Version history')}</span>
                                 </div>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
+                            </DropdownMenuItem>}
+                            {/* Move to trash — destructive, and the guest's capability is invitation-scoped. */}
+                            {!props.guestMode && <DropdownMenuItem
                                 className="text-destructive focus:text-destructive"
                                 onClick={handleMoveToTrash}
                             >
@@ -1112,7 +1086,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                                     <Trash2 className="h-4 w-4" />
                                     <span>{t('editor.moveToTrash', 'Move to trash')}</span>
                                 </div>
-                            </DropdownMenuItem>
+                            </DropdownMenuItem>}
                         </DropdownMenuGroup>
                         <DropdownMenuSeparator className={componentPresentation ? "hidden" : undefined} />
                         <DropdownMenuGroup className={componentPresentation ? "hidden" : undefined}>

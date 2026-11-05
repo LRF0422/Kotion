@@ -239,6 +239,47 @@ async function main(): Promise<void> {
     assert(entered.contextId === "org-a", "entered context id is preserved verbatim", entered);
     assert(entered.permission === "WRITE", "entered permission is preserved", entered);
 
+    // ---- listMyInvitations: the current user's Home feed ----
+    // Home renders accepted and pending invitations from one list, so both
+    // statuses along with the page/space/inviter metadata have to survive
+    // normalization; the endpoint takes no params.
+    fake.reply("/knowledge-wiki/collaboration/invitations/mine", [
+        {
+            id: 921,
+            token: "tok-accepted",
+            pageId: 922,
+            spaceId: 923,
+            pageTitle: "共享文档",
+            pageType: "doc",
+            spaceName: "团队空间",
+            inviterId: 924,
+            inviterName: "张三",
+            permission: "WRITE",
+            status: "ACCEPTED",
+            createdAt: 1700000000000,
+            expiresAt: 1701000000000,
+        },
+        { id: 931, token: "tok-pending", pageId: 932, spaceId: 933, pageTitle: "待接受", permission: "READ", status: "PENDING" },
+    ]);
+    const invitations = await service.collaboration.listMyInvitations();
+    const invitationsRequest = fake.requests.at(-1)!;
+    assert(invitationsRequest.endpoint.url === "/knowledge-wiki/collaboration/invitations/mine",
+        "my invitations read the mine endpoint", invitationsRequest.endpoint.url);
+    assert(invitationsRequest.endpoint.method === "GET", "my invitations uses GET", invitationsRequest.endpoint.method);
+    assert(invitationsRequest.params == null && invitationsRequest.body == null,
+        "my invitations takes no params or body", invitationsRequest);
+    assert(invitations.length === 2, "accepted and pending invitations are listed together", invitations);
+    assert(invitations[0]?.id === "921" && invitations[0]?.token === "tok-accepted",
+        "invitation ids normalize and tokens pass through", invitations[0]);
+    assert(invitations[0]?.pageId === "922" && invitations[0]?.pageTitle === "共享文档",
+        "list rows carry the invited page", invitations[0]);
+    assert(invitations[0]?.spaceName === "团队空间" && invitations[0]?.inviterName === "张三",
+        "list rows carry the owning space and inviter", invitations[0]);
+    assert(invitations[0]?.status === "ACCEPTED" && invitations[0]?.permission === "WRITE",
+        "list rows preserve status and permission", invitations[0]);
+    assert(invitations[1]?.status === "PENDING" && invitations[1]?.spaceName === undefined,
+        "pending rows keep their status and leave absent fields undefined", invitations[1]);
+
     // ---- createSpace: the endpoint answers with the new space's bare id ----
     // Reading that body as a record used to throw in normalizeId ("space.id must
     // be …"), so the shape has to be recognized before normalizing.

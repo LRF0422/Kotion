@@ -85,6 +85,9 @@ public class CollaborationPageController {
     @Autowired
     private IPageService pageService;
 
+    @Autowired
+    private IPermissionService permissionService;
+
     // ------------------------------------------------------------------
     // Document read / write
     // ------------------------------------------------------------------
@@ -173,7 +176,7 @@ public class CollaborationPageController {
             requireClientId(request.getClientId());
             CollabSessionService.SessionState state = collabSessionService.claimSession(
                     invitation.getPageId(), SecurityContextUtil.getUserId(), request.getClientId(),
-                    SecurityContextUtil.getUserName());
+                    SecurityContextUtil.getUserName(), true);
             return R.data(toVO(state, invitation.getPageId()));
         });
     }
@@ -289,14 +292,14 @@ public class CollaborationPageController {
         if (!pageService.isLivePage(invitedPage)) {
             throw WikiException.PAGE_IN_TRASH.newException();
         }
-        // The invitee edits in realtime but never persists. The inviter is the host
-        // and owns the write lease; a guest's writes would land without a host to
-        // keep the document's revision coherent. Read endpoints stay open so the
-        // editor can load the document and follow the host's presence.
-        if (IPermissionService.PERMISSION_WRITE.equals(requiredPermission)
-                || IPermissionService.PERMISSION_ADMIN.equals(requiredPermission)) {
-            throw WikiException.FORBIDDEN_ACCESS.newException(
-                    "受邀协作者不能直接保存改动，请保持邀请人在线，由邀请人保存");
+        // Writes additionally require the persistent page-level grant. Removing a
+        // page collaborator deletes that grant but leaves the accepted invitation
+        // row behind (acceptance is permanent), so without this check a removed
+        // collaborator could keep using its token to save while no host is online.
+        // Reads stay bound to the invitation alone, exactly as before.
+        if (rank(requiredPermission) >= RANK_WRITE
+                && !permissionService.hasPageGrant(invitation.getInviteeId(), invitation.getPageId())) {
+            throw WikiException.FORBIDDEN_ACCESS.newException();
         }
         return invitation;
     }

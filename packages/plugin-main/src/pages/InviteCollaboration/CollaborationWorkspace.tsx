@@ -23,12 +23,12 @@ export interface CollaborationWorkspaceProps {
  *
  * Renders the normal {@link PageEditor} with a document capability bound to the
  * invitation token, so reads are authorized by the invitation rather than by
- * membership in the page owner's identity context. The guest never takes the
- * write lease and never persists: the inviter is the host, and edits typed here
- * reach the database only through the shared Y.Doc. The collab provider token is
- * a JSON envelope carrying both the invitee's OAuth access token and the
- * invitation token; the room server exchanges the latter for a page-scoped
- * authorization.
+ * membership in the page owner's identity context. A guest with edit permission
+ * may take the write lease and persist their own edits while no host is present;
+ * once the inviter/host is online the host persists and the guest only edits.
+ * The collab provider token is a JSON envelope carrying both the invitee's OAuth
+ * access token and the invitation token; the room server exchanges the latter
+ * for a page-scoped authorization.
  */
 export const CollaborationWorkspace: React.FC<CollaborationWorkspaceProps> = ({
     token,

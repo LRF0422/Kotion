@@ -1,5 +1,5 @@
 import { Button, Card, CardContent, Dialog, DialogContent, DialogHeader, DialogTitle, Input, Skeleton, Tabs, TabsContent, TabsList, TabsTrigger, cn, useIsMobile } from "@kn/ui";
-import { type BlockSummary, type DateTimeValue, type PageSummary, type ResolvedPageType, type Space, useSpacePageService, useNavigator, useSelector, GlobalState, event, useDebounce } from "@kn/common";
+import { type CollaborationInvitation, type BlockSummary, type DateTimeValue, type PageSummary, type ResolvedPageType, type Space, useSpacePageService, useNavigator, useSelector, GlobalState, event, useDebounce, useOnRouteCacheActivated } from "@kn/common";
 import { ArrowRight, BanIcon, Book, Box, FileText, FilePlus, FolderPlus, LayoutGrid, Moon, Network, Plus, SearchIcon, Sparkles, Star, Sun, Sunset, Tag, Users, X, AlignLeft } from "@kn/icon";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { CreateSpaceDlg } from "../components/SpaceForm";
@@ -46,6 +46,13 @@ const relativeTime = (value?: DateTimeValue): string => {
             return text
         }
     }
+}
+
+/** Expiry label for shared rows; falls back to the raw value when unparseable. */
+const expiryText = (value?: DateTimeValue | null): string | undefined => {
+    if (value == null) return undefined
+    const date = new Date(value)
+    return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleDateString()
 }
 
 const asPageIcon = (icon: unknown): PageIconData | undefined => {
@@ -122,6 +129,13 @@ export const Home: React.FC = () => {
     const [blockResults, setBlockResults] = useState<BlockSummary[]>([])
     const [contentLoading, setContentLoading] = useState(false)
 
+    // "Shared with me" — invitations addressed to the current user. Accepted
+    // rows enter the collaboration workspace directly; pending rows lead to the
+    // invite card so the user can accept first.
+    const [invitations, setInvitations] = useState<CollaborationInvitation[]>([])
+    const [invitationsLoading, setInvitationsLoading] = useState(true)
+    const [invitationsFlag, setInvitationsFlag] = useState(0)
+
     // Update current hour every minute to adapt to time changes
     useEffect(() => {
         const timer = setInterval(() => {
@@ -145,9 +159,14 @@ export const Home: React.FC = () => {
             service.changes.subscribe("page.trashed", refresh),
             service.changes.subscribe("page.restoredFromTrash", refresh),
             service.changes.subscribe("page.favorite.changed", refresh),
+            service.changes.subscribe("collaboration.changed", refresh),
         ]
         return () => unsubscribers.forEach(unsubscribe => unsubscribe())
     }, [service])
+
+    // Home is keep-alive cached, so returning to it does not re-run mount
+    // effects. Re-read the invitation feed when the route becomes visible again.
+    useOnRouteCacheActivated(() => setInvitationsFlag(value => value + 1))
 
     const isMorning = currentHour >= 5 && currentHour < 12
     const isAfternoon = currentHour >= 12 && currentHour < 18
@@ -235,6 +254,17 @@ export const Home: React.FC = () => {
             .finally(() => setContentLoading(false))
     }, [debouncedContentQuery, service])
 
+    // Invitations addressed to the current user (the "shared with me" tab).
+    // Read-only and cheap, so it refetches on any collaboration change and when
+    // the cached Home route becomes visible again.
+    useEffect(() => {
+        setInvitationsLoading(true)
+        service.collaboration.listMyInvitations()
+            .then((items) => setInvitations(items))
+            .catch(() => setInvitations([]))
+            .finally(() => setInvitationsLoading(false))
+    }, [flag, invitationsFlag, service])
+
     const contentSearching = debouncedContentQuery.trim().length > 0
 
     // Pages edited within the last 7 days — small confidence-building stat.
@@ -312,6 +342,14 @@ export const Home: React.FC = () => {
             prev.includes(tag) ? prev.filter((tg) => tg !== tag) : [...prev, tag]
         )
     }, [])
+
+    // Already-accepted invitations enter the token-scoped workspace straight
+    // away; pending ones land on the invite card so the user can accept first.
+    const openSharedInvitation = (invitation: CollaborationInvitation) => {
+        if (!invitation.token) return
+        const accepted = String(invitation.status ?? "").toUpperCase() === "ACCEPTED"
+        navigator.go({ to: `/collaborate/${invitation.token}${accepted ? "?open=1" : ""}` })
+    }
 
     // Create a fresh page in the user's personal space, then open it.
     const handleNewPage = async (pageType?: ResolvedPageType) => {
@@ -483,6 +521,15 @@ export const Home: React.FC = () => {
                                             <span className="text-[11px] text-muted-foreground/70">{blockResults.length}</span>
                                         )}
                                     </TabsTrigger>
+                                    <TabsTrigger
+                                        value="shared"
+                                        className="h-7 gap-1.5 rounded-md px-2.5 text-xs font-medium data-[state=active]:bg-muted data-[state=active]:shadow-none"
+                                    >
+                                        {t("home.shared-with-me", "Shared with me")}
+                                        {invitations.length > 0 && (
+                                            <span className="text-[11px] text-muted-foreground/70">{invitations.length}</span>
+                                        )}
+                                    </TabsTrigger>
                                 </TabsList>
                             </div>
 
@@ -636,6 +683,81 @@ export const Home: React.FC = () => {
                                                 </div>
                                             </li>
                                         ))}
+                                    </ul>
+                                )}
+                            </TabsContent>
+
+                            {/* Shared with me — invitations addressed to the current user */}
+                            <TabsContent value="shared" className="m-0 flex flex-col gap-2 px-4 pb-4 pt-1">
+                                {invitationsLoading ? (
+                                    <div className="flex flex-col">
+                                        {[...Array(isMobile ? 4 : 6)].map((_, index) => (
+                                            <div key={index} className="flex items-center gap-3 px-2.5 py-2">
+                                                <Skeleton className="h-7 w-7 rounded-md" />
+                                                <div className="flex-1">
+                                                    <Skeleton className="h-4 w-3/5" />
+                                                    <Skeleton className="mt-1.5 h-3 w-2/5" />
+                                                </div>
+                                                <Skeleton className="h-3 w-14" />
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : invitations.length === 0 ? (
+                                    <EmptyBlock
+                                        icon={<Users className="h-5 w-5" />}
+                                        title={t("home.shared-empty", "No shared pages yet")}
+                                        desc={t("home.shared-empty-hint", "Pages others invite you to will appear here")}
+                                    />
+                                ) : (
+                                    <ul className="flex flex-col">
+                                        {invitations.map((invitation) => {
+                                            const accepted = String(invitation.status ?? "").toUpperCase() === "ACCEPTED"
+                                            const canEdit = (invitation.permission ?? "READ") !== "READ"
+                                            const expires = expiryText(invitation.expiresAt)
+                                            return (
+                                                <li
+                                                    key={invitation.id ?? invitation.token}
+                                                    onClick={() => openSharedInvitation(invitation)}
+                                                    className={cn(rowClass, "items-start")}
+                                                >
+                                                    <span className={iconChipClass}><Users className="h-4 w-4" /></span>
+                                                    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                                                        <span className="truncate text-sm font-medium text-foreground/90 group-hover/row:text-foreground">
+                                                            {invitation.pageTitle || t("home.untitled")}
+                                                        </span>
+                                                        <span className="truncate text-xs text-muted-foreground">
+                                                            {invitation.spaceName && (
+                                                                <>
+                                                                    {invitation.spaceName}
+                                                                    <span className="text-muted-foreground/40"> · </span>
+                                                                </>
+                                                            )}
+                                                            {invitation.inviterName
+                                                                ? t("home.shared-invited-by", { name: invitation.inviterName })
+                                                                : ""}
+                                                        </span>
+                                                        {expires && (
+                                                            <span className="truncate text-[11px] text-muted-foreground/70">
+                                                                {t("home.shared-expires", { time: expires })}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <span className="hidden shrink-0 text-[11px] text-muted-foreground sm:block">
+                                                        {canEdit
+                                                            ? t("home.shared-can-edit", "Can edit")
+                                                            : t("home.shared-view-only", "View only")}
+                                                    </span>
+                                                    <span className={cn(
+                                                        "shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium",
+                                                        accepted ? "text-emerald-600" : "text-amber-600",
+                                                    )}>
+                                                        {accepted
+                                                            ? t("home.shared-accepted", "Joined")
+                                                            : t("home.shared-pending", "Pending")}
+                                                    </span>
+                                                </li>
+                                            )
+                                        })}
                                     </ul>
                                 )}
                             </TabsContent>

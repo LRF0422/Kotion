@@ -143,6 +143,17 @@ public class PermissionServiceImpl implements IPermissionService {
                 .collect(Collectors.toSet());
     }
 
+    @Override
+    public boolean hasPageGrant(Long userId, Long pageId) {
+        if (userId == null || pageId == null) {
+            return false;
+        }
+        return pageCollaboratorService.lambdaQuery()
+                .eq(PageCollaborator::getPageId, pageId)
+                .eq(PageCollaborator::getUserId, userId)
+                .exists();
+    }
+
     private String max(String a, String b) {
         return rank(a) >= rank(b) ? a : b;
     }

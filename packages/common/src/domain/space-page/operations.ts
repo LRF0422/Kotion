@@ -126,6 +126,12 @@ export interface CollaborationOperations {
     acceptInvitation(token: string): Promise<void>;
     enterInvitation(token: string): Promise<InvitationEnterResult>;
     getInvitationPage(token: string): Promise<PageRecord>;
+    /**
+     * Non-expired invitations addressed to the current user (PENDING and
+     * ACCEPTED) that Home lists under "shared with me". Read-only: it does not
+     * emit a change event.
+     */
+    listMyInvitations(): Promise<CollaborationInvitation[]>;
     getPageCollaborators(pageId: PageId): Promise<PageCollaborator[]>;
     updateCollaboratorPermission(request: UpdateCollaboratorPermissionRequest): Promise<void>;
     removePageCollaborator(pageId: PageId, userId: UserId): Promise<void>;

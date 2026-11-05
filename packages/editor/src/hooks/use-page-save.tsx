@@ -26,6 +26,25 @@ type PageSaveDocumentOperations = Pick<
 /** Backend code for PAGE_REVISION_CONFLICT (see WikiException). */
 const REVISION_CONFLICT_CODE = 3016
 
+/**
+ * Backend code for NOT_SESSION_HOST (see WikiException): the write arrived from
+ * a client that does not hold the page's write lease.
+ *
+ * For an invited guest this is the normal way a lease handover is observed: the
+ * inviter opened the page, the server preempted the guest's lease, and this
+ * client's next write is refused. It is not a document conflict, so it must not
+ * trigger a reconcile — it is a demotion, and the guest's edits are safe in the
+ * shared Y.Doc for the host to persist.
+ */
+const NOT_SESSION_HOST_CODE = 4010
+
+/**
+ * Whether the backend refused a write because this client does not hold the
+ * page's write lease.
+ */
+const isNotSessionHost = (error: unknown): boolean =>
+    (error as { code?: unknown } | null)?.code === NOT_SESSION_HOST_CODE
+
 export interface PageSavedInfo {
     /** Whether the acknowledged write touched the `title` node. */
     titleChanged: boolean
@@ -37,10 +56,17 @@ export interface UsePageSaveOptions {
     enabled: boolean
     clientId: string
     /**
-     * Whether this client may take the write lease. False for an invited
-     * collaborator: the inviter is the host and writes both users' edits.
+     * Whether this client may take the write lease at all. False for a
+     * read-only invited collaborator. A guest with write access may claim: the
+     * inviter may never open the page, and the guest then hosts it itself.
      */
     canHost?: boolean
+    /**
+     * Whether this client is an invited collaborator (a guest). Passed through
+     * to the session, where it means "take the lease when nobody holds it, and
+     * never latch `sessionEnded`".
+     */
+    guest?: boolean
     /**
      * How the realtime layer sees the room. Feeds host-departure detection; see
      * `usePageSession`, which treats it as a hint and never as a verdict.
@@ -76,7 +102,7 @@ export interface UsePageSaveReturn {
  * should go through this rather than owning its own copy.
  */
 export function usePageSave(options: UsePageSaveOptions): UsePageSaveReturn {
-    const { editor, pageId, enabled, clientId, canHost = true, presence, reconcileOnly, documents, onSaved } = options
+    const { editor, pageId, enabled, clientId, canHost = true, guest = false, presence, reconcileOnly, documents, onSaved } = options
 
     // Read at call time rather than captured, so the caller can hand in a fresh
     // service capability (or a stable one) without this hook re-subscribing.
@@ -117,10 +143,17 @@ export function usePageSave(options: UsePageSaveOptions): UsePageSaveReturn {
     const flushNowRef = useRef<(() => Promise<unknown> | null) | null>(null)
     const handleBeforeRelease = useCallback(() => flushNowRef.current?.() ?? null, [])
 
+    // The write handlers below need the session's current answer when a write is
+    // refused as NOT_SESSION_HOST, but they are memoized independently of it and
+    // must not be rebuilt on every heartbeat. The ref is assigned immediately
+    // after the hook so it is never a turn behind.
+    const sessionRef = useRef<UsePageSessionReturn | null>(null)
+
     const session = usePageSession({
         enabled,
         clientId,
         canHost,
+        guest,
         onClaim: handleClaim,
         onHeartbeat: handleHeartbeat,
         onRelease: handleRelease,
@@ -129,6 +162,7 @@ export function usePageSave(options: UsePageSaveOptions): UsePageSaveReturn {
         hostPresent: presence.hostPresent,
         hostSeen: presence.hostSeen,
     })
+    sessionRef.current = session
 
     // ---- Writing ----
 
@@ -180,6 +214,22 @@ export function usePageSave(options: UsePageSaveOptions): UsePageSaveReturn {
         try {
             data = await documentsRef.current.applyPageOperations(pageId, req)
         } catch (error) {
+            if (isNotSessionHost(error)) {
+                // The lease moved to another client — typically the inviter
+                // opening the page and preempting this guest's lease. Re-read
+                // the role now rather than waiting up to a heartbeat, so the
+                // writer switches off instead of retrying a write the server
+                // will keep refusing. Rethrow unchanged: this is a demotion,
+                // not a document conflict. The edits are already in the shared
+                // Y.Doc for the host to persist, and reconciling (the
+                // staleOps signal below) would arm a full-document write from a
+                // client that is not allowed to write. Marking it `leaseLost` is
+                // what tells the writer to drop this batch silently instead of
+                // retrying, flashing "Save failed", or reconciling.
+                ;(error as any).leaseLost = true
+                void sessionRef.current?.refresh()
+                throw error
+            }
             throw asReconcileSignal(error)
         }
         assertApplied(data, editor)
@@ -196,6 +246,14 @@ export function usePageSave(options: UsePageSaveOptions): UsePageSaveReturn {
         try {
             data = await documentsRef.current.reconcilePageDocument(pageId, req)
         } catch (error) {
+            // Same reasoning as `handleApplyOps`: a reconcile is a write too, so
+            // losing the lease mid-reconcile is a demotion, not a reason to arm
+            // another one.
+            if (isNotSessionHost(error)) {
+                ;(error as any).leaseLost = true
+                void sessionRef.current?.refresh()
+                throw error
+            }
             throw asReconcileSignal(error)
         }
         assertApplied(data, editor)
@@ -224,8 +282,11 @@ export function usePageSave(options: UsePageSaveOptions): UsePageSaveReturn {
 
     const save = useOpSave({
         editor,
-        // Only the host writes. A collaborator's OpTracker stays switched off, so
-        // it accumulates nothing and cannot write even by accident.
+        // Only the session host writes. A collaborator's OpTracker stays
+        // switched off, so it accumulates nothing and cannot write even by
+        // accident. An invited guest is a host until the inviter preempts its
+        // lease; from that moment it is a collaborator again, and the edits it
+        // makes still reach the database through the host's shared Y.Doc.
         enabled: enabled && session.isHost,
         clientId,
         onApplyOps: handleApplyOps,

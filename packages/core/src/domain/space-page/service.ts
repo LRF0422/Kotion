@@ -316,6 +316,7 @@ export const createSpacePageService = (
         async acceptInvitation(token) { await execute(E.collaboration.acceptInvitation, { token }); changes.emit("collaboration.changed", { action: "accepted" }); },
         async enterInvitation(token) { return normalizeInvitationEnter(await execute(E.collaboration.enterInvitation, { token })); },
         async getInvitationPage(token) { return normalizePageRecord(await execute(E.collaboration.invitationPage, { token })); },
+        async listMyInvitations() { return normalizeArrayEnvelope(await execute(E.collaboration.myInvitations)).map(normalizeInvitation); },
         async getPageCollaborators(pageId) { return normalizeArrayEnvelope(await execute(E.collaboration.collaborators, { pageId: normalizeId(pageId, "pageId") })).map(normalizeCollaborator); },
         async updateCollaboratorPermission(request) { const p = normalizeId(request.pageId, "pageId"), u = normalizeId(request.userId, "userId"); await execute(E.collaboration.updatePermission, { pageId: p, userId: u }, { permission: request.permission }); changes.emit("page.permissions.changed", { pageId: p, userId: u }); },
         async removePageCollaborator(pageId, userId) { const p = normalizeId(pageId, "pageId"), u = normalizeId(userId, "userId"); await execute(E.collaboration.removeCollaborator, { pageId: p, userId: u }); changes.emit("page.permissions.changed", { pageId: p, userId: u }); },

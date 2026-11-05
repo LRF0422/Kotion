@@ -237,6 +237,7 @@ export const normalizeInvitation = (value: unknown): CollaborationInvitation => 
         pageId: normalizeOptionalId(raw.pageId, "invitation.pageId"),
         pageTitle: optionalString(raw.pageTitle),
         pageType: normalizePageType(raw.pageType),
+        spaceName: optionalString(raw.spaceName),
         inviteeId: normalizeOptionalId(raw.inviteeId, "invitation.inviteeId"),
         inviteeName: optionalString(raw.inviteeName), inviteeEmail: optionalString(raw.inviteeEmail),
         inviterId: normalizeOptionalId(raw.inviterId, "invitation.inviterId"), inviterName: optionalString(raw.inviterName),

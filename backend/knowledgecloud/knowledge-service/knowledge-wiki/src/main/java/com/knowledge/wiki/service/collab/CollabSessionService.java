@@ -136,6 +136,20 @@ public class CollabSessionService {
         /** Display name, so collaborators can be told who holds the page. */
         private String hostName;
 
+        /**
+         * Whether the lease was taken through a collaboration invitation, i.e.
+         * by an invited collaborator ("guest") rather than by a regular
+         * participant of the page's own space.
+         * <p>
+         * A guest lease is a real write lease — that is what lets an invited
+         * WRITE/ADMIN collaborator save while nobody on the owner's side is
+         * online. What makes it different is that it is <em>preemptible</em>: the
+         * page belongs to the owner's side, so a regular participant joining
+         * takes the lease back and persists the document from then on.
+         * </p>
+         */
+        private boolean guest;
+
         private Long startedAt;
     }
 
@@ -156,27 +170,55 @@ public class CollabSessionService {
     }
 
     /**
-     * Claim the page's write lease, or find out who already holds it.
+     * Claim the page's write lease as a regular participant.
      * <p>
-     * Three outcomes, in priority order:
-     * </p>
-     * <ol>
-     * <li><b>No session</b> — the caller becomes host. This is the {@code SETNX},
-     * so concurrent openers cannot both win.</li>
-     * <li><b>The caller already holds it</b> — renewed, still host. A lost response
-     * must not lock a client out of its own lease.</li>
-     * <li><b>The same user holds it from a different client</b> — taken over. This
-     * is what makes reload, network change and sleep/wake continue the session
-     * instead of ending it. The old client learns it was demoted on its next
-     * heartbeat and stops writing, so there is still only one writer.</li>
-     * </ol>
-     * <p>
-     * Anyone else becomes a collaborator. There is no election and no queue: the
-     * lease is released by the host leaving, and whoever opens the page next gets
-     * it.
+     * Convenience overload for callers whose access comes from the page's own
+     * space rather than from an invitation; the lease is therefore not
+     * preemptible by someone who is not already the host. See
+     * {@link #claimSession(Long, Long, String, String, boolean)}.
      * </p>
      */
     public SessionState claimSession(Long pageId, Long userId, String clientId, String userName) {
+        return claimSession(pageId, userId, clientId, userName, false);
+    }
+
+    /**
+     * Claim the page's write lease, or find out who already holds it.
+     * <p>
+     * Outcomes, in priority order:
+     * </p>
+     * <ol>
+     * <li><b>No session</b> — the caller becomes host. This is the {@code SETNX},
+     * so concurrent openers cannot both win. A guest opener (an invited
+     * collaborator using the invitation-scoped route) records {@code guest = true}
+     * on the lease.</li>
+     * <li><b>The caller already holds it</b> — renewed, still host. A lost
+     * response must not lock a client out of its own lease.</li>
+     * <li><b>The same user holds it from a different client</b> — taken over with
+     * the caller's kind of lease. This is what makes reload, network change and
+     * sleep/wake continue the session instead of ending it. The old client learns
+     * it was demoted on its next heartbeat and stops writing, so there is still
+     * only one writer.</li>
+     * <li><b>A regular participant finds a guest lease held by someone else</b> —
+     * taken over. The page belongs to the owner's side, so the moment a regular
+     * participant (the inviter, or a space member) opens it, it becomes the
+     * writer again even though the guest was there first. The displaced guest
+     * learns it was demoted on its next heartbeat and stops writing; the edits it
+     * already made live in the shared Y.Doc and are persisted by the new host.</li>
+     * </ol>
+     * <p>
+     * Anyone else becomes a collaborator: a guest cannot displace a regular host,
+     * and guests do not arbitrate among themselves. There is no election and no
+     * queue: the lease is released by the host leaving, and whoever opens the
+     * page next gets it.
+     * </p>
+     *
+     * @param guest {@code true} when the caller is an invited collaborator
+     *              claiming through an invitation; such a lease is preemptible
+     *              by a regular participant. {@code false} marks the caller as a
+     *              participant of the page's own space.
+     */
+    public SessionState claimSession(Long pageId, Long userId, String clientId, String userName, boolean guest) {
         if (pageId == null || userId == null || StrUtil.isBlank(clientId)) {
             return state(ROLE_NONE, false, null, null, false);
         }
@@ -186,12 +228,14 @@ public class CollabSessionService {
         mine.setHostUserId(userId);
         mine.setHostClientId(clientId);
         mine.setHostName(userName);
+        mine.setGuest(guest);
         mine.setStartedAt(System.currentTimeMillis());
 
         Boolean acquired = redisTemplate.opsForValue()
                 .setIfAbsent(key, JSONUtil.toJsonStr(mine), SESSION_TTL);
         if (Boolean.TRUE.equals(acquired)) {
-            log.debug("claimSession: pageId={} granted to userId={} clientId={}", pageId, userId, clientId);
+            log.debug("claimSession: pageId={} granted to userId={} clientId={} guest={}",
+                    pageId, userId, clientId, guest);
             return state(ROLE_HOST, true, userId, userName, true);
         }
 
@@ -199,12 +243,14 @@ public class CollabSessionService {
         if (holder == null) {
             // Expired between the SETNX and the read. One retry is enough: the
             // caller's next heartbeat re-claims anyway.
-            return claimSession(pageId, userId, clientId, userName);
+            return claimSession(pageId, userId, clientId, userName, guest);
         }
 
         if (clientId.equals(holder.getHostClientId())) {
+            // Renewal keeps the recorded kind of lease: flipping it here would
+            // change, mid-session, who is allowed to preempt it.
             redisTemplate.expire(key, SESSION_TTL);
-            return state(ROLE_HOST, true, userId, holder.getHostName(), true);
+            return state(ROLE_HOST, true, holder.getHostUserId(), holder.getHostName(), true);
         }
 
         if (Objects.equals(userId, holder.getHostUserId())) {
@@ -212,7 +258,19 @@ public class CollabSessionService {
             // concurrent claim, but every racer here is the same user, so any
             // winner satisfies "one writer, and it belongs to this user".
             redisTemplate.opsForValue().set(key, JSONUtil.toJsonStr(mine), SESSION_TTL);
-            log.debug("claimSession: pageId={} taken over by userId={} newClientId={}", pageId, userId, clientId);
+            log.debug("claimSession: pageId={} taken over by userId={} newClientId={} guest={}",
+                    pageId, userId, clientId, guest);
+            return state(ROLE_HOST, true, userId, userName, true);
+        }
+
+        if (!guest && holder.isGuest()) {
+            // A regular participant joins the session a guest is holding: hand
+            // the write lease back to the owner's side. The guest keeps editing
+            // the shared Y.Doc until its next heartbeat tells it it is no longer
+            // host; whatever it wrote before that is persisted by this client.
+            redisTemplate.opsForValue().set(key, JSONUtil.toJsonStr(mine), SESSION_TTL);
+            log.info("claimSession: pageId={} preempted from guest userId={} by userId={}",
+                    pageId, holder.getHostUserId(), userId);
             return state(ROLE_HOST, true, userId, userName, true);
         }
 

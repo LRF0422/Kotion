@@ -1,8 +1,17 @@
 package com.knowledge.wiki.service.application;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -26,6 +35,7 @@ import com.knowledge.wiki.service.entity.dto.InvitationAcceptResponseDTO;
 import com.knowledge.wiki.service.entity.dto.InvitationEnterResponseDTO;
 import com.knowledge.wiki.service.entity.dto.InvitationValidateResponseDTO;
 import com.knowledge.wiki.service.entity.enums.InvitationStatus;
+import com.knowledge.wiki.service.entity.vo.MyCollaborationInvitationVO;
 import com.knowledge.wiki.service.entity.vo.PageVO;
 import com.knowledge.wiki.service.entity.vo.PluginVersionVO;
 import com.knowledge.wiki.service.service.ICollaborationInvitationService;
@@ -34,6 +44,7 @@ import com.knowledge.wiki.service.service.IPluginService;
 import com.knowledge.wiki.service.exception.WikiException;
 import com.knowledge.wiki.service.service.IPermissionService;
 import com.knowledge.wiki.service.service.ISpaceService;
+import cn.hutool.core.collection.CollUtil;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -398,6 +409,166 @@ public class CollaborationApplication {
         } finally {
             InterceptorIgnoreHelper.clearIgnoreStrategy();
         }
+    }
+
+    /**
+     * The calling user's active collaboration invitations, for the home page.
+     * <p>
+     * Only rows the user can still act on are returned — pending invitations to
+     * accept and accepted invitations to open — and only while their page is
+     * reachable: an invitation to a trashed page would be a dead link. Expiry is
+     * applied here rather than in the query because it depends on the wall clock,
+     * not on the status column.
+     * </p>
+     * <p>
+     * One page can be invited more than once (an expired row and a newer one, or
+     * a pending row that was later accepted); the list is per page, preferring
+     * the accepted invitation because that is the one the client can enter.
+     * </p>
+     * <p>
+     * Runs with the tenant line ignored like the other invitation routes: the
+     * invitee usually lives in a different tenant from the page and its space, so
+     * the enrichment reads would otherwise resolve to nothing.
+     * </p>
+     *
+     * GET /knowledge-wiki/collaboration/invitations/mine
+     */
+    public List<MyCollaborationInvitationVO> listMyInvitations() {
+        InterceptorIgnoreHelper.handle(IgnoreStrategy.builder().tenantLine(true).build());
+        try {
+            return listMyInvitationsInternal();
+        } finally {
+            InterceptorIgnoreHelper.clearIgnoreStrategy();
+        }
+    }
+
+    private List<MyCollaborationInvitationVO> listMyInvitationsInternal() {
+        Long userId = SecurityContextUtil.getUserId();
+        if (userId == null) {
+            return Collections.emptyList();
+        }
+        List<CollaborationInvitation> invitations = collaborationInvitationService.getActiveByInvitee(userId);
+        if (CollUtil.isEmpty(invitations)) {
+            return Collections.emptyList();
+        }
+
+        Map<Long, CollaborationInvitation> byPage = new LinkedHashMap<>();
+        for (CollaborationInvitation invitation : invitations) {
+            if (invitation.getPageId() == null || isExpired(invitation)) {
+                continue;
+            }
+            CollaborationInvitation current = byPage.get(invitation.getPageId());
+            if (current == null || preferOver(invitation, current)) {
+                byPage.put(invitation.getPageId(), invitation);
+            }
+        }
+        if (byPage.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<Page> pages = pageService.listByIds(byPage.keySet());
+        if (CollUtil.isEmpty(pages)) {
+            return Collections.emptyList();
+        }
+        // A page in the trash (or under a trashed ancestor) cannot be opened, so
+        // its invitation is not a usable home entry.
+        Map<Long, Page> livePages = pageService.filterLivePages(pages).stream()
+                .collect(Collectors.toMap(Page::getId, page -> page));
+
+        Set<Long> spaceIds = new HashSet<>();
+        for (CollaborationInvitation invitation : byPage.values()) {
+            Page page = livePages.get(invitation.getPageId());
+            if (page != null) {
+                Long spaceId = spaceIdOf(invitation, page);
+                if (spaceId != null) {
+                    spaceIds.add(spaceId);
+                }
+            }
+        }
+        Map<Long, String> spaceNames = new HashMap<>();
+        if (!spaceIds.isEmpty()) {
+            for (Space space : spaceService.listByIds(spaceIds)) {
+                spaceNames.put(space.getId(), space.getName());
+            }
+        }
+        Map<Long, String> inviterNames = resolveInviterNames(byPage.values());
+
+        List<MyCollaborationInvitationVO> result = new ArrayList<>(byPage.size());
+        for (CollaborationInvitation invitation : byPage.values()) {
+            Page page = livePages.get(invitation.getPageId());
+            if (page == null) {
+                continue;
+            }
+            Long spaceId = spaceIdOf(invitation, page);
+            MyCollaborationInvitationVO vo = new MyCollaborationInvitationVO();
+            vo.setId(invitation.getId());
+            vo.setToken(invitation.getToken());
+            vo.setPageId(page.getId());
+            vo.setSpaceId(spaceId);
+            vo.setPageTitle(page.getTitle());
+            vo.setPageType(page.getPageType());
+            vo.setSpaceName(spaceId == null ? null : spaceNames.get(spaceId));
+            vo.setInviterId(invitation.getInviterId());
+            vo.setInviterName(inviterNames.get(invitation.getInviterId()));
+            vo.setPermission(invitation.getPermission());
+            vo.setStatus(invitation.getStatus() == null ? null : invitation.getStatus().name());
+            vo.setCreatedAt(invitation.getCreatedAt());
+            vo.setExpiresAt(invitation.getExpiresAt());
+            result.add(vo);
+        }
+        // Newest first: the invitation the user just received is what they look
+        // for at the top. Rows without a timestamp sort last instead of crashing.
+        result.sort(Comparator.comparing(MyCollaborationInvitationVO::getCreatedAt,
+                Comparator.nullsLast(Comparator.reverseOrder())));
+        return result;
+    }
+
+    /**
+     * The space an invitation belongs to, falling back to its page's space for
+     * older page-level invitations that stored no space id.
+     */
+    private Long spaceIdOf(CollaborationInvitation invitation, Page page) {
+        return invitation.getSpaceId() != null ? invitation.getSpaceId() : page.getSpaceId();
+    }
+
+    /**
+     * Whether {@code candidate} is the better row to keep for its page: an
+     * accepted invitation beats a pending one (only it can be entered), and
+     * between two rows of the same status the newer one wins.
+     */
+    private boolean preferOver(CollaborationInvitation candidate, CollaborationInvitation current) {
+        boolean candidateAccepted = candidate.getStatus() == InvitationStatus.ACCEPTED;
+        boolean currentAccepted = current.getStatus() == InvitationStatus.ACCEPTED;
+        if (candidateAccepted != currentAccepted) {
+            return candidateAccepted;
+        }
+        return candidate.getCreatedAt() != null
+                && (current.getCreatedAt() == null || candidate.getCreatedAt().isAfter(current.getCreatedAt()));
+    }
+
+    /**
+     * Display names of the inviters, best effort: the home list must not fail
+     * because knowledge-system is briefly unreachable — the row is still usable
+     * without the name.
+     */
+    private Map<Long, String> resolveInviterNames(Iterable<CollaborationInvitation> invitations) {
+        Map<Long, String> names = new HashMap<>();
+        for (CollaborationInvitation invitation : invitations) {
+            Long inviterId = invitation.getInviterId();
+            if (inviterId == null || names.containsKey(inviterId)) {
+                continue;
+            }
+            try {
+                KnowledgeUser inviter = ApiClientUtil.resolvingResponse(userClient.getUserById(inviterId));
+                if (inviter != null) {
+                    names.put(inviterId, inviter.getUserName());
+                }
+            } catch (RuntimeException remoteFailure) {
+                log.warn("listMyInvitations: could not resolve inviter {}. {}", inviterId,
+                        remoteFailure.getMessage());
+            }
+        }
+        return names;
     }
 
     private void requireCurrentInvitee(CollaborationInvitation invitation) {

@@ -19,13 +19,29 @@ export interface UsePageSessionOptions {
    */
   clientId: string
   /**
-   * Whether this client may take the write lease at all. False for an invited
-   * collaborator: the inviter is the host, and the guest's edits reach the
-   * database only through the host's shared Y.Doc. A guest still heartbeats, so
-   * it can follow the host's presence and learn when the session ends, but it
-   * never claims and therefore never writes.
+   * Whether this client may take the write lease at all.
+   *
+   * False for a read-only invitation (and for a client whose identity cannot
+   * own the page). An *invited collaborator* with write access leaves this true:
+   * the inviter may never open the page, and the guest then hosts it itself.
+   * Somebody still has to hold the lease for anything to be saved, and the
+   * server only lets a writer through.
    */
   canHost?: boolean
+  /**
+   * Whether this client is an invited collaborator (a guest), as opposed to a
+   * member of the page's own space.
+   *
+   * A guest that can host takes the page's lease over when nobody holds it,
+   * instead of treating the missing session as the end of one, and it never
+   * latches `sessionEnded`. That is what lets an invitee open and edit a page
+   * before the inviter joins. When the inviter does claim, the backend preempts
+   * the guest's lease; the guest's next heartbeat reports `COLLABORATOR`, the
+   * writer switches off, and the host persists the edits from the shared Y.Doc.
+   *
+   * Defaults to false, which keeps the member-only rule `NONE` → `ended`.
+   */
+  guest?: boolean
   onClaim: (clientId: string) => Promise<PageSessionState>
   onHeartbeat: (clientId: string) => Promise<PageSessionState>
   /**
@@ -103,15 +119,29 @@ export interface UsePageSessionReturn {
   /**
    * The host's awareness entry is gone and the grace period is running. A
    * collaborator shows "waiting for the host" on this; it is not yet a verdict.
+   * Always false for an invited guest, which hosts the page itself instead of
+   * waiting for anybody.
    */
   hostDisconnected: boolean
   /**
    * The server has confirmed there is no session left. Latched: the caller must
    * go read-only and leave, and reopening the page is what makes a new host.
+   *
+   * Never latched for an invited guest: it re-claims the page instead, so this
+   * stays false for the whole lifetime of a guest session.
    */
   sessionEnded: boolean
   /** Claim again now, rather than waiting for the next heartbeat. */
   reclaim: () => Promise<void>
+  /**
+   * Ask the server for this client's role right now, without claiming.
+   *
+   * Used by the writer when a save is refused because this client is not the
+   * session host: the heartbeat already carries the authoritative demotion, and
+   * waiting for the next interval would leave the writer enabled (and the UI
+   * showing an error) for up to a whole tick after the lease was taken away.
+   */
+  refresh: () => Promise<void>
 }
 
 /**
@@ -123,12 +153,13 @@ export interface UsePageSessionReturn {
  *
  * The heartbeat is doing three jobs at once, which is why it is worth having at
  * all: it renews the lease, it tells a demoted host to stop writing, and it
- * carries the rev watermark. A collaborator uses the same call to discover that
- * the session ended.
+ * carries the rev watermark. A member collaborator uses the same call to discover
+ * that the session ended; an invited guest uses it to discover that the lease is
+ * free and take it instead.
  */
 export function usePageSession(options: UsePageSessionOptions): UsePageSessionReturn {
   const {
-    enabled, clientId, canHost = true, onClaim, onHeartbeat, onRelease, onBeforeRelease,
+    enabled, clientId, canHost = true, guest = false, onClaim, onHeartbeat, onRelease, onBeforeRelease,
     heartbeatMs = 10_000,
     connected = true, hostPresent = false, hostSeen = false, graceMs = 30_000,
   } = options
@@ -212,12 +243,17 @@ export function usePageSession(options: UsePageSessionOptions): UsePageSessionRe
         wasHost: wasHostRef.current,
         wasCollaborator: wasCollaboratorRef.current,
         lastHostSelf: lastHostSelfRef.current,
+        guest,
+        // Only a client allowed to hold the lease may read a free page as
+        // "claim it": a read-only invitation has nothing to do with `NONE`.
+        mayHost: canHost,
       })
 
       if (decision === 'reclaim') {
         // Either our own lease expired while the page was still open — a
         // suspended laptop, a long offline stretch, a tab throttled to
-        // death — or a same-user editor/tab that held it just released.
+        // death — or a same-user editor/tab that held it just released, or
+        // (for an invited guest) the page simply had no host at that moment.
         // Re-claim rather than silently stopping: this client is still the
         // one the user is looking at.
         //
@@ -225,8 +261,11 @@ export function usePageSession(options: UsePageSessionOptions): UsePageSessionRe
         // deliberately not answered here: someone else may have held and
         // edited the page in the meantime. The rev watermark is what
         // catches that, and the writer refuses to write while behind.
-        // A guest never claims: the inviter is the host, so a same-user host
-        // signal must not hand this client the lease.
+        //
+        // A guest's claim race against the real inviter is decided by the
+        // server: the host preempts the guest's lease, and the next heartbeat
+        // here reports `COLLABORATOR`. The guest's edits are already in the
+        // shared Y.Doc, so nothing typed in the meantime is lost.
         apply(next)
         if (canHost) {
           console.warn('[usePageSession] lease lost; re-claiming')
@@ -242,6 +281,9 @@ export function usePageSession(options: UsePageSessionOptions): UsePageSessionRe
         // collaborator's heartbeat happened to fire first would hand the page
         // to an arbitrary user without anyone asking for it. This client goes
         // read-only and leaves; whoever opens the page next becomes the host.
+        //
+        // An invited guest never gets here (`decideHeartbeat` answers `reclaim`
+        // for it): it *is* allowed to be that whoever.
         console.warn('[usePageSession] session ended: no host, lease expired')
         apply(next)
         sessionEndedRef.current = true
@@ -256,14 +298,16 @@ export function usePageSession(options: UsePageSessionOptions): UsePageSessionRe
       // whole lease period of silence to do it.
       console.warn('[usePageSession] heartbeat failed:', err)
     }
-  }, [canHost, clientId, apply, claim])
+  }, [canHost, guest, clientId, apply, claim])
 
   useEffect(() => {
     if (!enabled || !clientId) return
     liveRef.current = true
 
-    // A guest does not claim; an immediate heartbeat tells it who the host is
-    // (and, for a guest opening before the host, that there is no session yet).
+    // Take the lease straight away when allowed — an invited guest included,
+    // because the page may have no host yet and waiting a heartbeat would leave
+    // the first seconds of typing unsaved. A client that may not host starts
+    // with a heartbeat instead, which tells it whether a session exists at all.
     if (canHost) {
       void claim()
     } else {
@@ -274,6 +318,11 @@ export function usePageSession(options: UsePageSessionOptions): UsePageSessionRe
 
     // Flush first, release second, and only if we hold the lease at all — the
     // whole reason this is a function rather than two statements.
+    //
+    // A guest that lost the lease to the preempting host needs no special case
+    // here: by the time the demotion heartbeat has been applied `heldLease` is
+    // false, and the edits that were in flight are already in the shared Y.Doc
+    // for the host to persist.
     const release = () => {
       closeSession({
         heldLease: wasHostRef.current,
@@ -306,6 +355,9 @@ export function usePageSession(options: UsePageSessionOptions): UsePageSessionRe
   useEffect(() => {
     if (!shouldWaitForHost({
       enabled, sessionEnded, role: state.role, connected, hostSeen, hostPresent,
+      // A guest persists the page itself when no host is there, so there is
+      // never an absent writer to warn it about.
+      isGuest: guest,
     })) {
       setHostDisconnected(false)
       return
@@ -317,7 +369,7 @@ export function usePageSession(options: UsePageSessionOptions): UsePageSessionRe
     // If the server still reports a live session when that fires, nothing
     // changes and the ordinary heartbeat keeps asking — the host's lease simply
     // has not run out yet.
-  }, [enabled, sessionEnded, state.role, connected, hostSeen, hostPresent, graceMs, beat])
+  }, [enabled, guest, sessionEnded, state.role, connected, hostSeen, hostPresent, graceMs, beat])
 
   // Nothing to be host of once disabled — otherwise a page that stops loading
   // would keep reporting a stale role.
@@ -344,5 +396,6 @@ export function usePageSession(options: UsePageSessionOptions): UsePageSessionRe
     hostDisconnected,
     sessionEnded,
     reclaim: claim,
+    refresh: beat,
   }
 }

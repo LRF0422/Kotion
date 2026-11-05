@@ -438,6 +438,11 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
 
     let failed = false
     let failure: Error | null = null
+    // The write was refused because this client no longer holds the page's write
+    // lease. Not a failure: the edits are safe in the shared Y.Doc and the client
+    // that took the lease persists them. Distinguished from `failed` so the
+    // finally block neither retries nor reconciles.
+    let leaseLost = false
     let missedServerRevision = false
     try {
       if (pending.kind === 'reconcile') {
@@ -489,6 +494,18 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
         // Deliberately NOT setError: a stale/conflict batch is recovered by the
         // next attempt (a full-document reconcile), so flashing "save failed" or
         // toasting it would report a self-healing retry as an error.
+      } else if ((err as any)?.leaseLost) {
+        // The lease moved to another client while this write was in flight —
+        // typically the page's host opening it and taking it back from an invited
+        // guest. Deliberately NOT setError: nothing was lost (the edits are in the
+        // shared Y.Doc and the new host persists them), and the session demotion
+        // switches this writer off on its own. Retrying or reconciling here would
+        // only ask the server to refuse the same write again.
+        console.warn('[useOpSave] lease moved to another client; dropping this batch')
+        leaseLost = true
+        pendingRef.current = null
+        retryCountRef.current = 0
+        setDirty(false)
       } else {
         setError(e)
         console.error('[useOpSave] write failed:', e)
@@ -503,7 +520,11 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
       }
       if (failed) {
         settleManualSaveWaiters(failure ?? new Error('Page save failed'))
-        if (retryCountRef.current < RETRY_DELAYS_MS.length) {
+        if (leaseLost) {
+          // Nothing to retry: this client is no longer allowed to write. The
+          // tracker is switched off by the session demotion, and a later
+          // re-promotion re-baselines it against the shared document.
+        } else if (retryCountRef.current < RETRY_DELAYS_MS.length) {
           if (retryTimerRef.current == null) {
             const delay = RETRY_DELAYS_MS[retryCountRef.current++]
             retryTimerRef.current = setTimeout(() => {
@@ -575,6 +596,13 @@ export function useOpSave(options: UseOpSaveOptions): UseOpSaveReturn {
     tracker.enabled = enabled
     if (!enabled) {
       pendingRef.current = null
+      // Losing the lease is not a save failure. A guest demoted because the
+      // host joined mid-write must not be left showing "Save failed" on a page
+      // whose edits are already in the shared Y.Doc — the host persists them.
+      // The pending work is dropped rather than kept for a retry this client is
+      // no longer allowed to make; a later re-promotion re-baselines below.
+      setError(null)
+      setDirty(false)
       return
     }
     // Becoming host: re-baseline against what is actually on screen (content

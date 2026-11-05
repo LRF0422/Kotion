@@ -19,13 +19,26 @@ import { createCommonSpacePageTransport, type SpacePageTransport } from "./trans
  * tenant-scoped /page/** document routes cannot see the page. Every method here
  * hits the invitation-scoped document API, where the token (plus the invitee's
  * access token) is the authorization.
+ *
+ * Automatic traffic (session claim/heartbeat, document apply/reconcile, seed
+ * claim) is sent to the transport silently: the editor's session/writer hooks
+ * own retry, save-status and the 4010 refresh, so a global error toast would
+ * only double-report a deliberate lease handover or an expired invitation
+ * (which a rejected heartbeat would otherwise repeat every cycle).
  */
 export const createInvitationDocumentOperations = (
     token: string,
     transport: SpacePageTransport = createCommonSpacePageTransport(),
 ): PageDocumentOperations => {
-    const execute = <T = unknown>(endpoint: SpacePageEndpoint, params?: Record<string, unknown>, body?: unknown) =>
-        transport.execute<T>({ endpoint, params: params ?? { token }, body });
+    const execute = <T = unknown>(
+        endpoint: SpacePageEndpoint,
+        params?: Record<string, unknown>,
+        body?: unknown,
+        options?: { silent?: boolean },
+    ) => transport.execute<T>({ endpoint, params: params ?? { token }, body, ...options });
+    /** Automatic invitation traffic: never raise the global error toast. */
+    const executeSilent = <T = unknown>(endpoint: SpacePageEndpoint, params?: Record<string, unknown>, body?: unknown) =>
+        execute<T>(endpoint, params, body, { silent: true });
     const keepalive = (
         endpoint: SpacePageEndpoint,
         pathParams: Record<string, unknown>,
@@ -74,7 +87,7 @@ export const createInvitationDocumentOperations = (
         },
         async claimPageSession(request) {
             return normalizeSession(
-                await execute(
+                await executeSilent(
                     E.collaboration.invitationClaimSession,
                     { token: token },
                     { clientId: request.clientId },
@@ -83,7 +96,7 @@ export const createInvitationDocumentOperations = (
         },
         async heartbeatPageSession(request) {
             return normalizeSession(
-                await execute(
+                await executeSilent(
                     E.collaboration.invitationHeartbeatSession,
                     { token: token },
                     { clientId: request.clientId },
@@ -100,12 +113,12 @@ export const createInvitationDocumentOperations = (
         },
         async applyPageOperations(pageId, request) {
             return normalizeOperationResult(
-                await execute(E.collaboration.invitationOperations, { token: token }, request),
+                await executeSilent(E.collaboration.invitationOperations, { token: token }, request),
             );
         },
         async reconcilePageDocument(pageId, request) {
             return normalizeOperationResult(
-                await execute(E.collaboration.invitationReconcile, { token: token }, request),
+                await executeSilent(E.collaboration.invitationReconcile, { token: token }, request),
             );
         },
         flushPageOperations(pageId, request) {
@@ -117,7 +130,7 @@ export const createInvitationDocumentOperations = (
             );
         },
         async claimPageSeed(request) {
-            const raw = await execute(
+            const raw = await executeSilent(
                 E.collaboration.invitationClaimSeed,
                 { token: token, clientId: request.clientId },
                 null,

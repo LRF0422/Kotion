@@ -16,6 +16,7 @@ export type SessionRole = 'HOST' | 'COLLABORATOR' | 'NONE'
  * - `adopt` — believe it and carry on.
  * - `reclaim` — our own lease lapsed; take the answer, then claim again.
  * - `ended` — the session we were part of is gone; go read-only and leave.
+ *   Never returned for an invited guest: a guest takes the page over instead.
  */
 export type HeartbeatDecision = 'adopt' | 'reclaim' | 'ended'
 
@@ -35,11 +36,29 @@ export interface HeartbeatContext {
    * from a page they are still looking at.
    */
   lastHostSelf?: boolean
+  /**
+   * Whether this client is an invited collaborator (a guest arriving through a
+   * collaboration invitation rather than through the page's own space).
+   *
+   * A guest is not kicked out when the session it was part of disappears: it
+   * takes the lease over instead, because an invited collaborator with write
+   * access is a legitimate host. The same flag is what keeps a guest editable
+   * when it opens the page *before* the inviter, when there is no session yet.
+   */
+  guest?: boolean
+  /**
+   * Whether the invitation this guest arrived through permits writing.
+   *
+   * Only consulted when {@link guest} is set: a write invitation may take the
+   * lease, a read-only one can never write and therefore has nothing to wait
+   * for once the session is gone.
+   */
+  mayHost?: boolean
 }
 
 /**
  * Interpret a heartbeat. `NONE` is the interesting case: the same answer means
- * three different things depending on what this client used to be.
+ * several different things depending on what this client used to be.
  */
 export function decideHeartbeat(role: SessionRole, ctx: HeartbeatContext): HeartbeatDecision {
   if (role !== 'NONE') return 'adopt'
@@ -54,6 +73,17 @@ export function decideHeartbeat(role: SessionRole, ctx: HeartbeatContext): Heart
   // off-screen / floating editor for this page). Re-claim instead of ending:
   // otherwise every sibling editor that closes ejects the user from the page.
   if (ctx.wasCollaborator && ctx.lastHostSelf) return 'reclaim'
+
+  // An invited collaborator takes the page over when no session exists instead
+  // of treating it as the end of one. The inviter may never have opened the
+  // page, may have left long ago, or may simply not have claimed yet — and a
+  // guest that went read-only in every one of those cases would be unable to
+  // open a page it was explicitly invited to write. This also retries a first
+  // claim that failed: the next heartbeat answers `NONE` and claims again.
+  //
+  // A read-only invitation can never write, so it has no lease to take; `adopt`
+  // keeps it in the same non-fatal state instead of latching a dead session.
+  if (ctx.guest) return ctx.mayHost === false ? 'adopt' : 'reclaim'
 
   if (ctx.wasCollaborator) return 'ended'
 
@@ -74,6 +104,14 @@ export interface GraceContext {
   hostSeen: boolean
   /** Whether a host is in awareness right now. */
   hostPresent: boolean
+  /**
+   * Whether this client is an invited collaborator. A guest never shows the
+   * host-disconnected countdown: it may host the page itself, so a missing host
+   * is either a normal pre-inviter state or a moment at which the guest is
+   * taking the lease over — never a reason to tell the user nothing is being
+   * saved.
+   */
+  isGuest?: boolean
 }
 
 /**
@@ -89,9 +127,14 @@ export interface GraceContext {
  *   only meaningful once a presence has been observed.
  * - `role` — a host is its own presence, and a client with no session has
  *   nothing to wait for.
+ *
+ * `isGuest` is not a false-alarm guard but a different product rule: an invited
+ * collaborator persists the page itself when nobody holds the lease, so there is
+ * no absent writer to warn about and no countdown to run.
  */
 export function shouldWaitForHost(ctx: GraceContext): boolean {
   if (!ctx.enabled || ctx.sessionEnded) return false
+  if (ctx.isGuest) return false
   if (ctx.role !== 'COLLABORATOR') return false
   if (!ctx.connected) return false
   if (!ctx.hostSeen) return false

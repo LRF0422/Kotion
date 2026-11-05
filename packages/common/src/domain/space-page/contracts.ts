@@ -201,6 +201,8 @@ export interface CollaborationInvitation {
     pageId?: PageId;
     pageTitle?: string;
     pageType?: string;
+    /** Display name of the space that owns the invited page (Home list rows). */
+    spaceName?: string;
     inviteeId?: UserId;
     inviteeName?: string;
     inviteeEmail?: string;

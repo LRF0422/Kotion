@@ -14,6 +14,7 @@ import com.knowledge.wiki.service.application.CollaborationApplication;
 import com.knowledge.wiki.service.entity.dto.InvitationAcceptResponseDTO;
 import com.knowledge.wiki.service.entity.dto.InvitationEnterResponseDTO;
 import com.knowledge.wiki.service.entity.dto.InvitationValidateResponseDTO;
+import com.knowledge.wiki.service.entity.vo.MyCollaborationInvitationVO;
 import com.knowledge.wiki.service.entity.vo.PageVO;
 import com.knowledge.wiki.service.entity.vo.PluginVersionVO;
 
@@ -75,6 +76,18 @@ public class CollaborationController {
     @GetMapping("/invitation/{token}/plugins")
     public R<List<PluginVersionVO>> getInvitationPlugins(@PathVariable("token") String token) {
         return R.data(collaborationApplication.getInvitationPlugins(token));
+    }
+
+    /**
+     * The calling user's active collaboration invitations, for the home page.
+     * GET /knowledge-wiki/collaboration/invitations/mine
+     *
+     * <p>Pending invitations to accept and accepted ones that are still usable;
+     * one row per page, newest first.
+     */
+    @GetMapping("/invitations/mine")
+    public R<List<MyCollaborationInvitationVO>> listMyInvitations() {
+        return R.data(collaborationApplication.listMyInvitations());
     }
 
 }

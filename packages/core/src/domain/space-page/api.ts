@@ -64,6 +64,8 @@ export const SPACE_PAGE_ENDPOINTS = {
         acceptInvitation: endpoint("/knowledge-wiki/collaboration/invitation/:token/accept", "POST"),
         enterInvitation: endpoint("/knowledge-wiki/collaboration/invitation/:token/enter", "POST"),
         invitationPage: endpoint("/knowledge-wiki/collaboration/invitation/:token/page", "GET"),
+        // Invitations addressed to the current user (Home's "shared with me" feed).
+        myInvitations: endpoint("/knowledge-wiki/collaboration/invitations/mine", "GET"),
         collaborators: endpoint("/knowledge-wiki/space/page/:pageId/collaborators", "GET"),
         updatePermission: endpoint("/knowledge-wiki/space/page/:pageId/collaborator/:userId/permission", "PUT"),
         removeCollaborator: endpoint("/knowledge-wiki/space/page/:pageId/collaborator/:userId", "DELETE"),

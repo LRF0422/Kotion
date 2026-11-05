@@ -15,7 +15,6 @@ import org.springframework.web.bind.annotation.RestController;
 import com.knowledge.core.secure.utils.SecurityContextUtil;
 import com.knowledge.core.tool.api.R;
 import com.knowledge.wiki.service.collab.CollabSessionService;
-import com.knowledge.wiki.service.entity.CollaborationInvitation;
 import com.knowledge.wiki.service.entity.Page;
 import com.knowledge.wiki.service.entity.dto.ApplyOpsDTO;
 import com.knowledge.wiki.service.entity.dto.CreatePageCheckpointDTO;
@@ -28,9 +27,7 @@ import com.knowledge.wiki.service.entity.vo.PageDocHistoryVO;
 import com.knowledge.wiki.service.entity.vo.PageDocVO;
 import com.knowledge.wiki.service.entity.vo.PageSessionVO;
 import com.knowledge.wiki.service.entity.vo.RestorePageDocVO;
-import com.knowledge.wiki.service.entity.enums.InvitationStatus;
 import com.knowledge.wiki.service.exception.WikiException;
-import com.knowledge.wiki.service.service.ICollaborationInvitationService;
 import com.knowledge.wiki.service.service.IPageService;
 import com.knowledge.wiki.service.service.IPermissionService;
 
@@ -83,9 +80,6 @@ public class PageDocController {
 
     @Autowired
     private CollabSessionService collabSessionService;
-
-    @Autowired
-    private ICollaborationInvitationService collaborationInvitationService;
 
     @GetMapping("/{pageId}/doc")
     @ApiOperation("读取页面当前文档与 rev")
@@ -166,6 +160,24 @@ public class PageDocController {
      * handing one out would let a read-only visitor block the people who can
      * actually edit.
      * </p>
+     * <p>
+     * The kind of lease is decided by <em>identity</em>, not by the route the
+     * caller took here. An explicit page-level collaborator grant marks the caller
+     * as an invited collaborator (a guest) even when it arrives through the normal
+     * page route (space tree, recent pages, a deep link) rather than through the
+     * invitation-scoped controller. Otherwise an invited collaborator who also has
+     * page access would take a regular, non-preemptible lease and the page's own
+     * side could never take it back — the inversion of R3 that the guest lease
+     * exists to prevent.
+     * </p>
+     * <p>
+     * The grant, not the invitation row, is the provenance used here on purpose:
+     * accepting an invitation materializes the grant permanently, while the
+     * invitation token expires. Classifying by the row would silently turn a
+     * long-standing collaborator into a regular participant as soon as their
+     * invitation expired. The extra lookup only runs on claim/reclaim, not on
+     * every heartbeat.
+     * </p>
      */
     @PostMapping("/{pageId}/session/claim")
     @ApiOperation("申请成为页面编辑主持人")
@@ -173,8 +185,12 @@ public class PageDocController {
             @RequestBody SessionClaimDTO request) {
         checkPage(pageId, IPermissionService.PERMISSION_WRITE);
         requireClientId(request.getClientId());
+        Long userId = SecurityContextUtil.getUserId();
+        // Identity, not route: an invited collaborator claims as a guest wherever
+        // they enter.
+        boolean guest = permissionService.hasPageGrant(userId, pageId);
         CollabSessionService.SessionState state = collabSessionService.claimSession(pageId,
-                SecurityContextUtil.getUserId(), request.getClientId(), SecurityContextUtil.getUserName());
+                userId, request.getClientId(), SecurityContextUtil.getUserName(), guest);
         return R.data(toVO(state, pageId));
     }
 
@@ -259,30 +275,6 @@ public class PageDocController {
         // Without this a stale tab / direct call kept editing a deleted page.
         if (!pageService.isLivePage(page)) {
             throw WikiException.PAGE_IN_TRASH.newException();
-        }
-        // A page-level collaboration invitee may edit in realtime, but never owns the
-        // write lease or persists: the invitee's client streams edits into the shared
-        // Y.Doc and the inviter's client (the host) writes them. Denying here means a
-        // guest cannot save even by calling the normal endpoint directly.
-        if (IPermissionService.PERMISSION_WRITE.equals(permission)
-                || IPermissionService.PERMISSION_ADMIN.equals(permission)) {
-            requireNotCollaborationInvitee(pageId);
-        }
-    }
-
-    private void requireNotCollaborationInvitee(Long pageId) {
-        Long userId = SecurityContextUtil.getUserId();
-        if (userId == null) {
-            return;
-        }
-        boolean invitee = collaborationInvitationService.lambdaQuery()
-                .eq(CollaborationInvitation::getPageId, pageId)
-                .eq(CollaborationInvitation::getInviteeId, userId)
-                .eq(CollaborationInvitation::getStatus, InvitationStatus.ACCEPTED)
-                .exists();
-        if (invitee) {
-            throw WikiException.FORBIDDEN_ACCESS.newException(
-                    "受邀协作者不能成为页面编辑主持人，改动由邀请人在线时保存");
         }
     }
 

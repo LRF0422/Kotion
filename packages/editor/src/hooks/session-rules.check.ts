@@ -72,6 +72,60 @@ check(
   decideHeartbeat('NONE', { wasHost: false, wasCollaborator: false }) === 'adopt',
 )
 
+// ─── Invited collaborators (guests) ───────────────────────────────────
+//
+// A guest used to be forbidden from claiming, so "no session" always meant
+// "the host is gone, and nobody is persisting this page". That is no longer the
+// product rule: an invitation with write access may host the page itself, so the
+// same answer now means "the lease is free — take it".
+
+check(
+  'an invited guest takes over a vanished session instead of ending it',
+  // The host left, or never arrived, and the lease is free. Ending here would
+  // eject a guest from a page it is allowed to edit and persist.
+  decideHeartbeat(
+    'NONE',
+    { wasHost: false, wasCollaborator: true, guest: true, mayHost: true },
+  ) === 'reclaim',
+)
+
+check(
+  'a guest opening before anyone has claimed claims the page itself',
+  decideHeartbeat(
+    'NONE',
+    { wasHost: false, wasCollaborator: false, guest: true, mayHost: true },
+  ) === 'reclaim',
+)
+
+check(
+  'a guest that was the host reclaims exactly like a member does',
+  decideHeartbeat('NONE', { wasHost: true, wasCollaborator: false, guest: true }) === 'reclaim',
+)
+
+check(
+  'a read-only guest adopts a missing session rather than latching it as ended',
+  decideHeartbeat(
+    'NONE',
+    { wasHost: false, wasCollaborator: true, guest: true, mayHost: false },
+  ) === 'adopt',
+)
+
+check(
+  'a different-user host leaving still ends a member collaborator',
+  // The guest rule must not leak into ordinary collaborators: for them a
+  // vanished session really is over.
+  decideHeartbeat(
+    'NONE',
+    { wasHost: false, wasCollaborator: true, lastHostSelf: false, guest: false },
+  ) === 'ended',
+)
+
+check(
+  'a live role is adopted for guests too',
+  decideHeartbeat('COLLABORATOR', { wasHost: false, wasCollaborator: true, guest: true }) === 'adopt' &&
+    decideHeartbeat('HOST', { wasHost: false, wasCollaborator: true, guest: true }) === 'adopt',
+)
+
 // ─── Starting the grace countdown ─────────────────────────────────────
 
 console.log('\ngrace countdown')
@@ -125,6 +179,14 @@ check(
   shouldWaitForHost({ ...collab, hostPresent: false, enabled: false }) === false,
 )
 
+check(
+  'an invited guest never waits for a host',
+  // A guest can persist the page itself, so the missing-host countdown (and its
+  // "Host disconnected" banner) must never run for it — including before the
+  // inviter has joined at all.
+  shouldWaitForHost({ ...collab, hostPresent: false, isGuest: true }) === false,
+)
+
 // ─── The plan's two scenarios, as sequences ───────────────────────────
 
 console.log('\nplan scenario: host reconnects inside the grace period')
@@ -175,6 +237,45 @@ console.log('\nplan scenario: host stays away past the lease')
   // not re-arm and ask again.
   ctx = { ...ctx, sessionEnded: true }
   check('an ended session stops waiting', shouldWaitForHost(ctx) === false)
+}
+
+console.log('\nplan scenario: the host preempts a guest lease and then leaves')
+
+{
+  // t=0 nobody holds the page, so the invited guest claims it and persists.
+  let decision = decideHeartbeat(
+    'HOST',
+    { wasHost: false, wasCollaborator: false, guest: true, mayHost: true },
+  )
+  check('the guest hosts the page while nobody else does', decision === 'adopt')
+
+  // t=1 the inviter opens the page; the backend preempts the guest's lease.
+  // The guest learns this from its next heartbeat and stops writing, but its
+  // edits are already in the shared document for the host to persist.
+  decision = decideHeartbeat(
+    'COLLABORATOR',
+    { wasHost: true, wasCollaborator: false, guest: true, mayHost: true },
+  )
+  check('a preempted guest adopts the collaborator role', decision === 'adopt')
+
+  decision = decideHeartbeat(
+    'COLLABORATOR',
+    { wasHost: false, wasCollaborator: true, guest: true, mayHost: true },
+  )
+  check('the guest stays a collaborator while the host holds the lease', decision === 'adopt')
+
+  // The host closes the page and the lease is free again: the guest takes over
+  // rather than being ejected from a page it is still looking at.
+  decision = decideHeartbeat(
+    'NONE',
+    { wasHost: false, wasCollaborator: true, guest: true, mayHost: true },
+  )
+  check('the guest reclaims the page instead of ending the session', decision === 'reclaim')
+
+  check(
+    'the guest never saw the host-disconnected countdown through any of it',
+    shouldWaitForHost({ ...collab, hostPresent: false, isGuest: true }) === false,
+  )
 }
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed')

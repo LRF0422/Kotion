@@ -76,6 +76,14 @@ public class CollaborationInvitationServiceImpl
     }
 
     @Override
+    public List<CollaborationInvitation> getActiveByInvitee(Long inviteeId) {
+        return this.lambdaQuery()
+                .eq(CollaborationInvitation::getInviteeId, inviteeId)
+                .in(CollaborationInvitation::getStatus, InvitationStatus.PENDING, InvitationStatus.ACCEPTED)
+                .list();
+    }
+
+    @Override
     public List<CollaborationInvitation> getByPage(Long pageId) {
         return this.lambdaQuery()
                 .eq(CollaborationInvitation::getPageId, pageId)

@@ -17,7 +17,7 @@ import {
     UserPlus,
     X
 } from "@kn/icon";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams } from "@kn/common";
 import { toast } from "@kn/ui";
 import { CollaborationWorkspace } from "./CollaborationWorkspace";
@@ -32,9 +32,14 @@ type InviteStatus = 'loading' | 'ready' | 'accepting' | 'error' | 'expired';
  *
  * The shared space usually lives in the inviter's context (tenant), which the
  * invitee's session cannot read through the normal routes. The invitee therefore
- * opens the page in a token-scoped guest workspace: reads are authorized by the
- * invitation token, the inviter is the host and the only writer, and the editor
- * waits for the inviter's presence before opening.
+ * opens the page in a token-scoped guest workspace whose reads are authorized by
+ * the invitation token. A guest with edit permission may take the write lease
+ * and persist their own edits while no host is present; once the inviter/host is
+ * online the host persists and the guest only edits.
+ *
+ * `?open=1` marks an invitation that is already ACCEPTED (Home's "shared with
+ * me" list appends it): the workspace is entered once automatically after the
+ * token has been validated, without showing the invitation card.
  */
 export const InviteCollaboration: React.FC = () => {
     const { t } = useTranslation();
@@ -50,6 +55,10 @@ export const InviteCollaboration: React.FC = () => {
     const [entered, setEntered] = useState(false);
 
     const inviteToken = params.token ? String(params.token) : searchParams.get('token');
+    // `?open=1` marks an already-ACCEPTED invitation opened from Home's
+    // "shared with me" list: enter the workspace once after validation.
+    const autoOpen = searchParams.get('open') === '1';
+    const autoEnteredRef = useRef(false);
 
     // Permission label mapping
     const getPermissionLabel = (permission: PagePermission) => {
@@ -110,10 +119,10 @@ export const InviteCollaboration: React.FC = () => {
      * Open the invited page in the token-scoped guest workspace.
      *
      * This is the only path an accepted invitee takes, for TEAM and personal
-     * contexts alike. The guest stays in their own identity context; reads are
-     * authorized by the invitation token, and the inviter — not the invitee —
-     * owns the write lease and persists. The editor itself waits for the
-     * inviter's presence before opening.
+     * contexts alike. The guest stays in their own identity context and reads
+     * are authorized by the invitation token. With no host present the guest may
+     * claim the write lease and persist their own edits; while the inviter/host
+     * is online the host persists and the guest only edits.
      */
     const enterWorkspace = async (token: string) => {
         const record = await service.collaboration.getInvitationPage(token);
@@ -125,7 +134,8 @@ export const InviteCollaboration: React.FC = () => {
         // Idempotently mark the invitation as entered (this is also what grants
         // the space organization's membership for TEAM contexts). We deliberately
         // do not switch the session's context or navigate to the normal route:
-        // the guest's editor is host-gated and never persists.
+        // the guest edits in place through the token-scoped document API and only
+        // defers persistence to the host while the host is present.
         const target = await service.collaboration.enterInvitation(token);
         if (!target.spaceId || !target.pageId) {
             throw new Error(t('inviteCollaboration.error.processFailed'));
@@ -154,10 +164,27 @@ export const InviteCollaboration: React.FC = () => {
         }
     };
 
+    // Home links already-ACCEPTED invitations with `?open=1` so the guest does
+    // not have to press "open page" again. Enter once, only after the token has
+    // validated, and reuse the normal open path (which marks it entered too).
+    useEffect(() => {
+        if (!autoOpen || autoEnteredRef.current) return;
+        if (inviteStatus !== 'ready' || !invitation || !inviteToken) return;
+        if (String(invitation.status ?? '').toUpperCase() !== 'ACCEPTED') return;
+        autoEnteredRef.current = true;
+        setErrorMessage('');
+        setInviteStatus('accepting');
+        openInvitationPage(inviteToken).catch((error: any) => {
+            console.error('Failed to auto-open accepted invitation:', error);
+            // Same recovery as the manual button: keep the card and show why.
+            setInviteStatus('ready');
+            setErrorMessage(readableError(error));
+        });
+    }, [autoOpen, inviteStatus, invitation, inviteToken]);
+
     const getUserInitials = (name?: string) => name?.charAt(0)?.toUpperCase() || '?';
-    const spaceName = typeof invitation?.metadata?.spaceName === 'string'
-        ? invitation.metadata.spaceName
-        : undefined;
+    const spaceName = invitation?.spaceName
+        ?? (typeof invitation?.metadata?.spaceName === 'string' ? invitation.metadata.spaceName : undefined);
 
     // The token-scoped editor keeps the guest in their own context; the workspace
     // owns the whole viewport once chosen.
