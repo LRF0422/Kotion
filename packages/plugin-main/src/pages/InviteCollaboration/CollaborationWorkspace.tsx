@@ -65,7 +65,9 @@ export const CollaborationWorkspace: React.FC<CollaborationWorkspaceProps> = ({
         documents: documentOps,
         getCollabToken: () => JSON.stringify({ accessToken: getAccessToken() ?? "", invitationToken: token }),
         getPage: () => service.collaboration.getInvitationPage(token),
-    }), [page.id, page.spaceId, page.title, readOnly, documentOps, service, token]);
+        // The agent's unified page target uses this to navigate back here.
+        open: () => navigator.go({ to: `/collaborate/${token}?open=1` }),
+    }), [page.id, page.spaceId, page.title, readOnly, documentOps, service, token, navigator]);
     useEffect(() => {
         // No unregister on unmount on purpose: an agent run can outlive the route
         // (the user navigates away while the agent keeps working). The capability

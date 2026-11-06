@@ -21,6 +21,10 @@ export * from "./page-navigation-bridge"
 // published by the collaboration workspace for the agent's page surfaces.
 export * from "./collaboration-guest-page"
 
+// The single model every agent page surface resolves: identity, access,
+// document capability, room auth, reads and navigation for one page.
+export * from "./agent-page-target"
+
 // Offscreen editor bridge — off-screen page editing sessions (engine in core)
 export * from "./offscreen-editor-bridge"
 

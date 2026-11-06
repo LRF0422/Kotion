@@ -50,6 +50,13 @@ export interface CollaborationGuestPageCapability {
     getCollabToken: () => string;
     /** Read the page row through the invitation (title, type, parents, …). */
     getPage: () => Promise<PageRecord>;
+    /**
+     * Navigate back to this page's surface (the invitation workspace). Provided
+     * by the workspace that owns the route; the agent's unified page target uses
+     * it so `open` on a guest page lands in the workspace, not in a space route
+     * the invitee cannot see.
+     */
+    open?: () => void;
 }
 
 const capabilities = new Map<string, CollaborationGuestPageCapability>();

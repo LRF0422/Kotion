@@ -2,9 +2,9 @@ import type { Editor } from "@kn/editor"
 import { z } from "@kn/ui"
 import type { ToolsRecord, ToolExecutionContext, SessionPageBinding, AgentArtifact, SpacePageService } from "@kn/common"
 import {
-    getCollaborationGuestPage,
     getPageNavigationBridge,
     getSessionPageBinding,
+    resolveAgentPageTarget,
     resolveService,
 } from "@kn/common"
 import { discoverBlocks, findBlockByText, runWithAITransactionMeta } from "@kn/common"
@@ -91,39 +91,19 @@ const resolveActivePage = (
 }
 
 const readMetadata = async (pageId: string) => {
-    // A collaboration guest page lives in the inviter's identity context: the
-    // tenant-scoped metadata read cannot see it. The workspace's guest
-    // capability (or, for the page currently on screen, the published page
-    // context) is the only way to describe it to the agent.
-    const guestPage = getCollaborationGuestPage(pageId)
-    if (guestPage) {
-        try {
-            const record = await guestPage.getPage()
-            return {
-                id: record.id,
-                spaceId: record.spaceId,
-                parentId: record.parentId,
-                title: record.title,
-                pageType: record.pageType,
-            } as Awaited<ReturnType<SpacePageService['pages']['getPageMetadata']>>
-        } catch {
-            return {
-                id: pageId,
-                spaceId: guestPage.spaceId,
-                title: guestPage.title ?? '',
-            } as Awaited<ReturnType<SpacePageService['pages']['getPageMetadata']>>
-        }
-    }
-    const current = getPageNavigationBridge()?.getCurrentPage()
-    if (current?.pageId != null && String(current.pageId) === String(pageId)) {
-        // The page is already on screen: its context is published, so the agent
-        // does not need a tenant-scoped read (and for a collaboration guest page
-        // that read would fail).
+    // One model for both authorities: a normal page resolves through the
+    // tenant-scoped service, an invited collaboration page through its
+    // invitation capability (and the page currently on screen through the
+    // published context). The agent's metadata read never branches itself.
+    const target = resolveAgentPageTarget(pageId)
+    if (target) {
+        const metadata = await target.loadMetadata()
         return {
-            id: current.pageId,
-            spaceId: current.spaceId,
-            parentId: current.parentId,
-            title: current.title ?? '',
+            id: metadata.id,
+            spaceId: metadata.spaceId,
+            parentId: metadata.parentId,
+            title: metadata.title,
+            pageType: metadata.pageType,
         } as Awaited<ReturnType<SpacePageService['pages']['getPageMetadata']>>
     }
     return resolveService('spacePageService').pages.getPageMetadata(pageId)

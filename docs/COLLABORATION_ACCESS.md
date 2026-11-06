@@ -142,7 +142,8 @@ mvn -o -pl knowledge-service/knowledge-wiki -am test \
 - **后台标签页的会话结束**：只在可见编辑器上弹窗/自动跳转，不再劫持前台页面。
 - **隐藏 AI 编辑器**同样受同步门禁：未同步时不再报告 ready（改为 markError），页面浮窗状态栏显示
   "Not synced"，不会再显示 "Saved" 却静默丢弃内容。
-- **协作者的 agent 可以操作协作页面**：协作工作区把"邀请令牌绑定的页面能力"注册到
+- **协作者的 agent 可以操作协作页面**（agent 页面操作的统一模型见
+  [AGENT_PAGE_MODEL.md](AGENT_PAGE_MODEL.md)）：协作工作区把"邀请令牌绑定的页面能力"注册到
   `@kn/common` 的能力注册表（文档读写、房间 auth 信封、页面读取）。隐藏的离屏编辑器、浮动编辑窗、
   页面工具（`editPage`/元数据读取）都先查这张表，从而跨租户读写同一个页面。另外 shell dock 在
   路由本身不携带 pageId（`/collaborate/:token`）时回退到"当前可见编辑器"，agent 面板因此能拿到

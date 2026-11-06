@@ -17,6 +17,7 @@ import {
     AgentPaneHost,
     getAgentDocumentBridge,
     getPageNavigationBridge,
+    resolveAgentPageTarget,
     useCurrentPage,
     setSessionPageBinding,
     clearSessionPageBinding,
@@ -384,6 +385,10 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
     // agent can still read/summarize the page.
     const canMutateNow = useCallback((): boolean => {
         const boundId = boundPageRef.current?.pageId
+        // The unified page model knows whether this page's access is read-only
+        // (a READ collaboration invitation) even before an editor is bound.
+        const pageTarget = resolveAgentPageTarget(boundId ?? null)
+        if (pageTarget && pageTarget.canEdit === false) return false
         const claimed = boundId ? claimedEditorsRef.current.get(String(boundId)) : undefined
         const target = (claimed ?? offscreenHandleRef.current?.editor ?? editor) as Editor | undefined
         return !target || target.isEditable !== false
