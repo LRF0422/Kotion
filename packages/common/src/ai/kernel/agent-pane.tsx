@@ -160,17 +160,27 @@ export const AgentPaneProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const openInPage = useCallback((next: AgentArtifact) => {
         const bridge = getPageNavigationBridge()
         if (!bridge) return
+        // Navigation may reject: a collaboration guest bridge refuses pages
+        // outside its invitation (there is nowhere to go), and a pane click must
+        // not surface that as an uncaught exception.
+        const navigate = (go: () => Promise<void> | void) => {
+            try {
+                void Promise.resolve(go()).catch(() => {})
+            } catch {
+                // Ignored on purpose — see above.
+            }
+        }
         if (next.kind === 'page') {
             setTarget(null)
             setOpen(false)
-            void bridge.openPage(next.id, next.spaceId)
+            navigate(() => bridge.openPage(next.id, next.spaceId))
             return
         }
         // A space has no editor to bind, so "open" means leaving for its route.
         if (next.kind === 'space' && bridge.openSpace) {
             setTarget(null)
             setOpen(false)
-            void bridge.openSpace(next.id)
+            navigate(() => bridge.openSpace!(next.id))
         }
     }, [])
 

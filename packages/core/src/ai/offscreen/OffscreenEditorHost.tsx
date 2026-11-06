@@ -29,6 +29,9 @@ import {
     useSpacePageService,
     getAccessToken,
     getAppEnv,
+    getCollaborationGuestPage,
+    subscribeCollaborationGuestPage,
+    type CollaborationGuestPageCapability,
     type GlobalState,
     type PageRecord,
 } from "@kn/common"
@@ -52,6 +55,30 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
     const { userInfo } = useSelector((state: GlobalState) => state)
     const service = useSpacePageService()
 
+    // A collaboration guest page lives in the inviter's context: the normal
+    // (tenant-scoped) page service cannot see it, and the room only authorizes
+    // the invitation-token envelope. The workspace publishes that capability
+    // for as long as it is on screen; without it the agent's hidden editor would
+    // fail exactly like a tenant-scoped read.
+    const [guestPage, setGuestPage] = useState<CollaborationGuestPageCapability | undefined>(
+        () => getCollaborationGuestPage(pageId),
+    )
+    useEffect(() => {
+        setGuestPage(getCollaborationGuestPage(pageId))
+        return subscribeCollaborationGuestPage(() => setGuestPage(getCollaborationGuestPage(pageId)))
+    }, [pageId])
+    // One document capability for the whole session: the invitation-scoped API
+    // for a guest, the tenant-scoped one otherwise.
+    const documents = guestPage?.documents ?? service.documents
+    // The room re-authenticates on every (re)connect; the guest envelope must be
+    // rebuilt with the current access token rather than captured. Memoized so
+    // the provider effect does not see a new function on every render (that
+    // would rebuild the provider and drop the live document).
+    const getCollabToken = useMemo(
+        () => guestPage ? guestPage.getCollabToken : () => getAccessToken() || '',
+        [guestPage],
+    )
+
     const [page, setPage] = useState<PageRecord | null>(null)
     const [editorInstance, setEditorInstance] = useState<Editor | null>(null)
     const [contentReady, setContentReady] = useState(false)
@@ -65,7 +92,8 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
     // ---- Load the target page (always fresh: editing needs latest content) ----
     useEffect(() => {
         let cancelled = false
-        service.pages.getPage(pageId)
+        const load = guestPage ? guestPage.getPage() : service.pages.getPage(pageId)
+        load
             .then((record) => {
                 if (cancelled) return
                 setPage(record)
@@ -73,6 +101,11 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
                     offscreenSessionManager.markError(
                         pageId,
                         new Error('Component-backed pages cannot be edited through the document editor'),
+                    )
+                } else if (guestPage && !guestPage.canEdit) {
+                    offscreenSessionManager.markError(
+                        pageId,
+                        new Error('This collaboration invitation is read-only; the page cannot be edited'),
                     )
                 }
             })
@@ -84,7 +117,7 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
                 )
             })
         return () => { cancelled = true }
-    }, [pageId, service])
+    }, [pageId, service, guestPage])
 
     // ---- Collaboration provider (same room as any visible editor of this page) ----
     useEffect(() => {
@@ -98,7 +131,9 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
             name: `page:${pageId}`,
             // Getter, not a captured value: reconnects re-authenticate, and an
             // access token captured at mount can expire before the agent is done.
-            token: () => getAccessToken() || '',
+            // For a collaboration guest the getter rebuilds the invitation
+            // envelope the room server requires for this page.
+            token: getCollabToken,
             document: doc,
             onSynced: () => {
                 setSynced(true)
@@ -120,15 +155,21 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
             collabProvider.disconnect()
             collabProvider.destroy()
         }
-    }, [pageId, page?.id, page?.pageType])
+    }, [pageId, page?.id, page?.pageType, getCollabToken])
 
     useEffect(() => {
         if (page?.pageType) return
-        setSynced(false)
+        // Seed from the provider's own flag: `onSynced` can fire before this
+        // effect runs, and clearing that would leave the writer off for a room
+        // that is synced. Reset on `provider` as well as `pageId` — the provider
+        // is recreated when the guest capability (and with it the room auth
+        // envelope) appears, and the old room's success must not make the new,
+        // unsynced one writable.
+        setSynced(provider?.synced === true)
         setSyncTimedOut(false)
         const timer = setTimeout(() => setSyncTimedOut(true), 8000)
         return () => clearTimeout(timer)
-    }, [pageId, page?.pageType])
+    }, [pageId, page?.pageType, provider])
 
     // ---- Legacy fallback pre-processing ----
     const legacyContent = useMemo(() => {
@@ -150,7 +191,7 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
         setBlockDoc(undefined)
         if (!page || page.pageType) return
         let cancelled = false
-        service.documents.getPageDocument(pageId)
+        documents.getPageDocument(pageId)
             .then((document) => {
                 if (cancelled) return
                 setBlockDoc({
@@ -163,7 +204,7 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
                 setBlockDoc(null)
             })
         return () => { cancelled = true }
-    }, [pageId, page?.id, page?.pageType, service])
+    }, [pageId, page?.id, page?.pageType, documents])
 
     const seed = useMemo(
         () => (page ? chooseSeed(blockDoc, legacyContent) : null),
@@ -195,14 +236,19 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
     const { session, flushNow } = usePageSave({
         editor: editorInstance,
         pageId,
-        enabled: !!page && !page.pageType && contentReady && !!seed?.trusted,
+        enabled: !!page && !page.pageType && contentReady && !!seed?.trusted
+            // A read-only invitation must not be edited through the agent.
+            && (!guestPage || guestPage.canEdit),
         // A room that never synced holds a placeholder, not the page; writing it
         // would reconcile the page down to nothing.
         collaborationSynced: synced,
         clientId,
+        // An invited collaborator follows the guest lease rules (take the page
+        // when nobody holds it, never latch "session ended").
+        guest: !!guestPage,
         presence: { connected: connectionStatus === 'connected', hostPresent, hostSeen },
         reconcileOnly: syncTimedOut && !synced,
-        documents: service.documents,
+        documents,
     })
 
     // Declare the session role in awareness (same field/value as the main
@@ -238,6 +284,15 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
         if (readyReportedRef.current) return
         if (editorInstance && contentReady && seed && (synced || syncTimedOut)) {
             readyReportedRef.current = true
+            if (guestPage && !guestPage.canEdit) {
+                // Read-only invitation: fail the session instead of letting the
+                // agent edit a document the backend will refuse to save.
+                offscreenSessionManager.markError(
+                    pageId,
+                    new Error('This collaboration invitation is read-only; the page cannot be edited'),
+                )
+                return
+            }
             if (!synced) {
                 // The room never delivered the document. The writer is gated off
                 // (see `collaborationSynced`), so anything the agent "edits" here
@@ -257,7 +312,7 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
                 },
             })
         }
-    }, [editorInstance, contentReady, seed, synced, syncTimedOut, pageId, page?.title])
+    }, [editorInstance, contentReady, seed, synced, syncTimedOut, pageId, page?.title, guestPage])
 
     // Unmount safety net: the manager flushes before dropping a session, but
     // an eviction/teardown race could still leave unsaved ops behind. The
@@ -292,10 +347,11 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
                 ref={(ed: Editor | null) => setEditorInstance(ed)}
                 synced={synced}
                 provider={provider}
-                pageDocuments={service.documents}
+                pageDocuments={documents}
                 id={pageId}
                 user={collaborationUser}
-                token={getAccessToken() || ''}
+                token={guestPage ? getCollabToken() : (getAccessToken() || '')}
+                isEditable={!guestPage || guestPage.canEdit}
                 toc={false}
                 withTitle={true}
                 width="w-full"

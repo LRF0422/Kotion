@@ -52,7 +52,10 @@ import {
     getAccessToken,
     getAppEnv,
     getSessionPageBinding,
+    getCollaborationGuestPage,
+    subscribeCollaborationGuestPage,
     setPageEditWindowImpl,
+    type CollaborationGuestPageCapability,
     type GlobalState,
     type PageEditWindowProps,
     type PageRecord,
@@ -209,6 +212,23 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, em
     const navigator = useNavigator();
     const service = useSpacePageService();
     const { userInfo } = useSelector((state: GlobalState) => state);
+
+    // Collaboration guest page: the page lives in the inviter's context, so the
+    // tenant-scoped service cannot read or write it. The workspace publishes an
+    // invitation-token-bound capability while it is on screen; without it the
+    // floating agent window fails exactly like a tenant-scoped read.
+    const [guestPage, setGuestPage] = useState<CollaborationGuestPageCapability | undefined>(
+        () => getCollaborationGuestPage(pageId),
+    );
+    useEffect(() => {
+        setGuestPage(getCollaborationGuestPage(pageId));
+        return subscribeCollaborationGuestPage(() => setGuestPage(getCollaborationGuestPage(pageId)));
+    }, [pageId]);
+    const documents = guestPage?.documents ?? service.documents;
+    const getCollabToken = useMemo(
+        () => guestPage ? guestPage.getCollabToken : () => getAccessToken() || '',
+        [guestPage],
+    );
 
     const winRef = useRef<HTMLDivElement>(null);
     const bodyRef = useRef<HTMLDivElement>(null);
@@ -389,18 +409,26 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, em
     // ---- Load the target page (always fresh: editing needs latest content) ----
     useEffect(() => {
         let cancelled = false;
-        service.pages.getPage(pageId)
+        const load = guestPage ? guestPage.getPage() : service.pages.getPage(pageId);
+        load
             .then((record) => {
                 if (cancelled) return;
+                // A previous attempt may have failed before the guest capability
+                // was published; a successful (re)load clears that error state.
+                setLoadError(false);
                 setPage(mapPageRecord(record));
-                service.changes.emit("page.updated", {
-                    page: record,
-                    spaceId: record.spaceId,
-                });
+                // A guest page belongs to another tenant's tree; emitting a tree
+                // event into this context would be meaningless at best.
+                if (!guestPage) {
+                    service.changes.emit("page.updated", {
+                        page: record,
+                        spaceId: record.spaceId,
+                    });
+                }
             })
             .catch(() => { if (!cancelled) setLoadError(true); });
         return () => { cancelled = true; };
-    }, [pageId, service]);
+    }, [pageId, service, guestPage]);
 
     const metadataRequestRef = useRef(0);
     useEffect(() => {
@@ -410,14 +438,16 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, em
     const refreshPageMetadata = useCallback(async () => {
         const requestId = ++metadataRequestRef.current;
         try {
-            const metadata = await service.pages.getPageMetadata(pageId);
+            const metadata = guestPage
+                ? await guestPage.getPage()
+                : await service.pages.getPageMetadata(pageId);
             if (requestId !== metadataRequestRef.current) return;
             setPage((current) => current ? mapPageRecord({ ...current, ...metadata }) : current);
         } catch {
             // Saving the document succeeded; a metadata refresh failure must not
             // turn the editor's save state into an error.
         }
-    }, [pageId, service]);
+    }, [pageId, service, guestPage]);
 
     // ---- Collaboration provider (same room as the main editor for this page) ----
     useEffect(() => {
@@ -433,8 +463,9 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, em
             baseUrl: getAppEnv('VITE_COLLABORATION_WS_URL') || 'wss://kotion.top:8877/ws',
             name: `page:${pageId}`,
             // Getter, not a captured value: the room re-authenticates on every
-            // reconnect, and a token captured at mount expires mid-session.
-            token: () => getAccessToken() || '',
+            // reconnect, and a token captured at mount expires mid-session. For a
+            // collaboration guest the getter rebuilds the invitation envelope.
+            token: getCollabToken,
             document: doc,
             onSynced: () => {
                 setSynced(true)
@@ -456,15 +487,19 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, em
             collabProvider.disconnect();
             collabProvider.destroy();
         };
-    }, [pageId, page?.id, page?.pageType]);
+    }, [pageId, page?.id, page?.pageType, getCollabToken]);
 
     useEffect(() => {
         if (page?.pageType) return;
-        setSynced(false);
+        // Reset on `provider` as well as `pageId`: the provider is recreated when
+        // the guest capability (and its room auth envelope) appears, and the old
+        // room's success must not make the new, unsynced one writable. Seed from
+        // `provider.synced` so an early `onSynced` is not cleared.
+        setSynced(provider?.synced === true);
         setSyncTimedOut(false);
         const timer = setTimeout(() => setSyncTimedOut(true), 8000);
         return () => clearTimeout(timer);
-    }, [pageId, page?.pageType]);
+    }, [pageId, page?.pageType, provider]);
 
     // ---- Legacy fallback pre-processing ----
     // PageRecord carries the old page-row content only as a migration fallback;
@@ -488,7 +523,7 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, em
         setBlockDoc(undefined)
         if (!page || page.pageType) return
         let cancelled = false
-        service.documents.getPageDocument(pageId)
+        documents.getPageDocument(pageId)
             .then((document) => {
                 if (cancelled) return
                 setBlockDoc({
@@ -501,7 +536,7 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, em
                 setBlockDoc(null)
             })
         return () => { cancelled = true }
-    }, [pageId, page?.id, page?.pageType, service])
+    }, [pageId, page?.id, page?.pageType, documents])
 
     // `null` means "not decided yet", holding the editor back from mounting so
     // the first reconcile cannot persist an unseeded document (see the main
@@ -523,14 +558,19 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, em
     const { saving, dirty, error: saveError, session, flushNow } = usePageSave({
         editor: editorInstance,
         pageId,
-        enabled: !!page && !page.pageType && contentReady && !!seed?.trusted,
+        enabled: !!page && !page.pageType && contentReady && !!seed?.trusted
+            // A read-only invitation must not be edited through the agent.
+            && (!guestPage || guestPage.canEdit),
         // Never persist the placeholder an unsynced room leaves behind: the first
         // write of a session is a whole-document reconcile.
         collaborationSynced: synced,
         clientId,
+        // An invited collaborator follows the guest lease rules (take the page
+        // when nobody holds it, never latch "session ended").
+        guest: !!guestPage,
         presence: { connected: connectionStatus === 'connected', hostPresent, hostSeen },
         reconcileOnly: syncTimedOut && !synced,
-        documents: service.documents,
+        documents,
         onSaved: ({ titleChanged }) => {
             if (titleChanged) void refreshPageMetadata();
         },
@@ -596,14 +636,20 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, em
     }, []);
 
     const handleOpenFullPage = useCallback(() => {
-        const spaceId = page?.spaceId;
-        if (!spaceId) return;
         // The route change replaces the whole view — animating out would only
         // delay the navigation.
         flushPending();
         onClose();
+        if (guestPage?.invitationToken) {
+            // A guest page is not reachable through the workspace route; its only
+            // full-page surface is the invitation workspace.
+            navigator.go({ to: `/collaborate/${guestPage.invitationToken}?open=1` });
+            return;
+        }
+        const spaceId = page?.spaceId;
+        if (!spaceId) return;
         navigator.go({ to: `/space-detail/${spaceId}/page/edit/${pageId}` });
-    }, [page?.spaceId, pageId, navigator, flushPending, onClose]);
+    }, [guestPage?.invitationToken, page?.spaceId, pageId, navigator, flushPending, onClose]);
 
     // ---- Dragging (header) — mutate style directly, no re-renders ----
     const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
@@ -817,11 +863,12 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, em
                         ref={(ed: Editor | null) => setEditorInstance(ed)}
                         synced={synced}
                         provider={provider}
-                        pageDocuments={service.documents}
+                        pageDocuments={documents}
                         className="h-full"
                         id={pageId}
                         user={collaborationUser}
-                        token={getAccessToken() || ''}
+                        token={guestPage ? getCollabToken() : (getAccessToken() || '')}
+                        isEditable={!guestPage || guestPage.canEdit}
                         toc={true}
                         tocContained={true}
                         withTitle={true}

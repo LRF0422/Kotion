@@ -12,6 +12,18 @@ export interface PageContextInput {
     spaceId?: string | number | null
     title?: string
     parentId?: string | number | null
+    /**
+     * Surface-specific navigation for `openPage`.
+     *
+     * Most pages live in the workspace route, which the default implementation
+     * knows how to open. A collaboration guest page does not: it is reached
+     * through its invitation link (`/collaborate/:token`), so the workspace
+     * passes an override instead of letting the agent navigate to a space route
+     * the guest cannot see.
+     */
+    openPage?: (pageId: string, spaceId?: string) => void
+    /** Surface-specific navigation for `openSpace`; defaults to the space route. */
+    openSpace?: (spaceId: string) => void
 }
 
 /**
@@ -40,6 +52,8 @@ export const usePublishPageContext = (page: PageContextInput | null, active = tr
     const spaceId = page?.spaceId == null ? undefined : String(page.spaceId)
     const title = page?.title
     const parentId = page?.parentId == null ? undefined : String(page.parentId)
+    const openPageOverride = page?.openPage
+    const openSpaceOverride = page?.openSpace
 
     useEffect(() => {
         if (!active || !routeCacheActive || !pageId) return
@@ -47,16 +61,24 @@ export const usePublishPageContext = (page: PageContextInput | null, active = tr
         const bridge: PageNavigationBridge = {
             getCurrentPage: () => ({ pageId, spaceId, title, parentId }),
             openPage: (targetPageId, targetSpaceId) => {
+                if (openPageOverride) {
+                    openPageOverride(String(targetPageId), targetSpaceId == null ? undefined : String(targetSpaceId))
+                    return
+                }
                 const target = targetSpaceId ?? spaceId
                 if (!target) return
                 navigator.go({ to: `/space-detail/${target}/page/edit/${targetPageId}` })
             },
             openSpace: (targetSpaceId) => {
+                if (openSpaceOverride) {
+                    openSpaceOverride(String(targetSpaceId))
+                    return
+                }
                 navigator.go({ to: `/space-detail/${targetSpaceId}` })
             },
         }
 
         setPageNavigationBridge(bridge)
         return () => clearPageNavigationBridge(bridge)
-    }, [active, routeCacheActive, pageId, spaceId, title, parentId, navigator])
+    }, [active, routeCacheActive, pageId, spaceId, title, parentId, navigator, openPageOverride, openSpaceOverride])
 }

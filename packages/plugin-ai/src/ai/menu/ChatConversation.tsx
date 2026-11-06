@@ -342,7 +342,14 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
             const currentPageId = getPageNavigationBridge()?.getCurrentPage()?.pageId
             if (currentPageId !== undefined && String(currentPageId) === targetPage.pageId) return
             setPendingReveal({ pageId: targetPage.pageId, blockId: ref.blockId })
-            getPageNavigationBridge()?.openPage(targetPage.pageId, targetPage.spaceId)
+            try {
+                getPageNavigationBridge()?.openPage(targetPage.pageId, targetPage.spaceId)
+            } catch (error) {
+                // A guest collaboration bridge refuses pages outside the
+                // invitation; there is nowhere to reveal this reference.
+                console.warn('[agent] could not reveal reference:', error)
+                setPendingReveal(null)
+            }
         }
     }, [editor, targetPage])
 
@@ -368,6 +375,19 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
     const agentEditor = (offscreenHandle?.editor as Editor) ?? editor
     const agentEditorRef = useRef<Editor | undefined>(editor)
     agentEditorRef.current = agentEditor
+
+    // A read-only surface must not be writable *through the agent*: document
+    // tools drive the editor programmatically, which still mutates the shared
+    // Y.Doc even though the visible editor refuses user input — and an online
+    // collaborator host would persist those edits. The executor vetoes mutating
+    // calls while this returns false; read-only tools stay available so the
+    // agent can still read/summarize the page.
+    const canMutateNow = useCallback((): boolean => {
+        const boundId = boundPageRef.current?.pageId
+        const claimed = boundId ? claimedEditorsRef.current.get(String(boundId)) : undefined
+        const target = (claimed ?? offscreenHandleRef.current?.editor ?? editor) as Editor | undefined
+        return !target || target.isEditable !== false
+    }, [editor])
 
     // ─── Change tracking ──────────────────────────────────────────
     const [tracking, setTracking] = useState(false)
@@ -627,6 +647,9 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
         // Mutating calls are serialized per document (write lease), and a
         // delegated child resolves its tools against its own editor.
         isReadOnlyTool,
+        // Refuse mutating tools while the bound editor is read-only (READ
+        // collaboration invitation / read-only page).
+        canMutate: canMutateNow,
         // Editor dependency of each tool, from the live provider metadata. The SDK
         // can only see built-ins without this, so plugin-declared `scope: 'any'`
         // tools (plugin-studio file writes, builds) would be treated as

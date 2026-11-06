@@ -81,6 +81,20 @@ export interface EditorToolExecutorOptions {
      * treated as mutating (conservative: extra serialization, never skipped).
      */
     isReadOnlyTool?: (toolName: string) => boolean
+    /**
+     * Host veto for mutating calls, evaluated at call time against the editor /
+     * page actually bound right now.
+     *
+     * A read-only surface is not merely non-interactive: the agent's document
+     * tools drive the editor programmatically, which still writes the shared
+     * Y.Doc — and an online collaborator host would persist those edits. A
+     * read-only viewer (a READ collaboration invitation, a read-only page) must
+     * therefore have its mutating calls refused here. Read-only tools are
+     * unaffected, so the agent can still read/summarize the page.
+     *
+     * Absent → no veto (existing hosts stay unchanged).
+     */
+    canMutate?: () => boolean
     /** Document a call acts on, or null when nothing has to be serialized. */
     resolveDocumentId?: (owner: string | null) => string | null
     /** Execution notifications for the UI. */
@@ -121,6 +135,7 @@ export interface EditorToolExecutorOptions {
 export class EditorToolExecutor {
     private readonly resolveTools: EditorToolExecutorOptions['resolveTools']
     private readonly isReadOnlyTool?: EditorToolExecutorOptions['isReadOnlyTool']
+    private readonly canMutate?: EditorToolExecutorOptions['canMutate']
     private readonly resolveDocumentId?: EditorToolExecutorOptions['resolveDocumentId']
     private readonly onExecution?: OnToolExecution
     private readonly getSessionBinding?: EditorToolExecutorOptions['getSessionBinding']
@@ -135,6 +150,7 @@ export class EditorToolExecutor {
     constructor(options: EditorToolExecutorOptions) {
         this.resolveTools = options.resolveTools
         this.isReadOnlyTool = options.isReadOnlyTool
+        this.canMutate = options.canMutate
         this.resolveDocumentId = options.resolveDocumentId
         this.onExecution = options.onExecution
         this.getSessionBinding = options.getSessionBinding
@@ -185,6 +201,16 @@ export class EditorToolExecutor {
             // needs it to know whether the owner is about to *write* (and must
             // therefore fork a private document) or only read the live page.
             const mutating = this.isReadOnlyTool ? !this.isReadOnlyTool(toolName) : true
+            if (mutating && this.canMutate && !this.canMutate()) {
+                // The bound surface is read-only (READ collaboration invitation,
+                // read-only page). Refuse before resolving/executing: letting the
+                // tool mutate the editor locally would write the shared Y.Doc and
+                // an online host would persist it. Reads are still allowed.
+                outcome = {
+                    ok: false,
+                    error: '当前页面为只读，无法执行修改操作（只读协作邀请或只读页面）。如需编辑，请让邀请人授予编辑权限后重新进入。',
+                }
+            } else {
             const tools = await this.resolveTools(owner, { mutating })
             // The backend routes names loosely (a namespaced plugin tool may
             // arrive by its bare local name, or with an invented namespace), so
@@ -216,6 +242,7 @@ export class EditorToolExecutor {
                     ? await withDocumentWrite(documentId, run, { label: name })
                     : await run()
                 outcome = { ok: true, result }
+            }
             }
         } catch (error: any) {
             outcome = { ok: false, error: error?.message ?? String(error) }

@@ -51,15 +51,25 @@ export interface UseDockStateOptions {
  */
 export const useDockState = ({ position, spaceId, pageId, restoreActive = true }: UseDockStateOptions) => {
     const allPanels = useDockPanels(position)
-    const { editor, pageId: editorPageId } = useActiveEditor()
+    const { editor, pageId: editorPageId, spaceId: editorSpaceId } = useActiveEditor()
 
     // The published editor belongs to whichever tab is active; only hand it to
     // panels when it actually matches the page this dock is showing.
+    //
+    // A route does not always encode a page: the collaboration workspace is
+    // `/collaborate/:token`, so the shell has no page id to hand the dock and
+    // the agent panel used to receive no editor on a page the user was editing
+    // (and that the agent therefore could not touch). Fall back to the
+    // *published* editor when the route provides no page — only the visible
+    // surface publishes one, and backgrounded editors clear it, so this cannot
+    // hand panels a hidden tab's document.
+    const resolvedPageId = pageId ?? editorPageId
+    const resolvedSpaceId = spaceId ?? (pageId == null ? editorSpaceId : undefined)
     const context: DockPanelContext = useMemo(() => ({
-        spaceId,
-        pageId,
-        editor: pageId && editorPageId === pageId ? editor : undefined,
-    }), [spaceId, pageId, editor, editorPageId])
+        spaceId: resolvedSpaceId,
+        pageId: resolvedPageId,
+        editor: resolvedPageId && editorPageId === resolvedPageId ? editor : undefined,
+    }), [resolvedSpaceId, resolvedPageId, editor, editorPageId])
 
     // Panels can opt out of the rail for the current context (e.g. "needs an open page").
     const panels = useMemo(

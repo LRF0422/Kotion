@@ -17,6 +17,10 @@ export * from "./tools"
 // Active-page context and application-shell navigation
 export * from "./page-navigation-bridge"
 
+// Cross-tenant collaboration page capability (invitation-token scoped),
+// published by the collaboration workspace for the agent's page surfaces.
+export * from "./collaboration-guest-page"
+
 // Offscreen editor bridge — off-screen page editing sessions (engine in core)
 export * from "./offscreen-editor-bridge"
 

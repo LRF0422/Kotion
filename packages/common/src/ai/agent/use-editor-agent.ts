@@ -70,6 +70,12 @@ export interface UseEditorAgentOptions {
      */
     isReadOnlyTool?: (name: string) => boolean
     /**
+     * Host veto for mutating calls, evaluated at call time. Returns false while
+     * the bound editor is read-only (READ collaboration invitation, read-only
+     * page) so the agent cannot write the shared Y.Doc programmatically.
+     */
+    canMutate?: () => boolean
+    /**
      * Whether a tool needs a live editor. Editor-independent tools are executed
      * even while the edit target is not ready (see the frontend-tool gate);
      * unknown tools count as editor-bound.
@@ -158,6 +164,7 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
         autoExecuteTools = true, persist = true, store: providedStore, lock: providedLock,
     } = options
     const isReadOnlyTool = options.isReadOnlyTool
+    const canMutate = options.canMutate
     // Held in a ref: the classifier reads live tool records, so an
     // identity-unstable host callback must not rebuild anything downstream.
     const needsEditorRef = useRef(options.needsEditor)
@@ -242,6 +249,7 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
         () => new EditorToolExecutor({
             resolveTools,
             isReadOnlyTool,
+            canMutate,
             resolveDocumentId,
             onExecution: onToolExecution,
             getSessionBinding,
@@ -270,7 +278,7 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
                 })
             },
         }),
-        [resolveTools, isReadOnlyTool, resolveDocumentId, onToolExecution, getSessionBinding, conversationId, dispatch]
+        [resolveTools, isReadOnlyTool, canMutate, resolveDocumentId, onToolExecution, getSessionBinding, conversationId, dispatch]
     )
 
     /**

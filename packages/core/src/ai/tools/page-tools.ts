@@ -1,7 +1,8 @@
 import type { Editor } from "@kn/editor"
 import { z } from "@kn/ui"
-import type { ToolsRecord, ToolExecutionContext, SessionPageBinding, AgentArtifact } from "@kn/common"
+import type { ToolsRecord, ToolExecutionContext, SessionPageBinding, AgentArtifact, SpacePageService } from "@kn/common"
 import {
+    getCollaborationGuestPage,
     getPageNavigationBridge,
     getSessionPageBinding,
     resolveService,
@@ -89,8 +90,44 @@ const resolveActivePage = (
     return openPage
 }
 
-const readMetadata = async (pageId: string) =>
-    resolveService('spacePageService').pages.getPageMetadata(pageId)
+const readMetadata = async (pageId: string) => {
+    // A collaboration guest page lives in the inviter's identity context: the
+    // tenant-scoped metadata read cannot see it. The workspace's guest
+    // capability (or, for the page currently on screen, the published page
+    // context) is the only way to describe it to the agent.
+    const guestPage = getCollaborationGuestPage(pageId)
+    if (guestPage) {
+        try {
+            const record = await guestPage.getPage()
+            return {
+                id: record.id,
+                spaceId: record.spaceId,
+                parentId: record.parentId,
+                title: record.title,
+                pageType: record.pageType,
+            } as Awaited<ReturnType<SpacePageService['pages']['getPageMetadata']>>
+        } catch {
+            return {
+                id: pageId,
+                spaceId: guestPage.spaceId,
+                title: guestPage.title ?? '',
+            } as Awaited<ReturnType<SpacePageService['pages']['getPageMetadata']>>
+        }
+    }
+    const current = getPageNavigationBridge()?.getCurrentPage()
+    if (current?.pageId != null && String(current.pageId) === String(pageId)) {
+        // The page is already on screen: its context is published, so the agent
+        // does not need a tenant-scoped read (and for a collaboration guest page
+        // that read would fail).
+        return {
+            id: current.pageId,
+            spaceId: current.spaceId,
+            parentId: current.parentId,
+            title: current.title ?? '',
+        } as Awaited<ReturnType<SpacePageService['pages']['getPageMetadata']>>
+    }
+    return resolveService('spacePageService').pages.getPageMetadata(pageId)
+}
 
 /** Insert a [[page]] link into a specific editor instance. */
 const insertPageLinkInto = async (

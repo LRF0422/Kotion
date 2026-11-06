@@ -1,13 +1,15 @@
 import { Button } from "@kn/ui";
 import {
     getAccessToken,
+    registerCollaborationGuestPage,
     type CollaborationInvitation,
     type PageRecord,
+    useNavigator,
     useSpacePageService,
     useTranslation,
 } from "@kn/common";
 import { FileText } from "@kn/icon";
-import React, { useMemo } from "react";
+import React, { useCallback, useEffect, useMemo } from "react";
 import { PageEditor } from "../SpaceDetail/PageEditor";
 import { usePublishPageContext } from "../../utils/use-publish-page-context";
 
@@ -38,6 +40,7 @@ export const CollaborationWorkspace: React.FC<CollaborationWorkspaceProps> = ({
 }) => {
     const { t } = useTranslation();
     const service = useSpacePageService();
+    const navigator = useNavigator();
     const documentOps = useMemo(
         () => service.collaboration.createInvitationDocumentOperations(token),
         [service, token],
@@ -48,14 +51,52 @@ export const CollaborationWorkspace: React.FC<CollaborationWorkspaceProps> = ({
     );
     const readOnly = (invitation.permission ?? "READ") === "READ";
 
+    // Publish the guest capability for the agent's *other* page surfaces (the
+    // hidden off-screen editor, the floating page window, the page tools). They
+    // resolve pages through the tenant-scoped service, which cannot see a page
+    // from the inviter's context; this registry is how they learn the
+    // invitation-scoped document capability instead.
+    const guestCapability = useMemo(() => ({
+        pageId: String(page.id),
+        spaceId: page.spaceId ? String(page.spaceId) : undefined,
+        title: page.title,
+        invitationToken: token,
+        canEdit: !readOnly,
+        documents: documentOps,
+        getCollabToken: () => JSON.stringify({ accessToken: getAccessToken() ?? "", invitationToken: token }),
+        getPage: () => service.collaboration.getInvitationPage(token),
+    }), [page.id, page.spaceId, page.title, readOnly, documentOps, service, token]);
+    useEffect(() => {
+        // No unregister on unmount on purpose: an agent run can outlive the route
+        // (the user navigates away while the agent keeps working). The capability
+        // is memory-only, scoped to this page and its invitation token, and a
+        // re-entry simply replaces it; dropping it here would make the agent's
+        // hidden editor unable to acquire the page the moment the workspace
+        // closes.
+        registerCollaborationGuestPage(guestCapability);
+    }, [guestCapability]);
+
     // This surface renders the editor directly (no `PageHost`), so it publishes
     // the page context itself — the agent must know which page the invitee is
     // reading even on the collaboration route.
+    // Stable identity: the page-context bridge re-publishes whenever one of its
+    // inputs changes, and an inline callback would do that on every render.
+    const openGuestPage = useCallback((targetPageId: string) => {
+        if (String(targetPageId) !== String(page.id)) {
+            throw new Error(t('inviteCollaboration.error.pageOutOfScope', 'This page is outside the invitation workspace'));
+        }
+        navigator.go({ to: `/collaborate/${token}?open=1` });
+    }, [navigator, token, page.id, t]);
+
     usePublishPageContext({
         pageId: page.id,
         spaceId: page.spaceId,
         title: page.title,
         parentId: page.parentId,
+        // A guest page is reached through its invitation link, not the workspace
+        // route: `openPage` on it from the agent must land back in this
+        // workspace instead of a space the invitee cannot see.
+        openPage: openGuestPage,
     });
 
     return (
