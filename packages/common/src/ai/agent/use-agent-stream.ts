@@ -153,14 +153,28 @@ export function useAgentStream(options: UseAgentStreamOptions): UseAgentStreamAp
                 } catch (error) {
                     if (controller.signal.aborted || generation !== generationRef.current) return
                     if (!(error instanceof Error) || error.message !== RESUME_FIRST_EVENT_TIMEOUT_MESSAGE) throw error
-                    // A silent resume is not automatically a failure. The server
-                    // acknowledges an already-applied batch without emitting
-                    // anything (a duplicate POST from the pending-tools watchdog),
-                    // and the run is simply still generating. Probe the run and,
-                    // when the results are no longer pending, follow the event
-                    // stream instead of declaring the agent unavailable.
-                    const view = await client.getRun(runId).catch(() => null)
-                    if (!resumeTimeoutMeansApplied(payload, view)) throw error
+                    // A silent resume is NOT a failure. The resume response is the
+                    // long-lived run stream and may legitimately have nothing new
+                    // to say: an already-applied batch is acknowledged without an
+                    // event (a duplicate POST from the pending-tools watchdog),
+                    // and a proxy may buffer a POST's body while GET streaming
+                    // works. The run's own event log is the authority, so close
+                    // this stream and follow it from the cursor — the replay
+                    // delivers whatever the resume response did not. A genuinely
+                    // dropped payload keeps the batch owed, and the pending-tools
+                    // watchdog re-submits it. Declaring the whole agent
+                    // unavailable here was a false alarm on healthy runs.
+                    void client.getRun(runId).then(view => {
+                        console.warn('[agent] resume emitted no event; following the run stream', {
+                            runId,
+                            afterSeq: cursor,
+                            action: payload.action,
+                            sentToolCalls: payload.toolResults?.map(item => item.callId) ?? [],
+                            runStatus: view?.status ?? null,
+                            pendingToolCalls: view?.pendingTools?.map(call => call.callId) ?? null,
+                            resultsApplied: resumeTimeoutMeansApplied(payload, view),
+                        })
+                    }).catch(() => undefined)
                     void events.return(undefined).catch(() => undefined)
                     startStream(runId, cursor, generation)
                     return
