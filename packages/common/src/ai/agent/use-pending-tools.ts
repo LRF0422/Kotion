@@ -343,7 +343,25 @@ export function usePendingToolExecution(
     }, [needsEditor, pendingCandidates, state.toolCalls])
 
     // Auto-execute frontend tools when the run pauses for them.
+    const gateSkipLoggedRef = useRef<string>('')
     useEffect(() => {
+        const gateOpen = autoExecuteTools || editorIndependentBatch
+        if ((!gateOpen && pendingCandidates.length > 0)
+            || (pendingCandidates.length > 0 && state.phase !== 'waiting-tools')) {
+            // A pending batch the client knows about but cannot run yet: explain
+            // why (editor gate vs phase/watermark) instead of silently waiting
+            // for the backend's tool timeout.
+            const key = `${state.phase}|${gateOpen}|${pendingCandidates.join(',')}`
+            if (gateSkipLoggedRef.current !== key) {
+                gateSkipLoggedRef.current = key
+                console.warn('[agent] pending frontend tools are not executing yet', {
+                    runId: state.runId ?? null,
+                    phase: state.phase,
+                    autoExecuteTools: gateOpen,
+                    pendingToolIds: pendingCandidates,
+                })
+            }
+        }
         if ((!autoExecuteTools && !editorIndependentBatch)
             || state.phase !== 'waiting-tools'
             || pendingCandidates.length === 0

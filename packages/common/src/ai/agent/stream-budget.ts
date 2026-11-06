@@ -176,10 +176,41 @@ export function acquireAgentStreamSlot(
     }
     return new Promise<() => void>((resolve, reject) => {
         const queue = priority === 'root' ? rootWaiters : childWaiters
+        // A queued stream is invisible otherwise: the UI just says "Working…"
+        // and the backend eventually times out waiting for a frontend tool
+        // result whose resume POST never left the client. Name the saturation.
+        const queuedAt = Date.now()
+        const waitTimer = setTimeout(() => {
+            try {
+                const snapshot = {
+                    priority,
+                    active: activeRoot + activeChild,
+                    activeRoot,
+                    activeChild,
+                    queued: rootWaiters.length + childWaiters.length,
+                    queuedRoot: rootWaiters.length,
+                    queuedChild: childWaiters.length,
+                    maxConcurrentStreams: config.maxConcurrentStreams,
+                }
+                console.warn('[agent] waiting for a run stream slot', snapshot)
+            } catch {
+                // diagnostics must never throw
+            }
+        }, 5000)
         const waiter: Waiter = {
             priority,
-            grant: () => resolve(createRelease(priority)),
-            fail: reject,
+            grant: () => {
+                clearTimeout(waitTimer)
+                const waitedMs = Date.now() - queuedAt
+                if (waitedMs >= 2000) {
+                    console.warn('[agent] run stream slot granted after waiting', { priority, waitedMs })
+                }
+                resolve(createRelease(priority))
+            },
+            fail: (error) => {
+                clearTimeout(waitTimer)
+                reject(error)
+            },
             signal,
             settled: false,
         }

@@ -133,7 +133,14 @@ export function useAgentStream(options: UseAgentStreamOptions): UseAgentStreamAp
             abortRef.current = controller
             let cursor = current.lastSeq
             try {
+                console.log('[agent] opening resume stream', {
+                    runId,
+                    afterSeq: cursor,
+                    action: payload.action,
+                    toolResults: payload.toolResults?.map(item => item.callId) ?? [],
+                })
                 const events = await client.resume(runId, payload, cursor, controller.signal)
+                console.log('[agent] resume stream opened', { runId, action: payload.action })
                 let firstTimer: ReturnType<typeof setTimeout> | undefined
                 let first: IteratorResult<import('./types').AgentEvent>
                 try {
