@@ -443,6 +443,43 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
         needsEditor: needsEditorTool,
     })
 
+    // ─── No-progress watchdog ─────────────────────────────────────
+    // "Working…" with no event is normally a slow tool or model step, both of
+    // which are bounded elsewhere (tool deadline / provider timeout). If NOTHING
+    // changes the client state for this long — no run event, no tool status, no
+    // phase change — the run is stranded (a frontend call the client never saw,
+    // or a server loop that stopped emitting). Surfacing a stopped state here
+    // beats an infinite spinner; the retry action re-attaches from the cursor.
+    const NO_PROGRESS_TIMEOUT_MS = 240_000
+    const lastActivityAtRef = useRef(Date.now())
+    useEffect(() => {
+        lastActivityAtRef.current = Date.now()
+    }, [state.lastSeq, state.phase, state.toolCalls, state.toolRetryToken])
+    useEffect(() => {
+        const timer = setInterval(() => {
+            const current = stateRef.current
+            if (current.phase !== 'streaming' && current.phase !== 'waiting-tools' && current.phase !== 'creating') {
+                return
+            }
+            const idleMs = Date.now() - lastActivityAtRef.current
+            if (idleMs < NO_PROGRESS_TIMEOUT_MS) return
+            console.warn('[agent] run made no progress; stopping the wait', {
+                runId: current.runId ?? null,
+                phase: current.phase,
+                idleMs,
+                pendingToolIds: current.pendingToolIds,
+                toolCalls: current.toolCalls.map(call => ({ callId: call.callId, tool: call.tool, status: call.status })),
+            })
+            dispatch({
+                type: 'connection-stopped',
+                error: `已 ${Math.round(idleMs / 1000)}s 没有收到任何运行进展（前端工具未执行，或服务端停止响应）。可以点“重试”继续等待，或新开一个会话。`,
+            })
+        }, 15_000)
+        return () => clearInterval(timer)
+        // dispatch/stateRef/refs are stable; the interval reads live state.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
+
     const scheduleAttachRetry = useCallback((runId: string | undefined, generation: number, error: unknown) => {
         const message = error instanceof Error ? error.message : String(error)
         const attempt = attachRetryAttemptRef.current++

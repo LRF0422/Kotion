@@ -182,6 +182,11 @@ export function usePendingToolExecution(
                 return
             }
 
+            console.log('[agent] executing pending frontend tools', {
+                runId: current.runId,
+                callIds,
+                autoExecuteTools,
+            })
             const results: { callId: string; ok: boolean; result?: unknown; error?: string }[] = []
             for (const callId of callIds) {
                 const record = stateRef.current.toolCalls.find(call => call.callId === callId)
@@ -224,6 +229,10 @@ export function usePendingToolExecution(
                     error: outcome.error,
                 })
             }
+            console.log('[agent] frontend tool results ready; submitting', {
+                runId: current.runId,
+                results: results.map(result => ({ callId: result.callId, ok: result.ok })),
+            })
             let resumeError: unknown
             for (let attempt = 0; attempt < 3 && mountedRef.current; attempt += 1) {
                 try {
