@@ -454,14 +454,77 @@ public class DefaultRunSupervisor {
             return handle.gate.offer(payload);
         }
         if ("tool_results".equals(payload.getAction())) {
-            // Not parked and nothing is pending: the batch was already applied
-            // (the client re-submits after a lost acknowledgement). Acknowledge it
-            // so the retry loop stops.
-            return true;
+            // Not parked, nothing pending. Two very different situations:
+            //
+            //  - a DUPLICATE of a batch that was already applied (the client
+            //    re-submits after a lost acknowledgement) — acknowledge it so the
+            //    retry loop stops;
+            //  - results that arrive in the window between the loop emitting
+            //    `tool.requested` and its pause becoming visible (it saves the
+            //    checkpoint and publishes the pause after announcing the calls).
+            //    Answering THAT with success dropped the batch on the floor: the
+            //    client believed it was delivered, the loop then parked, and the
+            //    run failed its tool timeout later with "等待编辑器工具结果超时".
+            if (checkpoint == null) {
+                checkpoint = checkpointStore.load(runId);
+            }
+            if (toolResultsAlreadyApplied(checkpoint, payload)) {
+                return true;
+            }
+            log.warn("Run {}: tool results arrived before the pause was visible; queueing them "
+                    + "for the loop's next wait (calls: {})", runId, callIdsOf(payload));
+            return handle.gate.offer(payload);
         }
         // Nobody is waiting for this payload. Reporting success here is what let
         // an approval / budget grant vanish silently; the caller retries instead.
         return false;
+    }
+
+    /**
+     * Whether every result in {@code payload} is already a tool message in the
+     * checkpoint's canonical log.
+     *
+     * <p>Idempotency check for a re-submitted batch (the client retries by
+     * callId). Deliberately checks the MESSAGES, not the pending set: a batch can
+     * be applied and its pending entries cleared before its acknowledgement
+     * reaches the client, and "already applied" must never be inferred from "not
+     * currently waiting".
+     */
+    static boolean toolResultsAlreadyApplied(Checkpoint checkpoint, ResumePayload payload) {
+        if (checkpoint == null || payload == null
+                || payload.getToolResults() == null || payload.getToolResults().isEmpty()) {
+            return false;
+        }
+        List<ChatMessage> messages = checkpoint.getMessages();
+        if (messages == null || messages.isEmpty()) {
+            return false;
+        }
+        java.util.Set<String> applied = new java.util.HashSet<>();
+        for (ChatMessage message : messages) {
+            if (message != null && "tool".equalsIgnoreCase(message.getRole())
+                    && message.getToolCallId() != null) {
+                applied.add(message.getToolCallId());
+            }
+        }
+        for (ResumePayload.ToolResultItem item : payload.getToolResults()) {
+            if (item == null || item.getCallId() == null || !applied.contains(item.getCallId())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Call ids of a resume payload, for diagnostics. */
+    private static List<String> callIdsOf(ResumePayload payload) {
+        List<String> ids = new ArrayList<>();
+        if (payload.getToolResults() != null) {
+            for (ResumePayload.ToolResultItem item : payload.getToolResults()) {
+                if (item != null && item.getCallId() != null) {
+                    ids.add(item.getCallId());
+                }
+            }
+        }
+        return ids;
     }
 
     /**

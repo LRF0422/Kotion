@@ -226,6 +226,77 @@ export function acquireAgentStreamSlot(
     })
 }
 
+/**
+ * Take a stream slot, but give up after `timeoutMs` and resolve {@code null}.
+ *
+ * <p>This exists for the one acquisition that must never queue indefinitely:
+ * posting a run's TOOL RESULTS. The resume POST used to wait for a slot with no
+ * bound; when the budget was saturated (several cached surfaces' parked run
+ * tails plus sub-run streams — four connections is easy to reach), the result
+ * never left the client, the backend stayed parked in WAITING_TOOLS, and the run
+ * failed 180s later with "等待编辑器工具结果超时". Delivery beats budget
+ * accounting: past the deadline the caller proceeds WITHOUT a slot (the browser
+ * still has a couple of connections beyond the client's own budget of 4) and
+ * logs the saturation.
+ *
+ * @returns the idempotent release, or {@code null} when no slot came free in time
+ */
+export function acquireAgentStreamSlotWithTimeout(
+    priority: AgentStreamPriority,
+    timeoutMs: number,
+    signal?: AbortSignal,
+): Promise<(() => void) | null> {
+    if (signal?.aborted) return Promise.reject(abortError())
+    if (canAdmit(priority)) {
+        occupy(priority)
+        return Promise.resolve(createRelease(priority))
+    }
+    return new Promise<(() => void) | null>((resolve, reject) => {
+        const queue = priority === 'root' ? rootWaiters : childWaiters
+        let finished = false
+        let timer: ReturnType<typeof setTimeout> | null = null
+        const detach = () => {
+            const index = queue.indexOf(waiter)
+            if (index >= 0) queue.splice(index, 1)
+            if (waiter.onAbort) signal?.removeEventListener('abort', waiter.onAbort)
+        }
+        const waiter: Waiter = {
+            priority,
+            settled: false,
+            grant: () => {
+                if (finished) return
+                finished = true
+                if (timer) clearTimeout(timer)
+                resolve(createRelease(priority))
+            },
+            fail: (error) => {
+                if (finished) return
+                finished = true
+                if (timer) clearTimeout(timer)
+                reject(error)
+            },
+            signal,
+        }
+        waiter.onAbort = () => {
+            if (finished) return
+            finished = true
+            if (timer) clearTimeout(timer)
+            waiter.settled = true
+            detach()
+            reject(abortError())
+        }
+        timer = setTimeout(() => {
+            if (finished) return
+            finished = true
+            waiter.settled = true
+            detach()
+            resolve(null)
+        }, Math.max(1, timeoutMs))
+        signal?.addEventListener('abort', waiter.onAbort, { once: true })
+        queue.push(waiter)
+    })
+}
+
 /** Restore defaults and drop waiters (tests only). */
 export function resetAgentStreamBudget(): void {
     config = { ...DEFAULT_CONFIG }

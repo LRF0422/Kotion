@@ -1,10 +1,12 @@
 import { strict as assert } from 'node:assert'
 import {
     acquireAgentStreamSlot,
+    acquireAgentStreamSlotWithTimeout,
     agentStreamBudgetSnapshot,
     configureAgentStreamBudget,
     resetAgentStreamBudget,
 } from './stream-budget'
+import { AgentClient } from './client'
 
 const tick = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 0))
 
@@ -136,12 +138,85 @@ async function checkReleaseIsIdempotentAndConfigClamps(): Promise<void> {
     assert.equal(agentStreamBudgetSnapshot().maxConcurrentStreams, 1, 'max is clamped to at least 1')
 }
 
+/**
+ * A bounded acquire is the fix for "tool result never delivered": the resume
+ * POST must not queue forever behind a saturated stream budget, and the
+ * abandoned waiter must not leak into the queue.
+ */
+async function checkTimedAcquireGivesUpWithoutLeaking(): Promise<void> {
+    resetAgentStreamBudget()
+    configureAgentStreamBudget({ maxConcurrentStreams: 1, reservedForRootStreams: 0 })
+    const held = await acquireAgentStreamSlot('root')
+
+    const timedOut = await acquireAgentStreamSlotWithTimeout('root', 30)
+    assert.equal(timedOut, null, 'a saturated budget must resolve null instead of blocking forever')
+    assert.equal(agentStreamBudgetSnapshot().queued, 0, 'the timed-out waiter must leave the queue')
+    assert.equal(agentStreamBudgetSnapshot().active, 1, 'and must not occupy a slot')
+
+    held()
+    const afterRelease = await acquireAgentStreamSlotWithTimeout('root', 30)
+    assert.ok(afterRelease, 'the budget must still be usable after a timed-out acquire')
+    afterRelease!()
+    assert.equal(agentStreamBudgetSnapshot().active, 0)
+}
+
+/**
+ * The wiring that matters: a tool-results resume is sent even while the budget
+ * is saturated. The old unbounded wait left the POST in the queue, the backend
+ * parked in WAITING_TOOLS, and the run failed 180s later with
+ * "等待编辑器工具结果超时".
+ */
+async function checkResumeStillPostsWhenBudgetIsSaturated(): Promise<void> {
+    resetAgentStreamBudget()
+    configureAgentStreamBudget({ maxConcurrentStreams: 1, reservedForRootStreams: 0 })
+    const held = await acquireAgentStreamSlot('root')
+
+    let calls = 0
+    const client = new AgentClient({
+        transport: {
+            apiBase: '/api/agent/v1',
+            fetch: async () => {
+                calls += 1
+                const body = new ReadableStream<Uint8Array>({
+                    start(controller) {
+                        controller.enqueue(new TextEncoder().encode(
+                            'data: {"seq":1,"type":"run.completed","finishReason":"stop"}\n\n'))
+                        controller.close()
+                    },
+                })
+                return { ok: true, status: 200, body } as unknown as Response
+            },
+        },
+    })
+
+    const startedAt = Date.now()
+    const events = await client.resume(
+        'run-1',
+        { action: 'tool_results', toolResults: [{ callId: 'call-1', ok: true }] } as any,
+        0,
+    )
+    const waitedMs = Date.now() - startedAt
+    assert.equal(calls, 1, 'the resume POST must go out even with no free stream slot')
+    assert.ok(waitedMs >= 4_000,
+        `the bounded wait must be honoured before going unbudgeted (waited ${waitedMs}ms)`)
+
+    const first = await events.next()
+    assert.equal(first.done, false)
+    assert.equal((first.value as any).type, 'run.completed', 'the response stream is still consumed')
+    await events.return(undefined)
+
+    held()
+    assert.equal(agentStreamBudgetSnapshot().active, 0)
+}
+
 async function main(): Promise<void> {
     await checkQueuesBeyondLimit()
     await checkRootReserve()
     await checkRootPriorityOverQueuedChild()
     await checkAbortRemovesWaiter()
     await checkReleaseIsIdempotentAndConfigClamps()
+    await checkTimedAcquireGivesUpWithoutLeaking()
+    await checkResumeStillPostsWhenBudgetIsSaturated()
     console.log('agent stream budget checks passed')
 }
 

@@ -10,7 +10,12 @@ import {
     getAgentTransport,
     type AgentTransport,
 } from './transport'
-import { acquireAgentStreamSlot, type AgentStreamOptions } from './stream-budget'
+import {
+    acquireAgentStreamSlot,
+    acquireAgentStreamSlotWithTimeout,
+    agentStreamBudgetSnapshot,
+    type AgentStreamOptions,
+} from './stream-budget'
 import {
     acceptAgentEvent,
     AgentControlError,
@@ -45,6 +50,17 @@ const RECONNECT_BASE_DELAY_MS = 500
 const RECONNECT_MAX_DELAY_MS = 8_000
 const RESUME_RESPONSE_TIMEOUT_MS = 30_000
 const REQUEST_TIMEOUT_MS = 15_000
+/**
+ * How long a resume POST may wait for a stream slot before it proceeds anyway.
+ *
+ * Tool results are the run's only route forward: while the client's stream
+ * budget is saturated (four cached surfaces' parked run tails, or sub-run
+ * streams), an unbounded wait here means the POST never leaves, the backend
+ * stays parked in WAITING_TOOLS, and the run dies 180s later with
+ * "等待编辑器工具结果超时". The slot is accounting, not correctness — after the
+ * deadline the POST is sent unbudgeted and the saturation is logged.
+ */
+const RESUME_SLOT_WAIT_MS = 5_000
 
 function isPermanentStreamError(error: unknown): boolean {
     const message = error instanceof Error ? error.message : String(error)
@@ -286,15 +302,21 @@ export class AgentClient {
         options?: AgentStreamOptions,
     ): Promise<AsyncGenerator<AgentEvent>> {
         const priority = options?.priority ?? 'root'
-        // Take the stream slot BEFORE issuing the POST. The resume response body
-        // IS the long-lived run stream, so its connection must be budgeted from
-        // the moment it is opened: the POST used to run unbudgeted and the slot
-        // was only taken when the body was first read, so several children
-        // resuming at once exceeded the client budget (and the browser's
-        // ~6-connection cap) — ordinary API calls starved, the resume itself
-        // timed out, and the child's tool results were at risk. Every failure
-        // path below releases the slot.
-        const release = await acquireAgentStreamSlot(priority, signal)
+        // Take the stream slot BEFORE issuing the POST: the resume response body
+        // IS the long-lived run stream, so its connection is budgeted from the
+        // moment it opens. But the wait is BOUNDED — a resume carrying tool
+        // results must be delivered even while the budget is saturated, or the
+        // run hangs until its tool timeout (see RESUME_SLOT_WAIT_MS). Past the
+        // deadline the POST goes out unbudgeted; the slot is handed to the body
+        // stream only when one was actually acquired.
+        const release = await acquireAgentStreamSlotWithTimeout(priority, RESUME_SLOT_WAIT_MS, signal)
+        if (!release) {
+            console.warn('[agent] resume proceeds without a stream slot', {
+                runId,
+                action: payload.action,
+                ...agentStreamBudgetSnapshot(),
+            })
+        }
         const controller = new AbortController()
         const forwardAbort = () => controller.abort()
         if (signal?.aborted) controller.abort()
@@ -311,7 +333,7 @@ export class AgentClient {
             })
         } catch (error) {
             signal?.removeEventListener('abort', forwardAbort)
-            release()
+            release?.()
             if (controller.signal.aborted && !signal?.aborted) {
                 throw new Error('Resume request timed out before response headers')
             }
@@ -321,25 +343,26 @@ export class AgentClient {
         }
         if (!response.ok) {
             signal?.removeEventListener('abort', forwardAbort)
-            release()
+            release?.()
             throw new Error('Resume failed (' + response.status + ')')
         }
         if (!response.body) {
             signal?.removeEventListener('abort', forwardAbort)
-            release()
+            release?.()
             throw new Error('Resume response body is null')
         }
         const events = this.streamFromBody(response.body, afterSeq)
         return (async function* () {
             // The slot taken for the POST is handed over to the body stream; it
             // is released exactly once, when the stream is closed (by iteration
-            // end, terminal event, abort, or an explicit return()).
+            // end, terminal event, abort, or an explicit return()). A resume that
+            // ran without a slot (saturated budget) simply has nothing to release.
             try {
                 yield* events
             } finally {
                 signal?.removeEventListener('abort', forwardAbort)
                 controller.abort()
-                release()
+                release?.()
             }
         })()
     }
