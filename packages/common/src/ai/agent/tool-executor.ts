@@ -196,6 +196,21 @@ export class EditorToolExecutor {
         })
 
         let outcome: ToolExecutionResult
+        // Diagnostics for the "agent hangs while editing" class: a tool that never
+        // settles leaves the run parked with no server event, which looks exactly
+        // like a transport stall. Name the tool that is actually stuck so the
+        // next reproduction is attributable instead of guessed at.
+        const startedAt = Date.now()
+        let slowDocumentId: string | null = null
+        const slowTimer = setTimeout(() => {
+            console.warn('[agent] tool still running after 8s', {
+                tool: toolName,
+                owner: owner ?? null,
+                callId,
+                documentId: slowDocumentId,
+                elapsedMs: Date.now() - startedAt,
+            })
+        }, 8000)
         try {
             // Read-only classification is decided before resolving tools: the host
             // needs it to know whether the owner is about to *write* (and must
@@ -238,6 +253,7 @@ export class EditorToolExecutor {
                         this.askForApproval(callId, request),
                 })
                 const documentId = mutating ? (this.resolveDocumentId?.(owner) ?? null) : null
+                slowDocumentId = documentId
                 const result = documentId
                     ? await withDocumentWrite(documentId, run, { label: name })
                     : await run()
@@ -248,6 +264,17 @@ export class EditorToolExecutor {
             outcome = { ok: false, error: error?.message ?? String(error) }
         }
 
+        clearTimeout(slowTimer)
+        const elapsedMs = Date.now() - startedAt
+        if (elapsedMs >= 2000) {
+            console.warn('[agent] slow tool', {
+                tool: toolName,
+                owner: owner ?? null,
+                callId,
+                elapsedMs,
+                ok: outcome.ok,
+            })
+        }
         outcome = ensureSerializableToolResult(outcome)
         this.cache.set(callId, outcome)
         this.onExecution?.({

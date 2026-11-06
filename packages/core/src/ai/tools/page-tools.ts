@@ -93,8 +93,18 @@ const resolveActivePage = (
 const readMetadata = async (pageId: string) => {
     // One model for both authorities: a normal page resolves through the
     // tenant-scoped service, an invited collaboration page through its
-    // invitation capability (and the page currently on screen through the
-    // published context). The agent's metadata read never branches itself.
+    // invitation capability. The visible page's context is already published,
+    // so use it as a synchronous fast path — an editPage call against the page
+    // the user has open must not depend on an extra metadata round-trip.
+    const current = getPageNavigationBridge()?.getCurrentPage()
+    if (current?.pageId != null && String(current.pageId) === String(pageId)) {
+        return {
+            id: current.pageId,
+            spaceId: current.spaceId,
+            parentId: current.parentId,
+            title: current.title ?? '',
+        } as Awaited<ReturnType<SpacePageService['pages']['getPageMetadata']>>
+    }
     const target = resolveAgentPageTarget(pageId)
     if (target) {
         const metadata = await target.loadMetadata()
