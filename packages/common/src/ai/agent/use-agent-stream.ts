@@ -13,11 +13,14 @@ import type { AgentClient } from './client'
 import type { AgentRunStore } from './persistence'
 import { TERMINAL_EVENT_TYPES, type ResumePayload } from './types'
 import { isPermanentTransportError } from './retry-policy'
+import { resumeTimeoutMeansApplied } from './resume-timeout'
 import type { Action, EditorAgentState } from './editor-agent-state'
 
 /** Outer reconnect attempts before a stream is declared stopped. */
 const MAX_OUTER_RECONNECTS = 5
 const RESUME_FIRST_EVENT_TIMEOUT_MS = 30_000
+/** Message used both for the rejected race and the benign-timeout classification. */
+const RESUME_FIRST_EVENT_TIMEOUT_MESSAGE = 'Agent resume timed out before the first event'
 
 export interface UseAgentStreamOptions {
     client: AgentClient
@@ -132,19 +135,36 @@ export function useAgentStream(options: UseAgentStreamOptions): UseAgentStreamAp
             try {
                 const events = await client.resume(runId, payload, cursor, controller.signal)
                 let firstTimer: ReturnType<typeof setTimeout> | undefined
-                const first = payload.action === 'tool_results'
-                    ? await Promise.race([
-                        events.next(),
-                        new Promise<never>((_, reject) => {
-                            firstTimer = setTimeout(
-                                () => reject(new Error('Agent resume timed out before the first event')),
-                                RESUME_FIRST_EVENT_TIMEOUT_MS
-                            )
-                        }),
-                    ]).finally(() => {
-                        if (firstTimer) clearTimeout(firstTimer)
-                    })
-                    : await events.next()
+                let first: IteratorResult<import('./types').AgentEvent>
+                try {
+                    first = payload.action === 'tool_results'
+                        ? await Promise.race([
+                            events.next(),
+                            new Promise<never>((_, reject) => {
+                                firstTimer = setTimeout(
+                                    () => reject(new Error(RESUME_FIRST_EVENT_TIMEOUT_MESSAGE)),
+                                    RESUME_FIRST_EVENT_TIMEOUT_MS
+                                )
+                            }),
+                        ]).finally(() => {
+                            if (firstTimer) clearTimeout(firstTimer)
+                        })
+                        : await events.next()
+                } catch (error) {
+                    if (controller.signal.aborted || generation !== generationRef.current) return
+                    if (!(error instanceof Error) || error.message !== RESUME_FIRST_EVENT_TIMEOUT_MESSAGE) throw error
+                    // A silent resume is not automatically a failure. The server
+                    // acknowledges an already-applied batch without emitting
+                    // anything (a duplicate POST from the pending-tools watchdog),
+                    // and the run is simply still generating. Probe the run and,
+                    // when the results are no longer pending, follow the event
+                    // stream instead of declaring the agent unavailable.
+                    const view = await client.getRun(runId).catch(() => null)
+                    if (!resumeTimeoutMeansApplied(payload, view)) throw error
+                    void events.return(undefined).catch(() => undefined)
+                    startStream(runId, cursor, generation)
+                    return
+                }
                 if (controller.signal.aborted || generation !== generationRef.current) {
                     // This generation lost the race for the run: close the resume
                     // stream we already opened, otherwise its budgeted stream slot
