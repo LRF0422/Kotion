@@ -1656,22 +1656,52 @@ public class AgentLoop implements Runnable {
      * which the pause was announced but invisible, so the client dropped the
      * batch and a resume could be swallowed as a no-op. The run then sat in
      * WAITING_TOOLS until its tool timeout while the UI showed the call running.
+     *
+     * <p>The wait deadline is measured from {@code requestedAt}, so it is
+     * re-stamped here, immediately before publication: time spent persisting the
+     * pause must not consume the window the client actually gets to answer.
      */
     private void pauseForPendingTools(List<String> pendingIds) {
         run.setPendingToolCalls(new ArrayList<>(checkpoint.getPendingToolCalls()));
         run.setStatus(RunStatus.WAITING_TOOLS.name());
         run.touch();
+        long publishedAt = System.currentTimeMillis();
+        for (PendingToolCall pendingCall : checkpoint.getPendingToolCalls()) {
+            pendingCall.setRequestedAt(publishedAt);
+        }
+        long persistStartedAt = System.currentTimeMillis();
         saveCheckpoint();
         persist();
         saveHot(true);
+        long persistMs = System.currentTimeMillis() - persistStartedAt;
+        if (persistMs >= 2000L) {
+            // A slow pause publication is exactly how a run enters its wait with
+            // the client already answering: name the write that ate the time.
+            log.warn("Run {}: persisting the tool pause took {}ms (calls: {})",
+                    run.getRunId(), persistMs, pendingIds);
+        }
+        long emitStartedAt = System.currentTimeMillis();
         emit(RunEvents.RUN_SUSPENDED, RunEvents.runSuspended("waiting_tools", pendingIds));
+        long emitMs = System.currentTimeMillis() - emitStartedAt;
+        if (emitMs >= 2000L) {
+            log.warn("Run {}: emitting the tool pause took {}ms (calls: {})",
+                    run.getRunId(), emitMs, pendingIds);
+        }
     }
 
     /**
      * Wait on the gate for frontend tool results (fresh dispatch or recovery).
      * Returns false on cancel or timeout.
+     *
+     * <p>The deadline is anchored to the ORIGINAL dispatch time (recovery-safe),
+     * so a loop that took a long time to publish the pause can arrive here with
+     * the deadline already spent. Results the client submitted in the meantime
+     * are sitting in the gate: they must be applied before the run is declared
+     * timed out. The old code failed on the spot, discarding those results — the
+     * client's POSTs were accepted (so it kept re-submitting) while the run died
+     * with "等待编辑器工具结果超时".
      */
-    private boolean dispatchWaitForPending() throws InterruptedException {
+    boolean dispatchWaitForPending() throws InterruptedException {
         // Recovery-safe: honor the earliest original dispatch time, so a crash
         // and rebuild never restarts the wait clock.
         long earliest = System.currentTimeMillis();
@@ -1681,13 +1711,24 @@ public class AgentLoop implements Runnable {
         long deadline = earliest + properties.getRun().getWaitingToolsTimeoutSeconds() * 1000L;
         while (!isCancelled() && !checkpoint.getPendingToolCalls().isEmpty()) {
             long remaining = deadline - System.currentTimeMillis();
-            if (remaining <= 0) {
-                fail("tool_timeout", "等待编辑器工具结果超时");
-                return false;
-            }
-            ResumePayload payload = gate.await(Math.min(remaining, 1000L));
-            if (payload == null) {
-                continue;
+            ResumePayload payload;
+            if (remaining > 0) {
+                payload = gate.await(Math.min(remaining, 1000L));
+                if (payload == null) {
+                    continue;
+                }
+            } else {
+                // Deadline already spent (slow pause publication). Take whatever
+                // is queued, then one short grace poll for a POST still in
+                // flight — a late answer beats a false timeout.
+                payload = gate.await(0L);
+                if (payload == null) {
+                    payload = gate.await(1000L);
+                }
+                if (payload == null) {
+                    fail("tool_timeout", "等待编辑器工具结果超时");
+                    return false;
+                }
             }
             if ("cancel".equals(payload.getAction()) || isCancelled()) {
                 return false;
