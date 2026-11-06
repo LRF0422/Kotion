@@ -184,14 +184,18 @@ public class DefaultRunSupervisor {
 
         // Root runs rebuild their conversation from the engine-owned session log;
         // the caller only supplies the new turn (prepareHistory appends it).
-        // Per-turn context (memory, profile, retrieved skills, deferred tools,
-        // rolling summary, bound-page note) is persisted as its own append-only
-        // message in front of the user turn — a transient block would break the
-        // provider prefix at the insertion point on every new turn.
-        ChatMessage stableContext = buildStableContextMessage(cmd);
+        // Per-turn context (memory, profile, rolling summary, bound-page note) is
+        // persisted as its own append-only message in front of the user turn — a
+        // transient block would break the provider prefix at the insertion point on
+        // every new turn. The stable half is TWO blocks: the skill catalogue changes
+        // only when it changes, while the deferred-tool directory changes every time
+        // a skill is loaded, and re-appending the whole catalogue for that was the
+        // expensive part.
+        ChatMessage stableSkills = buildStableSkillsMessage(cmd);
+        ChatMessage stableTools = buildStableToolsMessage(cmd);
         ChatMessage perTurnContext = buildPerTurnContextMessage(cmd);
         List<ChatMessage> history = transcriptProjector.prepareHistory(
-                run, cmd.getMessages(), stableContext, perTurnContext);
+                run, cmd.getMessages(), stableSkills, stableTools, perTurnContext);
         // Only skip the loop-side injection when the context is actually in the
         // history the model will see (an ineligible/aborted projection must
         // still get the transient block, or the run loses its memory).
@@ -203,10 +207,16 @@ public class DefaultRunSupervisor {
         return RunView.of(run);
     }
 
-    /** Stable injected-context block (skill fragments + deferred tools). */
-    private ChatMessage buildStableContextMessage(CreateRunCommand cmd) {
+    /** Stable injected-context block: eager skill fragments + the skill index. */
+    private ChatMessage buildStableSkillsMessage(CreateRunCommand cmd) {
         return contextManager.buildStableContextMessage(
-                contextManager.buildStableContext(cmd.getSkillFragments(), cmd.getSkillTools()));
+                contextManager.buildSkillsContext(cmd.getSkillFragments()));
+    }
+
+    /** Stable injected-context block: the deferred-tool directory. */
+    private ChatMessage buildStableToolsMessage(CreateRunCommand cmd) {
+        return contextManager.buildDeferredToolsContextMessage(
+                contextManager.buildDeferredToolsContext(cmd.getSkillTools()));
     }
 
     /** Per-turn injected-context block (page note / memory / profile / summary). */

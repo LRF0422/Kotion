@@ -237,6 +237,66 @@ public class ContextManager {
         }
     }
 
+    /** Longest purpose rendered in an index entry; the full text arrives on load. */
+    private static final int MAX_INDEX_DESCRIPTION_CHARS = 240;
+
+    /**
+     * Render one 【技能索引】 entry: the name `load_skill` expects, the one-line
+     * purpose, and the tool names the skill owns.
+     *
+     * <p>An INDEXED skill is one whose prompt fragment the client deferred (see
+     * `catalog-to-run-input`): the run carries this line instead of the whole
+     * instruction, and the `load_skill` tool result carries the instruction plus
+     * the tools' schemas. Naming the owned tools here keeps the prose → function
+     * join available BEFORE the skill is loaded.
+     *
+     * @return the entry, or {@code null} when the skill has no name to show
+     */
+    public static String renderSkillIndexEntry(String name, String description,
+                                               List<String> requiredTools,
+                                               List<String> optionalTools) {
+        String label = name == null ? "" : name.trim();
+        if (label.isEmpty()) {
+            return null;
+        }
+        String purpose = description == null ? "" : description.trim();
+        if (purpose.length() > MAX_INDEX_DESCRIPTION_CHARS) {
+            purpose = purpose.substring(0, MAX_INDEX_DESCRIPTION_CHARS) + "…";
+        }
+        List<String> owned = new ArrayList<>();
+        appendToolNames(owned, requiredTools);
+        appendToolNames(owned, optionalTools);
+        StringBuilder entry = new StringBuilder("【技能名】").append(label);
+        if (!purpose.isEmpty()) {
+            entry.append("：").append(purpose);
+        }
+        if (!owned.isEmpty()) {
+            entry.append("（工具：").append(String.join("、", owned)).append("）");
+        }
+        return entry.toString();
+    }
+
+    /**
+     * Join index entries into the block the stable context carries, or {@code null}
+     * when there is nothing to index.
+     */
+    public static String renderSkillIndex(List<String> entries) {
+        if (entries == null || entries.isEmpty()) {
+            return null;
+        }
+        StringBuilder block = new StringBuilder();
+        for (String entry : entries) {
+            if (entry == null || entry.trim().isEmpty()) {
+                continue;
+            }
+            if (block.length() > 0) {
+                block.append('\n');
+            }
+            block.append("- ").append(entry.trim());
+        }
+        return block.length() == 0 ? null : SKILL_INDEX_HEADER + "\n\n" + block;
+    }
+
     /**
      * Header for the skill fragments of this run.
      *
@@ -248,6 +308,20 @@ public class ContextManager {
     private static final String SKILLS_HEADER =
             "【场景规范】以下技能（skill）说明是本次运行所属场景的工作规范，按它执行。\n"
             + "其中的工具名就是工具列表里的函数名，按名字直接调用。\n\n";
+
+    /**
+     * Header of the compact skill index.
+     *
+     * <p>Every skill whose full instructions the client deferred gets one entry
+     * (see {@link #renderSkillIndexEntry}); this header says what the entries mean
+     * and that the instructions arrive with the discovery tool's result. The
+     * backend stays domain-blind: it formats what the client marked as deferred,
+     * it does not decide which skills are.
+     */
+    private static final String SKILL_INDEX_HEADER =
+            "【技能索引】以下技能只列出名称、用途和它拥有的工具名，完整说明尚未加载。"
+            + "需要它们时先调用 `load_skill`（参数写该技能名），返回内容会包含该技能的完整说明"
+            + "和它全部工具的参数结构。";
 
     /**
      * Header of the deferred (skill-owned) tool directory.
@@ -276,11 +350,22 @@ public class ContextManager {
 
     /**
      * Marker for the STABLE half of the injected context (skill fragments + the
-     * deferred-tool directory). It is persisted once and only re-appended when
-     * the catalog actually changes, so a large, unchanged directory does not
-     * accumulate one copy per turn.
+     * compact skill index). It is persisted once and only re-appended when the
+     * skill catalogue actually changes.
      */
     public static final String STABLE_CONTEXT_NAME = "__context_stable__";
+
+    /**
+     * Marker for the deferred-tool directory.
+     *
+     * <p>Split from {@link #STABLE_CONTEXT_NAME} because the two change on
+     * DIFFERENT events: the skill catalogue changes when a plugin is installed or
+     * the run's scope changes, while the directory changes every time the model
+     * loads a skill (`loadSkill` → those tools become callable next turn). Keeping
+     * them in one block re-appended the whole (catalogue-sized) block on every
+     * load; split, a load costs one small directory block.
+     */
+    public static final String STABLE_TOOLS_CONTEXT_NAME = "__context_tools__";
 
     /**
      * Marker for engine-authored user turns that only steer the model — the
@@ -508,9 +593,11 @@ public class ContextManager {
                 && isInjectedContextName(message.getName());
     }
 
-    /** True for either injected-context marker (stable or per-turn). */
+    /** True for any injected-context marker (stable skills, tool directory, per-turn). */
     public static boolean isInjectedContextName(String name) {
-        return INJECTED_CONTEXT_NAME.equals(name) || STABLE_CONTEXT_NAME.equals(name);
+        return INJECTED_CONTEXT_NAME.equals(name)
+                || STABLE_CONTEXT_NAME.equals(name)
+                || STABLE_TOOLS_CONTEXT_NAME.equals(name);
     }
 
     /** True when the turn was written by the engine as a steering nudge. */
@@ -550,12 +637,20 @@ public class ContextManager {
     }
 
     /**
-     * Stable context block (skill fragments + deferred-tool directory). The
-     * projector persists it once and only re-appends it when the content
-     * changes, so the directory is not repeated in every request.
+     * Stable skill block (eager fragments + the compact skill index). The
+     * projector persists it once and only re-appends it when the catalogue
+     * changes, so the instructions are not repeated in every request.
      */
     public ChatMessage buildStableContextMessage(String stableContext) {
         return buildContextMessage(stableContext, STABLE_CONTEXT_NAME);
+    }
+
+    /**
+     * Deferred-tool directory block. Split from the skill block on purpose: it is
+     * the half that changes every time the model loads a skill.
+     */
+    public ChatMessage buildDeferredToolsContextMessage(String toolsContext) {
+        return buildContextMessage(toolsContext, STABLE_TOOLS_CONTEXT_NAME);
     }
 
     private ChatMessage buildContextMessage(String body, String name) {
@@ -571,12 +666,30 @@ public class ContextManager {
     }
 
     /**
-     * The cache-stable half of the injected context: skill prompt fragments and
-     * the deferred-tool directory. Independent of the current turn, so it only
-     * needs to be persisted once instead of repeated in every request.
+     * The cache-stable half of the injected context: the eager skill fragments and
+     * the compact skill index. Independent of the current turn, so it only needs to
+     * be persisted once instead of repeated in every request.
+     *
+     * <p>The deferred-tool directory used to share this block. It is split out (see
+     * {@link #buildDeferredToolsContext}) because it is the part that changes when
+     * the model loads a skill: keeping them together re-appended a catalogue-sized
+     * block per load.
      */
     public String buildStableContext(List<String> skillFragments, List<ToolSpec> deferredTools) {
-        StringBuilder content = new StringBuilder();
+        String skills = buildSkillsContext(skillFragments);
+        String tools = buildDeferredToolsContext(deferredTools);
+        if (skills == null) {
+            return tools;
+        }
+        return tools == null ? skills : skills + tools;
+    }
+
+    /**
+     * The skill half of the stable context: eager fragments plus the index block
+     * (the client sends the index as one more fragment). Only re-appended when the
+     * catalogue itself changes.
+     */
+    public String buildSkillsContext(List<String> skillFragments) {
         StringBuilder skills = new StringBuilder();
         if (skillFragments != null) {
             for (String fragment : skillFragments) {
@@ -589,28 +702,36 @@ public class ContextManager {
                 skills.append(fragment.trim());
             }
         }
-        if (skills.length() > 0) {
-            // A skill fragment is a work specification for the current scenario —
-            // the client that owns the domain writes it, this loop only says so.
-            // Without this framing the fragments would sit in a block whose footer
-            // calls everything background context, which is where mandatory rules
-            // go to be ignored.
-            content.append(SKILLS_HEADER).append(skills);
+        if (skills.length() == 0) {
+            return null;
         }
-        if (deferredTools != null && !deferredTools.isEmpty()) {
-            StringBuilder directory = new StringBuilder();
-            appendDeferredTools(directory, deferredTools);
-            if (directory.length() > 0) {
-                content.append(directory);
-            }
+        // A skill fragment is a work specification for the current scenario —
+        // the client that owns the domain writes it, this loop only says so.
+        // Without this framing the fragments would sit in a block whose footer
+        // calls everything background context, which is where mandatory rules
+        // go to be ignored.
+        String content = SKILLS_HEADER + skills;
+        log.info("Skill context: {} chars ({} fragments)", content.length(),
+                skillFragments == null ? 0 : skillFragments.size());
+        return content;
+    }
+
+    /**
+     * The deferred-tool directory half of the stable context. Re-appended whenever
+     * a skill is loaded, which is why it is a block of its own.
+     */
+    public String buildDeferredToolsContext(List<ToolSpec> deferredTools) {
+        if (deferredTools == null || deferredTools.isEmpty()) {
+            return null;
         }
-        if (content.length() > 0) {
-            log.info("Stable injected context: {} chars ({} skill fragments, {} deferred tools)",
-                    content.length(),
-                    skillFragments == null ? 0 : skillFragments.size(),
-                    deferredTools == null ? 0 : deferredTools.size());
+        StringBuilder directory = new StringBuilder();
+        appendDeferredTools(directory, deferredTools);
+        if (directory.length() == 0) {
+            return null;
         }
-        return content.length() == 0 ? null : content.toString();
+        log.info("Deferred tool directory: {} chars ({} tools)", directory.length(),
+                deferredTools.size());
+        return directory.toString();
     }
 
     /**

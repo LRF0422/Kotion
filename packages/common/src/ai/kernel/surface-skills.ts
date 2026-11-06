@@ -41,7 +41,7 @@ export const workspaceHomeSkill: AgentSkillInput = {
         '1. 先确定目标页面：新建用 `createPage`；**编辑已有页面用 `editPage(pageId)`**',
         '   （pageId 先用 `searchPages` / `getSpacePageTree` 查到），两者都不离开用户当前界面；',
         '2. 页面确定后，这个会话就获得了完整的文档编辑能力：正文读写/格式/表格等内置工具**立刻可用**，',
-        '   插件能力（图表、多维表格、图示等）再按需用 `load_skill` 取参数格式；',
+        '   插件能力（图表、多维表格、图示等）再按需用 `load_skill` 取它的说明和参数格式；',
         '   已经加载过的技能在本会话里保持可调用，不用再加载；',
         '3. 同一个会话里继续往下写即可，不需要让用户先手动打开页面。',
         '',

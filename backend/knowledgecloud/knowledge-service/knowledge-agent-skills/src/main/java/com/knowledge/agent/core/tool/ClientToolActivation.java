@@ -29,14 +29,30 @@ public final class ClientToolActivation {
     /** Result field carrying the specs: a list of OpenAI-shaped tool objects. */
     public static final String FIELD = "activateTools";
 
+    /**
+     * Result field carrying a skill's prompt fragment.
+     *
+     * <p>Skills whose instructions the client deferred (plugin/marketplace skills:
+     * the run carries only their one-line index entry) deliver the prose in the same
+     * discovery result as their tool schemas, under this field. It is a DISCOVERY
+     * payload for the same reason the specs are: the fragment is the model's only
+     * copy of the instructions, so the context layers must not prune it by character
+     * count, and the result needs the larger discovery budget.
+     */
+    public static final String SKILL_FRAGMENT_FIELD = "skillFragment";
+
     /** The field as it appears inside a serialized tool message. */
     private static final String FIELD_TOKEN = "\"" + FIELD + "\"";
+
+    /** The fragment field as it appears inside a serialized tool message. */
+    private static final String FRAGMENT_TOKEN = "\"" + SKILL_FRAGMENT_FIELD + "\"";
 
     private ClientToolActivation() {
     }
 
     /**
-     * Whether a SERIALIZED tool message carries the handover field.
+     * Whether a SERIALIZED tool message carries a discovery payload (tool specs
+     * and/or a skill's instructions).
      *
      * <p>Used by the context layers, which only see the rendered text: a
      * discovery payload must never be pruned by character count (a head/tail cut
@@ -46,7 +62,24 @@ public final class ClientToolActivation {
      * the ordinary budget, which is a handful per conversation.
      */
     public static boolean carriesSpecs(String content) {
-        return content != null && content.contains(FIELD_TOKEN);
+        return content != null
+                && (content.contains(FIELD_TOKEN) || content.contains(FRAGMENT_TOKEN));
+    }
+
+    /**
+     * Whether a client result IS a discovery payload (specs or a skill fragment).
+     *
+     * <p>Checked on the raw object, so the decision is independent of whether the
+     * result had any tools to hand over: a prompt-only skill delivers only a
+     * fragment and still needs the discovery budget.
+     */
+    public static boolean isDiscoveryPayload(Object result) {
+        if (!(result instanceof Map)) {
+            return false;
+        }
+        Map<?, ?> map = (Map<?, ?>) result;
+        return map.get(FIELD) instanceof List
+                || map.get(SKILL_FRAGMENT_FIELD) instanceof String;
     }
 
     /**

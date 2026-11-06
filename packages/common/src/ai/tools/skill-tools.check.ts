@@ -365,7 +365,8 @@ function checkRememberedSkillsAreCallableNextRun(): void {
         'the loaded skill\'s tools become callable, in catalogue order')
     const spec = loaded.deferredTools.find(t => t.name === 'addBitableRecord') as any
     assert.equal(spec.inputSchema.type, 'object', 'and travel WITH their schema, so the backend can route them')
-    assert.equal(loaded.skills.length, 1, 'the skill fragment still ships (it is the work instruction)')
+    assert.equal(loaded.skills.length, 1,
+        'the skill still travels as an index entry even after it was loaded')
 
     // Another conversation's memory never leaks in.
     assert.deepEqual(
@@ -412,6 +413,83 @@ function checkRememberedSkillsAreCallableNextRun(): void {
     clearLoadedSkillCache()
 }
 
+/**
+ * A prompt-only skill (an installed SKILL.md) has no tools to deliver: its value
+ * IS the instructions. Now that fragments are indexed on demand it becomes
+ * loadable, and the answer must not pretend there are tools to activate.
+ */
+async function checkPromptOnlySkillServesItsInstructions(): Promise<void> {
+    const toolProvider = new ToolProvider({ editor: { id: 'stub' } as any })
+    const skillProvider = new SkillProvider({})
+    skillProvider.registerSkills([{
+        name: 'meeting-notes',
+        description: 'turn a transcript into minutes',
+        requiredTools: [],
+        systemPromptFragment: '把会议记录整理成三条结论。',
+    }] as any)
+    const probe = createSkillToolSource(skillProvider, toolProvider)
+    registerSkillToolSource(probe)
+    assert.deepEqual(probe.skillNames(), ['meeting-notes'],
+        'a prompt-only skill is loadable now that its fragment is not inlined')
+
+    const result = await loadSkill.execute({ skill: 'meeting-notes' })
+    assert.equal(result.success, true)
+    assert.equal(result.skillFragment,
+        '【技能名】meeting-notes\n\n把会议记录整理成三条结论。')
+    assert.ok(!('activateTools' in result),
+        'nothing to activate: an empty routing payload would be noise')
+    assert.ok(result.note.includes('没有自带工具'), 'and the answer says so plainly')
+    registerSkillToolSource(source)
+}
+
+/**
+ * Folding lets a loose spelling reach a skill (`doc-review` ← `Doc Review`), but as
+ * the catalogue grows two names can fold together. Silently picking one would be a
+ * guess; the answer must offer the candidates.
+ */
+async function checkAmbiguousNameOffersCandidates(): Promise<void> {
+    const executable = () => ({
+        description: 'x',
+        inputSchema: { type: 'object', properties: {} },
+        execute: async () => ({ ok: true }),
+    })
+    const toolProvider = new ToolProvider({ editor: { id: 'stub' } as any })
+    toolProvider.registerPluginTools({
+        insertChart: executable(),
+        addBitableRecord: executable(),
+    }, 'Probe')
+    const skillProvider = new SkillProvider({})
+    skillProvider.registerSkills([
+        { name: 'doc-review', description: 'a', requiredTools: ['insertChart'], systemPromptFragment: 'a' },
+        { name: 'doc_review', description: 'b', requiredTools: ['addBitableRecord'], systemPromptFragment: 'b' },
+        // A distinct skill, so the ambiguity is the ONLY reason the load fails.
+        { name: 'chart-ops', description: 'c', requiredTools: ['insertChart'], systemPromptFragment: 'c' },
+    ] as any)
+    registerSkillToolSource(createSkillToolSource(skillProvider, toolProvider))
+
+    const result = await loadSkill.execute({ skill: 'Doc Review' })
+    assert.ok(!result.success, 'two candidates must not silently resolve to one')
+    assert.ok(String(result.error).includes('多个技能'),
+        `the error must say the name is ambiguous: ${JSON.stringify(result)}`)
+    assert.deepEqual(result.didYouMean, ['doc-review', 'doc_review'],
+        'and list the real names so the model can retry instead of guessing')
+    registerSkillToolSource(source)
+}
+
+/** The error path must not dump an unbounded catalogue into the prompt. */
+async function checkAvailableListIsCapped(): Promise<void> {
+    const many = Array.from({ length: 60 }, (_, i) => `skill-${String(i).padStart(2, '0')}`)
+    registerSkillToolSource({
+        skillNames: () => many,
+        resolve: () => null,
+        diagnose: () => ({ unavailable: [] }),
+    })
+    const miss = await loadSkill.execute({ skill: 'nope' })
+    assert.equal(miss.available.length, 24, 'the hint list is capped')
+    assert.equal(miss.availableTotal, 60, 'the real size is still reported')
+    registerSkillToolSource(source)
+}
+
 async function main(): Promise<void> {
     await checkReturnsSchemaBundle()
     await checkUnknownSkillIsActionable()
@@ -421,6 +499,9 @@ async function main(): Promise<void> {
     await checkUnrunnableSkillSaysSo()
     await checkUnmountDoesNotStealTheSource()
     await checkLoadsAreRememberedForTheConversation()
+    await checkPromptOnlySkillServesItsInstructions()
+    await checkAmbiguousNameOffersCandidates()
+    await checkAvailableListIsCapped()
     checkRememberedSkillsAreCallableNextRun()
     clearLoadedSkillCache()
     console.log('skill tool checks passed')

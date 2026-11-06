@@ -137,6 +137,11 @@ public class EditorAgentController {
             }
         }
         if (request.getSkills() != null) {
+            // A skill whose fragment the client deferred (a plugin/installed skill:
+            // its prose would otherwise inflate every request) gets ONE index entry
+            // instead — name + purpose + the tools it owns. The instructions and the
+            // tool schemas arrive with the client's `load_skill` tool result.
+            List<String> skillIndex = new ArrayList<>();
             for (CreateRunRequest.SkillInput skill : request.getSkills()) {
                 if (skill == null) {
                     continue;
@@ -152,6 +157,13 @@ public class EditorAgentController {
                         skill.getOptionalTools());
                 if (fragment != null) {
                     cmd.getSkillFragments().add(fragment);
+                } else {
+                    String entry = ContextManager.renderSkillIndexEntry(
+                            skill.getName(), skill.getDescription(),
+                            skill.getRequiredTools(), skill.getOptionalTools());
+                    if (entry != null) {
+                        skillIndex.add(entry);
+                    }
                 }
                 if (skill.getTools() == null) {
                     continue;
@@ -161,6 +173,10 @@ public class EditorAgentController {
                         cmd.getSkillTools().add(spec);
                     }
                 }
+            }
+            String indexBlock = ContextManager.renderSkillIndex(skillIndex);
+            if (indexBlock != null) {
+                cmd.getSkillFragments().add(indexBlock);
             }
         }
         try {

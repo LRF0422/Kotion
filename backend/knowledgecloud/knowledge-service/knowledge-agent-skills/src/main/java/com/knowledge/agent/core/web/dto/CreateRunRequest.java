@@ -78,6 +78,19 @@ public class CreateRunRequest {
     @Data
     public static class SkillInput {
         private String name;
+
+        /**
+         * One-line purpose, sent for EVERY skill.
+         *
+         * <p>A skill without a {@link #systemPromptFragment} is <em>indexed</em>:
+         * the run carries only its name, this purpose and its tool names (see
+         * {@code ContextManager#renderSkillIndex}), and the full instructions arrive
+         * with the client's discovery tool result. Rendering the index here keeps the
+         * backend domain-blind: it formats what the client marked as deferred, it
+         * does not decide which skills are.
+         */
+        private String description;
+
         private String systemPromptFragment;
 
         /**

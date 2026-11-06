@@ -95,6 +95,49 @@ class AgentLoopDiscoveryPayloadTest {
         assertFalse(content.contains("[truncated]"));
     }
 
+    /**
+     * A prompt-only skill (no owned tools) hands over instructions, not specs. The
+     * fragment is the ONLY copy of those instructions, so it takes the discovery
+     * budget instead of the ordinary per-result cap.
+     */
+    @Test
+    void aPromptOnlySkillFragmentReachesTheModelWhole() throws Exception {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("success", true);
+        result.put("skill", "meeting-notes");
+        // 27k chars: well past the ordinary result cap, inside the discovery budget.
+        result.put(ClientToolActivation.SKILL_FRAGMENT_FIELD, "会议记录整理步骤。".repeat(3000));
+        String content = contentOf(result);
+
+        assertFalse(content.contains("[truncated]"),
+                "a prompt-only skill's instructions must reach the model whole");
+        JsonNode payload = objectMapper.readTree(content);
+        assertTrue(payload.path(ClientToolActivation.SKILL_FRAGMENT_FIELD).asText()
+                .startsWith("会议记录整理步骤。"));
+    }
+
+    /**
+     * Even a genuinely oversized fragment degrades to valid JSON (with what fits and
+     * a note), never to a torn-off mid-JSON cut.
+     */
+    @Test
+    void anOversizedPromptOnlyFragmentDegradesToValidJson() throws Exception {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("success", true);
+        result.put("skill", "meeting-notes");
+        result.put(ClientToolActivation.SKILL_FRAGMENT_FIELD,
+                new String(new char[60000]).replace('\0', 'x'));
+        String content = contentOf(result);
+
+        JsonNode payload = objectMapper.readTree(content);
+        assertTrue(payload.path("fragmentOmitted").asBoolean(),
+                "the model must be told the fragment was cut");
+        assertTrue(payload.path(ClientToolActivation.SKILL_FRAGMENT_FIELD).asText()
+                .contains("[truncated]"), "the head of the instructions is still delivered");
+        assertTrue(payload.path("note").asText().contains("load_skill"),
+                "and it says how to get the rest");
+    }
+
     /** A skill bundle shaped like the real `load_skill` result. */
     private Object bundle(int toolCount, int schemaChars) {
         return bundle(toolCount, schemaChars, "schema padding ");

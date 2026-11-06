@@ -43,6 +43,14 @@ export interface AgentToolSpec {
 
 export interface AgentSkillInput {
     name: string
+    /**
+     * One-line purpose. Travels for EVERY skill, including the ones whose
+     * fragment is deferred: the backend renders it as a 【技能索引】 entry, which is
+     * how the model learns the skill exists and when to call `load_skill` for it.
+     * The fragment itself only ships for the framing (built-in) skills — see
+     * `catalog-to-run-input` for the policy.
+     */
+    description?: string
     systemPromptFragment?: string
     /**
      * Tools the skill declares as required. Sent so the backend can name them

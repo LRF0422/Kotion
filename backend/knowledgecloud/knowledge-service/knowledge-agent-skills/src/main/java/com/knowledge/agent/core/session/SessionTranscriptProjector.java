@@ -134,16 +134,32 @@ public class SessionTranscriptProjector {
     /**
      * As above, with the STABLE and PER-TURN context blocks kept separate.
      *
-     * <p>The stable block (skill fragments + the deferred-tool directory) is
-     * large and independent of the current turn, so it is appended only when its
-     * content actually changes — repeating it every turn would grow the model
-     * log without bound. The per-turn block (memory / profile / summary / page
-     * note) is appended each turn. Both are persisted so the next request stays
-     * a byte-prefix extension of the previous one (provider prefix cache);
+     * <p>The stable block (eager skill fragments + the skill index) is large and
+     * independent of the current turn, so it is appended only when its content
+     * actually changes — repeating it every turn would grow the model log without
+     * bound. The per-turn block (memory / profile / summary / page note) is
+     * appended each turn. Both are persisted so the next request stays a
+     * byte-prefix extension of the previous one (provider prefix cache);
      * {@link #toUi} skips them so they never render as user bubbles.
+     *
+     * <p>The deferred-tool directory rides a third, separately-keyed block: it is
+     * the one stable-ish block that changes whenever the model loads a skill, and
+     * folding it into the skill block re-appended the whole catalogue per load.
      */
     public List<ChatMessage> prepareHistory(AgentRun run, List<ChatMessage> input,
                                             ChatMessage stableContext, ChatMessage perTurnContext) {
+        return prepareHistory(run, input, stableContext, null, perTurnContext);
+    }
+
+    /**
+     * Full form: the stable skill block, the stable deferred-tool directory block,
+     * and the per-turn block. Each is de-duplicated against the last block carrying
+     * its own marker, so a load (which changes only the directory) does not
+     * re-append the catalogue.
+     */
+    public List<ChatMessage> prepareHistory(AgentRun run, List<ChatMessage> input,
+                                            ChatMessage stableContext, ChatMessage toolsContext,
+                                            ChatMessage perTurnContext) {
         if (!eligible(run)) {
             return input != null ? input : new ArrayList<ChatMessage>();
         }
@@ -165,12 +181,14 @@ public class SessionTranscriptProjector {
                     repairToolPairing(state.messages, state::insertAt);
                     if (state.messages.isEmpty()) {
                         appendContext(state, stableContext, ContextManager.STABLE_CONTEXT_NAME);
+                        appendContext(state, toolsContext, ContextManager.STABLE_TOOLS_CONTEXT_NAME);
                         appendContext(state, perTurnContext, ContextManager.INJECTED_CONTEXT_NAME);
                         appendInput(state, input);
                     } else {
                         ChatMessage newUser = lastUser(input);
                         if (newUser != null && !isDuplicateLastUser(state.messages, newUser)) {
                             appendContext(state, stableContext, ContextManager.STABLE_CONTEXT_NAME);
+                            appendContext(state, toolsContext, ContextManager.STABLE_TOOLS_CONTEXT_NAME);
                             appendContext(state, perTurnContext, ContextManager.INJECTED_CONTEXT_NAME);
                             state.add(forLog(newUser));
                         }

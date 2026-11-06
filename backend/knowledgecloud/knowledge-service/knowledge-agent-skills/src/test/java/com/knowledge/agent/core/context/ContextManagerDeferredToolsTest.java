@@ -131,4 +131,31 @@ class ContextManagerDeferredToolsTest {
                 "deferred tools belong to the volatile tail, never the system prefix");
         assertFalse(system.getContent().contains("insertChart"));
     }
+
+    /**
+     * The skill block and the tool directory are SEPARATE stable blocks. Loading a
+     * skill changes only the directory; if both shared a block, every load would
+     * re-append the whole skill catalogue to the model log.
+     */
+    @Test
+    void theSkillBlockAndTheToolDirectoryAreSeparateBlocks() {
+        String skills = contextManager.buildSkillsContext(
+                new ArrayList<>(Arrays.asList("【场景规范】fragment")));
+        String tools = contextManager.buildDeferredToolsContext(
+                new ArrayList<>(Arrays.asList(insertChart())));
+
+        assertTrue(skills.contains("【场景规范】"));
+        assertFalse(skills.contains("【按需工具】"),
+                "a skill load must not re-append the skill catalogue");
+        assertTrue(tools.contains("【按需工具】"));
+        assertTrue(tools.contains("insertChart("));
+        assertFalse(tools.contains("【场景规范】"));
+
+        // The combined form (delegated children / the volatile path) keeps both.
+        String combined = contextManager.buildStableContext(
+                new ArrayList<>(Arrays.asList("【场景规范】fragment")),
+                new ArrayList<>(Arrays.asList(insertChart())));
+        assertTrue(combined.contains("【场景规范】"));
+        assertTrue(combined.contains("【按需工具】"));
+    }
 }

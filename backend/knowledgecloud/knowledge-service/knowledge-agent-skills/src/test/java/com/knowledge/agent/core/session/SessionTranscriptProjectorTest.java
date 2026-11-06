@@ -292,6 +292,61 @@ class SessionTranscriptProjectorTest {
         assertEquals("第二轮", turn2.get(4).getContent());
     }
 
+    /**
+     * Loading a skill changes the deferred-tool directory, not the skill catalogue.
+     * The projector must append the (small) directory block and NOT repeat the
+     * catalogue-sized skill block: re-appending the whole thing on every load is what
+     * grew the model log by a full copy of the skill catalogue each time.
+     */
+    @Test
+    void aChangedToolDirectoryDoesNotRepeatTheStableSkillBlock() throws Exception {
+        ContextManager contextManager = new ContextManager();
+        when(store.get(1L, 2L, "conv-1")).thenReturn(null);
+        List<ChatMessage> turn1 = projector.prepareHistory(run("run-1"),
+                Collections.singletonList(user("第一轮")),
+                contextManager.buildStableContextMessage("【场景规范】技能说明"),
+                contextManager.buildDeferredToolsContextMessage("【按需工具】第一版"),
+                contextManager.buildInjectedContextMessage("记忆 A"));
+        // [skills, tools, perTurn, user]
+        assertEquals(4, turn1.size());
+        assertEquals(ContextManager.STABLE_CONTEXT_NAME, turn1.get(0).getName());
+        assertEquals(ContextManager.STABLE_TOOLS_CONTEXT_NAME, turn1.get(1).getName());
+
+        StringBuilder persisted = new StringBuilder("[");
+        for (int i = 0; i < turn1.size(); i++) {
+            if (i > 0) {
+                persisted.append(',');
+            }
+            persisted.append("{\"m\":").append(mapper.writeValueAsString(turn1.get(i)))
+                    .append(",\"t\":").append(i + 1).append('}');
+        }
+        persisted.append(']');
+        AgentChatSessionEntity existing = new AgentChatSessionEntity();
+        existing.setModelMessagesJson(persisted.toString());
+        when(store.get(1L, 2L, "conv-1")).thenReturn(existing);
+
+        // Turn 2: the SAME skill block (must not be duplicated) and a directory that
+        // changed because a skill was loaded in between.
+        List<ChatMessage> turn2 = projector.prepareHistory(run("run-2"),
+                Collections.singletonList(user("第二轮")),
+                contextManager.buildStableContextMessage("【场景规范】技能说明"),
+                contextManager.buildDeferredToolsContextMessage("【按需工具】第二版"),
+                contextManager.buildInjectedContextMessage("记忆 B"));
+
+        // [skills, tools1, perTurnA, user1, tools2, perTurnB, user2]
+        assertEquals(7, turn2.size());
+        assertEquals(ContextManager.STABLE_CONTEXT_NAME, turn2.get(0).getName());
+        assertEquals(ContextManager.STABLE_TOOLS_CONTEXT_NAME, turn2.get(1).getName());
+        assertEquals("第一轮", turn2.get(3).getContent());
+        assertEquals(ContextManager.STABLE_TOOLS_CONTEXT_NAME, turn2.get(4).getName(),
+                "a loaded skill appends only the directory block");
+        assertTrue(turn2.get(4).getContent().contains("【按需工具】第二版"));
+        assertEquals(1, turn2.stream()
+                        .filter(message -> ContextManager.STABLE_CONTEXT_NAME.equals(message.getName()))
+                        .count(),
+                "the catalogue-sized skill block must stay a single copy");
+    }
+
     @Test
     void injectedContextIsPersistedWithoutTheGenericContentCap() throws Exception {
         when(store.get(1L, 2L, "conv-1")).thenReturn(null);

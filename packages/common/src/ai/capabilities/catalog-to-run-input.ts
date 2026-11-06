@@ -18,6 +18,16 @@
  *     being withheld again — see {@link BuildAgentRunInputsOptions.loadedSkills}.
  *  2. **The provider ceiling** — only if a host set one; whatever does not fit goes
  *     to the deferred directory (name + signature, schema on first call).
+ *  3. **Skill-fragment indexing** — a skill's PROSE is deferred too, except for the
+ *     framing skills that have to be in force before any tool is called. The run
+ *     carries every skill's one-line description, and a non-framing skill's
+ *     fragment is delivered by `load_skill` together with its tool schemas. This
+ *     is what keeps the prompt linear in the NUMBER of skills rather than in the
+ *     total size of their instructions: the fragment is the large half of a skill
+ *     and it is the half a run rarely needs verbatim. Without it, every installed
+ *     plugin/marketplace skill grew every request by its full text, and the
+ *     backend's injected-context budget (~200k chars) cut the tail of the
+ *     catalogue — silently.
  *
  * Doing step 1 anywhere upstream is a bug with a proven failure mode: withholding
  * before scope filtering left a workspace run with no client tools at all, because
@@ -30,7 +40,7 @@
  */
 
 import type { AgentSkillInput, AgentToolSpec } from '../agent/types'
-import type { AgentCapabilityCatalog, ToolPayload } from './payload-types'
+import type { AgentCapabilityCatalog, SkillPayload, ToolPayload } from './payload-types'
 
 /**
  * Non-core tools advertised with full schemas even when progressive discovery is on.
@@ -148,6 +158,33 @@ export interface BuildAgentRunInputsOptions {
     loadedSkills?: Iterable<string>
 }
 
+/**
+ * Prompt-fragment policy for one skill.
+ *
+ * A skill fragment is the skill's whole work instruction; it is also the biggest
+ * part of what a run ships. Only the skills that must be in force BEFORE the
+ * model picks a tool stay eager:
+ *
+ *  - `builtin` — the editor's domain policy and the discovery mechanism
+ *    description. They frame the run; deferring them would make page editing
+ *    depend on a discovery round trip.
+ *  - the {@link EAGER_SKILL_TAG} tag — a host's explicit "always in force"
+ *    marker for a skill it ships itself.
+ *
+ * Everything else (plugin skills, installed/marketplace skills) travels as a
+ * one-line description in the 【技能索引】 and its fragment arrives through
+ * `load_skill` on demand.
+ */
+const EAGER_SKILL_SOURCES = new Set<SkillPayload['source']>(['builtin'])
+
+/** Tag a skill with this to keep its prompt fragment eager (see above). */
+export const EAGER_SKILL_TAG = 'essential'
+
+/** Whether this skill's prompt fragment ships with the request instead of on demand. */
+export function skillFragmentIsEager(skill: Pick<SkillPayload, 'source' | 'tags'>): boolean {
+    return EAGER_SKILL_SOURCES.has(skill.source) || (skill.tags ?? []).includes(EAGER_SKILL_TAG)
+}
+
 function toToolSpec(tool: ToolPayload): AgentToolSpec {
     return {
         name: tool.function.name,
@@ -244,13 +281,31 @@ export function buildAgentRunInputs(
         skills: catalog.skills.map(skill => {
             const requiredTools = uniqueNames(skill.requiredTools)
             const optionalTools = uniqueNames(skill.optionalTools)
-            const input: AgentSkillInput = {
-                name: skill.name,
-                systemPromptFragment: labelledFragment(skill.name, skill.systemPromptFragment),
+            const eager = skillFragmentIsEager(skill)
+            const hasFragment = !!(skill.systemPromptFragment ?? '').trim()
+            const input: AgentSkillInput = { name: skill.name }
+            // The one-line purpose travels for every skill whose INSTRUCTIONS were
+            // deferred with it: that description is the index entry the model picks
+            // from, and the backend turns it into one when no fragment is shipped
+            // (see `ContextManager#renderSkillIndex`). A fragment-less skill (the
+            // auto-generated `<plugin>-default`) has nothing to index — its tools
+            // are advertised directly, so an entry would only invite a needless
+            // load_skill round trip.
+            if (!eager && hasFragment && typeof skill.description === 'string' && skill.description.trim()) {
+                input.description = skill.description.trim()
+            }
+            // A skill's full instructions are the expensive half. Ship them only
+            // when they have to be in force before any tool is chosen; otherwise
+            // `load_skill` delivers the fragment with the tool schemas (see the
+            // module comment, policy 3).
+            if (eager) {
+                input.systemPromptFragment = labelledFragment(skill.name, skill.systemPromptFragment)
             }
             // The declared names travel with the skill so the backend can render
             // them under its prompt fragment — the join between "find-and-replace
-            // content" and `replaceContent` has to be explicit, not guessed.
+            // content" and `replaceContent` has to be explicit, not guessed. For an
+            // indexed skill the same names render in its index entry, so the model
+            // still knows which tool belongs to which skill before loading it.
             if (requiredTools.length > 0) input.requiredTools = requiredTools
             if (optionalTools.length > 0) input.optionalTools = optionalTools
             return input
@@ -270,6 +325,10 @@ export function buildAgentRunInputs(
  *
  * A fragment-less skill is left alone: its tools are advertised directly, so there
  * is nothing to discover by name.
+ *
+ * Only EAGER fragments are labelled here. A deferred skill has no fragment in the
+ * request at all; the backend labels the fragment it receives from `load_skill`'s
+ * result instead, using the same `【技能名】` convention.
  */
 function labelledFragment(name: string, fragment: string | undefined): string | undefined {
     const text = fragment?.trim()

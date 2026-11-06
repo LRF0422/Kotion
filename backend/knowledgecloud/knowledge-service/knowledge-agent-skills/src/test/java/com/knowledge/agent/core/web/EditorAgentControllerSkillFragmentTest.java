@@ -15,6 +15,7 @@ import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -93,5 +94,54 @@ class EditorAgentControllerSkillFragmentTest {
         assertEquals(Collections.singletonList("insertNear"),
                 deferred.stream().map(ToolSpec::getName).collect(java.util.stream.Collectors.toList()),
                 "only the overflow may be deferred, and it must stay callable");
+    }
+
+    /**
+     * A skill whose instructions the client deferred arrives as ONE compact index
+     * entry: name + purpose + the tools it owns. The instructions and schemas come
+     * with the discovery tool's result — this is what keeps the prompt linear in the
+     * NUMBER of skills instead of the total size of their instructions.
+     */
+    @Test
+    void anIndexedSkillTravelsAsOneEntryInsteadOfItsFullInstructions() {
+        DefaultRunSupervisor supervisor = mock(DefaultRunSupervisor.class);
+        when(supervisor.create(any(CreateRunCommand.class))).thenReturn(null);
+        EditorAgentController controller = new EditorAgentController(
+                supervisor,
+                mock(ThreadStore.class),
+                mock(RunStreamer.class),
+                mock(MemoryStore.class));
+
+        CreateRunRequest request = new CreateRunRequest();
+        request.setConversationId("conv-1");
+
+        CreateRunRequest.SkillInput eager = new CreateRunRequest.SkillInput();
+        eager.setName("document-write");
+        eager.setSystemPromptFragment("find-and-replace content");
+        eager.setRequiredTools(Collections.singletonList("replaceContent"));
+
+        CreateRunRequest.SkillInput indexed = new CreateRunRequest.SkillInput();
+        indexed.setName("bitable-skill");
+        indexed.setDescription("多维表格：建表、读写记录");
+        indexed.setRequiredTools(Arrays.asList("insertBitable", "getBitableList"));
+        // No systemPromptFragment: the client deferred the instructions.
+
+        request.setSkills(Arrays.asList(eager, indexed));
+        controller.create(request);
+
+        ArgumentCaptor<CreateRunCommand> captor = ArgumentCaptor.forClass(CreateRunCommand.class);
+        verify(supervisor).create(captor.capture());
+        List<String> fragments = captor.getValue().getSkillFragments();
+        assertEquals(2, fragments.size(), () -> "eager fragment + one index block: " + fragments);
+        assertTrue(fragments.get(0).contains("find-and-replace content"));
+        String index = fragments.get(1);
+        assertTrue(index.startsWith("【技能索引】"), index);
+        assertTrue(index.contains("【技能名】bitable-skill"), index);
+        assertTrue(index.contains("多维表格：建表、读写记录"), index);
+        assertTrue(index.contains("insertBitable、getBitableList"),
+                () -> "an index entry must name the tools the skill owns: " + index);
+        assertTrue(index.contains("load_skill"), index);
+        assertFalse(index.contains("find-and-replace"),
+                "the eager skill is not repeated as an index entry");
     }
 }

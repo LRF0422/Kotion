@@ -87,4 +87,27 @@ class ClientToolActivationTest {
         // client sent, and the executor validates at call time.
         assertFalse(specs.get(1).getInputSchema() != null);
     }
+
+    /**
+     * A prompt-only skill delivers instructions and NO specs. The fragment still
+     * makes the result a discovery payload: it is the model's only copy of the
+     * skill's rules, so the context layers must protect it and it takes the larger
+     * result budget.
+     */
+    @Test
+    void aFragmentOnlyPayloadIsStillADiscoveryPayload() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("success", true);
+        result.put("skill", "meeting-notes");
+        result.put(ClientToolActivation.SKILL_FRAGMENT_FIELD, "把会议记录整理成三条结论。");
+
+        assertTrue(ClientToolActivation.isDiscoveryPayload(result));
+        assertTrue(ClientToolActivation.extract(result).isEmpty(),
+                "a prompt-only skill activates no tools");
+        assertTrue(ClientToolActivation.carriesSpecs(
+                        "{\"success\":true,\"skillFragment\":\"prose\"}"),
+                "the serialized form must be recognised by the context layers");
+        assertFalse(ClientToolActivation.isDiscoveryPayload(
+                Collections.singletonMap("success", true)));
+    }
 }

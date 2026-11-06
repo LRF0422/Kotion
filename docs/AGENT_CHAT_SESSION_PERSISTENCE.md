@@ -28,15 +28,22 @@ UI transcript 只是它的**纯投影**（可重建缓存）。这是对 DSH 分
    超预算时按固定的 prompt 预算把**最旧**的连续区段折叠成摘要，直到装得下。
    这样模型可见前缀是 append-only 日志的纯函数，不会随尾部增长被反复改写（provider 前缀缓存只增不减）。
 6. **注入上下文分「稳定 / 每轮」两段持久化**（不再「本轮插入、下轮丢弃」）：
-   - 稳定段（技能片段 + deferred 工具目录，`name=__context_stable__`）大且与当前轮无关，
-     由 `ContextManager.buildStableContext` 生成，**只在内容变化时**追加一次——否则每轮都会重复一条
-     数万字符的目录，日志随轮数线性膨胀。实测 27 个技能片段 + 132 个工具时约 51k 字符；
-     目录默认只给「名称 + 参数签名」（`context.deferred-tool-desc-limit: 0`，描述交给技能片段），
-     压掉描述后稳定段约减半，且**不隐藏任何工具**（name/signature 齐全，想调就能调）；
+   - 稳定段拆成两块，各自带标记、各自只在内容变化时追加一次：
+     - `__context_stable__`（**技能片段 + 技能索引**）由 `ContextManager.buildSkillsContext` 生成。
+       片段只常驻「框架型」技能（`source=builtin`，或打了 `essential` 标签：页面编辑策略、能力发现机制、
+       场景框架），其余插件/市场技能的**完整说明按需加载**：run 里每条只带一行
+       `【技能名】name：用途（工具：…）`，`load_skill` 的 tool 结果里带回完整片段和工具 schema。
+       这样提示词随技能**条数**线性涨（约 100 字符/条），而不是随说明总字数涨；
+     - `__context_tools__`（**deferred 工具目录**）由 `ContextManager.buildDeferredToolsContext` 生成。
+       目录默认只给「名称 + 参数签名」（`context.deferred-tool-desc-limit: 0`，描述交给技能片段），
+       且**不隐藏任何工具**（name/signature 齐全，想调就能调）。
+       它单独成块的原因：`load_skill` 每加载一个技能都会改变目录，如果和技能片段共用一块，
+       每次 load 都会把整段（数万字符的）技能目录重贴一遍。
    - 每轮段（记忆 / 画像 / 摘要 / 绑定页面提示，`name=__context__`）小且逐轮变化，每轮追加。
-   两段都位于历史之后、本轮用户消息之前，下一轮请求是上一轮的**字节前缀扩展**，跨轮缓存不再在注入点断裂；
+   三块都位于历史之后、本轮用户消息之前，下一轮请求是上一轮的**字节前缀扩展**，跨轮缓存不再在注入点断裂；
    UI 投影与画像/技能/会话摘要消费方按标记跳过。`forLog` 对注入上下文使用独立的大上限
-   （`MAX_INJECTED_CONTEXT_CHARS`）——通用的 2 万字符截断曾把目录整段切掉，导致所有 deferred 工具不可调用。
+   （`MAX_INJECTED_CONTEXT_CHARS`）——通用的 2 万字符截断曾把目录整段切掉，导致所有 deferred 工具不可调用；
+   技能说明按需加载后，注入段不再随已安装技能数线性膨胀到该上限。
    绑定页面提示走 `CreateRunRequest.contextNote`，**不再拼进 `systemPrompt`（index 0）**。
 7. **压缩摘要持久化，但不重写 model log**。摘要写入 `CompactionSummaryStore`
    （Redis：`agent:compaction:summary:{conversation}:{sha256(model+span)}`，TTL 30 天，失败即当未命中）。
@@ -54,7 +61,8 @@ UI transcript 只是它的**纯投影**（可重建缓存）。这是对 DSH 分
    `buildAgentRunInputs(catalog, { loadedSkills })` 里把它们的工具放进 **`deferredTools`**：
    首步即可调用（后端 deferred 池 + 稳定段目录列出），**不进 `tools` 数组**——数组在消息之前渲染，
    往里加 schema 会让整段历史的前缀缓存作废一次。参数结构本就在上一轮 `load_skill` 的 tool 结果里
-   （规范日志会带上），所以模型不需要、也不该再加载一次。技能被卸载、或当前场景跑不了它的工具时，
+   （规范日志会带上），技能自己的**完整说明**也随同一个结果返回（更早的说明见规范日志），
+   所以模型不需要、也不该再加载一次。技能被卸载、或当前场景跑不了它的工具时，
    这些名字匹配不到活目录里的内容，自然不再下发（活目录始终是唯一事实来源）。
 
 ## 顺序与并发

@@ -29,6 +29,16 @@ export interface SkillToolBundle {
     skill: string
     /** Full OpenAI-shaped specs for the skill's callable tools. */
     tools: AgentToolSpec[]
+    /**
+     * The skill's own work instructions, when it has any.
+     *
+     * Plugin/marketplace skills have their fragment withheld from the prompt (the
+     * 【技能索引】 only lists name + purpose + tool names), so this is where the
+     * prose travels: `load_skill` returns it in the tool result next to the
+     * schemas. Eager (built-in/framing) skills already shipped it inline, but
+     * repeating it here is harmless and keeps a re-load self-contained.
+     */
+    fragment?: string
 }
 
 /**
@@ -40,23 +50,35 @@ export type ToolAvailability = (name: string) => boolean
 
 /** Why a skill could not serve a run. */
 export interface SkillDiagnosis {
-    /** The skill's real name, when the reference matched one. */
+    /** The skill's real name, when the reference matched exactly one. */
     name?: string
     /** Declared tools that this run cannot execute right now. */
     unavailable: string[]
+    /**
+     * Real skill names the reference matched ambiguously. Folding (`doc-review`
+     * vs `doc_review`) can make a reference collide as the catalogue grows; the
+     * honest answer is "these are the candidates", not "no such skill".
+     */
+    ambiguous?: string[]
 }
 
 /** The live skill → tool-spec mapping of this client. */
 export interface SkillToolSource {
-    /** Skill names whose tools this run can have delivered, on demand. */
+    /** Skill names this run can load on demand (tools and/or instructions). */
     skillNames: (isAvailable?: ToolAvailability) => string[]
-    /** Resolve one skill for one run; null when it cannot serve that run. */
+    /**
+     * Resolve one skill for one run; null when it cannot serve that run.
+     *
+     * A prompt-only skill (an installed SKILL.md with no owned tools) resolves with
+     * an EMPTY `tools` and a `fragment`: loading it means "give me the
+     * instructions", not "make tools callable".
+     */
     resolve: (skill: string, isAvailable?: ToolAvailability) => SkillToolBundle | null
     /**
-     * Explain a failed resolve. "No such skill" and "this skill exists but its
-     * tools cannot run here yet" need different answers: the first is a naming
-     * mistake, the second is a capability the run has not unlocked (a workbench run
-     * has no document until it creates or opens one).
+     * Explain a failed resolve. "No such skill", "several skills match" and "this
+     * skill exists but its tools cannot run here yet" need different answers: the
+     * first is a naming mistake, the third is a capability the run has not
+     * unlocked (a workbench run has no document until it creates or opens one).
      */
     diagnose: (skill: string, isAvailable?: ToolAvailability) => SkillDiagnosis
 }
@@ -81,31 +103,48 @@ export function normalizeSkillKey(value: string): string {
 }
 
 /**
- * Resolve a skill the way the model actually names it: exact, then folded, then by
- * the tags the skill declares (which carry the vocabulary a user would use —
- * "多维表格", "批注", "chart"). Each tier must be unambiguous: guessing between two
- * capabilities is worse than reporting the candidates.
+ * All skills a reference plausibly names, at the first tier that matches.
+ *
+ * Exact name first, then case-only differences, then the folded spelling
+ * (`bitable` → `bitable-skill`), then the declared tags (the vocabulary a user
+ * would say — "多维表格", "批注", "chart"). Returning the whole tier lets the caller
+ * report candidates instead of silently picking one: guessing between two
+ * capabilities is worse than asking, and as the catalogue grows a folded
+ * collision is not hypothetical.
+ */
+export function matchSkillMatches(
+    skillProvider: SkillProvider,
+    reference: string,
+): SkillDefinition[] {
+    const wanted = (reference || '').trim()
+    if (!wanted) return []
+    const exact = skillProvider.getSkill(wanted)
+    if (exact) return [exact]
+
+    const skills = skillProvider.getAllSkills()
+    const lowered = wanted.toLowerCase()
+    const folded = normalizeSkillKey(wanted)
+
+    const byName = skills.filter(skill => skill.name.trim().toLowerCase() === lowered)
+    if (byName.length > 0) return byName
+    const byFolded = skills.filter(skill => normalizeSkillKey(skill.name) === folded)
+    if (byFolded.length > 0) return byFolded
+    return skills.filter(skill =>
+        (skill.tags ?? []).some(tag => tag.trim().toLowerCase() === lowered))
+}
+
+/**
+ * Resolve a skill the way the model actually names it.
+ *
+ * Only an UNAMBIGUOUS match resolves; use {@link matchSkillMatches} when the
+ * candidates are needed to explain a miss.
  */
 export function matchSkill(
     skillProvider: SkillProvider,
     reference: string,
 ): SkillDefinition | undefined {
-    const wanted = (reference || '').trim()
-    if (!wanted) return undefined
-    const exact = skillProvider.getSkill(wanted)
-    if (exact) return exact
-
-    const skills = skillProvider.getAllSkills()
-    const folded = normalizeSkillKey(wanted)
-    // Each tier must be unambiguous: silently picking between two capabilities is
-    // worse than reporting the candidates.
-    const unique = (matches: SkillDefinition[]) => (matches.length === 1 ? matches[0] : undefined)
-
-    const lowered = wanted.toLowerCase()
-    return unique(skills.filter(skill => skill.name.trim().toLowerCase() === lowered))
-        ?? unique(skills.filter(skill => normalizeSkillKey(skill.name) === folded))
-        ?? unique(skills.filter(skill =>
-            (skill.tags ?? []).some(tag => tag.trim().toLowerCase() === lowered)))
+    const matches = matchSkillMatches(skillProvider, reference)
+    return matches.length === 1 ? matches[0] : undefined
 }
 
 /** Closest skill names to a failed reference, for an actionable error. */
@@ -155,22 +194,49 @@ export function createSkillToolSource(
         ...(skill.requiredTools ?? []),
         ...(skill.optionalTools ?? []),
     ]
+    // A skill can be loaded when it has instructions to hand over (a prompt-only
+    // installed skill: its SKILL.md was never in the prompt) or at least one tool
+    // this run can execute. Prompt-only skills were previously invisible to
+    // discovery — their content shipped inline, so loading them was pointless.
+    // Now that fragments are indexed on demand, they are served like any other.
+    //
+    // A skill that DECLARES tools is judged by them: if none can run in this scope
+    // it stays out of the loadable list, so the model is told about the missing
+    // precondition instead of receiving instructions it cannot act on.
+    const fragmentOf = (skill: { systemPromptFragment?: string }) =>
+        (skill.systemPromptFragment ?? '').trim()
+    const servable = (
+        skill: { requiredTools?: string[]; optionalTools?: string[]; systemPromptFragment?: string },
+        executable: Record<string, any>,
+        isAvailable?: ToolAvailability,
+    ) => {
+        const declared = callableNames(skill)
+        if (declared.length > 0) {
+            return declared.some(name => runnable(name, executable, isAvailable))
+        }
+        return fragmentOf(skill).length > 0
+    }
+
     // Resolved live, per call, with the ASKING run's availability: the workbench
     // gains its document mid-conversation (createPage acquires the hidden editor),
     // and that run must be able to reach the capabilities that just appeared
     // without waiting for its next turn.
-    const runnable = (name: string, isAvailable?: ToolAvailability) =>
-        !!toolProvider.getAllTools()[name] && (isAvailable ? isAvailable(name) : true)
-
-    const findSkill = (name: string) => matchSkill(skillProvider, name)
+    //
+    // `getAllTools()` COPIES the whole tool map, so it is hoisted to one call per
+    // operation — the per-name form made discovery O(skills × tools) map copies.
+    const runnable = (name: string, executable: Record<string, any>, isAvailable?: ToolAvailability) =>
+        !!executable[name] && (isAvailable ? isAvailable(name) : true)
 
     return {
-        skillNames: (isAvailable?: ToolAvailability) => skillProvider.getAllSkills()
-            .filter(skill => callableNames(skill).some(name => runnable(name, isAvailable)))
-            .map(skill => skill.name)
-            .sort(),
+        skillNames: (isAvailable?: ToolAvailability) => {
+            const executable = toolProvider.getAllTools()
+            return skillProvider.getAllSkills()
+                .filter(skill => servable(skill, executable, isAvailable))
+                .map(skill => skill.name)
+                .sort()
+        },
         resolve: (skillName: string, isAvailable?: ToolAvailability) => {
-            const skill = findSkill(skillName)
+            const skill = matchSkill(skillProvider, skillName)
             if (!skill) return null
             const executable = toolProvider.getAllTools()
             const seen = new Set<string>()
@@ -179,7 +245,8 @@ export function createSkillToolSource(
                 if (seen.has(name)) continue
                 seen.add(name)
                 const tool = executable[name]
-                if (!tool || typeof tool.execute !== 'function' || !runnable(name, isAvailable)) continue
+                if (!tool || typeof tool.execute !== 'function'
+                    || !runnable(name, executable, isAvailable)) continue
                 const meta = toolProvider.getToolMetadata(name)
                 tools.push({
                     name,
@@ -190,16 +257,40 @@ export function createSkillToolSource(
                     source: 'client',
                 })
             }
-            return tools.length > 0 ? { skill: skill.name, tools } : null
+            const fragment = fragmentOf(skill)
+            const declared = callableNames(skill)
+            if (tools.length === 0) {
+                // A prompt-only skill (no declared tools) is served for its
+                // instructions alone. A skill that declares tools but cannot run any
+                // of them here is NOT served: the model must fix the precondition
+                // first (see `diagnose`), not receive instructions it cannot act on.
+                if (declared.length > 0 || !fragment) return null
+                return { skill: skill.name, tools: [], fragment }
+            }
+            return {
+                skill: skill.name,
+                tools,
+                ...(fragment ? { fragment } : {}),
+            }
         },
         diagnose: (reference: string, isAvailable?: ToolAvailability) => {
-            const skill = findSkill(reference)
-            if (!skill) return { unavailable: [] }
+            const matches = matchSkillMatches(skillProvider, reference)
+            // Several skills fold to the same reference: report the candidates
+            // instead of claiming the skill does not exist.
+            if (matches.length > 1) {
+                return {
+                    unavailable: [],
+                    ambiguous: matches.map(skill => skill.name).sort(),
+                }
+            }
+            if (matches.length === 0) return { unavailable: [] }
+            const skill = matches[0]
+            const executable = toolProvider.getAllTools()
             return {
                 name: skill.name,
                 unavailable: callableNames(skill)
                     .filter((name, index, all) => all.indexOf(name) === index)
-                    .filter(name => !runnable(name, isAvailable)),
+                    .filter(name => !runnable(name, executable, isAvailable)),
             }
         },
     }

@@ -367,14 +367,14 @@ function checkEditingBaselineIsNeverWithheld(): void {
         getAllSkills: () => [
             {
                 name: 'chart-ops',
-                description: '',
+                description: 'insert charts',
                 source: 'plugin',
                 requiredTools: ['insertChart'],
                 systemPromptFragment: 'insert charts',
             },
             {
                 name: 'document-write',
-                description: '',
+                description: 'find-and-replace content',
                 source: 'builtin',
                 requiredTools: ['replaceContent', 'insertNear'],
                 systemPromptFragment: 'find-and-replace content',
@@ -418,6 +418,20 @@ function checkEditingBaselineIsNeverWithheld(): void {
     // what the model reads to know it can ask for it.
     assert.deepEqual(
         runInput.skills.find(s => s.name === 'chart-ops')!.requiredTools, ['insertChart'])
+    // The framing skill's prose ships inline (it is the editor's policy, needed
+    // before any tool is chosen); the plugin skill's prose does not — it is the
+    // large half of a skill and `load_skill` delivers it on demand. Only the
+    // one-line purpose travels for the index entry.
+    assert.ok(
+        runInput.skills.find(s => s.name === 'document-write')!.systemPromptFragment
+            ?.startsWith('【技能名】document-write'),
+        'a built-in skill is eager: its rules must be in force from the first step')
+    assert.equal(
+        runInput.skills.find(s => s.name === 'chart-ops')!.systemPromptFragment, undefined,
+        'a plugin skill\'s instructions must not inflate every request')
+    assert.equal(
+        runInput.skills.find(s => s.name === 'chart-ops')!.description, 'insert charts',
+        'its one-line purpose still travels, which is the index entry the model picks from')
     // The model reaches a skill's tools by NAME, so the name has to reach the model:
     // the prompt only carries the fragment, and an unlabelled fragment made it
     // invent names ("插件开发台") and never find the capability.

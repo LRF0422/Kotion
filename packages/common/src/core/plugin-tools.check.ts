@@ -200,6 +200,13 @@ function checkSchemasAreWithheldButNamed(): void {
         assert((bitable!.requiredTools ?? []).includes(name),
             `${name} must be named by its skill so the model knows it exists`)
     }
+    // The PROSE stays out of the request: it is the largest half of a plugin skill
+    // and the half a run rarely needs. Its one-line purpose is what makes the
+    // 【技能索引】 entry the model picks from, and `load_skill` delivers the rest.
+    assert.equal(bitable!.systemPromptFragment, undefined,
+        'a plugin skill\'s instructions must not inflate every request')
+    assert.equal(bitable!.description, 'Bitable',
+        'but its purpose travels, so the model can decide to load it')
     // The essential editing path, the page entry points and the discovery tool stay
     // advertised, so a run can always read, write, ask — and ask for more.
     for (const name of ['getDocumentStructure', 'insertAtBlockId', 'applyEdits', 'askUserChoice', 'load_skill']) {
@@ -224,6 +231,11 @@ async function checkLoadSkillDeliversAWholeCapability(): Promise<void> {
 
     const chart = await loadSkill.execute({ skill: 'chart-ops' })
     assert.equal(chart.activateTools.length, chartTools.length)
+    // The PROSE is deferred too (it is the largest half of a plugin skill): it
+    // rides the same result, labelled the way the prompt convention expects.
+    assert.equal(chart.skillFragment,
+        '【技能名】chart-ops\n\nYou can use the Chart tools listed for this skill.',
+        'a plugin skill\'s instructions arrive with its schemas, not in every prompt')
 
     const unknown = await loadSkill.execute({ skill: 'nope' })
     assert(!!unknown.error && unknown.available.includes('bitable-ops'),
@@ -309,6 +321,12 @@ function checkDefaultSkillToolsStayAdvertised(): void {
         assert(advertised.includes(name),
             `${name} has no skill prose to advertise it, so it must keep its schema`)
     }
+    // …and it produces no index entry either: there is no instruction to load, so
+    // an entry would only invite a needless `load_skill` round trip.
+    const auto = run.skills.find(skill => skill.name.endsWith('-default'))
+    assert(!!auto, 'the generated skill still travels (it owns the tool names)')
+    assert.equal(auto!.description, undefined,
+        'a fragment-less skill has nothing to index; only deferred prose does')
 }
 
 /**

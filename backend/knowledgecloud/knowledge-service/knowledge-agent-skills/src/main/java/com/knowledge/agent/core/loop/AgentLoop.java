@@ -2624,7 +2624,7 @@ public class AgentLoop implements Runnable {
      */
     private int toolResultBudget(Object result) {
         int base = properties.getContext().getToolResultMaxChars();
-        if (ClientToolActivation.extract(result).isEmpty()) {
+        if (!ClientToolActivation.isDiscoveryPayload(result)) {
             return base;
         }
         return Math.max(base, properties.getContext().getClientToolPayloadMaxChars());
@@ -2922,26 +2922,32 @@ public class AgentLoop implements Runnable {
         if (!images.isEmpty()) {
             return render(imageToolSummaryJson(images));
         }
-        List<ToolSpec> specs = ClientToolActivation.extract(item.getResult());
-        if (!specs.isEmpty()) {
-            return discoveryContent(item.getResult(), specs);
+        if (ClientToolActivation.isDiscoveryPayload(item.getResult())) {
+            // Specs and/or the deferred skill fragment. A prompt-only skill has no
+            // specs at all, so the emptiness of `specs` must NOT route it through
+            // the ordinary cap — the fragment needs the discovery budget too.
+            return discoveryContent(item.getResult(),
+                    ClientToolActivation.extract(item.getResult()));
         }
         return render(renderResult(item.getResult()));
     }
 
     /**
-     * Content for the message that hands the model a skill's tool specs.
+     * Content for the message that hands the model a skill's tools and/or
+     * instructions.
      *
      * <p>The ordinary budget cannot apply: it cuts head + tail out of one string,
      * which here means invalid JSON and silently missing schemas — and the model
-     * needs EVERY schema to call those tools. So the payload is serialized whole
-     * at its own budget ({@code client-tool-payload-max-chars}), which covers a
-     * real skill bundle with room to spare.
+     * needs EVERY schema to call those tools, plus the whole fragment when the
+     * skill is instruction-only. So the payload is serialized whole at its own
+     * budget ({@code client-tool-payload-max-chars}), which covers a real skill
+     * bundle with room to spare.
      *
      * <p>Beyond even that, cutting is still the wrong answer: the message degrades
-     * to valid JSON that names every tool and says what to do. Nothing is lost on
-     * the routing side ({@link #registerClientActivatedTools} reads the ORIGINAL
-     * result), and the first call of any of those tools returns its schema (see
+     * to valid JSON that names every tool (and, for a prompt-only skill, keeps the
+     * head of its instructions) and says what to do. Nothing is lost on the routing
+     * side ({@link #registerClientActivatedTools} reads the ORIGINAL result), and
+     * the first call of any of those tools returns its schema (see
      * {@link #deferredSchemaNote}) — an honest smaller answer beats a corrupt one.
      */
     private String discoveryContent(Object result, List<ToolSpec> specs) {
@@ -2960,10 +2966,28 @@ public class AgentLoop implements Runnable {
         if (skill != null) {
             fallback.put("skill", skill);
         }
-        fallback.put("schemasOmitted", true);
-        fallback.put("toolNames", specs.stream().map(ToolSpec::getName).toList());
-        fallback.put("note", "这些工具的参数结构合计超过单条工具结果的上限（" + budget
-                + " 字符），未随本结果返回。它们已经可以按名字直接调用：首次调用会返回该工具的参数结构，之后再按它传参。");
+        Object fragment = result instanceof Map
+                ? ((Map<?, ?>) result).get(ClientToolActivation.SKILL_FRAGMENT_FIELD) : null;
+        if (specs.isEmpty()) {
+            // A prompt-only skill: there are no tool names to fall back on, so keep
+            // the head of the instructions. Prose tolerates a cut (unlike a JSON
+            // schema list), and the model can re-load the skill if it needs the rest.
+            int keep = Math.max(1000, budget / 2);
+            if (fragment instanceof String && ((String) fragment).length() > keep) {
+                fallback.put(ClientToolActivation.SKILL_FRAGMENT_FIELD,
+                        ((String) fragment).substring(0, keep) + "\n…[truncated]");
+            } else if (fragment != null) {
+                fallback.put(ClientToolActivation.SKILL_FRAGMENT_FIELD, fragment);
+            }
+            fallback.put("fragmentOmitted", true);
+            fallback.put("note", "该技能的说明超过单条工具结果的上限（" + budget
+                    + " 字符），只返回了开头部分；如需完整说明可再次调用 load_skill。");
+        } else {
+            fallback.put("schemasOmitted", true);
+            fallback.put("toolNames", specs.stream().map(ToolSpec::getName).toList());
+            fallback.put("note", "这些工具的参数结构合计超过单条工具结果的上限（" + budget
+                    + " 字符），未随本结果返回。它们已经可以按名字直接调用：首次调用会返回该工具的参数结构，之后再按它传参。");
+        }
         try {
             return objectMapper.writeValueAsString(fallback);
         } catch (Exception e) {
