@@ -66,6 +66,45 @@ export function ensureSerializableToolResult(outcome: ToolExecutionResult): Tool
     }
 }
 
+/** Default deadline for a read-only frontend tool call. */
+const DEFAULT_READ_TOOL_TIMEOUT_MS = 90_000
+/**
+ * Default deadline for a mutating call: larger because a mutating operation may
+ * legitimately take a while on a big document, but still finite — a tool that
+ * never settles must not leave the run "Working…" forever.
+ */
+const DEFAULT_MUTATING_TOOL_TIMEOUT_MS = 180_000
+
+/**
+ * Race a frontend tool call against its deadline.
+ *
+ * The underlying promise cannot be cancelled: a mutating call may still commit
+ * after the deadline. That is why the error tells the model not to retry blindly
+ * (the journal also marks the call started, so a reload never re-executes it),
+ * and why the default mutating deadline is generous. A surfaced timeout is still
+ * strictly better than a conversation stuck at "Working…" with no server event.
+ */
+function raceToolDeadline<T>(
+    promise: Promise<T>,
+    ms: number,
+    displayName: string,
+    meta: { tool: string; callId: string; owner: string | null; mutating: boolean; documentId: string | null },
+): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+        const timer = setTimeout(() => {
+            console.warn('[agent] tool execution deadline hit', { ...meta, timeoutMs: ms })
+            reject(new Error(
+                `工具执行超时（${Math.round(ms / 1000)}s）：${displayName} 未返回结果。`
+                + `可以换一种方式继续，或告知用户该操作暂时不可用；不要用相同参数反复重试。`
+            ))
+        }, ms)
+        promise.then(
+            value => { clearTimeout(timer); resolve(value) },
+            error => { clearTimeout(timer); reject(error) },
+        )
+    })
+}
+
 export interface EditorToolExecutorOptions {
     /**
      * Resolve the live editor-bound tool definitions (factory output). The
@@ -95,6 +134,12 @@ export interface EditorToolExecutorOptions {
      * Absent → no veto (existing hosts stay unchanged).
      */
     canMutate?: () => boolean
+    /**
+     * Per-call execution deadlines. A frontend tool that never settles leaves the
+     * run parked forever ("Working…") with no server event; a deadline turns it
+     * into a tool error the model can react to. Omitted → the defaults above.
+     */
+    executionTimeoutMs?: { mutating?: number; readOnly?: number }
     /** Document a call acts on, or null when nothing has to be serialized. */
     resolveDocumentId?: (owner: string | null) => string | null
     /** Execution notifications for the UI. */
@@ -136,6 +181,7 @@ export class EditorToolExecutor {
     private readonly resolveTools: EditorToolExecutorOptions['resolveTools']
     private readonly isReadOnlyTool?: EditorToolExecutorOptions['isReadOnlyTool']
     private readonly canMutate?: EditorToolExecutorOptions['canMutate']
+    private readonly executionTimeoutMs?: EditorToolExecutorOptions['executionTimeoutMs']
     private readonly resolveDocumentId?: EditorToolExecutorOptions['resolveDocumentId']
     private readonly onExecution?: OnToolExecution
     private readonly getSessionBinding?: EditorToolExecutorOptions['getSessionBinding']
@@ -151,6 +197,7 @@ export class EditorToolExecutor {
         this.resolveTools = options.resolveTools
         this.isReadOnlyTool = options.isReadOnlyTool
         this.canMutate = options.canMutate
+        this.executionTimeoutMs = options.executionTimeoutMs
         this.resolveDocumentId = options.resolveDocumentId
         this.onExecution = options.onExecution
         this.getSessionBinding = options.getSessionBinding
@@ -238,10 +285,6 @@ export class EditorToolExecutor {
                 // next call lands, instead of letting it guess another prefix.
                 outcome = { ok: false, error: unknownToolError(toolName, tools) }
             } else {
-                // Do not race mutating editor operations against a timeout: the
-                // underlying promise cannot be cancelled and may commit later,
-                // after the backend has already retried under a new callId.
-                //
                 // Mutating calls take the document's write lease so two agents
                 // bound to the same document cannot interleave (lost updates).
                 const run = () => definition.execute(args, callId, {
@@ -254,9 +297,21 @@ export class EditorToolExecutor {
                 })
                 const documentId = mutating ? (this.resolveDocumentId?.(owner) ?? null) : null
                 slowDocumentId = documentId
-                const result = documentId
-                    ? await withDocumentWrite(documentId, run, { label: name })
-                    : await run()
+                const work = documentId
+                    ? withDocumentWrite(documentId, run, { label: name })
+                    : run()
+                const deadline = mutating
+                    ? (this.executionTimeoutMs?.mutating ?? DEFAULT_MUTATING_TOOL_TIMEOUT_MS)
+                    : (this.executionTimeoutMs?.readOnly ?? DEFAULT_READ_TOOL_TIMEOUT_MS)
+                const result = deadline > 0
+                    ? await raceToolDeadline(work, deadline, name, {
+                        tool: toolName,
+                        callId,
+                        owner,
+                        mutating,
+                        documentId,
+                    })
+                    : await work
                 outcome = { ok: true, result }
             }
             }

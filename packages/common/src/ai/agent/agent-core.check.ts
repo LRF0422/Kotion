@@ -160,6 +160,39 @@ async function checkDocumentWriteSerialization(): Promise<void> {
     resetDocumentWriteLocks()
 }
 
+
+/**
+ * A frontend tool that never settles must not park the run at "Working…"
+ * forever: the executor's deadline turns it into a tool error the model can
+ * react to (and logs which tool is stuck).
+ */
+async function checkToolDeadlineUnsticksAHangingTool(): Promise<void> {
+    const executor = new EditorToolExecutor({
+        resolveTools: () => ({
+            hangRead: {
+                description: 'read tool that never settles',
+                inputSchema: {},
+                execute: () => new Promise<never>(() => { /* never settles */ }),
+            },
+            hangWrite: {
+                description: 'mutating tool that never settles',
+                inputSchema: {},
+                execute: () => new Promise<never>(() => { /* never settles */ }),
+            },
+        }),
+        isReadOnlyTool: name => name === 'hangRead',
+        executionTimeoutMs: { readOnly: 25, mutating: 35 },
+    })
+
+    const read = await executor.execute('deadline-r', 'hangRead', {})
+    assert.equal(read.ok, false, 'a hanging read tool must fail instead of hanging the run')
+    assert.match(String(read.error), /工具执行超时/, 'the error names the deadline')
+
+    const write = await executor.execute('deadline-w', 'hangWrite', {})
+    assert.equal(write.ok, false, 'a hanging mutating tool must fail instead of hanging the run')
+    assert.match(String(write.error), /工具执行超时/, 'the error names the deadline')
+}
+
 async function checkExecutorOwnerAndWriteLease(): Promise<void> {
     resetDocumentWriteLocks()
     const ownersSeen: Array<string | null | undefined> = []
@@ -821,6 +854,7 @@ async function main(): Promise<void> {
     await checkCrlfSseFrames()
     await checkStreamIdleWatchdog()
     await checkDocumentWriteSerialization()
+    await checkToolDeadlineUnsticksAHangingTool()
     await checkExecutorOwnerAndWriteLease()
     await checkSubRunWorkersRunInParallel()
     await checkChildResumeFailureKeepsToolResults()
