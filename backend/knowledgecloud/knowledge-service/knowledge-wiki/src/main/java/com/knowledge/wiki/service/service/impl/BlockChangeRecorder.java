@@ -1,6 +1,7 @@
 package com.knowledge.wiki.service.service.impl;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -104,7 +105,7 @@ public class BlockChangeRecorder {
         if (pageId == null || CollUtil.isEmpty(deletedBlockIds)) {
             return new ArrayList<>();
         }
-        Map<String, Integer> versions = existingVersions != null ? existingVersions : Map.of();
+        Map<String, Integer> versions = existingVersions != null ? existingVersions : Collections.emptyMap();
         List<BlockVersion> rows = new ArrayList<>(deletedBlockIds.size());
         for (String blockId : deletedBlockIds) {
             if (StrUtil.isBlank(blockId)) {

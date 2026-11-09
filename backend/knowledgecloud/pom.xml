@@ -162,8 +162,22 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>${maven.plugin.version}</version>
                 <configuration>
-                    <source>${java.version}</source>
-                    <target>${java.version}</target>
+                    <!--
+                        `release` (not the legacy source/target pair): the
+                        services RUN on Java 8 while the build JDK is newer, and
+                        source/target only constrain the LANGUAGE level — the
+                        compiler happily links JDK 9+ library calls like
+                        `Stream.toList()`, which then blow up at runtime with
+                        NoSuchMethodError (that is exactly how an agent run used
+                        to die silently at a skill tool result). `release 8`
+                        checks the Java 8 API signatures too, so such code fails
+                        the BUILD instead of the user's session.
+
+                        Tests are an exception: they run under the build JDK and
+                        legitimately use newer collection factories.
+                    -->
+                    <release>8</release>
+                    <testRelease>17</testRelease>
                     <encoding>UTF-8</encoding>
                     <compilerArgs>
                         <arg>-parameters</arg>

@@ -38,6 +38,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Editor Agent API — the redesigned AgentCore transport (V1 contract, see
@@ -242,7 +243,8 @@ public class EditorAgentController {
                 request.getAction(), afterSeq,
                 request.getToolResults() == null ? "[]"
                         : request.getToolResults().stream()
-                                .map(item -> item == null ? "?" : item.getCallId()).toList());
+                                .map(item -> item == null ? "?" : item.getCallId())
+                                .collect(Collectors.toList()));
         boolean accepted = supervisor.resume(runId, payload);
         if (!accepted) {
             log.warn("Resume rejected for run {} (action={})", runId, request.getAction());

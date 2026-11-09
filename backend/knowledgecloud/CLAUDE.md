@@ -149,3 +149,11 @@ make clean
 
 - MapStruct annotation processor is configured - rebuild after adding/changing mappers
 - Use `mvn clean package` when MapStruct changes don't reflect
+- **构建 JDK 17 / 运行 JDK 8**：主代码编译用 `--release 8`（根 pom 的
+  maven-compiler-plugin，测试用 `testRelease 17`），因此**主代码里禁止 JDK 9+ API**
+  （`Stream.toList()`、`List.of()`、`Map.of()`、`String.repeat()`…）。以前用
+  `source/target 8` 时这些能编过，但服务是 Java 8 跑的，运行期直接
+  `NoSuchMethodError`（AgentCore 就因为 `load_skill` 回退分支里一个
+  `Stream.toList()` 静默杀死了 loop 线程，整轮卡在 WAITING_TOOLS）。
+  需要新 API 时用 Java 8 等价写法（`collect(Collectors.toList())`、
+  `Collections.emptyList()` 等）。

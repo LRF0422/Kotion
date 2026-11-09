@@ -653,6 +653,16 @@ public class DefaultRunSupervisor {
                                 run.getCachedPromptTokens())).getSeq());
                 runStore.persist(run);
                 runStore.saveHot(run);
+            } else if (!run.statusEnum().isTerminal() && !lease.isHeld(runId)) {
+                // The loop returned without a terminal state and nobody else owns
+                // the run (no lease): it was killed by an Error or a bug. Leaving
+                // the durable status at WAITING_TOOLS/RUNNING orphaned it — the
+                // client kept resubmitting and waiting for an event that could
+                // never come. Fail it so the UI can recover.
+                log.error("Run {}: loop exited without a terminal state (status {}); marking failed",
+                        runId, run.getStatus());
+                markFailed(run, "loop_exit", "运行线程意外退出（无终态），本轮已终止");
+                return;
             }
             threadStore.clearActive(run.getConversationId(), runId);
             // Session memory: summarize the completed conversation async.

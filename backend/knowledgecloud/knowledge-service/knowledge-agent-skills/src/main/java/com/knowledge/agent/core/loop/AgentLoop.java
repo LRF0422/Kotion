@@ -41,6 +41,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
 
 /**
  * AgentCore loop — the synchronous driver of one run.
@@ -931,16 +932,26 @@ public class AgentLoop implements Runnable {
             if (!isCancelled()) {
                 fail("interrupted", "loop interrupted: " + e.getMessage());
             }
-        } catch (Exception e) {
+        } catch (Throwable e) {
+            // Throwable, not Exception: an Error (NoSuchMethodError from a Java
+            // 8 runtime, OOM, stack overflow) used to kill the loop thread
+            // SILENTLY — the run stayed WAITING_TOOLS with no owner, the client
+            // kept resubmitting and waited forever for a terminal event. A run
+            // that fails loudly is always better than an orphaned one.
             log.error("AgentLoop crashed for run {}", run.getRunId(), e);
-            if (!isCancelled() && !run.statusEnum().isTerminal()) {
-                // A stalled provider stream is a distinct, self-describing
-                // terminal state so the UI can show "模型响应超时" instead of
-                // a generic loop error.
-                boolean llmTimeout = e instanceof LlmGateway.LlmTimeoutException;
-                boolean quotaExceeded = e instanceof com.knowledge.core.entitlement.error.EntitlementException;
-                fail(quotaExceeded ? "quota_exceeded" : llmTimeout ? "llm_timeout" : "loop_error",
-                        e.getMessage() != null ? e.getMessage() : e.toString());
+            try {
+                if (!isCancelled() && !run.statusEnum().isTerminal()) {
+                    // A stalled provider stream is a distinct, self-describing
+                    // terminal state so the UI can show "模型响应超时" instead of
+                    // a generic loop error.
+                    boolean llmTimeout = e instanceof LlmGateway.LlmTimeoutException;
+                    boolean quotaExceeded = e instanceof com.knowledge.core.entitlement.error.EntitlementException;
+                    fail(quotaExceeded ? "quota_exceeded" : llmTimeout ? "llm_timeout" : "loop_error",
+                            e.getMessage() != null ? e.getMessage() : e.toString());
+                }
+            } catch (Throwable markFailedError) {
+                log.error("Run {}: could not mark the run after a loop crash",
+                        run.getRunId(), markFailedError);
             }
         } finally {
             try {
@@ -1768,7 +1779,8 @@ public class AgentLoop implements Runnable {
                 log.info("Run {}: tool wait received {} result(s) {} (pending before: {})",
                         run.getRunId(), payload.getToolResults().size(),
                         payload.getToolResults().stream()
-                                .map(ResumePayload.ToolResultItem::getCallId).toList(),
+                                .map(ResumePayload.ToolResultItem::getCallId)
+                                .collect(Collectors.toList()),
                         checkpoint.getPendingToolCalls().size());
                 applyToolResults(payload.getToolResults());
                 saveCheckpoint();
@@ -3080,7 +3092,8 @@ public class AgentLoop implements Runnable {
                     + " 字符），只返回了开头部分；如需完整说明可再次调用 load_skill。");
         } else {
             fallback.put("schemasOmitted", true);
-            fallback.put("toolNames", specs.stream().map(ToolSpec::getName).toList());
+            fallback.put("toolNames", specs.stream().map(ToolSpec::getName)
+                    .collect(Collectors.toList()));
             fallback.put("note", "这些工具的参数结构合计超过单条工具结果的上限（" + budget
                     + " 字符），未随本结果返回。它们已经可以按名字直接调用：首次调用会返回该工具的参数结构，之后再按它传参。");
         }

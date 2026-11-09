@@ -198,8 +198,10 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>${maven.plugin.version}</version>
                 <configuration>
-                    <source>${java.version}</source>
-                    <target>${java.version}</target>
+                    <!-- Runtime is Java 8; `release` also checks the API surface
+                         (see the root pom's comment). Keep in sync with it. -->
+                    <release>8</release>
+                    <testRelease>17</testRelease>
                     <encoding>UTF-8</encoding>
                     <compilerArgs>
                         <arg>-parameters</arg>
