@@ -238,8 +238,14 @@ public class EditorAgentController {
         payload.setToolResults(request.getToolResults());
         payload.setPlanDecision(request.getPlanDecision());
         long afterSeq = request.getAfterSeq() != null ? request.getAfterSeq() : 0;
+        log.info("Resume request: run={} action={} afterSeq={} callIds={}", runId,
+                request.getAction(), afterSeq,
+                request.getToolResults() == null ? "[]"
+                        : request.getToolResults().stream()
+                                .map(item -> item == null ? "?" : item.getCallId()).toList());
         boolean accepted = supervisor.resume(runId, payload);
         if (!accepted) {
+            log.warn("Resume rejected for run {} (action={})", runId, request.getAction());
             return streamer.error("RUN_BUSY", "任务正在其他节点执行，请稍后重试");
         }
         return streamer.stream(runId, afterSeq);

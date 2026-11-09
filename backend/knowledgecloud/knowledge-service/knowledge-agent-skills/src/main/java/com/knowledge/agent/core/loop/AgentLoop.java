@@ -270,6 +270,15 @@ public class AgentLoop implements Runnable {
 
     private volatile boolean cancelRequested;
 
+    /**
+     * The thread executing this loop (null before it starts).
+     *
+     * <p>Used by the supervisor's stall detector: when a run makes no progress
+     * while alive, its stack is the only way to name what is blocking it
+     * (a Redis/MySQL write, the gate, a provider call) instead of guessing.
+     */
+    private volatile Thread loopThread;
+
     private long lastHotFlushMs;
 
     /** Working-memory holder backed by the checkpoint scratchpad. */
@@ -387,6 +396,11 @@ public class AgentLoop implements Runnable {
             return true;
         }
         return checkExternalCancel();
+    }
+
+    /** The thread executing this loop, or null before it starts (stall diagnostics). */
+    public Thread loopThread() {
+        return loopThread;
     }
 
     /**
@@ -574,6 +588,7 @@ public class AgentLoop implements Runnable {
 
     @Override
     public void run() {
+        loopThread = Thread.currentThread();
         try {
             if (checkpoint == null) {
                 initFreshCheckpoint();
@@ -1687,6 +1702,8 @@ public class AgentLoop implements Runnable {
             log.warn("Run {}: emitting the tool pause took {}ms (calls: {})",
                     run.getRunId(), emitMs, pendingIds);
         }
+        log.info("Run {}: tool pause published ({} call(s): {}, persist={}ms, emit={}ms)",
+                run.getRunId(), pendingIds.size(), pendingIds, persistMs, emitMs);
     }
 
     /**
@@ -1709,12 +1726,24 @@ public class AgentLoop implements Runnable {
             earliest = Math.min(earliest, pendingCall.getRequestedAt());
         }
         long deadline = earliest + properties.getRun().getWaitingToolsTimeoutSeconds() * 1000L;
+        log.info("Run {}: entering tool wait for {} call(s) {} (window {}ms)",
+                run.getRunId(), checkpoint.getPendingToolCalls().size(),
+                pendingCallIds(), deadline - System.currentTimeMillis());
+        long lastWaitHeartbeat = System.currentTimeMillis();
         while (!isCancelled() && !checkpoint.getPendingToolCalls().isEmpty()) {
             long remaining = deadline - System.currentTimeMillis();
             ResumePayload payload;
             if (remaining > 0) {
                 payload = gate.await(Math.min(remaining, 1000L));
                 if (payload == null) {
+                    if (System.currentTimeMillis() - lastWaitHeartbeat >= 30_000L) {
+                        lastWaitHeartbeat = System.currentTimeMillis();
+                        // Proves the wait loop is alive; the supervisor's stall
+                        // detector reports when it is not.
+                        log.info("Run {}: still waiting for {} call(s) {}, {}ms left",
+                                run.getRunId(), checkpoint.getPendingToolCalls().size(),
+                                pendingCallIds(), remaining);
+                    }
                     continue;
                 }
             } else {
@@ -1726,6 +1755,8 @@ public class AgentLoop implements Runnable {
                     payload = gate.await(1000L);
                 }
                 if (payload == null) {
+                    log.warn("Run {}: tool wait timed out with no answer (call(s): {})",
+                            run.getRunId(), pendingCallIds());
                     fail("tool_timeout", "等待编辑器工具结果超时");
                     return false;
                 }
@@ -1734,10 +1765,23 @@ public class AgentLoop implements Runnable {
                 return false;
             }
             if (payload.getToolResults() != null && !payload.getToolResults().isEmpty()) {
+                log.info("Run {}: tool wait received {} result(s) {} (pending before: {})",
+                        run.getRunId(), payload.getToolResults().size(),
+                        payload.getToolResults().stream()
+                                .map(ResumePayload.ToolResultItem::getCallId).toList(),
+                        checkpoint.getPendingToolCalls().size());
                 applyToolResults(payload.getToolResults());
                 saveCheckpoint();
                 persist();
-                saveHot(false);
+                // Force the hot write: the client reads the run view right after
+                // its resume to decide whether the batch was acknowledged, and a
+                // throttled flush left it seeing a stale WAITING_TOOLS.
+                saveHot(true);
+                log.info("Run {}: tool wait applied, {} call(s) still pending",
+                        run.getRunId(), checkpoint.getPendingToolCalls().size());
+            } else {
+                log.warn("Run {}: tool wait payload had no results (action={})",
+                        run.getRunId(), payload.getAction());
             }
         }
         if (isCancelled()) {
@@ -1753,6 +1797,17 @@ public class AgentLoop implements Runnable {
         persist();
         saveHot(false);
         return true;
+    }
+
+    /** Pending call ids, diagnostics only. */
+    private List<String> pendingCallIds() {
+        List<String> ids = new ArrayList<>();
+        for (PendingToolCall pendingCall : checkpoint.getPendingToolCalls()) {
+            if (pendingCall != null && pendingCall.getCallId() != null) {
+                ids.add(pendingCall.getCallId());
+            }
+        }
+        return ids;
     }
 
     /**

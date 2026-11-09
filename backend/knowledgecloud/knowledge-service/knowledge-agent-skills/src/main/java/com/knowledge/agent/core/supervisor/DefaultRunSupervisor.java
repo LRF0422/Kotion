@@ -84,6 +84,16 @@ public class DefaultRunSupervisor {
     /** Live loops on THIS instance (reconcile and resume consult it). */
     private final Map<String, LoopHandle> handles = new ConcurrentHashMap<>();
 
+    /** Per-run progress probes for {@link #reportStalledLoops()}. */
+    private final Map<String, StallProbe> stallProbes = new ConcurrentHashMap<>();
+
+    /** Last observed progress of one live loop. */
+    private static final class StallProbe {
+        long lastSeq = Long.MIN_VALUE;
+        long since = System.currentTimeMillis();
+        boolean reported;
+    }
+
     public DefaultRunSupervisor(RunStore runStore,
                                 CheckpointStore checkpointStore,
                                 RunEventLog eventLog,
@@ -418,6 +428,7 @@ public class DefaultRunSupervisor {
             throw new IllegalArgumentException("RUN_NOT_FOUND");
         }
         if (run.statusEnum().isTerminal()) {
+            log.info("Resume run {} ignored: run is terminal", runId);
             return true; // no-op: the caller re-syncs from the event log
         }
         boolean waiting = RunStatus.WAITING_TOOLS.name().equals(run.getStatus())
@@ -427,6 +438,7 @@ public class DefaultRunSupervisor {
         Checkpoint checkpoint = null;
         if (handle == null) {
             if (lease.isHeld(runId)) {
+                log.warn("Resume run {} rejected: lease held (another instance drives it)", runId);
                 return false; // alive on another instance
             }
             checkpoint = checkpointStore.load(runId);
@@ -451,7 +463,16 @@ public class DefaultRunSupervisor {
                     && !checkpoint.getPendingToolCalls().isEmpty();
         }
         if (waiting) {
-            return handle.gate.offer(payload);
+            boolean queued = handle.gate.offer(payload);
+            log.info("Run {}: resume action={} calls={} -> parked, queued={} ({} call(s) pending)",
+                    runId, payload.getAction(), callIdsOf(payload), queued,
+                    checkpoint == null || checkpoint.getPendingToolCalls() == null
+                            ? -1 : checkpoint.getPendingToolCalls().size());
+            if (!queued) {
+                log.warn("Run {}: resume queue rejected (full or cancelled); calls={}",
+                        runId, callIdsOf(payload));
+            }
+            return queued;
         }
         if ("tool_results".equals(payload.getAction())) {
             // Not parked, nothing pending. Two very different situations:
@@ -697,6 +718,54 @@ public class DefaultRunSupervisor {
                 }
             }
         }
+    }
+
+    /**
+     * Stall diagnostics: a live loop whose seq has not advanced for a minute is
+     * either inside a legitimately slow provider call or blocked on something the
+     * event log cannot show (a Redis/MySQL write, the resume gate). When a run
+     * sits at "Working…" and tool results are being accepted but never applied,
+     * this line + the loop thread's stack name the blocker instead of guessing.
+     *
+     * <p>Reports once per stall (not per tick) and resets on any progress.
+     */
+    @Scheduled(fixedDelayString = "10000")
+    public void reportStalledLoops() {
+        long now = System.currentTimeMillis();
+        for (LoopHandle handle : handles.values()) {
+            String runId = handle.run.getRunId();
+            long seq = handle.run.getLastSeq();
+            StallProbe probe = stallProbes.computeIfAbsent(runId, key -> new StallProbe());
+            if (probe.lastSeq != seq) {
+                probe.lastSeq = seq;
+                probe.since = now;
+                probe.reported = false;
+                continue;
+            }
+            if (probe.reported || now - probe.since < 60_000L) {
+                continue;
+            }
+            probe.reported = true;
+            Thread loopThread = handle.loop.loopThread();
+            log.warn("Run {} made no progress for {}ms at seq {} (status {}, pending frontend calls: {})",
+                    runId, now - probe.since, seq, handle.run.getStatus(),
+                    handle.run.getPendingToolCalls());
+            if (loopThread == null) {
+                log.warn("Run {} loop thread has not started", runId);
+            } else {
+                log.warn("Run {} loop thread {} is {}; stack:{}", runId,
+                        loopThread.getName(), loopThread.getState(), stackTraceOf(loopThread));
+            }
+        }
+        stallProbes.keySet().removeIf(runId -> !handles.containsKey(runId));
+    }
+
+    private static String stackTraceOf(Thread thread) {
+        StringBuilder trace = new StringBuilder();
+        for (StackTraceElement element : thread.getStackTrace()) {
+            trace.append("\n    at ").append(element);
+        }
+        return trace.toString();
     }
 
     // ==================== internals ====================
