@@ -141,6 +141,71 @@ class OpenAiCompatibleClientTest {
                 content.get(1).path("image_url").path("url").asText());
     }
 
+    @Test
+    void mapsAliasToTheVendorModelId() throws Exception {
+        OpenAiCompatibleClient client = clientFor("vendor", "https://vendor.example/v1",
+                ModelConfig.builder()
+                        .name("deepseek-v3")
+                        .aliases(Collections.singletonList("deepseek-chat"))
+                        .build());
+
+        JsonNode body = objectMapper.readTree(client.buildRequestBody(request("deepseek-chat"), false));
+
+        assertEquals("deepseek-v3", body.path("model").asText());
+    }
+
+    @Test
+    void keepsVendorModelIdContainingSlash() throws Exception {
+        OpenAiCompatibleClient client = clientFor("siliconflow", "https://api.siliconflow.cn/v1",
+                ModelConfig.builder().name("deepseek-ai/DeepSeek-V3").build());
+
+        JsonNode body = objectMapper.readTree(
+                client.buildRequestBody(request("deepseek-ai/DeepSeek-V3"), false));
+
+        assertEquals("deepseek-ai/DeepSeek-V3", body.path("model").asText());
+    }
+
+    @Test
+    void stripsOnlyItsOwnProviderPrefix() throws Exception {
+        OpenAiCompatibleClient client = clientFor("vendor", "https://vendor.example/v1",
+                ModelConfig.builder().name("deepseek-v3").build());
+
+        JsonNode body = objectMapper.readTree(client.buildRequestBody(request("vendor/deepseek-v3"), false));
+
+        assertEquals("deepseek-v3", body.path("model").asText());
+    }
+
+    @Test
+    void usesTheOnlyDeclaredModelWhenTheRequestedIdIsUnknown() throws Exception {
+        OpenAiCompatibleClient client = clientFor("vendor", "https://vendor.example/v1",
+                ModelConfig.builder().name("deepseek-v3").build());
+
+        JsonNode body = objectMapper.readTree(client.buildRequestBody(request("deepseek-chat"), false));
+
+        assertEquals("deepseek-v3", body.path("model").asText());
+    }
+
+    @Test
+    void keepsTheRequestedIdWhenSeveralModelsAreDeclared() throws Exception {
+        ModelConfig first = ModelConfig.builder().name("deepseek-v3").build();
+        ModelConfig second = ModelConfig.builder().name("deepseek-r1").build();
+        OpenAiCompatibleClient client = clientFor("vendor", "https://vendor.example/v1", first, second);
+
+        JsonNode body = objectMapper.readTree(client.buildRequestBody(request("retired-model"), false));
+
+        assertEquals("retired-model", body.path("model").asText());
+    }
+
+    @Test
+    void resolvesChatUrlWithoutDuplicatingTheVersionSegment() {
+        OpenAiCompatibleClient client = clientFor("vendor",
+                "https://aigw-gzgy2.cucloud.cn:8443/v1",
+                ModelConfig.builder().name("deepseek-v3").build());
+
+        assertEquals("https://aigw-gzgy2.cucloud.cn:8443/v1/chat/completions",
+                client.getChatUrl());
+    }
+
     private OpenAiCompatibleClient client(Map<String, Object> extra) {
         ModelConfig model = ModelConfig.builder()
                 .name("test-model")
@@ -152,9 +217,23 @@ class OpenAiCompatibleClientTest {
         return new OpenAiCompatibleClient("test", provider);
     }
 
+    private OpenAiCompatibleClient clientFor(String providerName, String baseUrl, ModelConfig... models) {
+        LlmClientFactory.ProviderConfig provider = new LlmClientFactory.ProviderConfig();
+        provider.setBaseUrl(baseUrl);
+        provider.setModels(Arrays.asList(models));
+        return new OpenAiCompatibleClient(providerName, provider);
+    }
+
     private LlmRequest request() {
         return LlmRequest.builder()
                 .model("test-model")
+                .messages(Collections.emptyList())
+                .build();
+    }
+
+    private LlmRequest request(String model) {
+        return LlmRequest.builder()
+                .model(model)
                 .messages(Collections.emptyList())
                 .build();
     }

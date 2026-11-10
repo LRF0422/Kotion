@@ -26,14 +26,75 @@ public class LlmClientFactory {
 
     @PostConstruct
     public void init() {
+        clientCache.clear();
+        if (providers == null || providers.isEmpty()) {
+            log.warn("No LLM providers configured (agent.providers.* is empty); "
+                    + "agent runs will fail until at least one provider is configured.");
+            return;
+        }
         for (Map.Entry<String, ProviderConfig> entry : providers.entrySet()) {
             String providerName = entry.getKey();
             ProviderConfig config = entry.getValue();
+            if (config == null) {
+                log.error("LLM provider '{}' has no configuration; skipped", providerName);
+                continue;
+            }
+            // Resolve once, up front: a bad base-url/chat-path is a deployment
+            // error, and failing here is far cheaper than a 404 per agent turn.
+            String chatUrl;
+            try {
+                chatUrl = config.resolveChatUrl();
+            } catch (IllegalArgumentException e) {
+                throw new IllegalStateException(
+                        "Invalid LLM provider '" + providerName + "': " + e.getMessage(), e);
+            }
             LlmClient client = createClient(providerName, config);
             clientCache.put(providerName, client);
-            log.info("Initialized LLM client for provider: {} (models: {})",
-                    providerName, config.getModelNames());
+            log.info("LLM provider '{}' ready: POST {} (models: {}, api-key: {})",
+                    providerName, chatUrl, config.getModelNames(),
+                    hasText(config.getApiKey()) ? "set" : "MISSING");
+            if (!hasText(config.getApiKey())) {
+                // Some internal gateways authenticate per-network, so this is a
+                // warning, not an error — but it is the first thing to check for a
+                // 401/403 from a third-party vendor.
+                log.warn("LLM provider '{}' has no api-key configured; "
+                        + "requests will be sent without an Authorization header.", providerName);
+            }
+            if (config.getModels() == null || config.getModels().isEmpty()) {
+                log.warn("LLM provider '{}' declares no models; /api/v1/models will be empty "
+                        + "and model routing falls back to this provider's default.", providerName);
+            }
         }
+        validateDefaultSelection();
+    }
+
+    /**
+     * Surface the two misconfigurations that produce a provider-side 404
+     * ({@code model_not_found}) at request time: a default provider that does not
+     * exist, and a default model no provider declares.
+     */
+    private void validateDefaultSelection() {
+        if (!clientCache.containsKey(defaultProvider)) {
+            log.error("agent.default-provider '{}' is not among the configured providers {}; "
+                            + "runs without an explicit model cannot be served.",
+                    defaultProvider, clientCache.keySet());
+            return;
+        }
+        ProviderConfig defaultConfig = providers.get(defaultProvider);
+        if (!hasText(defaultModel)) {
+            log.warn("agent.default-model is empty; the provider's first declared model is used.");
+            return;
+        }
+        if (defaultConfig != null && defaultConfig.findModelConfig(defaultModel) == null) {
+            log.warn("agent.default-model '{}' is not declared by provider '{}' (declared: {}). "
+                            + "The vendor will likely answer 404 model_not_found. Set agent.default-model "
+                            + "to the vendor's model id, or declare '{}' as an alias of it.",
+                    defaultModel, defaultProvider, defaultConfig.getModelNames(), defaultModel);
+        }
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
     }
 
     private LlmClient createClient(String providerName, ProviderConfig config) {
@@ -60,24 +121,46 @@ public class LlmClientFactory {
 
     /**
      * Get an LLM client that supports the given model.
-     * Checks all providers for a matching model name.
+     *
+     * <p>Resolution order matters for third-party vendors:
+     * <ol>
+     *   <li>a model name (or alias) declared under {@code agent.providers.*.models}
+     *       — vendor ids often contain a slash ({@code deepseek-ai/DeepSeek-V3}),
+     *       which must not be mistaken for a provider prefix;</li>
+     *   <li>an explicit {@code provider/model} selector, only when the prefix is a
+     *       provider that is actually configured;</li>
+     *   <li>the default provider, with a warning naming the declared models.</li>
+     * </ol>
      */
     public LlmClient getClientForModel(String modelName) {
-        if (modelName == null || modelName.isEmpty()) {
+        if (modelName == null || modelName.trim().isEmpty()) {
             return getClient();
         }
-        // Check "provider/model" format
-        if (modelName.contains("/")) {
-            String[] parts = modelName.split("/", 2);
-            return getClient(parts[0]);
-        }
-        // Search all providers for matching model
+        String requested = modelName.trim();
+
+        // 1) Declared model name or alias across providers.
         for (Map.Entry<String, LlmClient> entry : clientCache.entrySet()) {
-            if (entry.getValue().getAvailableModels().contains(modelName)) {
+            ProviderConfig config = providers.get(entry.getKey());
+            if (config != null && config.findModelConfig(requested) != null) {
                 return entry.getValue();
             }
         }
-        // Fallback to default
+
+        // 2) Explicit "provider/model" selector (only for configured providers).
+        int slash = requested.indexOf('/');
+        if (slash > 0) {
+            LlmClient prefixed = clientCache.get(requested.substring(0, slash));
+            if (prefixed != null) {
+                return prefixed;
+            }
+        }
+
+        // 3) Fall back to the default provider instead of failing the run, but say
+        // why the request may come back 404 from the vendor.
+        log.warn("Model '{}' is not declared by any provider (declared: {}); "
+                        + "falling back to provider '{}'. Add the vendor's model id under "
+                        + "agent.providers.{}.models[] or map '{}' as one of its aliases.",
+                requested, getAllModels(), defaultProvider, defaultProvider, requested);
         return getClient();
     }
 
@@ -95,16 +178,31 @@ public class LlmClientFactory {
         if (requested == null || requested.trim().isEmpty()) {
             return false;
         }
-        String bare = requested.contains("/") ? requested.split("/", 2)[1] : requested;
+
+        // Declared name or alias first (handles vendor ids that contain a slash).
         for (ProviderConfig config : providers.values()) {
-            for (ModelConfig model : config.getModels()) {
-                if (model.getName() != null
-                        && (model.getName().equals(bare) || model.getName().equals(requested))) {
-                    return model.isVision() || looksLikeVisionModel(bare);
-                }
+            if (config == null) {
+                continue;
+            }
+            ModelConfig model = config.findModelConfig(requested);
+            if (model != null && model.getName() != null) {
+                return model.isVision() || looksLikeVisionModel(model.getName());
             }
         }
-        return looksLikeVisionModel(bare);
+
+        // Explicit "provider/model" form.
+        int slash = requested.indexOf('/');
+        if (slash > 0) {
+            ProviderConfig config = providers.get(requested.substring(0, slash));
+            if (config != null) {
+                ModelConfig model = config.findModelConfig(requested.substring(slash + 1));
+                if (model != null && model.getName() != null) {
+                    return model.isVision() || looksLikeVisionModel(model.getName());
+                }
+            }
+            requested = requested.substring(slash + 1);
+        }
+        return looksLikeVisionModel(requested);
     }
 
     /** Name heuristics for common multimodal model families. */
@@ -148,7 +246,7 @@ public class LlmClientFactory {
     }
 
     public void setProviders(Map<String, ProviderConfig> providers) {
-        this.providers = providers;
+        this.providers = providers != null ? providers : new LinkedHashMap<>();
     }
 
     public String getDefaultProvider() {
@@ -175,34 +273,74 @@ public class LlmClientFactory {
         private String baseUrl;
         private String apiKey;
         /**
-         * Chat completions endpoint path. Defaults to the OpenAI-style path.
-         * Zhipu (bigmodel.cn) uses "/chat/completions" under its /api/paas/v4 base URL.
+         * Chat-completions path appended to {@link #baseUrl}. Accepts three shapes:
+         * <ul>
+         *   <li>a path — {@code /v1/chat/completions} (default) or
+         *       {@code /chat/completions} for vendors whose base URL already ends
+         *       with the API version (e.g. {@code .../api/paas/v4});</li>
+         *   <li>a path-relative-to-base — {@code chat/completions};</li>
+         *   <li>a complete URL — {@code https://<host>/v1/chat/completions}.</li>
+         * </ul>
+         * A leading segment the base URL already carries is never duplicated, so
+         * {@code base-url: https://<host>/v1} plus the default path resolves to
+         * {@code https://<host>/v1/chat/completions} (not {@code /v1/v1/...}).
          */
-        private String chatPath = "/v1/chat/completions";
+        private String chatPath = ChatEndpoint.DEFAULT_CHAT_PATH;
+        /**
+         * Extra HTTP headers sent with every chat request, for vendors that need
+         * a non-Bearer credential header ({@code api-key}, {@code X-App-Id}, ...).
+         * A configured {@code Authorization} header wins over the generated
+         * {@code Bearer <api-key>}.
+         */
+        private Map<String, String> headers = new LinkedHashMap<>();
         private List<ModelConfig> models = new ArrayList<>();
 
         public List<String> getModelNames() {
             List<String> names = new ArrayList<>();
             for (ModelConfig m : models) {
-                names.add(m.getName());
+                if (m != null && m.getName() != null) {
+                    names.add(m.getName());
+                }
             }
             return names;
         }
 
+        /** Absolute URL built from {@link #baseUrl} and {@link #chatPath}. */
+        public String resolveChatUrl() {
+            return ChatEndpoint.resolve(baseUrl, chatPath);
+        }
+
         /**
-         * Find a model config by name.
+         * Find a model config by its declared name or one of its aliases.
+         *
+         * @return the matching config, the first model when {@code modelName} is
+         *         blank, or {@code null} when the id is not declared by this
+         *         provider (the caller decides the fallback)
          */
-        public ModelConfig getModelConfig(String modelName) {
-            if (modelName == null && !models.isEmpty()) {
+        public ModelConfig findModelConfig(String modelName) {
+            if (models == null || models.isEmpty()) {
+                return null;
+            }
+            if (modelName == null || modelName.trim().isEmpty()) {
                 return models.get(0);
             }
+            String requested = modelName.trim();
             for (ModelConfig m : models) {
-                if (m.getName().equals(modelName)) {
+                if (m != null && m.getName() != null && m.getName().equals(requested)) {
                     return m;
                 }
             }
-            // Return first model as fallback
-            return models.isEmpty() ? null : models.get(0);
+            for (ModelConfig m : models) {
+                if (m == null || m.getAliases() == null) {
+                    continue;
+                }
+                for (String alias : m.getAliases()) {
+                    if (alias != null && alias.trim().equals(requested)) {
+                        return m;
+                    }
+                }
+            }
+            return null;
         }
     }
 }

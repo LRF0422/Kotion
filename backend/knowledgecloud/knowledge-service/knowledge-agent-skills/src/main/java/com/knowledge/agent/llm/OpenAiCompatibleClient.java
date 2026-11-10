@@ -11,6 +11,7 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.net.URI;
 import java.util.*;
 
 /**
@@ -25,24 +26,35 @@ public class OpenAiCompatibleClient implements LlmClient {
 
     private final String providerName;
     private final LlmClientFactory.ProviderConfig config;
-    private final String chatPath;
+    /** Absolute chat-completions URL, resolved from base-url + chat-path. */
+    private final String chatUrl;
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
 
     public OpenAiCompatibleClient(String providerName, LlmClientFactory.ProviderConfig config) {
         this.providerName = providerName;
         this.config = config;
-        this.chatPath = config.getChatPath() != null && !config.getChatPath().isEmpty()
-                ? config.getChatPath()
-                : "/v1/chat/completions";
+        // Absolute URL instead of WebClient#baseUrl + relative path: the base URL
+        // and the chat path are joined by ChatEndpoint, which tolerates every
+        // shape a vendor hands out (origin, /v1, /compatible-mode/v1, full URL).
+        this.chatUrl = config.resolveChatUrl();
         this.objectMapper = new ObjectMapper();
         this.webClient = WebClient.builder()
-                .baseUrl(config.getBaseUrl())
                 .defaultHeader("Content-Type", "application/json")
                 .defaultHeaders(headers -> {
+                    Map<String, String> configured = config.getHeaders();
+                    if (configured != null) {
+                        for (Map.Entry<String, String> header : configured.entrySet()) {
+                            if (header.getKey() != null && !header.getKey().trim().isEmpty()
+                                    && header.getValue() != null) {
+                                headers.set(header.getKey().trim(), header.getValue().trim());
+                            }
+                        }
+                    }
                     String apiKey = config.getApiKey();
-                    if (apiKey != null && !apiKey.isEmpty()) {
-                        headers.set("Authorization", "Bearer " + apiKey);
+                    if (apiKey != null && !apiKey.trim().isEmpty()
+                            && !headers.containsKey("Authorization")) {
+                        headers.set("Authorization", "Bearer " + apiKey.trim());
                     }
                 })
                 .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(
@@ -50,6 +62,11 @@ public class OpenAiCompatibleClient implements LlmClient {
                                 .option(io.netty.channel.ChannelOption.CONNECT_TIMEOUT_MILLIS, 10_000)
                                 .responseTimeout(java.time.Duration.ofMinutes(5))))
                 .build();
+    }
+
+    /** Absolute URL this client POSTs to (also logged by LlmClientFactory at startup). */
+    public String getChatUrl() {
+        return chatUrl;
     }
 
     /**
@@ -74,16 +91,21 @@ public class OpenAiCompatibleClient implements LlmClient {
             throw new LlmApiException("Failed to build LLM request: " + e.getMessage(), e);
         }
         String responseBody = webClient.post()
-                .uri(chatPath)
+                .uri(URI.create(chatUrl))
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(requestBody)
                 .retrieve()
                 .bodyToMono(String.class)
                 .onErrorMap(WebClientResponseException.class, e -> {
-                    log.error("LLM chat API error ({} {}): {}", e.getStatusCode(),
-                            e.getStatusText(), e.getResponseBodyAsString());
+                    // Log the exact URL: a 404 here is almost always a wrong
+                    // base-url/chat-path join, a doubled /v1, or a model the vendor
+                    // does not expose (model_not_found) — all diagnosable from it.
+                    log.error("LLM chat API error for provider {} ({} {}) POST {}: {}",
+                            providerName, e.getStatusCode(), e.getStatusText(),
+                            chatUrl, e.getResponseBodyAsString());
                     return new LlmApiException("LLM chat API error (" + e.getStatusCode()
-                            + "): " + e.getResponseBodyAsString(), e);
+                            + ") for provider " + providerName + " at " + chatUrl + ": "
+                            + e.getResponseBodyAsString(), e);
                 })
                 .block();
 
@@ -108,7 +130,7 @@ public class OpenAiCompatibleClient implements LlmClient {
             return Flux.error(new LlmApiException("Failed to build LLM request: " + e.getMessage(), e));
         }
         return webClient.post()
-                .uri(chatPath)
+                .uri(URI.create(chatUrl))
                 .contentType(MediaType.APPLICATION_JSON)
                 .accept(MediaType.TEXT_EVENT_STREAM)
                 .bodyValue(requestBody)
@@ -117,11 +139,12 @@ public class OpenAiCompatibleClient implements LlmClient {
                 .filter(line -> line != null && !line.isEmpty() && !"[DONE]".equals(line.trim()))
                 .flatMap(this::parseStreamChunk)
                 .onErrorMap(WebClientResponseException.class, e -> {
-                    log.error("LLM stream API error for provider {} ({} {}): {}",
+                    log.error("LLM stream API error for provider {} ({} {}) POST {}: {}",
                             providerName, e.getStatusCode(), e.getStatusText(),
-                            e.getResponseBodyAsString());
+                            chatUrl, e.getResponseBodyAsString());
                     return new LlmApiException("LLM stream API error (" + e.getStatusCode()
-                            + "): " + e.getResponseBodyAsString(), e);
+                            + ") for provider " + providerName + " at " + chatUrl + ": "
+                            + e.getResponseBodyAsString(), e);
                 });
     }
 
@@ -132,10 +155,11 @@ public class OpenAiCompatibleClient implements LlmClient {
 
     @Override
     public String getDefaultModel() {
-        if (config.getModels().isEmpty()) {
+        if (config.getModels() == null || config.getModels().isEmpty()) {
             return "default";
         }
-        return config.getModels().get(0).getName();
+        ModelConfig first = config.getModels().get(0);
+        return first != null && first.getName() != null ? first.getName() : "default";
     }
 
     @Override
@@ -171,7 +195,7 @@ public class OpenAiCompatibleClient implements LlmClient {
         // Merge model-specific extra parameters from YAML config (e.g. Zhipu GLM's
         // "thinking" / "reasoning_effort"). These are provider extensions to the
         // OpenAI format and are applied before the standard fields below.
-        ModelConfig modelConfig = config.getModelConfig(model);
+        ModelConfig modelConfig = config.findModelConfig(model);
         if (modelConfig != null && modelConfig.getExtra() != null) {
             for (Map.Entry<String, Object> entry : modelConfig.getExtra().entrySet()) {
                 // stream_options is valid only for streaming chat-completion requests.
@@ -356,14 +380,35 @@ public class OpenAiCompatibleClient implements LlmClient {
     }
 
     private String resolveModel(String requestedModel) {
-        if (requestedModel != null && !requestedModel.isEmpty()) {
-            // Strip provider prefix if present
-            if (requestedModel.contains("/")) {
-                return requestedModel.split("/", 2)[1];
-            }
-            return requestedModel;
+        String requested = requestedModel == null ? "" : requestedModel.trim();
+        if (requested.isEmpty()) {
+            return getDefaultModel();
         }
-        return getDefaultModel();
+        // Strip this provider's own prefix only. Vendor ids legitimately contain a
+        // slash (SiliconFlow: deepseek-ai/DeepSeek-V3, ...) and must not be truncated.
+        String prefix = providerName + "/";
+        if (requested.startsWith(prefix)) {
+            requested = requested.substring(prefix.length());
+        }
+        // Map a declared alias / app-internal id to the id the vendor serves.
+        ModelConfig modelConfig = config.findModelConfig(requested);
+        if (modelConfig != null && modelConfig.getName() != null) {
+            return modelConfig.getName();
+        }
+        // The id is not declared by this provider. Sending an unknown id is the
+        // second most common cause of a vendor 404 (model_not_found). With a single
+        // declared model there is no ambiguity, so use it and say so; with several,
+        // keep the request as-is so the real error is visible.
+        if (config.getModels() != null && config.getModels().size() == 1) {
+            String only = config.getModels().get(0).getName();
+            if (only != null && !only.trim().isEmpty()) {
+                log.warn("Requested model '{}' is not declared for provider '{}'; using its only "
+                        + "declared model '{}' (add an alias if this mapping should be explicit).",
+                        requested, providerName, only);
+                return only;
+            }
+        }
+        return requested;
     }
 
     private LlmResponse parseResponse(String responseBody) throws Exception {

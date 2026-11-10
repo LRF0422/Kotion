@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -19,6 +20,18 @@ import java.util.Map;
 public class ModelConfig {
 
     private String name;
+
+    /**
+     * Additional ids clients may use for this model. The model is still sent to
+     * the provider under {@link #name}, so a deployment can keep the ids the app
+     * already sends ({@code deepseek-chat}, a {@code default-model} value, an old
+     * client preference) while the vendor only serves its own id
+     * ({@code deepseek-v3}, {@code DeepSeek-V3}, ...). A request that uses an
+     * alias is mapped to {@link #name} before the provider call, which also
+     * avoids the vendor's {@code 404 model_not_found}.
+     */
+    @Builder.Default
+    private List<String> aliases = new ArrayList<>();
 
     @Builder.Default
     private int maxTokens = 4096;

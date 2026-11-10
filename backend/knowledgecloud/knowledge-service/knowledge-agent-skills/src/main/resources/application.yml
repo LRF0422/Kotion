@@ -3,7 +3,7 @@ server:
 
 agent:
   # LLM provider selection (consumed by LlmClientFactory; providers map
-  # usually supplied via Nacos / environment config)
+  # usually supplied via Nacos / environment config).
   default-provider: deepseek
   default-model: deepseek-v4-flash
   # Vision (读图): before the agent sends image content to a model it checks
@@ -16,16 +16,27 @@ agent:
   # chat panel accepts the upload, the backend then drops the image parts, and
   # the model answers "看不到图片" — with nothing in the UI explaining why.
   # `default-model` above must therefore be flagged in the provider map
-  # (usually supplied by Nacos, not this file):
+  # (usually supplied by Nacos, not this file).
+  #
+  # ---- Provider 配置（任意 OpenAI 兼容厂家）----
+  # 完整说明与 404 排查清单见 doc/LLM_PROVIDERS.md。要点：
+  #   - base-url 可以带版本段（https://<host>/v1、.../compatible-mode/v1、
+  #     .../api/v3），不必手写 chat-path；归一化在 llm/ChatEndpoint.java，
+  #     base-url + 默认 chat-path 不会拼出 /v1/v1/...（那正是第三方厂家
+  #     返回 404 的常见原因）。
+  #   - models[].name 是发给厂家的真实模型 id；应用里已有的旧 id 可用
+  #     models[].aliases 映射过去（例如 aliases: [deepseek-chat]）。
+  #   - headers 可追加厂家要求的非 Bearer 鉴权头（api-key / X-App-Id ...）。
   #
   #   agent:
   #     providers:
   #       deepseek:
-  #         base-url: https://<host>/v1
+  #         base-url: https://aigw-gzgy2.cucloud.cn:8443/v1
   #         api-key: ${DEEPSEEK_API_KEY:}
   #         models:
-  #           - name: deepseek-v4-flash
-  #             vision: true
+  #           - name: deepseek-v3
+  #             aliases: [deepseek-chat]
+  #             vision: false
   #
   # The name must match the id the client sends (or `default-model`). The
   # capability is published per model by /api/v1/models (supportsVision), which

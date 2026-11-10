@@ -120,6 +120,8 @@ make clean
   匹配（一个 skill 多个 tool），SDK 每 300s 周期重注册兜底；运维见
   `knowledge-service/knowledge-agent-skills/REMOTE_SKILLS.md`。
 - **LLM Abstraction**: `LlmClient`/`LlmClientFactory`（OpenAI 兼容 provider，`agent.providers.*` 配置）；
+  base-url/chat-path 归一化在 `llm/ChatEndpoint`（第三方厂家 base-url 已带 `/v1` 时不会拼出
+  `/v1/v1/...` 而 404），模型别名/额外 header/404 排查见 `doc/LLM_PROVIDERS.md`；
   AgentCore 的 `LlmGateway` 是唯一调用入口（同步驱动 + 流式工具调用累积）。
 - **Multi-agent**: `delegate` 工具创建子 run 并立即回执（异步后台执行，父 loop 继续自己的步骤）；
   子 run 结果以后台通知注入，或由 `wait_for_children` 显式等待后聚合返回。
