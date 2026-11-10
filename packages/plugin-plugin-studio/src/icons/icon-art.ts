@@ -267,10 +267,16 @@ export const railIconSnippets = (iconName: string, emoji?: string) => ({
  * read/writeFile, the dock panel passes the same, tests pass a recorder.
  * ------------------------------------------------------------------ */
 
-/** The two file operations this needs — both callers already have them. */
+/** The file operations this needs — both callers already have them. */
 export interface PluginIconIo {
     readFile(options: { path: string }): Promise<string>
     writeFile(options: { path: string; contents: string }): Promise<void>
+    /**
+     * Optional, used only to undo an icon generation that had no predecessor
+     * (drop the freshly written `assets/icon.svg`). Callers that cannot delete
+     * simply omit it; `restorePluginIcon` then leaves the file in place.
+     */
+    deleteFile?(options: { path: string }): Promise<unknown>
 }
 
 export interface ApplyPluginIconInput {
@@ -496,6 +502,167 @@ export const writePluginIconSvg = async (input: WritePluginIconSvgInput): Promis
     await io.writeFile({ path: manifestPath, contents: JSON.stringify(manifest, null, 2) + '\n' })
 
     return { iconFile, relativePath: PLUGIN_ICON_RELATIVE_PATH, manifest: { previous, block: studioKey } }
+}
+
+/* ------------------------------------------------------------------ *
+ * Reading and undoing an applied icon
+ *
+ * The studio lets an author generate an icon, look at it, and undo it. Undo
+ * needs to know what was there *before* the generation, which is why reading
+ * and restoring are a pair: `readPluginIcon` snapshots the pointer plus the
+ * previous artwork text, `restorePluginIcon` puts both back.
+ * ------------------------------------------------------------------ */
+
+/** A manifest icon that is not a project file: nothing to read or write. */
+const isExternalIcon = (icon: string): boolean => /^(https?:|data:)/i.test(icon)
+
+/**
+ * Canonical project-relative spelling of a manifest icon path: forward slashes,
+ * no leading slash, no `.` / `..` / empty segments.
+ *
+ * Undo compares "is the previous icon the same file this generation wrote?",
+ * and a hand-edited manifest can spell the same file `./assets/icon.svg` or
+ * `assets\\icon.svg`. A raw string compare would rewrite the previous artwork
+ * and then delete it in the same undo, reporting success.
+ */
+const normalizeProjectRelative = (value: string): string => {
+    const parts: string[] = []
+    for (const segment of value.replace(/\\/g, '/').replace(/^\/+/, '').split('/')) {
+        if (!segment || segment === '.') continue
+        if (segment === '..') {
+            parts.pop()
+            continue
+        }
+        parts.push(segment)
+    }
+    return parts.join('/')
+}
+
+export interface ReadPluginIconInput {
+    /** Absolute project root. */
+    root: string
+    io: PluginIconIo
+}
+
+export interface ReadPluginIconResult {
+    /** The manifest's icon pointer, or null when the project declares none. */
+    icon: string | null
+    /**
+     * The previous artwork's text, when the pointer is a project file that can
+     * be read. A URL/data icon has no local contents; an unreadable file
+     * (deleted by hand, permissions) is reported as null instead of throwing.
+     */
+    svg: string | null
+}
+
+/**
+ * Snapshot the icon a project currently declares, before overwriting it.
+ *
+ * The block rule is the same one the writers use (prefer `knPluginStudio`,
+ * fall back to legacy `knPlugin`), so read-then-write always targets one block.
+ */
+export const readPluginIcon = async (input: ReadPluginIconInput): Promise<ReadPluginIconResult> => {
+    const { root, io } = input
+    if (!root) throw new Error('插件工程根目录不能为空')
+
+    const { block } = await loadManifestTarget(root, io)
+    const icon = typeof block.icon === 'string' && block.icon ? block.icon : null
+    if (!icon || isExternalIcon(icon)) return { icon, svg: null }
+
+    try {
+        // Canonical spelling: a manifest may say `./assets/icon.svg` while the
+        // store (and the browser) resolve the same file.
+        const svg = await io.readFile({ path: joinProjectPath(root, normalizeProjectRelative(icon)) })
+        return { icon, svg: typeof svg === 'string' ? svg : null }
+    } catch {
+        return { icon, svg: null }
+    }
+}
+
+export interface RestorePluginIconInput {
+    /** Absolute project root. */
+    root: string
+    io: PluginIconIo
+    /** The pointer `readPluginIcon` returned (null when there was no icon). */
+    icon: string | null
+    /** The artwork text `readPluginIcon` returned, when it could be read. */
+    svg: string | null
+}
+
+export interface RestorePluginIconResult {
+    /** The pointer the manifest now declares (null when it was removed). */
+    icon: string | null
+    /** True when the generated artwork file was actually deleted. */
+    fileRemoved: boolean
+    /**
+     * False when the previous pointer was an in-project file whose contents
+     * could not be read back (nothing could be rewritten, so the file on disk is
+     * the newer artwork even though the pointer was restored). The caller should
+     * tell the author instead of claiming a clean undo.
+     */
+    contentRestored: boolean
+}
+
+/**
+ * Undo an applied icon.
+ *
+ * Three cases, deliberately different:
+ *  - previous pointer was a URL/data URI → restore the pointer only; there was
+ *    never a project file behind it, so nothing is read or written;
+ *  - previous pointer was a project file with saved contents → rewrite that
+ *    file and restore the pointer;
+ *  - no previous icon → remove the pointer and delete the artwork this run
+ *    wrote (`assets/icon.svg`). Deleting is best-effort: without
+ *    `io.deleteFile` (or when the delete fails) the pointer is still restored
+ *    and the call does not throw.
+ */
+export const restorePluginIcon = async (input: RestorePluginIconInput): Promise<RestorePluginIconResult> => {
+    const { root, io } = input
+    if (!root) throw new Error('插件工程根目录不能为空')
+
+    const { manifestPath, manifest, studioKey, block } = await loadManifestTarget(root, io)
+    const icon = typeof input.icon === 'string' && input.icon ? input.icon : null
+
+    // 1) the manifest pointer: put the old value back, or drop the field.
+    const next = { ...block }
+    if (icon) next.icon = icon
+    else delete next.icon
+    manifest[studioKey] = next
+    await io.writeFile({ path: manifestPath, contents: JSON.stringify(manifest, null, 2) + '\n' })
+
+    // 2) the artwork file. URL/data icons never touch a file. Paths are
+    // canonicalized first so `./assets/icon.svg` and `assets/icon.svg` are the
+    // same file (otherwise the rewrite below would be deleted by step 3).
+    const previousRelative = icon && !isExternalIcon(icon) ? normalizeProjectRelative(icon) : null
+    const generatedRelative = normalizeProjectRelative(PLUGIN_ICON_RELATIVE_PATH)
+    const previousFile = previousRelative ? joinProjectPath(root, previousRelative) : null
+    const generatedPath = joinProjectPath(root, generatedRelative)
+    const contentRestored = previousFile === null || (typeof input.svg === 'string' && input.svg.length > 0)
+    if (previousFile && contentRestored) {
+        await io.writeFile({ path: previousFile, contents: input.svg as string })
+    }
+
+    // 3) Drop the artwork this generation wrote when it is NOT the file the
+    // manifest now points at (no previous icon, a URL/data icon, or a different
+    // in-project path). Otherwise it would linger as an orphan asset.
+    let fileRemoved = false
+    // Case-insensitive comparison on purpose: this tool runs on case-insensitive
+    // volumes (default macOS APFS) where `ASSETS/ICON.SVG` names the same file.
+    // Skipping the delete there is harmless on a case-sensitive volume (it only
+    // leaves an orphan), while deleting would destroy the restored artwork.
+    const sameFileAsGenerated = previousRelative !== null
+        && previousRelative.toLowerCase() === generatedRelative.toLowerCase()
+    if (!sameFileAsGenerated && typeof io.deleteFile === 'function') {
+        try {
+            await io.deleteFile({ path: generatedPath })
+            fileRemoved = true
+        } catch {
+            // Best effort: undo must not fail because the file is already gone.
+            fileRemoved = false
+        }
+    }
+
+    return { icon, fileRemoved, contentRestored }
 }
 
 /** The manifest field `publishPluginProject` reads to find the icon file. */

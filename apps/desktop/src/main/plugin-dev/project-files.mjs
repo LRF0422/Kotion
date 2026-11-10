@@ -11,7 +11,7 @@ import { readFile, readdir } from 'node:fs/promises'
 import { extname, join, relative, sep } from 'node:path'
 
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', 'release', 'out', '.git', '.turbo', 'coverage'])
-const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.json', '.md', '.css', '.html', '.txt'])
+const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.json', '.md', '.css', '.html', '.txt', '.svg'])
 const MAX_LIST_FILES = 400
 const DEFAULT_SEARCH_LIMIT = 60
 const MAX_SEARCH_LIMIT = 200

@@ -71,17 +71,27 @@ import {
 } from './studio-service'
 import { usePublishProject } from './StudioMarketplacePanel'
 import { CodeView } from './files/CodeView'
-import { applyPluginIcon, writePluginIconSvg } from './icons/icon-art'
+import { svgDataUrl } from './artifacts/cards'
 import {
-    AI_ICON_MAX_CHARS,
-    AI_ICON_SYSTEM_PROMPT,
-    buildAiIconPrompt,
-    buildAiIconRepairPrompt,
-    extractIconSvg,
-    validateIconSvg,
+    PLUGIN_ICON_RELATIVE_PATH,
+    applyPluginIcon,
+    readPluginIcon,
+    restorePluginIcon,
+    writePluginIconSvg,
+    type PluginIconIo,
+} from './icons/icon-art'
+import {
+    classifyIconAiError,
+    designAiIcon,
+    type AiIconProgress,
 } from './icons/icon-ai'
 
 type Busy = 'start' | 'stop' | 'build' | 'uninstall' | 'delete' | 'icon' | 'icon-ai' | null
+
+/** Where the AI icon dialog is: waiting, streaming a design, or reviewing one. */
+type AiIconPhase = 'idle' | 'designing' | 'review'
+/** What went wrong, mapped to an actionable hint (see `classifyIconAiError`). */
+type AiIconErrorKind = ReturnType<typeof classifyIconAiError>
 
 /** Scaffold templates the host can generate; see the desktop bundler. */
 const SCAFFOLD_TEMPLATES = ['panel', 'page', 'settings', 'command', 'blank'] as const
@@ -196,13 +206,39 @@ export const StudioPage: React.FC = () => {
     const [iconResult, setIconResult] = useState<
         ({ svg: string } & ({ ai: true } | { ai?: false; glyph: string; rail: string })) | null
     >(null)
+    /**
+     * The icon that was in the project before an AI icon was applied, so the
+     * apply can be undone without leaving the project with an image its manifest
+     * no longer points at. Session-scoped on purpose: `iconResult` is a preview
+     * of this run, not durable project state.
+     */
+    const [iconUndo, setIconUndo] = useState<{ icon: string | null; svg: string | null } | null>(null)
     /** AI icon dialog: the optional design brief, live stream count, last error. */
     const [aiIconOpen, setAiIconOpen] = useState(false)
     const [aiIconBrief, setAiIconBrief] = useState('')
+    const [aiIconPhase, setAiIconPhase] = useState<AiIconPhase>('idle')
+    /**
+     * The reviewed artwork AND the project it was designed for. The root travels
+     * with the candidate so a project switch (or a project disappearing from the
+     * list mid-run) can never apply project A's artwork to project B.
+     */
+    const [aiIconCandidate, setAiIconCandidate] = useState<{ svg: string; root: string } | null>(null)
     const [aiIconError, setAiIconError] = useState<string | null>(null)
+    const [aiIconErrorKind, setAiIconErrorKind] = useState<AiIconErrorKind | null>(null)
+    const [aiIconStage, setAiIconStage] = useState<AiIconProgress['stage']>('designing')
+    const [aiIconRound, setAiIconRound] = useState(1)
     const [aiIconChars, setAiIconChars] = useState(0)
+    /** The artwork the selected project currently declares, shown in its header. */
+    const [currentIcon, setCurrentIcon] = useState<{ src: string; path: string } | null>(null)
     /** Aborts the running generation when the dialog is closed or cancelled. */
     const aiIconAbortRef = useRef<AbortController | null>(null)
+    /** Live rendering of the values async handlers must compare against. */
+    const selectedRootRef = useRef<string | undefined>(selectedRoot)
+    const aiIconOpenRef = useRef(false)
+    const aiIconCandidateRef = useRef<{ svg: string; root: string } | null>(null)
+    selectedRootRef.current = selectedRoot
+    aiIconOpenRef.current = aiIconOpen
+    aiIconCandidateRef.current = aiIconCandidate
     /** Bottom pane tab — build output first, the file browser on demand. */
     const [activeTab, setActiveTab] = useState<'logs' | 'files'>('logs')
     /** Project-relative source files of the selected project (flat, sorted). */
@@ -396,6 +432,58 @@ export const StudioPage: React.FC = () => {
         setCollapsedDirs(new Set())
     }, [selectedRoot])
 
+    // Icon state is a preview of ONE project's run. Switching projects must not
+    // leave the previous project's artwork (or its undo snapshot) on screen —
+    // that read as "this project already has that icon".
+    useEffect(() => {
+        // A run started for the previous project must not finish into this one:
+        // abort it, and close the dialog (a Radix modal normally blocks the row
+        // click, but the project can also disappear from the host list).
+        aiIconAbortRef.current?.abort()
+        setAiIconOpen(false)
+        setIconResult(null)
+        setIconUndo(null)
+        setAiIconPhase('idle')
+        setAiIconCandidate(null)
+        setAiIconError(null)
+        setAiIconErrorKind(null)
+        setAiIconChars(0)
+        setAiIconRound(1)
+        setAiIconStage('designing')
+    }, [selectedRoot])
+
+    // Show the icon the project already has (file or URL) as soon as it is
+    // selected. Without this the header had no artwork until the author generated
+    // a new one, which made an existing icon look like it had been lost.
+    useEffect(() => {
+        let cancelled = false
+        setCurrentIcon(null)
+        if (!capability || !selectedRoot) return () => { cancelled = true }
+        void (async () => {
+            try {
+                const result = await readPluginIcon({
+                    root: selectedRoot,
+                    io: {
+                        readFile: (options) => capability.dev.readFile({ path: options.path }),
+                        writeFile: (options) => capability.dev.writeFile({ path: options.path, contents: options.contents }),
+                    },
+                })
+                if (cancelled || !result.icon) return
+                if (result.svg) {
+                    setCurrentIcon({ src: svgDataUrl(result.svg), path: result.icon })
+                } else if (/^data:/i.test(result.icon)) {
+                    // A data: URI is local. An http(s) icon is NOT loaded here:
+                    // selecting an untrusted project must not fire a request at
+                    // an author-controlled URL.
+                    setCurrentIcon({ src: result.icon, path: result.icon })
+                }
+            } catch {
+                // No readable icon (or no manifest): the header shows no thumbnail.
+            }
+        })()
+        return () => { cancelled = true }
+    }, [capability, selectedRoot])
+
     useEffect(() => {
         if (activeTab === 'files') void refreshFiles()
     }, [activeTab, refreshFiles])
@@ -582,6 +670,24 @@ export const StudioPage: React.FC = () => {
     }
 
     /**
+     * The icon helpers take an injected IO surface so `./icons/icon-art` stays
+     * import-free (its tests import the module under plain Node). The dev bridge
+     * already speaks the same shape; `deleteFile` is optional because a host
+     * predating that capability can still undo the manifest pointer.
+     */
+    const iconIo = (root: string): PluginIconIo | undefined => {
+        if (!capability) return undefined
+        return {
+            readFile: (options) => capability.dev.readFile({ path: options.path }),
+            writeFile: (options) => capability.dev.writeFile({ path: options.path, contents: options.contents }),
+            // The bridge wants the project root for its allowlist check too.
+            deleteFile: typeof capability.dev.deleteFile === 'function'
+                ? (options) => capability.dev.deleteFile({ root, path: options.path })
+                : undefined,
+        }
+    }
+
+    /**
      * Generate the plugin's own icon — the same deterministic art the agent tool
      * uses (`./icons/icon-art`), so a human never has to ask the agent for one.
      * It writes `assets/icon.svg`, points the manifest at it, and swaps the
@@ -590,92 +696,220 @@ export const StudioPage: React.FC = () => {
     const generateIcon = () =>
         run('icon', async () => {
             if (!capability || !selectedRoot) return
+            const root = selectedRoot
+            const io = iconIo(root)
+            if (!io) return
             setIconResult(null)
+            // The deterministic path also rewrites the rail icon, which the undo
+            // snapshot does not cover: offer no one-click undo instead of a
+            // half-restored project.
+            setIconUndo(null)
+            setAiIconOpen(false)
+            setAiIconPhase('idle')
+            setAiIconCandidate(null)
             const applied = await applyPluginIcon({
-                root: selectedRoot,
-                seed: selected?.pluginKey || selected?.label || selectedRoot,
+                root,
+                seed: selected?.pluginKey || selected?.label || root,
                 title: selected?.label,
-                io: {
-                    readFile: (options) => capability.dev.readFile({ path: options.path }),
-                    writeFile: (options) => capability.dev.writeFile({ path: options.path, contents: options.contents }),
-                },
+                io,
             })
+            // The write landed in `root` either way; only paint it as the
+            // selected project's icon if that project is still selected.
+            if (selectedRootRef.current !== root) return
             setIconResult({ svg: applied.svg, glyph: applied.glyph, rail: applied.railIcon.status })
+            setCurrentIcon({ src: svgDataUrl(applied.svg), path: applied.relativePath })
             await refreshManaged()
+            if (activeTab === 'files') refreshFilePane()
         })
 
     /**
      * Design the plugin's icon with the host's cloud model instead of the
-     * deterministic renderer: stream an SVG, check it hard (`./icons/icon-ai`),
-     * and — on a broken document — give the model exactly one repair round.
-     * Applied through the same file/manifest contract as the palette button, so
-     * previews, publishing and the marketplace upload need no special casing.
+     * deterministic renderer: stream an SVG, hard-validate it (`./icons/icon-ai`),
+     * and — on a broken document — hand the model its concrete problems for up to
+     * two repair rounds. The result is only a CANDIDATE: nothing is written into
+     * the project until the author reviews it and presses apply.
      */
     const generateAiIcon = async () => {
         if (!capability || !selectedRoot) return
+        const root = selectedRoot
         const controller = new AbortController()
         aiIconAbortRef.current = controller
         setBusy('icon-ai')
+        setAiIconPhase('designing')
+        setAiIconCandidate(null)
         setAiIconError(null)
+        setAiIconErrorKind(null)
         setAiIconChars(0)
+        setAiIconRound(1)
+        setAiIconStage('designing')
         try {
-            const receive = async (prompt: string): Promise<string> => {
-                setAiIconChars(0)
-                const { textStream } = streamKnowledgeText(prompt, {
-                    system: AI_ICON_SYSTEM_PROMPT,
-                    signal: controller.signal,
-                })
-                let text = ''
-                for await (const part of textStream) {
-                    text += part
-                    if (text.length > AI_ICON_MAX_CHARS) throw new Error(t('pluginStudio.aiIconTooLong'))
-                    setAiIconChars(text.length)
-                }
-                return text
-            }
-
-            let reply = await receive(
-                buildAiIconPrompt({
-                    seed: selected?.pluginKey || selected?.label || selectedRoot,
-                    title: selected?.label,
-                    brief: aiIconBrief,
-                }),
-            )
-            let svg = extractIconSvg(reply)
-            let problems = svg ? validateIconSvg(svg) : [t('pluginStudio.aiIconNoSvg')]
-            if (problems.length && !controller.signal.aborted) {
-                reply = await receive(buildAiIconRepairPrompt(svg ?? reply.slice(0, 12_000), problems))
-                svg = extractIconSvg(reply)
-                problems = svg ? validateIconSvg(svg) : [t('pluginStudio.aiIconNoSvg')]
-            }
-            if (!svg || problems.length) throw new Error(problems.join('；'))
-
-            await writePluginIconSvg({
-                root: selectedRoot,
-                io: {
-                    readFile: (options) => capability.dev.readFile({ path: options.path }),
-                    writeFile: (options) => capability.dev.writeFile({ path: options.path, contents: options.contents }),
+            const result = await designAiIcon({
+                seed: selected?.pluginKey || selected?.label || root,
+                title: selected?.label,
+                brief: aiIconBrief,
+                signal: controller.signal,
+                onProgress: (progress) => {
+                    setAiIconStage(progress.stage)
+                    setAiIconChars(progress.chars)
+                    setAiIconRound(progress.round)
                 },
-                svg,
+                stream: (prompt, options) =>
+                    streamKnowledgeText(prompt, {
+                        system: options.system,
+                        signal: options.signal,
+                    }).textStream,
             })
-            setIconResult({ svg, ai: true })
-            setAiIconOpen(false)
-            await refreshManaged()
+            // Aborted by a project switch / dialog close: never publish a
+            // candidate that belongs to a project the author has left.
+            if (controller.signal.aborted || selectedRootRef.current !== root) return
+            setAiIconCandidate({ svg: result.svg, root })
+            setAiIconPhase('review')
         } catch (cause) {
-            // A cancel (dialog closed) is not a failure — only real errors show.
-            if (!controller.signal.aborted) setAiIconError(String((cause as Error)?.message ?? cause))
+            // A dialog-close abort is not a failure. Any OTHER error — including
+            // a transport-originated cancel — must replace the spinner with a
+            // real state, never leave "designing…" forever.
+            if (controller.signal.aborted) return
+            setAiIconErrorKind(classifyIconAiError(cause))
+            setAiIconError(String((cause as Error)?.message ?? cause))
+            setAiIconPhase('idle')
         } finally {
             aiIconAbortRef.current = null
             setBusy(null)
         }
     }
 
+    /**
+     * Commit the reviewed AI artwork.
+     *
+     * The candidate carries the project it was designed for; a mismatch (the
+     * project changed while the dialog was open) is refused instead of writing
+     * one project's artwork into another. The previous icon is snapshotted
+     * before the write, and a write failure puts the snapshot back, so a partial
+     * failure cannot silently lose the old icon.
+     */
+    const applyAiIcon = async () => {
+        const candidate = aiIconCandidate
+        if (!capability || !selectedRoot || !candidate) return
+        if (candidate.root !== selectedRoot) {
+            setAiIconErrorKind('unknown')
+            setAiIconError(t('pluginStudio.aiIconProjectChanged'))
+            setAiIconPhase('idle')
+            setAiIconCandidate(null)
+            return
+        }
+        const root = candidate.root
+        const svg = candidate.svg
+        const io = iconIo(root)
+        if (!io) return
+        const showApplyFailure = (cause: unknown): void => {
+            const message = String((cause as Error)?.message ?? cause)
+            if (!aiIconOpenRef.current || !aiIconCandidateRef.current) {
+                // The dialog was closed while the write was in flight: report it
+                // on the page instead of reopening a review state with no preview.
+                setError(message)
+                setAiIconPhase('idle')
+                return
+            }
+            setAiIconErrorKind(classifyIconAiError(cause))
+            setAiIconError(message)
+            setAiIconPhase('review')
+        }
+
+        setBusy('icon-ai')
+        setAiIconError(null)
+        setAiIconErrorKind(null)
+        let previous: Awaited<ReturnType<typeof readPluginIcon>> | null = null
+        try {
+            previous = await readPluginIcon({ root, io })
+            await writePluginIconSvg({ root, io, svg })
+        } catch (cause) {
+            // Best effort: put the snapshot back if the write was partial.
+            if (previous) {
+                await restorePluginIcon({ root, io, icon: previous.icon, svg: previous.svg }).catch(() => undefined)
+            }
+            setBusy(null)
+            showApplyFailure(cause)
+            return
+        }
+
+        setIconUndo(previous)
+        setBusy(null)
+        if (selectedRootRef.current !== root) return
+        setIconResult({ svg, ai: true })
+        setCurrentIcon({ src: svgDataUrl(svg), path: PLUGIN_ICON_RELATIVE_PATH })
+        setAiIconOpen(false)
+        setAiIconPhase('idle')
+        setAiIconCandidate(null)
+        try {
+            await refreshManaged()
+            if (activeTab === 'files') refreshFilePane()
+        } catch (cause) {
+            setError(String((cause as Error)?.message ?? cause))
+        }
+    }
+
+    /** Put the previous icon (file + manifest pointer) back after an AI apply. */
+    const undoIcon = async () => {
+        if (!capability || !selectedRoot || !iconUndo) return
+        const root = selectedRoot
+        const io = iconIo(root)
+        if (!io) return
+        setBusy('icon')
+        setError(null)
+        try {
+            const restored = await restorePluginIcon({
+                root,
+                io,
+                icon: iconUndo.icon,
+                svg: iconUndo.svg,
+            })
+            if (selectedRootRef.current !== root) return
+            setIconUndo(null)
+            setIconResult(null)
+            setCurrentIcon(
+                iconUndo.icon && iconUndo.svg
+                    ? { src: svgDataUrl(iconUndo.svg), path: iconUndo.icon }
+                    : iconUndo.icon && /^data:/i.test(iconUndo.icon)
+                        ? { src: iconUndo.icon, path: iconUndo.icon }
+                        : null,
+            )
+            if (!restored.contentRestored) setError(t('pluginStudio.iconUndoIncomplete'))
+            await refreshManaged()
+            if (activeTab === 'files') refreshFilePane()
+        } catch (cause) {
+            setError(String((cause as Error)?.message ?? cause))
+        } finally {
+            setBusy(null)
+        }
+    }
+
+    /** Show the generated artwork in the Files tab instead of a tiny thumbnail. */
+    const openGeneratedIcon = () => {
+        setActiveTab('files')
+        void refreshFiles().then(() => void openFile(PLUGIN_ICON_RELATIVE_PATH))
+    }
+
+    /**
+     * The offline renderer is the reliable half of the icon feature: when the AI
+     * channel is unavailable or keeps failing, one click still leaves the author
+     * with a valid, wired icon.
+     */
+    const useOfflineIcon = () => {
+        closeAiIconDialog()
+        void generateIcon()
+    }
+
     /** Close the AI icon dialog; a running generation is aborted with it. */
     const closeAiIconDialog = () => {
         aiIconAbortRef.current?.abort()
         setAiIconOpen(false)
+        setAiIconPhase('idle')
+        setAiIconCandidate(null)
         setAiIconError(null)
+        setAiIconErrorKind(null)
         setAiIconChars(0)
+        setAiIconRound(1)
+        setAiIconStage('designing')
     }
 
     const removeFromList = () => {
@@ -957,6 +1191,14 @@ export const StudioPage: React.FC = () => {
                             <div className="shrink-0 space-y-2.5 border-b p-3">
                                 <div className="flex items-start justify-between gap-3">
                                     <div className="flex min-w-0 items-start gap-2">
+                                        {currentIcon ? (
+                                            <img
+                                                src={currentIcon.src}
+                                                alt=""
+                                                title={currentIcon.path}
+                                                className="h-8 w-8 shrink-0 rounded-lg border border-border/60"
+                                            />
+                                        ) : null}
                                         <span
                                             className={cn(
                                                 'mt-1 h-2 w-2 shrink-0 rounded-full',
@@ -1150,20 +1392,49 @@ export const StudioPage: React.FC = () => {
                                 ) : null}
 
                                 {iconResult ? (
-                                    <div className="flex items-center gap-2 rounded-md border bg-muted/30 p-1.5">
+                                    <div className="flex items-center gap-2 rounded-md border bg-muted/30 p-2">
                                         <img
-                                            src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(iconResult.svg)}`}
+                                            src={svgDataUrl(iconResult.svg)}
                                             alt=""
-                                            className="h-9 w-9 shrink-0 rounded-md border"
+                                            className="h-12 w-12 shrink-0 rounded-lg border"
                                         />
-                                        <span className="min-w-0 flex-1 text-[10.5px] leading-snug text-muted-foreground">
-                                            {iconResult.ai
-                                                ? t('pluginStudio.iconGeneratedAi')
-                                                : t('pluginStudio.iconGenerated', {
-                                                    glyph: iconResult.glyph,
-                                                    rail: t(`pluginStudio.iconRail.${iconResult.rail}`),
-                                                })}
-                                        </span>
+                                        <div className="min-w-0 flex-1">
+                                            <div className="truncate text-[10.5px] leading-snug text-muted-foreground">
+                                                {iconResult.ai
+                                                    ? t('pluginStudio.iconGeneratedAi')
+                                                    : t('pluginStudio.iconGenerated', {
+                                                        glyph: iconResult.glyph,
+                                                        rail: t(`pluginStudio.iconRail.${iconResult.rail}`),
+                                                    })}
+                                            </div>
+                                            <div className="truncate font-mono text-[10px] leading-snug text-muted-foreground/70">
+                                                {PLUGIN_ICON_RELATIVE_PATH}
+                                            </div>
+                                        </div>
+                                        <div className="flex shrink-0 items-center gap-1">
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-6 px-1.5 text-[10px]"
+                                                title={t('pluginStudio.iconOpenInFiles')}
+                                                onClick={openGeneratedIcon}
+                                                disabled={busy !== null}
+                                            >
+                                                {t('pluginStudio.iconOpen')}
+                                            </Button>
+                                            {iconUndo ? (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-6 px-1.5 text-[10px]"
+                                                    title={t('pluginStudio.iconUndoHint')}
+                                                    onClick={() => void undoIcon()}
+                                                    disabled={busy !== null}
+                                                >
+                                                    {t('pluginStudio.iconUndo')}
+                                                </Button>
+                                            ) : null}
+                                        </div>
                                     </div>
                                 ) : null}
                             </div>
@@ -1395,36 +1666,93 @@ export const StudioPage: React.FC = () => {
                                 value={aiIconBrief}
                                 onChange={(event) => setAiIconBrief(event.target.value)}
                                 placeholder={t('pluginStudio.aiIconBriefPlaceholder')}
-                                disabled={busy === 'icon-ai'}
+                                disabled={aiIconPhase === 'designing' || busy !== null}
                             />
                         </div>
-                        {busy === 'icon-ai' ? (
-                            <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                                {t('pluginStudio.aiIconGenerating', { size: formatBytes(aiIconChars) })}
-                            </p>
+                        {aiIconPhase === 'designing' ? (
+                            <div className="space-y-1 rounded-md border bg-muted/20 p-2">
+                                <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                    {t(`pluginStudio.aiIconStage.${aiIconStage}`)}
+                                </p>
+                                <p className="font-mono text-[10px] leading-snug text-muted-foreground/70">
+                                    {t('pluginStudio.aiIconProgress', {
+                                        round: aiIconRound,
+                                        size: formatBytes(aiIconChars),
+                                    })}
+                                </p>
+                            </div>
+                        ) : null}
+                        {aiIconPhase === 'review' && aiIconCandidate ? (
+                            <div className="flex flex-col items-center gap-2 rounded-md border bg-muted/20 p-3">
+                                <img
+                                    src={svgDataUrl(aiIconCandidate.svg)}
+                                    alt=""
+                                    className="h-40 w-40 rounded-2xl border shadow-sm"
+                                />
+                                <p className="text-center text-[10.5px] leading-snug text-muted-foreground">
+                                    {t('pluginStudio.aiIconReviewHint')}
+                                </p>
+                            </div>
                         ) : null}
                         {aiIconError ? (
-                            <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded-md border border-destructive/20 bg-destructive/5 p-2 text-[10.5px] leading-relaxed text-destructive">
-                                {t('pluginStudio.aiIconFailed', { error: aiIconError })}
-                            </pre>
+                            <div className="space-y-1.5 rounded-md border border-destructive/20 bg-destructive/5 p-2">
+                                <pre className="max-h-32 overflow-auto whitespace-pre-wrap text-[10.5px] leading-relaxed text-destructive">
+                                    {t('pluginStudio.aiIconFailed', { error: aiIconError })}
+                                </pre>
+                                {aiIconErrorKind ? (
+                                    <p className="text-[10.5px] leading-snug text-destructive/90">
+                                        {t(`pluginStudio.aiIconErrorHint.${aiIconErrorKind}`)}
+                                    </p>
+                                ) : null}
+                            </div>
                         ) : null}
-                        <p className="text-[10.5px] leading-snug text-muted-foreground/80">
-                            {t('pluginStudio.aiIconNote')}
-                        </p>
+                        {aiIconPhase !== 'review' ? (
+                            <p className="text-[10.5px] leading-snug text-muted-foreground/80">
+                                {t('pluginStudio.aiIconNote')}
+                            </p>
+                        ) : null}
                     </div>
                     <DialogFooter>
                         <Button variant="outline" size="sm" onClick={closeAiIconDialog}>
                             {t('pluginStudio.cancel')}
                         </Button>
-                        <Button size="sm" onClick={generateAiIcon} disabled={busy !== null}>
-                            {busy === 'icon-ai' ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                                <Sparkles className="h-3.5 w-3.5" />
-                            )}
-                            {t('pluginStudio.aiIconGenerate')}
-                        </Button>
+                        {aiIconPhase === 'review' ? (
+                            <>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => void generateAiIcon()}
+                                    disabled={busy !== null}
+                                >
+                                    {t('pluginStudio.aiIconRegenerate')}
+                                </Button>
+                                <Button size="sm" onClick={() => void applyAiIcon()} disabled={busy !== null}>
+                                    {busy === 'icon-ai' ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    ) : null}
+                                    {t('pluginStudio.aiIconApply')}
+                                </Button>
+                            </>
+                        ) : (
+                            <>
+                                {aiIconError ? (
+                                    <Button variant="outline" size="sm" onClick={useOfflineIcon}>
+                                        {t('pluginStudio.aiIconFallback')}
+                                    </Button>
+                                ) : null}
+                                <Button size="sm" onClick={() => void generateAiIcon()} disabled={busy !== null}>
+                                    {busy === 'icon-ai' ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                        <Sparkles className="h-3.5 w-3.5" />
+                                    )}
+                                    {aiIconPhase === 'designing'
+                                        ? t('pluginStudio.aiIconGenerating', { size: formatBytes(aiIconChars) })
+                                        : t('pluginStudio.aiIconGenerate')}
+                                </Button>
+                            </>
+                        )}
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

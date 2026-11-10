@@ -63,9 +63,13 @@
   停止监听 = **解绑 + 把窗口里的开发版一并卸载**（磁盘文件保留，再点开始监听/热更即可装回）：
   开发会话结束了却还把半成品留在窗口里，读起来就是"停止没生效"——菜单/面板/路由都还在。
 - **删除工程**：确认后先停止监听、卸载仍在窗口里的热更版本，再把工程目录**连同磁盘文件一起删除**（不可恢复，宿主拒绝删除不是插件工程的目录）。内置目录与已添加目录都可删除；只想停止跟踪而不删文件时仍可用「移除」。
-- **生成图标**（调色板按钮）：按工程名/用途生成 `assets/icon.svg` 并把栏位图标换成同一字形——和 agent 用的是**同一个确定性生成器**，生成后按钮下方直接显示这张图。
-- **AI 生成图标**（星标按钮）：填一句设计要求（可留空），由宿主 AI 模型（`streamKnowledgeText`，与插件其它 AI 功能同一通道）流式设计 512×512 的 SVG，生成过程中可随时取消或改用修复轮。结果先过硬校验（XML 合法、单引号字体栈、无外链、根元素带 viewBox 或宽高），不合格自动给模型一轮修复机会；落盘仍是 `assets/icon.svg` + `knPluginStudio.icon` 同一套契约（预览、发布、市场上传全不变），栏位图标不参与。AI 通道不可用时，确定性生成器（调色板按钮）仍可离线兜底。
-- 页面显示当前工程的构建状态与日志；下方**「文件」页签**可直接浏览工程源码——目录树 + 带回行号、**带语法高亮**的只读查看器（`dev.files` 枚举、`dev.readFile` 读取，跳过 node_modules/dist）。高亮走包内自带的轻量 tokenizer（`src/files/highlight.ts`：TS/TSX、JSON、CSS、HTML/SVG、Markdown、YAML、shell、Python；其余按纯文本），不引第三方高亮库；配色按亮/暗主题取两套固定色板（`src/files/CodeView.tsx` 内联样式），不依赖宿主 Tailwind 产物。
+- **生成图标**（调色板按钮）：按工程名/用途生成 `assets/icon.svg` 并把栏位图标换成同一字形——和 agent 用的是**同一个确定性生成器**，生成后按钮下方直接显示这张图。选中工程时，页头会直接显示它**当前**清单里的图标（文件或 URL），不需要先重新生成。
+- **AI 生成图标**（星标按钮）：填一句设计要求（可留空），由宿主 AI 模型（`streamKnowledgeText`，与插件其它 AI 功能同一通道）流式设计 512×512 的 SVG。对话框会显示「设计 → 校验 → 修复」阶段、轮次与已接收大小，随时可以取消（取消会中断后端 run）。
+  - **生成结果先作为草稿展示**（160px 预览），此时工程文件一个都没动；点「使用这张图标」才写入，也可以「重新生成」。落盘仍是 `assets/icon.svg` + `knPluginStudio.icon` 同一套契约（预览、发布、市场上传全不变），栏位图标不参与。
+  - 草稿先过**严格校验**：手写 XML 良构扫描（标签配对、属性必须带引号且不重复、属性值里不能有 `<`、字符引用/实体必须在 XML 合法范围内、无 DOCTYPE/PI、命名空间前缀必须声明）；禁止 `<script>/<style>/<foreignObject>/<image>` 等标签、禁止 `on*` 事件处理属性、禁止非 `#id` 的 `href`/`url()`（含 `http/file/data`、协议相对与相对路径）；引用检查在**解码后**执行：`href` 只做 XML 实体解码（它是 URL 不是 CSS），`fill/style` 等 CSS 值额外解码反斜杠转义（`u&#114;l(`、`&#x75;rl(`、CSS `u\72l(` 都按 `url(` 处理）；描述性文本（`<desc>`/`aria-label`）与注释里的 `<?`/`url(…)` 不算引用；命名空间前缀必须在使用它的元素或其祖先上声明。另限定大小与根元素真实 `xmlns`/`viewBox`（或宽高，`data-*` 不算）。**不合法或含不安全内容的文档绝不写入**：具体问题会交回模型，最多两轮修复。
+  - 整轮 120s 超时；失败按原因分类给出可执行提示（未登录 / 断网 / 超时 / 服务错误 / 模型输出不合法），并提供**「改用离线生成」**按钮，确定性生成器始终可离线兜底。
+  - 写入后结果卡提供「查看文件」（跳到「文件」页签打开 `assets/icon.svg`）和「撤销」（把上一张图标文件与清单指针恢复回去；首次生成、上一张是 URL/data、或上一张是另一个工程内文件时，会删掉本次生成的 `assets/icon.svg`（非规范拼写如 `./assets/icon.svg` 视为同一个文件）；若上一张文件读不出来，会明确提示“指针已恢复、内容无法写回”）。写入失败会自动回滚到快照，不会出现“文件被覆盖但清单没更新”的半成品。
+- 页面显示当前工程的构建状态与日志；下方**「文件」页签**可直接浏览工程源码与静态资源（含生成的 `assets/icon.svg`）——目录树 + 带回行号、**带语法高亮**的只读查看器（`dev.files` 枚举、`dev.readFile` 读取，跳过 node_modules/dist）。高亮走包内自带的轻量 tokenizer（`src/files/highlight.ts`：TS/TSX、JSON、CSS、HTML/SVG、Markdown、YAML、shell、Python；其余按纯文本），不引第三方高亮库；配色按亮/暗主题取两套固定色板（`src/files/CodeView.tsx` 内联样式），不依赖宿主 Tailwind 产物。
 
 ### 人：工程模板
 
@@ -604,20 +608,20 @@ pnpm test:plugin-dev:electron
 | `dev-server.test.mjs` | 10 | NDJSON 协议、文件监听重建、stdin 手动构建、错误隔离、干净退出 |
 | `manager.test.mjs` | 35 | **失败重建**立即释放等待、错误上报、会话存活、恢复；防回归「卡 30s」；**子进程启动即崩（缺 esbuild 那种）被判为 failed、快速失败、并把 stderr 原文带进 error 与日志**；**删除工程（拒绝非工程 / 拒绝标准目录 / 停止会话并删文件）**；**externals 的沿用与清空语义**；**删单个文件（越界 / manifest / 入口 / 目录 / 不存在全部拒绝，并回显正文）** |
 | `host-api.test.mjs` | 14 | 标准包枚举/搜索/读取、越界与未知包拒绝 |
-| `project-files.test.mjs` | 30 | 工程文件枚举/搜索/过滤、跳过 node_modules、截断上报；**grep（正则、交替、大小写、glob 与子串 include、上下文行、三种输出模式、匹配上限、非法正则、扫描量上报）**、glob 编译、IPC 参数类型校验 |
+| `project-files.test.mjs` | 33 | 工程文件枚举/搜索/过滤、跳过 node_modules、截断上报；**`.svg` 静态资源可见**；**grep（正则、交替、大小写、glob 与子串 include、上下文行、三种输出模式、匹配上限、非法正则、扫描量上报）**、glob 编译、IPC 参数类型校验 |
 | `package-install.test.mjs` | 20 | 包名/版本校验、管理器探测、argv 构造、假 spawn 安装 |
 | `tailwind.test.mjs` | 12 | 用宿主配置编译插件工具类、去除 @keyframes、空工程 |
 | `packaged-studio-deps.test.mjs` | 28 | **打包布局回归**：用真实 `afterPack` 钩子物化依赖，然后在**没有源码树**的前提下跑子进程——入口 `.mjs` 与 esbuild 都在 asar 外且可解析、平台二进制可 spawn、tailwind/postcss 与宿主配置就位并**真的编译出插件 CSS**、宿主标准包可读、**manager 从 `Resources/` 解析运行时且解析出的路径不含 `app.asar`** |
 | `studio-tools.test.mjs` | 228 | **agent 工具面**：名称/描述/schema、create→write→run→build→list→stop 的每次能力调用、**模板与 externals 透传和校验**、**删除工程与自卸载**、**删单个文件与「未读不许删」**、**service 发现（提供者归属/过滤/无注册表兜底）**、**产物聚焦（含 focus:false 与坏预览不拖垮构建）**、失败装订、缺能力提示、失败不装旧产物、**只读发现可以、注册表管理不在** |
 | `surface.test.mjs` | 31 | **产物声明**：mapper 与工具面一致、kind 与预览一致、构建/发布/工程/图标的 payload、失败不产生产物、id 稳定（同工程重建/重生成只占一格）、`focusArtifact` 无 payload 路径、垃圾输入不抛 |
 | `files/highlight.test.mjs` | 78 | **文件页签高亮**（包内 `pnpm --filter @kn/plugin-plugin-studio test` 也跑）：扩展名→扫描器映射、行数/正文不丢、TS 关键字/字符串/注释/数字/模板字面量跨行、块注释跨行、未闭合字符串止于行尾、JSX 标签与属性、JSON/YAML/CSS（at-rule、十六进制色、自定义属性）、markup 标签与跨行注释、markdown 标题/列表/行内代码/链接/围栏、shell 变量与关键字、Python 三引号、纯文本、垃圾输入不抛错、2000 行 <400ms |
-| `icon-art.test.mjs` | 36 | **图标**：同插件同图、关键词/显式字形/首字母兜底、配色哈希与显式色、SVG 自包含与转义、栏位片段、只改该改的文件（不动手写图标、兼容 legacy `knPlugin` 块）、清单读取与 mime/可上传判断 |
+| `icon-art.test.mjs` | 53 | **图标**：同插件同图、关键词/显式字形/首字母兜底、配色哈希与显式色、SVG 自包含与转义、栏位片段、只改该改的文件（不动手写图标、兼容 legacy `knPlugin` 块）、清单读取与 mime/可上传判断；**撤销**（读取当前图标、恢复文件+清单指针、首次生成的删除、URL/data 指针、缺 `deleteFile` 的降级、`./assets/icon.svg` / 反斜杠 / 大小写这类非规范指针按同一文件处理（大小写不敏感卷上不会误删）、旧内容读不出时明确上报） |
+| `icon-ai.test.mjs` | 99 | **AI 图标校验器与设计循环**：提示词/修复提示词、从围栏/散文里抽取 SVG、XML 良构扫描（未闭合/不匹配/裸 `&`/非法实体与字符引用/字面控制字符/重复属性/命名空间前缀作用域、QName、保留前缀绑定、声明名校验，注释/CDATA 里的控制字符/嵌套引号/DOCTYPE/真实 PI（注释与 CDATA 里的 `<?` 不算））、根属性边界（`data-xmlns`/`data-viewBox` 不算真实声明）、sanitize（补 `xmlns`、转义裸 `&`、去 XML 声明）、安全拒绝（script/style/foreignObject/image/事件属性/非 `#id` 的 href 与 url()/javascript:/@import，含实体与 CSS 转义编码的 `url()`/`href`）、设计循环（首轮成功、修复后成功、修复预算耗尽、超长、超时、外部取消、进度阶段、错误分类） |
+| `icon-pipeline.test.mjs` | 20 | **AI 图标落盘闭环**：模型回复 → 抽取/sanitize/校验 → 写真实临时工程（`assets/icon.svg` + 清单指针）→ 读回撤销快照 → 确定性图标被 AI 覆盖后撤销还原 → 首次生成撤销删文件/删指针 → 恶意回复在写入前被拒绝 |
 | `studio.smoke.mjs` | 63 | 真实 `PluginManager.installPluginFromSource` + Blob URL + 真实 loader；热更替换、单实例、坏代码不中断、恢复；**热更保身份（同一 dock 面板组件跨两次重建仍是同一个函数）、换实现可见（同一身份渲染出 `panel-v3`）、求值即抛的产物被拒绝、不动正在运行的版本、且拒绝原因里带着产物抛出的原文（`boom at eval`）**；**内置目录建工程、五个模板都能构建、删除工程、工程内删文件**；**产物管线（mapper 按工具名注册、卡片/预览贡献、产物架从 transcript 派生）**、**把活的插件面板真的渲染成 markup**、**真实 ServiceRegistry 把服务归属到插件** |
 | `electron.smoke.mjs` | 36 | 真实 preload 能力白名单、`dev.*` IPC（含 `dev.remove` / `dev.deleteFile`）、`ELECTRON_RUN_AS_NODE` 子进程、`desktop:event:dev` 推送、**无对话框 scaffold + 模板 + list + 读写/删除文件**、越界路径拒绝 |
 
-`pnpm test:plugin-dev` 合计 639 项检查。
-
-> 只由包内 `pnpm --filter @kn/plugin-plugin-studio test` 跑的还有 `icons/icon-ai.test.mjs`（14 项，AI 图标的校验器），它目前**没有**被 root 的 `test:plugin-dev` 聚合——改测试脚本时一并对齐。
+`pnpm test:plugin-dev` 合计 778 项检查。
 
 热更机制自己还有一组纯 Node 断言（`packages/common`，`pnpm check` 的一部分，不进 `test:plugin-dev`）：
 

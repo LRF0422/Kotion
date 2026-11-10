@@ -24,7 +24,9 @@ import {
     pickGlyph,
     railIconSnippets,
     readDeclaredIcon,
+    readPluginIcon,
     renderPluginIconSvg,
+    restorePluginIcon,
     stableHash,
     suggestGlyphs,
     writePluginIconSvg,
@@ -298,6 +300,328 @@ check(
         && iconMimeType('ICON.PNG') === 'image/png'
         && iconMimeType('icon.webp') === 'image/webp'
         && iconMimeType('icon.bin') === 'application/octet-stream',
+)
+
+/* ------------------------------------------------------------------ *
+ * Reading and undoing an applied icon (generation is reversible)
+ * ------------------------------------------------------------------ */
+const PREVIOUS_SVG = [
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">',
+    '  <rect width="512" height="512" fill="#111111"/>',
+    '</svg>',
+    '',
+].join('\n')
+const REMOTE_ICON = 'https://cdn.example.com/icon.png'
+const INLINE_ICON = 'data:image/svg+xml,<svg/>'
+const iconPath = `${ROOT}/${PLUGIN_ICON_RELATIVE_PATH}`
+
+/* A deleteFile-capable transport, plus a record of what it removed. */
+let deletedPaths = []
+const undoIo = {
+    ...io,
+    async deleteFile({ path }) {
+        deletedPaths.push(path)
+        files.delete(path)
+    },
+}
+
+/* read: snapshot before the generation overwrites the pointer. */
+reset({ name: 'prev', knPluginStudio: { pluginKey: 'prev', icon: PLUGIN_ICON_RELATIVE_PATH } })
+files.set(iconPath, PREVIOUS_SVG)
+const readPrevious = await readPluginIcon({ root: ROOT, io })
+check(
+    'undo: reads the declared icon and its contents',
+    readPrevious.icon === PLUGIN_ICON_RELATIVE_PATH && readPrevious.svg === PREVIOUS_SVG,
+    JSON.stringify(readPrevious),
+)
+
+/* A remote pointer has no local contents to snapshot. */
+reset({ name: 'remote', knPluginStudio: { pluginKey: 'remote', icon: REMOTE_ICON } })
+const readRemote = await readPluginIcon({ root: ROOT, io })
+reset({ name: 'inline', knPluginStudio: { pluginKey: 'inline', icon: INLINE_ICON } })
+const readInline = await readPluginIcon({ root: ROOT, io })
+check(
+    'undo: a URL/data icon has no local contents',
+    readRemote.icon === REMOTE_ICON && readRemote.svg === null
+        && readInline.icon === INLINE_ICON && readInline.svg === null,
+    JSON.stringify({ readRemote, readInline }),
+)
+
+/* A pointer to a file that is gone must not make the read throw. */
+reset({ name: 'stale', knPluginStudio: { pluginKey: 'stale', icon: 'assets/missing.svg' } })
+const readStale = await readPluginIcon({ root: ROOT, io })
+check(
+    'undo: an unreadable icon file yields no contents',
+    readStale.icon === 'assets/missing.svg' && readStale.svg === null,
+    JSON.stringify(readStale),
+)
+
+/* Legacy projects are read from their own block. */
+reset({ name: 'legacy-prev', knPlugin: { pluginKey: 'legacy-prev', icon: 'assets/old.svg' } })
+files.set(`${ROOT}/assets/old.svg`, PREVIOUS_SVG)
+const readLegacy = await readPluginIcon({ root: ROOT, io })
+check(
+    'undo: reads a legacy knPlugin pointer',
+    readLegacy.icon === 'assets/old.svg' && readLegacy.svg === PREVIOUS_SVG,
+    JSON.stringify(readLegacy),
+)
+
+/* Nothing declared yet: both fields are null, not "". */
+reset({ name: 'fresh', knPluginStudio: { pluginKey: 'fresh' } })
+const readNone = await readPluginIcon({ root: ROOT, io })
+check('undo: a project without an icon reads as null/null', readNone.icon === null && readNone.svg === null)
+
+/* Same refusal as the writers. */
+files.clear()
+let readRefused = ''
+try {
+    await readPluginIcon({ root: ROOT, io })
+} catch (error) {
+    readRefused = error.message
+}
+check('undo: reading refuses a directory without a manifest', /无法读取工程清单/.test(readRefused), readRefused)
+
+/* restore: a first generation is fully undone, file included. */
+reset({ name: 'fresh', knPluginStudio: { pluginKey: 'fresh', entry: 'src/index.tsx' } })
+await writePluginIconSvg({ root: ROOT, io, svg: aiArtwork })
+deletedPaths = []
+const undone = await restorePluginIcon({ root: ROOT, io: undoIo, icon: null, svg: null })
+const undoneManifest = JSON.parse(files.get(manifestPath))
+check(
+    'undo: a first generation is removed (pointer dropped, file deleted)',
+    undone.icon === null
+        && undone.fileRemoved === true
+        && deletedPaths.length === 1
+        && deletedPaths[0] === iconPath
+        && !files.has(iconPath)
+        && !('icon' in undoneManifest.knPluginStudio)
+        && undoneManifest.knPluginStudio.pluginKey === 'fresh',
+    JSON.stringify({ undone, deletedPaths, block: undoneManifest.knPluginStudio }),
+)
+
+/* Without deleteFile the undo is still correct about what it can do. */
+reset({ name: 'fresh-no-delete', knPluginStudio: { pluginKey: 'fresh-no-delete' } })
+await writePluginIconSvg({ root: ROOT, io, svg: aiArtwork })
+let noDeleteError = ''
+let noDeleteResult
+try {
+    noDeleteResult = await restorePluginIcon({ root: ROOT, io, icon: null, svg: null })
+} catch (error) {
+    noDeleteError = error.message
+}
+check(
+    'undo: without deleteFile it restores the pointer and leaves the file',
+    !noDeleteError
+        && noDeleteResult?.icon === null
+        && noDeleteResult?.fileRemoved === false
+        && !('icon' in JSON.parse(files.get(manifestPath)).knPluginStudio)
+        && files.has(iconPath),
+    noDeleteError,
+)
+
+/* A failing deleteFile is best-effort, never fatal. */
+reset({ name: 'fresh-delete-fails', knPluginStudio: { pluginKey: 'fresh-delete-fails' } })
+await writePluginIconSvg({ root: ROOT, io, svg: aiArtwork })
+let deleteError = ''
+let deleteFailedResult
+try {
+    deleteFailedResult = await restorePluginIcon({
+        root: ROOT,
+        io: { ...io, async deleteFile() { throw new Error('EPERM') } },
+        icon: null,
+        svg: null,
+    })
+} catch (error) {
+    deleteError = error.message
+}
+check(
+    'undo: a failing deleteFile is swallowed',
+    !deleteError && deleteFailedResult?.icon === null && deleteFailedResult?.fileRemoved === false,
+    deleteError,
+)
+
+/* restore: a URL pointer goes back without touching the filesystem. */
+reset({ name: 'remote', knPluginStudio: { pluginKey: 'remote', icon: REMOTE_ICON } })
+const beforeRemote = await readPluginIcon({ root: ROOT, io })
+await writePluginIconSvg({ root: ROOT, io, svg: aiArtwork })
+deletedPaths = []
+const restoredRemote = await restorePluginIcon({
+    root: ROOT,
+    io: undoIo,
+    icon: beforeRemote.icon,
+    svg: beforeRemote.svg,
+})
+const remoteManifest = JSON.parse(files.get(manifestPath))
+check(
+    'undo: a URL pointer is restored and the generated orphan file is dropped',
+    restoredRemote.icon === REMOTE_ICON
+        && restoredRemote.fileRemoved === true
+        && deletedPaths.length === 1
+        && deletedPaths[0] === iconPath
+        && !files.has(iconPath)
+        && remoteManifest.knPluginStudio.icon === REMOTE_ICON
+        && remoteManifest.knPluginStudio.pluginKey === 'remote',
+    JSON.stringify({ restoredRemote, block: remoteManifest.knPluginStudio }),
+)
+
+/* restore: the previous in-project artwork is rewritten byte for byte. */
+reset({ name: 'prev', knPluginStudio: { pluginKey: 'prev', icon: PLUGIN_ICON_RELATIVE_PATH } })
+files.set(iconPath, PREVIOUS_SVG)
+const originalBlock = JSON.stringify(JSON.parse(files.get(manifestPath)).knPluginStudio)
+const beforeFile = await readPluginIcon({ root: ROOT, io })
+await writePluginIconSvg({ root: ROOT, io, svg: aiArtwork })
+const restoredFile = await restorePluginIcon({
+    root: ROOT,
+    io: undoIo,
+    icon: beforeFile.icon,
+    svg: beforeFile.svg,
+})
+check(
+    'undo: restores the previous artwork file and manifest block',
+    restoredFile.icon === PLUGIN_ICON_RELATIVE_PATH
+        && restoredFile.fileRemoved === false
+        && restoredFile.contentRestored === true
+        && files.get(iconPath) === PREVIOUS_SVG
+        && JSON.stringify(JSON.parse(files.get(manifestPath)).knPluginStudio) === originalBlock,
+    JSON.stringify(restoredFile),
+)
+
+/* restore: a pointer to another project file is rewritten at its own path. */
+reset({ name: 'custom', knPluginStudio: { pluginKey: 'custom', icon: 'assets/old.svg' } })
+deletedPaths = []
+files.set(`${ROOT}/assets/old.svg`, PREVIOUS_SVG)
+const beforeCustom = await readPluginIcon({ root: ROOT, io })
+await writePluginIconSvg({ root: ROOT, io, svg: aiArtwork })
+const restoredCustom = await restorePluginIcon({
+    root: ROOT,
+    io: undoIo,
+    icon: beforeCustom.icon,
+    svg: beforeCustom.svg,
+})
+check(
+    'undo: rewrites a previous file at its own path and points back at it',
+    restoredCustom.icon === 'assets/old.svg'
+        && restoredCustom.fileRemoved === true
+        && deletedPaths.length === 1
+        && deletedPaths[0] === iconPath
+        && !files.has(iconPath)
+        && files.get(`${ROOT}/assets/old.svg`) === PREVIOUS_SVG
+        && JSON.parse(files.get(manifestPath)).knPluginStudio.icon === 'assets/old.svg'
+        && JSON.parse(files.get(manifestPath)).knPluginStudio.pluginKey === 'custom',
+    JSON.stringify(restoredCustom),
+)
+
+/* restore: a non-canonical pointer still names the same file (not an orphan). */
+reset({ name: 'dotted', knPluginStudio: { pluginKey: 'dotted', icon: './assets/icon.svg' } })
+files.set(iconPath, PREVIOUS_SVG)
+const beforeDotted = await readPluginIcon({ root: ROOT, io })
+await writePluginIconSvg({ root: ROOT, io, svg: aiArtwork })
+deletedPaths = []
+const restoredDotted = await restorePluginIcon({
+    root: ROOT,
+    io: undoIo,
+    icon: beforeDotted.icon,
+    svg: beforeDotted.svg,
+})
+check(
+    'undo: a non-canonical pointer (./assets/icon.svg) is the same file, not deleted',
+    restoredDotted.icon === './assets/icon.svg'
+        && restoredDotted.fileRemoved === false
+        && restoredDotted.contentRestored === true
+        && deletedPaths.length === 0
+        && files.get(iconPath) === PREVIOUS_SVG
+        && JSON.parse(files.get(manifestPath)).knPluginStudio.icon === './assets/icon.svg',
+    JSON.stringify({ restoredDotted, deletedPaths }),
+)
+
+/* restore: a Windows-spelled pointer is canonicalized too. */
+reset({ name: 'winpath', knPluginStudio: { pluginKey: 'winpath', icon: 'assets\\icon.svg' } })
+files.set(iconPath, PREVIOUS_SVG)
+const beforeWin = await readPluginIcon({ root: ROOT, io })
+await writePluginIconSvg({ root: ROOT, io, svg: aiArtwork })
+deletedPaths = []
+const restoredWin = await restorePluginIcon({
+    root: ROOT,
+    io: undoIo,
+    icon: beforeWin.icon,
+    svg: beforeWin.svg,
+})
+check(
+    'undo: a backslash-spelled pointer is the same file, not deleted',
+    restoredWin.fileRemoved === false && deletedPaths.length === 0 && files.get(iconPath) === PREVIOUS_SVG,
+    JSON.stringify({ restoredWin, deletedPaths }),
+)
+
+/* restore: case-only pointer differences alias on a case-insensitive volume. */
+reset({ name: 'case', knPluginStudio: { pluginKey: 'case', icon: 'ASSETS/ICON.SVG' } })
+files.set(iconPath, PREVIOUS_SVG)
+const caseIo = {
+    async readFile({ path }) {
+        const hit = [...files.keys()].find((key) => key.toLowerCase() === path.toLowerCase())
+        if (!hit) throw new Error('ENOENT ' + path)
+        return files.get(hit)
+    },
+    async writeFile({ path, contents }) {
+        const hit = [...files.keys()].find((key) => key.toLowerCase() === path.toLowerCase())
+        files.set(hit ?? path, contents)
+    },
+    async deleteFile({ path }) {
+        const hit = [...files.keys()].find((key) => key.toLowerCase() === path.toLowerCase())
+        deletedPaths.push(hit ?? path)
+        if (hit) files.delete(hit)
+    },
+}
+const beforeCase = await readPluginIcon({ root: ROOT, io: caseIo })
+await writePluginIconSvg({ root: ROOT, io: caseIo, svg: aiArtwork })
+deletedPaths = []
+const restoredCase = await restorePluginIcon({
+    root: ROOT,
+    io: caseIo,
+    icon: beforeCase.icon,
+    svg: beforeCase.svg,
+})
+check(
+    'undo: a case-only pointer alias is not deleted on a case-insensitive volume',
+    beforeCase.svg === PREVIOUS_SVG
+        && restoredCase.fileRemoved === false
+        && deletedPaths.length === 0
+        && files.get(iconPath) === PREVIOUS_SVG,
+    JSON.stringify({ beforeCase: Boolean(beforeCase.svg), restoredCase, deletedPaths }),
+)
+
+/* restore: an unreadable previous file cannot be rewritten — say so. */
+reset({ name: 'unreadable', knPluginStudio: { pluginKey: 'unreadable', icon: PLUGIN_ICON_RELATIVE_PATH } })
+const beforeUnreadable = await readPluginIcon({ root: ROOT, io })
+await writePluginIconSvg({ root: ROOT, io, svg: aiArtwork })
+deletedPaths = []
+const restoredUnreadable = await restorePluginIcon({
+    root: ROOT,
+    io: undoIo,
+    icon: beforeUnreadable.icon,
+    svg: beforeUnreadable.svg,
+})
+check(
+    'undo: reports contentRestored=false when the previous artwork is unreadable',
+    beforeUnreadable.icon === PLUGIN_ICON_RELATIVE_PATH
+        && beforeUnreadable.svg === null
+        && restoredUnreadable.icon === PLUGIN_ICON_RELATIVE_PATH
+        && restoredUnreadable.contentRestored === false
+        && restoredUnreadable.fileRemoved === false,
+    JSON.stringify(restoredUnreadable),
+)
+
+/* restore: legacy projects keep their block (and get no studio one). */
+reset({ name: 'legacy-undo', knPlugin: { pluginKey: 'legacy-undo' } })
+const legacyRestored = await restorePluginIcon({ root: ROOT, io, icon: null, svg: null })
+const legacyRestoredManifest = JSON.parse(files.get(manifestPath))
+check(
+    'undo: a legacy knPlugin project keeps its block',
+    legacyRestored.icon === null
+        && legacyRestored.fileRemoved === false
+        && legacyRestoredManifest.knPluginStudio === undefined
+        && !('icon' in legacyRestoredManifest.knPlugin)
+        && legacyRestoredManifest.knPlugin.pluginKey === 'legacy-undo',
+    JSON.stringify(legacyRestoredManifest),
 )
 
 const failedChecks = results.filter((entry) => !entry.ok)

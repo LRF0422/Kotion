@@ -177,6 +177,37 @@ try {
 }
 check('guard: empty query refused', /query/.test(empty), empty)
 
+/* ------------------------------------------------------------------ *
+ * Generated artwork: assets/icon.svg is a source file, vendor dirs still aren't
+ * ------------------------------------------------------------------ */
+await mkdir(join(root, 'assets'), { recursive: true })
+await mkdir(join(root, 'dist'), { recursive: true })
+await writeFile(
+    join(root, 'assets', 'icon.svg'),
+    '<svg xmlns="http://www.w3.org/2000/svg"><title>kn-svg-marker</title></svg>\n',
+)
+await writeFile(join(root, 'node_modules', 'dep', 'stray.svg'), '<svg><title>kn-svg-marker</title></svg>\n')
+await writeFile(join(root, 'dist', 'bundled.svg'), '<svg><title>kn-svg-marker</title></svg>\n')
+
+const withSvg = await listProjectFiles(root)
+check(
+    'list: includes generated .svg artwork under assets/',
+    withSvg.files.includes('assets/icon.svg'),
+    withSvg.files.join(', '),
+)
+const svgSearch = await searchProjectFiles(root, { query: 'kn-svg-marker' })
+check(
+    'search: finds .svg content, still skipping node_modules/dist',
+    svgSearch.matches.length === 1 && svgSearch.matches[0].path === 'assets/icon.svg',
+    JSON.stringify(svgSearch.matches),
+)
+const svgOnly = await listProjectFiles(root, { include: 'assets/' })
+check(
+    'list: include filter reaches the artwork directory',
+    svgOnly.files.length === 1 && svgOnly.files[0] === 'assets/icon.svg',
+    svgOnly.files.join(', '),
+)
+
 await rm(root, { recursive: true, force: true })
 
 const failed = results.filter((entry) => !entry.ok)
