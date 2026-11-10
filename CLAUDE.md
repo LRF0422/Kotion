@@ -52,7 +52,10 @@ pnpm clean:packages         # Clean all dist directories
   - `MessageBox/` - 消息提示组件
 - `src/hooks/` - 核心 React Hooks
 - `src/store/` - Redux 状态管理
-- `src/services/` - 核心服务
+- `src/services/` - 核心服务（`upload/` 断点续传、`file/` 文件服务）。**服务实现归宿主**：`fileService`、
+  `uploadTaskService` 由 core 在 `App.tsx` 的 `coreServices` 注册，插件（含 file-manager）只通过
+  `useFileService()` 调用，不要在自己的 `services` 里再注册同名服务（ServiceRegistry 会拒绝）。
+  文件选择器弹窗属于插件 UI，内核通过 `@kn/common` 的 `setFileSelectorImpl` 桥调用。
 - `src/context/` - React Context（如 MobilePageHeaderContext）
 - `src/storage/` - 存储服务装配（选择后端并注册 `storage` 服务）+ 旧 localStorage 迁移
 

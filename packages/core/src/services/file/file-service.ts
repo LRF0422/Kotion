@@ -2,24 +2,33 @@ import {
     FileAccessUrls,
     FileDownloadOptions,
     FileDownloadOutcome,
+    FILE_CENTER_APIS,
     FileService,
     UploadedFile,
     UploadOptions,
     FileSelectorOptions,
     SelectedFile,
+    fileOpen,
     getAccessToken,
+    getFileSelectorImpl,
     logger,
     resolveOptionalService,
 } from "@kn/common";
 import { request, useApi, APIS as CORE_APIS } from "@kn/common";
-import { fileOpen } from "browser-fs-access";
-import { APIS } from "../api";
-import { showFileSelector } from "../editor-extensions/utils/showFileSelector";
-import { downloadTarget } from "../utils/download";
+import { downloadTarget } from "./download";
 
 /**
- * FileService implementation provided by FileManager plugin
- * This implementation includes full file management capabilities
+ * Host-owned `FileService` implementation.
+ *
+ * The host registers this as a core service (see `App.tsx`), so every plugin
+ * and the shell can consume file operations without depending on the
+ * file-manager plugin being installed. The file manager only *calls* it.
+ *
+ * One piece of the contract stays plugin-owned: the in-app file selector is a
+ * dialog built from the file manager's tree/preview UI, so `openFileSelector`
+ * delegates to the implementation registered through `setFileSelectorImpl`
+ * (see `@kn/common/services/file-service`). Without that plugin the selector
+ * reports "no selection" instead of breaking the call.
  */
 export class FileServiceImpl implements FileService {
     private downloadBaseUrl: string;
@@ -96,7 +105,7 @@ export class FileServiceImpl implements FileService {
      * byte-range requests without exposing the application's access token.
      */
     async getFileAccessUrls(fileId: string): Promise<FileAccessUrls> {
-        const res = await useApi(APIS.GET_FILE_ACCESS_URLS, { fileId });
+        const res = await useApi(FILE_CENTER_APIS.GET_FILE_ACCESS_URLS, { fileId });
         return res.data as FileAccessUrls;
     }
 
@@ -147,14 +156,14 @@ export class FileServiceImpl implements FileService {
      * Delete a file by ID
      */
     async deleteFile(fileId: string): Promise<void> {
-        await useApi(APIS.DELETE_FILE, { fileId }, null);
+        await useApi(FILE_CENTER_APIS.DELETE_FILE, { fileId }, null);
     }
 
     /**
      * Create a folder in the file center
      */
     async createFolder(name: string, parentId?: string, repositoryKey?: string): Promise<any> {
-        const res = await useApi(APIS.CREATE_FILE, null, {
+        const res = await useApi(FILE_CENTER_APIS.CREATE_FILE, null, {
             name,
             parentId: parentId || '',
             type: 'FOLDER',
@@ -167,21 +176,25 @@ export class FileServiceImpl implements FileService {
      * Rename a file or folder
      */
     async renameFile(fileId: string, newName: string): Promise<void> {
-        await useApi(APIS.RENAME_FILE, { fileId }, { newName });
+        await useApi(FILE_CENTER_APIS.RENAME_FILE, { fileId }, { newName });
     }
 
     /**
      * Move a file to another folder
      */
     async moveFile(fileId: string, targetFolderId: string): Promise<void> {
-        await useApi(APIS.MOVE_FILE, null, {
+        await useApi(FILE_CENTER_APIS.MOVE_FILE, null, {
             sourceId: fileId,
             targetId: targetFolderId,
         });
     }
 
     /**
-     * Open file selector dialog to select files from file manager
+     * Open the in-app file selector dialog (owned by the file-manager plugin).
+     *
+     * The dialog needs an editor for its ReactRenderer host, so callers from a
+     * document context pass one; without it (or without the plugin) this
+     * reports "no selection".
      */
     async openFileSelector(options?: FileSelectorOptions, editor?: any): Promise<SelectedFile[] | null> {
         if (!editor) {
@@ -189,7 +202,13 @@ export class FileServiceImpl implements FileService {
             return null;
         }
 
-        const selectedFiles = await showFileSelector(editor, options);
+        const openSelector = getFileSelectorImpl();
+        if (!openSelector) {
+            logger.warn('fileService: no file selector is registered (file-manager plugin not installed)');
+            return null;
+        }
+
+        const selectedFiles = await openSelector(options, editor);
 
         // Add download URLs to selected files
         if (selectedFiles) {
@@ -247,14 +266,15 @@ export class FileServiceImpl implements FileService {
         formData.append('file', file);
         if (parentId) formData.append('parentId', parentId);
         if (repositoryKey) formData.append('repositoryKey', repositoryKey);
-        const res = await useApi(APIS.UPLOAD_FILE, null, formData, {
+        const res = await useApi(FILE_CENTER_APIS.UPLOAD_FILE, null, formData, {
             'Content-Type': 'multipart/form-data',
         });
         return res.data;
     }
 }
 
-// Singleton instance
+// Singleton instance — the host registers this object as the `fileService`
+// core service, so every consumer shares one implementation.
 let fileServiceInstance: FileServiceImpl | null = null;
 
 /**
@@ -273,3 +293,6 @@ export const getFileService = (config?: { downloadBaseUrl?: string }): FileServi
 export const resetFileService = (): void => {
     fileServiceInstance = null;
 };
+
+/** Registered as a core service in `App.tsx` (see `coreServices`). */
+export const fileService = getFileService();

@@ -52,6 +52,7 @@ import { createDesktopBridge } from "./desktop/bridge";
 import { OrganizationInvitationAccept } from "./components/settings/OrganizationInvitationAccept";
 import { createSpacePageService } from "./domain/space-page";
 import { uploadTaskService } from "./services/upload/upload-task-service";
+import { fileService } from "./services/file/file-service";
 import { createPluginMarketplaceService } from "./services/plugin-marketplace";
 import { createPluginDevHost } from "@kn/common";
 import { PluginPublisherHost } from "./components/Shop/PluginUploader/PluginPublisherHost";
@@ -361,6 +362,9 @@ export const App: React.FC<AppProps> = (props) => {
             coreServices: {
                 spacePageService,
                 uploadTaskService,
+                // File operations are host-owned: every plugin and the shell consume
+                // this, so the file-manager plugin is not required for them to work.
+                fileService,
                 ...(desktop ? { desktop } : {}),
             },
         }, plugins)

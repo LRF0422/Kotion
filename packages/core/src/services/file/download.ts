@@ -1,12 +1,12 @@
 import {
     API_BASE_URL,
     authorizedFetch,
+    FILE_CENTER_APIS,
     logger,
     type FileDownloadOutcome,
     type FileDownloadProgress,
     type FileService,
 } from '@kn/common';
-import { APIS } from '../api';
 import {
     chooseDownloadStrategy,
     fileExtensionOf,
@@ -106,7 +106,7 @@ const openDownloadResponse = async (fileService: FileService, target: DownloadTa
     const sources: Array<() => Promise<Response>> = [];
 
     if (target.id) {
-        const path = APIS.DOWNLOAD_FILE.url.replace(':fileId', encodeURIComponent(target.id));
+        const path = FILE_CENTER_APIS.DOWNLOAD_FILE.url.replace(':fileId', encodeURIComponent(target.id));
         sources.push(() => authorizedFetch(`${API_BASE_URL}${path}`));
     }
     if (target.path) {
@@ -245,7 +245,7 @@ const resolveStreamUrl = async (fileService: FileService, target: DownloadTarget
         const access = await fileService.getFileAccessUrls(target.id);
         return access?.downloadUrl || '';
     } catch (error) {
-        logger.warn('[file-manager] signed download URL unavailable', error);
+        logger.warn('[fileService] signed download URL unavailable', error);
         return '';
     }
 };
@@ -318,7 +318,7 @@ export const downloadTarget = async (
             });
         } catch (error) {
             if (isAbortError(error)) return 'cancelled';
-            logger.warn('[file-manager] save picker unavailable, falling back', error);
+            logger.warn('[fileService] save picker unavailable, falling back', error);
         }
 
         if (handle) {
@@ -326,7 +326,7 @@ export const downloadTarget = async (
             try {
                 response = await openDownloadResponse(fileService, target);
             } catch (error) {
-                logger.warn('[file-manager] download source unavailable, falling back', error);
+                logger.warn('[fileService] download source unavailable, falling back', error);
                 return await fallbackDownload(fileService, target, fileName, options);
             }
             // A failed transfer aborts the chosen file and surfaces the error

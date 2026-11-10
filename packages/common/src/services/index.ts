@@ -1,4 +1,10 @@
-export { useFileService, useOptionalFileService } from "./file-service";
+export {
+    useFileService,
+    useOptionalFileService,
+    setFileSelectorImpl,
+    getFileSelectorImpl,
+    type FileSelectorImpl,
+} from "./file-service";
 export { useUploadTaskService, useOptionalUploadTaskService } from "./upload-task-service";
 export * from "./plugin-config-service";
 // Side effect: installs the API-backed default plugin-config storage.

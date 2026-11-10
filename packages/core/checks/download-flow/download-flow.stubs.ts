@@ -14,6 +14,11 @@ export const logger = {
 
 export const API_BASE_URL = '/api';
 
+/** Only the endpoints the download flow references by name. */
+export const FILE_CENTER_APIS = {
+    DOWNLOAD_FILE: { url: '/knowledge-file-center/file/:fileId/download', method: 'GET' as const },
+};
+
 export const authorizedFetch = async (url: string, init?: RequestInit): Promise<Response> =>
     fetch(url, init);
 
@@ -30,7 +35,7 @@ export interface FileDownloadProgress {
 
 export type FileDownloadOutcome = 'saved' | 'cancelled' | 'handed-off';
 
-/** Shape used by `src/api/index.ts` (only its URL strings are consumed). */
+/** Shape used by `FILE_CENTER_APIS` (only its URL strings are consumed). */
 export interface API {
     name?: string;
     url: string;

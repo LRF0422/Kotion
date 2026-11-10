@@ -17,7 +17,7 @@
     "include": [
         "download-flow.check.ts",
         "download-flow.stubs.ts",
-        "../../src/utils/download.ts",
-        "../../src/utils/download-target.ts"
+        "../../src/services/file/download.ts",
+        "../../src/services/file/download-target.ts"
     ]
 }

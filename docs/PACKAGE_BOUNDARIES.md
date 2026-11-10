@@ -35,6 +35,36 @@ Core is the concrete host implementation. It owns:
 
 Core consumes common contracts. It must not compile files directly from `packages/common/src`.
 
+## Host-owned services
+
+Some services are needed by the shell and by plugins that do not ship an
+implementation, so the **host** registers them as core services
+(`coreServices` in `App.tsx`) instead of a plugin contributing them. Core
+services cannot be replaced by plugins (`ServiceRegistry` keeps core ownership),
+so consumers never depend on a plugin being installed:
+
+| Service | Contract | Implementation | Notes |
+| --- | --- | --- | --- |
+| `uploadTaskService` | `common/src/core/types.ts` | `core/src/services/upload/` | resumable upload lifecycle, panel, quota errors |
+| `fileService` | `common/src/core/types.ts` | `core/src/services/file/` | file-center CRUD, upload, authenticated download, selector |
+
+`fileService` used to be provided by `plugin-file-manager`; that plugin is now a
+**consumer only** (`useFileService()`), so uninstalling it no longer breaks
+attachments, cover images, Excel import or speech-to-text recordings.
+
+Two pieces stay outside core on purpose:
+
+- **The in-app file selector dialog** is built from the file manager's tree,
+  previews and editor context. It is published through the
+  `setFileSelectorImpl` bridge in `common/src/services/file-service.ts`, which
+  the host's `openFileSelector` calls. Without the plugin the call reports "no
+  selection" instead of throwing.
+- **The file-center endpoint catalog** lives in
+  `common/src/api/file-center.ts` (`FILE_CENTER_APIS`) rather than in either
+  package, because the host service and the plugin UI must share one definition
+  of the URLs. This follows the existing `common/src/api/` catalog pattern
+  noted below.
+
 ## Agent SDK runtime seam
 
 The agent SDK in `@kn/common/src/ai/agent` is a contract + orchestration layer;

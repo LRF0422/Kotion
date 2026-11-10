@@ -325,3 +325,5 @@ export const APIS = {
         method: 'GET'
     } as API
 }
+
+export * from "./file-center";

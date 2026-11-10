@@ -10,8 +10,11 @@
  *
  * Runs in Node against browser stubs; see `preload.cjs` and the tsconfig in
  * this folder for how the browser-only `@kn/common` import is substituted.
+ *
+ * The flow lives in the host (`@kn/core/services/file`) because the file
+ * service is a host-owned core service, not plugin code.
  */
-import { downloadTarget } from '../../src/utils/download';
+import { downloadTarget } from '../../src/services/file/download';
 import type { FileService } from './download-flow.stubs';
 
 // ---------------------------------------------------------------------------

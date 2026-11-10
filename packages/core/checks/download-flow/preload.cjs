@@ -19,6 +19,9 @@ synthetic.exports = {
     },
     API_BASE_URL: '/api',
     authorizedFetch: (url, init) => globalThis.__authorizedFetch(url, init),
+    FILE_CENTER_APIS: {
+        DOWNLOAD_FILE: { url: '/knowledge-file-center/file/:fileId/download', method: 'GET' },
+    },
 };
 require.cache[stubId] = synthetic;
 
