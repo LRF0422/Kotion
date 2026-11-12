@@ -172,16 +172,20 @@ export const createBackgroundTaskTools = (_editor?: unknown): ToolsRecord => ({
             if (!task) {
                 return { error: `没有 taskId 为 "${resolved.taskId}" 的后台任务。` }
             }
-            const summarized = summarizeTask(task)
             if (task.status === 'running') {
                 return {
-                    ...summarized,
+                    ...summarizeTask(task),
                     timedOut,
                     hint:
                         `等了 ${Math.round((args?.timeoutMs ?? DEFAULT_BACKGROUND_WAIT_MS) / 1000)}s 还没结束（不是失败）。`
                         + '你可以先做别的事，稍后再调一次 getBackgroundTask 继续等；任务完成时系统也会通知你。',
                 }
             }
+            // The model is about to receive the terminal result, so it HAS seen it:
+            // consume the task here rather than inside `wait` — a wait that the
+            // client abandoned mid-flight must never spend the completion note.
+            backgroundTasks.consume(task.id)
+            const summarized = summarizeTask(backgroundTasks.get(task.id) ?? task)
             const { value, truncated } = clipResult(task.result)
             return {
                 ...summarized,

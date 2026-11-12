@@ -23,6 +23,7 @@ import type { AgentChatMessage } from '../agent/types'
 import type { OnToolExecution } from '../types'
 import type { CustomAgent } from '../agent/custom-agents'
 import type { BackgroundTaskView } from '../agent/background-tasks'
+import type { FormRequestView } from '../agent/form-requests'
 import { buildCustomAgentNote } from '../agent/custom-agents'
 import { workspaceHomeSkill } from './surface-skills'
 import { useWorkspaceDocumentTarget } from './use-workspace-document'
@@ -55,6 +56,12 @@ export interface WorkspaceAgentOptions {
      * still sits in `getBackgroundTask` / the artifacts shelf).
      */
     onBackgroundTaskSettled?: (tasks: BackgroundTaskView[], note: string) => void
+    /**
+     * A filled dynamic form whose answer nobody was waiting for: the workbench is
+     * where users fill forms while the run has moved on. Same contract as
+     * `onBackgroundTaskSettled` — the host turns the note into a new turn.
+     */
+    onFormRequestAnswered?: (requests: FormRequestView[], note: string) => void
 }
 
 export interface WorkspaceAgentApi {
@@ -166,6 +173,9 @@ export function useWorkspaceAgent(options: WorkspaceAgentOptions = {}): Workspac
         // Long tasks finish here too (a studio build runs in the workbench): the
         // host decides how the completion rejoins the conversation.
         onBackgroundTaskSettled: options.onBackgroundTaskSettled,
+        // Filled forms arrive here the same way when no tool call is parked on
+        // them (the user can answer from the unified inbox at any time).
+        onFormRequestAnswered: options.onFormRequestAnswered,
     })
 
     const send = useCallback(async (

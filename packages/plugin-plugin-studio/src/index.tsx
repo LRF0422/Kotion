@@ -17,11 +17,18 @@
  */
 import React from 'react'
 import {
+    DESKTOP_CAPABILITY_CATALOG,
+    DESKTOP_CAPABILITY_GROUPS,
+    DESKTOP_CAPABILITY_GUARDS,
     KPlugin,
     backgroundToolRunner,
+    desktopCapabilityCall,
+    desktopCapabilityGuards,
+    findDesktopCapabilityMeta,
     getBoundServiceRegistry,
     openAgentArtifact,
     resolveOptionalService,
+    searchDesktopCapabilities,
     useTranslation,
     type AgentArtifact,
     type PluginConfig,
@@ -29,7 +36,11 @@ import {
 import { Wrench } from '@kn/icon'
 import * as KN_ICONS from '@kn/icon'
 import { StudioPage } from './StudioPage'
-import { createStudioTools } from './studio-tools'
+import {
+    createStudioTools,
+    type StudioDesktopCatalog,
+    type StudioDesktopCatalogEntry,
+} from './studio-tools'
 import * as iconArt from './icons/icon-art'
 import { STUDIO_ARTIFACT_MAPPERS, backgroundArtifactForTool } from './artifacts/surface'
 import { STUDIO_ARTIFACT_RENDERERS, STUDIO_TOOL_RENDERERS } from './artifacts'
@@ -67,6 +78,49 @@ const iconToolkit = {
  * return undefined and the agent tools would report 'no desktop dev
  * capability' even inside the desktop host.
  */
+/**
+ * The host's capability catalogue (`@kn/common`'s `desktop/catalog.ts`),
+ * adapted for the dependency-free tool layer.
+ *
+ * `@kn/common` is host-injected, so this is the catalogue of the *running*
+ * host, not a copy frozen into the studio bundle: a capability added to the
+ * contract ships with its metadata. A host older than the studio does not
+ * publish the catalogue at all; the adapter is then `undefined` and the tools
+ * degrade to prefix grouping (still honest about which names exist).
+ */
+const toCatalogEntry = (
+    meta: Parameters<typeof desktopCapabilityCall>[0],
+): StudioDesktopCatalogEntry => ({
+    name: meta.name,
+    group: meta.group,
+    summary: meta.summary,
+    call: desktopCapabilityCall(meta),
+    guards: [...desktopCapabilityGuards(meta)],
+    ...(meta.example ? { example: meta.example } : {}),
+    ...(meta.notes ? { notes: meta.notes } : {}),
+    ...(meta.availability ? { availability: meta.availability } : {}),
+})
+
+const desktopCatalog: StudioDesktopCatalog | undefined = Array.isArray(DESKTOP_CAPABILITY_CATALOG)
+    ? {
+          groups: DESKTOP_CAPABILITY_GROUPS.map((group) => ({
+              id: group.id,
+              title: group.title,
+              summary: group.summary,
+              guards: [...(group.guards ?? [])],
+              typesAt: group.typesAt,
+          })),
+          entries: DESKTOP_CAPABILITY_CATALOG.map(toCatalogEntry),
+          guardNotes: { ...DESKTOP_CAPABILITY_GUARDS },
+          find: (name) => {
+              const meta = findDesktopCapabilityMeta(name)
+              return meta ? toCatalogEntry(meta) : undefined
+          },
+          search: ({ query, group }) =>
+              searchDesktopCapabilities({ query, group }).map(toCatalogEntry),
+      }
+    : undefined
+
 const studioTools = createStudioTools({
     getDev: () => resolveOptionalService('desktop')?.dev,
     /**
@@ -79,6 +133,8 @@ const studioTools = createStudioTools({
         resolveOptionalService('desktop') as ReturnType<
             NonNullable<Parameters<typeof createStudioTools>[0]['getDesktop']>
         >,
+    /** The live capability catalogue, so discovery carries summaries + guards. */
+    getDesktopCatalog: () => desktopCatalog,
     getPluginHost: () =>
         resolveOptionalService('pluginHost') as ReturnType<
             Parameters<typeof createStudioTools>[0]['getPluginHost']

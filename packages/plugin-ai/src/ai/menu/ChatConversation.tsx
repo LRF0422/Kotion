@@ -12,6 +12,7 @@ import { Editor } from "@kn/editor"
 import {
     useEditorAgent,
     useCapabilityProviders,
+    usePendingFormRequests,
     buildAgentRunInputs,
     useLoadedSkills,
     AgentPaneHost,
@@ -56,6 +57,7 @@ import { ChatComposer } from "./chat/ChatComposer"
 import { useModelVisionSupport } from "../components/model-catalog"
 import type { TargetPageStatus } from "./chat/PageMentionPicker"
 import { UserChoiceCard } from "./chat/UserChoiceCard"
+import { FormRequestCard } from "./chat/FormRequestCard"
 import {
     getChangeTracker,
     selectFinalAnswer,
@@ -144,6 +146,11 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
         handleCustomSubmit,
         handleCancelChoice,
     } = useUserChoiceBridge()
+
+    // Dynamic forms the agent asked for in THIS conversation that still need an
+    // answer. They stay here until answered/cancelled; the unified board in the
+    // header shows the same requests across conversations.
+    const pendingForms = usePendingFormRequests(sessionId)
 
     // ─── This conversation's transcript ───────────────────────────
     const {
@@ -690,6 +697,26 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
                 })
                 .catch(err => setError(classifyError(err)))
         },
+        // 动态表单：用户在「填写请求」面板里补填了一张已经没人等的表单时，把答案作为
+        // 一条通知推进对话——否则用户填了，agent 却永远不知道。结构与上面的长任务
+        // 回调完全一致（追加一条用户消息 + 用同一套模型/上下文参数续跑）。
+        onFormRequestAnswered: (_requests, note) => {
+            setMessages(prev => [...prev, {
+                id: 'form-' + Date.now().toString(36),
+                sender: 'user' as const,
+                content: note,
+                timestamp: Date.now(),
+            }])
+            void agentRef.current
+                ?.start([{ role: 'user', content: note } as AgentChatMessage], {
+                    model: selectedModel || undefined,
+                    mode: 'execute',
+                    temperature: modelParams.temperature,
+                    maxTokens: modelParams.maxTokens,
+                    contextNote: buildCustomAgentNote(selectedAgent) || undefined,
+                })
+                .catch(err => setError(classifyError(err)))
+        },
     })
     agentRef.current = agent
 
@@ -1126,6 +1153,12 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
                             )}
                         </div>
                     )}
+
+                    {pendingForms.map(request => (
+                        <div key={request.id} className="mx-2 my-1.5">
+                            <FormRequestCard request={request} />
+                        </div>
+                    ))}
 
                     {pendingChoice && (
                         <UserChoiceCard

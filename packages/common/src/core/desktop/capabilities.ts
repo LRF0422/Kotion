@@ -1,0 +1,140 @@
+/**
+ * Every desktop capability a plugin may invoke through the preload bridge.
+ *
+ * This union is the registry: the preload whitelist, the main-process handlers,
+ * the typed bridge groups and the capability catalogue (`./catalog.ts`) are all
+ * checked against it. Adding a capability means touching all of them — see
+ * docs/DESKTOP_CAPABILITIES.md §"加一个新能力时的检查清单".
+ */
+
+export type DesktopCapability =
+    | 'system.info'
+    | 'system.paths'
+    | 'http.request'
+    | 'capture.sources'
+    | 'capture.selectRegion'
+    | 'capture.region.context'
+    | 'capture.region.submit'
+    | 'dialog.openFile'
+    | 'dialog.openFolder'
+    | 'dialog.saveFile'
+    | 'dialog.message'
+    | 'fs.readFile'
+    | 'fs.writeFile'
+    | 'fs.exists'
+    | 'fs.mkdir'
+    | 'fs.remove'
+    | 'fs.readdir'
+    | 'fs.stat'
+    | 'fs.copy'
+    | 'fs.move'
+    | 'window.setFullScreen'
+    | 'window.isFullScreen'
+    | 'window.setTrafficLights'
+    | 'window.toggleDevTools'
+    | 'app.quit'
+    // ---- network policy for http.request (SSRF switch) ---------------------
+    | 'net.policy.get'
+    | 'net.policy.set'
+    // ---- net: raw TCP / TLS byte streams (the transport plugins build
+    // application protocols on, e.g. a plugin's own IMAP/SMTP client) --------
+    | 'net.socketOpen'
+    | 'net.socketWrite'
+    | 'net.socketClose'
+    | 'net.socketSessions'
+    // ---- shell: system browser + a loopback OAuth redirect listener --------
+    | 'shell.browserOpen'
+    | 'shell.oauthStart'
+    | 'shell.oauthWait'
+    | 'shell.oauthSessions'
+    | 'shell.oauthCancel'
+    // ---- plugin-scoped encrypted key-value storage (safeStorage at rest) ---
+    | 'storage.secretAvailable'
+    | 'storage.secretSet'
+    | 'storage.secretGet'
+    | 'storage.secretHas'
+    | 'storage.secretList'
+    | 'storage.secretRemove'
+    | 'storage.secretClear'
+    | 'storage.secretNamespaces'
+    // ---- system notifications (badge + OS toast) ---------------------------
+    | 'notification.available'
+    | 'notification.show'
+    | 'notification.setBadge'
+    | 'notification.clear'
+    // ---- host-driven timers (a plugin panel may be closed) -----------------
+    | 'background.schedule'
+    | 'background.list'
+    | 'background.cancel'
+    | 'background.cancelAll'
+    // ---- generic long tasks (state/progress/incremental log/cancel) -------
+    | 'task.start'
+    | 'task.report'
+    | 'task.logsSince'
+    | 'task.list'
+    | 'task.get'
+    | 'task.touch'
+    | 'task.remove'
+    | 'task.finish'
+    | 'task.cancel'
+    // ---- remembered login credentials (OS keychain via safeStorage) --------
+    | 'credentials.available'
+    | 'credentials.load'
+    | 'credentials.save'
+    | 'credentials.clear'
+    // ---- plugin development (plugin-studio) --------------------------------
+    | 'dev.start'
+    | 'dev.stop'
+    | 'dev.build'
+    | 'dev.status'
+    | 'dev.logs'
+    | 'dev.logsSince'
+    | 'dev.scaffold'
+    | 'dev.list'
+    | 'dev.readFile'
+    | 'dev.writeFile'
+    | 'dev.hostApi'
+    | 'dev.files'
+    | 'dev.installDependencies'
+    | 'dev.remove'
+    | 'dev.deleteFile'
+    // ---- ssh (runs the user's own OpenSSH binaries) ------------------------
+    | 'ssh.exec'
+    | 'ssh.put'
+    | 'ssh.get'
+    | 'ssh.hosts'
+    | 'ssh.forget'
+    // ---- ssh: sftp directory surface ---------------------------------------
+    | 'ssh.sftpList'
+    | 'ssh.sftpStat'
+    | 'ssh.sftpMkdir'
+    | 'ssh.sftpRename'
+    | 'ssh.sftpRemove'
+    // ---- ssh: interactive terminal (remote pty, streamed) ------------------
+    | 'ssh.shellOpen'
+    | 'ssh.shellWrite'
+    | 'ssh.shellResize'
+    | 'ssh.shellClose'
+    | 'ssh.shells'
+    // ---- ssh: port forwarding (local -L / dynamic SOCKS5 -D) ---------------
+    | 'ssh.tunnelOpen'
+    | 'ssh.tunnelClose'
+    | 'ssh.tunnels'
+    // ---- ssh: credentials the user stores in the host (never given to plugins)
+    | 'ssh.credentialsAvailable'
+    | 'ssh.credentialsList'
+    | 'ssh.credentialsSet'
+    | 'ssh.credentialsRemove'
+    // ---- durable storage (SQLite in the main process) ----------------------
+    | 'storage.info'
+    | 'storage.get'
+    | 'storage.getMany'
+    | 'storage.set'
+    | 'storage.delete'
+    | 'storage.keys'
+    | 'storage.list'
+    | 'storage.count'
+    | 'storage.clear'
+    | 'storage.batch'
+    | 'storage.namespaces'
+

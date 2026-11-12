@@ -25,9 +25,26 @@ export interface DevSessionStatus {
 }
 
 export interface DevLogEntry {
+    /** Monotonic per-session sequence, starting at 1. */
+    seq?: number
     level: 'info' | 'warn' | 'error'
     message: string
     at: number
+}
+
+/** One page of the incremental log cursor (`logsSince`). */
+export interface DevLogsPage {
+    root: string
+    /** Null when no session exists for the root; changes on a session restart. */
+    sessionId: string | null
+    /** Entries with `seq > sinceSeq`, ascending, newest `limit` win. */
+    entries: DevLogEntry[]
+    /** Cursor to pass to the next call. */
+    nextSeq: number
+    /** Lines skipped by ring eviction + `limit` truncation. */
+    dropped: number
+    /** Entries currently retained in the ring. */
+    total: number
 }
 
 export interface DevProjectEntry {
@@ -87,6 +104,11 @@ export class DevSessionManager {
     build(options: DevSessionOptions): Promise<DevSessionStatus>
     status(options?: { root?: string }): DevSessionStatus[]
     logs(options: { root: string; limit?: number }): DevLogEntry[]
+    /**
+     * Incremental cursor read of the same log ring. An absent session is a
+     * well-formed empty page (`sessionId: null`), not an error.
+     */
+    logsSince(options: { root: string; sinceSeq?: number; limit?: number }): DevLogsPage
     scaffold(options: {
         name: string
         displayName?: string

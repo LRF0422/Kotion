@@ -239,6 +239,26 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
                     .catch(() => undefined)
             }
             : undefined,
+        // 动态表单：用户稍后从「填写请求」面板补填的答案没人等，空闲时同样作为一条
+        // 通知推进对话。这个旧面板自身没有表单 UI（formRequestHostAvailable 为 false
+        // 时工具会直接报错），但会话仍可能由统一面板投递答案回来。
+        onFormRequestAnswered: open
+            ? (_requests, note) => {
+                const notification: Message = {
+                    id: 'form-' + Date.now().toString(36),
+                    role: 'user',
+                    content: note,
+                    timestamp: Date.now(),
+                }
+                setMessages(prev => [...prev, notification])
+                void agentRef.current
+                    ?.start([{ role: 'user', content: note } satisfies AgentChatMessage], {
+                        mode,
+                        contextNote: customAgentNote,
+                    })
+                    .catch(() => undefined)
+            }
+            : undefined,
     })
     // 桥接：completion 回调在 agent 之前定义，触发时（异步）agent 早已就位。
     agentRef.current = agent

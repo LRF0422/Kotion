@@ -76,7 +76,7 @@ async function checkStartAnswersImmediately(): Promise<void> {
     assert.equal(settled?.deliveredAt, undefined, 'settling alone does not consume the task')
 }
 
-async function checkWaitConsumesTheResult(): Promise<void> {
+async function checkWaitConsumesNothingUntilHandover(): Promise<void> {
     const registry = new BackgroundTaskRegistry()
     const gate = deferred()
     const task = registry.start({
@@ -93,8 +93,42 @@ async function checkWaitConsumesTheResult(): Promise<void> {
     assert.equal(settled?.status, 'succeeded')
     assert.deepEqual(settled?.result, { manager: 'pnpm' })
 
-    assert.deepEqual(registry.undelivered('c1'), [], 'a waited-on task is already known to the agent')
-    assert.deepEqual(registry.takeUndelivered('c1'), [], 'and must not be announced afterwards')
+    // Reading the answer through `wait` is not a delivery: the caller may have
+    // been abandoned mid-wait (client deadline), so only an explicit handover
+    // (the tool that gives the result to the model) consumes the task.
+    assert.deepEqual(
+        registry.undelivered('c1').map(entry => entry.id),
+        [task.id],
+        'a bare wait must leave the completion pending',
+    )
+    assert.equal(registry.consume(task.id), true, 'the handover consumes the task')
+    assert.equal(registry.consume(task.id), false, 'consuming twice is a no-op')
+    assert.deepEqual(registry.takeUndelivered('c1'), [], 'and it must not be announced afterwards')
+}
+
+/**
+ * Regression for the swallowed-note bug: `getBackgroundTask({ wait: true,
+ * timeoutMs })` is killed by the client's read-tool deadline, the promise keeps
+ * running, and when the task settles the late resolution must NOT consume it.
+ */
+async function checkAbandonedWaitDoesNotSwallowTheNote(): Promise<void> {
+    const registry = new BackgroundTaskRegistry()
+    const gate = deferred()
+    const task = registry.start({
+        tool: 'buildPluginProject',
+        title: '构建 abandoned',
+        conversationId: 'c1',
+        run: () => gate.promise,
+    })
+
+    const abandoned = registry.wait(task.id, 5_000)
+    gate.resolve('built')
+    await abandoned
+    assert.deepEqual(
+        registry.undelivered('c1').map(entry => entry.id),
+        [task.id],
+        'a late resolution of an abandoned wait keeps the note pending',
+    )
 }
 
 async function checkWaitTimeoutKeepsTheTaskPending(): Promise<void> {
@@ -761,12 +795,17 @@ async function checkToolWaitTimeoutReportsProgress(): Promise<void> {
 }
 
 function checkWaitBudgetIsClamped(): void {
-    assert.ok(MAX_BACKGROUND_WAIT_MS >= 60_000)
+    assert.ok(MAX_BACKGROUND_WAIT_MS >= 60_000, 'a full minute of parking must stay possible')
+    // The client kills a read-only tool after 90s (tool-executor.ts). A wait cap
+    // above that would be a lie: the model gets "工具执行超时" while the pending
+    // wait swallows the completion note (see the abandoned-wait regression).
+    assert.ok(MAX_BACKGROUND_WAIT_MS <= 90_000, 'the wait cap must sit under the client tool deadline')
 }
 
 async function main(): Promise<void> {
     await checkStartAnswersImmediately()
-    await checkWaitConsumesTheResult()
+    await checkWaitConsumesNothingUntilHandover()
+    await checkAbandonedWaitDoesNotSwallowTheNote()
     await checkWaitTimeoutKeepsTheTaskPending()
     await checkFailureAndNoteText()
     await checkCancelStopsWaitingWithoutResurrecting()

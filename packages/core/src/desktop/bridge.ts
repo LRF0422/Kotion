@@ -22,6 +22,8 @@ import type {
     DevStatusOptions,
     DevLogsOptions,
     DevLogEntry,
+    DevLogsSinceOptions,
+    DevLogsPage,
     DevHostApiOptions,
     DevHostApiResult,
     DevFilesOptions,
@@ -32,6 +34,22 @@ import type {
     DevRemoveResult,
     DevDeleteFileOptions,
     DevDeleteFileResult,
+    TaskBridge,
+    DesktopTaskStartOptions,
+    DesktopTaskReportOptions,
+    DesktopTaskReportResult,
+    DesktopTaskLogsSinceOptions,
+    DesktopTaskLogsPage,
+    DesktopTaskListOptions,
+    DesktopTaskGetOptions,
+    DesktopTaskTouchOptions,
+    DesktopTaskRemoveOptions,
+    DesktopTaskRemoveResult,
+    DesktopTaskFinishOptions,
+    DesktopTaskCancelOptions,
+    DesktopTaskCancelResult,
+    DesktopTaskSnapshot,
+    DesktopTaskEvent,
     NetBridge,
     NotificationBridge,
     SecretBridge,
@@ -56,6 +74,10 @@ import type {
     SshShellSession,
     SshShellTarget,
     SshShellWriteOptions,
+    SshTunnelCloseOptions,
+    SshTunnelEvent,
+    SshTunnelOptions,
+    SshTunnelSession,
     SshCredentialInput,
     SshCredentialMetadata,
     SshCredentialMutationResult,
@@ -85,6 +107,7 @@ const DEV_CAPABILITIES: DesktopCapability[] = [
     'dev.build',
     'dev.status',
     'dev.logs',
+    'dev.logsSince',
     'dev.scaffold',
     'dev.list',
     'dev.readFile',
@@ -137,6 +160,10 @@ const createDevBridge = (
         logs: (options: DevLogsOptions): Promise<DevLogEntry[]> => {
             requireCapability('dev.logs')
             return invoke('dev.logs', options)
+        },
+        logsSince: (options: DevLogsSinceOptions): Promise<DevLogsPage> => {
+            requireCapability('dev.logsSince')
+            return invoke('dev.logsSince', options)
         },
         scaffold: (options: DevScaffoldOptions): Promise<DevScaffoldResult> => {
             requireCapability('dev.scaffold')
@@ -205,6 +232,9 @@ const SSH_CAPABILITIES: DesktopCapability[] = [
     'ssh.shellResize',
     'ssh.shellClose',
     'ssh.shells',
+    'ssh.tunnelOpen',
+    'ssh.tunnelClose',
+    'ssh.tunnels',
     'ssh.credentialsAvailable',
     'ssh.credentialsList',
     'ssh.credentialsSet',
@@ -243,7 +273,25 @@ const createSshBridge = (
          * component only sees its own terminal.
          */
         onShell: (listener) =>
-            host.on('ssh', (value) => listener(value as SshShellEvent)),
+            host.on('ssh', (value) => {
+                const payload = value as SshShellEvent
+                // Tunnels share the channel; a terminal listener must not see
+                // their lifecycle events (and vice versa in onTunnel below).
+                if (!String(payload?.type ?? '').startsWith('shell-')) return
+                listener(payload)
+            }),
+        tunnel: (options: SshTunnelOptions): Promise<SshTunnelSession> =>
+            invoke('ssh.tunnelOpen', options),
+        closeTunnel: (options: SshTunnelCloseOptions): Promise<boolean> =>
+            invoke('ssh.tunnelClose', options),
+        tunnels: (): Promise<SshTunnelSession[]> => invoke('ssh.tunnels'),
+        /** Tunnel events ride the same `ssh` channel; filter to `tunnel-close`. */
+        onTunnel: (listener) =>
+            host.on('ssh', (value) => {
+                const payload = value as SshTunnelEvent
+                if (payload?.type !== 'tunnel-close') return
+                listener(payload)
+            }),
         hosts: (): Promise<SshGrant[]> => invoke('ssh.hosts'),
         forget: (options: SshForgetOptions): Promise<boolean> => invoke('ssh.forget', options),
         credentials: {
@@ -433,6 +481,64 @@ const createBackgroundBridge = (
 }
 
 /**
+ * Task-group bridge (`desktop.tasks`).
+ *
+ * Kept as a separate factory like the other groups so a host without the
+ * `task.*` capabilities degrades to `undefined` instead of throwing on first
+ * use. The `runLongTask` helper in `@kn/common` already treats `undefined` as
+ * "no host support" and no-ops, which is what lets a plugin adopt long-task
+ * reporting unconditionally.
+ */
+/** Capabilities the generic long-task group adds; gates {@link TaskBridge}. */
+const TASK_CAPABILITIES: DesktopCapability[] = [
+    'task.start',
+    'task.report',
+    'task.logsSince',
+    'task.list',
+    'task.get',
+    'task.touch',
+    'task.remove',
+    'task.finish',
+    'task.cancel',
+]
+
+const createTaskBridge = (
+    host: DesktopHostBridge,
+    capabilities: readonly string[],
+): TaskBridge | undefined => {
+    if (!TASK_CAPABILITIES.some((capability) => capabilities.includes(capability))) {
+        return undefined
+    }
+
+    const invoke = <C extends DesktopCapability>(capability: C, params?: unknown) =>
+        host.invoke(capability, params) as Promise<DesktopCapabilityContract[C]['result']>
+
+    return {
+        start: (options: DesktopTaskStartOptions): Promise<DesktopTaskSnapshot> =>
+            invoke('task.start', options),
+        report: (options: DesktopTaskReportOptions): Promise<DesktopTaskReportResult> =>
+            invoke('task.report', options),
+        logsSince: (options: DesktopTaskLogsSinceOptions): Promise<DesktopTaskLogsPage> =>
+            invoke('task.logsSince', options),
+        list: (options?: DesktopTaskListOptions): Promise<DesktopTaskSnapshot[]> =>
+            invoke('task.list', options),
+        get: (options: DesktopTaskGetOptions): Promise<DesktopTaskSnapshot | null> =>
+            invoke('task.get', options),
+        touch: (options: DesktopTaskTouchOptions): Promise<DesktopTaskSnapshot> =>
+            invoke('task.touch', options),
+        remove: (options: DesktopTaskRemoveOptions): Promise<DesktopTaskRemoveResult> =>
+            invoke('task.remove', options),
+        finish: (options: DesktopTaskFinishOptions): Promise<DesktopTaskSnapshot> =>
+            invoke('task.finish', options),
+        cancel: (options: DesktopTaskCancelOptions): Promise<DesktopTaskCancelResult> =>
+            invoke('task.cancel', options),
+        /** One `task` event channel; filter here so a panel only sees its task. */
+        onEvent: (listener) =>
+            host.on('task', (value) => listener(value as DesktopTaskEvent)),
+    }
+}
+
+/**
  * Build the `desktop` core service, or undefined on the web (where the preload
  * bridge is absent). The host registers it via PluginManager coreServices.
  */
@@ -449,6 +555,7 @@ export const createDesktopBridge = (): DesktopBridge | undefined => {
     const secrets = createSecretBridge(host, capabilities)
     const notifications = createNotificationBridge(host, capabilities)
     const background = createBackgroundBridge(host, capabilities)
+    const tasks = createTaskBridge(host, capabilities)
 
     return {
         version: DESKTOP_BRIDGE_VERSION,
@@ -470,5 +577,6 @@ export const createDesktopBridge = (): DesktopBridge | undefined => {
         ...(secrets ? { secrets } : {}),
         ...(notifications ? { notifications } : {}),
         ...(background ? { background } : {}),
+        ...(tasks ? { tasks } : {}),
     }
 }

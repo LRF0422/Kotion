@@ -11,6 +11,7 @@ import {
 import { SessionSwitcher } from './SessionSwitcher'
 import { SessionTasksPanel } from './SessionTasksPanel'
 import { BackgroundTasksPanel } from './BackgroundTasksPanel'
+import { FormRequestsPanel } from './FormRequestsPanel'
 import type { ChatSessionMeta } from '../chat-sessions'
 
 export interface ChatHeaderActionsProps {
@@ -98,6 +99,10 @@ export const ChatHeaderActions: React.FC<ChatHeaderActionsProps> = ({
                         chat the user has since left is exactly what needs an
                         entry point. */}
                     <BackgroundTasksPanel sessions={sessions} onOpenSession={onSwitch} />
+                    {/* Unified inbox for agent dynamic forms: pending requests
+                        survive a conversation switch, and can be filled from
+                        here even after the asking run stopped waiting. */}
+                    <FormRequestsPanel sessions={sessions} onOpenSession={onSwitch} />
                     <SessionTasksPanel onOpenSession={onSwitch} refreshKey={tasksRefreshKey} />
                     {showHistory && (
                         <SessionSwitcher

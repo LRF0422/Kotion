@@ -26,11 +26,17 @@
  * terminal state it becomes "undelivered": nobody has shown the agent the
  * result yet. Exactly one of these consumes it:
  *
- *   1. the agent waits/polls and reads a terminal task (`wait`, `get`) — it has
- *      the answer, so nothing needs to interrupt it;
+ *   1. a tool hands a terminal task to the model and calls
+ *      {@link BackgroundTaskRegistry.consume} — it has the answer, so nothing
+ *      needs to interrupt it;
  *   2. the host injects a completion note into the conversation and calls
  *      {@link BackgroundTaskRegistry.takeUndelivered} — used when the run that
  *      started the task went idle without waiting.
+ *
+ * Note that {@link BackgroundTaskRegistry.wait} deliberately does NOT consume:
+ * a caller can give up on a wait (the client tool executor kills a read after
+ * 90s) while the underlying promise keeps running, so a late `wait` would mark a
+ * task delivered that nobody ever saw — and its completion note would be lost.
  *
  * `deliveredAt` is what makes that "exactly once": a peek at a *running* task
  * does not consume it, and a consumed one is never announced twice.
@@ -152,7 +158,13 @@ export interface BackgroundTaskArtifactState {
 
 /** Default/maximum wait for `getBackgroundTask({ wait: true })`, in ms. */
 export const DEFAULT_BACKGROUND_WAIT_MS = 60_000
-export const MAX_BACKGROUND_WAIT_MS = 300_000
+/**
+ * Kept BELOW the client's read-only tool deadline (90s, see
+ * `tool-executor.ts`): a wait that outlives that deadline is killed, the model
+ * gets a timeout error, and the still-pending wait would then consume the task
+ * when it finally settles. 80s leaves headroom for the round trip.
+ */
+export const MAX_BACKGROUND_WAIT_MS = 80_000
 
 /** Terminal task entries kept in memory (oldest terminal entries are dropped). */
 const MAX_TASKS = 100
@@ -403,11 +415,25 @@ export class BackgroundTaskRegistry {
     }
 
     /**
+     * Mark a terminal task as shown to the agent. Called by the tool that hands
+     * the result over (see module docs); a bare {@link wait} must NOT do this,
+     * because an abandoned wait (client deadline) still resolves later and would
+     * swallow the completion note.
+     */
+    consume(id: string): boolean {
+        const task = this.tasks.get(id)
+        if (!task || !isTerminal(task.status)) return false
+        const first = task.deliveredAt === undefined
+        this.markDelivered(task)
+        return first
+    }
+
+    /**
      * Park until the task is terminal or the timeout expires.
      *
-     * A terminal answer marks the task delivered: the caller now HAS the result,
-     * so the completion note must not also interrupt the conversation. A timed-out
-     * wait leaves the task undelivered (the agent still has not seen it).
+     * Read-only with respect to delivery: seeing a terminal answer here does not
+     * consume it (the caller may have been abandoned mid-wait), the tool that
+     * hands the result to the model calls {@link consume} instead.
      */
     async wait(
         id: string,
@@ -416,7 +442,6 @@ export class BackgroundTaskRegistry {
         const current = this.tasks.get(id)
         if (!current) return { task: undefined, timedOut: false }
         if (isTerminal(current.status)) {
-            this.markDelivered(current)
             return { task: snapshot(current), timedOut: false }
         }
 
@@ -448,7 +473,6 @@ export class BackgroundTaskRegistry {
         const task = this.tasks.get(id)
         if (!task) return { task: undefined, timedOut: false }
         if (isTerminal(task.status)) {
-            this.markDelivered(task)
             return { task: snapshot(task), timedOut: false }
         }
         return { task: snapshot(task), timedOut: !settled }
@@ -614,6 +638,12 @@ export class BackgroundTaskRegistry {
             task.status = 'cancelled'
             task.error = '任务已取消：后台动作在取消后仍完成了，结果不入队'
         }
+        if (task.status === 'cancelled' && task.deliveredAt === undefined) {
+            // A cancelled task is never announced: the agent explicitly stopped
+            // waiting (and a cancelled entry that stayed "pending" would also be
+            // the last thing trim() is willing to evict).
+            task.deliveredAt = task.finishedAt
+        }
         this.cancelHooks.delete(id)
         // The artifact moves from "being built" to its real outcome here: bytes,
         // modules, whether the dev version got installed — everything the shelf
@@ -718,9 +748,20 @@ export function flushBackgroundTaskNotes(options: {
     const conversationId = options.conversationId
     if (!conversationId) return false
     if (options.isBusy()) return false
-    const settled = backgroundTasks.takeUndelivered(conversationId)
+    // Peek first: claiming is irreversible (`deliveredAt`), and a host that
+    // throws while turning the note into a turn must not lose the completion.
+    const settled = backgroundTasks.undelivered(conversationId)
     if (settled.length === 0) return false
-    options.onNotify(settled, backgroundTasks.describe(settled))
+    try {
+        options.onNotify(settled, backgroundTasks.describe(settled))
+    } catch (error: any) {
+        console.warn(
+            '[background-tasks] notification failed; keeping the result pending:',
+            error?.message ?? error,
+        )
+        return false
+    }
+    backgroundTasks.takeUndelivered(conversationId)
     return true
 }
 

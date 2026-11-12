@@ -79,10 +79,49 @@ export interface StudioHostApiMatch {
     text: string
 }
 
+/** One declaration slice returned by `dev.hostApi` (symbol mode). */
+export interface StudioHostApiDeclaration {
+    symbol: string
+    package: string
+    path: string
+    startLine: number
+    endLine: number
+    totalLines: number
+    text: string
+}
+
+/** One interface member slice returned by `dev.hostApi` (member mode). */
+export interface StudioHostApiMember {
+    member: string
+    startLine: number
+    endLine: number
+    totalLines: number
+    text: string
+}
+
 export type StudioHostApiResult =
     | { kind: 'list'; root: string; packages: StudioHostPackage[] }
     | { kind: 'search'; matches: StudioHostApiMatch[]; truncated: boolean }
-    | { kind: 'file'; package: string; path: string; contents: string; bytes: number }
+    | {
+          kind: 'file'
+          package: string
+          path: string
+          contents: string
+          bytes: number
+          /** Set when the caller asked for one declaration (`symbol`). */
+          symbol?: string
+          startLine?: number
+          endLine?: number
+          totalLines?: number
+      }
+    | { kind: 'declarations'; declarations: StudioHostApiDeclaration[]; missing: string[] }
+    | {
+          kind: 'contract'
+          package: string
+          path: string
+          entries: StudioHostApiMember[]
+          missing: string[]
+      }
 
 export interface StudioFileMatch {
     path: string
@@ -151,30 +190,142 @@ export interface StudioDesktopBridge {
     [key: string]: unknown
 }
 
-/** One capability family, grouped by the name prefix in front of the first dot. */
+/** One capability row in the `summary` view of `listDesktopCapabilities`. */
+export interface StudioDesktopCapabilityEntry {
+    name: string
+    summary: string
+    /** Guard ids; see the catalogue's guard notes. */
+    guards: string[]
+    /** How to reach it (`desktop.invoke('…')` / `desktop.ssh.exec(…)`). */
+    call: string
+    /** Whether this host build actually exposes it. */
+    available: boolean
+}
+
+/** One capability family, with the catalogue metadata the group carries. */
 export interface StudioDesktopCapabilityGroup {
-    /** e.g. `ssh.` */
+    /** Group id, e.g. `ssh`. */
     group: string
-    /** Capability names in this family, sorted. */
-    capabilities: string[]
-    /** One-line note on what the family is for and its guard rails. */
-    summary?: string
+    title: string
+    summary: string
+    guards: string[]
+    /** Repo-relative module holding this group's params/result declarations. */
+    typesAt?: string
+    /** Matching capabilities: names, or full rows when `detail: 'summary'`. */
+    capabilities: Array<string | StudioDesktopCapabilityEntry>
+    /** How many of the matching capabilities this host exposes. */
+    available: number
+    /** How many are catalogued but absent from this host build. */
+    unavailable: number
+}
+
+/**
+ * Structural copy of `@kn/common`'s desktop capability catalogue
+ * (`desktop/catalog.ts`).
+ *
+ * Injected by the plugin entry instead of imported here, for the same reason as
+ * every other bridge shape: this module stays dependency-free under Node so its
+ * test can load it directly, and a host older than the studio simply passes
+ * `undefined` (the tools then fall back to prefix grouping).
+ */
+export interface StudioDesktopCatalogGroup {
+    id: string
+    title: string
+    summary: string
+    guards: string[]
+    typesAt: string
+}
+
+export interface StudioDesktopCatalogEntry {
+    name: string
+    group: string
+    summary: string
+    call: string
+    guards: string[]
+    example?: string
+    notes?: string
+    availability?: 'desktop' | 'desktop-studio'
+}
+
+export interface StudioDesktopCatalog {
+    groups: readonly StudioDesktopCatalogGroup[]
+    entries: readonly StudioDesktopCatalogEntry[]
+    /** Guard id → what it means (Chinese, author-facing). */
+    guardNotes: Record<string, string>
+    find(name: string): StudioDesktopCatalogEntry | undefined
+    search(options: { query?: string; group?: string }): StudioDesktopCatalogEntry[]
 }
 
 export interface StudioDesktopCapabilitiesResult {
     hasDesktop: boolean
     platform?: string
-    /** Total capabilities this host exposes. */
+    /** How many capabilities this host build actually exposes. */
+    total: number
+    /** How many matched the query/group filter. */
     count: number
     groups: StudioDesktopCapabilityGroup[]
     /** Typed groups hanging off the bridge (`desktop.dev` / `.ssh` / `.storage`). */
     typedGroups: Array<{ group: string; methods: string[] }>
+    /** Exposed by this host but unknown to this studio build (host is newer). */
+    uncatalogued: string[]
+    /** Catalogued but not exposed by this build (older or trimmed host). */
+    unavailable: string[]
+    /** False when the host's `@kn/common` predates the capability catalogue. */
+    catalogued: boolean
+    /** Where the docs and the contract live. */
+    docs: { reference: string; contract: string; catalog: string }
     /** How a plugin consumes any of this. */
     callPattern: string
-    /** Where the exact parameter/result types live. */
+    /** The discovery flow, in one line. */
     hint: string
+    /** Guard id → meaning, present in the `summary` view. */
+    guardNotes?: Record<string, string>
     /** Set when the host exposes no `desktop` service at all. */
     note?: string
+}
+
+/** One capability, as `getDesktopCapability` reports it. */
+export interface StudioDesktopCapabilityDetail {
+    name: string
+    /** False when this studio build does not know the name (newer host). */
+    known: boolean
+    group: string
+    title: string
+    summary: string
+    /** Guard ids plus their meanings. */
+    guards: Array<{ id: string; note: string }>
+    /** How to reach it, ready to paste. */
+    call: string
+    /** Whether the current host build exposes it. */
+    available: boolean
+    availability?: 'desktop' | 'desktop-studio'
+    example?: string
+    notes?: string
+    /** Where the declarations live (repo-relative). */
+    typesAt?: string
+    /** The contract's params expression, e.g. `SshExecOptions` or `{ path: string }`. */
+    params?: string
+    /** The contract's result expression. */
+    result?: string
+    /** Real declarations inlined from the host source (params/result types). */
+    declarations?: StudioHostApiDeclaration[]
+    /** Type names the source search could not resolve (utility/builtin types). */
+    declarationsSkipped?: string[]
+    /** Exact `readHostApiFile` call for one declaration. */
+    readMore?: string
+    /** Why declarations could not be inlined (old host, unrelated failure). */
+    sourceError?: string
+}
+
+export interface StudioDesktopCapabilityDetailResult {
+    hasDesktop: boolean
+    platform?: string
+    requested: number
+    found: number
+    /** Requested names that are not in this studio build's catalogue. */
+    missing: string[]
+    capabilities: StudioDesktopCapabilityDetail[]
+    hint: string
 }
 
 export interface StudioInstallResult {
@@ -287,12 +438,21 @@ export interface StudioDevBridge {    start(options: { root: string; watch?: boo
     list(options?: { dir?: string }): Promise<StudioProjectEntry[]>
     readFile(options: { path: string }): Promise<string>
     writeFile(options: { path: string; contents?: string }): Promise<void>
-    /** Read the standard host packages' source; see StudioHostApiResult. */
+    /**
+     * Read the standard host packages' source; see StudioHostApiResult.
+     *
+     * Modes: list (`{}`), search (`query`), whole file (`package`+`path`), one
+     * declaration (`package`+`path`+`symbol`), declarations by name across
+     * packages (`symbols`), or interface members (`package`+`path`+`members`).
+     */
     hostApi(options?: {
         package?: string
         path?: string
         query?: string
         limit?: number
+        symbol?: string
+        symbols?: string[]
+        members?: string[]
     }): Promise<StudioHostApiResult>
     /** List, search or grep one project's files; see StudioFilesResult. */
     files(options: {
@@ -442,6 +602,15 @@ export interface StudioToolDeps {
      * list; absent on the web and in tests that do not care.
      */
     getDesktop?: () => StudioDesktopBridge | undefined
+    /**
+     * The capability catalogue published by the host's `@kn/common`
+     * (`desktop/catalog.ts`), adapted by the plugin entry.
+     *
+     * The bridge says *which* names exist; the catalogue says what they mean,
+     * which guard rails they pass and how to call them. Absent on hosts whose
+     * `@kn/common` predates it — the tools then degrade to prefix grouping.
+     */
+    getDesktopCatalog?: () => StudioDesktopCatalog | undefined
     /** The host plugin registry's hot-install surface, or undefined when absent. */
     getPluginHost: () => StudioPluginHost | undefined
     /**
@@ -698,10 +867,12 @@ const BUILTIN_HOST_MODULE_SET = new Set(BUILTIN_HOST_MODULES)
 /**
  * What each `desktop.<family>.` capability family is for.
  *
- * Deliberately family-level (not per-capability): the authoritative
- * per-capability list comes from the live bridge, and the parameter/result types
- * come from `@kn/common`'s `desktop-bridge.ts`. This map only adds the "what is
- * this for / what is the guard rail" that a name like `fs.remove` cannot convey.
+ * Fallback for a host whose `@kn/common` predates the capability catalogue: the
+ * authoritative per-capability metadata now lives in
+ * `packages/common/src/core/desktop/catalog.ts` and arrives through
+ * `getDesktopCatalog` (see `listDesktopCapabilities`). This family map is only
+ * used when that adapter is absent — old desktop builds, where a name like
+ * `fs.remove` still needs a "what is this for / what is the guard rail" line.
  */
 const CAPABILITY_FAMILY_NOTES: Record<string, string> = {
     'system.': '应用与路径信息（版本、平台、标准目录）。只读。',
@@ -716,6 +887,242 @@ const CAPABILITY_FAMILY_NOTES: Record<string, string> = {
     'dev.': '插件开发台：构建/热更/工程文件/依赖安装。只有开发台这类工具插件需要；主进程侧的 dev-server 是唯一能被它拉起的进程。',
     'ssh.': 'SSH 远程执行与文件传输（用你自己的 OpenSSH）。过网络策略，且每个主机在本次运行内首次使用需用户确认；宿主不接收也不保存凭证。',
     'storage.': '持久化 KV（桌面 SQLite / Web localStorage）。插件必须留在自己的 `plugin.<pluginKey>` 命名空间里。',
+}
+
+/* ------------------------------------------------------------------ *
+ * Desktop capability discovery
+ *
+ * Two layers answer together: the live bridge (what this host build exposes)
+ * and the host catalogue in `@kn/common` (`desktop/catalog.ts`: what each
+ * capability means, its guards, how to call it). The bridge is the honest
+ * answer about availability; the catalogue is the only place a name like
+ * `fs.writeFile` turns into "params, guards, and an example".
+ * ------------------------------------------------------------------ */
+
+const DESKTOP_DOCS = {
+    reference: 'docs/DESKTOP_CAPABILITIES.md',
+    contract: 'packages/common/src/core/desktop/（按域拆分的契约）',
+    catalog: 'packages/common/src/core/desktop/catalog.ts',
+} as const
+
+/** The typed bridge groups hanging off `desktop`, in a stable order. */
+const TYPED_DESKTOP_GROUPS = [
+    'net',
+    'browser',
+    'secrets',
+    'notifications',
+    'background',
+    'storage',
+    'ssh',
+    'dev',
+] as const
+
+const DESKTOP_CALL_PATTERN =
+    "组件里 useOptionalService('desktop')，非 React 代码 resolveOptionalService('desktop')；" +
+    "有类型化组的直接调（desktop.ssh.exec({...}) / desktop.dev.start({...}) / desktop.storage.get(ns, key)），其余用 desktop.invoke('<能力名>', params)。" +
+    '能力可能不存在（Web 端没有 desktop，老桌面构建可能缺组）：先 desktop?.has(能力名) 或 desktop?.ssh 判断，缺失时降级而不是崩。'
+
+const DESKTOP_DISCOVERY_HINT =
+    '发现顺序：① listDesktopCapabilities({ query }) 按意图找（中文可用）；② getDesktopCapability({ names }) 一次拿到摘要/门禁/调用式/参数与结果类型（含源码声明）；' +
+    '③ 写代码时先特性检测。消费能力不需要在插件 config 里声明（services 是给“对外提供”用的）。'
+
+/** Type names that are syntax/utility rather than declarations to resolve. */
+const TS_BUILTINS = new Set([
+    'Partial',
+    'Required',
+    'Readonly',
+    'Record',
+    'Pick',
+    'Omit',
+    'Exclude',
+    'Extract',
+    'NonNullable',
+    'ReturnType',
+    'Parameters',
+    'Awaited',
+    'Promise',
+    'Array',
+    'ReadonlyArray',
+    'Map',
+    'Set',
+    'Date',
+    'Error',
+    'JSON',
+    'URL',
+    'RegExp',
+    'Uint8Array',
+    'ArrayBuffer',
+    'Blob',
+])
+
+const desktopLiveCapabilities = (deps: StudioToolDeps): string[] => {
+    const desktop = deps.getDesktop?.()
+    return desktop && Array.isArray(desktop.capabilities) ? [...desktop.capabilities] : []
+}
+
+/** Case-insensitive substring match; every whitespace-separated term must hit. */
+const matchesDesktopQuery = (name: string, query?: string, extra?: string): boolean => {
+    if (!query) return true
+    const haystack = (name + ' ' + (extra ?? '')).toLowerCase()
+    return query
+        .toLowerCase()
+        .split(/\s+/)
+        .filter(Boolean)
+        .every((term) => haystack.includes(term))
+}
+
+const normalizeCapabilityNames = (value: unknown): string[] => {
+    if (!Array.isArray(value)) {
+        throw new Error('names 必须是能力名数组，例如 ["fs.readFile", "ssh.exec"]')
+    }
+    const names: string[] = []
+    for (const item of value) {
+        if (typeof item !== 'string' || !item.trim()) continue
+        const name = item.trim()
+        if (!names.includes(name)) names.push(name)
+    }
+    if (names.length === 0) throw new Error('names 不能为空')
+    if (names.length > 12) throw new Error('一次最多查 12 个能力；用 listDesktopCapabilities({ query }) 先收窄')
+    return names
+}
+
+const normalizeTypeText = (value: string): string =>
+    value
+        .replace(/\s+/g, ' ')
+        .replace(/\s*[;,]$/, '')
+        .trim()
+
+/**
+ * Split one `DesktopCapabilityContract` entry into its `params` / `result`
+ * expressions. Both can be inline object literals or named types; that is what
+ * the contract file literally says, which is what the author wants to see.
+ */
+const parseContractFields = (text: string): { params?: string; result?: string } => {
+    const open = text.indexOf('{')
+    const close = text.lastIndexOf('}')
+    const body = open >= 0 && close > open ? text.slice(open + 1, close) : text
+    const paramsMatch = body.match(/(?:^|[\s;])params\??\s*:\s*([\s\S]*?)(?=(?:[\s;]result\??\s*:)|$)/)
+    const resultMatch = body.match(/(?:^|[\s;])result\??\s*:\s*([\s\S]*)$/)
+    const params = paramsMatch ? normalizeTypeText(paramsMatch[1]) : undefined
+    const result = resultMatch ? normalizeTypeText(resultMatch[1]) : undefined
+    return {
+        ...(params && params !== 'void' ? { params } : {}),
+        ...(result ? { result } : {}),
+    }
+}
+
+/** PascalCase identifiers referenced by a type expression, in order. */
+const typeSymbolsIn = (...texts: Array<string | undefined>): string[] => {
+    const symbols: string[] = []
+    for (const text of texts) {
+        if (!text) continue
+        for (const match of text.matchAll(/\b[A-Z][A-Za-z0-9_]*\b/g)) {
+            const symbol = match[0]
+            if (TS_BUILTINS.has(symbol) || symbols.includes(symbol)) continue
+            symbols.push(symbol)
+        }
+    }
+    return symbols
+}
+
+const firstTypeSymbol = (text: string | undefined): string | undefined => typeSymbolsIn(text)[0]
+
+const hostApiPathFromRepo = (typesAt?: string): string | undefined => {
+    if (!typesAt || !typesAt.startsWith('packages/')) return undefined
+    const marker = typesAt.indexOf('/src/')
+    return marker === -1 ? undefined : typesAt.slice(marker + 1)
+}
+
+const readMoreFor = (
+    typesAt: string | undefined,
+    params: string | undefined,
+    result: string | undefined,
+): string | undefined => {
+    const path = hostApiPathFromRepo(typesAt)
+    const symbol = firstTypeSymbol(params) ?? firstTypeSymbol(result)
+    if (!path || !symbol) return undefined
+    return `readHostApiFile({ package: '@kn/common', path: '${path}', symbol: '${symbol}' })`
+}
+
+interface StudioCapabilitySource {
+    params?: string
+    result?: string
+    declarations?: StudioHostApiDeclaration[]
+    declarationsSkipped?: string[]
+    error?: string
+}
+
+/**
+ * Source-accurate half of `getDesktopCapability`: read the contract entry and
+ * the declarations it references straight from the host packages. Best-effort
+ * by design — an older host without `dev.hostApi` still gets the catalogue
+ * summary, just no inlined declarations.
+ */
+const readCapabilitySource = async (
+    deps: StudioToolDeps,
+    names: string[],
+): Promise<Map<string, StudioCapabilitySource>> => {
+    const result = new Map<string, StudioCapabilitySource>()
+    for (const name of names) result.set(name, {})
+    if (names.length === 0) return result
+
+    const hostApi = deps.getDev?.()?.hostApi
+    if (typeof hostApi !== 'function') {
+        const message =
+            '当前宿主没有 dev.hostApi（旧桌面端），无法内联类型声明；用 searchHostApi / readHostApiFile 自查。'
+        for (const entry of result.values()) entry.error = message
+        return result
+    }
+
+    try {
+        const contract = await hostApi({
+            package: '@kn/common',
+            path: 'src/core/desktop/contract.ts',
+            members: names,
+        })
+        if (contract.kind !== 'contract') {
+            throw new Error('宿主 dev.hostApi 返回了意外的结果（期望 contract）')
+        }
+        for (const entry of contract.entries) {
+            const target = result.get(entry.member)
+            if (target) Object.assign(target, parseContractFields(entry.text))
+        }
+        for (const name of contract.missing) {
+            const target = result.get(name)
+            if (target) target.error = '契约里没有这个能力名，声明无法内联。'
+        }
+
+        const symbols = [...new Set([...result.values()].flatMap((entry) => typeSymbolsIn(entry.params, entry.result)))]
+        if (symbols.length === 0) return result
+
+        const declarations = await hostApi({ package: '@kn/common', symbols })
+        if (declarations.kind !== 'declarations') {
+            throw new Error('宿主 dev.hostApi 返回了意外的结果（期望 declarations）')
+        }
+        const bySymbol = new Map(declarations.declarations.map((declaration) => [declaration.symbol, declaration]))
+        for (const entry of result.values()) {
+            const wanted = typeSymbolsIn(entry.params, entry.result)
+            const found = wanted
+                .map((symbol) => bySymbol.get(symbol))
+                .filter((declaration): declaration is StudioHostApiDeclaration => Boolean(declaration))
+            if (found.length > 0) {
+                entry.declarations = found.map((declaration) => ({
+                    ...declaration,
+                    text:
+                        declaration.text.length > 2400
+                            ? declaration.text.slice(0, 2400) + '\n… (truncated)'
+                            : declaration.text,
+                }))
+            }
+            const skipped = wanted.filter((symbol) => !bySymbol.has(symbol))
+            if (skipped.length > 0) entry.declarationsSkipped = skipped
+        }
+        return result
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        for (const entry of result.values()) entry.error = message
+        return result
+    }
 }
 
 const normalizeExternals = (value: unknown): string[] => {
@@ -1933,95 +2340,312 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
      * plugin reaches host capabilities (files, dialogs, HTTP, SSH, storage…),
      * and it is *not* discoverable from the service registry: `listPluginServices`
      * shows the service name `desktop`, not the capability families under it.
-     * Reading the live bridge is the honest answer — it reports what this build
-     * exposes, not what some doc promised.
+     *
+     * Two sources answer together: the live bridge (what this build exposes) and
+     * the host catalogue (what each capability is for, its guards, how to call
+     * it). Query matches capability names, Chinese summaries and group titles, so
+     * an author can start from an intent ("read a file", "截屏") instead of a
+     * guessed identifier.
      */
     listDesktopCapabilities: {
         description:
-            '列出当前宿主通过 `desktop` 服务暴露给插件的能力（能力名按前缀分组，例如 `fs.` / `dialog.` / `ssh.` / `dev.`），' +
-            '以及挂在桥上的类型化能力组（`desktop.dev` / `desktop.ssh` / `desktop.storage`）各自有哪些方法。' +
-            '写插件要用桌面能力（读写文件、发 HTTP、SSH、弹对话框、持久化…）时先查这里，再用 ' +
-            "`resolveOptionalService('desktop')`（非组件）或 `useOptionalService('desktop')`（组件里）拿服务。" +
-            '注意三点：①Web 端没有这个服务，老桌面构建也可能缺某些组，所以必须先 `desktop?.has(能力名)` 或 `desktop?.ssh` 判断再调用；' +
-            '②能力的参数/结果类型在 @kn/common 的 src/core/desktop-bridge.ts（`DesktopCapabilityContract` 是总表），用 searchHostApi / readHostApiFile 读；' +
-            '③插件消费能力不需要在 config 里声明（`services` 是给“对外提供”用的）。',
+            '列出当前宿主通过 `desktop` 服务暴露给插件的桌面能力，按能力组（fs/dialog/http/net/shell/secrets/storage/ssh/…）返回。' +
+            '**按意图搜**：query 支持中文关键词（"文件"、"截屏"、"ssh 隧道"、"通知"），匹配能力名 + 摘要 + 分组标题；空格分隔多个词要求全部命中；' +
+            'group 可收窄到一组；detail: "summary" 时每条带一句话摘要、门禁（guards）与调用式（call）。' +
+            'uncatalogued = 宿主暴露但本开发台不认识的能力（宿主更新）；unavailable = 目录里有但当前宿主没暴露（旧宿主/精简构建）——清单不是绝对真相。' +
+            '拿到候选后，用 getDesktopCapability({ names }) 取签名/示例/类型声明，不要直接整读契约文件。' +
+            DESKTOP_CALL_PATTERN,
         inputSchema: {
             type: 'object',
             properties: {
-                query: { type: 'string', description: '可选。能力名子串过滤（大小写不敏感），如 "ssh"、"fs."、"storage"。' },
+                query: {
+                    type: 'string',
+                    description:
+                        '可选。意图/关键词，匹配能力名 + 中文摘要 + 分组标题；空格分隔多个词（全部命中）；如 "文件"、"截屏"、"ssh 隧道"。',
+                },
+                group: {
+                    type: 'string',
+                    description:
+                        '可选。只看一组：system|app|window|dialog|fs|capture|http|net|shell|secrets|storage|notification|background|credentials|ssh|dev。',
+                },
+                detail: {
+                    type: 'string',
+                    enum: ['names', 'summary'],
+                    description: '可选。默认 names 只回能力名；summary 每条回 { name, summary, guards, call, available }。',
+                },
             },
         },
         readOnly: true,
-        execute: async (args: { query?: string }) => {
+        execute: async (args: { query?: string; group?: string; detail?: 'names' | 'summary' }) => {
             const desktop = deps.getDesktop?.()
-            const callPattern =
-                "非 React 代码 resolveOptionalService('desktop')；组件里 useOptionalService('desktop')。" +
-                "有类型化组的直接调（desktop.ssh.exec({...}) / desktop.dev.start({...})）；其余用 desktop.invoke('<能力名>', params)。" +
-                '能力可能不存在：先 desktop?.has(能力名) 判断，缺失时降级而不是崩。'
-            const hint =
-                '参数与结果的确切类型：@kn/common 的 src/core/desktop-bridge.ts（DesktopCapabilityContract 是全部能力的表，' +
-                'DevBridge / SshBridge / StorageService 是各组的接口）。用 searchHostApi({ query: "SshBridge" }) 定位后 readHostApiFile 读。' +
-                'SSH 的信任模型与边界另见工程里的 docs/SSH.md。'
+            const live = desktopLiveCapabilities(deps)
+            const catalog = deps.getDesktopCatalog?.()
+            const detail = args?.detail === 'summary' ? 'summary' : 'names'
+            const query = typeof args?.query === 'string' && args.query.trim() ? args.query.trim() : undefined
+            const groupFilter =
+                typeof args?.group === 'string' && args.group.trim()
+                    ? args.group.trim().replace(/\.$/, '')
+                    : undefined
 
             if (!desktop || typeof desktop !== 'object') {
                 return {
                     hasDesktop: false,
+                    total: 0,
                     count: 0,
-                    groups: [],
-                    typedGroups: [],
-                    callPattern,
-                    hint,
+                    groups: [] as StudioDesktopCapabilityGroup[],
+                    typedGroups: [] as Array<{ group: string; methods: string[] }>,
+                    uncatalogued: [] as string[],
+                    unavailable: [] as string[],
+                    catalogued: Boolean(catalog),
+                    docs: DESKTOP_DOCS,
+                    callPattern: DESKTOP_CALL_PATTERN,
+                    hint: DESKTOP_DISCOVERY_HINT,
                     note:
                         '当前宿主没有 desktop 服务：Web 端本来就没有，桌面端则可能是老构建或未接线。' +
                         '写插件时按“能力可能不存在”处理，不要直接调用。',
                 }
             }
 
-            const all = Array.isArray(desktop.capabilities) ? [...desktop.capabilities] : []
-            const needle = typeof args?.query === 'string' && args.query.trim() ? args.query.trim().toLowerCase() : undefined
-            const filtered = all.filter((name) => (needle ? name.toLowerCase().includes(needle) : true)).sort()
+            const typedGroups = TYPED_DESKTOP_GROUPS.map(
+                (group): { group: string; methods: string[] } | undefined => {
+                    const value = desktop[group]
+                    if (!value || typeof value !== 'object') return undefined
+                    return { group, methods: Object.keys(value as Record<string, unknown>).sort() }
+                },
+            ).filter((entry): entry is { group: string; methods: string[] } => entry !== undefined)
 
-            const byFamily = new Map<string, string[]>()
-            for (const name of filtered) {
-                // Prefer the longest *known* family (`net.policy.` over `net.`),
-                // so its note is attached; a capability from a family this build
-                // has never heard of still gets grouped (and simply has no note).
-                const known = Object.keys(CAPABILITY_FAMILY_NOTES)
-                    .filter((family) => name.startsWith(family))
-                    .sort((a, b) => b.length - a.length)[0]
-                const dot = name.indexOf('.')
-                const family = known ?? (dot === -1 ? name : `${name.slice(0, dot)}.`)
-                const list = byFamily.get(family) ?? []
-                list.push(name)
-                byFamily.set(family, list)
+            if (!catalog) {
+                // A host whose @kn/common predates the catalogue: keep the old
+                // prefix-family view so discovery still works, and say so.
+                const byFamily = new Map<string, string[]>()
+                for (const name of live) {
+                    if (!matchesDesktopQuery(name, query) || (groupFilter && name.split('.')[0] !== groupFilter)) {
+                        continue
+                    }
+                    const dot = name.indexOf('.')
+                    const prefix = dot === -1 ? name : name.slice(0, dot) + '.'
+                    const known = Object.keys(CAPABILITY_FAMILY_NOTES)
+                        .filter((family) => name.startsWith(family))
+                        .sort((a, b) => b.length - a.length)[0]
+                    const family = known ?? prefix
+                    const list = byFamily.get(family) ?? []
+                    list.push(name)
+                    byFamily.set(family, list)
+                }
+                const groups: StudioDesktopCapabilityGroup[] = [...byFamily.entries()]
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([group, capabilities]) => ({
+                        group,
+                        title: group,
+                        summary: CAPABILITY_FAMILY_NOTES[group] ?? '',
+                        guards: [],
+                        capabilities: detail === 'summary'
+                            ? capabilities.slice().sort().map((name) => ({
+                                  name,
+                                  summary: CAPABILITY_FAMILY_NOTES[group] ?? '',
+                                  guards: [] as string[],
+                                  call: `desktop.invoke('${name}', params)`,
+                                  available: true,
+                              }))
+                            : capabilities.slice().sort(),
+                        available: capabilities.length,
+                        unavailable: 0,
+                    }))
+                return {
+                    hasDesktop: true,
+                    platform: typeof desktop.platform === 'string' ? desktop.platform : undefined,
+                    total: live.length,
+                    count: groups.reduce((sum, group) => sum + group.available, 0),
+                    groups,
+                    typedGroups,
+                    uncatalogued: [] as string[],
+                    unavailable: [] as string[],
+                    catalogued: false,
+                    docs: DESKTOP_DOCS,
+                    callPattern: DESKTOP_CALL_PATTERN,
+                    hint:
+                        '当前宿主的 @kn/common 还没有能力目录（catalog），只能按名称前缀分组。' +
+                        DESKTOP_DISCOVERY_HINT,
+                }
             }
 
-            const groups: StudioDesktopCapabilityGroup[] = [...byFamily.entries()]
-                .sort(([a], [b]) => a.localeCompare(b))
-                .map(([group, capabilities]) => ({
-                    group,
-                    capabilities,
-                    ...(CAPABILITY_FAMILY_NOTES[group] ? { summary: CAPABILITY_FAMILY_NOTES[group] } : {}),
-                }))
-
-            const typedGroups = ['dev', 'ssh', 'storage']
-                .map((group) => {
-                    const value = desktop[group]
-                    if (!value || typeof value !== 'object') return null
-                    return { group, methods: Object.keys(value as Record<string, unknown>).sort() }
+            const liveSet = new Set(live)
+            const entries = catalog.search({ query, group: groupFilter })
+            const groups: StudioDesktopCapabilityGroup[] = []
+            for (const group of catalog.groups) {
+                if (groupFilter && group.id !== groupFilter) continue
+                const members = entries.filter((entry) => entry.group === group.id)
+                if (members.length === 0) continue
+                const availableMembers = members.filter((entry) => liveSet.has(entry.name))
+                const unavailableMembers = members.filter((entry) => !liveSet.has(entry.name))
+                groups.push({
+                    group: group.id,
+                    title: group.title,
+                    summary: group.summary,
+                    guards: [...group.guards],
+                    typesAt: group.typesAt,
+                    capabilities:
+                        detail === 'summary'
+                            ? availableMembers.map((entry) => ({
+                                  name: entry.name,
+                                  summary: entry.summary,
+                                  guards: [...entry.guards],
+                                  call: entry.call,
+                                  available: true,
+                              }))
+                            : availableMembers.map((entry) => entry.name),
+                    available: availableMembers.length,
+                    unavailable: unavailableMembers.length,
                 })
-                .filter((entry): entry is { group: string; methods: string[] } => entry !== null)
+            }
+
+            const catalogued = new Set(catalog.entries.map((entry) => entry.name))
+            const uncatalogued = live
+                .filter((name) => !catalogued.has(name))
+                .filter((name) => matchesDesktopQuery(name, query))
+                .filter((name) => !groupFilter || name.split('.')[0] === groupFilter)
+                .sort()
+            if (uncatalogued.length > 0) {
+                groups.push({
+                    group: 'uncatalogued',
+                    title: '未收录能力',
+                    summary:
+                        '当前宿主暴露、但本开发台版本还不认识的能力（宿主比开发台新）。参数/结果请用 searchHostApi + readHostApiFile 查。',
+                    guards: [],
+                    capabilities: detail === 'summary'
+                        ? uncatalogued.map((name) => ({
+                              name,
+                              summary: '本开发台没有这条能力的元数据。',
+                              guards: [] as string[],
+                              call: `desktop.invoke('${name}', params)`,
+                              available: true,
+                          }))
+                        : uncatalogued,
+                    available: uncatalogued.length,
+                    unavailable: 0,
+                })
+            }
+
+            const unavailable = entries
+                .filter((entry) => !liveSet.has(entry.name))
+                .map((entry) => entry.name)
+                .sort()
+            const guardIds = new Set<string>()
+            for (const entry of entries) for (const guard of entry.guards) guardIds.add(guard)
 
             return {
                 hasDesktop: true,
                 platform: typeof desktop.platform === 'string' ? desktop.platform : undefined,
-                count: filtered.length,
+                total: live.length,
+                count: entries.filter((entry) => liveSet.has(entry.name)).length + uncatalogued.length,
                 groups,
                 typedGroups,
-                callPattern,
-                hint,
-                ...(needle && filtered.length !== all.length ? { totalBeforeFilter: all.length } : {}),
+                uncatalogued,
+                unavailable,
+                catalogued: true,
+                docs: DESKTOP_DOCS,
+                callPattern: DESKTOP_CALL_PATTERN,
+                hint: DESKTOP_DISCOVERY_HINT,
+                ...(detail === 'summary'
+                    ? {
+                          guardNotes: Object.fromEntries(
+                              [...guardIds].map((id) => [id, catalog.guardNotes[id] ?? '']),
+                          ),
+                      }
+                    : {}),
+            } satisfies StudioDesktopCapabilitiesResult
+        },
+    },
+
+    /**
+     * One call, full contract: summary, guards, call shape, params/result types
+     * and the real declarations, inlined from the host source.
+     *
+     * This is the answer to "reading the 2000-line contract file" — the studio
+     * asks the host for the exact entry and the declarations it references, so
+     * the agent gets 30 lines instead of a whole module.
+     */
+    getDesktopCapability: {
+        description:
+            '一次拿全一个/多个桌面能力的“怎么用”：一句话摘要、门禁（guards，带含义）、可直接照抄的调用式（call）、' +
+            '契约里的 params/result 类型表达式，以及从宿主源码内联的真实 TS 声明（declarations）——所以不需要再读整个契约文件。' +
+            'available 表示当前宿主是否真的暴露了它；缺失时按“能力可能不存在”写降级（desktop?.has(...) / desktop?.ssh）。' +
+            '需要更细的定义时，按 readMore 给出的 readHostApiFile({ package, path, symbol }) 精确读取。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                names: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: '能力名数组，1–12 个，如 ["fs.readFile", "ssh.exec"]。',
+                },
+            },
+            required: ['names'],
+        },
+        readOnly: true,
+        execute: async (args: { names?: string[] }) => {
+            const names = normalizeCapabilityNames(args?.names)
+            const desktop = deps.getDesktop?.()
+            const live = new Set(desktopLiveCapabilities(deps))
+            const catalog = deps.getDesktopCatalog?.()
+            const source = await readCapabilitySource(deps, names)
+            const capabilities: StudioDesktopCapabilityDetail[] = []
+            const missing: string[] = []
+
+            for (const name of names) {
+                const entry = catalog?.find(name)
+                const details = source.get(name) ?? {}
+                if (!entry) {
+                    missing.push(name)
+                    capabilities.push({
+                        name,
+                        known: false,
+                        group: 'unknown',
+                        title: '未知能力',
+                        summary:
+                            '本开发台版本的目录里没有这个能力名（可能名字写错，或宿主比开发台新）。用 listDesktopCapabilities({ query }) 找准确名字。',
+                        guards: [],
+                        call: `desktop.invoke('${name}', params)`,
+                        available: live.has(name),
+                        ...(details.error ? { sourceError: details.error } : {}),
+                    })
+                    continue
+                }
+                const group = catalog?.groups.find((item) => item.id === entry.group)
+                capabilities.push({
+                    name: entry.name,
+                    known: true,
+                    group: entry.group,
+                    title: group?.title ?? entry.group,
+                    summary: entry.summary,
+                    guards: entry.guards.map((id) => ({
+                        id,
+                        note: catalog?.guardNotes[id] ?? '',
+                    })),
+                    call: entry.call,
+                    available: live.has(name),
+                    availability: entry.availability,
+                    example: entry.example,
+                    notes: entry.notes,
+                    typesAt: group?.typesAt,
+                    params: details.params,
+                    result: details.result,
+                    declarations: details.declarations,
+                    declarationsSkipped: details.declarationsSkipped,
+                    readMore: readMoreFor(group?.typesAt, details.params, details.result),
+                    ...(details.error ? { sourceError: details.error } : {}),
+                })
             }
+
+            return {
+                hasDesktop: Boolean(desktop),
+                platform: typeof desktop?.platform === 'string' ? desktop.platform : undefined,
+                requested: names.length,
+                found: capabilities.length - missing.length,
+                missing,
+                capabilities,
+                hint: DESKTOP_DISCOVERY_HINT,
+            } satisfies StudioDesktopCapabilityDetailResult
         },
     },
 
@@ -2317,25 +2941,42 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
 
     readHostApiFile: {
         description:
-            '读取标准宿主包里的一个源码文件（包内相对路径，如 src/core/PluginManager.ts），查看真实接口定义。' +
-            '先用 searchHostApi 定位文件，再用它读取；路径必须在包内，且不要读无关的大文件。',
+            '读取标准宿主包里的一个源码文件（包内相对路径，如 src/core/desktop/ssh.ts），查看真实接口定义。' +
+            '**传 symbol 只返回那一个声明**（`export interface / type / const / enum / class / function <symbol>`）及行号范围，是看类型的首选；' +
+            '不传 symbol 才返回整个文件（大文件尽量别整读）。先用 searchHostApi，或直接用 getDesktopCapability 返回的 readMore。',
         inputSchema: {
             type: 'object',
             properties: {
                 package: { type: 'string', description: '包名，如 @kn/common 或 common。' },
-                path: { type: 'string', description: '包内相对路径，如 src/index.ts。' },
+                path: { type: 'string', description: '包内相对路径，如 src/core/desktop/fs.ts。' },
+                symbol: {
+                    type: 'string',
+                    description: '可选。只返回这个声明，例如 DesktopFileStat；找不到会报错而不是静默返回整文件。',
+                },
             },
             required: ['package', 'path'],
         },
         readOnly: true,
-        execute: async (args: { package: string; path: string }) => {
-            const result = await requireHostApi(deps)({ package: args.package, path: args.path })
+        execute: async (args: { package: string; path: string; symbol?: string }) => {
+            const result = await requireHostApi(deps)({
+                package: args.package,
+                path: args.path,
+                symbol: args.symbol,
+            })
             if (result.kind !== 'file') throw new Error('宿主 API 返回了意外的结果')
             return {
                 package: result.package,
                 path: result.path,
                 bytes: result.bytes,
                 contents: result.contents,
+                ...(result.symbol
+                    ? {
+                          symbol: result.symbol,
+                          startLine: result.startLine,
+                          endLine: result.endLine,
+                          totalLines: result.totalLines,
+                      }
+                    : {}),
             }
         },
     },

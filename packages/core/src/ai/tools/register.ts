@@ -10,6 +10,8 @@ import {
     registerToolFactories,
     createSkillTools,
     createBackgroundTaskTools,
+    createLongTaskTools,
+    createFormTools,
 } from '@kn/common'
 import { createWorkspaceToolImplementations } from './workspace-tools'
 import { createReadTools } from './read-tools'
@@ -68,5 +70,11 @@ export function registerCoreToolFactories(): void {
         // The agent's side of long tasks: list/wait/cancel `background: true`
         // tool calls. Editor-free and valid in every scope.
         createBackgroundTaskTools,
+        // The same for PLUGIN-declared long tasks (`desktop.tasks`): list / wait
+        // with a bounded timeout / incremental logs / cooperative cancel.
+        createLongTaskTools,
+        // Dynamic forms: ask the user for structured data (request/get/list/
+        // cancel). Also editor-free and valid in every scope.
+        createFormTools,
     ])
 }

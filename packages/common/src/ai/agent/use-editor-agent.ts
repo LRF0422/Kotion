@@ -17,7 +17,9 @@ import { useSubRuns } from './use-sub-runs'
 import { usePendingToolExecution } from './use-pending-tools'
 import { useAgentStream } from './use-agent-stream'
 import { useBackgroundTaskNotifications } from './use-background-task-notifications'
+import { useFormRequestNotifications } from './use-form-request-notifications'
 import type { BackgroundTaskView } from './background-tasks'
+import type { FormRequestView } from './form-requests'
 import { isPermanentTransportError } from './retry-policy'
 import { createAgentPersistence, type AgentRunStore, type AgentTabLock } from './persistence'
 import type {
@@ -121,6 +123,15 @@ export interface UseEditorAgentOptions {
      * later `listBackgroundTasks` shows it.
      */
     onBackgroundTaskSettled?: (tasks: BackgroundTaskView[], note: string) => void
+    /**
+     * A dynamic form was answered but nobody was parked on it any more (the wait
+     * budget expired, or the user filled it from the unified inbox after the run
+     * moved on). The run is idle, so this is the moment the answers can become a
+     * new turn — otherwise the user filled the form and the agent never learns it.
+     * Pages that do not pass it lose only the auto-notification: the answers stay
+     * readable through `getFormRequest` / `listFormRequests`.
+     */
+    onFormRequestAnswered?: (requests: FormRequestView[], note: string) => void
 }
 
 export interface StartTurnOptions {
@@ -794,6 +805,22 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
         isBusy: isBackgroundTurnBusy,
         onNotify: (tasks, note) => onBackgroundTaskSettledRef.current?.(tasks, note),
         enabled: Boolean(options.onBackgroundTaskSettled),
+    })
+
+    /**
+     * Same first-idle delivery for dynamic forms: filling a form is not always
+     * tied to a tool call that is still parked (the wait may have expired, and the
+     * user can answer from the unified inbox). The busy predicate is the same one
+     * the background path uses — "genuinely at rest" is a property of the run.
+     */
+    const onFormRequestAnsweredRef = useRef(options.onFormRequestAnswered)
+    onFormRequestAnsweredRef.current = options.onFormRequestAnswered
+    useFormRequestNotifications({
+        conversationId,
+        busy: state.phase !== 'idle' || startInFlightRef.current !== null,
+        isBusy: isBackgroundTurnBusy,
+        onNotify: (requests, note) => onFormRequestAnsweredRef.current?.(requests, note),
+        enabled: Boolean(options.onFormRequestAnswered),
     })
 
     return { state, start, steer, attach, approvePlan, continueRun, retryConnection, cancel, reset }

@@ -1,6 +1,7 @@
 # 宿主能力：net / shell / storage.secret / notification / background
 
-本文档说明桌面宿主（Electron）新增的**通用**能力组，以及它们为什么长这样。
+本文档说明桌面宿主（Electron）的**能力面**（含新增的通用能力组），以及它们为什么长这样。
+逐条能力的审计（103 条的矩阵、漂移与风险）见 [DESKTOP_CAPABILITY_AUDIT.md](./DESKTOP_CAPABILITY_AUDIT.md)。
 
 一句话前提：宿主只提供**通用原语**——搬运字节、打开浏览器、装密钥、发通知、管时钟。
 宿主**不提供任何协议客户端**，也**不会新增 `mail.*` 之类的高层能力**：邮件（IMAP/SMTP）、
@@ -24,13 +25,107 @@ MQTT、自定义行协议等一律由插件自己用 JS 实现，宿主只保证
 
 | 层 | 位置 | 职责 |
 |----|------|------|
-| 契约 | `packages/common/src/core/desktop-bridge.ts` | 能力名、参数/结果类型、桥接接口 |
+| 契约 | `packages/common/src/core/desktop/`（按域拆分，见下） | 能力名、参数/结果类型、桥接接口 |
+| 能力目录 | `packages/common/src/core/desktop/catalog.ts` | 每条能力的摘要/门禁/调用式/示例（给人和 agent 看的那一层） |
 | 插件类型入口 | `packages/plugin-api/src/index.ts` | 转发契约类型，插件作者只依赖这个包 |
 | 渲染端桥接 | `packages/core/src/desktop/bridge.ts` | 能力探测（按 `capabilities` 判定）→ `desktop.net` 等 |
 | 能力白名单 | `apps/desktop/src/preload/index.ts` | 固定通道列表，没有通用 IPC 逃生口 |
-| 实现 | `apps/desktop/src/main/capabilities/` | 参数校验（纯 JS，可直测）+ Electron 接线 |
-| 门禁 | `apps/desktop/src/main/ipc.ts` | 网络策略 / DNS 判定 / fs 允许清单 |
-| 自测 | `apps/desktop/src/main/capabilities/electron.smoke.cjs` | 真 preload → 真 IPC → 真 socket/TLS/HTTP，55 项 |
+| 实现 | `apps/desktop/src/main/capabilities/` 等（见下） | 参数校验（纯 JS，可直测）+ Electron 接线 |
+| 门禁 | `apps/desktop/src/main/ipc.ts` / `net-policy.ts` / `confirm/` | 网络策略 / DNS 判定 / fs 允许清单 / 用户确认 |
+| 自测 | `apps/desktop/src/main/capabilities/electron.smoke.cjs` | 真 preload → 真 IPC → 真 socket/TLS/HTTP，64 项 |
+| 漂移检查 | `pnpm --filter @kn/common check:desktop-capabilities` | union ⇄ preload ⇄ 主进程 handler ⇄ catalog 四方对齐（数百项断言，随能力/门禁数量变化） |
+
+## 模块划分：能力域 → 契约 → 主进程 → 门禁
+
+契约不再是 2000 行的 `desktop-bridge.ts`（那个文件现在只做 re-export），而是**一个能力域一个模块**。
+读代码、加能力、给 agent 查接口都从这张表入手：
+
+| 能力域 | 契约/类型 | 主进程实现 | 类型化桥（`desktop.*`） | 门禁 |
+|--------|-----------|------------|--------------------------|------|
+| `system` / `app` / `window` | `desktop/system.ts`、`bridge.ts`、`window.ts` | `main/ipc.ts` | — | — |
+| `dialog` | `desktop/dialog.ts` | `main/ipc.ts` | — | 用户交互；授权路径进 fs 白名单 |
+| `fs` | `desktop/fs.ts` | `main/ipc.ts` | — | fs 白名单 |
+| `capture` | `desktop/capture.ts` | `main/ipc.ts` | — | 用户交互 |
+| `http` / `net.policy` | `desktop/http.ts` | `main/ipc.ts` + `main/net-policy.ts` | — | 网络策略（SSRF） |
+| `net` | `desktop/net.ts` | `capabilities/handlers.ts` + `capabilities/socket-*.mjs` | `net` | 网络策略 + 用户确认 + 窗口归属 |
+| `shell` | `desktop/browser.ts` | `capabilities/handlers.ts` + `oauth-callback.mjs` | `browser` | 用户确认（origin） |
+| `secrets` | `desktop/secrets.ts` | `capabilities/handlers.ts` + `secrets.mjs` | `secrets` | 钥匙串（safeStorage） |
+| `notification` | `desktop/notifications.ts` | `capabilities/handlers.ts` + `notifications.mjs` | `notifications` | `iconPath` 走 fs 白名单 |
+| `background` | `desktop/background.ts` | `capabilities/handlers.ts` + `scheduler.mjs` | `background` | 窗口归属 |
+| `task` | `desktop/tasks.ts` | `capabilities/handlers.ts` + `tasks.mjs` | `tasks` | 无（通用长任务原语；任务数据由插件自报） |
+| `credentials` | `desktop/credentials.ts` | `main/ipc.ts` + `main/credentials.ts` | — | 钥匙串；**宿主登录态专用** |
+| `storage` | `desktop/contract.ts` + `common/src/storage/types.ts` | `main/storage/index.ts` | `storage` | `plugin.<key>` 命名空间约定 |
+| `ssh` | `desktop/ssh.ts` | `main/ssh/index.ts` | `ssh`（含 `.credentials`） | 网络策略 + 用户确认 + known_hosts |
+| `dev` | `desktop/dev.ts` | `main/plugin-dev/index.ts` | `dev` | fs 白名单；只有带 studio runtime 的构建暴露 |
+| 宿主内部 | preload 白名单里的 `dialog.confirm.*` | `main/confirm/index.ts` | — | 只接受确认窗自己的 webContents（插件用不到） |
+
+- `desktop/capabilities.ts` 是**能力名唯一清单**（`DesktopCapability` union）；
+  `desktop/contract.ts` 是「名字 → params/result」总表；`desktop/catalog.ts` 是「名字 → 摘要/门禁/调用式/示例」。
+- 三个清单互相钉住：加一个能力必须同时改 union、contract、catalog、preload 白名单和主进程 handler，
+  否则 `check:desktop-capabilities` 直接失败。不再靠「记得改」。
+- 纯逻辑在 `.mjs`（可脱离 Electron 直测），Electron 接线在 `.ts`；所有出网能力共用 `net-policy`，
+  所有用户可见副作用共用 `confirm/` 的宿主确认窗。
+
+### `dev.*`：插件开发台能力
+
+只有带 studio runtime 的桌面构建暴露（`availability: 'desktop-studio'`）。日志相关的两条：
+
+| 能力 | 说明 |
+|------|------|
+| `dev.logs` | 会话日志尾部（`slice(-limit)`，默认 200 / 上限 1000）；每行多一个 `seq` 字段，签名与返回形状不变。 |
+| `dev.logsSince` | **增量游标**：同一份日志 ring（每 session 保留 1000 条、连续重复行 1s 内去重），只返回 `seq > sinceSeq` 的条目（超过 `limit` 取最新），附带 `sessionId` / `nextSeq` / `dropped` / `total`。`sessionId` 变化 = 宿主重启（`seq` 归零，调用方重置游标）；`dropped` = ring 淘汰 + `limit` 截断之和，客户端可如实显示「已丢弃 N 行」。 |
+
+### `task.*`：插件长任务
+
+通用长任务原语（状态 / 进度 / 增量日志 / 协作式取消），任何插件的慢操作都能接入；宿主不解释任务内容。
+推荐插件用 `@kn/common` 的 `runLongTask` / `startLongTask`，宿主能力探测失败时自动降级为本地 no-op。
+完整说明见 [LONG_TASKS.md](./LONG_TASKS.md)。
+
+| 能力 | 说明 |
+|------|------|
+| `task.start` | 注册 running 任务，返回快照（含 `sessionId`）；同 `id` 已完成任务开启新 run，运行中同 id 拒绝。 |
+| `task.report` | 合并进度 + 追加日志（≤200 行/次），连续重复 `(level,message)` 1s 内去重。 |
+| `task.logsSince` | 增量日志（与 `dev.logsSince` 同形）：`seq` 游标、`nextSeq`、`dropped`、`total`；每任务 ring 1000 行。 |
+| `task.list` | 按 `updatedAt` 从新到旧列任务（可按 state/kind/root 过滤）；全局最多保留 200 个。 |
+| `task.get` | 按 id 读单个任务快照；未知或已淘汰返回 `null`（轮询语义，不抛错）。 |
+| `task.touch` | 刷新 `lastHeartbeatAt`/`updatedAt`；终态任务直接返回快照，未知报 `TASK_NOT_FOUND`。`start` 声明 `heartbeatMs`（1000–600000）后，宿主每 10s 清扫：超过 3 个周期无心跳置 `failed`（`stale: no heartbeat for Nms`），`report` 也算心跳。 |
+| `task.remove` | 忘掉一个已结束任务（`removed: true`）；运行中/取消中拒绝（`TASK_RUNNING`），未知返回 `removed: false`。 |
+| `task.finish` | 置为 succeeded/failed/cancelled（终态幂等）；可带 `result`（JSON 可序列化，序列化后 ≤16KB，否则 `TASK_RESULT_TOO_LARGE`/`TASK_RESULT_INVALID`），重复 finish 不覆盖已存 result。 |
+| `task.cancel` | 请求取消：状态转 `cancelling` 并广播 `cancel-request`；插件协作停止后 `finish(cancelled)`。 |
+
+## 能力目录（catalog）与 agent 发现
+
+`catalog.ts` 的存在是为了**一个具体场景**：插件开发台里的 agent 要写「读文件 / 连 SSH / 发通知」这类代码时，
+不应该先读 2000 行契约再猜。它按「意图」回答：
+
+- 每条能力带 `group`（域）、`summary`（中文一句话）、`guards`（网络策略/用户确认/fs 白名单/钥匙串/窗口归属/
+  用户交互/敏感值/不可逆/developer）、`access`（`desktop.invoke(...)` 还是某个类型化桥方法）、
+  `example`（可粘的调用样例）、`notes`（坑与边界）。
+- `availability: 'desktop-studio'` 标出 `dev.*`：普通插件不该依赖。
+- 时间/类型仍然以契约模块为准：catalog 不复制签名，`getDesktopCapability` 会直接去宿主源码里取
+  `contract.ts` 的条目和真实 TS 声明（`dev.hostApi` 的 `symbol` / `symbols` / `members` 模式）。
+
+对应开发台工具（`packages/plugin-plugin-studio`）：
+
+| 工具 | 用途 |
+|------|------|
+| `listDesktopCapabilities({ query?, group?, detail? })` | 按意图找能力：中文关键词匹配名字+摘要+分组；`detail: 'summary'` 带摘要/门禁/调用式 |
+| `getDesktopCapability({ names })` | 一次拿全：摘要、门禁（带含义）、调用式、params/result 类型表达式、源码内联声明、示例、`readMore` |
+| `readHostApiFile({ package, path, symbol })` | 只读一个声明（带行号范围），不整读文件 |
+
+```ts
+// agent 的推荐路径（3 步，不用读契约文件）
+const found = await listDesktopCapabilities({ query: '文件' })          // → fs.* / dialog.*
+const detail = await getDesktopCapability({ names: ['fs.readFile'] })  // → 签名 + 门禁 + 示例 + 声明
+const res = await desktop?.invoke('fs.readFile', { path, encoding: 'utf8' })
+```
+
+> 注意：catalog 的 `guards` 是**人工声明**，`check:desktop-capabilities` 只能保证结构一致
+> （名字/调用形态/类型存在），不能证明主进程真的这么拦。改门禁实现时要同步核对 catalog；
+> 已知与实现不一致的点记在 [DESKTOP_CAPABILITY_AUDIT.md](./DESKTOP_CAPABILITY_AUDIT.md) §1/§4。
+
+`uncatalogued` / `unavailable` 是刻意的诚实：宿主暴露但开发台不认识的能力（宿主更新）会单列，
+目录里有但当前构建没有的（旧客户端/精简构建）也会单列——清单不是绝对真相，活着的能力面才是。
 
 ## 0. 信任模型（先读这个）
 
@@ -265,6 +360,9 @@ ELECTRON_RUN_AS_NODE= apps/desktop/node_modules/.bin/electron \
 # 等价于
 pnpm --filter @kn/desktop test:capabilities:electron
 
+# 契约 / preload / 主进程 / 能力目录四方对齐（纯 Node，秒级）
+pnpm --filter @kn/common check:desktop-capabilities
+
 # 类型（主进程 + preload，含能力模块的 .d.mts 签名）
 cd apps/desktop && ./node_modules/.bin/tsc -p tsconfig.node.json --noEmit --composite false
 
@@ -272,7 +370,7 @@ cd apps/desktop && ./node_modules/.bin/tsc -p tsconfig.node.json --noEmit --comp
 pnpm --filter @kn/desktop build
 ```
 
-覆盖内容（55 项，全部通过）：能力白名单（含"没有 `mail.*`"）、TCP 收发/回显/关闭事件、
+覆盖内容（64 项，全部通过）：能力白名单（含"没有 `mail.*`"）、TCP 收发/回显/关闭事件、
 TLS `strict` 拒绝自签证书 + `relaxed` 连通、网络策略拒绝、授权拒绝（且同目标第二次不再询问）、
 会话归属（另一个窗口不能写/关/看见别人的会话）、
 非 http(s) scheme 拒绝、浏览器打开 + 回环重定向收到 `code`/`state`、OAuth 取消、
@@ -281,15 +379,18 @@ TLS `strict` 拒绝自签证书 + `relaxed` 连通、网络策略拒绝、授权
 
 ## 8. 加一个新能力时的检查清单
 
-1. 契约：`packages/common/src/core/desktop-bridge.ts` 加进 `DesktopCapability` +
-   `DesktopCapabilityContract` + 桥接接口；`packages/plugin-api/src/index.ts` 转发类型。
+1. 契约：`packages/common/src/core/desktop/capabilities.ts` 加进 `DesktopCapability` union，
+   `desktop/contract.ts` 加 params/result，域模块加类型；需要转发的在 `packages/plugin-api/src/index.ts` 转发。
+   同一域优先加进已有的域模块，不要新开一个「杂项」文件。
 2. 白名单：`apps/desktop/src/preload/index.ts`（不加就在这里被静默拒绝）。
 3. 实现：`apps/desktop/src/main/capabilities/`——纯逻辑放 `.mjs` + `.d.mts`，Electron 接线放 `.ts`。
 4. 门禁：能出网的一律走网络策略；能触发用户可见副作用（开浏览器、连新主机）的一律先弹窗。
 5. 桥接：`packages/core/src/desktop/bridge.ts` 按 `capabilities` 探测，缺失时保持 `undefined`
    让插件退化（**不要**抛异常）。
-6. 自测：`electron.smoke.cjs` 里加"允许 + 拒绝"两条路径。
-7. 文档：本节新增一条，并在 `CLAUDE.md` 的能力清单里指过来。
+6. 能力目录：`desktop/catalog.ts` 加一条（`summary` 必填，`guards`/`example`/`notes` 按需）；
+   `pnpm --filter @kn/common check:desktop-capabilities` 会检查 union/preload/handler/catalog 四方对齐。
+7. 自测：`electron.smoke.cjs` 里加"允许 + 拒绝"两条路径；纯逻辑放 `*.test.mjs`。
+8. 文档：本节新增一条，并在 `CLAUDE.md` 的能力清单里指过来。
 
 ## 9. 已知边界
 

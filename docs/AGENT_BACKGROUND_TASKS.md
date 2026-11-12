@@ -6,7 +6,7 @@
 ## 为什么需要
 
 前端工具调用和后端是**同步契约**：后端进入 `WAITING_TOOLS`，一直等到客户端回结果
-（服务端工具超时 600s）。这对"改一行文档"是对的，对下面的活是错的：
+（服务端等待前端工具结果 180s）。这对"改一行文档"是对的，对下面的活是错的：
 
 - `installPluginDependencies` —— 走 npm/pnpm 联网装包，几十秒到几分钟；
 - `buildPluginProject` / `runPluginProject` —— 冷启动、依赖多时要等；
@@ -47,7 +47,7 @@
 | 工具 | 作用 |
 | --- | --- |
 | `listBackgroundTasks` | 列出**本会话**的后台任务：taskId / 工具 / 标题 / 状态 / 进度 / 是否已看过结果 |
-| `getBackgroundTask` | 取状态与结果。`wait: true`（默认）会等到结束或超时；`timeoutMs` 默认 60s、上限 5 分钟。超时返回 `timedOut: true` + `status: "running"`，**不是失败** |
+| `getBackgroundTask` | 取状态与结果。`wait: true`（默认）会等到结束或超时；`timeoutMs` 默认 60s、上限 80s（客户端读工具死线 90s，超过会被掐断，见下）。超时返回 `timedOut: true` + `status: "running"`，**不是失败** |
 | `cancelBackgroundTask` | 停止等待：标记 cancelled、唤醒等待者、之后完成也不再通知。**不是杀掉后台动作**（见下） |
 
 `taskId` 可以省略：本会话只有一个在跑的任务时就是它。
@@ -58,11 +58,12 @@
 
 任务结束时，结果只走其中一条：
 
-1. **agent 自己等了**（`getBackgroundTask` 读到终态）→ 它已经拿到答案，不再打断它；
+1. **工具把终态结果交给了模型**（`getBackgroundTask` 读到终态后 `consume`）→ 模型已经拿到答案，不再打断它；
 2. **agent 没有等** → 任务保持"待投递"，等这一轮 run 空闲下来后，
    宿主把结果作为一条通知推进对话（`takeUndelivered` 认领，只发一次）。
 
 看一个 **还在跑** 的任务不算消费：`wait` 超时、或者 `wait: false` 只瞄一眼，结果仍然会投递。
+**`wait` 本身也不算消费**：客户端读工具有 90s 死线，被掐断的 wait 之后仍会 resolve，如果在 `wait` 里标记已投递，那条完成通知就永远丢了。所以消费点只在"工具把终态结果交给模型"这一处。
 
 ### 任务的产物
 
@@ -125,7 +126,7 @@
 - **通知只在会话真正空闲（`phase === 'idle'`）时注入。** 三个面板都会在终态那一提交里
   `agent.reset()`，所以"完成即注入"会被那个 reset 掐掉；等 reset 完的 idle 提交再推。
   同一时刻完成的多件任务会合成一条通知；不同时刻完成的就是多次注入（各自一轮）。
-- **预算/中断语义沿用既有机制。** 等 60s 的 `getBackgroundTask` 由服务端 600s 工具超时兜底；
+- **预算/中断语义沿用既有机制。** 等 60s 的 `getBackgroundTask` 由服务端等待前端工具结果的 180s 窗口兜底；
   崩溃后续接遇到"已开始未完成"的工具调用仍是原有的 fail-closed（不会重复执行）。
 
 ## 自测
@@ -143,3 +144,5 @@ pnpm --filter @kn/plugin-plugin-studio test       # 开发台 4 个工具的 bac
 最靠前、终态按结束时间倒序、稳定排序不修改入参、时长在 ms / 秒 / 分钟 / 小时之间切换且时钟回拨钳到 0）。
 此外它还**用真实的 `ToolProvider` + 真实的作用域规则**断言三件容易写错又看不见的事：工作台（无文档）也能拿到这三个
 工具（元数据 `scope: 'any'`）、它们都带 schema、都不占文档写锁。`check` 总入口已包含它。
+
+相关：agent 向用户要数据的动态表单（`requestUserForm`）见 [AGENT_FORM_REQUESTS.md](AGENT_FORM_REQUESTS.md)。

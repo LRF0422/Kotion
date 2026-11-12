@@ -8,6 +8,7 @@ import {
     useAgentArtifacts,
     describeAgentTarget,
     useCustomAgents,
+    usePendingFormRequests,
     useTranslation,
     useWorkspaceAgent,
     type AgentArtifact,
@@ -19,6 +20,7 @@ import {
 
 import { ChatComposer } from "../menu/chat/ChatComposer"
 import { ChatEmptyState } from "../menu/chat/ChatEmptyState"
+import { FormRequestCard } from "../menu/chat/FormRequestCard"
 import { useModelVisionSupport } from "../components/model-catalog"
 import type { ExecutionStep, Message } from "../menu/chat-types"
 import { MessageBubble } from "../menu/MessageBubble"
@@ -92,6 +94,11 @@ export const KernelConversation: React.FC<KernelConversationProps> = ({
         meta: session,
     })
 
+    // Agent dynamic forms still waiting for the user in THIS conversation. The
+    // chat header board (same registry) is the cross-conversation inbox; this is
+    // the inline card so the user does not have to open it.
+    const pendingForms = usePendingFormRequests(sessionId)
+
     // Every SETTLED transcript change reaches the container: it needs the size
     // for the clear affordance, derives the auto title and bumps the recency of
     // the conversation. The load itself is held back (`loadingTranscript`) so
@@ -118,6 +125,17 @@ export const KernelConversation: React.FC<KernelConversationProps> = ({
         onBackgroundTaskSettled: (_tasks, note) => {
             setMessages(prev => [...prev, {
                 id: `background-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
+                sender: 'user' as const,
+                content: note,
+                timestamp: Date.now(),
+            }])
+            void send(note).catch(() => undefined)
+        },
+        // 动态表单：用户在「填写请求」面板里补填了已经没人等的表单时，把答案作为一条
+        // 通知推进对话。与上面的长任务回调同构——工作台正是用户补填的主要入口。
+        onFormRequestAnswered: (_requests, note) => {
+            setMessages(prev => [...prev, {
+                id: `form-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
                 sender: 'user' as const,
                 content: note,
                 timestamp: Date.now(),
@@ -416,6 +434,12 @@ export const KernelConversation: React.FC<KernelConversationProps> = ({
                             </button>
                         </div>
                     )}
+
+                    {pendingForms.map(request => (
+                        <div key={request.id} className="mx-2 my-1.5">
+                            <FormRequestCard request={request} />
+                        </div>
+                    ))}
 
                     {(sessionError || (state.error && state.phase !== 'failed')) && (
                         <div className="mx-2 my-1.5 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-[11px] text-amber-700 dark:text-amber-300">

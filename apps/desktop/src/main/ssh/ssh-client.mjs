@@ -22,11 +22,30 @@
 import ssh2 from 'ssh2'
 
 const { Client } = ssh2
+import { userInfo } from 'node:os'
 import {
     MAX_SFTP_ENTRIES,
     createOutputCollector,
 } from './ssh-params.mjs'
 import { buildAuthConfig, readKnownHostStore, readKnownHosts, verifyHostKey } from './ssh-keys.mjs'
+
+/**
+ * Who to authenticate as when the caller omitted `user`.
+ *
+ * ssh2 has no OpenSSH-style "default to the local account" fallback: passing
+ * `username: undefined` makes `connect()` throw `Invalid username` before any
+ * socket work. The contract says `user` is optional, so resolve it here — the
+ * same account a plain `ssh host` would use.
+ */
+const localUsername = () => {
+    try {
+        const name = userInfo().username
+        if (name) return name
+    } catch {
+        /* no passwd entry (some containers): fall through to the environment */
+    }
+    return process.env.USER || process.env.USERNAME || undefined
+}
 
 /** How long to wait for the TCP+handshake+auth phase. */
 const CONNECT_TIMEOUT_MS = 20_000
@@ -161,7 +180,9 @@ export const connectSsh = (
             client.connect({
                 host: target.host,
                 port: target.port,
-                username: target.user ?? undefined,
+                // ssh2 refuses `undefined` before it even dials; the contract
+                // lets callers omit the user, so resolve the local account.
+                username: target.user ?? localUsername(),
                 readyTimeout: Math.min(timeoutMs, CONNECT_TIMEOUT_MS),
                 keepaliveInterval: 15_000,
                 keepaliveCountMax: 3,

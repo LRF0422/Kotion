@@ -5,7 +5,7 @@
 
 - 插件包：[`packages/plugin-plugin-studio`](../packages/plugin-plugin-studio)
 - 桌面能力层：[`apps/desktop/src/main/plugin-dev`](../apps/desktop/src/main/plugin-dev)
-- 能力契约：[`packages/common/src/core/desktop-bridge.ts`](../packages/common/src/core/desktop-bridge.ts)（`DevBridge`）
+- 能力契约（按域拆分）：[`packages/common/src/core/desktop/`](../packages/common/src/core/desktop)（`dev.ts` 是 `DevBridge`；`catalog.ts` 是能力目录，模块划分见 [DESKTOP_CAPABILITIES.md](./DESKTOP_CAPABILITIES.md#模块划分能力域--契约--主进程--门禁)）
 
 ## 为什么这么做
 
@@ -89,7 +89,7 @@
 
 ### agent：工具驱动
 
-插件向 agent 注册了 26 个工具（顶层 `tools`，见 `PluginManager.resolveAgentCapabilities`）：
+插件向 agent 注册了 27 个工具（顶层 `tools`，见 `PluginManager.resolveAgentCapabilities`）：
 
 | 工具 | 作用 |
 | --- | --- |
@@ -111,14 +111,33 @@
 | `listPluginIcons` | **查宿主真实存在的图标名**（`@kn/icon` 里的组件），返回 import + 可直接粘的栏位图标代码，以及按用途关键词的 emoji 建议。栏位图标别凭记忆拼名字 |
 | `generatePluginIcon` | **给工程生成图标**：按插件名/关键词选字形配色，离线渲染 SVG 写进 `assets/icon.svg`，把 `knPluginStudio.icon` 指向它，并尽量把源码里那个 emoji 栏位图标换成同一字形 |
 | `listHostGlobals` | 列出宿主通过 `window.__KN__` 暴露的全局模块（写 `externals` 前先查它） |
-| `listDesktopCapabilities` | **列出当前宿主真实暴露的桌面能力**（按 `fs.` / `dialog.` / `http.` / `ssh.` / `dev.` / `storage.` 等前缀分组）与类型化组（`desktop.dev` / `desktop.ssh` / `desktop.storage`）的方法。插件要用桌面能力时先查它：服务注册表只显示服务名 `desktop`，看不到下面的能力面 |
+| `listDesktopCapabilities` | **按意图发现桌面能力**（要用桌面能力时先查它）：`query` 是意图/关键词（**中文可用**，如「文件」「截屏」「ssh 隧道」「通知」，空格分隔多个词时要求全部命中），可传 `group`（`system`/`dialog`/`fs`/`window`/`app`/`capture`/`http`/`net`/`shell`/`secrets`/`storage`/`notification`/`background`/`credentials`/`ssh`/`dev`）收窄，`detail: 'summary'` 每条回 `{ name, summary, guards, call, available }`。返回 `groups`（能力目录分组，带标题/摘要/门禁）、`typedGroups`（`desktop.net` / `.browser` / `.secrets` / `.notifications` / `.background` / `.storage` / `.ssh` / `.dev` 的方法）、`uncatalogued`（宿主有、本版本不认识）与 `unavailable`（目录里有、宿主没暴露）——**清单不是绝对真相**。服务注册表只显示服务名 `desktop`，看不到下面的能力面 |
+| `getDesktopCapability` | **一次拿全某几个能力的契约**：`{ names: [...] }`（1–12 个，如 `['fs.readFile', 'ssh.exec']`）回 `call`（可直接照抄的调用式）、`params` / `result`（类型表达式）、`guards`（门禁）、`example`、`available`、`typesAt`（源码位置），并把 `declarations`（params/result 的**真实 TS 声明**，按需截断）内联进来——**优先用它替代读整个契约文件**；没找到的名字在 `missing` 里，需要更细的声明按 `readMore` 用 `readHostApiFile` 的 `symbol` 精读 |
 | `listHostApiPackages` | 列出可查阅的标准宿主包与类型入口 |
 | `searchHostApi` | 在标准包源码里按名字搜索类型/接口（返回文件+行号） |
-| `readHostApiFile` | 读取标准包里的一个源码文件，查看真实接口定义 |
+| `readHostApiFile` | 读取标准包里的一个源码文件，查看真实接口定义；可选 `symbol`（如 `{ package, path, symbol }`）只返回该声明（`export interface/type/const/enum <symbol>`）与行号范围，不再读整文件（`getDesktopCapability` 的 `readMore` 就是这种用法） |
 | `installPluginDependencies` | 安装第三方 npm 包（调用 npm/pnpm/yarn 并写入 package.json）；可传 `background` |
 | `listMyPlugins` | 列出我在市场上的提交/已上架插件（拿 pluginId、审核状态） |
 | `publishPluginProject` | 构建并上传产物，然后上架（提交审核）或发布新版本；**图标默认自动上传**（读清单里的 `knPluginStudio.icon`）；可传 `background` |
 | `upgradePluginVersion` | 把已安装插件升级到市场里的目标版本 |
+
+#### 宿主能力发现（推荐顺序）
+
+插件只能用宿主 `desktop` 服务提供的桌面能力，而能力面**不在**服务注册表里（那里只有一个服务名 `desktop`）。按三步走：
+
+1. **按意图找能力**：`listDesktopCapabilities({ query: '截屏' })` —— 中文关键词可搜，空格分隔多个词要求全部命中；可用 `group` 收窄到一个能力组，`detail: 'summary'` 看一句话摘要 + 门禁 + 调用式。`uncatalogued` / `unavailable` 说明清单**不是绝对真相**（宿主更新或更旧都可能出现），最终以 `available` 与 `desktop.has()` 为准。
+2. **一次拿全契约**：`getDesktopCapability({ names: ['fs.readFile', 'ssh.exec'] })` 给 `call` / `params` / `result` / `guards` / `example`，并把真实 TS 声明内联进 `declarations`——**不需要**再读整个契约文件。确实要看声明之外的内容时，按返回的 `readMore` 用 `readHostApiFile({ package, path, symbol })` 只取那一个声明。
+3. **写代码（特性检测 + 降级）**：`useOptionalService('desktop')`（组件里）/ `resolveOptionalService('desktop')`（非 React），先 `desktop?.has('<能力名>')` 或 `desktop?.ssh` 判断；Web 端与旧构建缺能力时降级不抛。消费能力**不需要**写进插件 config 的 `services`（那是给“对外提供”用的）。
+
+`getDesktopCapability` 返回的 `guards` 是门禁字典，写错误处理/UI 时逐条对照：
+`net-policy`（出网一律过网络策略，私网/LAN/元数据地址默认拒绝）、
+`user-confirm`（本次运行内首次连接新主机/打开新来源弹系统确认，用户可能拒绝）、
+`fs-allowlist`（路径必须落在 fs 白名单内）、`keychain`（依赖系统钥匙串，可能不可用）、
+`window-scope`（会话/任务归当前窗口）、`user-interaction`（会弹原生 UI，可能被取消）、
+`sensitive`（返回敏感值，别顺手读）、`destructive`（不可逆）、`developer`（只有开发台这类工具插件需要）。
+
+能力目录与完整清单：`packages/common/src/core/desktop/catalog.ts`（`groups` 的标题/摘要/门禁来自这里；契约按域拆在 `packages/common/src/core/desktop/*`，不再是一个总表文件）。
+通用能力组（net / shell / secrets / notification / background）见 [`DESKTOP_CAPABILITIES.md`](./DESKTOP_CAPABILITIES.md)，SSH 的信任模型见 [`SSH.md`](./SSH.md)。
 
 所以你可以直接说：
 
@@ -612,7 +631,7 @@ pnpm test:plugin-dev:electron
 | `package-install.test.mjs` | 20 | 包名/版本校验、管理器探测、argv 构造、假 spawn 安装 |
 | `tailwind.test.mjs` | 12 | 用宿主配置编译插件工具类、去除 @keyframes、空工程 |
 | `packaged-studio-deps.test.mjs` | 28 | **打包布局回归**：用真实 `afterPack` 钩子物化依赖，然后在**没有源码树**的前提下跑子进程——入口 `.mjs` 与 esbuild 都在 asar 外且可解析、平台二进制可 spawn、tailwind/postcss 与宿主配置就位并**真的编译出插件 CSS**、宿主标准包可读、**manager 从 `Resources/` 解析运行时且解析出的路径不含 `app.asar`** |
-| `studio-tools.test.mjs` | 228 | **agent 工具面**：名称/描述/schema、create→write→run→build→list→stop 的每次能力调用、**模板与 externals 透传和校验**、**删除工程与自卸载**、**删单个文件与「未读不许删」**、**service 发现（提供者归属/过滤/无注册表兜底）**、**产物聚焦（含 focus:false 与坏预览不拖垮构建）**、失败装订、缺能力提示、失败不装旧产物、**只读发现可以、注册表管理不在** |
+| `studio-tools.test.mjs` | 246 | **agent 工具面**：名称/描述/schema、create→write→run→build→list→stop 的每次能力调用、**模板与 externals 透传和校验**、**删除工程与自卸载**、**删单个文件与「未读不许删」**、**service 发现（提供者归属/过滤/无注册表兜底）**、**产物聚焦（含 focus:false 与坏预览不拖垮构建）**、失败装订、缺能力提示、失败不装旧产物、**只读发现可以、注册表管理不在**、**宿主能力发现（意图搜索/摘要视图/能力目录注入与旧宿主降级、`getDesktopCapability` 的声明内联与 `readMore`）** |
 | `surface.test.mjs` | 31 | **产物声明**：mapper 与工具面一致、kind 与预览一致、构建/发布/工程/图标的 payload、失败不产生产物、id 稳定（同工程重建/重生成只占一格）、`focusArtifact` 无 payload 路径、垃圾输入不抛 |
 | `files/highlight.test.mjs` | 78 | **文件页签高亮**（包内 `pnpm --filter @kn/plugin-plugin-studio test` 也跑）：扩展名→扫描器映射、行数/正文不丢、TS 关键字/字符串/注释/数字/模板字面量跨行、块注释跨行、未闭合字符串止于行尾、JSX 标签与属性、JSON/YAML/CSS（at-rule、十六进制色、自定义属性）、markup 标签与跨行注释、markdown 标题/列表/行内代码/链接/围栏、shell 变量与关键字、Python 三引号、纯文本、垃圾输入不抛错、2000 行 <400ms |
 | `icon-art.test.mjs` | 53 | **图标**：同插件同图、关键词/显式字形/首字母兜底、配色哈希与显式色、SVG 自包含与转义、栏位片段、只改该改的文件（不动手写图标、兼容 legacy `knPlugin` 块）、清单读取与 mime/可上传判断；**撤销**（读取当前图标、恢复文件+清单指针、首次生成的删除、URL/data 指针、缺 `deleteFile` 的降级、`./assets/icon.svg` / 反斜杠 / 大小写这类非规范指针按同一文件处理（大小写不敏感卷上不会误删）、旧内容读不出时明确上报） |
@@ -645,7 +664,7 @@ pnpm test:plugin-dev:electron
 | `dev.scaffold` | 按 `template` 写模板工程；**省略 `parentDir` 即用内置目录**，返回 `managed: true` |
 | `dev.list` | 枚举工程目录 |
 | `dev.readFile` / `dev.writeFile` | 读写工程文件（agent 改源码用） |
-| `dev.hostApi` | 只读标准宿主包源码：列出包（无参）/ 搜索（`query`）/ 读文件（`package`+`path`） |
+| `dev.hostApi` | 只读标准宿主包源码：列出包（无参）/ 搜索（`query`）/ 读文件（`package`+`path`）/ **只取一个声明**（`package`+`path`+`symbol`）/ **按名字解析声明**（`symbols`，跨模块返回 file:line）/ **只取接口成员**（`package`+`path`+`members`，如契约里的某条能力） |
 | `dev.files` | 枚举/搜索/grep 一个工程的源码文件：列出（无 `query`/`pattern`）/ 子串搜索（`query`）/ 正则检索（`pattern` + `include`/`ignoreCase`/`context`/`outputMode`），带 `scanned`/`truncated`/`timedOut` 完整性上报 |
 | `dev.installDependencies` | 在工程目录里安装第三方 npm 包（自动识别 npm/pnpm/yarn，校验包名） |
 | `dev.remove` | 停止会话并**删除工程目录**；拒绝没有可读 `package.json` 的目录与用户标准目录（Documents/Downloads/Desktop/temp/userData） |

@@ -27,10 +27,16 @@ import {
     backgroundTasks,
     formatBackgroundTaskDuration,
     groupBackgroundTasks,
+    taskMonitor,
     useBackgroundTasks,
+    useLongTasks,
+    useTaskMonitorLines,
+    useTaskMonitorSubscriptions,
     useTranslation,
     type BackgroundTaskStatus,
     type BackgroundTaskView,
+    type DesktopTaskSnapshot,
+    type TaskMonitorSubscription,
 } from '@kn/common'
 import {
     Activity,
@@ -60,6 +66,9 @@ import {
 } from '@kn/ui'
 import { formatToolName } from '../chat-types'
 import type { ChatSessionMeta } from '../chat-sessions'
+import { ensureTaskMonitorConfigured } from '../../tasks/task-monitor-host'
+import { TaskLogSection } from '../../tasks/TaskLogSection'
+import { LongTasksSection } from '../../tasks/LongTasksSection'
 
 /**
  * Result/error preview cap. This is a board, not a log viewer: a build result can
@@ -82,6 +91,23 @@ const formatTaskValue = (value: unknown): string => {
     } catch {
         return clipText(String(value))
     }
+}
+
+/**
+ * Tools whose background work writes a dev-session build log (`dev.logsSince`).
+ * Installs write no running output at all (their output only exists as the final
+ * tool result), so a live-log section there would be a permanently empty box.
+ */
+const DEV_LOG_TOOLS: ReadonlySet<string> = new Set([
+    'buildPluginProject',
+    'runPluginProject',
+    'publishPluginProject',
+])
+
+/** The project root a task's dev-session log belongs to (studio passes `meta.root`). */
+const rootOfTask = (task: BackgroundTaskView): string | null => {
+    const root = task.meta?.root
+    return typeof root === 'string' && root ? root : null
 }
 
 /** Mirrors the tab status lights: spinner running, dot for done, red for failed. */
@@ -231,6 +257,86 @@ const TaskRow: React.FC<TaskRowProps> = ({
                             </pre>
                         </div>
                     )}
+
+                    {/* Live build log (incremental, host-side). Never a chat message:
+                        see docs/AGENT_TASK_MONITORING_DESIGN.md. */}
+                    {DEV_LOG_TOOLS.has(task.tool) && rootOfTask(task) && (
+                        <TaskLogSection
+                            root={rootOfTask(task) as string}
+                            label={task.title || formatToolName(task.tool)}
+                            taskId={task.id}
+                            running={task.status === 'running'}
+                        />
+                    )}
+                </div>
+            )}
+        </div>
+    )
+}
+
+/**
+ * A monitor whose task is not on the board (already settled, or the board was
+ * cleared by a page refresh while the dev session kept running). This is the row
+ * that makes "I was watching that build" survive a refresh: the subscription is
+ * persisted, the log itself lives in the host.
+ */
+const MonitorRow: React.FC<{
+    monitor: TaskMonitorSubscription
+    expanded: boolean
+    onToggle: () => void
+}> = ({ monitor, expanded, onToggle }) => {
+    const { t } = useTranslation()
+    const lines = useTaskMonitorLines(monitor.id)
+    const label = monitor.label
+
+    return (
+        <div className="group/row">
+            <button
+                type="button"
+                onClick={onToggle}
+                aria-expanded={expanded}
+                className="flex w-full items-start gap-2 rounded-md px-3 py-1.5 text-left transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+            >
+                <Loader2
+                    aria-hidden
+                    className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin text-primary motion-reduce:animate-none"
+                />
+                <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs font-medium leading-5 text-foreground/90" title={label}>
+                        {label}
+                    </span>
+                    <span className="block truncate font-mono text-[10px] leading-4 text-muted-foreground">
+                        {monitor.source.kind === 'dev' ? monitor.source.root : monitor.label}
+                    </span>
+                </span>
+                <span className="mt-0.5 flex shrink-0 items-center gap-0.5 text-[10px] tabular-nums text-muted-foreground">
+                    <span>
+                        {t('ai.chat.backgroundTasks.liveLogLines', {
+                            count: lines.length,
+                            defaultValue: '{{count}} 行',
+                        })}
+                    </span>
+                    <ChevronDown
+                        aria-hidden
+                        className={cn('h-3 w-3 transition-transform', expanded && 'rotate-180')}
+                    />
+                </span>
+            </button>
+
+            {expanded && (
+                <div className="pb-2 pl-[30px] pr-3 text-[11px]">
+                    {/* Only a dev-root monitor has a dev-session log to show; a
+                        task monitor's lines live in the plugin-task row. */}
+                    {monitor.source.kind === 'dev' && (
+                        <TaskLogSection root={monitor.source.root} label={label} />
+                    )}
+                    <button
+                        type="button"
+                        onClick={() => taskMonitor.stop(monitor.id)}
+                        className="mt-1.5 rounded border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-muted"
+                    >
+                        {t('ai.chat.backgroundTasks.monitorsStop', { defaultValue: '停止监控' })}
+                    </button>
                 </div>
             )}
         </div>
@@ -239,9 +345,17 @@ const TaskRow: React.FC<TaskRowProps> = ({
 
 // ─── Shared body (popover + sheet) ─────────────────────────────────
 
+interface LongTaskBoardState {
+    tasks: DesktopTaskSnapshot[]
+    loading: boolean
+    error: string | null
+    refresh: () => void
+}
+
 interface BackgroundTasksContentProps {
     running: BackgroundTaskView[]
     finished: BackgroundTaskView[]
+    longTasks: LongTaskBoardState
     conversationOf: (task: BackgroundTaskView) => { label: string; openable: boolean; sessionId?: string }
     now: number
     expandedId: string | null
@@ -254,6 +368,7 @@ interface BackgroundTasksContentProps {
 const BackgroundTasksContent: React.FC<BackgroundTasksContentProps> = ({
     running,
     finished,
+    longTasks,
     conversationOf,
     now,
     expandedId,
@@ -262,7 +377,37 @@ const BackgroundTasksContent: React.FC<BackgroundTasksContentProps> = ({
     onClose,
 }) => {
     const { t } = useTranslation()
-    const count = running.length + finished.length
+    // Monitors outlive the registry (they are keyed by source: a dev root or a
+    // plugin task), so a page refresh can leave a running watch with no task row
+    // to attach it to. Wiring is idempotent and lazily started here: closed
+    // panel = no polling at all.
+    useEffect(() => {
+        ensureTaskMonitorConfigured()
+    }, [])
+    const monitors = useTaskMonitorSubscriptions()
+    const taskRoots = useMemo(() => {
+        const roots = new Set<string>()
+        for (const task of [...running, ...finished]) {
+            const root = rootOfTask(task)
+            if (root) roots.add(root)
+        }
+        return roots
+    }, [running, finished])
+    // A monitor is only "orphan" when nothing else on the board already shows its
+    // task: dev monitors attach to a build row, task monitors to the plugin-task
+    // list. Showing both would duplicate the same work twice in one panel.
+    const longTaskIds = useMemo(
+        () => new Set(longTasks.tasks.map(task => task.id)),
+        [longTasks.tasks],
+    )
+    const orphanMonitors = useMemo(
+        () => monitors.filter(monitor => monitor.status === 'running'
+            && (monitor.source.kind === 'dev'
+                ? !taskRoots.has(monitor.source.root)
+                : !longTaskIds.has(monitor.source.taskId))),
+        [monitors, taskRoots, longTaskIds],
+    )
+    const count = running.length + finished.length + orphanMonitors.length + longTasks.tasks.length
     const scrollable = count > SCROLLABLE_TASK_COUNT
 
     const statusLabel = useCallback(
@@ -360,6 +505,31 @@ const BackgroundTasksContent: React.FC<BackgroundTasksContentProps> = ({
                     )}
                 >
                     <div className="pb-1">
+                        <LongTasksSection
+                            tasks={longTasks.tasks}
+                            loading={longTasks.loading}
+                            error={longTasks.error}
+                            refresh={longTasks.refresh}
+                            now={now}
+                            expandedId={expandedId}
+                            onToggle={onToggle}
+                        />
+                        {orphanMonitors.length > 0 && (
+                            <>
+                                {sectionHeader(
+                                    t('ai.chat.backgroundTasks.monitorsSection', { defaultValue: '监控中' }),
+                                    orphanMonitors.length,
+                                )}
+                                {orphanMonitors.map(monitor => (
+                                    <MonitorRow
+                                        key={monitor.id}
+                                        monitor={monitor}
+                                        expanded={expandedId === monitor.id}
+                                        onToggle={() => onToggle(monitor.id)}
+                                    />
+                                ))}
+                            </>
+                        )}
                         {running.length > 0 && (
                             <>
                                 {sectionHeader(
@@ -424,16 +594,24 @@ export const BackgroundTasksPanel: React.FC<BackgroundTasksPanelProps> = ({
     const tasks = useBackgroundTasks()
     const { running, finished } = useMemo(() => groupBackgroundTasks(tasks), [tasks])
     const runningCount = running.length
+    // Plugin tasks live in the HOST (they survive a refresh), so they need their
+    // own subscription. `enabled: open` is what keeps a closed panel at zero
+    // polling: this header component stays mounted for the whole session.
+    const longTaskBoard = useLongTasks({ limit: 30, enabled: open })
+    const longRunningCount = useMemo(
+        () => longTaskBoard.tasks.filter(task => task.state === 'running' || task.state === 'cancelling').length,
+        [longTaskBoard.tasks],
+    )
 
     // Only running rows show a live duration, so only they need a ticker — and
     // only while the board is actually open. Closed panel = zero timers.
     const [now, setNow] = useState(() => Date.now())
     useEffect(() => {
-        if (!open || runningCount === 0) return
+        if (!open || (runningCount === 0 && longRunningCount === 0)) return
         setNow(Date.now())
         const timer = setInterval(() => setNow(Date.now()), 1_000)
         return () => clearInterval(timer)
-    }, [open, runningCount])
+    }, [open, runningCount, longRunningCount])
 
     const sessionTitles = useMemo(() => {
         const map = new Map<string, string>()
@@ -515,6 +693,7 @@ export const BackgroundTasksPanel: React.FC<BackgroundTasksPanelProps> = ({
         <BackgroundTasksContent
             running={running}
             finished={finished}
+            longTasks={longTaskBoard}
             conversationOf={conversationOf}
             now={now}
             expandedId={expandedId}

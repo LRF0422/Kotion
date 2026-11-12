@@ -112,6 +112,56 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
         requiresEditor: false,
     },
 
+    // ===== Plugin long tasks (`desktop.tasks`) =====
+    // The other long-task family: tasks a PLUGIN registered on the host, so their
+    // state/logs survive a page refresh. Protocol-level for the same reason as the
+    // background ones — a plugin task is reported from a chat/workbench run with
+    // no document — and they touch no editor.
+    {
+        name: 'listLongTasks',
+        category: 'interaction',
+        description: '列出插件在宿主注册的长任务（desktop.tasks）及其状态、进度与是否有结果。',
+        priority: 7,
+        tags: ['long-task', 'plugin', 'task', 'essential'],
+        loaded: false,
+        source: 'builtin',
+        scope: 'any',
+        requiresEditor: false,
+    },
+    {
+        name: 'getLongTask',
+        category: 'interaction',
+        description: '取插件长任务的状态与结果；wait 为 true（默认）时等到它结束或超时。',
+        priority: 7,
+        tags: ['long-task', 'plugin', 'task', 'essential'],
+        loaded: false,
+        source: 'builtin',
+        scope: 'any',
+        requiresEditor: false,
+    },
+    {
+        name: 'getLongTaskLogs',
+        category: 'interaction',
+        description: '按 seq 游标增量读取插件长任务的日志，支持 level 与 grep 过滤。',
+        priority: 6,
+        tags: ['long-task', 'plugin', 'log'],
+        loaded: false,
+        source: 'builtin',
+        scope: 'any',
+        requiresEditor: false,
+    },
+    {
+        name: 'cancelLongTask',
+        category: 'interaction',
+        description: '请求取消插件长任务：协作式，宿主不杀进程，任务可能继续到插件自己停止。',
+        priority: 6,
+        tags: ['long-task', 'plugin', 'task'],
+        loaded: false,
+        source: 'builtin',
+        scope: 'any',
+        requiresEditor: false,
+    },
+
     // ===== Document Read Tools =====
     {
         name: 'getDocumentStructure',
@@ -346,6 +396,53 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
     },
 
     // ===== Interaction Tools =====
+    // Dynamic forms: protocol-level like askUserChoice, but able to collect many
+    // fields in one interaction. `scope: 'any'` / `requiresEditor: false` because
+    // the workbench (no document) is a first-class place to ask for data.
+    {
+        name: 'requestUserForm',
+        category: 'interaction',
+        description: '向用户要一组结构化数据：声明一张动态表单（标题 + 字段），用户填好后一次性拿回 values。',
+        priority: 8,
+        tags: ['user', 'form', 'input', 'essential'],
+        loaded: false,
+        source: 'builtin',
+        scope: 'any',
+        requiresEditor: false,
+    },
+    {
+        name: 'getFormRequest',
+        category: 'interaction',
+        description: '取填写请求的状态与答案；wait 为 true（默认）时等到用户提交、取消或超时。',
+        priority: 8,
+        tags: ['user', 'form', 'input', 'essential'],
+        loaded: false,
+        source: 'builtin',
+        scope: 'any',
+        requiresEditor: false,
+    },
+    {
+        name: 'listFormRequests',
+        category: 'interaction',
+        description: '列出本会话的填写请求及其状态（待填写/已填写/已取消），不含完整答案。',
+        priority: 8,
+        tags: ['user', 'form', 'input', 'essential'],
+        loaded: false,
+        source: 'builtin',
+        scope: 'any',
+        requiresEditor: false,
+    },
+    {
+        name: 'cancelFormRequest',
+        category: 'interaction',
+        description: '取消一张待填写的表单；正在等它的 run 会收到 status=cancelled。',
+        priority: 8,
+        tags: ['user', 'form', 'input', 'essential'],
+        loaded: false,
+        source: 'builtin',
+        scope: 'any',
+        requiresEditor: false,
+    },
     {
         name: 'askUserChoice',
         category: 'interaction',

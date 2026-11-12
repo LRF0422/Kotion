@@ -27,6 +27,11 @@
  * last call releases it. An interactive shell still owns a dedicated connection
  * for as long as it lives (a pty is not a request/response call) and streams
  * over `desktop:event:ssh`.
+ *
+ * Port forwarding (`ssh -L` / `ssh -D`, `ssh-tunnel.mjs` + `ssh-socks5.mjs`) is
+ * its own grant scope and also owns a connection: the listener is loopback-only
+ * and stays up until `ssh.tunnelClose`, a revoked host, or app quit — so the
+ * pool must never reap it. `tunnel-close` events ride the same `ssh` channel.
  */
 import { app, BrowserWindow, ipcMain, safeStorage } from 'electron'
 import { readFileSync, writeFileSync } from 'node:fs'
@@ -39,6 +44,7 @@ import { getNetPolicy } from '../net-policy-store'
 import {
     clampSshOutputBytes,
     clampSshTimeout,
+    MAX_SSH_TUNNELS,
     normalizeHostKeyPolicy,
     normalizeRemotePath,
     normalizeSessionId,
@@ -47,6 +53,11 @@ import {
     normalizeSshCommand,
     normalizeSshTarget,
     normalizeTerm,
+    normalizeTunnelId,
+    normalizeTunnelKind,
+    normalizeTunnelLabel,
+    normalizeTunnelLocalPort,
+    normalizeTunnelRemoteTarget,
     sshDenyReason,
     sshGrantKey,
 } from './ssh-params.mjs'
@@ -72,6 +83,8 @@ import {
     sftpUpload,
 } from './ssh-client.mjs'
 import { createSshPool } from './ssh-pool.mjs'
+import { createTunnelManager } from './ssh-tunnel.mjs'
+import { negotiateSocks5 } from './ssh-socks5.mjs'
 
 interface SshGrant {
     /** `user@host:port` — the identity `forget` revokes (all scopes at once). */
@@ -96,7 +109,7 @@ interface SetupSshOptions {
     assertAllowedPath: (value: unknown, label: string) => string
 }
 
-type SshRequestKind = 'command' | 'transfer' | 'sftp' | 'shell'
+type SshRequestKind = 'command' | 'transfer' | 'sftp' | 'shell' | 'tunnel' | 'proxy'
 
 interface ShellSession {
     id: string
@@ -137,10 +150,14 @@ const dialogStrings = (locale: string) =>
                   transfer: '上传 / 下载文件',
                   sftp: '读取或修改远端目录',
                   shell: '打开「交互式终端」——远端 pty，可以输入任意命令',
+                  tunnel: '建立「SSH 隧道」——在本机 127.0.0.1 开监听端口，把连接转发到远端',
+                  proxy: '建立「SOCKS5 代理隧道」——本机回环代理，可访问远端能访问的任意地址',
               } as Record<SshRequestKind, string>,
               policyStrict: '严格校验（按 ~/.ssh/known_hosts）',
               policyAcceptNew: '首次自动信任（accept-new，会记住该密钥）',
               note: '宿主不会接收或保存任何密码或私钥。允许后，本次运行内该主机的后续调用不再询问（可在设置里「忘记」）。',
+              tunnelNote:
+                  '宿主不会接收或保存任何密码或私钥。隧道只监听本机 127.0.0.1（不对局域网开放），会一直保持到你关闭它、撤销该主机或退出应用。',
           }
         : {
               title: 'SSH connection request',
@@ -153,10 +170,14 @@ const dialogStrings = (locale: string) =>
                   transfer: 'Upload / download a file',
                   sftp: 'Read or modify a remote directory',
                   shell: 'Open an INTERACTIVE TERMINAL (remote pty, arbitrary input)',
+                  tunnel: 'Open an SSH TUNNEL (loopback listener forwarding to one remote destination)',
+                  proxy: 'Open a SOCKS5 PROXY TUNNEL (loopback proxy to anything the server can reach)',
               } as Record<SshRequestKind, string>,
               policyStrict: 'Strict (verify against ~/.ssh/known_hosts)',
               policyAcceptNew: 'Accept-new (trust on first use, remembered)',
               note: 'The host never receives or stores a password or key. Allowing covers later calls to this host for this app run (revocable at any time).',
+              tunnelNote:
+                  'The host never receives or stores a password or key. The tunnel listens on 127.0.0.1 only (never on the LAN) and stays open until you close it, revoke the host, or quit the app.',
           }
 
 export function setupSshIpcHandlers({ assertAllowedPath }: SetupSshOptions) {
@@ -248,9 +269,15 @@ export function setupSshIpcHandlers({ assertAllowedPath }: SetupSshOptions) {
         hostKeyPolicy: 'strict' | 'accept-new',
         kind: SshRequestKind,
         detail: string,
+        /**
+         * Extra identity inside one scope, for capabilities whose consent is
+         * narrower than "this host": a local tunnel is granted per destination,
+         * so approving `db:5432` does not silently approve `127.0.0.1:22`.
+         */
+        identity = '',
     ): Promise<SshGrant> => {
         const key = sshGrantKey(target)
-        const grantId = `${kind}:${key}`
+        const grantId = `${kind}:${key}${identity ? `|${identity}` : ''}`
         const existing = grants.get(grantId)
         // A grant made under `strict` must not silently cover `accept-new`
         // (the weaker policy), and it never covers another operation class —
@@ -269,7 +296,7 @@ export function setupSshIpcHandlers({ assertAllowedPath }: SetupSshOptions) {
                     {
                         label: t.labels.action,
                         value: `${t.kind[kind]}${detail ? `（${detail}）` : ''}`,
-                        tone: kind === 'shell' ? 'danger' : 'default',
+                        tone: kind === 'shell' || kind === 'tunnel' || kind === 'proxy' ? 'danger' : 'default',
                     },
                     {
                         label: t.labels.hostKey,
@@ -280,7 +307,7 @@ export function setupSshIpcHandlers({ assertAllowedPath }: SetupSshOptions) {
                         value: describeAuth(buildAuthConfig({})),
                     },
                 ],
-                note: t.note,
+                note: kind === 'tunnel' || kind === 'proxy' ? t.tunnelNote : t.note,
                 allowLabel: t.allow,
                 denyLabel: t.deny,
             },
@@ -327,6 +354,43 @@ export function setupSshIpcHandlers({ assertAllowedPath }: SetupSshOptions) {
      * `withConnection`) because a pty owns its connection.
      */
     const pool = createSshPool({ openSftp: openSftpSession, end: endSsh })
+
+    /**
+     * Long-lived port forwards (`ssh -L` / `ssh -D`).
+     *
+     * A tunnel owns a dedicated SSH connection, like the pty shell: it is a
+     * stream, not a request/response call, so the pool's idle reaper must not
+     * close it out from under a forwarded connection. The manager keeps the
+     * protocol generic; `connect` above is still the only way in — network
+     * policy, the user grant and host-key verification have all already run.
+     */
+    const tunnels = createTunnelManager({
+        connect: (options) => connect(options),
+        end: endSsh,
+        broadcast: (event: unknown) => broadcast(event as Record<string, unknown>),
+        /**
+         * The SOCKS5 negotiator is injected, not imported by the engine, so the
+         * engine stays protocol-agnostic and testable with a fake. `null` and
+         * `undefined` mean the same thing here (no destination policy).
+         */
+        socks5: (socket, deps) =>
+            negotiateSocks5(socket, {
+                forwardOut: deps.forwardOut,
+                assertDestination: deps.assertDestination ?? undefined,
+                timeoutMs: deps.timeoutMs,
+            }),
+        /**
+         * A local forward's destination is resolved by the **remote** host, so
+         * the local SSRF policy does not apply (a private destination is the
+         * point of a bastion tunnel). A cloud-metadata literal is still refused
+         * as defence in depth — the dialog names the destination either way.
+         */
+        assertDestination: (host: string) => {
+            if (isIP(host) !== 0 && classifyAddress(host) === 'metadata') {
+                throw new Error(sshDenyReason('metadata'))
+            }
+        },
+    })
 
     /** Normalize + policy-check + grant-check, then run one call on a pooled client. */
     const withConnection = async (
@@ -558,6 +622,71 @@ export function setupSshIpcHandlers({ assertAllowedPath }: SetupSshOptions) {
             .sort((a, b) => a.openedAt - b.openedAt),
     )
 
+    /* ---------------- port forwarding (ssh -L / ssh -D) ---------------- */
+    ipcMain.handle('desktop:ssh.tunnelOpen', async (event, raw) => {
+        const params = asRecord(raw)
+        const target = normalizeSshTarget(params)
+        const hostKeyPolicy = normalizeHostKeyPolicy(params.hostKeyPolicy)
+        const kind = normalizeTunnelKind(params.kind)
+        const localPort = normalizeTunnelLocalPort(params.localPort)
+        const label = normalizeTunnelLabel(params.label)
+        const remote = kind === 'local' ? normalizeTunnelRemoteTarget(params) : null
+        await assertTargetAllowed(target.host)
+        // Fail a destination the host can never forward to *before* asking the
+        // user: `assertDestination` refuses a metadata literal per connection
+        // too, but a listener that can only drop every connection is worse than
+        // an immediate, explicit refusal.
+        if (remote && isIP(remote.host) !== 0 && classifyAddress(remote.host) === 'metadata') {
+            throw new Error(sshDenyReason('metadata'))
+        }
+        // Do not show a consent dialog for a tunnel the cap already forbids;
+        // `tunnels.open()` re-checks (including in-flight opens) atomically.
+        if (tunnels.size() >= MAX_SSH_TUNNELS) {
+            throw new Error(`desktop ssh: too many open tunnels (max ${MAX_SSH_TUNNELS}); close one first`)
+        }
+        // `tunnel` and `proxy` are separate grants on purpose: one fixed
+        // destination is narrower than a SOCKS5 proxy to anything the server
+        // can reach, so allowing one must not silently allow the other.
+        const scope: SshRequestKind = kind === 'local' ? 'tunnel' : 'proxy'
+        const zh = app.getLocale().toLowerCase().startsWith('zh')
+        const portText = localPort || (zh ? '自动' : 'auto')
+        const detail =
+            kind === 'local'
+                ? zh
+                    ? `本机 127.0.0.1:${portText} → ${remote!.host}:${remote!.port}（由远端发起连接）`
+                    : `127.0.0.1:${portText} → ${remote!.host}:${remote!.port} (the remote side makes the connection)`
+                : zh
+                  ? `SOCKS5 代理 127.0.0.1:${portText}`
+                  : `SOCKS5 proxy on 127.0.0.1:${portText}`
+        await requireGrant(
+            event,
+            target,
+            hostKeyPolicy,
+            scope,
+            detail,
+            // Local forwards are consented per destination; the SOCKS5 proxy is
+            // inherently destination-free, so its grant is the whole host.
+            kind === 'local' ? `${remote!.host.toLowerCase()}:${remote!.port}` : '',
+        )
+        const credentialId = typeof params.credentialId === 'string' ? params.credentialId : undefined
+        return tunnels.open({
+            target,
+            hostKeyPolicy,
+            credentialId,
+            kind,
+            remoteHost: remote?.host,
+            remotePort: remote?.port,
+            localPort,
+            label,
+        })
+    })
+
+    ipcMain.handle('desktop:ssh.tunnelClose', (_event, raw) =>
+        tunnels.close(normalizeTunnelId(asRecord(raw).tunnelId)),
+    )
+
+    ipcMain.handle('desktop:ssh.tunnels', () => tunnels.list())
+
     /* ---------------- stored credentials ---------------- */
     ipcMain.handle('desktop:ssh.credentialsAvailable', () => credentialIo.canEncrypt())
     // Metadata only: the secret never crosses this boundary (see ssh-credentials.mjs).
@@ -582,7 +711,19 @@ export function setupSshIpcHandlers({ assertAllowedPath }: SetupSshOptions) {
     })
 
     /* ---------------- grants ---------------- */
-    ipcMain.handle('desktop:ssh.hosts', () => [...grants.values()].sort((a, b) => a.key.localeCompare(b.key)))
+    // One row per host + scope + policy: tunnel grants are per destination
+    // internally, but the listing is "what has this host been allowed to do".
+    ipcMain.handle('desktop:ssh.hosts', () => {
+        const seen = new Set<string>()
+        return [...grants.values()]
+            .filter((grant) => {
+                const identity = `${grant.key}|${grant.scope}|${grant.hostKeyPolicy}`
+                if (seen.has(identity)) return false
+                seen.add(identity)
+                return true
+            })
+            .sort((a, b) => a.key.localeCompare(b.key))
+    })
     ipcMain.handle('desktop:ssh.forget', (_event, raw) => {
         const params = asRecord(raw)
         // Revoking a host revokes every scope the user allowed for it: leaving a
@@ -596,12 +737,19 @@ export function setupSshIpcHandlers({ assertAllowedPath }: SetupSshOptions) {
         }
         // A revoked host must lose its pooled connection too: the next call has
         // to ask again rather than inherit a session allowed under the old grant.
-        for (const grant of revoked) pool.invalidate(grant)
+        for (const grant of revoked) {
+            pool.invalidate(grant)
+            // An open tunnel is ongoing access to the host, so revoking the
+            // grant has to take it away as well (a live terminal is unchanged:
+            // it is an interactive session, not a standing network listener).
+            tunnels.closeForTarget(grant, 'revoked')
+        }
         return revoked.length > 0
     })
 
-    // Live shells and pooled connections must not outlive the app.
+    // Live shells, tunnels and pooled connections must not outlive the app.
     app.on('will-quit', () => {
+        tunnels.dispose()
         pool.dispose()
         for (const session of shells.values()) {
             try {

@@ -13,12 +13,60 @@
 import { createStudioTools } from './studio-tools.ts'
 import { pluginAuthoringSkill } from './skills/plugin-authoring.ts'
 import * as iconArt from './icons/icon-art.ts'
+import * as desktopCatalogModule from '../../common/src/core/desktop/catalog.ts'
+
+/**
+ * The host's capability catalogue, adapted exactly the way the plugin entry
+ * (`index.tsx`) adapts it. Using the real catalogue here means the test also
+ * catches drift between the studio's expectations and the shipped metadata.
+ */
+const toCatalogEntry = (meta) => ({
+    name: meta.name,
+    group: meta.group,
+    summary: meta.summary,
+    call: desktopCatalogModule.desktopCapabilityCall(meta),
+    guards: [...desktopCatalogModule.desktopCapabilityGuards(meta)],
+    example: meta.example,
+    notes: meta.notes,
+    availability: meta.availability,
+})
+const desktopCatalog = {
+    groups: desktopCatalogModule.DESKTOP_CAPABILITY_GROUPS.map((group) => ({
+        id: group.id,
+        title: group.title,
+        summary: group.summary,
+        guards: [...(group.guards ?? [])],
+        typesAt: group.typesAt,
+    })),
+    entries: desktopCatalogModule.DESKTOP_CAPABILITY_CATALOG.map(toCatalogEntry),
+    guardNotes: { ...desktopCatalogModule.DESKTOP_CAPABILITY_GUARDS },
+    find: (name) => {
+        const meta = desktopCatalogModule.findDesktopCapabilityMeta(name)
+        return meta ? toCatalogEntry(meta) : undefined
+    },
+    search: ({ query, group }) =>
+        desktopCatalogModule.searchDesktopCapabilities({ query, group }).map(toCatalogEntry),
+}
 
 const results = []
 const check = (name, condition, detail = '') => {
     results.push({ name, ok: Boolean(condition), detail })
     console.log(`${condition ? 'ok  ' : 'FAIL'} ${name}${detail ? ' — ' + detail : ''}`)
 }
+
+/* The documented example intents must actually resolve — a Chinese keyword the
+ * docs tell authors to try is a promise, not a suggestion. */
+const INTENT_EXAMPLES = ['截屏', '文件', 'ssh 隧道', '通知']
+check(
+    'catalogue: the documented Chinese intents resolve',
+    INTENT_EXAMPLES.every(
+        (query) => desktopCatalogModule.searchDesktopCapabilities({ query }).length > 0,
+    ),
+    INTENT_EXAMPLES.map(
+        (query) => `${query}=${desktopCatalogModule.searchDesktopCapabilities({ query }).length}`,
+    ).join(', '),
+)
+
 
 /* ------------------------------------------------------------------ *
  * Recording fake of the two injected services.
@@ -160,7 +208,58 @@ const dev = {
                 truncated: false,
             }
         }
+        if (Array.isArray(options.symbols) && options.symbols.length) {
+            const known = {
+                SshExecOptions: 'export interface SshExecOptions extends SshCallOptions {\n    command: string\n}\n',
+                SshExecResult: 'export interface SshExecResult {\n    ok: boolean\n}\n',
+                DesktopFileResult: 'export interface DesktopFileResult<T = never> {\n    data?: T | null\n}\n',
+            }
+            return {
+                kind: 'declarations',
+                declarations: options.symbols
+                    .filter((symbol) => known[symbol])
+                    .map((symbol) => ({
+                        symbol,
+                        package: '@kn/common',
+                        path: 'src/core/desktop/ssh.ts',
+                        startLine: 1,
+                        endLine: 3,
+                        totalLines: 100,
+                        text: known[symbol],
+                    })),
+                missing: options.symbols.filter((symbol) => !known[symbol]),
+            }
+        }
+        if (Array.isArray(options.members) && options.members.length) {
+            const known = {
+                'fs.readFile':
+                    "    'fs.readFile': { params: { path: string; encoding?: 'utf8' | 'base64' }; result: DesktopFileResult<string> }",
+                'ssh.exec': "    'ssh.exec': { params: SshExecOptions; result: SshExecResult }",
+            }
+            return {
+                kind: 'contract',
+                package: '@kn/common',
+                path: options.path ?? 'src/core/desktop/contract.ts',
+                entries: options.members
+                    .filter((member) => known[member])
+                    .map((member) => ({ member, startLine: 1, endLine: 1, totalLines: 200, text: known[member] })),
+                missing: options.members.filter((member) => !known[member]),
+            }
+        }
         if (typeof options.path === 'string' && options.path) {
+            if (typeof options.symbol === 'string' && options.symbol) {
+                return {
+                    kind: 'file',
+                    package: '@kn/common',
+                    path: options.path,
+                    contents: 'export interface ' + options.symbol + ' {}',
+                    bytes: 20,
+                    symbol: options.symbol,
+                    startLine: 10,
+                    endLine: 12,
+                    totalLines: 40,
+                }
+            }
             return {
                 kind: 'file',
                 package: '@kn/common',
@@ -373,6 +472,7 @@ const desktopBridge = {
 const tools = createStudioTools({
     getDev: () => dev,
     getDesktop: () => desktopBridge,
+    getDesktopCatalog: () => desktopCatalog,
     getPluginHost: () => pluginHost,
     getDevHost: () => devHost,
     getMarketplace: () => marketplace,
@@ -413,6 +513,7 @@ const EXPECTED = [
     'generatePluginIcon',
     'listHostGlobals',
     'listDesktopCapabilities',
+    'getDesktopCapability',
     'listHostApiPackages',
     'searchHostApi',
     'readHostApiFile',
@@ -438,6 +539,7 @@ check(
         && tools.readPluginProjectFile.readOnly === true
         && tools.listHostGlobals.readOnly === true
         && tools.listDesktopCapabilities.readOnly === true
+        && tools.getDesktopCapability.readOnly === true
         && tools.listPluginServices.readOnly === true,
 )
 check(
@@ -753,64 +855,108 @@ check(
 
 /* ------------------------------------------------------------------ *
  * Desktop capabilities: what can a plugin I write here actually call?
+ *
+ * Two sources answer: the live bridge (availability) and the host catalogue
+ * (meaning, guards, call shape). Both are exercised — including the degraded
+ * path for a host whose `@kn/common` predates the catalogue.
  * ------------------------------------------------------------------ */
 const desktopCapabilities = await tools.listDesktopCapabilities.execute({})
 check(
-    'capabilities: reports the live bridge',
-    desktopCapabilities.hasDesktop === true && desktopCapabilities.count === 15 && desktopCapabilities.platform === 'darwin',
-    JSON.stringify({ count: desktopCapabilities.count, platform: desktopCapabilities.platform }),
+    'capabilities: reports the live bridge and the catalogued total',
+    desktopCapabilities.hasDesktop === true &&
+        desktopCapabilities.total === 15 &&
+        desktopCapabilities.count === 15 &&
+        desktopCapabilities.platform === 'darwin' &&
+        desktopCapabilities.catalogued === true,
+    JSON.stringify({ total: desktopCapabilities.total, count: desktopCapabilities.count }),
 )
 check(
-    'capabilities: groups by family with notes',
-    ['credentials.', 'dev.', 'dialog.', 'fs.', 'http.', 'net.policy.', 'ssh.', 'system.'].every((family) =>
-        desktopCapabilities.groups.some((entry) => entry.group === family),
-    ) &&
-        desktopCapabilities.groups.find((entry) => entry.group === 'ssh.')?.summary?.includes('用户确认') === true,
-    JSON.stringify(desktopCapabilities.groups.map((entry) => entry.group)),
+    'capabilities: groups are catalogue groups with real summaries',
+    desktopCapabilities.groups.some((group) => group.group === 'fs' && /白名单/.test(group.summary)) &&
+        desktopCapabilities.groups.some((group) => group.group === 'ssh' && /用户确认/.test(group.summary)),
+    JSON.stringify(desktopCapabilities.groups.map((group) => group.group)),
 )
 check(
-    'capabilities: ssh family lists its five calls',
-    JSON.stringify(desktopCapabilities.groups.find((entry) => entry.group === 'ssh.')?.capabilities) ===
-        JSON.stringify(['ssh.exec', 'ssh.forget', 'ssh.get', 'ssh.hosts', 'ssh.put']),
-    JSON.stringify(desktopCapabilities.groups.find((entry) => entry.group === 'ssh.')?.capabilities),
+    'capabilities: ssh group lists the live calls in catalogue order',
+    JSON.stringify(desktopCapabilities.groups.find((group) => group.group === 'ssh')?.capabilities) ===
+        JSON.stringify(['ssh.exec', 'ssh.put', 'ssh.get', 'ssh.hosts', 'ssh.forget']),
+    JSON.stringify(desktopCapabilities.groups.find((group) => group.group === 'ssh')?.capabilities),
 )
 check(
-    'capabilities: typed groups expose their methods',
-    desktopCapabilities.typedGroups.find((entry) => entry.group === 'ssh')?.methods.join(',') === 'exec,forget,get,hosts,put' &&
-        desktopCapabilities.typedGroups.some((entry) => entry.group === 'dev') &&
-        desktopCapabilities.typedGroups.some((entry) => entry.group === 'storage'),
+    'capabilities: typed groups cover every typed bridge, not just dev/ssh/storage',
+    desktopCapabilities.typedGroups.some((group) => group.group === 'storage') &&
+        desktopCapabilities.typedGroups.some((group) => group.group === 'ssh') &&
+        desktopCapabilities.typedGroups.some((group) => group.group === 'dev'),
     JSON.stringify(desktopCapabilities.typedGroups),
 )
 check(
+    'capabilities: host-only names are reported as uncatalogued',
+    JSON.stringify(desktopCapabilities.uncatalogued) === JSON.stringify(['vertex.made.up']),
+    JSON.stringify(desktopCapabilities.uncatalogued),
+)
+check(
+    'capabilities: catalogued but absent names are reported as unavailable',
+    desktopCapabilities.unavailable.includes('ssh.sftpList') && desktopCapabilities.unavailable.length > 50,
+    JSON.stringify(desktopCapabilities.unavailable.slice(0, 5)),
+)
+check(
     'capabilities: teaches the degradation rule',
-    desktopCapabilities.callPattern.includes('has(') && /useOptionalService/.test(desktopCapabilities.callPattern),
+    desktopCapabilities.callPattern.includes('has(') &&
+        /useOptionalService/.test(desktopCapabilities.callPattern),
     desktopCapabilities.callPattern,
 )
 check(
-    'capabilities: points at the contract for signatures',
-    /desktop-bridge/.test(desktopCapabilities.hint) && /DesktopCapabilityContract/.test(desktopCapabilities.hint),
-    desktopCapabilities.hint,
-)
-const filteredCapabilities = await tools.listDesktopCapabilities.execute({ query: 'SSH' })
-check(
-    'capabilities: query filters, case-insensitively, and reports the unfiltered total',
-    filteredCapabilities.count === 5 && filteredCapabilities.groups.length === 1 && filteredCapabilities.totalBeforeFilter === 15,
-    JSON.stringify({ count: filteredCapabilities.count, total: filteredCapabilities.totalBeforeFilter }),
-)
-check(
-    'capabilities: multi-segment families group as one (net.policy., not net.)',
-    desktopCapabilities.groups.some((entry) => entry.group === 'net.policy.') &&
-        !desktopCapabilities.groups.some((entry) => entry.group === 'net.'),
-    JSON.stringify(desktopCapabilities.groups.map((entry) => entry.group)),
-)
-check(
-    'capabilities: a family this build has never heard of is listed without an invented note',
-    desktopCapabilities.groups.find((entry) => entry.group === 'vertex.')?.capabilities.join(',') === 'vertex.made.up' &&
-        desktopCapabilities.groups.find((entry) => entry.group === 'vertex.')?.summary === undefined,
-    JSON.stringify(desktopCapabilities.groups.find((entry) => entry.group === 'vertex.')),
+    'capabilities: points at the catalogue and the split contract, not one giant file',
+    /catalog\.ts/.test(desktopCapabilities.docs.catalog) &&
+        /desktop\//.test(desktopCapabilities.docs.contract) &&
+        !/desktop-bridge\.ts/.test(desktopCapabilities.docs.contract),
+    JSON.stringify(desktopCapabilities.docs),
 )
 
-/* Web host: no `desktop` service at all — a structured answer, not a throw. */const noDesktop = await createStudioTools({
+const filteredCapabilities = await tools.listDesktopCapabilities.execute({ query: 'SSH' })
+check(
+    'capabilities: query filters by name and by what a capability is for',
+    filteredCapabilities.count === 5 &&
+        filteredCapabilities.groups.some((group) => group.group === 'ssh') &&
+        // `net.policy.set` mentions ssh in its summary (it widens ssh reach too),
+        // so it is a legitimate hit even though this fake host does not expose it.
+        filteredCapabilities.groups.some((group) => group.group === 'net' && group.available === 0),
+    JSON.stringify({ count: filteredCapabilities.count, groups: filteredCapabilities.groups.map((group) => group.group) }),
+)
+
+const intentCapabilities = await tools.listDesktopCapabilities.execute({ query: '文件' })
+const intentNames = intentCapabilities.groups.flatMap((group) => group.capabilities)
+check(
+    'capabilities: a Chinese intent finds fs/dialog work',
+    ['fs.readFile', 'fs.writeFile', 'dialog.openFile'].every((name) => intentNames.includes(name)),
+    JSON.stringify(intentNames),
+)
+
+const summaryView = await tools.listDesktopCapabilities.execute({ query: 'fs.readFile', detail: 'summary' })
+const summaryEntry = summaryView.groups.flatMap((group) => group.capabilities)[0]
+check(
+    'capabilities: summary view carries the summary, guards and call shape',
+    summaryEntry &&
+        summaryEntry.name === 'fs.readFile' &&
+        summaryEntry.guards.includes('fs-allowlist') &&
+        summaryEntry.call.includes("desktop.invoke('fs.readFile"),
+    JSON.stringify(summaryEntry),
+)
+check(
+    'capabilities: summary view explains the guards it used',
+    /白名单/.test(summaryView.guardNotes?.['fs-allowlist'] ?? ''),
+    JSON.stringify(summaryView.guardNotes),
+)
+
+const groupFiltered = await tools.listDesktopCapabilities.execute({ group: 'dialog' })
+check(
+    'capabilities: group filter narrows to one family',
+    groupFiltered.groups.length === 1 && groupFiltered.groups[0].group === 'dialog',
+    JSON.stringify(groupFiltered.groups.map((group) => group.group)),
+)
+
+/* Web host: no `desktop` service at all — a structured answer, not a throw. */
+const noDesktop = await createStudioTools({
     getDev: () => dev,
     getPluginHost: () => pluginHost,
 }).listDesktopCapabilities.execute({})
@@ -819,7 +965,8 @@ check(
     noDesktop.hasDesktop === false && noDesktop.count === 0 && /没有 desktop 服务/.test(noDesktop.note),
     JSON.stringify(noDesktop.note),
 )
-/* Old desktop build: the service exists but a typed group is missing. */
+
+/* Old host: the service exists, typed groups are partial, no catalogue. */
 const partialDesktop = createStudioTools({
     getDev: () => dev,
     getPluginHost: () => pluginHost,
@@ -827,10 +974,64 @@ const partialDesktop = createStudioTools({
 })
 const partial = await partialDesktop.listDesktopCapabilities.execute({})
 check(
-    'capabilities: a build without typed groups still lists raw capabilities',
-    partial.hasDesktop === true && partial.count === 1 && partial.typedGroups.length === 0,
-    JSON.stringify(partial),
+    'capabilities: a host without the catalogue degrades to prefix families',
+    partial.hasDesktop === true &&
+        partial.catalogued === false &&
+        partial.count === 1 &&
+        partial.typedGroups.length === 0 &&
+        partial.groups.some((group) => group.group === 'fs.'),
+    JSON.stringify(partial.groups),
 )
+
+/* ------------------------------------------------------------------ *
+ * getDesktopCapability: one call, full contract (summary + guards + types)
+ * ------------------------------------------------------------------ */
+const detailed = await tools.getDesktopCapability.execute({
+    names: ['fs.readFile', 'ssh.exec', 'vertex.made.up'],
+})
+check(
+    'detail: reports found/missing',
+    detailed.found === 2 && JSON.stringify(detailed.missing) === JSON.stringify(['vertex.made.up']),
+    JSON.stringify({ found: detailed.found, missing: detailed.missing }),
+)
+const readFileDetail = detailed.capabilities[0]
+check(
+    'detail: guards come with their meanings',
+    readFileDetail.guards.some((guard) => guard.id === 'fs-allowlist' && /白名单/.test(guard.note)),
+    JSON.stringify(readFileDetail.guards),
+)
+check(
+    'detail: the contract expressions are surfaced',
+    /path: string/.test(readFileDetail.params ?? '') && /DesktopFileResult/.test(readFileDetail.result ?? ''),
+    JSON.stringify({ params: readFileDetail.params, result: readFileDetail.result }),
+)
+check('detail: availability comes from the live bridge', readFileDetail.available === true)
+
+const sshDetail = detailed.capabilities[1]
+check(
+    'detail: declarations are inlined from the host source',
+    sshDetail.declarations?.some((declaration) => declaration.symbol === 'SshExecOptions' && /command/.test(declaration.text)),
+    JSON.stringify(sshDetail.declarations?.map((declaration) => declaration.symbol)),
+)
+check(
+    'detail: readMore gives the exact readHostApiFile call',
+    /path: 'src\/core\/desktop\/ssh\.ts'/.test(sshDetail.readMore ?? '') &&
+        /symbol: 'SshExecOptions'/.test(sshDetail.readMore ?? ''),
+    sshDetail.readMore,
+)
+check(
+    'detail: the source modes were actually used',
+    calls.some(([name, args]) => name === 'hostApi' && Array.isArray(args.members)) &&
+        calls.some(([name, args]) => name === 'hostApi' && Array.isArray(args.symbols)),
+)
+
+let emptyNames = ''
+try {
+    await tools.getDesktopCapability.execute({ names: [] })
+} catch (error) {
+    emptyNames = error.message
+}
+check('detail: empty names are refused', /不能为空/.test(emptyNames), emptyNames)
 
 /* ------------------------------------------------------------------ *
  * Icons: pick a real rail icon name, then generate the marketplace image
@@ -1306,6 +1507,24 @@ check('hostApi: read returns contents', apiFile.contents.includes('DockPanelConf
 check(
     'hostApi: read forwards package + path',
     calls.some(([name, args]) => name === 'hostApi' && args.package === '@kn/common' && args.path === 'src/core/dock.ts'),
+)
+
+const apiSymbol = await tools.readHostApiFile.execute({
+    package: '@kn/common',
+    path: 'src/core/desktop/fs.ts',
+    symbol: 'DesktopFileStat',
+})
+check(
+    'hostApi: symbol mode returns one declaration plus its line range',
+    apiSymbol.symbol === 'DesktopFileStat' &&
+        apiSymbol.startLine === 10 &&
+        apiSymbol.endLine === 12 &&
+        apiSymbol.contents.includes('DesktopFileStat'),
+    JSON.stringify(apiSymbol),
+)
+check(
+    'hostApi: symbol mode forwards the symbol',
+    calls.some(([name, args]) => name === 'hostApi' && args.symbol === 'DesktopFileStat'),
 )
 
 /* Without a dev-capable host the tools must explain themselves. */

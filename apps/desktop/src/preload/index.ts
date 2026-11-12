@@ -64,6 +64,18 @@ const CAPABILITIES = [
   'background.list',
   'background.cancel',
   'background.cancelAll',
+  // Generic long tasks: host-owned state/progress + incremental log cursor +
+  // cooperative cancellation. Any plugin can register a slow job without
+  // keeping its panel (or the page) alive to own the state.
+  'task.start',
+  'task.report',
+  'task.logsSince',
+  'task.list',
+  'task.get',
+  'task.touch',
+  'task.remove',
+  'task.finish',
+  'task.cancel',
   'capture.sources',
   'capture.selectRegion',
   'capture.region.context',
@@ -124,6 +136,9 @@ const CAPABILITIES = [
   'dev.build',
   'dev.status',
   'dev.logs',
+  // Incremental cursor read of the same log ring (seq/sessionId/nextSeq/
+  // dropped), used by task monitoring. dev.logs itself is unchanged.
+  'dev.logsSince',
   'dev.scaffold',
   'dev.list',
   'dev.readFile',
@@ -160,6 +175,12 @@ const CAPABILITIES = [
   'ssh.shellResize',
   'ssh.shellClose',
   'ssh.shells',
+  // Port forwarding through the same SSH gate: a loopback-only listener
+  // (`ssh -L` fixed destination, or a no-auth SOCKS5 proxy for `ssh -D`).
+  // Tunnels are their own grant scope and stay until `tunnelClose`/app quit.
+  'ssh.tunnelOpen',
+  'ssh.tunnelClose',
+  'ssh.tunnels',
   // Stored credentials. `set` takes a secret in; nothing ever returns one out.
   'ssh.credentialsAvailable',
   'ssh.credentialsList',

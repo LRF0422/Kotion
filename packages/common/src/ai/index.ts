@@ -1,5 +1,6 @@
 // AgentCore SDK — 全新 agent 前端（从 0 重设计）。
 export * from "./agent"
+export * from "./tasks"
 
 // AI text helpers (streamKnowledgeText/streamKnowledgeChat — AgentCore-backed)
 export * from "./ai-utils"

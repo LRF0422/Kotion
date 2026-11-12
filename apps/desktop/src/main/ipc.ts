@@ -193,11 +193,13 @@ export function setupIpcHandlers() {
   app.on('will-quit', () => devManager.dispose());
 
   // ==================== ssh ====================
-  // Runs the user's own OpenSSH binaries. Every target passes the network
-  // policy (private/loopback refused by default) and the first connection to a
-  // host in this app run asks the user in a modal dialog; local paths in the
-  // transfer calls share this module's fs allowlist. No credential ever enters
-  // the contract — auth is the user's ~/.ssh config and agent.
+  // The SSH capability (ssh2 in the main process, not the system ssh binary):
+  // exec, SFTP, pty shells, and loopback port forwarding (-L tunnels and a -D
+  // SOCKS5 proxy). Every target passes the network policy (private/loopback
+  // refused by default) and the first use per host + operation class asks the
+  // user in a host-owned dialog; local paths in transfer calls share this
+  // module's fs allowlist. No credential ever enters the contract — auth is the
+  // user's agent/keys or a host-stored credential resolved in the main process.
   setupSshIpcHandlers({ assertAllowedPath });
 
   // ==================== durable storage (SQLite) ====================

@@ -20,7 +20,7 @@ import ssh2 from 'ssh2'
 
 const { Server, utils } = ssh2
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { tmpdir, userInfo } from 'node:os'
 import { join } from 'node:path'
 import {
     DEFAULT_SSH_OUTPUT_BYTES,
@@ -202,9 +202,14 @@ const startServer = async () => {
     const dirs = new Set(['/', '/logs'])
     const ptyRequests = []
     const windowChanges = []
+    /** Usernames the server was asked to authenticate (see the user-less check). */
+    const authUsernames = []
     const server = new Server({ hostKeys: [hostKeyPem] }, (client) => {
         ignoreClientErrors(client)
-        client.on('authentication', (ctx) => ctx.accept())
+        client.on('authentication', (ctx) => {
+            authUsernames.push(ctx.username)
+            ctx.accept()
+        })
         client.on('ready', () => {
             client.on('session', (accept) => {
                 const session = accept()
@@ -358,7 +363,7 @@ const startServer = async () => {
     })
     const port = await listen(server)
     const close = () => new Promise((resolve) => server.close(resolve))
-    return { port, files, dirs, ptyRequests, windowChanges, close }
+    return { port, files, dirs, ptyRequests, windowChanges, authUsernames, close }
 }
 
 const server = await startServer()
@@ -378,6 +383,20 @@ const base = {
 
 const session = await connectSsh(base)
 check('connect: verified host key accepted', session.verdict?.ok === true && Boolean(session.client), JSON.stringify(session.verdict))
+
+/**
+ * `user` is optional in the contract. ssh2 has no OpenSSH-style default and
+ * throws `Invalid username` before dialing, so `ssh-client.mjs` resolves the
+ * local account itself; the server sees that name, not "undefined".
+ */
+const localAccount = userInfo().username
+const withoutUser = await connectSsh({ ...base, target: { host: '127.0.0.1', user: null, port: server.port } })
+check(
+    'connect: omitted user falls back to the local account',
+    Boolean(withoutUser.client) && server.authUsernames.at(-1) === localAccount,
+    `server saw ${JSON.stringify(server.authUsernames.at(-1))}, expected ${JSON.stringify(localAccount)}`,
+)
+endSsh(withoutUser.client)
 
 const emptyHome = mkdtempSync(join(tmpdir(), 'kn-ssh-nokeys-'))
 let strictError = ''

@@ -257,6 +257,15 @@ async function run() {
         'background.list',
         'background.cancel',
         'background.cancelAll',
+        'task.start',
+        'task.report',
+        'task.logsSince',
+        'task.list',
+        'task.get',
+        'task.touch',
+        'task.remove',
+        'task.finish',
+        'task.cancel',
     ]
     const missing = expected.filter((name) => !whitelist.includes(name))
     check('preload: every new capability is whitelisted', missing.length === 0, missing.join(', '))

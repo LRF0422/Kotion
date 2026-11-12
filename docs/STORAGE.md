@@ -99,7 +99,7 @@ const info = await resolveStorage()?.info()
 - **降级**：打不开数据库时应用照常启动，所有 `storage.*` 返回
   `{ ok: false, code: 'STORAGE_UNAVAILABLE' }`，渲染端回退 localStorage。
 - **能力清单**：`storage.info | get | getMany | set | delete | keys | list | count | clear | batch | namespaces`
-  （`apps/desktop/src/preload/index.ts` 的白名单、`packages/common/src/core/desktop-bridge.ts` 的契约、
+  （`apps/desktop/src/preload/index.ts` 的白名单、`packages/common/src/core/desktop/contract.ts` 的契约、
   `apps/desktop/src/main/storage/index.ts` 的处理器三处必须同步）。
 - **错误跨进程**：Electron 会把 `ipcMain.handle` 抛出的异常压成字符串，丢 `code`，所以能力统一返回
   `{ ok: true, value } | { ok: false, code, message }` 信封；`storage-bridge.ts` 还原成 `StorageError`。

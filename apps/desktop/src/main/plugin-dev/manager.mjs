@@ -10,6 +10,7 @@
  * renderer can never pass arbitrary commands or environment variables.
  */
 import { spawn } from 'node:child_process'
+import { randomBytes } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { mkdir, readFile, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, join, parse, relative, resolve, sep } from 'node:path'
@@ -130,7 +131,19 @@ const PROTECTED_DIR_NAMES = new Set([
     'users',
 ])
 
-const MAX_LOG_ENTRIES = 400
+const MAX_LOG_ENTRIES = 1000
+/** Default page size for `DevSession.logsSince` when the caller omits `limit`. */
+const DEFAULT_LOGS_SINCE_LIMIT = 200
+/**
+ * Window in which a repeat of the previous `(level, message)` pair is dropped.
+ *
+ * The same line can be written twice by design: the dev-server reports a
+ * build error as an NDJSON `log` event *and* esbuild prints it to stderr, so a
+ * single failure used to show up as two identical rows. Only consecutive
+ * duplicates inside this window are dropped — a repeated warning 2s later is
+ * a real event.
+ */
+const LOG_DEDUPE_WINDOW_MS = 1000
 /** How many stderr lines to keep for the "crashed before first build" report. */
 const MAX_STDERR_LINES = 40
 const INITIAL_BUILD_TIMEOUT_MS = 30_000
@@ -162,11 +175,35 @@ const sameExternals = (left, right) => {
 
 /** @typedef {import('./dev-server.mjs')} DevServerModule */
 
+/**
+ * Normalize a caller-supplied log cursor.
+ *
+ * Anything but a positive finite number means "not supplied yet", so it falls
+ * back to 0 — the oldest entry the ring still retains. Negative/huge values
+ * arrive from a stale renderer, not from an attacker, but they must not make
+ * `dropped` negative or a `slice` misbehave.
+ */
+const normalizeSinceSeq = (value) =>
+    typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0
+
+/** Normalize a page size; non-positive/absent falls back to the default. */
+const normalizeLogLimit = (value) =>
+    typeof value === 'number' && Number.isFinite(value) && value > 0
+        ? Math.floor(value)
+        : DEFAULT_LOGS_SINCE_LIMIT
+
+/** Short random id, regenerated per session, so a client can detect a restart. */
+const createSessionId = () => randomBytes(6).toString('hex')
+
 class DevSession {
     constructor(root, options, emit) {
         this.root = root
         this.options = options
         this.emit = emit
+        // Random per-session id: a restarted session keeps the same `root`, so
+        // this (plus a seq that starts over at 1) is how a client tells "the
+        // host restarted" from "no new lines yet".
+        this.sessionId = createSessionId()
         this.child = null
         // Resolved once: a child process needs a real file on disk, and the
         // entry differs between source runs and built output. Tests override it
@@ -181,6 +218,12 @@ class DevSession {
         this.updatedAt = 0
         this.watching = false
         this.logs = []
+        /**
+         * Monotonic log sequence, never reset by ring eviction: the ring may
+         * drop old entries, but a client cursor (`sinceSeq`) must keep working
+         * because the numbers only ever grow within a session.
+         */
+        this.logSeq = 0
         this.readyWaiters = []
         this.buildWaiters = []
         // Set once the child has reported `ready`. Used to tell "never came up"
@@ -202,9 +245,79 @@ class DevSession {
         }
     }
 
+    /**
+     * Append one log line.
+     *
+     * Two properties matter downstream (task monitoring reads this ring with a
+     * cursor, not with a tail window):
+     *
+     * 1. every retained entry carries a **monotonic `seq`** starting at 1, so a
+     *    caller can ask for "everything after N" without re-reading the tail;
+     * 2. a line repeated back-to-back within {@link LOG_DEDUPE_WINDOW_MS} is
+     *    dropped — the dev-server writes the same failure to stderr and to the
+     *    NDJSON stream, which used to duplicate every build error.
+     */
     pushLog(level, message) {
-        this.logs.push({ level, message, at: Date.now() })
+        const at = Date.now()
+        const previous = this.logs[this.logs.length - 1]
+        if (
+            previous &&
+            previous.level === level &&
+            previous.message === message &&
+            at - previous.at < LOG_DEDUPE_WINDOW_MS
+        ) {
+            return
+        }
+        this.logSeq += 1
+        this.logs.push({ seq: this.logSeq, level, message, at })
         if (this.logs.length > MAX_LOG_ENTRIES) this.logs.splice(0, this.logs.length - MAX_LOG_ENTRIES)
+    }
+
+    /**
+     * Page the ring by cursor: every entry with `seq > sinceSeq`, newest wins
+     * when there are more than `limit`.
+     *
+     * `dropped` is what the caller can no longer see: entries the ring evicted
+     * since `sinceSeq` plus older entries cut off by `limit`. Reporting it is
+     * what lets a monitor honestly say "N lines were discarded" instead of
+     * silently presenting a gap as the whole history.
+     */
+    logsSince({ sinceSeq = 0, limit } = {}) {
+        const cursor = normalizeSinceSeq(sinceSeq)
+        const pageSize = normalizeLogLimit(limit)
+        const total = this.logs.length
+        if (total === 0) {
+            return {
+                root: this.root,
+                sessionId: this.sessionId,
+                entries: [],
+                nextSeq: cursor,
+                dropped: 0,
+                total: 0,
+            }
+        }
+
+        const firstSeq = this.logs[0].seq
+        const startIndex = this.logs.findIndex((entry) => entry.seq > cursor)
+        const candidates = startIndex === -1 ? [] : this.logs.slice(startIndex)
+        const truncated = Math.max(0, candidates.length - pageSize)
+        const entries = truncated > 0 ? candidates.slice(truncated) : candidates
+        // Entries between the cursor and the oldest retained seq are gone for
+        // good (ring eviction), so the caller never sees them.
+        const evicted = Math.max(0, firstSeq - 1 - cursor)
+        const dropped = evicted + truncated
+
+        return {
+            root: this.root,
+            sessionId: this.sessionId,
+            entries,
+            // No entries returned: point the caller just before the oldest
+            // retained entry when something was dropped, otherwise keep its
+            // cursor unchanged (nothing new happened).
+            nextSeq: entries.length ? entries[entries.length - 1].seq : dropped > 0 ? firstSeq - 1 : cursor,
+            dropped,
+            total,
+        }
     }
 
     /** Resolve once the child is up (ready or fatal), never before a first build. */
@@ -548,6 +661,30 @@ export class DevSessionManager {
         if (!session) return []
         const limit = options.limit ?? 200
         return session.logs.slice(-limit)
+    }
+
+    /**
+     * Incremental read from one session's log ring.
+     *
+     * Deliberately shaped differently from {@link logs}: an absent session is
+     * not an error but a well-formed empty page whose `sessionId` is null, so a
+     * poller can distinguish "not started" from "restarted" (null vs a changed
+     * id) without branching on exceptions.
+     */
+    logsSince(options = {}) {
+        const sinceSeq = normalizeSinceSeq(options.sinceSeq)
+        const session = this.sessions.get(options.root)
+        if (!session) {
+            return {
+                root: options.root,
+                sessionId: null,
+                entries: [],
+                nextSeq: sinceSeq,
+                dropped: 0,
+                total: 0,
+            }
+        }
+        return session.logsSince({ sinceSeq, limit: options.limit })
     }
 
     async scaffold(options) {

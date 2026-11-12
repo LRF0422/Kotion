@@ -127,6 +127,19 @@ export function setupDevIpcHandlers({ assertAllowedPath }: DevIpcOptions): DevSe
         return manager.logs({ root: assertAllowedPath(params.root, 'root'), limit })
     })
 
+    // Incremental cursor read (task monitoring). Same path allowlist and the
+    // same page-size clamp as dev.logs; `sinceSeq` is normalized in the manager
+    // so a stale/negative cursor falls back to "from the oldest retained line".
+    handle('dev.logsSince', (_event, raw) => {
+        const params = asRecord(raw)
+        const limit = typeof params.limit === 'number' && params.limit > 0 ? Math.min(params.limit, 1000) : 200
+        return manager.logsSince({
+            root: assertAllowedPath(params.root, 'root'),
+            sinceSeq: typeof params.sinceSeq === 'number' ? params.sinceSeq : 0,
+            limit,
+        })
+    })
+
     handle('dev.scaffold', async (_event, raw) => {
         const params = asRecord(raw)
         const name = requireString(params.name, 'name')

@@ -108,6 +108,9 @@ const run = async () => {
     )
     handle('dev.status', (params = {}) => manager.status(params.root ? { root: assertAllowedPath(params.root, 'root') } : {}))
     handle('dev.logs', (params = {}) => manager.logs({ root: assertAllowedPath(params.root, 'root'), limit: params.limit ?? 200 }))
+    handle('dev.logsSince', (params = {}) =>
+        manager.logsSince({ root: assertAllowedPath(params.root, 'root'), sinceSeq: params.sinceSeq ?? 0, limit: params.limit ?? 200 }),
+    )
     handle('dev.list', (params = {}) =>
         manager.listProjects({ dir: assertAllowedPath(params?.dir ?? projectsDir, 'dir') }),
     )
@@ -161,6 +164,7 @@ const run = async () => {
         'dev.stop',
         'dev.devstatus',
         'dev.logs',
+        'dev.logsSince',
         'dev.scaffold',
         'dev.list',
         'dev.readFile',
@@ -176,7 +180,17 @@ const run = async () => {
     }
     // The ssh group shares this preload contract; assert its names are exposed
     // so a whitelist regression is caught by the Electron suite as well.
-    for (const capability of ['ssh.exec', 'ssh.put', 'ssh.get', 'ssh.hosts', 'ssh.forget']) {
+    for (const capability of [
+        'ssh.exec',
+        'ssh.put',
+        'ssh.get',
+        'ssh.hosts',
+        'ssh.forget',
+        'ssh.shellOpen',
+        'ssh.tunnelOpen',
+        'ssh.tunnelClose',
+        'ssh.tunnels',
+    ]) {
         check(`bridge: capability ${capability}`, capabilities?.includes(capability) === true)
     }
     check(

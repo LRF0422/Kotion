@@ -30,6 +30,18 @@ export const MAX_SFTP_ENTRIES = 2000
 export const MAX_TERM_CHARS = 32
 export const MAX_SHELL_COLS = 500
 export const MAX_SHELL_ROWS = 300
+
+/* ---------------- tunnels ---------------- */
+
+/** Forwarding modes a tunnel may request. */
+export const SSH_TUNNEL_KINDS = ['local', 'dynamic']
+
+/** Concurrently open tunnels, app-wide. */
+export const MAX_SSH_TUNNELS = 8
+/** Concurrent forwarded connections inside one tunnel. */
+export const MAX_TUNNEL_CHANNELS = 64
+export const MAX_TUNNEL_LABEL_CHARS = 80
+
 const MAX_HOST_CHARS = 253
 const MAX_USER_CHARS = 64
 
@@ -90,6 +102,72 @@ export const normalizeSshTarget = (raw = {}) => {
 
 /** Stable identity of one grant: `user@host:port`. */
 export const sshGrantKey = (target) => `${target.user ?? ''}@${target.host}:${target.port}`
+
+/**
+ * Coerce a requested tunnel kind.
+ *
+ * Unknown values are refused instead of defaulted: silently turning a SOCKS5
+ * proxy into a single-destination forward (or the other way round) would hand
+ * out a different capability than the caller asked for — and a different thing
+ * than the user is asked to allow, because `kind` selects the dialog wording.
+ */
+export const normalizeTunnelKind = (value) => {
+    if (value === undefined || value === null || value === '') return 'local'
+    if (SSH_TUNNEL_KINDS.includes(value)) return value
+    throw new Error('desktop ssh: "kind" must be "local" or "dynamic"')
+}
+
+/**
+ * Loopback port to bind: `0` (or omitted) asks the OS for an ephemeral port.
+ *
+ * Only the port is caller-controlled; the bind address is fixed by the host
+ * (`127.0.0.1`), so a tunnel can never be exposed to the LAN.
+ */
+export const normalizeTunnelLocalPort = (value) => {
+    if (value === undefined || value === null || value === '') return 0
+    const port = Number(value)
+    if (!Number.isInteger(port) || port < 0 || port > 65535) {
+        throw new Error('desktop ssh: "localPort" must be an integer between 0 and 65535')
+    }
+    return port
+}
+
+/** Destination of a `local` tunnel, as resolved **from the SSH server**. */
+export const normalizeTunnelRemoteTarget = (raw = {}) => {
+    if (!raw || typeof raw !== 'object') throw new Error('desktop ssh: remote target must be an object')
+    let host = asString(raw.remoteHost)
+    if (host.startsWith('[') && host.endsWith(']')) host = host.slice(1, -1)
+    if (!host) throw new Error('desktop ssh: "remoteHost" is required for a local tunnel')
+    if (host.startsWith('-')) throw new Error('desktop ssh: "remoteHost" must not start with "-"')
+    if (host.length > MAX_HOST_CHARS || !HOST_CHARS.test(host)) {
+        throw new Error('desktop ssh: "remoteHost" contains unsupported characters')
+    }
+    const port = Number(raw.remotePort)
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+        throw new Error('desktop ssh: "remotePort" must be an integer between 1 and 65535')
+    }
+    return { host, port }
+}
+
+/** Optional human label for `ssh.tunnels()` / logs. Never used for routing. */
+export const normalizeTunnelLabel = (value) => {
+    const label = asString(value)
+    if (!label) return null
+    if (/[\u0000-\u001f\u007f]/.test(label)) {
+        throw new Error('desktop ssh: "label" must not contain control characters')
+    }
+    if (label.length > MAX_TUNNEL_LABEL_CHARS) {
+        throw new Error(`desktop ssh: "label" is too long (max ${MAX_TUNNEL_LABEL_CHARS} characters)`)
+    }
+    return label
+}
+
+/** Validate a tunnel id (they come back from the host, but never trust that). */
+export const normalizeTunnelId = (value) => {
+    const id = asString(value)
+    if (!id || !SESSION_ID_CHARS.test(id)) throw new Error('desktop ssh: invalid "tunnelId"')
+    return id
+}
 
 /** Validate a remote command. Multi-line scripts are fine; NUL is not. */
 export const normalizeSshCommand = (value) => {

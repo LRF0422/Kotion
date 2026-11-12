@@ -98,6 +98,58 @@ export type {
 export { useBackgroundTask, useBackgroundTasks } from './use-background-tasks'
 export { useBackgroundTaskNotifications } from './use-background-task-notifications'
 export type { UseBackgroundTaskNotificationsOptions } from './use-background-task-notifications'
+export {
+    FormRequestRegistry,
+    buildFormRequestNote,
+    clampFormWaitMs,
+    DEFAULT_FORM_BATCH_MAX_ROWS,
+    DEFAULT_FORM_WAIT_MS,
+    flushFormRequestNotes,
+    formRequestHostAvailable,
+    formatFormFieldValue,
+    formRequests,
+    groupFormRequests,
+    isFormRequestPending,
+    MAX_FORM_BATCH_ROWS,
+    MAX_FORM_DESCRIPTION_CHARS,
+    MAX_FORM_FIELDS,
+    MAX_FORM_FIELD_DESCRIPTION_CHARS,
+    MAX_FORM_FIELD_LABEL_CHARS,
+    MAX_FORM_OPTION_LABEL_CHARS,
+    MAX_FORM_OPTIONS,
+    MAX_FORM_TEXT_LENGTH,
+    MAX_FORM_TITLE_CHARS,
+    MAX_FORM_WAIT_MS,
+    MIN_FORM_WAIT_MS,
+    normalizeFormRequestInput,
+    registerFormRequestHost,
+    resetFormRequestHost,
+    sortFormRequests,
+    validateFormRows,
+    validateFormValues,
+} from './form-requests'
+export type {
+    CreateFormRequestOptions,
+    FormBatchSpec,
+    FormField,
+    FormFieldOption,
+    FormFieldType,
+    FormFieldValue,
+    FormRequestEvent,
+    FormRequestInput,
+    FormRequestListener,
+    FormRequestStatus,
+    FormRequestView,
+    FormRowsValidationResult,
+    FormSubmitResult,
+    FormValidationResult,
+    FormValues,
+    FormWaitOutcome,
+    NormalizeFormResult,
+} from './form-requests'
+export { useFormRequest, useFormRequests, usePendingFormRequests } from './use-form-requests'
+export { useFormRequestNotifications } from './use-form-request-notifications'
+export type { UseFormRequestNotificationsOptions } from './use-form-request-notifications'
 export type {
     AgentStepRecord,
     EditorAgentApi,

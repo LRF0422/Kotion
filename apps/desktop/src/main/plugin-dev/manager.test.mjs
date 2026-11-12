@@ -219,6 +219,181 @@ try {
     manager.stop({ root: externalsRoot })
 
     /* ------------------------------------------------------------------ *
+     * Incremental log cursor (`logsSince`). The ring keeps 1000 entries with a
+     * monotonic seq, drops consecutive duplicates inside 1s (the dev-server
+     * writes the same failure to stderr and the NDJSON stream), and reports
+     * cursor gaps as `dropped`. A restart must surface a new `sessionId` with
+     * seq starting over at 1 — that is how a monitor detects "host restarted,
+     * reset the cursor".
+     * ------------------------------------------------------------------ */
+    const logScript = join(tmpdir(), `kn-studio-logs-${process.pid}.mjs`)
+    const logProject = join(projectsDir, 'logs-plugin')
+    await mkdir(join(logProject, 'src'), { recursive: true })
+    await writeFile(
+        join(logProject, 'package.json'),
+        JSON.stringify({
+            name: 'logs-plugin',
+            knPluginStudio: { pluginKey: 'logs-plugin', entry: 'src/index.tsx' },
+        }),
+    )
+    await writeFile(join(logProject, 'src', 'index.tsx'), GOOD)
+    await writeFile(
+        logScript,
+        [
+            `const emit = (value) => process.stdout.write(JSON.stringify(value) + '\\n')`,
+            `emit({ event: 'ready', plugin: { pluginKey: 'logs-plugin', name: 'Logs' } })`,
+            `emit({ event: 'build', code: 'ok', bytes: 1, durationMs: 1, buildCount: 1, at: Date.now() })`,
+            // 1100 distinct lines: only the newest 1000 survive, so seq 1..101
+            // are evicted and must be reported as dropped.
+            `for (let i = 1; i <= 1100; i++) emit({ event: 'log', level: 'info', message: 'line-' + i })`,
+            // Same (level, message) twice in one chunk (<1s apart): keep one.
+            `emit({ event: 'log', level: 'error', message: 'same-line' })`,
+            `emit({ event: 'log', level: 'error', message: 'same-line' })`,
+            // Well over 1s later the same line is a real event and must be kept.
+            `setTimeout(() => emit({ event: 'log', level: 'error', message: 'same-line' }), 2000)`,
+            `setInterval(() => {}, 1000)`,
+            '',
+        ].join('\n'),
+    )
+
+    /** Poll until `predicate()` returns a truthy value (or time out). */
+    const waitFor = async (predicate, timeoutMs = 8000) => {
+        const deadline = Date.now() + timeoutMs
+        while (Date.now() < deadline) {
+            const value = predicate()
+            if (value) return value
+            await new Promise((resolve) => setTimeout(resolve, 20))
+        }
+        return undefined
+    }
+
+    const logsManager = new DevSessionManager()
+    try {
+        await logsManager.start({ root: logProject, devServer: logScript, watch: false })
+        const firstPage = await waitFor(() => {
+            const page = logsManager.logsSince({ root: logProject, limit: 1000 })
+            return page.entries.length && page.entries[page.entries.length - 1].seq === 1101 ? page : undefined
+        })
+        check('logsSince: the burst is visible', Boolean(firstPage), JSON.stringify({ total: firstPage?.total, nextSeq: firstPage?.nextSeq }))
+        check(
+            'logsSince: every entry carries a monotonic seq',
+            Boolean(firstPage) &&
+                firstPage.entries.every((entry, index) => index === 0 || entry.seq > firstPage.entries[index - 1].seq),
+            `${firstPage?.entries[0]?.seq}..${firstPage?.entries[firstPage?.entries.length - 1]?.seq}`,
+        )
+        check(
+            'logsSince: a session id is reported',
+            typeof firstPage?.sessionId === 'string' && firstPage.sessionId.length > 0,
+            String(firstPage?.sessionId),
+        )
+        const oldSessionId = firstPage?.sessionId
+        check(
+            'logsSince: ring keeps the newest 1000 and reports eviction',
+            firstPage?.total === 1000 && firstPage?.dropped === 101 && firstPage?.entries.length === 1000,
+            JSON.stringify({ total: firstPage?.total, dropped: firstPage?.dropped, entries: firstPage?.entries.length }),
+        )
+        // dev.logs keeps its old tail semantics (default 200) — only the extra
+        // `seq` field is new, so existing callers see the same shape.
+        const tail = logsManager.logs({ root: logProject })
+        check(
+            'logs: unchanged shape still returns the tail (now with seq)',
+            tail.length === 200 &&
+                tail[0].seq === 902 &&
+                typeof tail[0].at === 'number' &&
+                typeof tail[0].message === 'string',
+            `first seq ${tail[0]?.seq}, ${tail.length} entries`,
+        )
+
+        /* Duplicate suppression: two identical pushes in one chunk => one row. */
+        const duplicateCount = () =>
+            logsManager.logsSince({ root: logProject, limit: 1000 }).entries.filter((entry) => entry.message === 'same-line').length
+        check('logsSince: consecutive duplicate is dropped', duplicateCount() === 1, `${duplicateCount()} kept`)
+
+        /* limit truncation only: cursor past the evicted prefix. */
+        const truncated = logsManager.logsSince({ root: logProject, sinceSeq: 101, limit: 100 })
+        check(
+            'logsSince: limit keeps the newest and counts the truncation',
+            truncated.entries.length === 100 &&
+                truncated.entries[0].seq === 1002 &&
+                truncated.entries[truncated.entries.length - 1].seq === 1101 &&
+                truncated.dropped === 900 &&
+                truncated.nextSeq === 1101,
+            JSON.stringify({ first: truncated.entries[0]?.seq, dropped: truncated.dropped, nextSeq: truncated.nextSeq }),
+        )
+
+        /* Cursor behind the ring: eviction is reported once, then the cursor advances. */
+        const incremental = logsManager.logsSince({ root: logProject, sinceSeq: 1095, limit: 200 })
+        check(
+            'logsSince: sinceSeq returns only the new entries',
+            incremental.entries.length === 6 &&
+                incremental.entries[0].seq === 1096 &&
+                incremental.nextSeq === 1101 &&
+                incremental.dropped === 0,
+            JSON.stringify({ seqs: incremental.entries.map((entry) => entry.seq), dropped: incremental.dropped }),
+        )
+        const idle = logsManager.logsSince({ root: logProject, sinceSeq: 1101 })
+        check(
+            'logsSince: nothing new keeps the cursor',
+            idle.entries.length === 0 && idle.nextSeq === 1101 && idle.dropped === 0,
+            JSON.stringify({ nextSeq: idle.nextSeq, dropped: idle.dropped }),
+        )
+        const defaulted = logsManager.logsSince({ root: logProject })
+        check(
+            'logsSince: absent sinceSeq starts from the oldest retained line',
+            defaulted.entries.length === 200 && defaulted.entries[0].seq === 902 && defaulted.dropped === 901,
+            JSON.stringify({ first: defaulted.entries[0]?.seq, dropped: defaulted.dropped }),
+        )
+
+        /* The >1s repeat must survive, so dedupe is not a blanket filter. */
+        const delayed = await waitFor(() => {
+            const page = logsManager.logsSince({ root: logProject, sinceSeq: 1101 })
+            return page.entries.some((entry) => entry.seq === 1102) ? page : undefined
+        })
+        check(
+            'logsSince: the same line after 1s is a new event',
+            Boolean(delayed) && delayed.entries.length === 1 && delayed.entries[0].seq === 1102 && duplicateCount() === 2,
+            JSON.stringify({ entries: delayed?.entries.length, duplicates: duplicateCount() }),
+        )
+
+        /* Restart: same root, new session id, seq numbering starts over at 1. */
+        logsManager.stop({ root: logProject })
+        await logsManager.start({ root: logProject, devServer: logScript, watch: false })
+        const restarted = await waitFor(() => {
+            const page = logsManager.logsSince({ root: logProject, limit: 1000 })
+            return page.entries.length === 1000 && page.entries[page.entries.length - 1].seq >= 1101 ? page : undefined
+        })
+        check(
+            'logsSince: a restart reports a different session id',
+            Boolean(restarted) && restarted.sessionId !== oldSessionId && restarted.sessionId !== null,
+            `${oldSessionId} -> ${restarted?.sessionId}`,
+        )
+        // A continued counter would put the first retained seq around 2200;
+        // ~102 means numbering really restarted at 1 (1..101 evicted) and the
+        // evicted prefix is reported as dropped exactly once.
+        const restartedFirst = restarted?.entries[0]?.seq
+        check(
+            'logsSince: a restart restarts seq numbering at 1',
+            Boolean(restarted) && restartedFirst < 200 && restarted.dropped === restartedFirst - 1,
+            JSON.stringify({ first: restartedFirst, dropped: restarted?.dropped }),
+        )
+
+        /* No session: a well-formed empty page, not an exception. */
+        const noSession = logsManager.logsSince({ root: join(projectsDir, 'never-started'), sinceSeq: 42 })
+        check(
+            'logsSince: no session returns an empty page',
+            noSession.sessionId === null &&
+                noSession.entries.length === 0 &&
+                noSession.nextSeq === 42 &&
+                noSession.dropped === 0 &&
+                noSession.total === 0,
+            JSON.stringify(noSession),
+        )
+    } finally {
+        logsManager.dispose()
+        await rm(logScript, { force: true })
+    }
+
+    /* ------------------------------------------------------------------ *
      * A child that dies before its first `ready` must fail fast and explain
      * itself. This is the packaged-app failure mode: esbuild was missing from
      * the app bundle, the child crashed on import, and the studio page showed

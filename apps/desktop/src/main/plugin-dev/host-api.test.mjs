@@ -63,6 +63,95 @@ check('dispatch: search mode', searched.kind === 'search' && searched.matches.le
 const read = await queryHostApi(root, { package: '@kn/common', path: 'src/core/dock.ts' })
 check('dispatch: read mode', read.kind === 'file' && read.contents.includes('DockPanelConfig'))
 
+/* ------------------------------------------------------------------ *
+ * Precise reads: one declaration / one interface member
+ *
+ * The agent's expensive mistake is reading a whole contract file to learn one
+ * type. These modes are what the studio's `getDesktopCapability` builds on.
+ * ------------------------------------------------------------------ */
+const declaration = await readHostPackageFile(root, {
+    package: '@kn/common',
+    path: 'src/core/desktop/fs.ts',
+    symbol: 'DesktopFileStat',
+})
+check(
+    'declaration: returns one type, not the file',
+    declaration.symbol === 'DesktopFileStat' &&
+        declaration.contents.includes('export interface DesktopFileStat') &&
+        !declaration.contents.includes('DesktopDirEntry'),
+    declaration.contents.slice(0, 60),
+)
+check(
+    'declaration: reports its own line range + file size',
+    declaration.startLine > 0 &&
+        declaration.endLine >= declaration.startLine &&
+        declaration.totalLines > declaration.endLine,
+    JSON.stringify({
+        start: declaration.startLine,
+        end: declaration.endLine,
+        total: declaration.totalLines,
+    }),
+)
+
+let unknownDeclaration = ''
+try {
+    await readHostPackageFile(root, {
+        package: '@kn/common',
+        path: 'src/core/desktop/fs.ts',
+        symbol: 'NoSuchDeclaration',
+    })
+} catch (error) {
+    unknownDeclaration = error.message
+}
+check(
+    'declaration: unknown symbol is an error, not a whole file',
+    /not found/.test(unknownDeclaration) && /NoSuchDeclaration/.test(unknownDeclaration),
+    unknownDeclaration,
+)
+
+const declarations = await queryHostApi(root, {
+    package: '@kn/common',
+    symbols: ['SshExecOptions', 'StorageListOptions', 'NoSuchType'],
+})
+check(
+    'dispatch: declarations mode resolves symbols across modules',
+    declarations.kind === 'declarations' &&
+        declarations.declarations.length === 2 &&
+        JSON.stringify(declarations.missing) === JSON.stringify(['NoSuchType']),
+    JSON.stringify({
+        found: declarations.declarations.map((entry) => entry.symbol),
+        missing: declarations.missing,
+    }),
+)
+check(
+    'dispatch: declarations carry package + path + line range',
+    declarations.declarations.every(
+        (entry) => entry.package === '@kn/common' && entry.path.endsWith('.ts') && entry.startLine > 0,
+    ) &&
+        declarations.declarations.some((entry) => entry.path === 'src/core/desktop/ssh.ts'),
+    JSON.stringify(declarations.declarations.map((entry) => entry.path)),
+)
+
+const members = await queryHostApi(root, {
+    package: '@kn/common',
+    path: 'src/core/desktop/contract.ts',
+    members: ['fs.readFile', 'ssh.exec', 'nope.nothing'],
+})
+check(
+    'dispatch: contract mode returns members with params/result',
+    members.kind === 'contract' &&
+        members.entries.length === 2 &&
+        members.entries.every((entry) => /params/.test(entry.text) && /result/.test(entry.text)) &&
+        JSON.stringify(members.missing) === JSON.stringify(['nope.nothing']),
+    JSON.stringify({ entries: members.entries.map((entry) => entry.member), missing: members.missing }),
+)
+check(
+    'dispatch: contract members report their line range',
+    members.entries.every(
+        (entry) => entry.startLine > 0 && entry.endLine >= entry.startLine && entry.totalLines >= entry.endLine,
+    ),
+)
+
 let traversal = ''
 try {
     await readHostPackageFile(root, { package: '@kn/common', path: '../../package.json' })

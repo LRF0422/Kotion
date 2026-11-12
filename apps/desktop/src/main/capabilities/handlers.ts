@@ -34,6 +34,7 @@ import {
     type OAuthCallbackResult,
 } from './oauth-callback.mjs'
 import { createTaskScheduler } from './scheduler.mjs'
+import { createTaskRegistry } from './tasks.mjs'
 import { badgeIsEmpty, normalizeBadgeOptions, normalizeNotificationOptions } from './notifications.mjs'
 // The HTTP body decision helpers live in their own module (no electron, no
 // fetch). Re-exported here so the Electron smoke test can drive them from the
@@ -88,6 +89,9 @@ export interface CapabilityHostDeps {
 
 const asRecord = (value: unknown): Record<string, any> =>
     value && typeof value === 'object' ? (value as Record<string, any>) : {}
+
+/** How often heartbeat tasks are checked for staleness (3 missed beats fails). */
+const TASK_SWEEP_INTERVAL_MS = 10_000
 
 const handle = (capability: string, fn: (event: Electron.IpcMainInvokeEvent, params: unknown) => unknown): void => {
     ipcMain.handle('desktop:' + capability, (event, params) => fn(event, params))
@@ -791,8 +795,75 @@ export function setupCapabilityHandlers(deps: CapabilityHostDeps) {
         return scheduler.cancelAll()
     })
 
+    /* ============================ task ================================ */
+
+    /**
+     * Generic long tasks. Unlike `background.*` (per window, dies with it), the
+     * registry belongs to the app run: a renderer refresh must still see the
+     * tasks it finished (and the logs of one it lost). Tasks owned by a window
+     * that goes away are failed explicitly — the work is gone with its module.
+     */
+    const taskRegistry = createTaskRegistry({
+        onEvent: (event) => {
+            for (const window of BrowserWindow.getAllWindows()) {
+                if (!window.isDestroyed()) window.webContents.send('desktop:event:task', event)
+            }
+        },
+    })
+    const watchedTaskOwners = new Set<number>()
+
+    const watchTaskOwner = (event: Electron.IpcMainInvokeEvent) => {
+        const owner = event.sender.id
+        if (watchedTaskOwners.has(owner)) return owner
+        watchedTaskOwners.add(owner)
+        event.sender.once('destroyed', () => {
+            watchedTaskOwners.delete(owner)
+            taskRegistry.failOwner(owner, 'the window that owned this task was closed')
+        })
+        return owner
+    }
+
+    handle('task.start', (event, raw) => {
+        const params = asRecord(raw)
+        return taskRegistry.start({
+            id: params.id,
+            kind: params.kind,
+            title: params.title,
+            root: params.root,
+            progress: params.progress,
+            heartbeatMs: params.heartbeatMs,
+            owner: watchTaskOwner(event),
+        })
+    })
+    handle('task.report', (_event, raw) => taskRegistry.report(asRecord(raw)))
+    handle('task.logsSince', (_event, raw) => taskRegistry.logsSince(asRecord(raw)))
+    handle('task.list', (_event, raw) => taskRegistry.list(asRecord(raw)))
+    handle('task.get', (_event, raw) => taskRegistry.get(asRecord(raw)))
+    handle('task.touch', (_event, raw) => taskRegistry.touch(asRecord(raw)))
+    handle('task.remove', (_event, raw) => taskRegistry.remove(asRecord(raw)))
+    handle('task.finish', (_event, raw) => taskRegistry.finish(asRecord(raw)))
+    handle('task.cancel', (_event, raw) => taskRegistry.cancel(asRecord(raw)))
+
+    /**
+     * Fail tasks whose plugin stopped beating.
+     *
+     * A destroyed renderer is already handled by `failOwner`, but a plugin that
+     * dies *inside* a live window is not — the heartbeat contract is the only
+     * thing that notices. The registry is Electron-free, so this timer is the
+     * only piece that has to live here.
+     */
+    const taskSweepTimer = setInterval(() => {
+        try {
+            taskRegistry.sweep()
+        } catch {
+            // One bad sweep must not stop the timer for the rest of the run.
+        }
+    }, TASK_SWEEP_INTERVAL_MS)
+
     /** Stop timers, close sockets, and drop notification handles on quit. */
     const dispose = () => {
+        clearInterval(taskSweepTimer)
+        taskRegistry.dispose()
         for (const scheduler of schedulers.values()) scheduler.dispose()
         schedulers.clear()
         for (const id of [...powerBlockers.keys()]) setKeepAwake(id, false)
