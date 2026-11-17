@@ -459,7 +459,6 @@ import type { BlockInfo, PageInfo } from '@kn/plugin-block-reference/types';
 
 ## Related Documentation
 
-- [Project Optimization Summary](/OPTIMIZATION_SUMMARY.md)
 - [Plugin Architecture](/packages/common/src/core/README.md)
 - [TypeScript Config](/packages/typescript-config/)
 - [Tailwind Best Practices](/TAILWIND_BEST_PRACTICES.md)

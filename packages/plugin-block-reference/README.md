@@ -84,7 +84,6 @@ Modal for searching and selecting pages within a space.
 ## Documentation
 
 - [Optimization Report](./OPTIMIZATION.md) - Detailed optimization documentation
-- [Project Review](../../PROJECT_REVIEW_REPORT.md) - Overall project review
 
 ## Version History
 

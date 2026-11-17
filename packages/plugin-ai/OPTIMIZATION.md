@@ -397,7 +397,6 @@ en: {
 ## 📚 Related Documentation
 
 - [Main README](./README.md) - Usage and API documentation
-- [Project Optimization Summary](../../OPTIMIZATION_SUMMARY.md) - Project-wide optimizations
 - [Tailwind Best Practices](../../TAILWIND_BEST_PRACTICES.md) - Styling guidelines
 
 ---
