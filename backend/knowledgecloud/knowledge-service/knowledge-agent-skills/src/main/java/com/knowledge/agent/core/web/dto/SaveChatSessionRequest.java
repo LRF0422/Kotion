@@ -17,6 +17,9 @@ public class SaveChatSessionRequest {
 
     private JsonNode boundPage;
 
+    /** Conversation group id; null / absent ungroups the session. */
+    private String groupId;
+
     private JsonNode messages;
 
     private Long createdAt;

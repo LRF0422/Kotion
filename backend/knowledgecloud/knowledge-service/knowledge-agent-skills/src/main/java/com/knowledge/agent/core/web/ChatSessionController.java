@@ -52,6 +52,7 @@ public class ChatSessionController {
 
     private static final int MAX_SESSION_ID_LENGTH = 128;
     private static final int MAX_TITLE_LENGTH = 255;
+    private static final int MAX_GROUP_ID_LENGTH = 64;
     /** One-time migration upload bounds: prevents an oversized transcript blob. */
     private static final int MAX_IMPORT_MESSAGES = 2000;
     private static final int MAX_IMPORT_JSON_CHARS = 16 * 1024 * 1024;
@@ -128,6 +129,7 @@ public class ChatSessionController {
             entity.setTitle(truncate(request.getTitle(), MAX_TITLE_LENGTH));
             entity.setTargetPageJson(writeJson(request.getTargetPage()));
             entity.setBoundPageJson(writeJson(request.getBoundPage()));
+            entity.setGroupId(truncate(request.getGroupId(), MAX_GROUP_ID_LENGTH));
             entity.setCreateTime(request.getCreatedAt());
             entity.setUpdateTime(request.getUpdatedAt());
             // A client-supplied transcript is intentionally ignored: the engine
@@ -188,6 +190,7 @@ public class ChatSessionController {
             entity.setTitle(truncate(request.getTitle(), MAX_TITLE_LENGTH));
             entity.setTargetPageJson(writeJson(request.getTargetPage()));
             entity.setBoundPageJson(writeJson(request.getBoundPage()));
+            entity.setGroupId(truncate(request.getGroupId(), MAX_GROUP_ID_LENGTH));
             entity.setMessagesJson(incomingJson);
             entity.setMessageCount(messages.size());
             entity.setSchemaVersion(1);

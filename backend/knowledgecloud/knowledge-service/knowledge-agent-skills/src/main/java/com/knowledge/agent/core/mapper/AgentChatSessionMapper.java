@@ -22,7 +22,7 @@ import java.util.List;
 public interface AgentChatSessionMapper extends BaseMapper<AgentChatSessionEntity> {
 
     @Select("SELECT id, session_id, tenant_id, user_id, title, target_page_json, bound_page_json, "
-            + "message_count, schema_version, source_run_id, as_of_seq, create_time, update_time "
+            + "group_id, message_count, schema_version, source_run_id, as_of_seq, create_time, update_time "
             + "FROM agent_chat_session "
             + "WHERE tenant_id = #{tenantId} AND user_id = #{userId} "
             + "ORDER BY update_time DESC, session_id ASC LIMIT #{limit}")
@@ -41,14 +41,15 @@ public interface AgentChatSessionMapper extends BaseMapper<AgentChatSessionEntit
      * bindings / update_time). Existing projected messages are preserved.
      */
     @Insert("INSERT INTO agent_chat_session (session_id, tenant_id, user_id, title, target_page_json, "
-            + "bound_page_json, messages_json, message_count, schema_version, source_run_id, as_of_seq, "
+            + "bound_page_json, group_id, messages_json, message_count, schema_version, source_run_id, as_of_seq, "
             + "create_time, update_time) "
             + "VALUES (#{sessionId}, #{tenantId}, #{userId}, #{title}, #{targetPageJson}, #{boundPageJson}, "
-            + "#{messagesJson}, #{messageCount}, 1, #{sourceRunId}, 0, #{createTime}, #{updateTime}) "
+            + "#{groupId}, #{messagesJson}, #{messageCount}, 1, #{sourceRunId}, 0, #{createTime}, #{updateTime}) "
             + "ON DUPLICATE KEY UPDATE "
             + "title = VALUES(title), "
             + "target_page_json = VALUES(target_page_json), "
             + "bound_page_json = VALUES(bound_page_json), "
+            + "group_id = VALUES(group_id), "
             + "update_time = VALUES(update_time)")
     void upsertMeta(AgentChatSessionEntity entity);
 
@@ -110,6 +111,17 @@ public interface AgentChatSessionMapper extends BaseMapper<AgentChatSessionEntit
                         @Param("userId") Long userId,
                         @Param("sessionId") String sessionId,
                         @Param("updateTime") long updateTime);
+
+    /**
+     * Ungroup every session of a deleted group. Deliberately does not touch
+     * {@code update_time}: that column orders the session list, and removing a
+     * folder must not reshuffle the user's conversations.
+     */
+    @Update("UPDATE agent_chat_session SET group_id = NULL "
+            + "WHERE tenant_id = #{tenantId} AND user_id = #{userId} AND group_id = #{groupId}")
+    int clearGroupId(@Param("tenantId") Long tenantId,
+                     @Param("userId") Long userId,
+                     @Param("groupId") String groupId);
 
     @Delete("DELETE FROM agent_chat_session "
             + "WHERE tenant_id = #{tenantId} AND user_id = #{userId} AND session_id = #{sessionId}")

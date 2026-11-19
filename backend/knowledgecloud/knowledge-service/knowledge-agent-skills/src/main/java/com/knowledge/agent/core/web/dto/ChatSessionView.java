@@ -20,6 +20,9 @@ public class ChatSessionView {
 
     private JsonNode boundPage;
 
+    /** Conversation group id; absent when the session is ungrouped. */
+    private String groupId;
+
     private JsonNode messages;
 
     private int messageCount;
@@ -38,6 +41,7 @@ public class ChatSessionView {
         view.setTitle(entity.getTitle());
         view.setTargetPage(read(mapper, entity.getTargetPageJson()));
         view.setBoundPage(read(mapper, entity.getBoundPageJson()));
+        view.setGroupId(entity.getGroupId());
         view.setMessageCount(entity.getMessageCount() != null ? entity.getMessageCount() : 0);
         view.setCreatedAt(entity.getCreateTime());
         view.setUpdatedAt(entity.getUpdateTime());

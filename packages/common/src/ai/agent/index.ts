@@ -187,6 +187,7 @@ export type {
     AgentProfile,
     AgentProfileEvidence,
     AgentProfileTrait,
+    AgentSessionGroup,
     AgentSessionTask,
     AgentSkillInput,
     AgentToolCallInfo,
@@ -206,5 +207,6 @@ export type {
     RunUsage,
     RunView,
     SaveAgentChatSessionInput,
+    SaveAgentSessionGroupInput,
     ThreadView,
 } from './types'

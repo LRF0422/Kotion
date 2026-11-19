@@ -40,6 +40,13 @@ public class AgentChatSessionEntity implements Serializable {
     /** JSON ChatTargetPage this session belongs to (client-owned UI meta). */
     private String boundPageJson;
 
+    /**
+     * Client-owned conversation group id ({@code agent_session_group.group_id}).
+     * NULL means ungrouped; the id is not a foreign key — deleting a group
+     * clears it through {@code AgentChatSessionMapper#clearGroupId}.
+     */
+    private String groupId;
+
     /** JSON array of projected UI messages (engine-written display read model). */
     private String messagesJson;
 

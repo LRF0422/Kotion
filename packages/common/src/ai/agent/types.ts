@@ -191,6 +191,8 @@ export interface AgentChatSession {
     title?: string
     targetPage?: unknown
     boundPage?: unknown
+    /** Conversation group id; absent when the session is ungrouped. */
+    groupId?: string
     /** Present only on the detail endpoint, never on the index list. */
     messages?: unknown
     messageCount?: number
@@ -229,8 +231,30 @@ export interface SaveAgentChatSessionInput {
     title?: string
     targetPage?: unknown
     boundPage?: unknown
+    /** Conversation group id; `null` ungroups the session. */
+    groupId?: string | null
     createdAt?: number
     updatedAt?: number
+}
+
+/**
+ * One user-created conversation folder in the chat session list
+ * (`/api/agent/v1/session-groups`). Like a session id, `groupId` is generated
+ * by the client so an offline browser can create a group before it syncs.
+ */
+export interface AgentSessionGroup {
+    groupId: string
+    name: string
+    /** Position in the sidebar list, ascending. */
+    sortIndex?: number
+    createdAt?: number
+    updatedAt?: number
+}
+
+/** Client-writable group fields: the name is required, the position optional. */
+export interface SaveAgentSessionGroupInput {
+    name: string
+    sortIndex?: number
 }
 
 /**

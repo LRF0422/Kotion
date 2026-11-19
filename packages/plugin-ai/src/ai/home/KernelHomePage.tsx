@@ -107,6 +107,11 @@ export const KernelHomePage: React.FC = () => {
         createSession,
         deleteSession,
         clearSessionMessages,
+        groups: sessionGroups,
+        createGroup,
+        renameGroup,
+        deleteGroup,
+        moveSessionToGroup,
     } = useChatSessions()
 
     const activeIdRef = useRef(activeSessionId)
@@ -409,6 +414,11 @@ export const KernelHomePage: React.FC = () => {
                             onSelect={handleSelectSession}
                             onNewSession={handleNewSession}
                             onDelete={handleDeleteSession}
+                            groups={sessionGroups}
+                            onCreateGroup={createGroup}
+                            onRenameGroup={renameGroup}
+                            onDeleteGroup={deleteGroup}
+                            onMoveSession={moveSessionToGroup}
                             // A floating pane already separates the list from
                             // the chat; the tint is only needed in the flat
                             // (classic) layout.
@@ -431,6 +441,11 @@ export const KernelHomePage: React.FC = () => {
                             onSelect={handleSelectSession}
                             onNewSession={handleNewSession}
                             onDelete={handleDeleteSession}
+                            groups={sessionGroups}
+                            onCreateGroup={createGroup}
+                            onRenameGroup={renameGroup}
+                            onDeleteGroup={deleteGroup}
+                            onMoveSession={moveSessionToGroup}
                             onNavigate={() => setHistorySheetOpen(false)}
                             onClose={() => setHistorySheetOpen(false)}
                             className="bg-background"

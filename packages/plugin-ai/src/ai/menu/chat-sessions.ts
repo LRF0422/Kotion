@@ -18,6 +18,10 @@ const INDEX_KEY = 'kn-ai-chat-sessions-index'
 const ACTIVE_KEY = 'kn-ai-chat-active-session'
 const OPEN_TABS_KEY = 'kn-ai-chat-open-tabs'
 const SESSION_MSG_PREFIX = 'kn-ai-chat-session:'
+/** User-created conversation folders (the sidebar's grouped view). */
+const GROUPS_KEY = 'kn-ai-chat-session-groups'
+/** Folded group ids — a per-device view preference, never synced. */
+const COLLAPSED_GROUPS_KEY = 'kn-ai-chat-session-group-collapsed'
 
 // Legacy keys (single-session era) — migrated on first load.
 const LEGACY_MESSAGES_KEY = 'kn-ai-chat-messages'
@@ -37,6 +41,10 @@ export const MAX_SESSIONS = 50
  * so running past the stream budget is a delay, never a loss.
  */
 export const MAX_OPEN_TABS = 6
+/** Upper bound on user-created conversation groups. */
+export const MAX_GROUPS = 100
+/** A group name is a single sidebar row, so it is deliberately short. */
+export const MAX_GROUP_NAME_LENGTH = 64
 
 // ─── Types ─────────────────────────────────────────────────────────
 /** A page bound to a chat session via the @-mention picker. */
@@ -69,6 +77,27 @@ export interface ChatSessionMeta {
      * user should not have to re-open it. Absent = no target.
      */
     targetArtifact?: AgentArtifact
+    /**
+     * User-created conversation group (a sidebar folder). Absent = ungrouped:
+     * such a conversation keeps falling into the recency buckets, so nothing
+     * disappears from the list when no groups exist.
+     */
+    groupId?: string
+}
+
+/**
+ * One user-created conversation folder.
+ *
+ * The id is generated locally (like a session id) so a group can be created
+ * offline and merged with the backend copy later; `sortIndex` is the sidebar
+ * position and is the only cross-device ordering signal.
+ */
+export interface ChatSessionGroup {
+    id: string
+    name: string
+    sortIndex: number
+    createdAt: number
+    updatedAt: number
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────
@@ -92,6 +121,77 @@ function safeRemove(key: string): void {
 
 export function generateSessionId(): string {
     return `s-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+export function generateGroupId(): string {
+    return `g-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+/** Coerce a stored number (the cache may hold strings from older builds). */
+function toNumber(value: unknown, fallback: number): number {
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+    if (typeof value === 'string') {
+        const parsed = Number(value)
+        if (Number.isFinite(parsed)) return parsed
+    }
+    return fallback
+}
+
+/**
+ * Normalise a group list so a corrupt / hand-edited cache cannot break the
+ * sidebar: ids are unique, names are trimmed and non-empty, positions are
+ * numbers, and the result is in display order.
+ */
+export function normalizeGroups(groups: unknown): ChatSessionGroup[] {
+    if (!Array.isArray(groups)) return []
+    const seen = new Set<string>()
+    const out: ChatSessionGroup[] = []
+    for (const raw of groups) {
+        if (!raw || typeof raw !== 'object') continue
+        const item = raw as Record<string, unknown>
+        const id = typeof item.id === 'string' ? item.id.trim() : ''
+        if (!id || seen.has(id)) continue
+        const name = typeof item.name === 'string' ? item.name.trim() : ''
+        if (!name) continue
+        seen.add(id)
+        out.push({
+            id,
+            name: name.slice(0, MAX_GROUP_NAME_LENGTH),
+            sortIndex: toNumber(item.sortIndex, out.length),
+            createdAt: toNumber(item.createdAt, 0),
+            updatedAt: toNumber(item.updatedAt, 0),
+        })
+    }
+    return sortGroups(out).slice(0, MAX_GROUPS)
+}
+
+/** Display order: explicit position first, creation order as the tie-break. */
+export function sortGroups<T extends { sortIndex: number; createdAt: number; id: string }>(groups: T[]): T[] {
+    return [...groups].sort((a, b) =>
+        a.sortIndex - b.sortIndex || a.createdAt - b.createdAt || a.id.localeCompare(b.id))
+}
+
+export function loadGroups(): ChatSessionGroup[] {
+    return normalizeGroups(safeParse<unknown>(localStorage.getItem(GROUPS_KEY), []))
+}
+
+export function saveGroups(groups: ChatSessionGroup[]): void {
+    safeWrite(GROUPS_KEY, JSON.stringify(normalizeGroups(groups)))
+}
+
+/** Folded group ids (view state; a group id that no longer exists is ignored). */
+export function loadCollapsedGroups(): string[] {
+    const arr = safeParse<unknown>(localStorage.getItem(COLLAPSED_GROUPS_KEY), [])
+    if (!Array.isArray(arr)) return []
+    const out: string[] = []
+    for (const value of arr) {
+        if (typeof value === 'string' && value && !out.includes(value)) out.push(value)
+    }
+    return out
+}
+
+export function saveCollapsedGroups(ids: string[]): void {
+    safeWrite(COLLAPSED_GROUPS_KEY, JSON.stringify([...new Set(ids.filter(Boolean))]))
 }
 
 export function deriveTitle(messages: Message[]): string {

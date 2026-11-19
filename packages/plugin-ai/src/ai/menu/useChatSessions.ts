@@ -2,27 +2,40 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import type { Message } from './chat-types'
 import {
+    ChatSessionGroup,
     ChatSessionMeta,
     ChatTargetPage,
+    MAX_GROUPS,
+    MAX_GROUP_NAME_LENGTH,
     MAX_OPEN_TABS,
     deleteSessionMessages,
     deriveTitle,
+    generateGroupId,
     generateSessionId,
     getActiveId,
+    loadGroups,
     loadIndex,
     loadOpenTabs,
     migrateLegacy,
+    saveGroups,
     saveIndex,
     saveOpenTabs,
     setActiveId,
+    sortGroups,
 } from './chat-sessions'
+import { mergeGroupMeta, mergeSessionMeta } from './chat-session-merge'
 import {
     clearRemoteSession,
     deleteRemoteSession,
+    deleteRemoteSessionGroup,
     isSessionApiAvailable,
+    isSessionGroupApiAvailable,
+    listRemoteSessionGroups,
     listRemoteSessions,
     markSessionApiUnavailable,
+    markSessionGroupApiUnavailable,
     upsertRemoteSession,
+    upsertRemoteSessionGroup,
 } from './chat-session-api'
 
 export interface UseChatSessionsResult {
@@ -54,10 +67,28 @@ export interface UseChatSessionsResult {
     clearSessionMessages: (id: string) => void
     /** Patch one session's metadata (bound page, working target). */
     patchSession: (id: string, patch: Partial<ChatSessionMeta>) => void
+    /** User-created conversation folders, in display order. */
+    groups: ChatSessionGroup[]
+    /** Create a group at the end of the list; returns its id (null when blank). */
+    createGroup: (name: string) => string | null
+    /** Rename one group (position is unchanged). */
+    renameGroup: (id: string, name: string) => void
+    /** Delete a group; its conversations go back to the ungrouped buckets. */
+    deleteGroup: (id: string) => void
+    /** Move one conversation into a group, or `null` to ungroup it. */
+    moveSessionToGroup: (sessionId: string, groupId: string | null) => void
 }
 
 /** Upper bound on sessions fetched from the backend. */
 const SESSION_LIST_LIMIT = 100
+
+/** One session's metadata with its group membership removed. */
+function withoutGroup<T extends { groupId?: string }>(session: T): T {
+    if (!session.groupId) return session
+    const next = { ...session }
+    delete next.groupId
+    return next
+}
 
 function createMeta(id: string, boundPage?: ChatTargetPage): ChatSessionMeta {
     const now = Date.now()
@@ -65,22 +96,12 @@ function createMeta(id: string, boundPage?: ChatTargetPage): ChatSessionMeta {
 }
 
 /**
- * Union of backend and local-cache session metadata.
- *
- * Only METADATA is cached locally now: the transcript is engine-owned and read
- * from `/api/agent/v1/sessions`. The local cache keeps the session list snappy
- * on boot and holds pre-migration transcripts solely as an import source.
+ * Union of backend and local-cache metadata. The tie-breaks (a group move is a
+ * metadata-only write, a local-only group is offline work) live in
+ * `chat-session-merge.ts` and are pinned by its own check.
  */
 function mergeSessions(remote: ChatSessionMeta[], local: ChatSessionMeta[]): ChatSessionMeta[] {
-    const byId = new Map<string, ChatSessionMeta>()
-    for (const session of remote) byId.set(session.id, session)
-    for (const session of local) {
-        const existing = byId.get(session.id)
-        if (!existing || (session.updatedAt || 0) > (existing.updatedAt || 0)) {
-            byId.set(session.id, session)
-        }
-    }
-    return [...byId.values()].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+    return mergeSessionMeta(remote, local).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
 }
 
 /**
@@ -123,9 +144,12 @@ export function useChatSessions(): UseChatSessionsResult {
     const [sessions, setSessions] = useState<ChatSessionMeta[]>(initial.current.sessions)
     const [activeSessionId, setActiveSessionIdState] = useState<string>(initial.current.activeId)
     const [openSessionIds, setOpenSessionIds] = useState<string[]>(initial.current.tabs)
+    const [groups, setGroups] = useState<ChatSessionGroup[]>(() => loadGroups())
 
     const sessionsRef = useRef(sessions)
     sessionsRef.current = sessions
+    const groupsRef = useRef(groups)
+    groupsRef.current = groups
     const activeIdRef = useRef(activeSessionId)
     activeIdRef.current = activeSessionId
     const tabsRef = useRef(openSessionIds)
@@ -231,6 +255,29 @@ export function useChatSessions(): UseChatSessionsResult {
                 const known = remoteById.get(meta.id)
                 if (known && (meta.updatedAt || 0) <= (known.updatedAt || 0)) continue
                 void upsertRemoteSession(meta).catch(() => markSessionApiUnavailable())
+            }
+
+            // Groups sync independently: an older backend without the endpoint
+            // must not disable the session index above.
+            let remoteGroups: ChatSessionGroup[] = []
+            try {
+                remoteGroups = await listRemoteSessionGroups()
+            } catch {
+                markSessionGroupApiUnavailable()
+            }
+            const mergedGroups = mergeGroupMeta(remoteGroups, loadGroups())
+            groupsRef.current = mergedGroups
+            setGroups(mergedGroups)
+            saveGroups(mergedGroups)
+
+            // Upload groups this device created while offline / before the
+            // endpoint existed. Names and positions are client-owned, so the
+            // local copy is authoritative for a group the server never saw.
+            const remoteGroupIds = new Set(remoteGroups.map(group => group.id))
+            for (const group of mergedGroups) {
+                if (remoteGroupIds.has(group.id)) continue
+                if (!isSessionGroupApiAvailable()) break
+                void upsertRemoteSessionGroup(group).catch(() => markSessionGroupApiUnavailable())
             }
         }
         void hydrate()
@@ -378,6 +425,79 @@ export function useChatSessions(): UseChatSessionsResult {
         updateMeta(id, session => ({ ...session, ...patch }))
     }, [updateMeta])
 
+    // ── Conversation groups (client-owned folders) ───────────────────
+    const commitGroups = useCallback((next: ChatSessionGroup[]) => {
+        const ordered = sortGroups(next).slice(0, MAX_GROUPS)
+        groupsRef.current = ordered
+        saveGroups(ordered)
+        setGroups(ordered)
+    }, [])
+
+    const pushGroup = useCallback((group: ChatSessionGroup) => {
+        if (!isSessionGroupApiAvailable()) return
+        void upsertRemoteSessionGroup(group).catch(() => markSessionGroupApiUnavailable())
+    }, [])
+
+    const createGroup = useCallback((name: string): string | null => {
+        const trimmed = name.trim().slice(0, MAX_GROUP_NAME_LENGTH)
+        if (!trimmed) return null
+        const current = groupsRef.current
+        if (current.length >= MAX_GROUPS) return null
+        // Append at the end: a new folder starts empty, and the list is a
+        // stable sequence rather than "most recently touched first".
+        const last = current.reduce((max, group) => Math.max(max, group.sortIndex), -1)
+        const now = Date.now()
+        const group: ChatSessionGroup = {
+            id: generateGroupId(),
+            name: trimmed,
+            sortIndex: last + 1,
+            createdAt: now,
+            updatedAt: now,
+        }
+        commitGroups([...current, group])
+        pushGroup(group)
+        return group.id
+    }, [commitGroups, pushGroup])
+
+    const renameGroup = useCallback((id: string, name: string) => {
+        const trimmed = name.trim().slice(0, MAX_GROUP_NAME_LENGTH)
+        if (!id || !trimmed) return
+        const current = groupsRef.current
+        const target = current.find(group => group.id === id)
+        if (!target || target.name === trimmed) return
+        const updated: ChatSessionGroup = { ...target, name: trimmed, updatedAt: Date.now() }
+        commitGroups(current.map(group => (group.id === id ? updated : group)))
+        pushGroup(updated)
+    }, [commitGroups, pushGroup])
+
+    const deleteGroup = useCallback((id: string) => {
+        if (!id) return
+        const current = groupsRef.current
+        if (!current.some(group => group.id === id)) return
+        commitGroups(current.filter(group => group.id !== id))
+        // Ungroup the members LOCALLY only: the backend clears group_id for the
+        // whole group in the same request, so a per-session PUT per row would be
+        // redundant traffic.
+        const members = sessionsRef.current.filter(session => session.groupId === id)
+        if (members.length > 0) {
+            const next = sessionsRef.current.map(session =>
+                session.groupId === id ? withoutGroup(session) : session)
+            sessionsRef.current = next
+            saveIndex(next)
+            setSessions(next)
+        }
+        void deleteRemoteSessionGroup(id).catch(() => markSessionGroupApiUnavailable())
+    }, [commitGroups])
+
+    const moveSessionToGroup = useCallback((sessionId: string, groupId: string | null) => {
+        if (!sessionId) return
+        updateMeta(sessionId, session => {
+            if (!groupId) return withoutGroup(session)
+            if (session.groupId === groupId) return session
+            return { ...session, groupId }
+        })
+    }, [updateMeta])
+
     return {
         sessions,
         activeSession,
@@ -391,5 +511,10 @@ export function useChatSessions(): UseChatSessionsResult {
         noteSessionMessages,
         clearSessionMessages,
         patchSession,
+        groups,
+        createGroup,
+        renameGroup,
+        deleteGroup,
+        moveSessionToGroup,
     }
 }

@@ -31,6 +31,7 @@ import type {
     AgentProfile,
     AgentProfileEvidence,
     AgentProfileTrait,
+    AgentSessionGroup,
     AgentSessionTask,
     CreateMemoryInput,
     CreateRunInput,
@@ -41,6 +42,7 @@ import type {
     ResumePayload,
     RunView,
     SaveAgentChatSessionInput,
+    SaveAgentSessionGroupInput,
     ThreadView,
 } from './types'
 import { TERMINAL_EVENT_TYPES } from './types'
@@ -434,6 +436,33 @@ export class AgentClient {
         await this.request('/sessions/' + encodeURIComponent(sessionId) + '/transcript', {
             method: 'DELETE',
         })
+    }
+
+    // ==================== chat session groups ====================
+
+    /**
+     * The caller's conversation groups in display order. Groups are pure UI
+     * metadata (a folder for the session list); membership travels on the
+     * session itself via {@link saveChatSession}'s `groupId`.
+     */
+    async listSessionGroups(limit = 200): Promise<AgentSessionGroup[]> {
+        const data = await this.request<{ items?: AgentSessionGroup[] }>(
+            '/session-groups?limit=' + encodeURIComponent(String(limit)),
+        )
+        return Array.isArray(data?.items) ? data!.items! : []
+    }
+
+    /** Create or rename / reposition one conversation group. */
+    async saveSessionGroup(groupId: string, input: SaveAgentSessionGroupInput): Promise<void> {
+        await this.request('/session-groups/' + encodeURIComponent(groupId), {
+            method: 'PUT',
+            body: JSON.stringify(input),
+        })
+    }
+
+    /** Delete a group; its sessions become ungrouped on the backend too. */
+    async deleteSessionGroup(groupId: string): Promise<void> {
+        await this.request('/session-groups/' + encodeURIComponent(groupId), { method: 'DELETE' })
     }
 
     /**
