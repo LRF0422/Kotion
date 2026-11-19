@@ -3,7 +3,14 @@ import { Node as PmNode, type NodeType } from "@tiptap/pm/model"
 import type { BlockInfo } from "../types"
 
 /**
- * Discover all blocks in the document
+ * Discover all blocks in the document.
+ *
+ * The leading `title` container is reported as ONE block and its children are
+ * not walked: the inner `heading` is the page's title text, not an addressable
+ * body block. Listing both made agents target the heading with block tools
+ * (replace/delete/convert), which either fails against the `title > heading`
+ * schema or destroys the title wrapper. The title block itself stays at index 0
+ * so "insert after block 0" still means "right after the title".
  */
 export const discoverBlocks = (editor: Editor): BlockInfo[] => {
     const blocks: BlockInfo[] = []
@@ -31,6 +38,8 @@ export const discoverBlocks = (editor: Editor): BlockInfo[] => {
             }
 
             blocks.push(blockInfo)
+
+            if (node.type.name === 'title') return false
         }
         return true
     })

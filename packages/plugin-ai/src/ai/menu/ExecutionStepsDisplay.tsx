@@ -1,10 +1,27 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Check, ChevronDown, Loader2, Sparkles } from '@kn/icon'
-import { Streamdown, ToolApprovalCard, useAutoScroll } from '@kn/ui'
+import {
+    MessageResponse,
+    Reasoning,
+    ReasoningContent,
+    ReasoningTrigger,
+    Task,
+    TaskContent,
+    TaskTrigger,
+    Tool,
+    ToolApprovalCard,
+    ToolContent,
+    ToolHeader,
+    ToolInput,
+    ToolOutput,
+} from '@kn/ui'
+import type { ToolState } from '@kn/ui'
 import type { AgentStepRecord } from '@kn/common'
 import { AgentToolResultCard, useTranslation } from '@kn/common'
-import { ExecutionStep, formatToolName, sanitizeToolPayload } from './chat-types'
+import { ExecutionStep, sanitizeToolPayload } from './chat-types'
+import { toolCallTitle } from './tool-titles'
 import { ShimmerText } from './chat/ShimmerText'
+import { getToolIcon } from './tool-icons'
 
 interface AgentActivityTimelineProps {
     steps?: ExecutionStep[]
@@ -56,26 +73,31 @@ function readUserChoice(
     return { question, waiting: false }
 }
 
-/**
- * One step's payload is capped for DISPLAY only — a `load_skill` result is a
- * couple of tens of KB of schemas, unusable as a wall of text in the timeline.
- * The cap says so instead of trailing off with a naked "…", which read like the
- * tool itself had returned a torn-off payload.
- */
-const DETAILS_MAX_CHARS = 4000
+/** Display-only cap: a tool payload is not a document, and megabytes of JSON
+ * would freeze the transcript. The cap says so instead of silently truncating. */
+const DISPLAY_MAX_CHARS = 4000
 
-function formatDetails(value: unknown, cappedNote: (total: number) => string): string {
-    if (value === undefined) return ''
-    try {
-        const formatted = typeof value === 'string'
-            ? String(sanitizeToolPayload(value))
-            : JSON.stringify(sanitizeToolPayload(value), null, 2)
-        return formatted.length > DETAILS_MAX_CHARS
-            ? `${formatted.slice(0, DETAILS_MAX_CHARS)}\n${cappedNote(formatted.length)}`
-            : formatted
-    } catch {
-        return String(value)
+function toDisplayPayload(
+    value: unknown,
+    t: (key: string, options?: { total?: number }) => string,
+): unknown {
+    const sanitized = sanitizeToolPayload(value)
+    if (typeof sanitized === 'string') {
+        return sanitized.length > DISPLAY_MAX_CHARS
+            ? `${sanitized.slice(0, DISPLAY_MAX_CHARS)}\n${t('ai.chat.toolOutputCapped', { total: sanitized.length })}`
+            : sanitized
     }
+    if (sanitized && typeof sanitized === 'object') {
+        try {
+            const json = JSON.stringify(sanitized)
+            if (json.length > DISPLAY_MAX_CHARS) {
+                return `${json.slice(0, DISPLAY_MAX_CHARS)}\n${t('ai.chat.toolOutputCapped', { total: json.length })}`
+            }
+        } catch {
+            return String(sanitized)
+        }
+    }
+    return sanitized
 }
 
 function hasInspectableValue(value: unknown): boolean {
@@ -139,6 +161,13 @@ function buildTimelineItems(
     })
 }
 
+/**
+ * The run's reasoning + tool calls, as one collapsible activity group.
+ *
+ * Presentation uses AI Elements: `Task` for the group, `Reasoning` for a
+ * thinking block and `Tool` for each call. The event/step projection that feeds
+ * it is unchanged, so live runs and replayed transcripts look the same.
+ */
 export const AgentActivityTimeline = React.memo(function AgentActivityTimeline({
     steps = [],
     activitySteps = [],
@@ -157,33 +186,34 @@ export const AgentActivityTimeline = React.memo(function AgentActivityTimeline({
     if (items.length === 0 && !isRunning) return null
 
     return (
-        <details
-            className="group/activity mb-4"
-            open={open}
-            onToggle={event => setOpen(event.currentTarget.open)}
-        >
-            <summary className="flex min-h-9 cursor-pointer list-none items-center gap-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
-                <span>{t('ai.chat.steps', { count: Math.max(items.length, 1) })}</span>
-                <ChevronDown className="h-3.5 w-3.5 transition-transform group-open/activity:rotate-180" />
-            </summary>
-            <div className="relative ml-2 mt-2 border-l border-border/80 pl-5">
+        <Task open={open} onOpenChange={setOpen} className="mb-2">
+            <TaskTrigger title={t('ai.chat.steps', { count: Math.max(items.length, 1) })}>
+                <button
+                    type="button"
+                    className="flex min-h-8 w-full items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground lg:min-h-6"
+                >
+                    <span>{t('ai.chat.steps', { count: Math.max(items.length, 1) })}</span>
+                    <ChevronDown
+                        className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`}
+                    />
+                </button>
+            </TaskTrigger>
+            <TaskContent className="mt-1">
                 {items.map((item, index) => (
-                    <div key={item.id} className={index === items.length - 1 ? 'relative' : 'relative pb-4'}>
-                        <span className="absolute -left-[24px] top-2 h-2 w-2 rounded-full bg-muted-foreground/60 ring-4 ring-background" />
+                    <div key={item.id} className="min-w-0">
                         {item.kind === 'thinking'
                             ? <ThinkingItem item={item} expanded={isRunning && index === items.length - 1} />
                             : <ToolItem step={item.step} />}
                     </div>
                 ))}
                 {items.length === 0 && isRunning && (
-                    <div className="relative flex min-h-8 items-center gap-2 text-xs text-muted-foreground" role="status" aria-live="polite">
-                        <span className="absolute -left-[24px] top-3 h-2 w-2 rounded-full bg-primary ring-4 ring-background" />
+                    <div className="flex min-h-7 items-center gap-1.5 text-xs text-muted-foreground" role="status" aria-live="polite">
                         <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
                         <ShimmerText>{t('ai.chat.thinking')}</ShimmerText>
                     </div>
                 )}
-            </div>
-        </details>
+            </TaskContent>
+        </Task>
     )
 })
 
@@ -195,53 +225,52 @@ function ThinkingItem({
     expanded: boolean
 }) {
     const { t } = useTranslation()
-    const [open, setOpen] = useState(expanded)
-    const { scrollRef, scrollToBottom, disableAutoScroll } = useAutoScroll({
-        content: item.reasoning,
-    })
+    const bodyRef = useRef<HTMLDivElement | null>(null)
+
+    // Reasoning streams token by token: keep the newest line visible while the
+    // block is the active one, without stealing the outer transcript scroll.
+    useEffect(() => {
+        if (!expanded || !bodyRef.current) return
+        bodyRef.current.scrollTop = bodyRef.current.scrollHeight
+    }, [item.reasoning, expanded])
+
+    const label = expanded
+        ? <ShimmerText className="font-medium">{t('ai.chat.thought')}</ShimmerText>
+        : <span className="font-medium">{t('ai.chat.thought')}</span>
+
     return (
-        <div className="min-w-0 space-y-2.5">
+        <div className="min-w-0 space-y-1">
             {item.reasoning.trim() ? (
-                <details
-                    className="group/thought"
-                    open={open}
-                    onToggle={event => {
-                        const nextOpen = event.currentTarget.open
-                        setOpen(nextOpen)
-                        if (nextOpen) requestAnimationFrame(() => scrollToBottom())
-                    }}
-                >
-                    <summary className="flex min-h-8 cursor-pointer list-none items-center gap-2 text-xs text-muted-foreground transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
-                        <Sparkles className="h-4 w-4 shrink-0" />
-                        {expanded
-                            ? <ShimmerText className="font-medium">{t('ai.chat.thought')}</ShimmerText>
-                            : <span className="font-medium">{t('ai.chat.thought')}</span>}
-                        <ChevronDown className="h-3.5 w-3.5 transition-transform group-open/thought:rotate-180" />
-                    </summary>
-                    <div
-                        ref={scrollRef}
-                        className="mt-1 max-h-48 overflow-y-auto whitespace-pre-wrap break-words pr-1 text-xs leading-relaxed text-muted-foreground"
-                        onWheel={disableAutoScroll}
-                        onTouchMove={disableAutoScroll}
-                    >
-                        {item.reasoning.trim()}
+                <Reasoning isStreaming={expanded} defaultOpen={expanded} className="mb-0">
+                    <ReasoningTrigger getThinkingMessage={() => label} />
+                    <div ref={bodyRef} className="max-h-48 overflow-y-auto pr-1">
+                        <ReasoningContent className="mt-0.5 text-[11px] leading-5">
+                            {item.reasoning}
+                        </ReasoningContent>
                     </div>
-                </details>
+                </Reasoning>
             ) : (
-                <div className="flex min-h-8 items-center gap-2 text-xs text-muted-foreground">
+                <div className="flex min-h-7 items-center gap-1.5 text-xs text-muted-foreground">
                     <Sparkles className="h-4 w-4 shrink-0" />
-                    {expanded
-                        ? <ShimmerText className="font-medium">{t('ai.chat.thought')}</ShimmerText>
-                        : <span className="font-medium">{t('ai.chat.thought')}</span>}
+                    {label}
                 </div>
             )}
             {item.text.trim() && (
                 <div className="min-w-0 break-words text-[13px] leading-6 text-foreground [&_p]:my-1.5 [&_pre]:max-w-full [&_pre]:overflow-x-auto">
-                    <Streamdown controls={false}>{item.text.trim()}</Streamdown>
+                    <MessageResponse controls={false}>{item.text.trim()}</MessageResponse>
                 </div>
             )}
         </div>
     )
+}
+
+function toolState(step: ExecutionStep): ToolState {
+    if (step.approval?.status === 'pending') return 'approval-requested'
+    if (step.status === 'error') return 'output-error'
+    if (step.status === 'running') {
+        return hasInspectableValue(step.args) ? 'input-available' : 'input-streaming'
+    }
+    return 'output-available'
 }
 
 function ToolItem({ step }: { step: ExecutionStep }) {
@@ -251,40 +280,58 @@ function ToolItem({ step }: { step: ExecutionStep }) {
     const hasDetails = hasInspectableValue(step.args)
         || hasInspectableValue(step.result)
         || hasInspectableValue(step.error)
-    const toolNameClassName = step.status === 'error'
-        ? 'truncate font-medium text-destructive'
-        : 'truncate font-medium text-foreground/80'
-    // Running tools shimmer (DeepSeek-style in-progress cue). The colour
-    // comes from the gradient, so the muted/foreground text class is dropped.
-    const toolName = step.status === 'running'
-        ? <ShimmerText className="truncate font-medium">{formatToolName(step.toolName)}</ShimmerText>
-        : <span className={toolNameClassName}>{formatToolName(step.toolName)}</span>
+    const state = toolState(step)
+
+    const labels: Partial<Record<ToolState, string>> = {
+        'input-streaming': t('ai.chat.toolRunning'),
+        'input-available': t('ai.chat.toolRunning'),
+        'approval-requested': t('ai.chat.toolApprovalRequested'),
+        'approval-responded': t('ai.chat.toolApprovalResponded'),
+        'output-available': t('ai.chat.toolCompleted'),
+        'output-error': t('ai.chat.toolFailed'),
+        'output-denied': t('ai.chat.toolFailed'),
+    }
+
+    const args = useMemo(() => toDisplayPayload(step.args, t), [step.args, t])
+    const result = useMemo(() => toDisplayPayload(step.result, t), [step.result, t])
+    // The title names what this call did when its own arguments say so
+    // ("搜索「季度目标」"), not just which tool ran ("搜索文档").
+    const title = toolCallTitle(
+        (key, options) => t(key, options),
+        { toolName: step.toolName, args: step.args, result: step.result },
+    )
 
     return (
-        <div className="min-w-0">
-            <div className="flex min-h-6 min-w-0 items-center gap-1.5 text-xs">
-                {hasDetails ? (
-                    <button
-                        type="button"
-                        className="flex min-w-0 items-center gap-1 text-left transition-colors hover:text-foreground"
-                        aria-expanded={open}
-                        onClick={() => setOpen(value => !value)}
-                    >
-                        {toolName}
-                        <ChevronDown className={`h-3 w-3 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
-                    </button>
-                ) : (
-                    toolName
-                )}
-                {step.status === 'running' && (
-                    <span className="shrink-0 text-muted-foreground">{t('ai.chat.toolRunning')}</span>
-                )}
-                {step.status === 'error' && (
-                    <span className="shrink-0 text-destructive">{t('ai.chat.toolFailed')}</span>
-                )}
-            </div>
+        <div className="min-w-0 space-y-1">
+            <Tool open={open} onOpenChange={setOpen} className="mb-0">
+                <ToolHeader
+                    title={title}
+                    type={`tool-${step.toolName}`}
+                    state={state}
+                    labels={labels}
+                    icon={getToolIcon(step.toolName)}
+                />
+                <ToolContent>
+                    {hasDetails ? (
+                        <>
+                            <ToolInput input={args} label={t('ai.chat.toolInput')} />
+                            <ToolOutput
+                                output={result}
+                                errorText={step.error}
+                                label={t('ai.chat.toolOutput')}
+                                errorLabel={t('ai.chat.toolError')}
+                            />
+                        </>
+                    ) : (
+                        <div className="px-3 pb-3 text-[11px] text-muted-foreground">
+                            {t('ai.chat.toolNoDetails')}
+                        </div>
+                    )}
+                </ToolContent>
+            </Tool>
+
             {/* Plugin-registered card for this tool's result. Renders nothing
-                when no plugin declared a renderer, so the JSON block below
+                when no plugin declared a renderer, so the structured block above
                 remains the universal fallback. While the call is waiting for
                 approval it renders the approval card instead (plugin card by
                 request.kind, else the host's generic ToolApprovalCard). */}
@@ -298,8 +345,9 @@ function ToolItem({ step }: { step: ExecutionStep }) {
                 approval={step.approval}
                 ApprovalCard={ToolApprovalCard}
             />
+
             {userChoice && (
-                <div className="mt-1 space-y-0.5 pl-[22px] text-[11px]">
+                <div className="space-y-0.5 pl-1 text-[11px]">
                     {userChoice.question && (
                         <div className="line-clamp-2 text-muted-foreground">{userChoice.question}</div>
                     )}
@@ -315,39 +363,6 @@ function ToolItem({ step }: { step: ExecutionStep }) {
                     ) : null}
                 </div>
             )}
-            {hasDetails && open && <ToolDetails step={step} />}
-        </div>
-    )
-}
-
-function ToolDetails({ step }: { step: ExecutionStep }) {
-    const { t } = useTranslation()
-    const cappedNote = (total: number) => t('ai.chat.toolOutputCapped', { total })
-
-    return (
-        <div className="mt-1.5 space-y-2 text-[11px] text-muted-foreground">
-            {hasInspectableValue(step.args) && (
-                <DetailBlock label={t('ai.chat.toolInput')} value={formatDetails(step.args, cappedNote)} />
-            )}
-            {hasInspectableValue(step.result) && (
-                <DetailBlock label={t('ai.chat.toolOutput')} value={formatDetails(step.result, cappedNote)} />
-            )}
-            {hasInspectableValue(step.error) && (
-                <DetailBlock label={t('ai.chat.toolError')} value={formatDetails(step.error, cappedNote)} destructive />
-            )}
-        </div>
-    )
-}
-
-function DetailBlock({ label, value, destructive = false }: { label: string; value: string; destructive?: boolean }) {
-    return (
-        <div>
-            <div className={destructive ? 'mb-1 font-medium text-destructive' : 'mb-1 font-medium text-foreground/70'}>
-                {label}
-            </div>
-            <pre className="max-h-40 max-w-full overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted/70 p-2 font-mono text-[10px] leading-relaxed text-foreground/75">
-                {value}
-            </pre>
         </div>
     )
 }

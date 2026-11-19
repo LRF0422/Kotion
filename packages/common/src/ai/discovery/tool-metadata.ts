@@ -204,7 +204,7 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
     {
         name: 'updateTitle',
         category: 'document-write',
-        description: '更新文档标题',
+        description: '修改当前编辑页面的标题（页面标题是受保护的第一个块，这是唯一正确的改标题方式；其他块工具不能改标题）',
         priority: 10,
         tags: ['title', 'update', 'essential'],
         loaded: false,

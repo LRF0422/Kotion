@@ -1,5 +1,7 @@
+import { i18n } from '@kn/common'
 import type { AgentStepRecord, SubRunRecord, RunUsage, AgentTodoItem } from '@kn/common'
 import type { SubToolCallView } from '@kn/ui'
+import { toolLabel } from './tool-titles'
 
 // Types
 export interface Message {
@@ -228,15 +230,12 @@ export function extractBlockReferences(steps?: ExecutionStep[]): BlockReference[
     return refs
 }
 
-// Helper function to format tool names for display
+// Helper function to format tool names for display. Built-in tools have a
+// localized label under `ai.chat.toolNames`; plugin tools keep the readable
+// Title Case fallback (their ids are not a closed set the host can translate).
+// For a call's own title (with its page/query/argument), see `toolCallTitle`.
 export function formatToolName(toolName: string) {
-    return toolName
-        // snake_case builtins (wait_for_children, get_run_state, …) read as one
-        // run-on word otherwise.
-        .replace(/_/g, ' ')
-        .replace(/([A-Z])/g, ' $1')
-        .replace(/^./, str => str.toUpperCase())
-        .trim()
+    return toolLabel((key, options) => i18n.t(key, options), toolName)
 }
 
 /**

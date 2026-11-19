@@ -44,6 +44,16 @@ export interface DocumentStructure {
         pos: number
         textInsertPos: number
     }>
+    /**
+     * The page title (the leading `title` container), reported once and never
+     * as an ordinary block. Change it with `updateTitle`; block-addressed tools
+     * refuse to edit it.
+     */
+    title?: {
+        /** Stable block id of the title container (may be absent on legacy docs) */
+        blockId?: string
+        text: string
+    }
     blocks: Array<{
         type: string
         pos: number
@@ -57,6 +67,8 @@ export interface DocumentStructure {
         depth?: number
         /** Heading level (only present for heading blocks) */
         level?: number
+        /** Set on the pinned page-title container; edit it with `updateTitle` only */
+        role?: 'title'
     }>
 }
 

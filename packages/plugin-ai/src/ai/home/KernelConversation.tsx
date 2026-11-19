@@ -1,7 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { MutableRefObject } from "react"
-import { ChatMessageList, PlanApprovalCard } from "@kn/ui"
-import { LoaderCircle } from "@kn/icon"
+import {
+    Conversation,
+    ConversationContent,
+    ConversationScrollButton,
+    Loader,
+    PlanApprovalCard,
+} from "@kn/ui"
 import {
     fileToAgentImage,
     toImageDataUrl,
@@ -371,94 +376,97 @@ export const KernelConversation: React.FC<KernelConversationProps> = ({
 
     return (
         <div className="flex min-h-0 w-full flex-1 flex-col">
-            {/* ChatMessageList owns the scroll container: it ships auto-follow
-                (useAutoScroll + a "back to bottom" affordance) and re-enables
-                following once the user returns to the bottom.
+            {/* Conversation (AI Elements) owns the scroll container: it ships
+                auto-follow (useAutoScroll + a "back to bottom" affordance) and
+                re-enables following once the user returns to the bottom.
 
                 The scrollport spans the whole panel (its scrollbar therefore
                 rides the panel's right edge instead of floating mid-window),
                 while the transcript column keeps its readable max-w-3xl width
                 by centering itself inside the scrollport. */}
-            <ChatMessageList>
-                <div className="mx-auto flex w-full max-w-3xl grow flex-col gap-1 px-5 md:px-6">
-                    {loadingTranscript && messages.length === 0 && (
-                        <div className="flex flex-col items-center justify-center gap-2 py-16 text-muted-foreground">
-                            <LoaderCircle className="h-5 w-5 animate-spin" />
-                            <span className="text-xs">
-                                {t('ai.chat.loadingSession')}
-                            </span>
-                        </div>
-                    )}
+            <Conversation>
+                <ConversationContent className="flex flex-col p-0">
+                    <div className="mx-auto flex w-full max-w-3xl grow flex-col gap-0.5 px-5 py-2 md:px-6">
+                        {loadingTranscript && messages.length === 0 && (
+                            <div className="flex flex-col items-center justify-center gap-2 py-16 text-muted-foreground">
+                                <Loader size={18} />
+                                <span className="text-xs">
+                                    {t('ai.chat.loadingSession')}
+                                </span>
+                            </div>
+                        )}
 
-                    {/* Center the hero in the message viewport instead of
-                        pinning it to the top of the scroll area. */}
-                    {isEmpty && (
-                        <div className="flex flex-1 flex-col justify-center">
-                            <ChatEmptyState mode={chatMode} onSubmit={handleQuickSubmit} />
-                        </div>
-                    )}
+                        {/* Center the hero in the message viewport instead of
+                            pinning it to the top of the scroll area. */}
+                        {isEmpty && (
+                            <div className="flex flex-1 flex-col justify-center">
+                                <ChatEmptyState mode={chatMode} onSubmit={handleQuickSubmit} />
+                            </div>
+                        )}
 
-                    {/* A steered turn is handled after the step that is still
-                        running, so while the run is live it sits below the
-                        streaming answer rather than in the history above it. */}
-                    {messages.map(message => (
-                        isActive && message.steered ? null : (
+                        {/* A steered turn is handled after the step that is still
+                            running, so while the run is live it sits below the
+                            streaming answer rather than in the history above it. */}
+                        {messages.map(message => (
+                            isActive && message.steered ? null : (
+                                <MessageBubble key={message.id} message={message} />
+                            )
+                        ))}
+
+                        {isActive && <MessageBubble message={liveMessage} isStreaming />}
+
+                        {isActive && messages.filter(message => message.steered).map(message => (
                             <MessageBubble key={message.id} message={message} />
-                        )
-                    ))}
+                        ))}
 
-                    {isActive && <MessageBubble message={liveMessage} isStreaming />}
+                        {state.phase === 'waiting-approval' && state.plan && (
+                            <div className="mx-2 my-1.5">
+                                <PlanApprovalCard
+                                    planText={state.plan.text}
+                                    onDecision={(approved, feedback) => agent.approvePlan(approved, feedback)}
+                                />
+                            </div>
+                        )}
 
-                    {isActive && messages.filter(message => message.steered).map(message => (
-                        <MessageBubble key={message.id} message={message} />
-                    ))}
-
-                    {state.phase === 'waiting-approval' && state.plan && (
-                        <div className="mx-2 my-1.5">
-                            <PlanApprovalCard
-                                planText={state.plan.text}
-                                onDecision={(approved, feedback) => agent.approvePlan(approved, feedback)}
-                            />
-                        </div>
-                    )}
-
-                    {state.phase === 'suspended' && state.suspendReason === 'budget' && (
-                        <div className="mx-2 my-1.5 flex items-center gap-2 rounded-lg border border-border/60 bg-card p-2.5 text-[12px] text-muted-foreground">
-                            <span>{t('ai.chat.budgetPaused')}</span>
-                            <button
-                                type="button"
-                                className="ml-auto shrink-0 rounded-md bg-primary px-2.5 py-1 text-[12px] font-medium text-primary-foreground hover:opacity-90"
-                                onClick={() => void agent.continueRun()}
-                            >
-                                {t('ai.chat.continueRun')}
-                            </button>
-                        </div>
-                    )}
-
-                    {pendingForms.map(request => (
-                        <div key={request.id} className="mx-2 my-1.5">
-                            <FormRequestCard request={request} />
-                        </div>
-                    ))}
-
-                    {(sessionError || (state.error && state.phase !== 'failed')) && (
-                        <div className="mx-2 my-1.5 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-[11px] text-amber-700 dark:text-amber-300">
-                            <span className="min-w-0 flex-1">
-                                {sessionError ?? t('ai.chat.unavailable', { error: state.error })}
-                            </span>
-                            {state.error && (
+                        {state.phase === 'suspended' && state.suspendReason === 'budget' && (
+                            <div className="mx-2 my-1.5 flex items-center gap-2 rounded-lg border border-border/60 bg-card p-2.5 text-[12px] text-muted-foreground">
+                                <span>{t('ai.chat.budgetPaused')}</span>
                                 <button
                                     type="button"
-                                    className="shrink-0 rounded-md border border-amber-500/30 px-2 py-1 font-medium hover:bg-amber-500/10"
-                                    onClick={agent.retryConnection}
+                                    className="ml-auto shrink-0 rounded-md bg-primary px-2.5 py-1 text-[12px] font-medium text-primary-foreground hover:opacity-90"
+                                    onClick={() => void agent.continueRun()}
                                 >
-                                    {t('ai.chat.retry')}
+                                    {t('ai.chat.continueRun')}
                                 </button>
-                            )}
-                        </div>
-                    )}
-                </div>
-            </ChatMessageList>
+                            </div>
+                        )}
+
+                        {pendingForms.map(request => (
+                            <div key={request.id} className="mx-2 my-1.5">
+                                <FormRequestCard request={request} />
+                            </div>
+                        ))}
+
+                        {(sessionError || (state.error && state.phase !== 'failed')) && (
+                            <div className="mx-2 my-1.5 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-[11px] text-amber-700 dark:text-amber-300">
+                                <span className="min-w-0 flex-1">
+                                    {sessionError ?? t('ai.chat.unavailable', { error: state.error })}
+                                </span>
+                                {state.error && (
+                                    <button
+                                        type="button"
+                                        className="shrink-0 rounded-md border border-amber-500/30 px-2 py-1 font-medium hover:bg-amber-500/10"
+                                        onClick={agent.retryConnection}
+                                    >
+                                        {t('ai.chat.retry')}
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </ConversationContent>
+                <ConversationScrollButton label={t('ai.chat.scrollToBottom')} />
+            </Conversation>
 
             {/* No top divider: the composer draws its own outline, so a
                 full-bleed hairline over a max-w-3xl composer is just a stray

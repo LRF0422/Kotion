@@ -94,9 +94,9 @@ export const ChatTabs: React.FC<ChatTabsProps> = ({
                         role="tab"
                         aria-selected={isActive}
                         className={cn(
-                            'group/tab flex h-7 max-w-[190px] shrink-0 items-center gap-1 rounded-md pl-2 pr-0.5 transition-colors',
+                            'group/tab flex h-7 max-w-[190px] shrink-0 items-center gap-1 rounded-lg pl-2.5 pr-0.5 transition-colors',
                             isActive
-                                ? 'bg-muted text-foreground'
+                                ? 'bg-primary/10 text-foreground ring-1 ring-inset ring-primary/15'
                                 : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
                         )}
                     >
@@ -144,7 +144,7 @@ export const ChatTabs: React.FC<ChatTabsProps> = ({
                 onClick={onNewTab}
                 aria-label={t('ai.chat.newChat')}
                 title={t('ai.chat.tabs.newTab', { defaultValue: '新建标签页' })}
-                className="ml-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                className="ml-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
             >
                 <Plus className="h-3.5 w-3.5" />
             </button>

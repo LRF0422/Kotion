@@ -16,7 +16,7 @@ import {
  */
 export const createReadTools = (editor: Editor): ToolsRecord => ({
     getDocumentStructure: {
-        description: '获取文档结构概览,包括大小、标题、每个块的 blockId 与文本预览 textPreview。通常据此即可定位与判断内容,无需逐块读取',
+        description: '获取文档结构概览,包括大小、页面标题（title 字段）、每个块的 blockId 与文本预览 textPreview。title 是受保护的页面标题块，改标题只能用 updateTitle；blocks 里的标题条目带 role: \'title\'。通常据此即可定位与判断内容,无需逐块读取',
         inputSchema: z.object({}),
         execute: async () => {
             const structure = extractDocumentStructure(editor)

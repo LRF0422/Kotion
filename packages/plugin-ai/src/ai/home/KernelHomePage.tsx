@@ -462,7 +462,7 @@ export const KernelHomePage: React.FC = () => {
                 {/* Header: conversation list toggle + the FOCUSED conversation's
                     title, then the shared action cluster (tasks / clear) and the
                     artifacts shelf. The tab strip lives only in the dock now. */}
-                <div className="flex h-9 shrink-0 items-center gap-1 border-b bg-background/95 pl-1.5 pr-2 backdrop-blur-sm">
+                <div className="flex h-10 shrink-0 items-center gap-1.5 border-b border-border/60 bg-background/90 pl-1.5 pr-2 backdrop-blur-md">
                     <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger asChild>

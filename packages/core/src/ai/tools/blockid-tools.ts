@@ -2,6 +2,7 @@ import type { Editor } from "@kn/editor"
 import { z } from "@kn/ui"
 import type { ToolsRecord } from "@kn/common"
 import { parseMarkdownToNodes, scrollToPosition, findBlockPosById } from "@kn/common"
+import { TITLE_EDIT_HINT, titleBoundary } from "./document-title"
 
 // Block lookup is shared with the reference/navigation features.
 const findBlockInDoc = findBlockPosById
@@ -30,7 +31,7 @@ const markdownToPmNodes = (editor: Editor, markdown: string): { nodes: any[]; dr
  */
 export const createBlockIdTools = (editor: Editor): ToolsRecord => ({
     replaceBlockById: {
-        description: '通过 blockId 替换整个块的内容，支持 Markdown。blockId 从 getDocumentStructure 或 searchInDocument 获取，比位置寻址更可靠（编辑后不失效）',
+        description: '通过 blockId 替换整个块的内容，支持 Markdown。blockId 从 getDocumentStructure 或 searchInDocument 获取，比位置寻址更可靠（编辑后不失效）。页面标题（title 块及其内部 heading）受保护，改标题请用 updateTitle',
         inputSchema: z.object({
             blockId: z.string().describe("目标块的 blockId"),
             markdown: z.string().describe("新的块内容，支持 Markdown 格式（可以是多个块）")
@@ -40,6 +41,14 @@ export const createBlockIdTools = (editor: Editor): ToolsRecord => ({
                 const found = findBlockInDoc(editor.state.doc, blockId)
                 if (!found) {
                     return { error: `未找到 blockId 为 "${blockId}" 的块，请用 getDocumentStructure 获取有效的 blockId` }
+                }
+
+                // Replacing the title container (or its inner heading) with
+                // markdown is how a "rename the page" attempt used to delete the
+                // title structure outright. Only updateTitle may write it.
+                const boundary = titleBoundary(editor.state.doc)
+                if (boundary && found.pos < boundary.to) {
+                    return { error: `块 ${blockId} 属于页面标题。${TITLE_EDIT_HINT}` }
                 }
 
                 const { nodes, dropped } = markdownToPmNodes(editor, markdown)
@@ -67,7 +76,7 @@ export const createBlockIdTools = (editor: Editor): ToolsRecord => ({
     },
 
     insertAtBlockId: {
-        description: '在指定 blockId 的块之前或之后插入内容，支持 Markdown。比 blockIndex/位置寻址更可靠',
+        description: '在指定 blockId 的块之前或之后插入内容，支持 Markdown。比 blockIndex/位置寻址更可靠。页面标题所在位置受保护，不能在标题前或标题内插入',
         inputSchema: z.object({
             blockId: z.string().describe("锚点块的 blockId"),
             markdown: z.string().describe("要插入的内容，支持 Markdown 格式"),
@@ -93,6 +102,14 @@ export const createBlockIdTools = (editor: Editor): ToolsRecord => ({
                     ? found.pos
                     : found.pos + found.node.nodeSize
 
+                // "After the title" is a valid top-level insertion; before it or
+                // inside it is not (the title container is pinned first and may
+                // only contain its heading).
+                const boundary = titleBoundary(editor.state.doc)
+                if (boundary && insertPos < boundary.to) {
+                    return { error: `插入位置落在页面标题内。${TITLE_EDIT_HINT}` }
+                }
+
                 const tr = editor.state.tr
                 tr.insert(insertPos, nodes)
                 editor.view.dispatch(tr)
@@ -113,7 +130,7 @@ export const createBlockIdTools = (editor: Editor): ToolsRecord => ({
     },
 
     applyEdits: {
-        description: '【推荐用于多处修改】在单个事务中批量执行多个编辑操作（替换块/插入/删除/追加）。所有操作一次性生效、一步撤销、只滚动一次，比逐个调用工具流畅得多。操作按顺序执行，用 blockId 定位（位置自动保持正确）',
+        description: '【推荐用于多处修改】在单个事务中批量执行多个编辑操作（替换块/插入/删除/追加）。所有操作一次性生效、一步撤销、只滚动一次，比逐个调用工具流畅得多。操作按顺序执行，用 blockId 定位（位置自动保持正确）。页面标题受保护：涉及标题的操作会被跳过，改标题请用 updateTitle',
         inputSchema: z.object({
             operations: z.array(z.object({
                 action: z.enum(['replaceBlock', 'insertBefore', 'insertAfter', 'deleteBlock', 'append'])
@@ -149,6 +166,23 @@ export const createBlockIdTools = (editor: Editor): ToolsRecord => ({
                         found = findBlockInDoc(tr.doc, op.blockId)
                         if (!found) {
                             results.push({ index, action: op.action, blockId: op.blockId, error: '未找到该 blockId 对应的块' })
+                            continue
+                        }
+
+                        // Same title guard as the single-op tools: the batch
+                        // runner is the most likely place for a model to
+                        // "replace every block, including the title".
+                        const boundary = titleBoundary(tr.doc)
+                        const targetPos = op.action === 'insertAfter'
+                            ? found.pos + found.node.nodeSize
+                            : found.pos
+                        if (boundary && targetPos < boundary.to) {
+                            results.push({
+                                index,
+                                action: op.action,
+                                blockId: op.blockId,
+                                error: `目标属于页面标题，已跳过。${TITLE_EDIT_HINT}`,
+                            })
                             continue
                         }
                     }

@@ -2,6 +2,7 @@ import type { Editor } from "@kn/editor"
 import { z } from "@kn/ui"
 import type { ToolsRecord } from "@kn/common"
 import { findBlockPosById, findTextMatchesInDoc, scrollToPosition } from "@kn/common"
+import { TITLE_EDIT_HINT, titleBoundary } from "./document-title"
 
 /**
  * Precise document deletion tools.
@@ -57,14 +58,6 @@ const isProtected = (doc: any, pos: number, node: any): boolean => {
     return false
 }
 
-/** Doc range of the pinned leading block (title), when present. */
-const titleRange = (doc: any): { from: number; to: number } | null => {
-    const first = doc.firstChild
-    return first && PROTECTED_TYPES.has(first.type.name)
-        ? { from: 0, to: first.nodeSize }
-        : null
-}
-
 /** Preview of a node's text content for result reporting. */
 const preview = (node: any): string =>
     node.textContent.length > 60
@@ -76,7 +69,7 @@ const preview = (node: any): string =>
  */
 export const createDeleteTools = (editor: Editor): ToolsRecord => ({
     deleteText: {
-        description: '精确删除匹配到的文本（只删文本，不动块结构；要删整块请用 deleteBlocks）。默认要求能唯一定位：多处匹配时必须提供 blockId 或 occurrence 之一，或显式设置 deleteAllMatches',
+        description: '精确删除匹配到的文本（只删文本，不动块结构；要删整块请用 deleteBlocks）。默认要求能唯一定位：多处匹配时必须提供 blockId 或 occurrence 之一，或显式设置 deleteAllMatches。页面标题内的文本受保护、不会被删除（改标题请用 updateTitle）',
         inputSchema: z.object({
             searchText: z.string().min(1).describe('要删除的文本，须与文档内容一致（默认不区分大小写）'),
             blockId: z.string().optional().describe('限定在该 blockId 的块（及其子块）内查找，用于多处匹配时精确定位'),
@@ -98,11 +91,18 @@ export const createDeleteTools = (editor: Editor): ToolsRecord => ({
 
                 const doc = editor.state.doc
                 const options: { caseSensitive: boolean; scopeFrom?: number; scopeTo?: number } = { caseSensitive }
+                const boundary = titleBoundary(doc)
 
                 if (blockId) {
                     const scope = findBlockPosById(doc, blockId)
                     if (!scope) {
                         return { error: `未找到 blockId 为 "${blockId}" 的块，请用 getDocumentStructure 获取有效 blockId` }
+                    }
+                    // The title container and its heading are one protected
+                    // block: deleting text out of it silently turned a page
+                    // title into "Untitled".
+                    if (boundary && scope.pos < boundary.to) {
+                        return { error: `块 ${blockId} 属于页面标题。${TITLE_EDIT_HINT}` }
                     }
                     options.scopeFrom = scope.pos
                     options.scopeTo = scope.pos + scope.node.nodeSize
@@ -117,9 +117,25 @@ export const createDeleteTools = (editor: Editor): ToolsRecord => ({
                     }
                 }
 
+                // Deletions never reach into the title. `deleteAllMatches` drops
+                // title hits and says so; an explicitly chosen title match is an
+                // error rather than a silent page rename.
+                const titleMatches = boundary
+                    ? matches.filter(match => match.from < boundary.to)
+                    : []
+                const bodyMatches = boundary
+                    ? matches.filter(match => match.from >= boundary.to)
+                    : matches
+                const inTitle = (match: (typeof matches)[number]) =>
+                    boundary !== null && match.from < boundary.to
+
+                if (bodyMatches.length === 0) {
+                    return { error: `匹配文本只出现在页面标题里。${TITLE_EDIT_HINT}`, titleMatches: titleMatches.length }
+                }
+
                 let targets
                 if (deleteAllMatches) {
-                    targets = matches
+                    targets = bodyMatches
                 } else if (occurrence !== undefined) {
                     if (!Number.isInteger(occurrence) || occurrence < 1 || occurrence > matches.length) {
                         return {
@@ -129,6 +145,9 @@ export const createDeleteTools = (editor: Editor): ToolsRecord => ({
                         }
                     }
                     targets = [matches[occurrence - 1]]
+                    if (inTitle(targets[0])) {
+                        return { error: `第 ${occurrence} 处匹配在页面标题里。${TITLE_EDIT_HINT}` }
+                    }
                 } else if (matches.length === 1) {
                     targets = matches
                 } else {
@@ -170,7 +189,10 @@ export const createDeleteTools = (editor: Editor): ToolsRecord => ({
                         blockType: m.blockType
                     })),
                     deletedSize: docSize - editor.state.doc.nodeSize,
-                    message: `已删除 ${targets.length}/${matches.length} 处匹配文本`
+                    ...(titleMatches.length > 0
+                        ? { skippedTitleMatches: titleMatches.length, titleHint: TITLE_EDIT_HINT }
+                        : {}),
+                    message: `已删除 ${targets.length}/${matches.length} 处匹配文本${titleMatches.length > 0 ? `（跳过标题内的 ${titleMatches.length} 处）` : ''}`
                 }
             } catch (error) {
                 return { error: `删除文本失败: ${error instanceof Error ? error.message : '未知错误'}` }
@@ -306,7 +328,7 @@ export const createDeleteTools = (editor: Editor): ToolsRecord => ({
                     }
                 }
 
-                const title = titleRange(doc)
+                const title = titleBoundary(doc)
                 if (title && from < title.to) {
                     return { error: `范围 ${from}-${to} 覆盖了文档标题，标题内容请用 updateTitle 修改` }
                 }
@@ -383,7 +405,7 @@ export const createDeleteTools = (editor: Editor): ToolsRecord => ({
                     return { error: '删除区间为空（锚点块被排除或锚点重叠），未执行删除' }
                 }
 
-                const title = titleRange(doc)
+                const title = titleBoundary(doc)
                 if (title && from < title.to) {
                     return { error: `删除区间 ${from}-${to} 覆盖了文档标题，标题请用 updateTitle 修改` }
                 }
@@ -423,11 +445,18 @@ export const createDeleteTools = (editor: Editor): ToolsRecord => ({
     clearDocument: {
         description: '清空文档内容，保留标题。用于需要重写整个文档的场景',
         inputSchema: z.object({
-            preserveTitle: z.boolean().optional().describe("是否保留标题，默认 true")
+            preserveTitle: z.boolean().optional().describe("是否保留标题（页面必须有标题块，传 false 会被拒绝；默认 true）")
         }),
         execute: async ({ preserveTitle = true }: {
             preserveTitle?: boolean
         }) => {
+            if (!preserveTitle) {
+                // The document schema is `title block*`: a page without its
+                // title block cannot be saved. Clearing "everything including
+                // the title" used to report success while the transform silently
+                // failed.
+                return { error: `页面必须有标题块，不能清空标题。${TITLE_EDIT_HINT}` }
+            }
             try {
                 const doc = editor.state.doc
 
@@ -435,12 +464,9 @@ export const createDeleteTools = (editor: Editor): ToolsRecord => ({
                     return { error: '文档中没有内容' }
                 }
 
-                // Iterate only the top-level children of the doc.
-                // NOTE: do NOT use discoverBlocks() here because it recurses
-                // into descendants and would return the inner `heading` node
-                // of the `title` container as a separate block, causing the
-                // deletion range to start INSIDE the title node when
-                // preserveTitle is true.
+                // Iterate only the top-level children of the doc. This needs
+                // absolute offsets for one contiguous delete range, which the
+                // per-node block list (discoverBlocks) does not provide.
                 const topBlocks: Array<{ pos: number; size: number; type: string }> = []
                 let offset = 0
                 doc.forEach(child => {

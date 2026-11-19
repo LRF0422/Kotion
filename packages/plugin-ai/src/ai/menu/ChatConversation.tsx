@@ -1,10 +1,12 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from "react"
 import type { MutableRefObject } from "react"
-import { Loader2 } from "@kn/icon"
 import {
     ExpandableChatBody,
     ExpandableChatFooter,
-    ChatMessageList,
+    Conversation,
+    ConversationContent,
+    ConversationScrollButton,
+    Loader,
     PlanApprovalCard,
     cn,
 } from "@kn/ui"
@@ -1067,118 +1069,121 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
     // ─── Render ───────────────────────────────────────────────────
     return (
         <>
-            <ExpandableChatBody className="bg-muted/20 dark:bg-background overflow-x-hidden flex-row">
+            <ExpandableChatBody className="flex-row overflow-x-hidden bg-background">
                 {/* On mobile the pane takes over the panel (push navigation);
                     on desktop it is an inline side peek next to the chat. */}
                 <div className={cn('flex min-h-0 min-w-0 flex-1 flex-col', inlinePaneArtifact && 'hidden md:flex')}>
-                <ChatMessageList>
-                    {loadingTranscript && messages.length === 0 && (
-                        <div
-                            role="status"
-                            aria-live="polite"
-                            className="flex flex-col items-center justify-center gap-2 py-16 text-muted-foreground"
-                        >
-                            <Loader2 className="h-5 w-5 animate-spin" />
-                            <span className="text-xs">{t('ai.chat.loadingSession')}</span>
-                        </div>
-                    )}
-
-                    {isEmpty && (
-                        <ChatEmptyState mode={chatMode} onSubmit={handleQuickSubmit} page={starterPage} />
-                    )}
-
-                    {/* A steered turn is only handled after the step that is
-                        still running, so while the run is live it is rendered
-                        BELOW the streaming answer instead of being spliced into
-                        the history above it. */}
-                    {messages.map((message) => (
-                        isActive && message.steered ? null : (
-                            <MessageBubble
-                                key={message.id}
-                                message={message}
-                                onRevealReference={handleRevealReference}
-                            />
-                        )
-                    ))}
-
-                    {isActive && (
-                        <MessageBubble
-                            message={liveMessage}
-                            isStreaming
-                            onRevealReference={handleRevealReference}
-                        />
-                    )}
-
-                    {isActive && messages.filter(message => message.steered).map((message) => (
-                        <MessageBubble
-                            key={message.id}
-                            message={message}
-                            onRevealReference={handleRevealReference}
-                        />
-                    ))}
-
-                    {agent.state.phase === 'waiting-approval' && agent.state.plan && (
-                        <div className="mx-2 my-1.5">
-                            <PlanApprovalCard
-                                planText={agent.state.plan.text}
-                                onDecision={(approved, feedback) => agent.approvePlan(approved, feedback)}
-                            />
-                        </div>
-                    )}
-
-                    {agent.state.phase === 'suspended' && agent.state.suspendReason === 'budget' && (
-                        <div className="mx-2 my-1.5 flex items-center gap-2 rounded-lg border border-border/60 bg-card p-2.5 text-[12px] text-muted-foreground">
-                            <span>{t('ai.chat.budgetPaused')}</span>
-                            <button
-                                type="button"
-                                className="ml-auto shrink-0 rounded-md bg-primary px-2.5 py-1 text-[12px] font-medium text-primary-foreground hover:opacity-90"
-                                onClick={() => void agent.continueRun()}
-                            >
-                                {t('ai.chat.continueRun')}
-                            </button>
-                        </div>
-                    )}
-
-                    {agent.state.error && agent.state.phase !== 'failed' && (
-                        <div className="mx-2 my-1.5 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-[11px] text-amber-700 dark:text-amber-300">
-                            <span className="min-w-0 flex-1">{t('ai.chat.unavailable', { error: agent.state.error })}</span>
-                            {agent.state.phase === 'suspended' && (
-                                <button
-                                    type="button"
-                                    className="shrink-0 rounded-md border border-amber-500/30 px-2 py-1 font-medium hover:bg-amber-500/10"
-                                    onClick={agent.retryConnection}
+                    <Conversation>
+                        <ConversationContent className="flex flex-col gap-0.5 p-2">
+                            {loadingTranscript && messages.length === 0 && (
+                                <div
+                                    role="status"
+                                    aria-live="polite"
+                                    className="flex flex-col items-center justify-center gap-2 py-16 text-muted-foreground"
                                 >
-                                    {t('ai.chat.retry')}
-                                </button>
+                                    <Loader size={18} />
+                                    <span className="text-xs">{t('ai.chat.loadingSession')}</span>
+                                </div>
                             )}
-                        </div>
-                    )}
 
-                    {pendingForms.map(request => (
-                        <div key={request.id} className="mx-2 my-1.5">
-                            <FormRequestCard request={request} />
-                        </div>
-                    ))}
+                            {isEmpty && (
+                                <ChatEmptyState mode={chatMode} onSubmit={handleQuickSubmit} page={starterPage} />
+                            )}
 
-                    {pendingChoice && (
-                        <UserChoiceCard
-                            choice={pendingChoice}
-                            customInput={customInput}
-                            onCustomInputChange={setCustomInput}
-                            onSelect={handleOptionSelect}
-                            onCustomSubmit={handleCustomSubmit}
-                            onCancel={handleCancelChoice}
-                        />
-                    )}
+                            {/* A steered turn is only handled after the step that is
+                                still running, so while the run is live it is rendered
+                                BELOW the streaming answer instead of being spliced into
+                                the history above it. */}
+                            {messages.map((message) => (
+                                isActive && message.steered ? null : (
+                                    <MessageBubble
+                                        key={message.id}
+                                        message={message}
+                                        onRevealReference={handleRevealReference}
+                                    />
+                                )
+                            ))}
 
-                    {error && (
-                        <ErrorDisplay
-                            error={error}
-                            onRetry={handleRetry}
-                            onDismiss={() => setError(null)}
-                        />
-                    )}
-                </ChatMessageList>
+                            {isActive && (
+                                <MessageBubble
+                                    message={liveMessage}
+                                    isStreaming
+                                    onRevealReference={handleRevealReference}
+                                />
+                            )}
+
+                            {isActive && messages.filter(message => message.steered).map((message) => (
+                                <MessageBubble
+                                    key={message.id}
+                                    message={message}
+                                    onRevealReference={handleRevealReference}
+                                />
+                            ))}
+
+                            {agent.state.phase === 'waiting-approval' && agent.state.plan && (
+                                <div className="mx-2 my-1.5">
+                                    <PlanApprovalCard
+                                        planText={agent.state.plan.text}
+                                        onDecision={(approved, feedback) => agent.approvePlan(approved, feedback)}
+                                    />
+                                </div>
+                            )}
+
+                            {agent.state.phase === 'suspended' && agent.state.suspendReason === 'budget' && (
+                                <div className="mx-2 my-1.5 flex items-center gap-2 rounded-lg border border-border/60 bg-card p-2.5 text-[12px] text-muted-foreground">
+                                    <span>{t('ai.chat.budgetPaused')}</span>
+                                    <button
+                                        type="button"
+                                        className="ml-auto shrink-0 rounded-md bg-primary px-2.5 py-1 text-[12px] font-medium text-primary-foreground hover:opacity-90"
+                                        onClick={() => void agent.continueRun()}
+                                    >
+                                        {t('ai.chat.continueRun')}
+                                    </button>
+                                </div>
+                            )}
+
+                            {agent.state.error && agent.state.phase !== 'failed' && (
+                                <div className="mx-2 my-1.5 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-[11px] text-amber-700 dark:text-amber-300">
+                                    <span className="min-w-0 flex-1">{t('ai.chat.unavailable', { error: agent.state.error })}</span>
+                                    {agent.state.phase === 'suspended' && (
+                                        <button
+                                            type="button"
+                                            className="shrink-0 rounded-md border border-amber-500/30 px-2 py-1 font-medium hover:bg-amber-500/10"
+                                            onClick={agent.retryConnection}
+                                        >
+                                            {t('ai.chat.retry')}
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+
+                            {pendingForms.map(request => (
+                                <div key={request.id} className="mx-2 my-1.5">
+                                    <FormRequestCard request={request} />
+                                </div>
+                            ))}
+
+                            {pendingChoice && (
+                                <UserChoiceCard
+                                    choice={pendingChoice}
+                                    customInput={customInput}
+                                    onCustomInputChange={setCustomInput}
+                                    onSelect={handleOptionSelect}
+                                    onCustomSubmit={handleCustomSubmit}
+                                    onCancel={handleCancelChoice}
+                                />
+                            )}
+
+                            {error && (
+                                <ErrorDisplay
+                                    error={error}
+                                    onRetry={handleRetry}
+                                    onDismiss={() => setError(null)}
+                                />
+                            )}
+                        </ConversationContent>
+                        <ConversationScrollButton label={t('ai.chat.scrollToBottom')} />
+                    </Conversation>
                 </div>
                 {inlinePaneArtifact && (
                     <aside className="flex min-h-0 min-w-0 flex-1 flex-col border-l border-border bg-background md:w-3/5 md:flex-none">

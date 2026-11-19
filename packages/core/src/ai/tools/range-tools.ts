@@ -1,6 +1,7 @@
 import type { Editor } from "@kn/editor"
 import { z } from "@kn/ui"
 import type { ToolsRecord } from "@kn/common"
+import { TITLE_EDIT_HINT, titleBoundary } from "./document-title"
 
 /**
  * Find every occurrence of `text` in the doc, returning absolute from/to.
@@ -29,7 +30,7 @@ const findTextOccurrences = (editor: Editor, text: string): Array<{ from: number
  */
 export const createRangeTools = (editor: Editor): ToolsRecord => ({
     replaceRange: {
-        description: '在精确位置范围内替换文本。先用 searchInDocument 查找精确位置，再用此工具替换。强烈建议传入 expectedText：若位置已因其他编辑失效，会自动重新定位该文本后替换',
+        description: '在精确位置范围内替换文本。先用 searchInDocument 查找精确位置，再用此工具替换。强烈建议传入 expectedText：若位置已因其他编辑失效，会自动重新定位该文本后替换。页面标题受保护，改标题请用 updateTitle',
         inputSchema: z.object({
             from: z.number().describe("替换范围起始位置"),
             to: z.number().describe("替换范围结束位置"),
@@ -77,6 +78,14 @@ export const createRangeTools = (editor: Editor): ToolsRecord => ({
                         to = occurrences[0].to
                         relocated = true
                     }
+                }
+
+                // The title is page metadata, not body copy: replacing a range
+                // that overlaps it silently renamed the page and (when the
+                // replacement parsed as a block) broke the title schema.
+                const boundary = titleBoundary(editor.state.doc)
+                if (boundary && from < boundary.to) {
+                    return { error: `替换范围 ${from}-${to} 覆盖了页面标题。${TITLE_EDIT_HINT}` }
                 }
 
                 // Extract old text before replacement

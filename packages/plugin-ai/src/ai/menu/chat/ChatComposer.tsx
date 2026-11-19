@@ -1,5 +1,4 @@
 import React, {
-    FormEvent,
     forwardRef,
     useEffect,
     useRef,
@@ -8,7 +7,12 @@ import React, {
 import { Send, Square, CornerDownRight, MessageCircle, Bot, FileDiff, ImagePlus, ImageOff, X } from '@kn/icon'
 import {
     Button,
-    ChatInput,
+    PromptInput,
+    PromptInputBody,
+    PromptInputFooter,
+    PromptInputHeader,
+    PromptInputSubmit,
+    PromptInputTextarea,
     Tooltip,
     TooltipContent,
     TooltipProvider,
@@ -16,7 +20,7 @@ import {
     ZoomableImage,
 } from '@kn/ui'
 import type { ChatMode, ChatModelParams } from '@kn/common'
-import { isImeComposing, useTranslation } from '@kn/common'
+import { useTranslation } from '@kn/common'
 
 import { ModelSelector } from '../../components/ModelSelector'
 import { AgentSelector } from '../../components/AgentSelector'
@@ -185,21 +189,9 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
     const isValid = (value.trim().length > 0 || hasImages)
         && !targetUnavailable && !blockedByAttachedImages
 
-    const handleFormSubmit = (e: FormEvent) => {
-        e.preventDefault()
-        if (!isValid) return
-        onSubmit()
-    }
-
+    // Enter / Shift+Enter live in PromptInputTextarea, which guards IME
+    // composition. This handler only keeps the optional `@` shortcut.
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        // While an IME is composing (拼音/kana/한글), Enter confirms the
-        // candidate — submitting here would send the raw pre-edit text.
-        if (isImeComposing(e)) return
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault()
-            if (isValid) onSubmit()
-            return
-        }
         // `@` at the start or after whitespace opens the page picker. Gated with
         // the chip: with no chip rendered there is nothing to anchor the
         // popover, so `@` must stay a plain text character.
@@ -231,8 +223,13 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
     }
 
     return (
-        <form
-            onSubmit={handleFormSubmit}
+        <PromptInput
+            value={value}
+            onValueChange={onChange}
+            onSubmit={() => {
+                if (!isValid) return
+                onSubmit()
+            }}
             className="relative rounded-xl border border-border/60 bg-background transition-colors focus-within:border-ring/50 focus-within:ring-1 focus-within:ring-ring/15"
         >
             {blockedByAttachedImages && (
@@ -322,7 +319,7 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
                 SHOW_TRACKING_TOGGLE) and sampling params are folded into the model
                 menu, so the row still fits one line in the narrow side dock;
                 `flex-wrap` remains as a safety net. */}
-            <div className="flex flex-wrap items-center gap-1 px-2 pt-1.5">
+            <PromptInputHeader className="flex flex-wrap items-center gap-1 px-2 pt-1.5">
                 <ModeToggle mode={mode} onModeChange={onModeChange} disabled={isLoading} />
                 <AgentSelector disabled={isLoading} triggerClassName="hover:bg-muted/60" />
                 <ModelSelector
@@ -356,34 +353,34 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
                         <FileDiff className="h-3 w-3 shrink-0" />
                     </button>
                 )}
-            </div>
+            </PromptInputHeader>
             {/* Input takes the full card width; the attach button sits in the
                 bottom-LEFT corner and send/stop in the bottom-right, on their
                 own row below the textarea. */}
-            <div className="px-0.5">
-                <ChatInput
-                    ref={inputRef}
-                    value={value}
-                    onChange={(e) => onChange(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    onPaste={handlePaste}
-                    placeholder={
-                        connecting
-                            ? t('ai.chat.targetPageConnectingPlaceholder', { defaultValue: '正在连接目标页面…' })
-                            : isLoading
-                                ? t('ai.chat.steerPlaceholder', {
-                                    defaultValue: 'Agent 正在执行，可继续输入，它会在当前步骤结束后处理…',
-                                })
-                                : mode === 'ask'
-                                    ? t('ai.chat.askPlaceholder', { defaultValue: '向 AI 提问关于文档的问题…' })
-                                    : t('ai.chat.agentPlaceholder', { defaultValue: '提问、编辑或自动化任何事情…' })
-                    }
-                    disabled={targetUnavailable}
-                    rows={1}
-                    className="min-h-[48px] max-h-[120px] w-full resize-none overflow-y-auto rounded-xl border-0 bg-transparent px-3 pb-1 pt-1.5 text-sm leading-relaxed shadow-none placeholder:text-muted-foreground/45 focus-visible:ring-0 lg:min-h-[38px] lg:pb-1 lg:pt-1 lg:text-[13px]"
-                />
-            </div>
-            <div className="flex items-center gap-1 px-2 pb-1.5">
+            <PromptInputBody>
+                <div className="px-0.5">
+                    <PromptInputTextarea
+                        ref={inputRef}
+                        onKeyDown={handleKeyDown}
+                        onPaste={handlePaste}
+                        placeholder={
+                            connecting
+                                ? t('ai.chat.targetPageConnectingPlaceholder', { defaultValue: '正在连接目标页面…' })
+                                : isLoading
+                                    ? t('ai.chat.steerPlaceholder', {
+                                        defaultValue: 'Agent 正在执行，可继续输入，它会在当前步骤结束后处理…',
+                                    })
+                                    : mode === 'ask'
+                                        ? t('ai.chat.askPlaceholder', { defaultValue: '向 AI 提问关于文档的问题…' })
+                                        : t('ai.chat.agentPlaceholder', { defaultValue: '提问、编辑或自动化任何事情…' })
+                        }
+                        disabled={targetUnavailable}
+                        rows={1}
+                        className="min-h-[48px] max-h-[120px] w-full resize-none overflow-y-auto rounded-xl border-0 bg-transparent px-3 pb-1 pt-1.5 text-sm leading-relaxed shadow-none placeholder:text-muted-foreground/45 focus-visible:ring-0 lg:min-h-[38px] lg:pb-1 lg:pt-1 lg:text-[13px]"
+                    />
+                </div>
+            </PromptInputBody>
+            <PromptInputFooter className="px-2 pb-1.5">
                 {onAddImages && (
                     <button
                         type="button"
@@ -426,9 +423,8 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>
-                                    <Button
-                                        type="submit"
-                                        size="sm"
+                                    <PromptInputSubmit
+                                        status="streaming"
                                         aria-label={t('ai.chat.steerSend', {
                                             defaultValue: '发送给正在执行的任务',
                                         })}
@@ -439,7 +435,7 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
                                         <span className="text-xs font-medium lg:text-[10px]">
                                             {t('ai.chat.steerAction', { defaultValue: '插话' })}
                                         </span>
-                                    </Button>
+                                    </PromptInputSubmit>
                                 </TooltipTrigger>
                                 <TooltipContent side="top" className="text-xs">
                                     {t('ai.chat.steerHint', {
@@ -449,18 +445,17 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
                             </Tooltip>
                         </TooltipProvider>
                     ) : (
-                        <Button
-                            type="submit"
-                            size="sm"
+                        <PromptInputSubmit
+                            status="ready"
                             aria-label={t('ai.chat.send', { defaultValue: '发送消息' })}
                             disabled={!isValid}
                             className="h-11 w-11 rounded-xl bg-primary p-0 text-primary-foreground transition-all hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40 lg:h-8 lg:w-8 lg:rounded-lg"
                         >
                             <Send className="h-3.5 w-3.5" />
-                        </Button>
+                        </PromptInputSubmit>
                     )}
                 </div>
-            </div>
-        </form>
+            </PromptInputFooter>
+        </PromptInput>
     )
 })

@@ -15,6 +15,7 @@ import {
     toPageId,
     type CreatePosition,
 } from "./page-tree"
+import { applyDocumentTitle, asTitleEditor, titleBoundary } from "./document-title"
 
 const BRIDGE_MISSING = '页面服务不可用（当前可能不在页面编辑器中）'
 
@@ -136,6 +137,13 @@ const insertPageLinkInto = async (
         const blocks = discoverBlocks(editorInstance)
         const found = findBlockByText(blocks, nearText)
         if (!found) return { success: false, error: `未找到包含 "${nearText}" 的块` }
+        // The title is not a body anchor: an inline link at the title boundary
+        // has no textblock to live in (and a link inside the page name is not
+        // what "insert a link near this text" means).
+        const boundary = titleBoundary(editorInstance.state.doc)
+        if (boundary && found.pos < boundary.to) {
+            return { success: false, error: `不能在页面标题里插入页面链接，请用正文中的文本定位` }
+        }
         insertPos = found.contentEnd
         anchor = `"${found.text}" 所在块的末尾`
     }
@@ -444,16 +452,50 @@ export const createPageTools = (editor: Editor): ToolsRecord => ({
     },
 
     renamePage: {
-        description: '重命名任意页面（修改标题），不离开当前页面',
+        description: '重命名任意页面（修改标题），不离开当前页面。目标若是本会话正在编辑的页面，会直接改文档标题（与 updateTitle 等价）；其他页面走页面服务更新。不要用块编辑工具改标题',
         inputSchema: z.object({
             pageId: z.string().describe("要重命名的页面 id"),
             title: z.string().describe("新标题")
         }),
-        execute: async ({ pageId, title }: { pageId: string; title: string }) => {
+        execute: async (
+            { pageId, title }: { pageId: string; title: string },
+            _callId?: string,
+            context?: ToolExecutionContext,
+        ) => {
             const id = toPageId(pageId)
             if (!id) return { error: 'pageId 不能为空' }
             if (!title || !title.trim()) return { error: '标题不能为空' }
             try {
+                // Renaming the page this agent is EDITING must go through the
+                // live document. The API path writes the authoritative doc
+                // behind this editor's back: the open editor keeps the old
+                // title, and its next save can write that old title back — the
+                // "rename it and it flips back" loop. For any other page the
+                // API is the right authority (nothing here has it open).
+                //
+                // Only an EXPLICIT editor→page binding counts: resolving via
+                // "the session's bound page" could point at a document this
+                // editor does not hold, and writing the wrong page's title is
+                // worse than the API path.
+                const binding = context?.sessionBinding ?? getSessionPageBinding()
+                const editorPageId = editor
+                    ? toPageId(binding?.getPageForEditor?.(editor)?.pageId)
+                    : null
+                if (editorPageId && editorPageId === id) {
+                    const applied = applyDocumentTitle(asTitleEditor(editor), title)
+                    if (!applied.success) return { error: applied.error }
+                    return {
+                        success: true,
+                        pageId: id,
+                        title: applied.newTitle,
+                        changed: applied.changed,
+                        viaDocument: true,
+                        message: applied.changed
+                            ? `已把当前页面标题从 "${applied.previousTitle}" 改为 "${applied.newTitle}"（随文档保存同步到页面列表）`
+                            : `当前页面标题已经是 "${applied.newTitle}"，无需修改`,
+                    }
+                }
+
                 await resolveService('spacePageService').pages.updatePageTitle({ pageId: id, title: title.trim() })
                 return { success: true, pageId: id, title: title.trim(), message: `已重命名为 "${title.trim()}"` }
             } catch (error) {

@@ -7,57 +7,36 @@ import {
 } from "@kn/common"
 import { parseMarkdownToNodes } from "@kn/common"
 import { scrollToPosition } from "@kn/common"
+import {
+    TITLE_EDIT_HINT,
+    applyDocumentTitle,
+    asTitleEditor,
+    titleBoundary,
+} from "./document-title"
 
 /**
  * Create document insertion tools
  */
 export const createInsertTools = (editor: Editor): ToolsRecord => ({
     updateTitle: {
-        description: '更新文档标题。文档标题是第一个块，使用此工具来修改标题而不是插入新标题',
+        description: '修改当前编辑页面的标题（文档第一个受保护的 title 块）。这是改标题的唯一正确方式：标题不是普通块，不要用 replaceBlockById / applyEdits / deleteText / replaceContent / insertNear 等工具去改它。传入的是纯文本标题，不是 Markdown。',
         inputSchema: z.object({
-            newTitle: z.string().describe("新的标题文本")
+            newTitle: z.string().describe("新的标题纯文本（单行；不要传 Markdown 或 HTML）")
         }),
         execute: async ({ newTitle }: { newTitle: string }) => {
-            if (!newTitle || newTitle.trim().length === 0) {
-                return { error: '标题不能为空' }
-            }
-
             try {
-                const doc = editor.state.doc
-                // Title node is always the first child in the document
-                const titleNode = doc.firstChild
-
-                if (!titleNode || titleNode.type.name !== 'title') {
-                    return { error: '未找到文档标题节点' }
+                const result = applyDocumentTitle(asTitleEditor(editor), newTitle)
+                if (!result.success) {
+                    return { error: result.error }
                 }
-
-                // The title node contains a heading, we need to replace the heading's content
-                const headingNode = titleNode.firstChild
-                if (!headingNode) {
-                    return { error: '标题节点结构异常' }
-                }
-
-                // Calculate positions: title starts at pos 0, heading starts at pos 1
-                // The text content starts at pos 2 (inside the heading)
-                const contentStart = 2 // 0 (doc) + 1 (title) + 1 (heading)
-                const contentEnd = contentStart + headingNode.textContent.length
-
-                const success = editor.chain()
-                    .focus()
-                    .setTextSelection({ from: contentStart, to: contentEnd })
-                    .insertContent(newTitle)
-                    .scrollIntoView()
-                    .run()
-
-                if (!success) {
-                    return { error: '更新标题失败' }
-                }
-
                 return {
                     success: true,
-                    previousTitle: headingNode.textContent,
-                    newTitle,
-                    message: `标题已从 "${headingNode.textContent}" 更新为 "${newTitle}"`
+                    previousTitle: result.previousTitle,
+                    newTitle: result.newTitle,
+                    changed: result.changed,
+                    message: result.changed
+                        ? `标题已从 "${result.previousTitle}" 更新为 "${result.newTitle}"`
+                        : `标题已经是 "${result.newTitle}"，无需修改`
                 }
             } catch (error) {
                 return { error: `更新标题失败: ${error instanceof Error ? error.message : '未知错误'}` }
@@ -101,6 +80,14 @@ export const createInsertTools = (editor: Editor): ToolsRecord => ({
 
                 const docSize = editor.state.doc.nodeSize
 
+                // The title container is pinned first: an insertion point inside
+                // it would put body nodes where only a heading may live. Clamp to
+                // just after the title (a legacy blockIndex can map onto its
+                // heading, which is not addressable any more).
+                const boundary = titleBoundary(editor.state.doc)
+                const redirectedFromTitle = boundary !== null && insertPos < boundary.to
+                if (redirectedFromTitle) insertPos = boundary.to
+
                 // Parse markdown if enabled
                 const nodes = parseMarkdown
                     ? parseMarkdownToNodes(text)
@@ -122,7 +109,8 @@ export const createInsertTools = (editor: Editor): ToolsRecord => ({
                     insertedAfter: insertPos,
                     insertedSize: newDocSize - docSize,
                     parsedNodes: nodes.length,
-                    markdownParsed: parseMarkdown
+                    markdownParsed: parseMarkdown,
+                    ...(redirectedFromTitle ? { redirectedFromTitle: true } : {})
                 }
             } catch (error) {
                 return { error: `插入失败: ${error instanceof Error ? error.message : '未知错误'}` }
@@ -155,6 +143,24 @@ export const createInsertTools = (editor: Editor): ToolsRecord => ({
                     return { error: `未找到包含 "${searchText}" 的块` }
                 }
 
+                // The title is one protected block. "After the title" is valid;
+                // inserting before it (title must stay first) or inside it (only
+                // its heading may live there) is not, and silently failing made
+                // the model retry with another tool — often a destructive one.
+                const boundary = titleBoundary(editor.state.doc)
+                const targetsTitle = boundary !== null && foundBlock.pos < boundary.to
+                if (targetsTitle) {
+                    if (position === 'before') {
+                        return { error: `不能在页面标题之前插入内容（标题必须是第一个块）。${TITLE_EDIT_HINT}` }
+                    }
+                    if (position === 'start' || position === 'end') {
+                        return { error: `不能在页面标题内部插入内容。${TITLE_EDIT_HINT}` }
+                    }
+                }
+                // 'after' the title container means the end of the title.
+                const anchorPos = targetsTitle ? boundary!.to : foundBlock.pos
+                const anchorSize = targetsTitle ? 0 : foundBlock.size
+
                 let success: boolean
                 let insertedAt: number | string
                 let nodes: any[]
@@ -168,14 +174,14 @@ export const createInsertTools = (editor: Editor): ToolsRecord => ({
 
                 switch (position) {
                     case 'before':
-                        success = editor.commands.insertContentAt(foundBlock.pos, nodes)
-                        insertedAt = foundBlock.pos
-                        if (success) scrollToPosition(editor, foundBlock.pos)
+                        success = editor.commands.insertContentAt(anchorPos, nodes)
+                        insertedAt = anchorPos
+                        if (success) scrollToPosition(editor, anchorPos)
                         break
                     case 'after':
-                        success = editor.commands.insertContentAt(foundBlock.pos + foundBlock.size, nodes)
-                        insertedAt = foundBlock.pos + foundBlock.size
-                        if (success) scrollToPosition(editor, foundBlock.pos + foundBlock.size)
+                        success = editor.commands.insertContentAt(anchorPos + anchorSize, nodes)
+                        insertedAt = anchorPos + anchorSize
+                        if (success) scrollToPosition(editor, anchorPos + anchorSize)
                         break
                     case 'start':
                         // Inline insertion - parse inline markdown only
@@ -289,7 +295,25 @@ export const createInsertTools = (editor: Editor): ToolsRecord => ({
                     return { error: `未找到文本: "${searchText}"` }
                 }
 
-                const toReplace = replaceAll ? matches : [matches[0]]
+                // Title text is page metadata, not body copy. Excluding it here
+                // is what stops `replaceAll` from silently renaming every page
+                // whose title happens to contain the search phrase.
+                const boundary = titleBoundary(doc)
+                const titleMatches = boundary
+                    ? matches.filter(match => match.from < boundary.to)
+                    : []
+                const bodyMatches = boundary
+                    ? matches.filter(match => match.from >= boundary.to)
+                    : matches
+
+                if (bodyMatches.length === 0) {
+                    return {
+                        error: `匹配文本只出现在页面标题里。${TITLE_EDIT_HINT}`,
+                        titleMatches: titleMatches.length
+                    }
+                }
+
+                const toReplace = replaceAll ? bodyMatches : [bodyMatches[0]]
                 const sortedMatches = [...toReplace].sort((a, b) => b.from - a.from)
 
                 // Single transaction: the previous per-match dispatch made each
@@ -316,7 +340,10 @@ export const createInsertTools = (editor: Editor): ToolsRecord => ({
                     replaceWith,
                     replacedCount: toReplace.length,
                     totalMatches: matches.length,
-                    sizeChange: newDocSize - docSize
+                    sizeChange: newDocSize - docSize,
+                    ...(titleMatches.length > 0
+                        ? { skippedTitleMatches: titleMatches.length, titleHint: TITLE_EDIT_HINT }
+                        : {})
                 }
             } catch (error) {
                 return { error: `替换失败: ${error instanceof Error ? error.message : '未知错误'}` }

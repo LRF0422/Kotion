@@ -68,7 +68,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
         [tabs],
     )
     return (
-        <div className="flex w-full items-center gap-1 border-b px-2 h-9 bg-background/95 backdrop-blur-sm">
+        <div className="flex h-10 w-full items-center gap-1.5 border-b border-border/60 bg-background/90 px-2.5 backdrop-blur-md">
             <ChatTabs
                 tabs={tabs}
                 activeTabId={activeTabId}

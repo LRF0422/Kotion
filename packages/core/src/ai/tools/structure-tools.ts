@@ -3,6 +3,7 @@ import { convertListType, findNodeByBlockId } from "@kn/editor"
 import { z } from "@kn/ui"
 import type { ToolsRecord } from "@kn/common"
 import { discoverBlocks, findBlockByText } from "@kn/common"
+import { TITLE_EDIT_HINT, titleBoundary } from "./document-title"
 import { scrollToPosition } from "@kn/common"
 
 /**
@@ -46,6 +47,14 @@ export const createStructureTools = (editor: Editor): ToolsRecord => ({
                     }
                 } else {
                     return { error: '必须提供 blockIndex 或 searchText 来定位块' }
+                }
+
+                // The title container is not a convertible block: toggling its
+                // wrapper away leaves a document that no longer matches the
+                // `title block*` schema (and loses icon/cover/attrs).
+                const boundary = titleBoundary(editor.state.doc)
+                if (boundary && block.pos < boundary.to) {
+                    return { error: `不能转换页面标题块。${TITLE_EDIT_HINT}` }
                 }
 
                 const previousType = block.type
@@ -129,6 +138,18 @@ export const createStructureTools = (editor: Editor): ToolsRecord => ({
                 }
                 if (!targetResult) {
                     return { error: `未找到 targetBlockId 为 "${targetBlockId}" 的块` }
+                }
+
+                // Moving the title breaks the pinned-first invariant; moving a
+                // block before the title does too.
+                const boundary = titleBoundary(editor.state.doc)
+                if (boundary && sourceResult.pos < boundary.to) {
+                    return { error: `不能移动页面标题块。${TITLE_EDIT_HINT}` }
+                }
+                // "After the title" is a valid destination; "before" it would
+                // push the title out of the pinned first position.
+                if (boundary && position === 'before' && targetResult.pos < boundary.to) {
+                    return { error: `不能把块移动到页面标题之前。${TITLE_EDIT_HINT}` }
                 }
 
                 const sourceNode = sourceResult.node

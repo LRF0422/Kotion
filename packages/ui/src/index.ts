@@ -1,6 +1,7 @@
 
 export * from "./components"
 export * from "./components/ai"
+export * from "./components/ai-elements"
 export * from "./lib/utils"
 export { setBootPhase, bootSplashReady, bootSplashDismiss } from "./boot/boot-splash"
 export type { BootPhase } from "./boot/boot-splash"

@@ -38,8 +38,33 @@ export const buildNodeInfo = (node: Node, pos: number, includeFullText: boolean 
 export const extractDocumentStructure = (editor: Editor): DocumentStructure => {
     const headings: DocumentStructure['headings'] = []
     const blocks: DocumentStructure['blocks'] = []
+    let title: DocumentStructure['title'] | undefined
 
     editor.state.doc.descendants((node, pos) => {
+        // The page title is not body content and is edited only through
+        // `updateTitle`. Report it once (as `title` + a role-tagged block) and do
+        // not descend into its inner heading: listing that heading as an
+        // ordinary block is what made agents try to replace/delete it.
+        if (node.type.name === 'title') {
+            const blockId = (node.attrs.id ?? node.attrs.blockId) as string | undefined
+            title = {
+                ...(blockId ? { blockId } : {}),
+                text: node.textContent,
+            }
+            blocks.push({
+                type: 'title',
+                pos,
+                size: node.nodeSize,
+                depth: editor.state.doc.resolve(pos).depth + 1,
+                ...(blockId ? { blockId } : {}),
+                ...(node.textContent
+                    ? { textPreview: node.textContent.slice(0, 60) + (node.textContent.length > 60 ? '…' : '') }
+                    : {}),
+                role: 'title',
+            })
+            return false
+        }
+
         if (node.type.name === 'heading') {
             headings.push({
                 level: node.attrs.level || 1,
@@ -85,7 +110,8 @@ export const extractDocumentStructure = (editor: Editor): DocumentStructure => {
     return {
         totalSize: editor.state.doc.nodeSize,
         headings,
-        blocks
+        blocks,
+        ...(title ? { title } : {})
     }
 }
 
