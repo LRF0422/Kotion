@@ -45,6 +45,8 @@ import {
     cacheHitRate,
     useTranslation,
     buildCustomAgentNote,
+    customAgentCapabilities,
+    filterCatalogForCustomAgent,
     useCustomAgents,
     isImeComposing,
     toolApprovals,
@@ -179,11 +181,38 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
         })()
     }, [conversationId, sessionClient])
 
+    // 当前选中的自定义 Agent：它的指引作为每轮上下文注入，它手动配置的技能/工具
+    // 白名单则作用在下面的能力目录上（先于 run 输入构建，模型看到的工具就是它）。
+    const { selectedAgent } = useCustomAgents()
+
     // 编辑器工具目录 + 技能片段（保留的供应商层）
     const { getCatalog, resolveTools, isReadOnlyTool } = useCapabilityProviders(editor ?? null)
     const { t } = useTranslation()
     const subAgentLabels = useMemo(() => buildSubAgentTreeLabels(t), [t])
-    const catalog = useMemo(() => getCatalog(), [getCatalog])
+    // 自定义 Agent 的「只启用这些技能/工具」是最后一层过滤：不能超出本界面能跑的
+    // 能力，只能在其中挑一个子集。
+    const catalog = useMemo(
+        () => filterCatalogForCustomAgent(getCatalog(), selectedAgent),
+        [getCatalog, selectedAgent],
+    )
+    const agentCapabilities = useMemo(
+        () => customAgentCapabilities(selectedAgent),
+        [selectedAgent],
+    )
+    const allowedSkills = useMemo(
+        () => (agentCapabilities ? agentCapabilities.skills : null),
+        [agentCapabilities],
+    )
+    // load_skill 也按白名单回答：目录已经不列的工具，不能再从发现通道拿回来。
+    // 同一份白名单交给执行器，挡住「上一轮还记得工具名」的调用。
+    const allowedToolNames = useMemo(
+        () => (agentCapabilities ? new Set(catalog.tools.map(tool => tool.function.name)) : null),
+        [agentCapabilities, catalog],
+    )
+    const isToolAllowedByAgent = useCallback(
+        (name: string) => !allowedToolNames || allowedToolNames.has(name),
+        [allowedToolNames],
+    )
     // 所有可执行工具都带完整 schema 下发；skills[] 只补提示词片段与各自拥有的工具名。
     // 仅超出 provider 工具上限的部分回落到 deferredTools —— 外加**本会话已通过
     // `load_skill` 加载过的技能**：它们的工具保持可调用，不需要再发现一次。
@@ -198,9 +227,8 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
     // navigation, and the agent's target must follow the visible page.
     const currentPage = useCurrentPage()
 
-    // Custom agent selected for this panel. Its guidance rides in the per-turn
-    // context note, never in the backend-owned system prompt.
-    const { selectedAgent } = useCustomAgents()
+    // The selected agent's guidance rides in the per-turn context note, never in
+    // the backend-owned system prompt.
     const customAgentNote = useMemo(() => buildCustomAgentNote(selectedAgent), [selectedAgent])
     /** Set right after `useEditorAgent`: the completion callback needs `start`. */
     const agentRef = useRef<EditorAgentApi | null>(null)
@@ -214,6 +242,9 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
         // Mutating calls take the document's write lease (no per-agent editor
         // target in this panel, so all agents share the conversation document).
         isReadOnlyTool,
+        isToolAvailable: isToolAllowedByAgent,
+        isToolAllowed: isToolAllowedByAgent,
+        allowedSkills,
         spaceId: currentPage?.spaceId,
         pageId: currentPage?.pageId !== undefined ? String(currentPage.pageId) : undefined,
         // 长任务（background: true 的工具调用，如构建/装依赖/发布）跑完后，若 agent

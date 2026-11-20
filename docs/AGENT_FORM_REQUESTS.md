@@ -202,6 +202,22 @@ schema 是数据不是代码，模型按需声明，宿主负责渲染与校验�
 plugin-ai 只保留「注册表 + 校验 + 提交」的适配层。面板列表行/触发器等 chat chrome 沿用现有面板样式
 （与 `BackgroundTasksPanel` 一致），不属于表单控件。
 
+## 国际化（文案都在哪）
+
+表单相关文案分两层，改文案时不要两边都写：
+
+- **`@kn/ui` 只能拿 props**：`AgentFormCard` / `formatFormRelativeTime` 不 import `@kn/common`，
+  所以所有可翻译文案走 `AgentFormCardLabels`（`relativeTime` 里是「刚刚 / N 分钟前」这类相对时间，
+  `batchHint` / `batchLimit` / `batchCellAria` / `batchRowsCount` / `yes` / `no` / `listSeparator` /
+  `labelSeparator` 也在其中），默认值是中文产品文案。
+- **翻译在 plugin-ai**：[`form-labels.ts`](../packages/plugin-ai/src/ai/menu/chat/form-labels.ts) 的
+  `useFormCardLabels(batch)` / `useFormRelativeTimeLabels()` 把 `ai.chat.forms.*` 映射成上面的 labels，
+  收件箱面板与卡片适配层共用它；语言包在 [`plugin-ai/src/index.tsx`](../packages/plugin-ai/src/index.tsx)
+  的 `locales.en` / `locales.zh` 里（`en` 用 i18next 的 `_one` / `_other` 复数键，`zh` 用单键）。
+- **卡片上的 `defaultValue` 只是兜底**：key 缺失时 i18next 会安静地回落到中文，英文界面「看起来能用但全是中文」
+  就是这么来的——`pnpm --filter @kn/plugin-ai check:form-labels` 会拦住这种情况（en/zh 键集一致性 +
+  页面用到的 key 都存在 + 卡片可本地化字段都有来源）。
+
 ## 明确的边界（不要误解）
 
 - **注册表在内存里，随页面刷新消失。** 刷新后待填写表单是空的，**当初挂在表单上的 run 也没了**
@@ -245,6 +261,7 @@ plugin-ai 只保留「注册表 + 校验 + 提交」的适配层。面板列表�
 
 ```bash
 pnpm --filter @kn/common check:form-requests
+pnpm --filter @kn/plugin-ai check:form-labels   # 文案键（en/zh）与卡片 labels 的覆盖
 ```
 
 覆盖：`normalizeFormRequestInput`（8 种字段、上限、非法 key/重复 key/坏选项；`batch` 的

@@ -16,6 +16,7 @@ import { AppMenuButton } from "./components/AppMenuButton"
 import { DockHost } from "./components/Dock"
 import { AgentDocumentHost } from "./ai/agentdoc"
 import { UploadTaskHost } from "./components/UploadTasks/UploadTaskHost"
+import { SettingsHost } from "./components/settings/SettingsHost"
 import { toRemotePluginDescriptor, type PluginRecord } from "./components/Shop/plugin-model"
 import { RouteCacheOutlet } from "./routing/RouteCacheOutlet"
 import { isRouteCacheDisabledByFlag } from "./routing/route-cache"
@@ -540,6 +541,10 @@ export function Layout({ onPluginsReady }: LayoutProps) {
 
                     {/* App-lifetime resumable upload runtime and global progress panel. */}
                     <UploadTaskHost />
+
+                    {/* Settings deep links from plugins (e.g. the chat's agent
+                        picker → custom-agent editor). */}
+                    <SettingsHost />
 
                     {/* Show loading overlay while plugins are loading */}
                     {(!pluginsLoaded || Boolean(pluginLoadError)) && (

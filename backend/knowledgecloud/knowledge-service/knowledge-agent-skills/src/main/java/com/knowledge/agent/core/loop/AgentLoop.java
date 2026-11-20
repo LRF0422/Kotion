@@ -1728,6 +1728,14 @@ public class AgentLoop implements Runnable {
      * timed out. The old code failed on the spot, discarding those results — the
      * client's POSTs were accepted (so it kept re-submitting) while the run died
      * with "等待编辑器工具结果超时".
+     *
+     * <p>When the window really expires with nothing queued, the run is
+     * <b>parked</b> as {@code SUSPENDED/client_detached} instead of failed. A
+     * closed/frozen client is not a failed task: the pending calls stay in the
+     * checkpoint, the run view keeps them, and a later attach + resume starts a
+     * fresh loop from that checkpoint and applies the results. The deadline is
+     * still a deadline for treating the client as gone, not for killing the
+     * conversation.
      */
     boolean dispatchWaitForPending() throws InterruptedException {
         // Recovery-safe: honor the earliest original dispatch time, so a crash
@@ -1766,10 +1774,7 @@ public class AgentLoop implements Runnable {
                     payload = gate.await(1000L);
                 }
                 if (payload == null) {
-                    log.warn("Run {}: tool wait timed out with no answer (call(s): {})",
-                            run.getRunId(), pendingCallIds());
-                    fail("tool_timeout", "等待编辑器工具结果超时");
-                    return false;
+                    return suspendForDetachedClient();
                 }
             }
             if ("cancel".equals(payload.getAction()) || isCancelled()) {
@@ -1809,6 +1814,35 @@ public class AgentLoop implements Runnable {
         persist();
         saveHot(false);
         return true;
+    }
+
+    /**
+     * Park a run whose frontend-tool window expired with no answer.
+     *
+     * <p>This is deliberately not {@code fail(...)}: the client being gone
+     * (closed tab, suspended phone, crash, network) says nothing about the task.
+     * The checkpoint keeps the pending calls and the run stays resumable; the
+     * supervisor's exit hook leaves it parked, and a later attach + resume
+     * starts a fresh loop from this checkpoint and applies the results.
+     *
+     * <p>The event reason is still {@code waiting_tools} so the client's reducer
+     * rebuilds the pending card and executes the batch after re-attach.
+     */
+    private boolean suspendForDetachedClient() {
+        if (isCancelled() || run.statusEnum().isTerminal()) {
+            return false;
+        }
+        log.warn("Run {}: no frontend tool result within {}s; parking as SUSPENDED/client_detached "
+                        + "(call(s): {}) — a later attach can resume it",
+                run.getRunId(), properties.getRun().getWaitingToolsTimeoutSeconds(), pendingCallIds());
+        run.setStatus(RunStatus.SUSPENDED.name());
+        run.setSuspendReason("client_detached");
+        run.touch();
+        emit(RunEvents.RUN_SUSPENDED, RunEvents.runSuspended("waiting_tools", pendingCallIds()));
+        saveCheckpoint();
+        persist();
+        saveHot(true);
+        return false;
     }
 
     /** Pending call ids, diagnostics only. */

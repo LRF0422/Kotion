@@ -41,6 +41,12 @@ export const MAX_SESSIONS = 50
  * so running past the stream budget is a delay, never a loss.
  */
 export const MAX_OPEN_TABS = 6
+/**
+ * Hard ceiling on PERSISTED tabs. The soft ceiling above is the point where an
+ * idle tab is evicted; when every open tab is running we deliberately exceed
+ * it instead of dropping a run, so persistence must be able to store that.
+ */
+export const MAX_PERSISTED_TABS = 12
 /** Upper bound on user-created conversation groups. */
 export const MAX_GROUPS = 100
 /** A group name is a single sidebar row, so it is deliberately short. */
@@ -241,7 +247,7 @@ export function loadOpenTabs(): string[] {
         if (typeof value !== 'string' || !value || seen.has(value)) continue
         seen.add(value)
         out.push(value)
-        if (out.length >= MAX_OPEN_TABS) break
+        if (out.length >= MAX_PERSISTED_TABS) break
     }
     return out
 }
@@ -253,7 +259,7 @@ export function saveOpenTabs(ids: string[]): void {
         if (!id || seen.has(id)) continue
         seen.add(id)
         out.push(id)
-        if (out.length >= MAX_OPEN_TABS) break
+        if (out.length >= MAX_PERSISTED_TABS) break
     }
     safeWrite(OPEN_TABS_KEY, JSON.stringify(out))
 }

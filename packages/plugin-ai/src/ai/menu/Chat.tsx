@@ -9,6 +9,7 @@ import {
     PageEditWindow,
     registerAgentPaneOpener,
     useAgentPane,
+    useLocation,
     useTranslation,
 } from "@kn/common"
 import type {
@@ -59,6 +60,10 @@ export const ExpandableChatDemo: React.FC<{
     onClose?: () => void
 }> = ({ editor, embedded, onClose }) => {
     const { t } = useTranslation()
+    // On the full-page /ai surface the dock hands its conversations to that
+    // surface (one agent per conversation; see chat/agent-surface).
+    const location = useLocation()
+    const yieldToKernel = location.pathname === '/ai'
 
     // ─── Model / mode preferences (persisted, shared by every tab) ──
     const [selectedModel, handleModelChange] = useModelPreference()
@@ -89,6 +94,10 @@ export const ExpandableChatDemo: React.FC<{
     }, [])
 
     // ─── Session + tab index ──────────────────────────────────────
+    // The tab ceiling must not evict a conversation with a live run. `runStatus`
+    // is declared below (it is reported by the mounted panels), so the predicate
+    // reads it through a ref; see `useChatSessions`'s `isSessionRunning`.
+    const runStatusRef = useRef<Record<string, ChatTabStatus>>({})
     const {
         sessions: allSessions,
         activeSessionId,
@@ -101,7 +110,12 @@ export const ExpandableChatDemo: React.FC<{
         createSession,
         deleteSession,
         clearSessionMessages,
-    } = useChatSessions()
+    } = useChatSessions({
+        isSessionRunning: id => {
+            const status = runStatusRef.current[id]
+            return status === 'running' || status === 'attention'
+        },
+    })
 
     const activeIdRef = useRef(activeSessionId)
     activeIdRef.current = activeSessionId
@@ -111,6 +125,7 @@ export const ExpandableChatDemo: React.FC<{
 
     // ─── Tab status (running / needs-you / unread / failed) ───────
     const [runStatus, setRunStatus] = useState<Record<string, ChatTabStatus>>({})
+    runStatusRef.current = runStatus
     const [messageCounts, setMessageCounts] = useState<Record<string, number>>({})
     const [editWindowPageId, setEditWindowPageId] = useState<string | null>(null)
 
@@ -150,6 +165,7 @@ export const ExpandableChatDemo: React.FC<{
         handleDeleteSession,
     } = useSessionActions({
         activeSessionId,
+        surface: 'dock',
         controlsRef,
         clearSessionMessages,
         activateSession,
@@ -303,6 +319,7 @@ export const ExpandableChatDemo: React.FC<{
                         sessionId={id}
                         session={allSessions.find(session => session.id === id)}
                         active={id === activeSessionId}
+                        yieldToKernel={yieldToKernel}
                         editor={editor}
                         selectedModel={selectedModel}
                         onModelChange={handleModelChange}

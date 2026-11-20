@@ -19,6 +19,7 @@
 import { useCallback } from 'react'
 import type { MutableRefObject } from 'react'
 import { forgetLoadedSkills } from '@kn/common'
+import { getAgentSurfaceOwner, type AgentSurfaceId } from './chat/agent-surface'
 
 export interface ChatPanelControls {
     /** Stop this conversation's in-flight run; the transcript is kept. */
@@ -29,6 +30,8 @@ export interface ChatPanelControls {
 
 export interface UseSessionActionsOptions {
     activeSessionId: string
+    /** Which surface this controller belongs to; it may only act on its own conversations. */
+    surface: AgentSurfaceId
     /** Live per-conversation controls, registered by the mounted tab panels. */
     controlsRef: MutableRefObject<Map<string, ChatPanelControls>>
     /** Drop one conversation's transcript (engine copy included). */
@@ -53,9 +56,19 @@ export interface UseSessionActionsApi {
 
 export function useSessionActions(options: UseSessionActionsOptions): UseSessionActionsApi {
     const {
-        activeSessionId, controlsRef, clearSessionMessages,
+        activeSessionId, surface, controlsRef, clearSessionMessages,
         activateSession, closeTab, createSession, deleteSession,
     } = options
+
+    /**
+     * A conversation driven by the other surface must be cleared/deleted THERE:
+     * clearing its transcript here would delete the engine log under a live run
+     * (and the other surface would keep streaming into it).
+     */
+    const ownsConversation = useCallback((id: string) => {
+        const owner = getAgentSurfaceOwner(id)
+        return !owner || owner === surface
+    }, [surface])
 
     /** Stop one conversation's run without touching its transcript. */
     const cancelSession = useCallback((id: string) => {
@@ -64,6 +77,7 @@ export function useSessionActions(options: UseSessionActionsOptions): UseSession
     }, [controlsRef])
 
     const handleClearChat = useCallback(async () => {
+        if (!ownsConversation(activeSessionId)) return
         // The panel owns the transcript state, so it clears first (and cancels
         // its run with the "abandoning" flag set, so the cancelled turn is not
         // snapshotted back into the chat). Storage + title follow.
@@ -73,7 +87,7 @@ export function useSessionActions(options: UseSessionActionsOptions): UseSession
         // `load_skill` result had put in it are gone, so the remembered skills go
         // with it (one `load_skill` call re-establishes both).
         forgetLoadedSkills(activeSessionId)
-    }, [activeSessionId, controlsRef, clearSessionMessages])
+    }, [activeSessionId, controlsRef, clearSessionMessages, ownsConversation])
 
     const handleNewSession = useCallback(() => {
         // No abandonment: opening a new tab must not disturb the runs already
@@ -88,15 +102,18 @@ export function useSessionActions(options: UseSessionActionsOptions): UseSession
     const handleCloseTab = useCallback((id: string) => {
         // Stop the run BEFORE unmounting: the panel's own teardown only drops
         // the local stream, which would leave the engine working with no UI.
-        cancelSession(id)
+        // A conversation driven by the other surface has no controls here;
+        // closing the tab simply stops showing it.
+        if (ownsConversation(id)) cancelSession(id)
         closeTab(id)
-    }, [cancelSession, closeTab])
+    }, [cancelSession, closeTab, ownsConversation])
 
     const handleDeleteSession = useCallback((id: string) => {
+        if (!ownsConversation(id)) return
         cancelSession(id)
         deleteSession(id)
         forgetLoadedSkills(id)
-    }, [cancelSession, deleteSession])
+    }, [cancelSession, deleteSession, ownsConversation])
 
     return {
         handleClearChat,

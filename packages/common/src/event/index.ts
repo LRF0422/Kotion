@@ -3,7 +3,7 @@ import { EventEmitter, type PluginChangeSource } from "./event";
 
 export const event = new EventEmitter()
 
-export type { PluginChangeSource } from "./event";
+export type { PluginChangeSource, OpenSettingsPayload } from "./event";
 
 // --- Typed event names ---
 
@@ -57,6 +57,13 @@ export const DOCK_PANEL_RUNNING = "DOCK_PANEL_RUNNING"
 
 /** Imperatively start a tour by its id. Payload: the tour id string. */
 export const START_TOUR = "START_TOUR"
+
+/**
+ * Open the global settings dialog. Payload: `{ key?, agentId? }` — optionally
+ * deep-links to a settings panel (and, for the custom-agent panel, the agent to
+ * edit). Emit this from plugins instead of importing the host's settings UI.
+ */
+export const OPEN_SETTINGS = "OPEN_SETTINGS"
 
 export const BUSINESS_TOPIC = {
     PAGE_COOPERATION_INVITE: "space.page.cooperation.invite"

@@ -389,14 +389,14 @@ export function usePendingToolExecution(
      * Both are handled from `pendingCandidates` (tape ∪ suspend payload) and the
      * server's own run view, after a quiet period. Editor-independent tools just
      * work; a tool that truly needs a missing editor fails with its own error
-     * result, which the model can react to — better than a ten-minute hang.
+     * result, which the model can react to — better than a silent park.
      * Results come from the executor cache / journal, so nothing runs twice, and a
      * duplicate `tool_results` POST is idempotent server-side.
      *
      * Every pass that leaves the batch owed ARMS THE NEXT ONE. Waiting for the
      * next state change instead was the actual hang: with the server parked there
      * is no next event, so the watchdog fired once, warned "第 1 次等待", and the
-     * run sat in WAITING_TOOLS until its ten-minute tool timeout — the force pass
+     * run sat in WAITING_TOOLS until its 180s client-detached park — the force pass
      * below was unreachable exactly when it was needed.
      */
     const checkPendingAck = useCallback(async () => {

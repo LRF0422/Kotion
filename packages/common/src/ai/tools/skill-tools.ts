@@ -1,6 +1,11 @@
 import { z } from "zod"
 import type { ToolExecutionContext, ToolsRecord } from "../types"
-import { getSkillToolSource, suggestSkills, type SkillToolSource } from "../skills/skill-tool-bridge"
+import {
+    getSkillToolSource,
+    normalizeSkillKey,
+    suggestSkills,
+    type SkillToolSource,
+} from "../skills/skill-tool-bridge"
 import { loadedSkillsFor, rememberLoadedSkill } from "../skills/loaded-skill-cache"
 
 /**
@@ -40,8 +45,12 @@ import { loadedSkillsFor, rememberLoadedSkill } from "../skills/loaded-skill-cac
 const MAX_AVAILABLE_SKILLS = 24
 
 /** What the model may load, capped for the error path (see above). */
-function availableSkills(source: SkillToolSource, isAvailable?: (name: string) => boolean) {
-    const names = source.skillNames(isAvailable)
+function availableSkills(
+    source: SkillToolSource,
+    isAvailable?: (name: string) => boolean,
+    isAllowed?: (name: string) => boolean,
+) {
+    const names = source.skillNames(isAvailable).filter(name => isAllowed ? isAllowed(name) : true)
     const available = names.slice(0, MAX_AVAILABLE_SKILLS)
     return names.length > available.length
         ? { available, availableTotal: names.length }
@@ -73,13 +82,31 @@ export const createSkillTools = (_editor?: unknown): ToolsRecord => ({
             // offered document tools it cannot execute, and one that just acquired
             // a document must see what appeared.
             const isAvailable = execCtx?.isToolAvailable
+            // The selected custom agent may have enabled only some skills. Its
+            // catalog already dropped the rest, so refusing here is what keeps
+            // discovery from handing out a capability the user switched OFF.
+            const allowedNames = execCtx?.allowedSkills
+            const allowedKeys = allowedNames
+                ? new Set(allowedNames.map(name => normalizeSkillKey(name)).filter(Boolean))
+                : null
+            const isAllowed = (name: string) => !allowedKeys || allowedKeys.has(normalizeSkillKey(name))
             const wanted = typeof skill === 'string' ? skill.trim() : ''
             if (!wanted) {
-                return { error: 'skill 不能为空。', ...availableSkills(source, isAvailable) }
+                return { error: 'skill 不能为空。', ...availableSkills(source, isAvailable, isAllowed) }
+            }
+            if (!isAllowed(wanted)) {
+                const listed = availableSkills(source, isAvailable, isAllowed)
+                return {
+                    error: `当前 Agent 没有启用技能 "${wanted}"，无法加载它。`
+                        + (listed.available.length > 0
+                            ? `该 Agent 可用的技能：${listed.available.join('、')}。`
+                            : '该 Agent 没有启用任何技能。'),
+                    ...listed,
+                }
             }
             const bundle = source.resolve(wanted, isAvailable)
             if (!bundle) {
-                const listed = availableSkills(source, isAvailable)
+                const listed = availableSkills(source, isAvailable, isAllowed)
                 const diagnosis = source.diagnose(wanted, isAvailable)
                 if (diagnosis.ambiguous && diagnosis.ambiguous.length > 0) {
                     // Folding (`doc-review` vs `doc_review`) is what lets the model's

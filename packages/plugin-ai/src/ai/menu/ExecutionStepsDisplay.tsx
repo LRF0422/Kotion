@@ -199,23 +199,59 @@ export const AgentActivityTimeline = React.memo(function AgentActivityTimeline({
                 </button>
             </TaskTrigger>
             <TaskContent className="mt-1">
-                {items.map((item, index) => (
-                    <div key={item.id} className="min-w-0">
-                        {item.kind === 'thinking'
-                            ? <ThinkingItem item={item} expanded={isRunning && index === items.length - 1} />
-                            : <ToolItem step={item.step} />}
-                    </div>
-                ))}
-                {items.length === 0 && isRunning && (
-                    <div className="flex min-h-7 items-center gap-1.5 text-xs text-muted-foreground" role="status" aria-live="polite">
-                        <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
-                        <ShimmerText>{t('ai.chat.thinking')}</ShimmerText>
-                    </div>
-                )}
+                {/* The run reads as a timeline, not a stack: a continuous rail with
+                    one status dot per step, so "what ran, in what order, what is
+                    still going" is legible at a glance. */}
+                <div className="relative ml-2 border-l border-border/70 pl-4">
+                    {items.map((item, index) => (
+                        <div key={item.id} className="relative min-w-0 pb-3 last:pb-0">
+                            <TimelineDot item={item} />
+                            {item.kind === 'thinking'
+                                ? <ThinkingItem item={item} expanded={isRunning && index === items.length - 1} />
+                                : <ToolItem step={item.step} />}
+                        </div>
+                    ))}
+                    {items.length === 0 && isRunning && (
+                        <div className="relative flex min-h-7 items-center gap-1.5 text-xs text-muted-foreground" role="status" aria-live="polite">
+                            <TimelineDot active />
+                            <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
+                            <ShimmerText>{t('ai.chat.thinking')}</ShimmerText>
+                        </div>
+                    )}
+                </div>
             </TaskContent>
         </Task>
     )
 })
+
+/**
+ * Dot for one timeline row. The rail line is drawn by the parent, so the dot
+ * only needs to sit on it (`-left` = parent padding + half its own size) and
+ * punch a hole in the line with its ring.
+ */
+function TimelineDot({ item, active = false }: { item?: TimelineItem; active?: boolean }) {
+    let tone = 'bg-muted-foreground/40'
+    let pulse = false
+    if (active) {
+        tone = 'bg-primary'
+        pulse = true
+    } else if (item?.kind === 'tool') {
+        if (item.step.approval?.status === 'pending') {
+            tone = 'bg-amber-500'
+        } else if (item.step.status === 'error') {
+            tone = 'bg-destructive'
+        } else if (item.step.status === 'running') {
+            tone = 'bg-primary'
+            pulse = true
+        }
+    }
+    return (
+        <span
+            aria-hidden="true"
+            className={`absolute -left-[19px] top-3 size-1.5 rounded-full ring-2 ring-background ${tone} ${pulse ? 'animate-pulse motion-reduce:animate-none' : ''}`}
+        />
+    )
+}
 
 function ThinkingItem({
     item,
@@ -256,7 +292,7 @@ function ThinkingItem({
                 </div>
             )}
             {item.text.trim() && (
-                <div className="min-w-0 break-words text-[13px] leading-6 text-foreground [&_p]:my-1.5 [&_pre]:max-w-full [&_pre]:overflow-x-auto">
+                <div className="min-w-0 break-words text-[13px] leading-6 text-foreground [&_p]:my-1.5 [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_code]:text-[length:1em] [&_pre]:text-[length:1em]">
                     <MessageResponse controls={false}>{item.text.trim()}</MessageResponse>
                 </div>
             )}

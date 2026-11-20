@@ -58,8 +58,8 @@ const REQUEST_TIMEOUT_MS = 15_000
  * Tool results are the run's only route forward: while the client's stream
  * budget is saturated (four cached surfaces' parked run tails, or sub-run
  * streams), an unbounded wait here means the POST never leaves, the backend
- * stays parked in WAITING_TOOLS, and the run dies 180s later with
- * "等待编辑器工具结果超时". The slot is accounting, not correctness — after the
+ * stays parked in WAITING_TOOLS, and the backend parks the run as
+ * SUSPENDED/client_detached 180s later (resumable on the next attach). The slot is accounting, not correctness — after the
  * deadline the POST is sent unbudgeted and the saturation is logged.
  */
 const RESUME_SLOT_WAIT_MS = 5_000

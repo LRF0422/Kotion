@@ -139,6 +139,18 @@ export function useCapabilityProviders(
          * longer depends on a module-level singleton.
          */
         sessionBinding?: () => SessionPageBinding | null
+        /**
+         * READ-ONLY mount: build the catalog but do not touch the app-global
+         * wiring around it.
+         *
+         * A configuration UI (the custom-agent editor) only needs the list of
+         * skills/tools. Without this it would (a) take over the `load_skill`
+         * discovery source and drop it on unmount, leaving a live chat unable to
+         * discover anything, and (b) replace the plugin manager's agent-binding
+         * resolver with a null one, breaking page-scoped plugin tools while the
+         * settings dialog is open. Running surfaces never set this.
+         */
+        passive?: boolean
     }
 ): CapabilityProviders {
     const { pluginManager } = useContext(AppContext)
@@ -340,10 +352,11 @@ export function useCapabilityProviders(
     // instead of the app-global registry (another conversation's, in a host with
     // background tabs).
     useEffect(() => {
+        if (options?.passive) return
         if (!pluginManager?.setAgentBindingResolver) return
         pluginManager.setAgentBindingResolver(() => sessionBindingRef.current())
         return () => pluginManager.setAgentBindingResolver(undefined)
-    }, [pluginManager])
+    }, [pluginManager, options?.passive])
     // Register plugin skills + tools when plugins are loaded/changed, against
     // the editor that is active at that moment.
     useEffect(() => {
@@ -405,12 +418,13 @@ export function useCapabilityProviders(
      * providers, so a plugin installed or removed mid-session is reflected at once.
      */
     useEffect(() => {
+        if (options?.passive) return
         const source = createSkillToolSource(skillProvider, toolProvider)
         registerSkillToolSource(source)
         // Identity-matched release: an unrelated surface unmounting must not
         // unregister THIS one's discovery source.
         return () => releaseSkillToolSource(source)
-    }, [skillProvider, toolProvider, version])
+    }, [skillProvider, toolProvider, version, options?.passive])
 
     // Rebuild the capability catalog whenever providers change (cached via ref).
     const getCatalog = useCallback((activeSkills?: Set<string>): CapabilityCatalog => {

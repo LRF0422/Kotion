@@ -1,4 +1,8 @@
-export { AgentFormCard, formatFormRelativeTime } from './AgentFormCard'
+export {
+    AgentFormCard,
+    defaultFormRelativeTimeLabels,
+    formatFormRelativeTime,
+} from './AgentFormCard'
 export type {
     AgentFormBatchSpec,
     AgentFormCardLabels,
@@ -10,6 +14,7 @@ export type {
     AgentFormStatus,
     AgentFormSubmitPayload,
     AgentFormSubmitResult,
+    FormRelativeTimeLabels,
 } from './AgentFormCard'
 export { SubAgentTree, defaultSubAgentTreeLabels, buildSubAgentTreeLabels } from './SubAgentTree'
 export type {

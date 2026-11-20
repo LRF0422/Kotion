@@ -78,11 +78,18 @@ export interface SettingDlgProps {
      * 例如账号菜单的「邀请协作者」→ `Member`、「升级方案」→ `Subscription`。
      */
     initialKey?: string;
+    /**
+     * 深链到「自定义 Agent」面板后，直接进入哪个 Agent 的编辑弹窗。
+     * 由 `SettingsHost`（对话里的「编辑 Agent」）传入；其他面板忽略。
+     */
+    agentFocusId?: string;
 }
 
-export const SettingDlg: React.FC<PropsWithChildren<SettingDlgProps>> = ({ children, open: controlledOpen, onOpenChange, initialKey }) => {
+export const SettingDlg: React.FC<PropsWithChildren<SettingDlgProps>> = ({ children, open: controlledOpen, onOpenChange, initialKey, agentFocusId }) => {
     const { userInfo } = useSelector((state: GlobalState) => state);
-    const [currentKey, setCurrentKey] = useSafeState<string>("MyAccount");
+    // 首屏就落在深链面板上：`SettingsHost` 是「按需挂载 + 直接 open」，
+    // 若等 effect 再切 tab，会先闪一帧「我的账号」。
+    const [currentKey, setCurrentKey] = useSafeState<string>(initialKey || "MyAccount");
     const [uncontrolledOpen, setUncontrolledOpen] = useSafeState<boolean>(false);
     const isControlled = controlledOpen !== undefined;
     const open = isControlled ? controlledOpen : uncontrolledOpen;
@@ -91,7 +98,9 @@ export const SettingDlg: React.FC<PropsWithChildren<SettingDlgProps>> = ({ child
         onOpenChange?.(next);
     };
     // 移动端：是否处于「详情」视图（false 时显示导航列表）。
-    const [mobileDetail, setMobileDetail] = useSafeState<boolean>(false);
+    const [mobileDetail, setMobileDetail] = useSafeState<boolean>(
+        Boolean(initialKey && initialKey !== "MyAccount"),
+    );
     const { usePath } = useUploadFile();
     const { pluginManager } = useContext(AppContext);
     const { isMobile } = useResponsive();
@@ -223,7 +232,7 @@ export const SettingDlg: React.FC<PropsWithChildren<SettingDlgProps>> = ({ child
             case "Member":
                 return <Member />;
             case "MyAgents":
-                return <AgentManager />;
+                return <AgentManager focusAgentId={agentFocusId} />;
             case "MyProfile":
                 return <MyProfile />;
             case "MyMemory":

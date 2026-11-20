@@ -18,6 +18,20 @@ export type PluginChangeSource =
   | 'bulk'
 
 /**
+ * Payload of `OPEN_SETTINGS`.
+ *
+ * Plugins cannot import the host's settings UI, so they ask for it by emitting
+ * the event instead. The host keeps one app-level settings dialog that serves
+ * these deep links (see core `SettingsHost`).
+ */
+export interface OpenSettingsPayload {
+  /** Settings nav key, e.g. `MyAgents`; omitted → the account panel. */
+  key?: string
+  /** Custom agent to open in the editor once the agents panel is ready. */
+  agentId?: string
+}
+
+/**
  * Type-safe event map.
  * Each key is an event name; the value is the payload type (undefined for no payload).
  */
@@ -30,6 +44,7 @@ export interface EventMap {
   TOGGLE_AI_ASSISTANT: undefined
   TOGGLE_DOCK_PANEL: { id: string; position?: 'right' | 'left' }
   DOCK_PANEL_RUNNING: { id: string; running: boolean }
+  OPEN_SETTINGS: OpenSettingsPayload
   START_TOUR: string
 }
 

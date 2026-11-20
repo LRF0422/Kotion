@@ -62,6 +62,40 @@ export interface SkillDiagnosis {
     ambiguous?: string[]
 }
 
+/** One skill row of the live capability directory. */
+export interface SkillDirectoryEntry {
+    name: string
+    description: string
+    /** `user` is an installed SKILL.md (stored as a `user:`-prefixed plugin skill). */
+    source: 'builtin' | 'plugin' | 'user'
+    pluginName?: string
+    /** Tools the skill declares that this client can actually execute. */
+    tools: string[]
+}
+
+/** One tool row of the live capability directory. */
+export interface ToolDirectoryEntry {
+    name: string
+    description: string
+    category: string
+    source: 'builtin' | 'plugin'
+    readOnly: boolean
+    pluginName?: string
+}
+
+/**
+ * The live skill + tool directory.
+ *
+ * Exists for the surfaces that CONFIGURE capabilities (the custom-agent editor,
+ * the agent-facing `listAgentCapabilities` tool) rather than run them: they need
+ * the same names the run catalog will be built from, without instantiating a
+ * second ToolProvider (which would take over the discovery bridge).
+ */
+export interface CapabilityDirectory {
+    skills: SkillDirectoryEntry[]
+    tools: ToolDirectoryEntry[]
+}
+
 /** The live skill → tool-spec mapping of this client. */
 export interface SkillToolSource {
     /** Skill names this run can load on demand (tools and/or instructions). */
@@ -81,6 +115,12 @@ export interface SkillToolSource {
      * unlocked (a workbench run has no document until it creates or opens one).
      */
     diagnose: (skill: string, isAvailable?: ToolAvailability) => SkillDiagnosis
+    /**
+     * Full directory of what this client can offer. Optional so a minimal test
+     * double can implement discovery only; configuration surfaces degrade to
+     * "free-form names" when it is absent.
+     */
+    directory?: () => CapabilityDirectory
 }
 
 let source: SkillToolSource | null = null
@@ -291,6 +331,36 @@ export function createSkillToolSource(
                 unavailable: callableNames(skill)
                     .filter((name, index, all) => all.indexOf(name) === index)
                     .filter(name => !runnable(name, executable, isAvailable)),
+            }
+        },
+        directory: () => {
+            const executable = toolProvider.getAllTools()
+            return {
+                skills: skillProvider.getAllSkills()
+                    .map(skill => {
+                        const isUserInstalled = skill.source === 'plugin'
+                            && typeof skill.pluginName === 'string'
+                            && skill.pluginName.startsWith('user:')
+                        return {
+                            name: skill.name,
+                            description: skill.description ?? '',
+                            source: isUserInstalled ? 'user' as const : skill.source,
+                            ...(skill.pluginName ? { pluginName: skill.pluginName } : {}),
+                            tools: callableNames(skill).filter(name => !!executable[name]),
+                        }
+                    })
+                    .sort((a, b) => a.name.localeCompare(b.name)),
+                tools: toolProvider.getAllMetadata()
+                    .filter(meta => !!executable[meta.name])
+                    .map(meta => ({
+                        name: meta.name,
+                        description: meta.description ?? '',
+                        category: meta.category,
+                        source: meta.source,
+                        readOnly: isReadOnlyMetadata(meta, executable[meta.name]),
+                        ...(meta.pluginName ? { pluginName: meta.pluginName } : {}),
+                    }))
+                    .sort((a, b) => a.name.localeCompare(b.name)),
             }
         },
     }

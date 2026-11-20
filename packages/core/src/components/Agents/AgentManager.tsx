@@ -8,7 +8,7 @@
  * 可展开的指引输入、底部头像宫格。
  */
 
-import React, { useCallback, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
     AgentAvatar,
     AGENT_AVATARS,
@@ -31,11 +31,18 @@ import {
 import { Bot, Check, ChevronLeft, ChevronRight, Loader2, Pencil, Plus, Trash2 } from '@kn/icon'
 import {
     createCustomAgentId,
+    customAgentAllowedToolNames,
+    customAgentCapabilities,
+    useCapabilityProviders,
     useCustomAgents,
     useTranslation,
     type CustomAgent,
 } from '@kn/common'
 import { SettingsPanel, SettingsSection } from '../settings/components/primitives'
+import {
+    AgentCapabilityPicker,
+    type AgentCapabilitySelection,
+} from './AgentCapabilityPicker'
 
 interface AgentDraft {
     id: string
@@ -44,6 +51,7 @@ interface AgentDraft {
     emoji: string
     description: string
     instructions: string
+    capabilities: AgentCapabilitySelection
     createdAt: number
 }
 
@@ -54,6 +62,7 @@ const EMPTY_DRAFT: AgentDraft = {
     emoji: '',
     description: '',
     instructions: '',
+    capabilities: { mode: 'all', skills: [], tools: [] },
     createdAt: 0,
 }
 
@@ -68,7 +77,16 @@ const AgentGlyph: React.FC<{ avatar?: string; emoji?: string; className: string 
     return <Bot className={className} />
 }
 
-export const AgentManager: React.FC = () => {
+export interface AgentManagerProps {
+    /**
+     * Deep link from the chat's agent picker: open this agent's editor as soon
+     * as the list is available. Handled once — closing the editor while the
+     * settings panel stays open must not reopen it.
+     */
+    focusAgentId?: string
+}
+
+export const AgentManager: React.FC<AgentManagerProps> = ({ focusAgentId }) => {
     const { t } = useTranslation()
     const {
         agents,
@@ -80,6 +98,21 @@ export const AgentManager: React.FC = () => {
         deleteAgent,
         selectAgent,
     } = useCustomAgents()
+    // 可用技能/工具目录：只「读」能力提供者（passive）。设置面板不是运行面，
+    // 它若接管 load_skill 的发现源 / 插件 edit-target 解析器，会让正在使用的
+    // 对话在设置打开或关闭时失去能力。
+    const { getCatalog } = useCapabilityProviders(null, { passive: true })
+    const capabilityCatalog = useMemo(() => {
+        try {
+            const catalog = getCatalog()
+            return { skills: catalog.skills, tools: catalog.tools }
+        } catch {
+            // 能力目录不可用（极少见）：给一个空目录而不是 null —— 面板会说明
+            // 「目录不可用、手动白名单不生效」，避免一直停在「读取中」。
+            return { skills: [], tools: [] }
+        }
+    }, [getCatalog])
+
     const [dialogOpen, setDialogOpen] = useState(false)
     const [draft, setDraft] = useState<AgentDraft>(EMPTY_DRAFT)
     const [initialDraft, setInitialDraft] = useState<AgentDraft>(EMPTY_DRAFT)
@@ -87,7 +120,10 @@ export const AgentManager: React.FC = () => {
     const [pendingDelete, setPendingDelete] = useState<string | null>(null)
 
     const openCreate = useCallback(() => {
-        const fresh = { ...EMPTY_DRAFT }
+        const fresh: AgentDraft = {
+            ...EMPTY_DRAFT,
+            capabilities: { mode: 'all', skills: [], tools: [] },
+        }
         setDraft(fresh)
         setInitialDraft(fresh)
         setInstructionsEditing(false)
@@ -95,6 +131,7 @@ export const AgentManager: React.FC = () => {
     }, [])
 
     const openEdit = useCallback((agent: CustomAgent) => {
+        const caps = customAgentCapabilities(agent)
         const next: AgentDraft = {
             id: agent.id,
             name: agent.name,
@@ -102,6 +139,9 @@ export const AgentManager: React.FC = () => {
             emoji: agent.emoji ?? '',
             description: agent.description ?? '',
             instructions: agent.instructions,
+            capabilities: caps
+                ? { mode: 'custom', skills: caps.skills, tools: caps.tools }
+                : { mode: 'all', skills: [], tools: [] },
             createdAt: agent.createdAt,
         }
         setDraft(next)
@@ -114,6 +154,21 @@ export const AgentManager: React.FC = () => {
         setDraft(initialDraft)
         setInstructionsEditing(initialDraft.instructions.trim().length > 0)
     }, [initialDraft])
+
+    // Deep link: the chat's agent picker asked for this agent's editor. Wait for
+    // the list to load, then open it exactly once (see `focusedAgentRef`).
+    const focusedAgentRef = useRef<string | null>(null)
+    useEffect(() => {
+        if (!focusAgentId) {
+            focusedAgentRef.current = null
+            return
+        }
+        if (focusedAgentRef.current === focusAgentId) return
+        const agent = agents.find(item => item.id === focusAgentId)
+        if (!agent) return
+        focusedAgentRef.current = focusAgentId
+        openEdit(agent)
+    }, [agents, focusAgentId, openEdit])
 
     const cycleAvatar = useCallback((delta: number) => {
         setDraft(prev => {
@@ -143,6 +198,15 @@ export const AgentManager: React.FC = () => {
             emoji: draft.avatar ? undefined : (draft.emoji || undefined),
             description: draft.description.trim() || undefined,
             instructions,
+            ...(draft.capabilities.mode === 'custom'
+                ? {
+                    capabilities: {
+                        mode: 'custom' as const,
+                        skills: draft.capabilities.skills,
+                        tools: draft.capabilities.tools,
+                    },
+                }
+                : {}),
             createdAt: draft.createdAt || now,
             updatedAt: now,
         }
@@ -156,6 +220,23 @@ export const AgentManager: React.FC = () => {
         setPendingDelete(null)
         toast.success(t('settings.agents.deleted', { defaultValue: 'Agent 已删除' }))
     }, [deleteAgent, t])
+
+    /** 列表里的能力摘要；`null` = 该 Agent 使用全部能力（无需说明）。 */
+    const capabilitySummary = useCallback((agent: CustomAgent): string | null => {
+        const caps = customAgentCapabilities(agent)
+        if (!caps) return null
+        const allowed = capabilityCatalog
+            ? customAgentAllowedToolNames(capabilityCatalog, agent)
+            : null
+        const tools = allowed
+            ? (capabilityCatalog?.tools ?? []).filter(tool => allowed.has(tool.function.name)).length
+            : caps.tools.length
+        return t('settings.agents.capabilities.summaryCustom', {
+            defaultValue: '{{skills}} 个技能 · {{tools}} 个工具',
+            skills: caps.skills.length,
+            tools,
+        })
+    }, [capabilityCatalog, t])
 
     const selectedName = useMemo(
         () => agents.find(agent => agent.id === selectedAgentId)?.name ?? null,
@@ -200,6 +281,7 @@ export const AgentManager: React.FC = () => {
                     <div className="divide-y divide-border/60 overflow-hidden rounded-xl border border-border/60 bg-card">
                         {agents.map(agent => {
                             const active = agent.id === selectedAgentId
+                            const capsSummary = capabilitySummary(agent)
                             return (
                                 <div key={agent.id} className="flex items-start gap-3 px-4 py-3">
                                     <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted text-base text-foreground">
@@ -224,6 +306,11 @@ export const AgentManager: React.FC = () => {
                                         {agent.instructions && (
                                             <p className="line-clamp-1 text-xs text-muted-foreground/70">
                                                 {agent.instructions}
+                                            </p>
+                                        )}
+                                        {capsSummary && (
+                                            <p className="text-[11px] text-muted-foreground/80">
+                                                {capsSummary}
                                             </p>
                                         )}
                                     </div>
@@ -386,6 +473,19 @@ export const AgentManager: React.FC = () => {
                                 )}
                             </div>
                         </div>
+
+                        {/* 技能与工具：手动配置这个 Agent 能用的能力 */}
+                        <AgentCapabilityPicker
+                            catalog={capabilityCatalog}
+                            value={draft.capabilities}
+                            disabled={saving}
+                            onChange={next => setDraft(prev => ({ ...prev, capabilities: next }))}
+                        />
+                        <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                            {t('settings.agents.capabilities.aiHint', {
+                                defaultValue: '也可以直接在对话里说：「帮我建一个只做审稿的 Agent」，由 Agent 替你创建并配置。',
+                            })}
+                        </p>
 
                         {/* 职业头像宫格 */}
                         <div className="mt-6 grid grid-cols-4 gap-2.5">

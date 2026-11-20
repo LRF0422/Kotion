@@ -24,6 +24,7 @@ import {
     sortGroups,
 } from './chat-sessions'
 import { mergeGroupMeta, mergeSessionMeta } from './chat-session-merge'
+import { planOpenTab } from './chat/tab-eviction'
 import {
     clearRemoteSession,
     deleteRemoteSession,
@@ -37,6 +38,17 @@ import {
     upsertRemoteSession,
     upsertRemoteSessionGroup,
 } from './chat-session-api'
+
+export interface UseChatSessionsOptions {
+    /**
+     * Whether a conversation currently has a live run. The open-tab ceiling
+     * skips these: unmounting a running conversation aborts its stream and can
+     * strand a backend run that is waiting for a frontend tool result. The
+     * predicate is read through a ref, so an identity-unstable callback does
+     * not rebuild `openTab`.
+     */
+    isSessionRunning?: (id: string) => boolean
+}
 
 export interface UseChatSessionsResult {
     /** All known chat sessions, sorted by most-recent first. */
@@ -122,7 +134,13 @@ function mergeSessions(remote: ChatSessionMeta[], local: ChatSessionMeta[]): Cha
  * {@link useSessionTranscript}. This hook therefore never swaps or resets
  * message state — only the panel that owns a conversation can cancel it.
  */
-export function useChatSessions(): UseChatSessionsResult {
+export function useChatSessions(options: UseChatSessionsOptions = {}): UseChatSessionsResult {
+    // Read through a ref: the container re-renders on every run-status change,
+    // but `openTab` must keep its identity (it is a dependency of the session
+    // actions and the tab strip).
+    const isSessionRunningRef = useRef(options.isSessionRunning)
+    isSessionRunningRef.current = options.isSessionRunning
+
     // ── Lazy one-shot local seed (migration + ensure one session + one tab) ──
     const initial = useRef<{ sessions: ChatSessionMeta[]; activeId: string; tabs: string[] } | null>(null)
     if (initial.current === null) {
@@ -176,17 +194,24 @@ export function useChatSessions(): UseChatSessionsResult {
         setActiveSessionIdState(id)
     }, [])
 
-    /** Open `id` as a tab (evicting the oldest other tab at the ceiling). */
+    /**
+     * Open `id` as a tab. At the ceiling the oldest IDLE tab is dropped; a tab
+     * with a live run is never the victim (see `tab-eviction.ts`). If every
+     * other tab is running, the soft ceiling is exceeded on purpose — dropping
+     * a run is worse than one extra mounted conversation.
+     */
     const openTab = useCallback((id: string) => {
-        const tabs = tabsRef.current
-        if (tabs.includes(id)) return
-        const next = [...tabs]
-        if (next.length >= MAX_OPEN_TABS) {
-            const evictable = next.findIndex(tabId => tabId !== activeIdRef.current)
-            next.splice(evictable >= 0 ? evictable : 0, 1)
+        const plan = planOpenTab(
+            tabsRef.current,
+            id,
+            activeIdRef.current,
+            MAX_OPEN_TABS,
+            tabId => isSessionRunningRef.current?.(tabId) === true,
+        )
+        if (plan.evicted) {
+            console.warn('[agent] open-tab ceiling: evicted idle conversation', plan.evicted)
         }
-        next.push(id)
-        commitTabs(next)
+        commitTabs(plan.tabs)
     }, [commitTabs])
 
     const activateSession = useCallback((id: string) => {

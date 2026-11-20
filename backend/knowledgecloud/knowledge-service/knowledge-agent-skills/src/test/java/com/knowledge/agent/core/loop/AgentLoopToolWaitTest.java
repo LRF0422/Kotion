@@ -22,6 +22,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -122,15 +123,18 @@ class AgentLoopToolWaitTest {
     }
 
     @Test
-    void aSpentDeadlineWithoutAnAnswerStillFails() throws Exception {
+    void aSpentDeadlineWithoutAnAnswerParksTheRunForResume() throws Exception {
         Checkpoint checkpoint = checkpointWith("call-1", spentDeadline());
         AgentRun run = run();
 
         assertFalse(loop(run, checkpoint, new ResumeGate()).dispatchWaitForPending(),
                 "nothing was delivered and the deadline is long gone");
-        assertEquals("FAILED", run.getStatus());
-        assertEquals("tool_timeout", run.getErrorCode());
+        // A closed/frozen client is not a failed task: keep the pending call and
+        // the checkpoint intact so a later attach + resume can apply the result.
+        assertEquals("SUSPENDED", run.getStatus());
+        assertEquals("client_detached", run.getSuspendReason());
+        assertNull(run.getErrorCode(), "parking must not record a failure code");
         assertFalse(checkpoint.getPendingToolCalls().isEmpty(),
-                "the unanswered call stays pending for diagnosis");
+                "the unanswered call stays pending for the later resume");
     }
 }

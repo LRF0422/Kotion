@@ -24,7 +24,11 @@ import type { OnToolExecution } from '../types'
 import type { CustomAgent } from '../agent/custom-agents'
 import type { BackgroundTaskView } from '../agent/background-tasks'
 import type { FormRequestView } from '../agent/form-requests'
-import { buildCustomAgentNote } from '../agent/custom-agents'
+import {
+    buildCustomAgentNote,
+    customAgentCapabilities,
+    filterCatalogForCustomAgent,
+} from '../agent/custom-agents'
 import { workspaceHomeSkill } from './surface-skills'
 import { useWorkspaceDocumentTarget } from './use-workspace-document'
 import { buildImageContentParts, type AgentImageData } from '../image/image-attachments'
@@ -122,10 +126,46 @@ export function useWorkspaceAgent(options: WorkspaceAgentOptions = {}): Workspac
     }, [providers.toolProvider, hasDocument])
 
     // getCatalog's identity changes with the provider version, so the catalog
-    // (and therefore tools/skills) refreshes when plugins are installed.
+    // (and therefore tools/skills) refreshes when plugins are installed. The
+    // selected custom agent's manual skill/tool configuration is applied LAST,
+    // on top of what this scope can run: an agent cannot widen a surface's
+    // capabilities, only pick a subset of them.
     const catalog = useMemo(
-        () => filterAgentCatalog(providers.getCatalog(), isAvailableTool),
-        [providers.getCatalog, isAvailableTool],
+        () => filterCatalogForCustomAgent(
+            filterAgentCatalog(providers.getCatalog(), isAvailableTool),
+            options.customAgent,
+        ),
+        [providers.getCatalog, isAvailableTool, options.customAgent],
+    )
+
+    // The agent's skill allow-list, or null when it may use every skill. Handed
+    // to `load_skill` so discovery cannot reach a skill the user switched off,
+    // and to the run so tools outside the configuration are never advertised as
+    // callable (the catalog above already excludes them).
+    const agentCapabilities = useMemo(
+        () => customAgentCapabilities(options.customAgent),
+        [options.customAgent],
+    )
+    // `[]` is meaningful (an agent with no skills enabled), so it cannot double
+    // as "unrestricted": null is the only "all skills" value.
+    const allowedSkills = useMemo(
+        () => (agentCapabilities ? agentCapabilities.skills : null),
+        [agentCapabilities],
+    )
+    const allowedToolNames = useMemo(
+        () => (agentCapabilities ? new Set(catalog.tools.map(tool => tool.function.name)) : null),
+        [agentCapabilities, catalog],
+    )
+    const isRunToolAvailable = useCallback((name: string) => {
+        if (allowedToolNames && !allowedToolNames.has(name)) return false
+        return isAvailableTool(name)
+    }, [allowedToolNames, isAvailableTool])
+    // Same allow-list, used by the EXECUTOR: a transcript from before an agent
+    // switch (or a delegated child) can ask for a tool the catalog no longer
+    // advertises, and that call must be refused rather than run.
+    const isRunToolAllowed = useCallback(
+        (name: string) => !allowedToolNames || allowedToolNames.has(name),
+        [allowedToolNames],
     )
     // What this conversation already discovered: the run ships those tools as
     // callable-but-deferred instead of withholding them for a second `load_skill`
@@ -166,10 +206,15 @@ export function useWorkspaceAgent(options: WorkspaceAgentOptions = {}): Workspac
         sessionBinding,
         // Discovery answers for THIS run: before it has a document, its page-scoped
         // tools must not be offered (they are registered in the client but cannot
-        // run here); after `createPage` acquires one, they must be.
-        isToolAvailable: isAvailableTool,
-        // Fresh surface: never adopt the dock's persisted run handle.
-        persist: false,
+        // run here); after `createPage` acquires one, they must be. The selected
+        // custom agent's allow-list narrows it further.
+        isToolAvailable: isRunToolAvailable,
+        isToolAllowed: isRunToolAllowed,
+        allowedSkills,
+        // Persist the run handle: the dock and this page hand a conversation
+        // back and forth at safe boundaries, and the receiving surface needs
+        // the handle to attach/replay a run the other one started.
+        persist: true,
         // Long tasks finish here too (a studio build runs in the workbench): the
         // host decides how the completion rejoins the conversation.
         onBackgroundTaskSettled: options.onBackgroundTaskSettled,

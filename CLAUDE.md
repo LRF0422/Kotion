@@ -219,6 +219,16 @@ description: 技能描述
 - `SkillCard` - 技能卡片展示
 - `CreateSkillDialog` - 创建/导入技能对话框
 
+## 自定义 Agent（人格 + 技能/工具白名单）
+
+`packages/common/src/ai/agent/custom-agents.ts` 管理用户自建 Agent：指引作为每轮 `<context>`
+注入；`capabilities`（`mode: 'custom'` + `skills`/`tools`）是**限制**，缺省=全部能力。
+运行侧唯一强制点是 `filterCatalogForCustomAgent`（三个界面在 scope 过滤之后调用），
+`load_skill` 另用 run 的 `allowedSkills` 兜底，两处必须一致。
+对话里让 Agent 自己建 Agent 走 `listCustomAgents` / `listAgentCapabilities` / `saveCustomAgent`
+（`common/src/ai/tools/custom-agent-tools.ts`，core 注册）。详见 **[docs/CUSTOM_AGENTS.md](docs/CUSTOM_AGENTS.md)**；
+自测 `pnpm --filter @kn/common check:custom-agents`。
+
 ## Responsive / 响应式规范
 
 本仓库使用统一的**三层设备体系**（mobile `<768` / tablet `768–1023` / desktop `≥1024`）。

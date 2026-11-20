@@ -60,6 +60,7 @@ import {
     useResponsive,
 } from '@kn/ui'
 import { FormRequestCard } from './FormRequestCard'
+import { useFormRelativeTimeLabels } from './form-labels'
 import type { ChatSessionMeta } from '../chat-sessions'
 
 /** Open board rows before the body switches to a fixed, scrollable height. */
@@ -116,10 +117,11 @@ const FormRequestRow: React.FC<FormRequestRowProps> = ({
     onOpenConversation,
 }) => {
     const { t } = useTranslation()
+    const relativeTimeLabels = useFormRelativeTimeLabels()
     const timestamp = request.status === 'pending'
         ? request.createdAt
         : request.answeredAt ?? request.cancelledAt ?? request.createdAt
-    const relativeTime = formatFormRelativeTime(timestamp, now)
+    const relativeTime = formatFormRelativeTime(timestamp, now, relativeTimeLabels)
     // Batch forms are worth flagging in the list: one row hides several records.
     const batchCount = request.batch
         ? (request.status === 'answered'

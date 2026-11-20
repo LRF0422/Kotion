@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Bot, ChevronDown } from '@kn/icon'
+import { Bot, ChevronDown, Pencil } from '@kn/icon'
 import {
     AgentAvatar,
     DropdownMenu,
@@ -10,7 +10,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@kn/ui'
-import { useCustomAgents, useTranslation } from '@kn/common'
+import { event, OPEN_SETTINGS, useCustomAgents, useTranslation } from '@kn/common'
 
 const DEFAULT_AGENT_VALUE = '__default_agent__'
 
@@ -83,6 +83,28 @@ export const AgentPicker: React.FC<AgentPickerProps> = ({ disabled, className = 
                         </>
                     )}
                 </DropdownMenuRadioGroup>
+
+                {/* Deep link into the settings panel's editor: the selected agent
+                    opens directly, the default one lands on the agents list. */}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                    className="min-h-11 gap-2 text-xs text-muted-foreground lg:min-h-8"
+                    onSelect={() => {
+                        // Let the menu finish closing (and hand focus back)
+                        // before the modal opens its own focus scope.
+                        window.setTimeout(() => {
+                            event.emit(OPEN_SETTINGS, {
+                                key: 'MyAgents',
+                                agentId: selectedAgentId ?? undefined,
+                            })
+                        }, 0)
+                    }}
+                >
+                    <Pencil aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">
+                        {t('settings.agents.editAgent', { defaultValue: '编辑 Agent' })}
+                    </span>
+                </DropdownMenuItem>
             </DropdownMenuContent>
         </DropdownMenu>
     )

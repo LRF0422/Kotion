@@ -156,6 +156,23 @@ export interface EditorToolExecutorOptions {
      */
     isToolAvailable?: (name: string) => boolean
     /**
+     * LIVE skill allow-list of this run (a custom agent's selection), or null for
+     * every skill in the catalog. A getter, like the binding: switching agents
+     * mid-conversation must take effect on the next call without rebuilding the
+     * executor. Handed to `load_skill` so discovery cannot bypass it.
+     */
+    getAllowedSkills?: () => readonly string[] | null | undefined
+    /**
+     * Hard tool allow-list for THIS run (a custom agent's manual configuration),
+     * read live so switching agents mid-conversation takes effect immediately.
+     * Absent = every registered tool.
+     *
+     * The catalog is what the model is normally offered, but a transcript may
+     * still contain a tool name from before the switch (or a delegated child may
+     * ask for one), so execution itself has to refuse what the user switched off.
+     */
+    isToolAllowed?: (name: string) => boolean
+    /**
      * Conversation this executor's calls belong to. Discovery tools remember what
      * they loaded per conversation, so a skill loaded on one turn stays callable on
      * the next (a new run) instead of having to be loaded again.
@@ -186,6 +203,8 @@ export class EditorToolExecutor {
     private readonly onExecution?: OnToolExecution
     private readonly getSessionBinding?: EditorToolExecutorOptions['getSessionBinding']
     private readonly isToolAvailable?: EditorToolExecutorOptions['isToolAvailable']
+    private readonly getAllowedSkills?: EditorToolExecutorOptions['getAllowedSkills']
+    private readonly isToolAllowed?: EditorToolExecutorOptions['isToolAllowed']
     private readonly conversationId?: string | null
     private readonly requestApproval?: EditorToolExecutorOptions['requestApproval']
     /** Idempotency cache: callId → result (replays/reconnects reuse it). */
@@ -202,6 +221,8 @@ export class EditorToolExecutor {
         this.onExecution = options.onExecution
         this.getSessionBinding = options.getSessionBinding
         this.isToolAvailable = options.isToolAvailable
+        this.getAllowedSkills = options.getAllowedSkills
+        this.isToolAllowed = options.isToolAllowed
         this.conversationId = options.conversationId
         this.requestApproval = options.requestApproval
     }
@@ -279,7 +300,15 @@ export class EditorToolExecutor {
             // resolve the same way before declaring the tool unavailable.
             const name = resolveToolName(toolName, tools) ?? toolName
             const definition: ToolDefinition | undefined = tools[name]
-            if (!definition || typeof definition.execute !== 'function') {
+            if (this.isToolAllowed && !this.isToolAllowed(name) && !this.isToolAllowed(toolName)) {
+                // The selected custom agent does not grant this tool. The catalog
+                // no longer advertises it, but the transcript may: refuse with the
+                // reason instead of quietly running it.
+                outcome = {
+                    ok: false,
+                    error: `工具 ${name} 没有被当前 Agent 启用（自定义能力配置只允许已勾选的技能/工具），不能调用。`,
+                }
+            } else if (!definition || typeof definition.execute !== 'function') {
                 // The model invented a name (usually a made-up namespace prefix
                 // plus a semantic suffix). Name the closest real tools so the
                 // next call lands, instead of letting it guess another prefix.
@@ -292,6 +321,7 @@ export class EditorToolExecutor {
                     conversationId: this.conversationId ?? null,
                     sessionBinding: this.getSessionBinding?.() ?? null,
                     isToolAvailable: this.isToolAvailable,
+                    allowedSkills: this.getAllowedSkills?.() ?? undefined,
                     requestApproval: (request: ToolApprovalRequest) =>
                         this.askForApproval(callId, request),
                 })

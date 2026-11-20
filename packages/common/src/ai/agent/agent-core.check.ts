@@ -839,6 +839,45 @@ async function waitFor(predicate: () => boolean, timeoutMs: number): Promise<voi
     throw new Error('timed out waiting for condition')
 }
 
+async function checkExecutorHonorsToolAllowList(): Promise<void> {
+    let ran = 0
+    const executor = new EditorToolExecutor({
+        resolveTools: () => ({
+            allowedTool: {
+                description: 'ok',
+                inputSchema: {},
+                execute: async () => { ran += 1; return 'allowed' },
+            },
+            blockedTool: {
+                description: 'no',
+                inputSchema: {},
+                execute: async () => { ran += 1; return 'blocked' },
+            },
+        }),
+        // A custom agent enabled only `allowedTool`. The catalog would not
+        // advertise the other one, but a stale transcript (or a delegated child)
+        // can still ask for it: execution has to refuse.
+        isToolAllowed: (name: string) => name === 'allowedTool',
+    })
+
+    const allowed = await executor.execute('call-ok', 'allowedTool', {})
+    assert.equal(allowed.ok, true)
+    assert.equal(ran, 1)
+
+    const refused = await executor.execute('call-no', 'blockedTool', {})
+    assert.equal(refused.ok, false, 'a tool outside the run allow-list must not execute')
+    assert.match(String(refused.error), /没有被当前 Agent 启用/)
+    assert.equal(ran, 1, 'the refused tool must not run')
+
+    // An unrestricted run (no allow-list) keeps executing everything.
+    const open = new EditorToolExecutor({
+        resolveTools: () => ({
+            anything: { description: 'x', inputSchema: {}, execute: async () => 'ran' },
+        }),
+    })
+    assert.equal((await open.execute('call-open', 'anything', {})).ok, true)
+}
+
 async function main(): Promise<void> {
     await checkExecutorSingleFlight()
     checkToolBatchSnapshot()
@@ -856,6 +895,7 @@ async function main(): Promise<void> {
     await checkDocumentWriteSerialization()
     await checkToolDeadlineUnsticksAHangingTool()
     await checkExecutorOwnerAndWriteLease()
+    await checkExecutorHonorsToolAllowList()
     await checkSubRunWorkersRunInParallel()
     await checkChildResumeFailureKeepsToolResults()
     await checkStaleRunViewDoesNotDropPendingCalls()

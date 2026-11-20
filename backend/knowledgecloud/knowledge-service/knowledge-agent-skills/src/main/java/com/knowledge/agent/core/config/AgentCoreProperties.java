@@ -98,7 +98,13 @@ public class AgentCoreProperties {
         private int maxChildrenPerRun = 16;
         /** Timeout for a delegated sub-agent run (seconds). */
         private int delegateTimeoutSeconds = 600;
-        /** How long a run may wait for frontend tool results (seconds). */
+        /**
+         * How long a run waits for frontend tool results before the client is
+         * presumed detached (seconds). Past this window the run is parked as
+         * {@code SUSPENDED/client_detached} — pending calls stay in the
+         * checkpoint and a later attach + resume can apply them — rather than
+         * failed.
+         */
         private int waitingToolsTimeoutSeconds = 180;
         /** Min interval between hot-state flushes carrying assistantText (ms). */
         private long assistantFlushIntervalMs = 1000;

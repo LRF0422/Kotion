@@ -14,6 +14,7 @@ import {
     describeAgentTarget,
     useCustomAgents,
     usePendingFormRequests,
+    useRouteCacheActive,
     useTranslation,
     useWorkspaceAgent,
     type AgentArtifact,
@@ -34,6 +35,14 @@ import type { ChatPanelControls } from "../menu/use-session-actions"
 import type { ChatTabStatus } from "../menu/chat/ChatTabs"
 import type { ChatSessionMeta } from "../menu/chat-sessions"
 import { selectFinalAnswer, toolCallsToSteps } from "../menu/chat-helpers"
+import {
+    canYieldAgentSurface,
+    claimAgentSurface,
+    getAgentSurfaceOwner,
+    registerAgentSurfaceMount,
+    releaseAgentSurface,
+    useAgentSurfaceOwner,
+} from "../menu/chat/agent-surface"
 
 const ACTIVE_PHASES = new Set([
     'creating', 'streaming', 'waiting-tools', 'waiting-approval', 'suspended',
@@ -65,7 +74,12 @@ export interface KernelConversationProps {
  * editor inside `useWorkspaceAgent`), and the working target is the
  * conversation's own artifact rather than a document.
  */
-export const KernelConversation: React.FC<KernelConversationProps> = ({
+interface KernelConversationActiveProps extends KernelConversationProps {
+    /** Whether the /ai route is actually on screen (route cache keeps it mounted). */
+    visible: boolean
+}
+
+const KernelConversationActive: React.FC<KernelConversationActiveProps> = ({
     sessionId,
     session,
     selectedModel,
@@ -79,6 +93,7 @@ export const KernelConversation: React.FC<KernelConversationProps> = ({
     onRunStatus,
     onArtifacts,
     controlsRef,
+    visible,
 }) => {
     const { t } = useTranslation()
     const [sessionError, setSessionError] = useState<string | null>(null)
@@ -149,6 +164,68 @@ export const KernelConversation: React.FC<KernelConversationProps> = ({
         },
     })
     const { state } = agent
+    const surfaceOwner = useAgentSurfaceOwner(sessionId)
+    const detachedRef = useRef(false)
+    const attachingRef = useRef(false)
+    const attachAttemptedRef = useRef<string | null>(null)
+
+    /**
+     * Surface ownership. On screen, the page claims the conversation; when the
+     * route is cached in the background it yields at a safe boundary (the run
+     * keeps going) so the dock can drive it again. A tool/approval/plan wait
+     * keeps ownership here, and the dock shows a "running elsewhere" banner.
+     */
+    useEffect(() => {
+        const pendingApproval = state.toolCalls.some(call => call.approval?.status === 'pending')
+        const safe = canYieldAgentSurface(state.phase, state.pendingToolIds, pendingApproval)
+
+        if (visible) {
+            const reattach = () => {
+                if (attachingRef.current) return
+                attachingRef.current = true
+                detachedRef.current = false
+                void agent.attach().finally(() => { attachingRef.current = false })
+            }
+            if (surfaceOwner === 'kernel') {
+                if (detachedRef.current && safe) reattach()
+                return
+            }
+            if (surfaceOwner === null && claimAgentSurface(sessionId, 'kernel')) {
+                if (detachedRef.current && safe) reattach()
+            }
+            return
+        }
+
+        if (surfaceOwner === 'kernel' && safe && agent.detach()) {
+            detachedRef.current = true
+            releaseAgentSurface(sessionId, 'kernel')
+        }
+    }, [
+        visible, surfaceOwner, sessionId, agent.attach, agent.detach,
+        state.phase, state.pendingToolIds, state.toolCalls,
+    ])
+
+    // First activation (or a handoff from the dock): adopt the engine's active
+    // run. The handle is persisted by this surface too (see useWorkspaceAgent),
+    // so `attach` can also replay a run that finished while this page was hidden.
+    useEffect(() => {
+        if (!visible || surfaceOwner !== 'kernel') {
+            attachAttemptedRef.current = null
+            return
+        }
+        if (state.phase !== 'idle' || state.runId) return
+        if (attachAttemptedRef.current === sessionId) return
+        if (attachingRef.current) return
+        attachAttemptedRef.current = sessionId
+        attachingRef.current = true
+        void agent.attach().finally(() => { attachingRef.current = false })
+    }, [visible, surfaceOwner, sessionId, state.phase, state.runId, agent.attach])
+
+    // Route-cache eviction / plugin reload: do not leave a stale owner behind.
+    useEffect(() => () => {
+        if (getAgentSurfaceOwner(sessionId) === 'kernel') releaseAgentSurface(sessionId, 'kernel')
+    }, [sessionId])
+
     const modelVision = useModelVisionSupport(selectedModel)
     const visionBlocked = modelVision.known && !modelVision.supportsVision
 
@@ -504,4 +581,58 @@ export const KernelConversation: React.FC<KernelConversationProps> = ({
             </div>
         </div>
     )
+}
+
+/**
+ * The dock still owns the conversation (it is waiting for a frontend tool, an
+ * approval, or a plan/budget decision). Mounting a second agent here would fight
+ * the RunLock, so show why the page is passive until the dock hands over.
+ */
+const KernelConversationHeld: React.FC<{ session: ChatSessionMeta | undefined }> = ({ session }) => {
+    const { t } = useTranslation()
+    return (
+        <div
+            role="status"
+            aria-live="polite"
+            className="flex h-full min-h-0 w-full flex-1 flex-col items-center justify-center gap-2 p-6 text-center"
+        >
+            {session?.title && (
+                <p className="max-w-md text-sm font-medium text-foreground">{session.title}</p>
+            )}
+            <p className="text-sm text-muted-foreground">
+                {t('ai.chat.runningInDock', {
+                    defaultValue: '该会话正在右侧 AI 面板中运行（等待工具或审批）。',
+                })}
+            </p>
+            <p className="max-w-sm text-xs text-muted-foreground">
+                {t('ai.chat.runningInDockHint', {
+                    defaultValue: '完成当前步骤后会自动切换到这里；也可以直接在右侧面板继续。',
+                })}
+            </p>
+        </div>
+    )
+}
+
+/**
+ * One conversation of the kernel home. The wrapper decides which surface may
+ * drive it; the active component below owns all the agent/transcript hooks.
+ */
+export const KernelConversation: React.FC<KernelConversationProps> = (props) => {
+    const visible = useRouteCacheActive()
+    const owner = useAgentSurfaceOwner(props.sessionId)
+
+    // Tell the dock that /ai really has a panel for this conversation. The two
+    // session indexes can briefly disagree; yielding to a page that has not
+    // mounted the conversation would hide the run from both surfaces.
+    useEffect(
+        () => registerAgentSurfaceMount(props.sessionId, 'kernel'),
+        [props.sessionId],
+    )
+
+    if (owner === 'dock') return <KernelConversationHeld session={props.session} />
+    // A cached-but-hidden page must not keep an agent mounted for a conversation
+    // it does not own; when it owns one (unsafe hold), it stays mounted to
+    // finish/yield it.
+    if (!visible && owner !== 'kernel') return null
+    return <KernelConversationActive {...props} visible={visible} />
 }

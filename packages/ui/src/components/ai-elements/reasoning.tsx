@@ -177,6 +177,10 @@ export const ReasoningContent = memo(
     <CollapsibleContent
       className={cn(
         "mt-3 text-sm",
+        // Streamdown hard-codes `text-sm` on inline code and fenced code blocks,
+        // so inside the smaller reasoning text they read as headings. Pin both
+        // to 1em of the prose they sit in, wherever this component is used.
+        "[&_code]:text-[length:1em] [&_pre]:text-[length:1em]",
         "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:animate-in data-[state=open]:slide-in-from-top-2 text-muted-foreground outline-none",
         className,
       )}

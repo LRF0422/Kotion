@@ -490,6 +490,43 @@ async function checkAvailableListIsCapped(): Promise<void> {
     registerSkillToolSource(source)
 }
 
+async function checkAgentAllowListIsEnforced(): Promise<void> {
+    registerSkillToolSource(source)
+
+    // A custom agent configured only `bitable-ops`: the catalog already omitted
+    // `chart-ops`, and discovery must not hand it out anyway.
+    const blocked = await loadSkill.execute(
+        { skill: 'chart-ops' },
+        undefined,
+        { allowedSkills: ['bitable-ops'] },
+    )
+    assert.ok(String(blocked.error).includes('chart-ops'))
+    assert.equal(blocked.success, undefined, 'a disabled skill must not be served')
+    assert.deepEqual(blocked.available, ['bitable-ops'],
+        'the error only offers what this agent enabled')
+
+    const allowed = await loadSkill.execute(
+        { skill: 'bitable-ops' },
+        undefined,
+        { allowedSkills: ['bitable-ops'] },
+    )
+    assert.equal(allowed.success, true)
+
+    // Empty list = "no skills enabled", NOT "unrestricted"; the distinction is
+    // the difference between a chat-only agent and an unrestricted one.
+    const none = await loadSkill.execute(
+        { skill: 'bitable-ops' },
+        undefined,
+        { allowedSkills: [] },
+    )
+    assert.ok(String(none.error).includes('没有启用'))
+    assert.deepEqual(none.available, [])
+
+    // No allow-list at all keeps the old, unrestricted behaviour.
+    const unrestricted = await loadSkill.execute({ skill: 'bitable-ops' }, undefined, {})
+    assert.equal(unrestricted.success, true)
+}
+
 async function main(): Promise<void> {
     await checkReturnsSchemaBundle()
     await checkUnknownSkillIsActionable()
@@ -502,6 +539,7 @@ async function main(): Promise<void> {
     await checkPromptOnlySkillServesItsInstructions()
     await checkAmbiguousNameOffersCandidates()
     await checkAvailableListIsCapped()
+    await checkAgentAllowListIsEnforced()
     checkRememberedSkillsAreCallableNextRun()
     clearLoadedSkillCache()
     console.log('skill tool checks passed')

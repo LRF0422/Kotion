@@ -28,6 +28,8 @@ import {
     useTranslation,
     useAgentPane,
     buildCustomAgentNote,
+    customAgentCapabilities,
+    filterCatalogForCustomAgent,
     useCustomAgents,
     fileToAgentImage,
     buildImageContentParts,
@@ -51,6 +53,14 @@ import {
 import type { BlockReference, Message } from "./chat-types"
 import type { ChatSessionMeta, ChatTargetPage } from "./chat-sessions"
 import { useSessionTranscript } from "./use-session-transcript"
+import {
+    canYieldAgentSurface,
+    claimAgentSurface,
+    getAgentSurfaceOwner,
+    releaseAgentSurface,
+    useAgentSurfaceMounted,
+    useAgentSurfaceOwner,
+} from "./chat/agent-surface"
 import { useOffscreenTargets } from "./use-offscreen-targets"
 import { MessageBubble } from "./MessageBubble"
 import { ErrorDisplay } from "./ErrorDisplay"
@@ -84,6 +94,12 @@ export interface ChatConversationProps {
      * tabs keep RUNNING, they just do not own the visible chrome.
      */
     active: boolean
+    /**
+     * True when the full-page `/ai` surface is on screen. The dock then yields
+     * this conversation to it at a safe boundary (the run keeps going
+     * server-side) instead of driving a second agent for the same conversation.
+     */
+    yieldToKernel?: boolean
     /** Active editor to bind document tools to (may disappear mid-run). */
     editor?: Editor
     selectedModel: string
@@ -117,6 +133,7 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
     sessionId,
     session,
     active,
+    yieldToKernel = false,
     editor,
     selectedModel,
     onModelChange,
@@ -131,6 +148,19 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
     onOpenPageWindow,
 }) => {
     const { t } = useTranslation()
+
+    // Who is driving this conversation right now: the dock or the `/ai` page.
+    // The dock yields the run at a safe boundary when `/ai` is on screen; it
+    // never mounts a second agent for a conversation the page owns.
+    const surfaceOwner = useAgentSurfaceOwner(sessionId)
+    // The /ai page may be on screen but not have mounted this conversation yet
+    // (the two session indexes can briefly disagree). Only yield to a surface
+    // that can actually take it over, otherwise the run would vanish from both.
+    const kernelMounted = useAgentSurfaceMounted(sessionId, 'kernel')
+    const shouldYield = yieldToKernel && kernelMounted
+    const isHandedOff = surfaceOwner === 'kernel' || (shouldYield && surfaceOwner !== 'dock')
+    const detachedRef = useRef(false)
+    const attachingRef = useRef(false)
 
     // Vision guard: knowing up front whether the selected model can see images
     // is what lets the composer refuse an upload instead of letting the backend
@@ -426,7 +456,31 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
         onUserChoiceRequest: handleUserChoiceRequest,
         sessionBinding: getSessionBinding,
     })
-    const catalog = useMemo(() => getCatalog(), [getCatalog])
+    // 自定义 Agent 的技能/工具白名单：作用在本界面能跑的能力目录之上（最后一层
+    // 过滤）。必须先拿到它再构建 run 输入，否则模型仍会看到被关掉的工具。
+    const { selectedAgent } = useCustomAgents()
+    const catalog = useMemo(
+        () => filterCatalogForCustomAgent(getCatalog(), selectedAgent),
+        [getCatalog, selectedAgent],
+    )
+    const agentCapabilities = useMemo(
+        () => customAgentCapabilities(selectedAgent),
+        [selectedAgent],
+    )
+    const allowedSkills = useMemo(
+        () => (agentCapabilities ? agentCapabilities.skills : null),
+        [agentCapabilities],
+    )
+    // load_skill 只回答白名单里的技能；执行器也用同一份白名单挡住旧 transcript
+    // 带来的调用（目录已不宣传，但名字可能还在历史消息里）。
+    const allowedToolNames = useMemo(
+        () => (agentCapabilities ? new Set(catalog.tools.map(tool => tool.function.name)) : null),
+        [agentCapabilities, catalog],
+    )
+    const isToolAllowedByAgent = useCallback(
+        (name: string) => !allowedToolNames || allowedToolNames.has(name),
+        [allowedToolNames],
+    )
     // Every callable tool rides in tools[] with its schema; skills[] adds the
     // prompt fragments and the tool names each skill owns. Only what the
     // provider's tool ceiling cannot fit comes back as deferredTools — plus the
@@ -645,9 +699,7 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
         }
     }, [liveCurrentPageId, acquireOwnerTarget])
 
-    // Custom agent selected for this chat. Its guidance is appended to the
-    // editor rules for every run it starts.
-    const { selectedAgent } = useCustomAgents()
+    /* selectedAgent 已在上方（能力目录过滤处）取出。 */
 
     /** Set right after `useEditorAgent`: the completion callback needs `start`. */
     const agentRef = useRef<EditorAgentApi | null>(null)
@@ -661,6 +713,11 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
         // Mutating calls are serialized per document (write lease), and a
         // delegated child resolves its tools against its own editor.
         isReadOnlyTool,
+        // 自定义 Agent 的白名单：不在其中的工具不可调用（目录已不宣传，这里再挡
+        // 一层，让 load_skill 也按同一规则回答）。
+        isToolAvailable: isToolAllowedByAgent,
+        isToolAllowed: isToolAllowedByAgent,
+        allowedSkills,
         // Refuse mutating tools while the bound editor is read-only (READ
         // collaboration invitation / read-only page).
         canMutate: canMutateNow,
@@ -682,7 +739,7 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
         // 长任务（background: true 的构建/装依赖/发布）跑完，而 agent 没有在等它时，
         // 把结果作为一条通知推进对话：否则那条工具调用的"结果"永远不会回到会话里。
         // 回调属于 hook 的 OPTIONS，拿不到 hook 的返回值，用 ref 桥接。
-        onBackgroundTaskSettled: (_tasks, note) => {
+        onBackgroundTaskSettled: surfaceOwner === 'dock' && !shouldYield ? (_tasks, note) => {
             setMessages(prev => [...prev, {
                 id: 'background-' + Date.now().toString(36),
                 sender: 'user' as const,
@@ -698,11 +755,11 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
                     contextNote: buildCustomAgentNote(selectedAgent) || undefined,
                 })
                 .catch(err => setError(classifyError(err)))
-        },
+        } : undefined,
         // 动态表单：用户在「填写请求」面板里补填了一张已经没人等的表单时，把答案作为
         // 一条通知推进对话——否则用户填了，agent 却永远不知道。结构与上面的长任务
         // 回调完全一致（追加一条用户消息 + 用同一套模型/上下文参数续跑）。
-        onFormRequestAnswered: (_requests, note) => {
+        onFormRequestAnswered: surfaceOwner === 'dock' && !shouldYield ? (_requests, note) => {
             setMessages(prev => [...prev, {
                 id: 'form-' + Date.now().toString(36),
                 sender: 'user' as const,
@@ -718,20 +775,59 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
                     contextNote: buildCustomAgentNote(selectedAgent) || undefined,
                 })
                 .catch(err => setError(classifyError(err)))
-        },
+        } : undefined,
     })
     agentRef.current = agent
 
-    // Re-attach at most once per session activation. Without this guard, resetting
-    // a completed run immediately triggers another attach while the backend is
-    // still clearing thread.activeRunId, replaying the same assistant output.
-    const attachAttemptedSessionRef = useRef<string | null>(null)
+    /**
+     * Surface handoff. The dock is the home for a conversation on workspace
+     * routes; on `/ai` it yields at a safe boundary (the backend run keeps
+     * going) and re-attaches when it gets the conversation back. A run waiting
+     * on a tool/approval keeps the dock as owner — the page then shows a banner
+     * instead of mounting a second agent.
+     */
     useEffect(() => {
-        if (!targetToolsReady || agent.state.phase !== 'idle' || agent.state.runId) return
-        if (attachAttemptedSessionRef.current === sessionId) return
-        attachAttemptedSessionRef.current = sessionId
-        void agent.attach()
-    }, [sessionId, targetToolsReady, agent.state.phase, agent.state.runId, agent.attach])
+        const pendingApproval = agent.state.toolCalls.some(call => call.approval?.status === 'pending')
+        const safe = canYieldAgentSurface(agent.state.phase, agent.state.pendingToolIds, pendingApproval)
+
+        if (shouldYield) {
+            if (surfaceOwner !== 'dock' || !safe) return
+            if (agent.detach()) {
+                detachedRef.current = true
+                releaseAgentSurface(sessionId, 'dock')
+            }
+            return
+        }
+
+        const reattach = () => {
+            if (attachingRef.current) return
+            attachingRef.current = true
+            detachedRef.current = false
+            void agent.attach().finally(() => { attachingRef.current = false })
+        }
+
+        if (surfaceOwner === 'dock') {
+            if (detachedRef.current && safe) reattach()
+            return
+        }
+        if (surfaceOwner === null && claimAgentSurface(sessionId, 'dock')) {
+            // First activation, or the /ai page just handed the conversation
+            // back. Attach even when this surface never detached: the run may
+            // have been driven by the other surface until now.
+            if (detachedRef.current || (agent.state.phase === 'idle' && !agent.state.runId)) {
+                reattach()
+            }
+        }
+    }, [
+        shouldYield, surfaceOwner, sessionId, agent.attach, agent.detach,
+        agent.state.phase, agent.state.pendingToolIds, agent.state.toolCalls,
+    ])
+
+    // A dock panel that unmounts (tab closed, plugin reload) must not leave a
+    // stale owner that keeps the /ai page in its "running elsewhere" banner.
+    useEffect(() => () => {
+        if (getAgentSurfaceOwner(sessionId) === 'dock') releaseAgentSurface(sessionId, 'dock')
+    }, [sessionId])
 
     // ─── Composer state ───────────────────────────────────────────
     const [input, setInput] = useState("")
@@ -794,6 +890,15 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
     // in a background tab leaves a dot instead of vanishing.
     const reportedStatusRef = useRef<ChatTabStatus>('idle')
     useEffect(() => {
+        // A handed-off conversation is driven by the /ai page. Reporting its
+        // frozen "streaming" state would keep the dock pinned open forever.
+        if (isHandedOff) {
+            if (reportedStatusRef.current !== 'idle') {
+                reportedStatusRef.current = 'idle'
+                onRunStatus(sessionId, 'idle')
+            }
+            return
+        }
         const phase = agent.state.phase
         const status: ChatTabStatus =
             pendingChoice || phase === 'waiting-approval' || phase === 'suspended'
@@ -809,7 +914,7 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
         reportedStatusRef.current = status
         if (status === 'idle') return
         onRunStatus(sessionId, status)
-    }, [agent.state.phase, pendingChoice, onRunStatus, sessionId])
+    }, [agent.state.phase, pendingChoice, onRunStatus, sessionId, isHandedOff])
 
     const lastUserMessageRef = useRef<string>("")
     const composerRef = useRef<HTMLTextAreaElement>(null)
@@ -830,11 +935,12 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
     }, [setMessages])
 
     /**
-     * A turn typed while the run was already past its last safe boundary. It is
-     * flushed as the next run the moment the current one finishes, so a message
-     * sent into the closing milliseconds of a run is never dropped.
+     * Turns typed while the run was already past its last safe boundary. They
+     * are answered as fresh runs, one per turn, in the order they were typed:
+     * the first one after this run finishes, the next after that run finishes.
+     * A single slot used to overwrite the older turn and silently drop it.
      */
-    const queuedTurnRef = useRef<AgentChatMessage[] | null>(null)
+    const queuedTurnRef = useRef<AgentChatMessage[][]>([])
 
     /**
      * Start a fresh run for one user turn: freeze the page this turn edits and
@@ -883,10 +989,10 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
     ])
 
     const flushQueuedTurn = useCallback(() => {
-        const queued = queuedTurnRef.current
-        if (!queued) return
-        queuedTurnRef.current = null
-        void startTurn(queued)
+        const [next, ...rest] = queuedTurnRef.current
+        if (!next) return
+        queuedTurnRef.current = rest
+        void startTurn(next)
     }, [startTurn])
 
     // ─── Run lifecycle: snapshot terminal turns into history ─────
@@ -906,7 +1012,7 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
                 ? prev.map(m => (m.steered ? { ...m, steered: false } : m))
                 : prev)
             if (abandoningRef.current) {
-                queuedTurnRef.current = null
+                queuedTurnRef.current = []
                 agent.reset()
                 return
             }
@@ -958,6 +1064,13 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
     // any more, only per-conversation controls.
     useEffect(() => {
         const controls = controlsRef.current
+        // The surface that owns the run owns its controls. A handed-off dock
+        // panel must not offer stop/clear: `cancel()` would otherwise mark the
+        // run cancelled locally while the /ai page keeps driving it.
+        if (isHandedOff) {
+            controls.delete(sessionId)
+            return
+        }
         controls.set(sessionId, {
             cancel: async () => {
                 const cancelled = await agent.cancel().catch(() => false)
@@ -974,7 +1087,7 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
             },
         })
         return () => { controls.delete(sessionId) }
-    }, [sessionId, agent, abandonAgent, resetTranscript, controlsRef])
+    }, [sessionId, agent, abandonAgent, resetTranscript, controlsRef, isHandedOff])
 
     // ─── Submit ───────────────────────────────────────────────────
     const submitMessage = useCallback(async (messageText: string, images: AgentImageData[] = []) => {
@@ -1007,18 +1120,24 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
         // A run is already executing: hand the turn to it instead of waiting for
         // it to finish. The loop folds it in between two model calls, so the
         // answer keeps streaming into the same run and no run is cancelled.
-        if (isActive) {
+        //
+        // `runId` is part of the test: a `suspended`/`creating` surface may be
+        // active with no run yet (attach failed, or the create round-trip is in
+        // flight). Steering that has no target used to park the turn in the
+        // queue forever, so let `start()` create a run (or wait for the create
+        // already in flight and fold the turn into it).
+        if (isActive && agent.state.runId) {
             if (await agent.steer(agentMessages)) return
             // It crossed its last safe boundary between typing and sending: keep
             // the turn (its bubble is already on screen) and answer it as the
             // next run once this one publishes its terminal state.
             setSteered(userMessage.id, false)
-            queuedTurnRef.current = agentMessages
+            queuedTurnRef.current = [...queuedTurnRef.current, agentMessages]
             return
         }
 
         await startTurn(agentMessages)
-    }, [agent, generateMessageId, isActive, setMessages, setSteered, startTurn])
+    }, [agent, agent.state.runId, generateMessageId, isActive, setMessages, setSteered, startTurn])
 
     const handleSend = useCallback(() => {
         const text = input.trim()
@@ -1067,6 +1186,24 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
     const starterPage = targetPage ?? currentPage
 
     // ─── Render ───────────────────────────────────────────────────
+    // The /ai page owns this conversation. Keep the tab mounted (its run is
+    // being driven there) but do not render a second composer/approval card
+    // whose actions would target a detached agent.
+    if (isHandedOff) {
+        return (
+            <div className="flex h-full min-h-[220px] flex-col items-center justify-center gap-2 p-6 text-center">
+                <p className="text-sm font-medium text-foreground">
+                    {t('ai.chat.runningInKernel', { defaultValue: '该会话正在 /ai 页面运行' })}
+                </p>
+                <p className="max-w-sm text-xs text-muted-foreground">
+                    {t('ai.chat.runningInKernelHint', {
+                        defaultValue: '可能在等待工具或审批。回到 /ai 页面即可继续；切回工作区后会自动接回这里。',
+                    })}
+                </p>
+            </div>
+        )
+    }
+
     return (
         <>
             <ExpandableChatBody className="flex-row overflow-x-hidden bg-background">

@@ -1,5 +1,6 @@
 export * from './tool-factory-registry'
 export * from './skill-tools'
+export * from './custom-agent-tools'
 export * from './background-tools'
 export * from './form-tools'
 export * from './long-task-tools'

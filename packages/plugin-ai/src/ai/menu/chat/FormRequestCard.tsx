@@ -13,7 +13,7 @@
  *    `AgentFormSubmitResult`.
  */
 
-import React, { useMemo } from 'react'
+import React from 'react'
 import {
     DEFAULT_FORM_BATCH_MAX_ROWS,
     formRequests,
@@ -25,11 +25,11 @@ import {
 } from '@kn/common'
 import {
     AgentFormCard,
-    type AgentFormCardLabels,
     type AgentFormRequest,
     type AgentFormSubmitPayload,
     type AgentFormSubmitResult,
 } from '@kn/ui'
+import { useFormCardLabels } from './form-labels'
 
 export interface FormRequestCardProps {
     /** The request to render; the live registry view is preferred when available. */
@@ -74,26 +74,9 @@ export const FormRequestCard: React.FC<FormRequestCardProps> = ({
     const liveRequest = useFormRequest(request.id)
     const view = liveRequest ?? request
 
-    const labels = useMemo<AgentFormCardLabels>(() => ({
-        submit: t('ai.chat.forms.submit', { defaultValue: '提交' }),
-        submitting: t('ai.chat.forms.submitting', { defaultValue: '提交中…' }),
-        cancel: t('ai.chat.forms.cancel', { defaultValue: '取消' }),
-        addRow: t('ai.chat.forms.addRow', { defaultValue: '添加一条' }),
-        removeRow: t('ai.chat.forms.removeRow', { defaultValue: '删除' }),
-        required: t('ai.chat.forms.required', { defaultValue: '必填' }),
-        pending: t('ai.chat.forms.statusPending', { defaultValue: '待填写' }),
-        answered: t('ai.chat.forms.statusAnswered', { defaultValue: '已填写' }),
-        cancelled: t('ai.chat.forms.statusCancelled', { defaultValue: '已取消' }),
-        cancelReason: t('ai.chat.forms.cancelReasonLabel', { defaultValue: '取消原因' }),
-        waitExpired: t('ai.chat.forms.waitExpiredHint', {
-            defaultValue: 'agent 已停止等待，现在填写仍会作为通知送回会话。',
-        }),
-        selectPlaceholder: t('ai.chat.forms.selectPlaceholder', { defaultValue: '请选择' }),
-        emptyValue: t('ai.chat.forms.emptyValue', { defaultValue: '（空）' }),
-        validationFailed: t('ai.chat.forms.validationFailed', {
-            defaultValue: '请检查标红的字段后再提交。',
-        }),
-    }), [t])
+    // All card copy (including the batch hints, which embed the row bounds) is
+    // built once in `form-labels.ts`, shared with the inbox board.
+    const labels = useFormCardLabels(view.batch)
 
     const handleSubmit = (payload: AgentFormSubmitPayload): AgentFormSubmitResult => {
         if (payload.kind === 'batch') {

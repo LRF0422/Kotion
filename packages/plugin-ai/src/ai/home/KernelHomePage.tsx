@@ -95,6 +95,10 @@ export const KernelHomePage: React.FC = () => {
     const isModernSurface = !isMobile && uiStyle === 'modern'
 
     // ─── Session index (shared with the dock) ────────────────────────
+    // A running conversation must never be the tab the ceiling evicts; see
+    // `useChatSessions`'s `isSessionRunning`. Read through a ref because the
+    // run status lives below (it is reported by the mounted conversations).
+    const runStatusRef = useRef<Record<string, ChatTabStatus>>({})
     const {
         sessions: allSessions,
         activeSessionId,
@@ -112,7 +116,12 @@ export const KernelHomePage: React.FC = () => {
         renameGroup,
         deleteGroup,
         moveSessionToGroup,
-    } = useChatSessions()
+    } = useChatSessions({
+        isSessionRunning: id => {
+            const status = runStatusRef.current[id]
+            return status === 'running' || status === 'attention'
+        },
+    })
 
     const activeIdRef = useRef(activeSessionId)
     activeIdRef.current = activeSessionId
@@ -159,6 +168,7 @@ export const KernelHomePage: React.FC = () => {
 
     // ─── Tab status / artifacts, reported by the panels ──────────────
     const [runStatus, setRunStatus] = useState<Record<string, ChatTabStatus>>({})
+    runStatusRef.current = runStatus
     const [messageCounts, setMessageCounts] = useState<Record<string, number>>({})
     const [artifactsByTab, setArtifactsByTab] = useState<Record<string, AgentArtifact[]>>({})
 
@@ -315,6 +325,7 @@ export const KernelHomePage: React.FC = () => {
         handleDeleteSession,
     } = useSessionActions({
         activeSessionId,
+        surface: 'kernel',
         controlsRef,
         clearSessionMessages,
         activateSession,

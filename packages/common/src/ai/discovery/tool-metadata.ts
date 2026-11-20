@@ -72,6 +72,45 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
         scope: 'any'
     },
 
+    // ===== Custom agents (configuration) =====
+    // Protocol-level like `load_skill`: "帮我建一个审稿 Agent" is said in a chat
+    // that may have no document at all, and these tools edit the same config the
+    // settings dialog writes. They touch no editor and mutate no document, so
+    // they must survive every scope filter.
+    {
+        name: 'listCustomAgents',
+        category: 'interaction',
+        description: '列出用户的自定义 Agent（名称、指引、可用技能/工具）以及当前选中的那个。',
+        priority: 5,
+        tags: ['agent', 'custom-agent', 'essential'],
+        loaded: false,
+        source: 'builtin',
+        scope: 'any',
+        requiresEditor: false,
+    },
+    {
+        name: 'listAgentCapabilities',
+        category: 'interaction',
+        description: '列出当前环境可用的技能与工具（供给自定义 Agent 配置能力时选用）。',
+        priority: 5,
+        tags: ['agent', 'custom-agent', 'skill', 'essential'],
+        loaded: false,
+        source: 'builtin',
+        scope: 'any',
+        requiresEditor: false,
+    },
+    {
+        name: 'saveCustomAgent',
+        category: 'interaction',
+        description: '创建或更新一个用户自定义 Agent（名称 + 指引 + 可选的技能/工具白名单）。',
+        priority: 6,
+        tags: ['agent', 'custom-agent', 'essential'],
+        loaded: false,
+        source: 'builtin',
+        scope: 'any',
+        requiresEditor: false,
+    },
+
     // ===== Background (long-running) tasks =====
     // Protocol-level like `load_skill`, and for the same reason: the surfaces
     // where a long tool actually runs (a workbench run with no document) would

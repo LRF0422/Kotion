@@ -5,11 +5,18 @@
 import { strict as assert } from 'node:assert'
 import {
     buildCustomAgentNote,
+    customAgentAllowedToolNames,
+    customAgentCapabilities,
+    filterCatalogForCustomAgent,
     findCustomAgent,
+    normalizeCustomAgentCapabilities,
     normalizeCustomAgents,
     normalizeSelectedAgentId,
+    resolveCustomAgentCapabilities,
+    unavailableCapabilityNames,
     type CustomAgent,
 } from './custom-agents'
+import type { AgentCapabilityCatalog, SkillPayload, ToolPayload } from '../capabilities/payload-types'
 
 function checkNormalizeDropsInvalid(): void {
     assert.deepEqual(normalizeCustomAgents(null), [])
@@ -88,6 +95,182 @@ function checkCustomAgentNote(): void {
     assert.ok(note.includes('以系统规则为准'))
 }
 
+
+// ─── Manual skill/tool configuration ────────────────────────────────
+
+const tool = (name: string): ToolPayload => ({
+    type: 'function',
+    function: { name, description: `${name} description`, parameters: { type: 'object', properties: {} } },
+})
+
+const skill = (
+    name: string,
+    requiredTools: string[],
+    optionalTools?: string[],
+): SkillPayload => ({
+    name,
+    description: `${name} description`,
+    requiredTools,
+    ...(optionalTools ? { optionalTools } : {}),
+    source: 'builtin',
+})
+
+function fixtureCatalog(): AgentCapabilityCatalog {
+    return {
+        skills: [
+            skill('doc-review', ['readChunk', 'searchInDocument']),
+            skill('bitable-skill', ['insertBitable', 'addBitableRecord'], ['listBitables']),
+            skill('prompt-only', []),
+        ],
+        tools: [
+            tool('readChunk'),
+            tool('searchInDocument'),
+            tool('insertBitable'),
+            tool('addBitableRecord'),
+            tool('listBitables'),
+            tool('write'),
+            tool('load_skill'),
+        ],
+        version: 'v1',
+    }
+}
+
+const agentWith = (capabilities: CustomAgent['capabilities']): CustomAgent => ({
+    id: 'a1',
+    name: 'Reviewer',
+    instructions: 'Review carefully.',
+    capabilities,
+    createdAt: 0,
+    updatedAt: 0,
+})
+
+function checkNormalizeCapabilities(): void {
+    // `all` is represented by ABSENCE: an old record and an explicit "all" must
+    // look the same to every consumer.
+    assert.equal(normalizeCustomAgentCapabilities(undefined), undefined)
+    assert.equal(normalizeCustomAgentCapabilities({ mode: 'all', skills: ['x'] }), undefined)
+    assert.equal(customAgentCapabilities(agentWith(undefined)), undefined)
+
+    const custom = normalizeCustomAgentCapabilities({
+        mode: 'custom',
+        // Spelling differences fold to one skill; tools are identifiers and stay exact.
+        skills: ['Doc Review', 'doc_review', '  ', 42],
+        tools: ['readChunk', 'readChunk', 'ReadChunk'],
+    })!
+    assert.equal(custom.mode, 'custom')
+    assert.deepEqual(custom.skills, ['Doc Review'])
+    assert.deepEqual(custom.tools, ['readChunk', 'ReadChunk'])
+
+    // An empty custom list is meaningful (chat-only agent), not "everything".
+    const empty = normalizeCustomAgentCapabilities({ mode: 'custom' })!
+    assert.deepEqual(empty.skills, [])
+    assert.deepEqual(empty.tools, [])
+}
+
+function checkCapabilitiesSurviveNormalization(): void {
+    const list = normalizeCustomAgents([
+        {
+            id: 'a1',
+            name: 'Reviewer',
+            instructions: 'Review.',
+            capabilities: { mode: 'custom', skills: ['doc-review'], tools: ['write'] },
+        },
+        // A legacy record has no capabilities and must stay unrestricted.
+        { id: 'a2', name: 'Legacy', instructions: 'Hi.' },
+    ])
+    assert.deepEqual(list[0].capabilities, { mode: 'custom', skills: ['doc-review'], tools: ['write'] })
+    assert.equal(list[1].capabilities, undefined)
+}
+
+function checkUnrestrictedCatalogIsUnchanged(): void {
+    const catalog = fixtureCatalog()
+    // Same object → the unrestricted run path stays byte- and identity-stable.
+    assert.equal(filterCatalogForCustomAgent(catalog, null), catalog)
+    assert.equal(filterCatalogForCustomAgent(catalog, agentWith(undefined)), catalog)
+    assert.equal(filterCatalogForCustomAgent(catalog, agentWith({ mode: 'all', skills: [], tools: [] })), catalog)
+    assert.equal(customAgentAllowedToolNames(catalog, agentWith(undefined)), null)
+}
+
+function checkFilterKeepsConfiguredSkillsAndTheirTools(): void {
+    const catalog = fixtureCatalog()
+    const filtered = filterCatalogForCustomAgent(catalog, agentWith({
+        mode: 'custom',
+        skills: ['bitable'],
+        // `write` is explicitly allowed; the bitable tools come with the skill.
+        tools: ['write'],
+    }))
+    assert.deepEqual(filtered.skills.map(item => item.name), ['bitable-skill'])
+    assert.deepEqual(
+        filtered.tools.map(item => item.function.name).sort(),
+        ['addBitableRecord', 'insertBitable', 'listBitables', 'load_skill', 'write'],
+        'skill-owned tools and the discovery bridge are kept, everything else is gone',
+    )
+    assert.ok(filtered.version.includes(':ca'), 'a restricted catalog needs its own version')
+    assert.notEqual(filtered.version, catalog.version)
+}
+
+function checkFilterDropsDiscoveredButUnconfiguredSkills(): void {
+    const catalog = fixtureCatalog()
+    const filtered = filterCatalogForCustomAgent(catalog, agentWith({ mode: 'custom', skills: [], tools: [] }))
+    // Chat-only: no tools, no skills, no discovery bridge.
+    assert.deepEqual(filtered.skills, [])
+    assert.deepEqual(filtered.tools, [])
+    assert.equal(filtered.version.includes(':ca'), true)
+}
+
+function checkAllowedToolNamesIncludeSkillTools(): void {
+    const catalog = fixtureCatalog()
+    const allowed = customAgentAllowedToolNames(catalog, agentWith({
+        mode: 'custom', skills: ['doc-review'], tools: ['write'],
+    }))!
+    assert.deepEqual([...allowed].sort(), ['load_skill', 'readChunk', 'searchInDocument', 'write'])
+}
+
+function checkUnavailableCapabilities(): void {
+    const catalog = fixtureCatalog()
+    const missing = unavailableCapabilityNames(catalog, {
+        skills: ['doc-review', 'uninstalled-skill'],
+        tools: ['write', 'goneTool'],
+    })
+    assert.deepEqual(missing.skills, ['uninstalled-skill'])
+    assert.deepEqual(missing.tools, ['goneTool'])
+    // Unrestricted agents have nothing to be missing.
+    assert.deepEqual(unavailableCapabilityNames(catalog, null), { skills: [], tools: [] })
+}
+
+function checkResolveCapabilitiesOnSave(): void {
+    const existing = { mode: 'custom' as const, skills: ['doc-review'], tools: ['write'] }
+
+    // Nothing sent → keep the restriction (a guidance-only edit).
+    assert.deepEqual(resolveCustomAgentCapabilities(existing, {}), existing)
+    // Explicit "all" → clear it.
+    assert.equal(resolveCustomAgentCapabilities(existing, { mode: 'all' }), undefined)
+    // One half sent → the other half survives.
+    assert.deepEqual(
+        resolveCustomAgentCapabilities(existing, { skills: ['bitable'] }),
+        { mode: 'custom', skills: ['bitable'], tools: ['write'] },
+    )
+    assert.deepEqual(
+        resolveCustomAgentCapabilities(existing, { tools: [] }),
+        { mode: 'custom', skills: ['doc-review'], tools: [] },
+    )
+    // Explicit custom without lists keeps both halves.
+    assert.deepEqual(
+        resolveCustomAgentCapabilities(existing, { mode: 'custom' }),
+        existing,
+    )
+    // Creation: nothing → unrestricted; lists → restricted (empty is meaningful).
+    assert.equal(resolveCustomAgentCapabilities(undefined, {}), undefined)
+    assert.deepEqual(
+        resolveCustomAgentCapabilities(undefined, { skills: ['doc-review'] }),
+        { mode: 'custom', skills: ['doc-review'], tools: [] },
+    )
+    assert.deepEqual(
+        resolveCustomAgentCapabilities(undefined, { mode: 'custom', skills: [], tools: [] }),
+        { mode: 'custom', skills: [], tools: [] },
+    )
+}
+
 function main(): void {
     checkNormalizeDropsInvalid()
     checkNormalizeKeepsAndTrims()
@@ -95,6 +278,14 @@ function main(): void {
     checkNormalizeSelected()
     checkFind()
     checkCustomAgentNote()
+    checkNormalizeCapabilities()
+    checkCapabilitiesSurviveNormalization()
+    checkUnrestrictedCatalogIsUnchanged()
+    checkFilterKeepsConfiguredSkillsAndTheirTools()
+    checkFilterDropsDiscoveredButUnconfiguredSkills()
+    checkAllowedToolNamesIncludeSkillTools()
+    checkUnavailableCapabilities()
+    checkResolveCapabilitiesOnSave()
     console.log('custom-agents checks passed')
 }
 

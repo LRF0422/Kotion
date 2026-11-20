@@ -40,6 +40,7 @@ import org.springframework.stereotype.Component;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -83,6 +84,26 @@ public class DefaultRunSupervisor {
 
     /** Live loops on THIS instance (reconcile and resume consult it). */
     private final Map<String, LoopHandle> handles = new ConcurrentHashMap<>();
+
+    /**
+     * Consecutive lease-renew failures per run. One transient Redis error must
+     * not cancel a healthy run. The lease TTL is 30s and renewal runs every
+     * 10s: one failure leaves 20s of headroom, while the second consecutive
+     * failure (20s without a successful renew) is close enough to expiry that
+     * the local loop must stop to avoid split-brain.
+     */
+    private final Map<String, Integer> leaseRenewFailures = new ConcurrentHashMap<>();
+
+    /**
+     * Runs whose local loop was stopped because its lease was lost. Their exit
+     * is not a task failure: the run is left non-terminal so reconcile/resume
+     * can rebuild it from the checkpoint (this also covers split-brain: the new
+     * owner finishes it and projects the transcript).
+     */
+    private final Set<String> leaseLostRuns = ConcurrentHashMap.newKeySet();
+
+    /** Consecutive renew failures tolerated before the local loop is stopped. */
+    private static final int LEASE_RENEW_MAX_FAILURES = 2;
 
     /** Per-run progress probes for {@link #reportStalledLoops()}. */
     private final Map<String, StallProbe> stallProbes = new ConcurrentHashMap<>();
@@ -636,6 +657,8 @@ public class DefaultRunSupervisor {
     /** Called by the loop exactly once when it reaches a terminal state. */
     public void onLoopExit(String runId) {
         handles.remove(runId);
+        leaseRenewFailures.remove(runId);
+        boolean leaseLost = leaseLostRuns.remove(runId);
         lease.release(runId);
         AgentRun run = runStore.load(runId);
         // A cross-instance cancel may have marked the flag after the loop
@@ -653,6 +676,25 @@ public class DefaultRunSupervisor {
                                 run.getCachedPromptTokens())).getSeq());
                 runStore.persist(run);
                 runStore.saveHot(run);
+            } else if (!run.statusEnum().isTerminal()
+                    && RunStatus.SUSPENDED.name().equals(run.getStatus())
+                    && "client_detached".equals(run.getSuspendReason())) {
+                // The tool wait expired while the client was gone. This is not a
+                // failed task: keep the checkpoint/pending calls and leave the
+                // run resumable. A re-attach + resume starts a fresh loop from
+                // that checkpoint; reconcile deliberately skips it until then.
+                log.info("Run {}: parked waiting for a detached client; leaving it resumable", runId);
+                eventLog.release(runId);
+                return;
+            } else if (!run.statusEnum().isTerminal() && leaseLost) {
+                // The lease-renewal grace period ran out. Do NOT fail the run:
+                // another instance may already drive it, and if nobody does,
+                // reconcile rebuilds it from the checkpoint. Failing here was
+                // the difference between "Redis blipped" and "turn lost".
+                log.warn("Run {}: local loop stopped after losing its lease; leaving it for reconcile/resume",
+                        runId);
+                eventLog.release(runId);
+                return;
             } else if (!run.statusEnum().isTerminal() && !lease.isHeld(runId)) {
                 // The loop returned without a terminal state and nobody else owns
                 // the run (no lease): it was killed by an Error or a bug. Leaving
@@ -698,6 +740,14 @@ public class DefaultRunSupervisor {
                 if (run == null || run.statusEnum().isTerminal()) {
                     continue;
                 }
+                if (RunStatus.SUSPENDED.name().equals(run.getStatus())
+                        && "client_detached".equals(run.getSuspendReason())) {
+                    // Parked because the frontend that owed tool results went
+                    // away. There is nothing for a rebuilt loop to do until a
+                    // resume arrives: rebuilding it every sweep would re-park it
+                    // and append a duplicate run.suspended each time.
+                    continue;
+                }
                 Checkpoint checkpoint = checkpointStore.load(runId);
                 if (checkpoint == null) {
                     markFailed(run, "unrecoverable", "无法恢复：缺少断点快照");
@@ -717,16 +767,31 @@ public class DefaultRunSupervisor {
     public void renewLeases() {
         int ttl = properties.getLease().getTtlSeconds();
         for (LoopHandle handle : handles.values()) {
-            if (!handle.future.isDone()) {
-                if (!lease.renew(handle.run.getRunId(), ttl)) {
-                    // Ownership is gone: another instance may already be driving
-                    // this run. Stop this loop instead of risking split-brain
-                    // duplicate seqs/side effects.
-                    log.warn("Lease lost for {} — stopping local loop to avoid split-brain",
-                            handle.run.getRunId());
-                    handle.loop.requestCancel();
-                }
+            String runId = handle.run.getRunId();
+            if (handle.future.isDone()) {
+                leaseRenewFailures.remove(runId);
+                continue;
             }
+            if (lease.renew(runId, ttl)) {
+                leaseRenewFailures.remove(runId);
+                continue;
+            }
+            // Do NOT cancel on the first failure: a Redis timeout, a GC pause or
+            // a partitioned moment is not proof that another node owns the run.
+            // The TTL is 30s and this runs every 10s, so two consecutive
+            // failures (20s without a renew) are the cut-off.
+            int failures = leaseRenewFailures.merge(runId, 1, Integer::sum);
+            if (failures < LEASE_RENEW_MAX_FAILURES) {
+                log.warn("Lease renew failed for {} ({}/{}); retrying on the next tick",
+                        runId, failures, LEASE_RENEW_MAX_FAILURES);
+                continue;
+            }
+            leaseRenewFailures.remove(runId);
+            leaseLostRuns.add(runId);
+            log.warn("Lease lost for {} after {} consecutive renew failures — stopping the local loop "
+                            + "to avoid split-brain (the run stays resumable)",
+                    runId, failures);
+            handle.loop.requestCancel();
         }
     }
 

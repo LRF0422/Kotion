@@ -147,6 +147,29 @@ export type AgentFormSubmitResult =
     | { ok: true }
     | { ok: false; error?: string; fieldErrors?: Record<string, string> }
 
+/**
+ * Relative-time wording shared by the card header and the inbox board
+ * (`formatFormRelativeTime`). Hosts pass translated values; the defaults are the
+ * Chinese product copy.
+ */
+export interface FormRelativeTimeLabels {
+    /** BCP-47 tag used by the absolute-date fallback; defaults to `zh-CN`. */
+    locale?: string
+    justNow: string
+    minutesAgo: (count: number) => string
+    hoursAgo: (count: number) => string
+    daysAgo: (count: number) => string
+}
+
+/** Chinese defaults; a host that localizes the card overrides every field. */
+export const defaultFormRelativeTimeLabels: FormRelativeTimeLabels = {
+    locale: 'zh-CN',
+    justNow: '刚刚',
+    minutesAgo: count => `${count} 分钟前`,
+    hoursAgo: count => `${count} 小时前`,
+    daysAgo: count => `${count} 天前`,
+}
+
 /** Overridable copy; defaults are the Chinese product copy used across the app. */
 export interface AgentFormCardLabels {
     submit?: string
@@ -161,6 +184,8 @@ export interface AgentFormCardLabels {
     answered?: string
     cancelled?: string
     cancelReason?: string
+    /** Separator between a label and its value ("取消原因：…"); defaults to "：". */
+    labelSeparator?: string
     waitExpired?: string
     selectPlaceholder?: string
     emptyValue?: string
@@ -175,6 +200,17 @@ export interface AgentFormCardLabels {
     multiSelectPlaceholder?: string
     /** Trigger label for a multiselect cell that has picks; defaults to "已选 N 项". */
     selectedCount?: (count: number) => string
+    /** Read-only answer of a checked / unchecked checkbox; defaults to 是 / 否. */
+    yes?: string
+    no?: string
+    /** Joins a multiselect answer in the read-only summary; defaults to "、". */
+    listSeparator?: string
+    /** Accessible name of a batch cell: `(field label, 1-based row)`. */
+    batchCellAria?: (fieldLabel: string, rowNumber: number) => string
+    /** Record-count suffix on the batch submit button, e.g. "3 条". */
+    batchRowsCount?: (count: number) => string
+    /** Relative/absolute time wording in the answered / cancelled header. */
+    relativeTime?: FormRelativeTimeLabels
 }
 
 export interface AgentFormCardProps {
@@ -203,15 +239,20 @@ const WEEK_MS = 7 * DAY_MS
  * Relative time ("刚刚" / "3 分钟前"), shared by the card and the inbox board.
  *
  * Pure on purpose: bodies that tick pass their own `now`, and render paths that
- * must not allocate timers just call it with the default.
+ * must not allocate timers just call it with the default. `labels` carries the
+ * localized wording, because `@kn/ui` cannot reach the host's i18n instance.
  */
-export function formatFormRelativeTime(timestamp: number, now: number = Date.now()): string {
+export function formatFormRelativeTime(
+    timestamp: number,
+    now: number = Date.now(),
+    labels: FormRelativeTimeLabels = defaultFormRelativeTimeLabels,
+): string {
     const diff = Math.max(0, now - timestamp)
-    if (diff < MINUTE_MS) return '刚刚'
-    if (diff < HOUR_MS) return `${Math.floor(diff / MINUTE_MS)} 分钟前`
-    if (diff < DAY_MS) return `${Math.floor(diff / HOUR_MS)} 小时前`
-    if (diff < WEEK_MS) return `${Math.floor(diff / DAY_MS)} 天前`
-    return new Date(timestamp).toLocaleDateString('zh-CN')
+    if (diff < MINUTE_MS) return labels.justNow
+    if (diff < HOUR_MS) return labels.minutesAgo(Math.floor(diff / MINUTE_MS))
+    if (diff < DAY_MS) return labels.hoursAgo(Math.floor(diff / HOUR_MS))
+    if (diff < WEEK_MS) return labels.daysAgo(Math.floor(diff / DAY_MS))
+    return new Date(timestamp).toLocaleDateString(labels.locale ?? defaultFormRelativeTimeLabels.locale)
 }
 
 /**
@@ -265,16 +306,23 @@ const selectedValues = (value: unknown): string[] =>
 const formatFieldValue = (
     field: AgentFormField,
     value: unknown,
-    emptyValue: string,
+    labels: AgentFormCardLabels,
 ): string => {
+    const emptyValue = labels.emptyValue ?? DEFAULT_LABELS.emptyValue
     if (value === undefined || value === null) return emptyValue
     if (Array.isArray(value)) {
-        const labels = value.map(item => (
+        const picked = value.map(item => (
             field.options?.find(option => option.value === item)?.label ?? String(item)
         ))
-        return labels.length > 0 ? labels.join('、') : emptyValue
+        return picked.length > 0
+            ? picked.join(labels.listSeparator ?? DEFAULT_LABELS.listSeparator)
+            : emptyValue
     }
-    if (field.type === 'checkbox') return value ? '是' : '否'
+    if (field.type === 'checkbox') {
+        return value
+            ? (labels.yes ?? DEFAULT_LABELS.yes)
+            : (labels.no ?? DEFAULT_LABELS.no)
+    }
     if (field.type === 'select' || field.type === 'radio') {
         return field.options?.find(option => option.value === value)?.label ?? String(value)
     }
@@ -303,10 +351,18 @@ const DEFAULT_LABELS = {
     answered: '已填写',
     cancelled: '已取消',
     cancelReason: '取消原因',
+    labelSeparator: '：',
     waitExpired: 'agent 已停止等待，现在填写仍会作为通知送回会话。',
     selectPlaceholder: '请选择',
     emptyValue: '（空）',
     validationFailed: '请检查标红的字段后再提交。',
+    yes: '是',
+    no: '否',
+    listSeparator: '、',
+    multiSelectPlaceholder: '选择…',
+    selectedCount: (count: number) => `已选 ${count} 项`,
+    batchCellAria: (fieldLabel: string, rowNumber: number) => `${fieldLabel}（第 ${rowNumber} 行）`,
+    batchRowsCount: (count: number) => `${count} 条`,
 } as const
 
 /* ------------------------------------------------------------------ *
@@ -720,7 +776,7 @@ const renderBatchCellControl = ({
             )
         case 'multiselect': {
             const picked = selectedValues(value)
-            const countLabel = labels.selectedCount ?? ((count: number) => `已选 ${count} 项`)
+            const countLabel = labels.selectedCount ?? DEFAULT_LABELS.selectedCount
             return (
                 <Popover>
                     <PopoverTrigger asChild>
@@ -734,7 +790,7 @@ const renderBatchCellControl = ({
                             <span className="truncate">
                                 {picked.length > 0
                                     ? countLabel(picked.length)
-                                    : (labels.multiSelectPlaceholder ?? '选择…')}
+                                    : (labels.multiSelectPlaceholder ?? DEFAULT_LABELS.multiSelectPlaceholder)}
                             </span>
                             <ChevronDown className="h-3 w-3 shrink-0 opacity-50" aria-hidden />
                         </Button>
@@ -787,7 +843,13 @@ const renderBatchCellControl = ({
                     <Checkbox
                         {...common}
                         checked={value === true}
-                        aria-label={`${field.label}（第 ${Number(cellKey.split(':')[0]) + 1} 行）`}
+                        aria-label={
+                            labels.batchCellAria?.(field.label, Number(cellKey.split(':')[0]) + 1)
+                            ?? DEFAULT_LABELS.batchCellAria(
+                                field.label,
+                                Number(cellKey.split(':')[0]) + 1,
+                            )
+                        }
                         onCheckedChange={next => onChange(next === true)}
                     />
                 </div>
@@ -989,7 +1051,8 @@ export const AgentFormCard: React.FC<AgentFormCardProps> = ({
                 )}
                 {isBatch && isPending && (
                     <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground/80">
-                        {labels.batchHint ?? `表格填写：${batch!.minRows}–${batch!.maxRows} 条，Enter 跳到下一行`}
+                        {labels.batchHint
+                            ?? `表格填写：${batch!.minRows}–${batch!.maxRows} 条，Enter 跳到下一行`}
                     </p>
                 )}
                 {!isPending && (
@@ -1010,9 +1073,11 @@ export const AgentFormCard: React.FC<AgentFormCardProps> = ({
                         </Badge>
                         <span
                             className="text-[10px] text-muted-foreground/70"
-                            title={new Date(finishedAt).toLocaleString('zh-CN')}
+                            title={new Date(finishedAt).toLocaleString(
+                                labels.relativeTime?.locale ?? defaultFormRelativeTimeLabels.locale,
+                            )}
                         >
-                            {formatFormRelativeTime(finishedAt)}
+                            {formatFormRelativeTime(finishedAt, Date.now(), labels.relativeTime)}
                         </span>
                     </div>
                 )}
@@ -1039,7 +1104,7 @@ export const AgentFormCard: React.FC<AgentFormCardProps> = ({
                                     {field.label}
                                 </dt>
                                 <dd className="min-w-0 flex-1 break-words text-foreground/80">
-                                    {formatFieldValue(field, request.values?.[field.key], emptyValue)}
+                                    {formatFieldValue(field, request.values?.[field.key], labels)}
                                 </dd>
                             </div>
                         ))}
@@ -1080,7 +1145,7 @@ export const AgentFormCard: React.FC<AgentFormCardProps> = ({
                                                 key={field.key}
                                                 className="whitespace-pre-wrap break-words align-top text-[11px] text-foreground/80"
                                             >
-                                                {formatFieldValue(field, row[field.key], emptyValue)}
+                                                {formatFieldValue(field, row[field.key], labels)}
                                             </TableCell>
                                         ))}
                                     </TableRow>
@@ -1091,7 +1156,7 @@ export const AgentFormCard: React.FC<AgentFormCardProps> = ({
                 )}
                 {request.status === 'cancelled' && (
                     <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
-                        {`${labels.cancelReason ?? DEFAULT_LABELS.cancelReason}：${request.cancelReason ?? emptyValue}`}
+                        {`${labels.cancelReason ?? DEFAULT_LABELS.cancelReason}${labels.labelSeparator ?? DEFAULT_LABELS.labelSeparator}${request.cancelReason ?? emptyValue}`}
                     </p>
                 )}
                 {request.waitExpiredAt && (
@@ -1275,7 +1340,9 @@ export const AgentFormCard: React.FC<AgentFormCardProps> = ({
                             ? (labels.submitting ?? DEFAULT_LABELS.submitting)
                             : (request.submitLabel || labels.submit || DEFAULT_LABELS.submit)}
                         {isBatch && batchCount > 0 && (
-                            <span className="ml-1 tabular-nums opacity-80">{batchCount} 条</span>
+                            <span className="ml-1 tabular-nums opacity-80">
+                                {(labels.batchRowsCount ?? DEFAULT_LABELS.batchRowsCount)(batchCount)}
+                            </span>
                         )}
                     </Button>
                 </div>

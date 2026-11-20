@@ -54,6 +54,27 @@ export type {
 
 const MAX_ATTACH_RETRIES = 5
 
+/**
+ * The latest user utterance in a turn's message list. `start` sends only the
+ * new turn, and a turn submitted while another start is still in flight is
+ * folded into the run that start produced instead of being dropped.
+ */
+function lastUserUtterance(messages: AgentChatMessage[]): AgentChatMessage | undefined {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+        if (messages[index]?.role === 'user') return messages[index]
+    }
+    return undefined
+}
+
+/** Whether a user utterance carries anything the engine can accept. */
+function hasUtteranceContent(utterance: AgentChatMessage | undefined): boolean {
+    return Boolean(
+        utterance
+        && ((utterance.content && utterance.content.trim())
+            || (utterance.contentParts && utterance.contentParts.length > 0))
+    )
+}
+
 // ==================== hook ====================
 
 export interface UseEditorAgentOptions {
@@ -116,6 +137,21 @@ export interface UseEditorAgentOptions {
      */
     isToolAvailable?: (name: string) => boolean
     /**
+     * Skill names THIS run may load, when the selected custom agent configured
+     * an explicit skill list. Omit to allow every skill in the catalog. The
+     * executor hands it to `load_skill`, which refuses anything else — otherwise
+     * a per-agent restriction could be bypassed with one discovery call.
+     */
+    allowedSkills?: readonly string[] | null
+    /**
+     * Hard tool allow-list for this run, when the selected custom agent enabled
+     * only some tools. Omit for "everything this surface could run". Kept
+     * separate from `isToolAvailable` (a scope/live-state question) because this
+     * one is a user configuration and must also refuse calls that reach the
+     * executor from a stale transcript or a delegated child.
+     */
+    isToolAllowed?: (name: string) => boolean
+    /**
      * A background task (`background: true`) settled and nobody has shown the
      * agent the result — the run is idle, so this is the moment the completion
      * can become a new turn. Pages that do not pass it simply lose the
@@ -166,6 +202,14 @@ export interface EditorAgentApi {
     continueRun: () => Promise<void>
     retryConnection: () => void
     cancel: () => Promise<boolean>
+    /**
+     * Stop following this run locally so another surface (the `/ai` page or the
+     * dock) can attach to it. This is NOT a cancel: the backend run keeps going.
+     * Only safe phases are accepted (idle/streaming/terminal); a pending
+     * frontend tool, approval, plan or budget wait belongs to this surface, so
+     * detach refuses and returns false.
+     */
+    detach: () => boolean
     reset: () => void
 }
 
@@ -219,6 +263,8 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
     const [state, dispatch] = useReducer(reducer, initialState)
 
     const abortRef = useRef<AbortController | null>(null)
+    /** False after `detach()`: another surface drives the run, so this hook must not watchdog it. */
+    const followingRef = useRef(true)
     const mountedRef = useRef(true)
     const generationRef = useRef(0)
     const attachRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -226,6 +272,8 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
     const attachReplayThroughRef = useRef(0)
     const controlResumeRef = useRef<Promise<void> | null>(null)
     const startInFlightRef = useRef<Promise<void> | null>(null)
+    /** Run created by the most recent successful `start` (fold-in target). */
+    const lastStartRunIdRef = useRef<string | null>(null)
     const conversationRef = useRef(conversationId)
     const stateRef = useRef(state)
     const attachRef = useRef<(runId?: string) => Promise<boolean>>(async () => false)
@@ -255,6 +303,12 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
     // workbench gains a document exactly that way.
     const isToolAvailableRef = useRef(options.isToolAvailable)
     isToolAvailableRef.current = options.isToolAvailable
+    // Same ref treatment: the allow-list can change without rebuilding the
+    // executor (and its result cache), while every call still sees the latest.
+    const allowedSkillsRef = useRef(options.allowedSkills)
+    allowedSkillsRef.current = options.allowedSkills
+    const isToolAllowedRef = useRef(options.isToolAllowed)
+    isToolAllowedRef.current = options.isToolAllowed
 
     const executor = useMemo(
         () => new EditorToolExecutor({
@@ -265,6 +319,8 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
             onExecution: onToolExecution,
             getSessionBinding,
             isToolAvailable: (name: string) => isToolAvailableRef.current?.(name) ?? true,
+            getAllowedSkills: () => allowedSkillsRef.current ?? null,
+            isToolAllowed: (name: string) => isToolAllowedRef.current?.(name) ?? true,
             // Session memory for discovery: `load_skill` files what it loaded under
             // this conversation, so the next turn's run can call those tools without
             // loading them again (see skills/loaded-skill-cache).
@@ -323,7 +379,38 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
 
     const start = useCallback(
         (messages: AgentChatMessage[], opts: StartTurnOptions = {}): Promise<void> => {
-            if (startInFlightRef.current) return startInFlightRef.current
+            followingRef.current = true
+            if (startInFlightRef.current) {
+                // A second turn landed while the previous run was still being
+                // created. Silently returning the in-flight promise (the old
+                // behaviour) put the second bubble on screen but never sent it.
+                // Wait for creation, then fold the turn into that run; if the
+                // start produced no live run, fall through and create one.
+                return (async () => {
+                    try {
+                        await startInFlightRef.current
+                    } catch {
+                        // The first start failed; this turn still deserves a try.
+                    }
+                    // A third start may have won the slot while we awaited.
+                    if (startInFlightRef.current) return start(messages, opts)
+                    const utterance = lastUserUtterance(messages)
+                    const runId = lastStartRunIdRef.current
+                    if (runId && hasUtteranceContent(utterance)) {
+                        try {
+                            const accepted = await client.sendRunMessage(runId, {
+                                content: utterance!.content ?? '',
+                                contentParts: utterance!.contentParts,
+                            })
+                            if (accepted) return
+                        } catch {
+                            // The run may have ended between creation and here:
+                            // fall through to a fresh run so the turn is kept.
+                        }
+                    }
+                    return start(messages, opts)
+                })()
+            }
             const task = (async () => {
                 const requestGeneration = generationRef.current
             const acquired = await lock.acquire(conversationId)
@@ -332,7 +419,7 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
                 return
             }
             if (!acquired) {
-                const error = new Error('该会话正在另一个标签页中运行')
+                const error = new Error('该会话正在另一个窗口、标签页或面板中运行')
                 dispatch({ type: 'transport-error', error: error.message })
                 throw error
             }
@@ -390,6 +477,9 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
                     await client.cancelRun(run.runId).catch(() => undefined)
                     return
                 }
+                // Remember the live run so a turn submitted while this start was
+                // still resolving can be steered into it instead of dropped.
+                lastStartRunIdRef.current = run.runId
                 if (persist) {
                     store.save({ conversationId, runId: run.runId, lastSeq: 0, status: run.status, updatedAt: Date.now() })
                 }
@@ -468,6 +558,9 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
     }, [state.lastSeq, state.phase, state.toolCalls, state.toolRetryToken])
     useEffect(() => {
         const timer = setInterval(() => {
+            // Another surface drives the run while detached; its own hook owns
+            // the no-progress decision.
+            if (!followingRef.current) return
             const current = stateRef.current
             if (current.phase !== 'streaming' && current.phase !== 'waiting-tools' && current.phase !== 'creating') {
                 return
@@ -510,6 +603,10 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
 
     const attach = useCallback(
         async (runId?: string): Promise<boolean> => {
+            // Re-attaching means this surface is following the run again; the
+            // no-progress watchdog must be live even if the attach later fails
+            // (it surfaces the stall instead of leaving a stale spinner).
+            followingRef.current = true
             const requestGeneration = generationRef.current
             let saved = runId ? { runId, lastSeq: 0 } : store.load(conversationId)
             if (!saved) {
@@ -534,7 +631,7 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
                     scheduleAttachRetry(
                         runId,
                         requestGeneration,
-                        new AgentControlError('RUN_BUSY', '该会话正在另一个标签页中运行')
+                        new AgentControlError('RUN_BUSY', '该会话正在另一个窗口、标签页或面板中运行')
                     )
                     return false
                 }
@@ -558,6 +655,7 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
                     })
                     startStream(view.runId, 0, generation)
                     attachRetryAttemptRef.current = 0
+                    followingRef.current = true
                     // Terminal run: drop the saved handle so a remount does not
                     // re-attach (and re-replay) the same finished run forever.
                     if (persist) store.clear(conversationId)
@@ -568,6 +666,14 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
                 clearRetryTimer()
                 attachRetryAttemptRef.current = 0
                 const generation = ++generationRef.current
+                // A resumed/attached live run is a valid fold-in target for a
+                // turn that arrives while the attach round-trip is in flight.
+                // A SUSPENDED run has no live loop to steer (approval/budget or
+                // a detached client), so it is not a fold-in target.
+                lastStartRunIdRef.current =
+                    view.status === 'RUNNING' || view.status === 'WAITING_TOOLS'
+                        ? view.runId
+                        : null
                 // An actively streaming run can be re-attached from the durable
                 // watermark with the accumulated text, avoiding a full replay of
                 // the event log (and its re-render). Paused runs need the
@@ -594,6 +700,7 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
                     })
                     startStream(view.runId, 0, generation)
                 }
+                followingRef.current = true
                 return true
             } catch (error: any) {
                 if (acquiredClaim) lock.release(acquiredClaim)
@@ -635,21 +742,12 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
     const steer = useCallback(async (messages: AgentChatMessage[]): Promise<boolean> => {
         const current = stateRef.current
         if (!current.runId) return false
-        let utterance: AgentChatMessage | undefined
-        for (let index = messages.length - 1; index >= 0; index -= 1) {
-            if (messages[index]?.role === 'user') {
-                utterance = messages[index]
-                break
-            }
-        }
-        if (!utterance) return false
-        const hasText = Boolean(utterance.content && utterance.content.trim())
-        const hasParts = Boolean(utterance.contentParts && utterance.contentParts.length > 0)
-        if (!hasText && !hasParts) return false
+        const utterance = lastUserUtterance(messages)
+        if (!hasUtteranceContent(utterance)) return false
         try {
             return await client.sendRunMessage(current.runId, {
-                content: utterance.content ?? '',
-                contentParts: utterance.contentParts,
+                content: utterance!.content ?? '',
+                contentParts: utterance!.contentParts,
             })
         } catch {
             // Falls back to a new run, which re-reads the transcript: a steer that
@@ -681,6 +779,8 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
         const ownsConversation = lock.owns(conversationId)
         generationRef.current += 1
         startInFlightRef.current = null
+        lastStartRunIdRef.current = null
+        followingRef.current = true
         abortRef.current?.abort()
         // A pending approval's promise must settle NOW: the tool is awaiting it
         // and the surface is being torn down. Denying is the only safe answer.
@@ -708,12 +808,52 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
         return true
     }, [client, conversationId, lock, store, executor, stopSubRuns])
 
+    /**
+     * Hand the run to another surface without cancelling it.
+     *
+     * <p>Only safe boundaries are accepted. A frontend tool batch, an approval,
+     * a plan/budget pause or an in-flight create are all owned by THIS surface's
+     * UI/executor — detaching there would strand a promise or move a tool call
+     * to a surface that cannot execute it. The caller keeps ownership until the
+     * phase settles, then retries.
+     */
+    const detach = useCallback((): boolean => {
+        const current = stateRef.current
+        const pendingApproval = current.toolCalls.some(call => call.approval?.status === 'pending')
+        const unsafe = current.phase === 'creating'
+            || current.phase === 'waiting-tools'
+            || current.phase === 'waiting-approval'
+            || current.phase === 'suspended'
+            || current.pendingToolIds.length > 0
+            || pendingApproval
+        if (unsafe) return false
+        followingRef.current = false
+        generationRef.current += 1
+        startInFlightRef.current = null
+        lastStartRunIdRef.current = null
+        abortRef.current?.abort()
+        resetPending()
+        executor.clearCache()
+        stopSubRuns()
+        resetReconnect()
+        if (attachRetryTimerRef.current) clearTimeout(attachRetryTimerRef.current)
+        attachRetryAttemptRef.current = 0
+        attachReplayThroughRef.current = 0
+        // A card can appear between the check and the abort; settle it so its
+        // tool promise cannot hang after this surface stops rendering it.
+        toolApprovals.cancelScope(conversationId, '界面已切换，审批自动拒绝')
+        lock.release()
+        return true
+    }, [conversationId, executor, lock, stopSubRuns, resetPending, resetReconnect])
+
     const reset = useCallback(() => {
         const current = stateRef.current
         const ownsConversation = lock.owns(conversationId)
         const terminal = current.phase === 'completed' || current.phase === 'failed' || current.phase === 'cancelled'
         generationRef.current += 1
         startInFlightRef.current = null
+        lastStartRunIdRef.current = null
+        followingRef.current = true
         abortRef.current?.abort()
         toolApprovals.cancelScope(conversationId, TOOL_APPROVAL_CANCELLED_REASON)
         resetPending()
@@ -735,6 +875,8 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
         if (conversationRef.current === conversationId) return
         generationRef.current += 1
         startInFlightRef.current = null
+        lastStartRunIdRef.current = null
+        followingRef.current = true
         abortRef.current?.abort()
         // The previous conversation's cards are gone with the switch: settle
         // its approvals instead of leaving tools awaiting a decision forever.
@@ -758,6 +900,8 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
             mountedRef.current = false
             generationRef.current += 1
             startInFlightRef.current = null
+            lastStartRunIdRef.current = null
+            followingRef.current = true
             abortRef.current?.abort()
             attachReplayThroughRef.current = 0
             // Children keep running server-side; this tab simply stops driving
@@ -823,5 +967,5 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
         enabled: Boolean(options.onFormRequestAnswered),
     })
 
-    return { state, start, steer, attach, approvePlan, continueRun, retryConnection, cancel, reset }
+    return { state, start, steer, attach, approvePlan, continueRun, retryConnection, cancel, detach, reset }
 }

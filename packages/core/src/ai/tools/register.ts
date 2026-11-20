@@ -12,6 +12,7 @@ import {
     createBackgroundTaskTools,
     createLongTaskTools,
     createFormTools,
+    createCustomAgentTools,
 } from '@kn/common'
 import { createWorkspaceToolImplementations } from './workspace-tools'
 import { createReadTools } from './read-tools'
@@ -76,5 +77,10 @@ export function registerCoreToolFactories(): void {
         // Dynamic forms: ask the user for structured data (request/get/list/
         // cancel). Also editor-free and valid in every scope.
         createFormTools,
+        // Custom agents: list / inspect the capability directory / create or
+        // update an agent. The same config the settings dialog edits, so "帮我
+        // 建一个审稿 Agent" lands in the picker instead of in a paragraph of
+        // instructions the user has to retype.
+        createCustomAgentTools,
     ])
 }

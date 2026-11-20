@@ -200,6 +200,13 @@ export interface ToolExecutionContext {
      */
     isToolAvailable?: (name: string) => boolean
     /**
+     * Skill names THIS run may load, when the active custom agent configured an
+     * explicit skill list. Absent (the norm) means every skill in the catalog is
+     * loadable. `load_skill` enforces it: a per-agent restriction that discovery
+     * could bypass would not be a restriction at all.
+     */
+    allowedSkills?: readonly string[] | null
+    /**
      * Ask the user to confirm THIS call. Injected by the executor on every
      * execution, so tools never talk to an approval channel directly (there is
      * exactly one execution point — see `agent/tool-executor.ts`).

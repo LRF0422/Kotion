@@ -180,7 +180,11 @@ export function classifyError(err: any): ChatError {
         return { type: 'network', message: '网络连接失败，请检查网络设置', retryable: true }
     }
 
-    return { type: 'unknown', message: '生成失败，请重试', retryable: true }
+    // Keep the engine's own explanation when it has one: a lock conflict
+// ("该会话正在另一个窗口…") or a concrete backend rejection is far more
+// actionable than a generic "生成失败".
+    const detail = message.trim()
+    return { type: 'unknown', message: detail || '生成失败，请重试', retryable: true }
 }
 
 // ============ Block Reference Types ============
