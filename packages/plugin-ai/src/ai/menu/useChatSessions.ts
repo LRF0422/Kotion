@@ -55,8 +55,11 @@ export interface UseChatSessionsResult {
     activateSession: (id: string) => void
     /** Close a tab. The conversation itself is kept — it stays in history. */
     closeTab: (id: string) => void
-    /** Create a brand-new conversation, open it as a tab and focus it. */
-    createSession: (boundPage?: ChatTargetPage) => string
+    /**
+     * Create a brand-new conversation, open it as a tab and focus it.
+     * Pass `groupId` to start it inside one of the user's folders.
+     */
+    createSession: (boundPage?: ChatTargetPage, groupId?: string) => string
     /** Delete a conversation and close its tab. */
     deleteSession: (id: string) => void
     /** Manually rename a session. */
@@ -90,9 +93,9 @@ function withoutGroup<T extends { groupId?: string }>(session: T): T {
     return next
 }
 
-function createMeta(id: string, boundPage?: ChatTargetPage): ChatSessionMeta {
+function createMeta(id: string, boundPage?: ChatTargetPage, groupId?: string): ChatSessionMeta {
     const now = Date.now()
-    return { id, title: 'New chat', createdAt: now, updatedAt: now, boundPage }
+    return { id, title: 'New chat', createdAt: now, updatedAt: now, boundPage, groupId }
 }
 
 /**
@@ -292,9 +295,14 @@ export function useChatSessions(): UseChatSessionsResult {
         [sessions, activeSessionId],
     )
 
-    const createSession = useCallback((boundPage?: ChatTargetPage): string => {
+    const createSession = useCallback((boundPage?: ChatTargetPage, groupId?: string): string => {
         const id = generateSessionId()
-        const meta = createMeta(id, boundPage)
+        // Only a folder that still exists can own the new conversation; a stale
+        // id would otherwise park the chat in "ungrouped" without telling anyone.
+        const targetGroup = groupId && groupsRef.current.some(group => group.id === groupId)
+            ? groupId
+            : undefined
+        const meta = createMeta(id, boundPage, targetGroup)
         const next = [meta, ...sessionsRef.current]
         sessionsRef.current = next
         saveIndex(next)

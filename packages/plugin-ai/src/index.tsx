@@ -169,6 +169,7 @@ export const ai = new AiPlugin({
                             "earlier": "Earlier",
                             "groups": {
                                 "new": "New group",
+                                "newChat": "New chat in group",
                                 "newTitle": "New group",
                                 "rename": "Rename",
                                 "renameTitle": "Rename group",
@@ -437,6 +438,7 @@ export const ai = new AiPlugin({
                             "earlier": "更早",
                             "groups": {
                                 "new": "新建分组",
+                                "newChat": "在分组内新建对话",
                                 "newTitle": "新建分组",
                                 "rename": "重命名",
                                 "renameTitle": "重命名分组",

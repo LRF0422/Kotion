@@ -329,6 +329,15 @@ export const KernelHomePage: React.FC = () => {
         await handleClearChat()
     }, [pane, handleClearChat])
 
+    /**
+     * Start a conversation INSIDE a folder, straight from the sidebar. Same
+     * creation path as "New chat" — only the group id differs — so the new chat
+     * opens as a tab, gets focused, and is visible in the folder immediately.
+     */
+    const handleNewSessionInGroup = useCallback((groupId: string) => {
+        createSession(undefined, groupId)
+    }, [createSession])
+
     // ─── Artifacts shelf of the FOCUSED conversation ─────────────────
     // Derived from that conversation's transcript (engine-persisted), so it
     // survives a refresh for free and can never drift from the chat.
@@ -413,6 +422,7 @@ export const KernelHomePage: React.FC = () => {
                             runStatus={sessionStatuses}
                             onSelect={handleSelectSession}
                             onNewSession={handleNewSession}
+                            onNewSessionInGroup={handleNewSessionInGroup}
                             onDelete={handleDeleteSession}
                             groups={sessionGroups}
                             onCreateGroup={createGroup}
@@ -440,6 +450,7 @@ export const KernelHomePage: React.FC = () => {
                             runStatus={sessionStatuses}
                             onSelect={handleSelectSession}
                             onNewSession={handleNewSession}
+                            onNewSessionInGroup={handleNewSessionInGroup}
                             onDelete={handleDeleteSession}
                             groups={sessionGroups}
                             onCreateGroup={createGroup}

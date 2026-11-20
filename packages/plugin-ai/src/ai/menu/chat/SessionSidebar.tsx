@@ -49,6 +49,8 @@ export interface SessionSidebarProps {
     /** Focus a conversation (mounting its panel when it is not mounted yet). */
     onSelect: (id: string) => void
     onNewSession: () => void
+    /** Start a new conversation INSIDE one of the folders below. */
+    onNewSessionInGroup: (groupId: string) => void
     /** Delete one conversation for good. */
     onDelete: (id: string) => void
     /** User-created conversation folders, already in display order. */
@@ -101,27 +103,41 @@ const SessionRow: React.FC<{
     const statusKey = STATUS_LABEL_KEY[status]
     const deleteLabel = t('ai.chat.deleteChat', { title })
     const moveLabel = t('ai.chat.sessions.groups.moveTo')
+    // Row actions stay out of the way on a mouse, but a touch screen has no
+    // hover: there they are always visible (max-md = the mobile sheet).
+    const actionVisibility = cn(
+        'opacity-0 group-hover/session:opacity-100 group-focus-within/session:opacity-100 focus-visible:opacity-100 max-md:opacity-100',
+        isActive && 'opacity-60 hover:opacity-100',
+    )
     const actionClass = cn(
-        'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground',
-        isActive ? 'opacity-60 hover:opacity-100' : 'opacity-0 group-hover/session:opacity-100 group-focus-within/session:opacity-100 focus-visible:opacity-100',
+        'flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground',
+        actionVisibility,
     )
 
     return (
         <div
             ref={rowRef}
             className={cn(
-                'group/session relative flex items-start gap-1 rounded-lg py-2 pl-2.5 pr-1.5 transition-colors',
+                'group/session relative flex items-start gap-1 rounded-lg py-1.5 pl-2 pr-1 transition-colors',
                 isActive
-                    ? 'bg-muted text-foreground'
+                    ? 'bg-muted/80 text-foreground'
                     : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
             )}
         >
+            {/* Active marker: a quiet accent rather than a heavier fill, so the
+                list keeps a single visual rhythm. */}
+            {isActive && (
+                <span
+                    aria-hidden
+                    className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-primary"
+                />
+            )}
             <button
                 type="button"
                 onClick={onSelect}
                 aria-current={isActive ? 'true' : undefined}
                 title={pageTitle ? `${title} — @${pageTitle}` : title}
-                className="flex min-w-0 flex-1 items-start gap-1.5 text-left"
+                className="flex min-w-0 flex-1 items-start gap-1.5 py-0.5 text-left"
             >
                 <span
                     className="mt-[3px] flex h-3 w-3 shrink-0 items-center justify-center"
@@ -131,79 +147,81 @@ const SessionRow: React.FC<{
                     <ChatTabStatusLight status={status} />
                 </span>
                 <span className="min-w-0 flex-1">
-                    <span className={cn('line-clamp-2 break-words text-xs leading-4', isActive && 'font-medium')}>
+                    <span className={cn('line-clamp-2 break-words text-[12px] leading-4', isActive && 'font-medium')}>
                         {title}
                     </span>
                     {pageTitle && (
-                        <span className="mt-0.5 flex min-w-0 items-center gap-0.5 text-[10px] leading-3 text-muted-foreground/80">
+                        <span className="mt-0.5 flex min-w-0 items-center gap-1 text-[10px] leading-3 text-muted-foreground/80">
                             <AtSign className="h-2.5 w-2.5 shrink-0" />
                             <span className="truncate">{pageTitle}</span>
                         </span>
                     )}
                 </span>
             </button>
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <button
-                        type="button"
-                        aria-label={moveLabel}
-                        title={moveLabel}
-                        className={actionClass}
-                    >
-                        <FolderInput className="h-3 w-3" />
-                    </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-44">
-                    <DropdownMenuLabel className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
-                        {moveLabel}
-                    </DropdownMenuLabel>
-                    <DropdownMenuItem
-                        disabled={!session.groupId}
-                        onSelect={() => onMove(null)}
-                        className="text-xs"
-                    >
-                        <X className="mr-1.5 h-3 w-3 opacity-60" />
-                        {t('ai.chat.sessions.groups.ungroup')}
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    {groups.length === 0 ? (
-                        <div className="px-2 py-1.5 text-[11px] leading-4 text-muted-foreground/70">
-                            {t('ai.chat.sessions.groups.noGroups')}
-                        </div>
-                    ) : (
-                        groups.map(group => (
-                            <DropdownMenuItem
-                                key={group.id}
-                                onSelect={() => onMove(group.id)}
-                                className="text-xs"
-                            >
-                                {session.groupId === group.id ? (
-                                    <Check className="mr-1.5 h-3 w-3 shrink-0" />
-                                ) : (
-                                    <FolderClosed className="mr-1.5 h-3 w-3 shrink-0 opacity-60" />
-                                )}
-                                <span className="min-w-0 flex-1 truncate">{group.name}</span>
-                            </DropdownMenuItem>
-                        ))
+            <div className="flex shrink-0 items-center gap-0.5 pt-0.5">
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <button
+                            type="button"
+                            aria-label={moveLabel}
+                            title={moveLabel}
+                            className={actionClass}
+                        >
+                            <FolderInput className="h-3 w-3" />
+                        </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-44">
+                        <DropdownMenuLabel className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                            {moveLabel}
+                        </DropdownMenuLabel>
+                        <DropdownMenuItem
+                            disabled={!session.groupId}
+                            onSelect={() => onMove(null)}
+                            className="text-xs"
+                        >
+                            <X className="mr-1.5 h-3 w-3 opacity-60" />
+                            {t('ai.chat.sessions.groups.ungroup')}
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        {groups.length === 0 ? (
+                            <div className="px-2 py-1.5 text-[11px] leading-4 text-muted-foreground/70">
+                                {t('ai.chat.sessions.groups.noGroups')}
+                            </div>
+                        ) : (
+                            groups.map(group => (
+                                <DropdownMenuItem
+                                    key={group.id}
+                                    onSelect={() => onMove(group.id)}
+                                    className="text-xs"
+                                >
+                                    {session.groupId === group.id ? (
+                                        <Check className="mr-1.5 h-3 w-3 shrink-0" />
+                                    ) : (
+                                        <FolderClosed className="mr-1.5 h-3 w-3 shrink-0 opacity-60" />
+                                    )}
+                                    <span className="min-w-0 flex-1 truncate">{group.name}</span>
+                                </DropdownMenuItem>
+                            ))
+                        )}
+                    </DropdownMenuContent>
+                </DropdownMenu>
+                <button
+                    type="button"
+                    aria-label={deleteLabel}
+                    title={deleteLabel}
+                    onClick={(event) => {
+                        event.stopPropagation()
+                        event.preventDefault()
+                        onDelete()
+                    }}
+                    className={cn(
+                        'flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-destructive/15 hover:text-destructive',
+                        actionVisibility,
                     )}
-                </DropdownMenuContent>
-            </DropdownMenu>
-            <button
-                type="button"
-                aria-label={deleteLabel}
-                title={deleteLabel}
-                onClick={(event) => {
-                    event.stopPropagation()
-                    event.preventDefault()
-                    onDelete()
-                }}
-                className={cn(
-                    'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground/70 transition-colors hover:bg-destructive/15 hover:text-destructive',
-                    isActive ? 'opacity-60 hover:opacity-100' : 'opacity-0 group-hover/session:opacity-100 group-focus-within/session:opacity-100 focus-visible:opacity-100',
-                )}
-            >
-                <X className="h-3 w-3" />
-            </button>
+                >
+                    <X className="h-3 w-3" />
+                </button>
+            </div>
         </div>
     )
 }
@@ -305,6 +323,7 @@ export const SessionSidebar: React.FC<SessionSidebarProps> = ({
     runStatus,
     onSelect,
     onNewSession,
+    onNewSessionInGroup,
     onDelete,
     groups,
     onCreateGroup,
@@ -363,6 +382,21 @@ export const SessionSidebar: React.FC<SessionSidebarProps> = ({
         onNewSession()
         onNavigate?.()
     }
+    /**
+     * "New chat" inside a folder: expand it first (the new row is focused and
+     * must be visible straight away), then create. Creating on a folded folder
+     * without expanding used to look like nothing happened.
+     */
+    const handleNewInGroup = (groupId: string) => {
+        setCollapsedGroups(prev => {
+            if (!prev.includes(groupId)) return prev
+            const next = prev.filter(id => id !== groupId)
+            saveCollapsedGroups(next)
+            return next
+        })
+        onNewSessionInGroup(groupId)
+        onNavigate?.()
+    }
 
     return (
         <div
@@ -375,19 +409,26 @@ export const SessionSidebar: React.FC<SessionSidebarProps> = ({
         >
             {/* Same height and divider as the chat header next to it, so the
                 horizontal rule runs continuously across the whole surface. */}
-            <div className="flex h-10 shrink-0 items-center justify-between gap-1 border-b border-border/60 px-3">
-                <span className="truncate text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    {t('ai.chat.sessions.title')}
-                </span>
-                <div className="flex shrink-0 items-center gap-1">
+            <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-border/60 px-3">
+                <div className="flex min-w-0 items-center gap-1.5">
+                    <span className="truncate text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        {t('ai.chat.sessions.title')}
+                    </span>
+                    {sessions.length > 0 && (
+                        <span className="shrink-0 rounded-full bg-muted px-1.5 text-[9px] font-medium leading-4 tabular-nums text-muted-foreground/70">
+                            {sessions.length}
+                        </span>
+                    )}
+                </div>
+                <div className="flex shrink-0 items-center gap-0.5">
                     <button
                         type="button"
                         onClick={() => setDialog({ mode: 'create' })}
                         aria-label={t('ai.chat.sessions.groups.new')}
                         title={t('ai.chat.sessions.groups.new')}
-                        className="flex h-4 w-4 items-center justify-center rounded-sm text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
+                        className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
                     >
-                        <FolderPlus className="h-3 w-3" />
+                        <FolderPlus className="h-3.5 w-3.5" />
                     </button>
                     {onClose && (
                         <button
@@ -395,22 +436,24 @@ export const SessionSidebar: React.FC<SessionSidebarProps> = ({
                             onClick={onClose}
                             aria-label={t('ai.chat.close')}
                             title={t('ai.chat.close')}
-                            className="flex h-4 w-4 items-center justify-center rounded-sm text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
+                            className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
                         >
-                            <X className="h-3 w-3" />
+                            <X className="h-3.5 w-3.5" />
                         </button>
                     )}
                 </div>
             </div>
-            <div className="shrink-0 px-2 pb-1.5 pt-2">
+            <div className="shrink-0 px-2 pb-1 pt-2">
                 <button
                     type="button"
                     onClick={handleNew}
                     title={t('ai.chat.newChat')}
-                    className="flex h-8 w-full items-center gap-1.5 rounded-lg border border-border/60 bg-background/40 px-2.5 text-xs text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                    className="group/new flex h-9 w-full items-center gap-2 rounded-xl border border-border/60 bg-background px-2 text-left text-xs font-medium text-foreground shadow-sm transition-colors hover:border-border hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                 >
-                    <Plus className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate">{t('ai.chat.newChat')}</span>
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary transition-colors group-hover/new:bg-primary/15">
+                        <Plus className="h-3.5 w-3.5" />
+                    </span>
+                    <span className="min-w-0 flex-1 truncate">{t('ai.chat.newChat')}</span>
                 </button>
             </div>
             {/* Native scroll container on purpose: Radix ScrollArea puts a
@@ -420,12 +463,12 @@ export const SessionSidebar: React.FC<SessionSidebarProps> = ({
                 ending in an ellipsis. Global scrollbar styling (thin + auto-hide
                 via `.scrollbar-auto-hide`) keeps the look identical. */}
             <div className="scrollbar-auto-hide min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-                <div className="px-1.5 pb-3">
+                <div className="px-2 pb-3">
                     {groups.length === 0 && (
                         <button
                             type="button"
                             onClick={() => setDialog({ mode: 'create' })}
-                            className="mb-1 mt-1 flex w-full items-center gap-1.5 rounded-lg border border-dashed border-border/60 px-2 py-1.5 text-[11px] text-muted-foreground/70 transition-colors hover:border-border hover:bg-muted/40 hover:text-foreground"
+                            className="mb-1 mt-1 flex w-full items-center gap-1.5 rounded-lg border border-dashed border-border/60 px-2 py-2 text-[11px] text-muted-foreground/70 transition-colors hover:border-border hover:bg-muted/40 hover:text-foreground"
                         >
                             <FolderPlus className="h-3.5 w-3.5 shrink-0" />
                             <span className="truncate">{t('ai.chat.sessions.groups.new')}</span>
@@ -436,27 +479,38 @@ export const SessionSidebar: React.FC<SessionSidebarProps> = ({
                         const collapsed = collapsedGroups.includes(group.id)
                         return (
                             <div key={group.id} className="pt-2 first:pt-0">
-                                <div className="group/folder flex items-center gap-0.5 rounded-md pl-1 pr-0.5 transition-colors hover:bg-muted/40">
+                                <div className="group/folder flex items-center gap-0.5 rounded-lg px-1 transition-colors hover:bg-muted/50">
                                     <button
                                         type="button"
                                         onClick={() => toggleGroup(group.id)}
                                         aria-expanded={!collapsed}
                                         title={group.name}
-                                        className="flex min-w-0 flex-1 items-center gap-1 py-1 text-left text-[10px] font-medium text-muted-foreground/80 transition-colors hover:text-foreground"
+                                        className="flex min-w-0 flex-1 items-center gap-1.5 py-1.5 text-left"
                                     >
                                         <ChevronRight
                                             className={cn(
-                                                'h-3 w-3 shrink-0 transition-transform',
+                                                'h-3 w-3 shrink-0 text-muted-foreground/60 transition-transform',
                                                 !collapsed && 'rotate-90',
                                             )}
                                         />
-                                        <FolderClosed className="h-3 w-3 shrink-0" />
-                                        <span className="min-w-0 flex-1 truncate">{group.name}</span>
+                                        <FolderClosed className="h-3.5 w-3.5 shrink-0 text-muted-foreground/80" />
+                                        <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-foreground/80 transition-colors group-hover/folder:text-foreground">
+                                            {group.name}
+                                        </span>
                                         {rows.length > 0 && (
-                                            <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground/50">
+                                            <span className="shrink-0 rounded-full bg-muted px-1.5 text-[9px] font-medium leading-4 tabular-nums text-muted-foreground/70">
                                                 {rows.length}
                                             </span>
                                         )}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleNewInGroup(group.id)}
+                                        aria-label={t('ai.chat.sessions.groups.newChat')}
+                                        title={t('ai.chat.sessions.groups.newChat')}
+                                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/40 transition-colors hover:bg-muted hover:text-foreground group-hover/folder:text-muted-foreground/80"
+                                    >
+                                        <Plus className="h-3.5 w-3.5" />
                                     </button>
                                     <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
@@ -464,12 +518,20 @@ export const SessionSidebar: React.FC<SessionSidebarProps> = ({
                                                 type="button"
                                                 aria-label={t('ai.chat.sessions.groups.manage')}
                                                 title={t('ai.chat.sessions.groups.manage')}
-                                                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground/60 opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover/folder:opacity-100 group-focus-within/folder:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
+                                                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/60 opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover/folder:opacity-100 group-focus-within/folder:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 max-md:opacity-100"
                                             >
                                                 <MoreHorizontal className="h-3.5 w-3.5" />
                                             </button>
                                         </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end" className="w-40">
+                                        <DropdownMenuContent align="end" className="w-44">
+                                            <DropdownMenuItem
+                                                className="text-xs"
+                                                onSelect={() => handleNewInGroup(group.id)}
+                                            >
+                                                <Plus className="mr-1.5 h-3 w-3 opacity-60" />
+                                                {t('ai.chat.sessions.groups.newChat')}
+                                            </DropdownMenuItem>
+                                            <DropdownMenuSeparator />
                                             <DropdownMenuItem
                                                 className="text-xs"
                                                 onSelect={() => setDialog({
@@ -492,11 +554,18 @@ export const SessionSidebar: React.FC<SessionSidebarProps> = ({
                                     </DropdownMenu>
                                 </div>
                                 {!collapsed && (
-                                    <div className="flex flex-col gap-px">
+                                    <div className="mt-0.5 flex flex-col gap-px">
                                         {rows.length === 0 ? (
-                                            <div className="px-2 py-1.5 text-[10px] leading-3 text-muted-foreground/50">
-                                                {t('ai.chat.sessions.groups.emptyFolder')}
-                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleNewInGroup(group.id)}
+                                                className="mx-1 flex items-center gap-1.5 rounded-lg border border-dashed border-border/60 px-2 py-1.5 text-[11px] text-muted-foreground/60 transition-colors hover:border-border hover:bg-muted/40 hover:text-foreground"
+                                            >
+                                                <Plus className="h-3 w-3 shrink-0" />
+                                                <span className="truncate">
+                                                    {t('ai.chat.sessions.groups.newChat')}
+                                                </span>
+                                            </button>
                                         ) : (
                                             rows.map(session => (
                                                 <SessionRow
@@ -519,13 +588,16 @@ export const SessionSidebar: React.FC<SessionSidebarProps> = ({
                     })}
 
                     {groups.length > 0 && ungrouped.length > 0 && (
-                        <div className="px-2 pb-1 pt-3 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/50">
-                            {t('ai.chat.sessions.groups.ungrouped')}
+                        <div className="mt-3 flex items-center gap-2 px-2 pb-1">
+                            <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50">
+                                {t('ai.chat.sessions.groups.ungrouped')}
+                            </span>
+                            <span aria-hidden className="h-px flex-1 bg-border/60" />
                         </div>
                     )}
                     {ungrouped.map(bucket => (
                         <div key={bucket.bucket} className="pt-2 first:pt-0">
-                            <div className="px-2 pb-1 text-[10px] font-medium text-muted-foreground/70">
+                            <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
                                 {t(`ai.chat.sessions.${bucket.bucket}`)}
                             </div>
                             <div className="flex flex-col gap-px">
