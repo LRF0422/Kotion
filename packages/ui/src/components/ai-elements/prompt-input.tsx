@@ -395,9 +395,15 @@ export type PromptInputSubmitProps = ComponentProps<typeof Button> & {
 
 export const PromptInputSubmit = forwardRef<HTMLButtonElement, PromptInputSubmitProps>(
   function PromptInputSubmit(
-    { className, variant = "default", size = "icon-sm", status, children, ...props },
+    { className, variant = "default", size, status, children, ...props },
     ref,
   ) {
+    // The icon sizes hard-code a square box (`icon-sm` = h-8 w-8). That is right
+    // for an icon-only submit but silently breaks a *labeled* one: the label
+    // spills out of the pill instead of widening it, and the composer's edge
+    // then cuts it mid-word (the "Steer" button used to shrink to 32px this
+    // way). Labeled buttons therefore default to a content-sized button.
+    const resolvedSize = size ?? (children != null ? "sm" : "icon-sm");
     let icon: ReactNode = <CornerDownLeft className="size-4" />;
 
     if (status === "submitted") {
@@ -413,7 +419,7 @@ export const PromptInputSubmit = forwardRef<HTMLButtonElement, PromptInputSubmit
         ref={ref}
         aria-label="Submit"
         className={cn(className)}
-        size={size}
+        size={resolvedSize}
         type="submit"
         variant={variant}
         {...props}

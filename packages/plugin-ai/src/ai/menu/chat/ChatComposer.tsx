@@ -420,11 +420,16 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
                     {isLoading ? (
                         // Mid-run the action is named: an icon alone read as a plain
                         // send, so there was nowhere to click "steer".
+                        // `size="sm"` is load-bearing: PromptInputSubmit otherwise
+                        // defaults to the icon size (h-8 w-8), which pinned this
+                        // labeled action to a 32px square — the icon + "插话" then
+                        // spilled out of the pill and got cut by the card's edge.
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>
                                     <PromptInputSubmit
                                         status="streaming"
+                                        size="sm"
                                         aria-label={t('ai.chat.steerSend', {
                                             defaultValue: '发送给正在执行的任务',
                                         })}

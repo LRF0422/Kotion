@@ -112,6 +112,19 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
     },
 
     // ===== Background (long-running) tasks =====
+    // Kind-agnostic context query. Editor-free so a workspace run can ask what
+    // a file/table/selection is before it has (or needs) a page editor.
+    {
+        name: 'getCurrentTarget',
+        category: 'interaction',
+        description: '查询当前正在操作的对象：类型、id、标题、能力与可用工具。对象不一定是页面。',
+        priority: 9,
+        tags: ['target', 'context', 'focus', 'page', 'selection', 'any'],
+        loaded: false,
+        source: 'builtin',
+        scope: 'any',
+        requiresEditor: false,
+    },
     // Protocol-level like `load_skill`, and for the same reason: the surfaces
     // where a long tool actually runs (a workbench run with no document) would
     // otherwise filter these out and leave the model with a taskId it cannot wait
@@ -871,6 +884,12 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
     },
 
     // ===== Page Tools =====
+    // Page/space MANAGEMENT does not need a document editor: these tools read or
+    // mutate page rows, and `editPage`/`createPage` are exactly what a run calls
+    // to ACQUIRE an editor. Classifying them as editor-bound put them behind the
+    // readiness gate that only an executable editPage could open — a deadlock
+    // that left the agent unable to recover a lost target. `insertPageLink` is
+    // the exception: it writes into a document.
     {
         name: 'searchPages',
         category: 'page',
@@ -878,7 +897,8 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
         priority: 8,
         tags: ['page', 'search', 'knowledge-base', 'essential'],
         loaded: false,
-        source: 'builtin'
+        source: 'builtin',
+        requiresEditor: false
     },
     {
         name: 'createPage',
@@ -887,7 +907,8 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
         priority: 8,
         tags: ['page', 'create', 'subpage', 'sibling', 'page-tree'],
         loaded: false,
-        source: 'builtin'
+        source: 'builtin',
+        requiresEditor: false
     },
     {
         name: 'listSpaces',
@@ -896,7 +917,8 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
         priority: 8,
         tags: ['page', 'space', 'list', 'page-tree'],
         loaded: false,
-        source: 'builtin'
+        source: 'builtin',
+        requiresEditor: false
     },
     {
         name: 'getSpacePageTree',
@@ -905,7 +927,8 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
         priority: 9,
         tags: ['page', 'tree', 'space', 'structure', 'page-tree'],
         loaded: false,
-        source: 'builtin'
+        source: 'builtin',
+        requiresEditor: false
     },
     {
         name: 'editPage',
@@ -914,7 +937,8 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
         priority: 9,
         tags: ['page', 'offscreen', 'edit', 'target'],
         loaded: false,
-        source: 'builtin'
+        source: 'builtin',
+        requiresEditor: false
     },
     {
         name: 'renamePage',
@@ -923,7 +947,8 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
         priority: 7,
         tags: ['page', 'rename', 'title', 'page-tree'],
         loaded: false,
-        source: 'builtin'
+        source: 'builtin',
+        requiresEditor: false
     },
     {
         name: 'movePage',
@@ -932,7 +957,8 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
         priority: 7,
         tags: ['page', 'move', 'page-tree'],
         loaded: false,
-        source: 'builtin'
+        source: 'builtin',
+        requiresEditor: false
     },
     {
         name: 'deletePage',
@@ -941,7 +967,8 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
         priority: 6,
         tags: ['page', 'delete', 'trash', 'page-tree'],
         loaded: false,
-        source: 'builtin'
+        source: 'builtin',
+        requiresEditor: false
     },
     {
         name: 'restorePage',
@@ -950,7 +977,8 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
         priority: 6,
         tags: ['page', 'restore', 'trash', 'page-tree'],
         loaded: false,
-        source: 'builtin'
+        source: 'builtin',
+        requiresEditor: false
     },
     {
         name: 'insertPageLink',
@@ -968,7 +996,8 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
         priority: 7,
         tags: ['page', 'navigate', 'open'],
         loaded: false,
-        source: 'builtin'
+        source: 'builtin',
+        requiresEditor: false
     },
 ]
 

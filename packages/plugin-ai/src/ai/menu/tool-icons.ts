@@ -45,6 +45,8 @@ import {
 const TOOL_ICONS: Record<string, LucideIcon> = {
     // Discovery / skills
     load_skill: Sparkles,
+    // Context: what is the agent operating on?
+    getCurrentTarget: Activity,
 
     // Read
     getDocumentStructure: ListTree,

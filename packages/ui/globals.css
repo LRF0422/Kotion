@@ -540,3 +540,21 @@ html[data-ui-style="modern"] #root {
     scroll-behavior: auto !important;
   }
 }
+
+/* ------------------------------------------------------------------
+ * Streamdown paints fenced code blocks lazily.
+ *
+ * Its code-block wrapper carries an inline
+ *   content-visibility: auto; contain-intrinsic-size: auto 200px
+ * so a code block outside the scrollport is skipped and only reserves its
+ * remembered height. Inside the agent transcript that reads as a large blank
+ * region: the answer is there, but nothing is painted until the block scrolls
+ * into view ("scroll down and it slowly fills in"). Because the value is an
+ * inline style it takes `!important` to switch off.
+ *
+ * The transcript is capped (100 turns) and its code is already tokenised, so
+ * painting eagerly costs little and removes the blank gap / layout shift.
+ * ------------------------------------------------------------------ */
+[data-streamdown="code-block"] {
+  content-visibility: visible !important;
+}

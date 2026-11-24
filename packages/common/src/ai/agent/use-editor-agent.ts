@@ -313,6 +313,9 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
     const executor = useMemo(
         () => new EditorToolExecutor({
             resolveTools,
+            // Same classifier the readiness gate uses: a document tool resolves
+            // the exact edit target before running, an editor-free tool does not.
+            needsEditor: needsEditorTool,
             isReadOnlyTool,
             canMutate,
             resolveDocumentId,
@@ -345,7 +348,7 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
                 })
             },
         }),
-        [resolveTools, isReadOnlyTool, canMutate, resolveDocumentId, onToolExecution, getSessionBinding, conversationId, dispatch]
+        [resolveTools, needsEditorTool, isReadOnlyTool, canMutate, resolveDocumentId, onToolExecution, getSessionBinding, conversationId, dispatch]
     )
 
     /**

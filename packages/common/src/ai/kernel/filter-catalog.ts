@@ -26,6 +26,27 @@ import type { ToolMetadata } from '../types'
 export type { AgentCapabilityCatalog }
 
 /**
+ * Built-in tool categories that operate on a DOCUMENT. They are advertised even
+ * before the workbench has a document, because a run's tool list is fixed when
+ * the run is created: a run that starts with no page and calls `createPage` can
+ * acquire one mid-run, but a tool the model was never offered cannot be called
+ * in that same run. The per-call resolver then binds these tools to the exact
+ * target page, and reports "createPage/editPage first" when there is none —
+ * which is strictly better than telling the user a document capability is
+ * missing after the page already exists.
+ */
+const DOCUMENT_TOOL_CATEGORIES = new Set<string>([
+    'document-read',
+    'document-write',
+    'document-structure',
+    'document-delete',
+    'layout',
+])
+
+export const isDocumentToolCategory = (category: string | undefined): boolean =>
+    category !== undefined && DOCUMENT_TOOL_CATEGORIES.has(category)
+
+/**
  * Whether a run at this scope may be offered a tool.
  *
  * The rule lives here (not inline in the workspace hook) because it is the one
@@ -48,6 +69,14 @@ export function agentToolAvailableAtScope(
     if (!meta) return false
     if (hasDocument) return true
     if (meta.source === 'plugin') return true
+    // Editor-free by declaration: a workspace run can execute it (page
+    // management, background tasks, discovery) regardless of the scope name.
+    if (meta.requiresEditor === false) return true
+    // A workbench run can acquire a document mid-run (createPage / editPage).
+    // Its tool list was frozen at run creation, so document tools must be
+    // advertised up front; execution is what enforces "only against the exact
+    // target, or fail with a request to acquire one".
+    if (isDocumentToolCategory(meta.category)) return true
     return meta.scope === 'any' || meta.scope === 'workspace'
 }
 

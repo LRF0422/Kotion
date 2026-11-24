@@ -113,8 +113,20 @@ export interface EditorToolExecutorOptions {
      */
     resolveTools: (
         owner?: string | null,
-        options?: { mutating?: boolean }
+        options?: {
+            mutating?: boolean
+            requiresEditor?: boolean
+            toolName?: string
+        }
     ) => ToolsRecord | Promise<ToolsRecord>
+    /**
+     * Whether a tool needs a live document editor. Passed through to
+     * `resolveTools` so the host only acquires/validates an edit target for the
+     * tools that actually use one — an editor-free tool must never be failed by
+     * a missing document, and a document tool must never fall back to another
+     * page's editor. Omitted → every tool is treated as editor-bound.
+     */
+    needsEditor?: (toolName: string) => boolean
     /**
      * Read-only classification for the write lease. Omitted → every tool is
      * treated as mutating (conservative: extra serialization, never skipped).
@@ -196,6 +208,7 @@ export interface EditorToolExecutorOptions {
 
 export class EditorToolExecutor {
     private readonly resolveTools: EditorToolExecutorOptions['resolveTools']
+    private readonly needsEditor?: EditorToolExecutorOptions['needsEditor']
     private readonly isReadOnlyTool?: EditorToolExecutorOptions['isReadOnlyTool']
     private readonly canMutate?: EditorToolExecutorOptions['canMutate']
     private readonly executionTimeoutMs?: EditorToolExecutorOptions['executionTimeoutMs']
@@ -214,6 +227,7 @@ export class EditorToolExecutor {
 
     constructor(options: EditorToolExecutorOptions) {
         this.resolveTools = options.resolveTools
+        this.needsEditor = options.needsEditor
         this.isReadOnlyTool = options.isReadOnlyTool
         this.canMutate = options.canMutate
         this.executionTimeoutMs = options.executionTimeoutMs
@@ -294,7 +308,14 @@ export class EditorToolExecutor {
                     error: '当前页面为只读，无法执行修改操作（只读协作邀请或只读页面）。如需编辑，请让邀请人授予编辑权限后重新进入。',
                 }
             } else {
-            const tools = await this.resolveTools(owner, { mutating })
+            const tools = await this.resolveTools(owner, {
+                mutating,
+                // Unknown tools stay editor-bound (conservative): acquiring the
+                // target is how we avoid running a document tool against the
+                // wrong page, and the resolver reports a missing target clearly.
+                requiresEditor: this.needsEditor ? this.needsEditor(toolName) : true,
+                toolName,
+            })
             // The backend routes names loosely (a namespaced plugin tool may
             // arrive by its bare local name, or with an invented namespace), so
             // resolve the same way before declaring the tool unavailable.

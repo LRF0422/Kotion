@@ -51,7 +51,7 @@ import {
     useTranslation,
     getAccessToken,
     getAppEnv,
-    getSessionPageBinding,
+    registerAgentEditor,
     resolveAgentPageTarget,
     subscribeAgentPageTargets,
     setPageEditWindowImpl,
@@ -583,15 +583,23 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, em
     // writer: the conversation's hidden off-screen session for the page is
     // dropped, and the agent's document tools resolve to THIS editor instead of
     // racing a second one (the "page updated by another writer" conflict).
+    //
+    // The claim is app-global, not routed through the focused conversation's
+    // binding: this pane may be opened by the `/ai` workbench (which publishes
+    // no binding), by a page-tree window, or before the chat mounts at all.
     useEffect(() => {
-        if (!editorInstance || !pageId) return;
-        const binding = getSessionPageBinding();
-        if (!binding?.claimEditor) return;
-        binding.claimEditor(pageId, editorInstance);
-        return () => {
-            binding.releaseEditor?.(pageId, editorInstance);
-        };
-    }, [editorInstance, pageId]);
+        // Only a READY editor may claim authorship. Registering before the
+        // seed/sync completes would let the agent write into a placeholder that
+        // the save session refuses to persist (and that the next sync replaces).
+        if (!editorInstance || !pageId || !contentReady || !synced) return;
+        return registerAgentEditor({
+            pageId: String(pageId),
+            editor: editorInstance,
+            role: embedded ? 'pane' : 'window',
+            title: page?.title,
+            spaceId: page?.spaceId === undefined ? undefined : String(page.spaceId),
+        });
+    }, [editorInstance, pageId, embedded, contentReady, synced, page?.title, page?.spaceId]);
 
     // Declare the session role in awareness (same field/value as the main
     // PageEditor, so the two cannot drift).

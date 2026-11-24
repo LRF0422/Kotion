@@ -1,5 +1,9 @@
 # Agent 页面操作统一模型（AgentPageTarget）
 
+> 「当前操作对象」是类型开放的，页面只是其中一种。通用模型、插件 provider 与 `getCurrentTarget`
+> 工具见 **[AGENT_OPERATION_TARGET.md](AGENT_OPERATION_TARGET.md)**；本文只描述页面这一种对象的
+> 身份、权限、文档能力与写权归属。
+
 本文记录"agent 操作页面"的唯一模型，以及各 surface 如何向它提供数据、各消费方如何只依赖它。
 此前 agent 触达页面有四条互相独立、细节不同的路径（可见编辑器 / 隐藏离屏编辑器 / 浮动编辑窗 /
 页面工具），每条都要自己处理"普通页面还是受邀协作页面""谁能读""谁能写""房间怎么认证"，
@@ -48,6 +52,10 @@ agent 程序化写入等）。
 | 浮动编辑窗（`PageEditWindowImpl`） | 同上；"打开完整页面"对受邀页面走目标 `open()` |
 | agent 修改类工具 | `canMutate` 先看目标 `canEdit`，再看绑定编辑器 `isEditable`：只读页面/只读邀请的写操作在工具执行器层被拒绝 |
 | Shell dock（`use-dock-state`） | 路由不携带 pageId（`/collaborate/:token`）时回退到当前可见编辑器，agent 面板才能拿到操作对象 |
+| 可见编辑器认领（`agent-editor-registry`） | 浮动窗 / 侧边分栏 / 工作台分栏把 `pageId → editor` 注册到**应用级**认领表；会话与工作台订阅后立即让位 |
+| 工具绑定层（`useCapabilityProviders` + `EditorToolExecutor`） | 每次调用按目标页面解析**确切**编辑器；文档工具绝不回落到"当前可见页面" |
+| 工作台（`useWorkspaceDocumentTarget`） | 分栏里的页面产物 = 文档编辑目标；优先复用可见编辑器，否则按需获取隐藏会话 |
+| 通用操作对象（`agent-operation-target`） | 页面 provider 把会话目标/可见页 + 选区报告给 `getCurrentTarget`；非页面对象由插件 provider 描述 |
 
 ## 4. 不变量
 
@@ -57,6 +65,32 @@ agent 程序化写入等）。
 - **认证统一**：房间认证只通过 `getCollabToken()`，受邀页面重建信封、普通页面取最新 access token。
 - **惰性解析**：目标对象可廉价创建（服务访问是 getter / 方法），host 没有注册 space-page 服务时也不会抛错。
 - **不缓存页面内容**：模型只描述"怎么访问"，内容读取仍走 `loadRecord` / 编辑器。
+
+### 4.1 编辑目标（document target）的额外不变量
+
+页面"身份/权限"模型之上还有一层"这次工具调用写哪个文档"，它由四个模块分工：
+
+| 层 | 模块 | 唯一职责 |
+| --- | --- | --- |
+| 页面作用域认领 | `agent-editor-registry` | 某个 pageId 当前由哪个**可见**编辑器承载（分栏/浮窗/路由） |
+| 会话编辑目标 | `session-page-binding` | 一个会话 / 委派子 agent 的目标页面与隐藏会话租约 |
+| 隐藏编辑器引擎 | `offscreen-editor-bridge` + core `OffscreenEditorHost` | 屏幕上没有该页面时的编辑器 |
+| 工具绑定 | `useCapabilityProviders` / `EditorToolExecutor` | 每次调用解析"确切目标编辑器"，失败关闭 |
+
+- **同一页面只有一个 writer**：可见编辑器注册认领时，应用级注册表立即 `destroyIdle` 未持有的隐藏会话；
+  仍持有租约的会话（会话目标 / 子 agent）由订阅方释放。认领不依赖"当前聚焦的会话"，因此分栏先于聊天
+  打开、`/ai` 工作台、后台标签页都不会丢认领。
+- **不串页**：会话目标为 A、可见编辑器是 B 时，`getEditor()` 必须返回 A 的租约或 `null`，绝不返回 B。
+  工具绑定层对文档工具做同样判定；目标编辑器拿不到时返回可操作错误（先 `createPage` / `editPage`），
+  而不是把这次写入落到 B。
+- **跨页操作不改变目标**：往父页面插入链接、给参数指定的页面写内容，使用
+  `SessionPageBinding.getEditorForPage()` 取得编辑器，不调用 `editPage`。后者只用于"把会话目标切到 X"。
+- **页面管理工具与编辑器解耦**：`createPage` / `editPage` / `searchPages` / `movePage` 等声明
+  `requiresEditor: false`，不会因为目标编辑器暂时不可用而被执行门禁卡住——它们正是恢复目标的路径。
+- **工作台可在同一轮拿到文档能力**：run 的 tools 列表在创建时冻结，所以 workspace 预先广告文档工具；
+  执行时再解析确切目标。否则 `createPage` 成功后同一条 run 仍然"写不了"，只能等用户再发一轮。
+- **分栏页面就是目标**：工作台把 `targetArtifact.kind === 'page'` 传入 `useWorkspaceDocumentTarget`，
+  分栏打开/恢复后即成为编辑目标；分栏的可见编辑器认领后，隐藏会话让位。
 
 ## 5. 仍不在模型内的部分（有意为之）
 
@@ -76,4 +110,5 @@ agent 程序化写入等）。
 pnpm --filter @kn/common check:agent-page   # 统一模型 15 项
 pnpm --filter @kn/common check:collab-guest # 受邀能力注册表 12 项
 pnpm --filter @kn/common check:current-page # 可见页面桥
+pnpm --filter @kn/common check:document-target # 认领表 / 确切目标 / 页面工具分类
 ```

@@ -45,6 +45,11 @@ import { wrapToolsWithCallback } from "./utils/tool-wrapper"
 import { metadataNeedsEditor } from "./discovery/tool-metadata"
 import { getSessionPageBinding, type SessionPageBinding } from "./session-page-binding"
 import { isLiveEditor } from "./plugin-agent/live-editor"
+import {
+    documentTargetUnavailableMessage,
+    isSamePage,
+    noDocumentTargetMessage,
+} from "./document-target"
 
 /**
  * Progressive skill discovery (`VITE_KN_SKILL_DISCOVERY=false` opts out).
@@ -106,7 +111,17 @@ export interface CapabilityProviders {
      */
     resolveTools: (
         owner?: string | null,
-        options?: { mutating?: boolean }
+        options?: {
+            mutating?: boolean
+            /**
+             * Whether the tool being resolved needs a document editor. The
+             * executor passes this so an editor-free tool is never held behind,
+             * or failed by, an edit target it does not use.
+             */
+            requiresEditor?: boolean
+            /** Wire name of the tool about to run (diagnostics/unknown-tool path). */
+            toolName?: string
+        }
     ) => ToolsRecord | Promise<ToolsRecord>
     /**
      * Build (or return the cached) tool record bound to an arbitrary editor,
@@ -451,31 +466,102 @@ export function useCapabilityProviders(
         [wrappedTools, allTools]
     )
 
-    // Stable: reads the live provider map at call time, so a target switch made
-    // earlier in the same backend tool batch is visible to the next call. An
-    // owner (delegated sub-run) resolves to that agent's own editor when the
-    // host exposes one; a child that never retargeted inherits the parent's.
-    // The async branch only runs when the owner has a target whose editor is
-    // not ready yet — never silently fall back to another document for it.
+    /**
+     * Stable tool resolver: reads the live provider map at call time, so a
+     * target switch made earlier in the same backend tool batch is visible to
+     * the next call.
+     *
+     * The rule this function enforces (and used to miss): when the caller has a
+     * page target, its tools must close over THAT page's editor. Falling back to
+     * the active editor because the target editor is not ready silently writes
+     * the page the user happens to be looking at. So:
+     *
+     *  - exact target editor ready → use it (cached per-editor build);
+     *  - target exists but editor not ready → ask the binding for the exact
+     *    editor (acquiring/forking as needed), never substitute another one;
+     *  - no target at all → the visible editor is the implicit target; a
+     *    document tool with no live editor fails with a "create/editPage first"
+     *    message instead of a raw null-editor crash.
+     *
+     * An `owner` (delegated sub-run) is resolved first and by editor identity,
+     * because it may hold a private fork of the same page.
+     */
     const resolveTools = useCallback((
         owner?: string | null,
-        options?: { mutating?: boolean }
-    ): ToolsRecord | Promise<ToolsRecord> => {
-        if (!owner) return toolProvider.getAllTools()
-        const binding = sessionBindingRef.current()
-        const activeEditor = toolProvider.getEditor()
-        const ownerEditor = binding?.getEditorFor?.(owner)
-        if (ownerEditor) {
-            return ownerEditor === activeEditor
-                ? toolProvider.getAllTools()
-                : buildToolsForEditor(ownerEditor)
+        options?: {
+            mutating?: boolean
+            requiresEditor?: boolean
+            toolName?: string
         }
-        if (!binding?.getEditorForAsync) return toolProvider.getAllTools()
-        return binding.getEditorForAsync(owner, options).then(editor => (
-            editor && editor !== activeEditor
-                ? buildToolsForEditor(editor)
-                : toolProvider.getAllTools()
-        ))
+    ): ToolsRecord | Promise<ToolsRecord> => {
+        const binding = sessionBindingRef.current()
+        if (!binding) return toolProvider.getAllTools()
+        const activeEditor = toolProvider.getEditor()
+        const activePageId = isLiveEditor(activeEditor)
+            ? binding.getPageForEditor?.(activeEditor)?.pageId ?? null
+            : null
+        const requiresEditor = options?.requiresEditor !== false
+        const ensureEditor = binding.getEditorForAsync
+
+        /** Resolve the exact target editor, then choose the matching tool map. */
+        const bindTarget = (
+            target: { pageId: string; title?: string; spaceId?: string },
+            promise: Promise<any | null>,
+        ): Promise<ToolsRecord> => promise.then(
+            editor => {
+                if (!isLiveEditor(editor)) {
+                    throw new Error(documentTargetUnavailableMessage(target))
+                }
+                return editor === activeEditor
+                    ? toolProvider.getAllTools()
+                    : buildToolsForEditor(editor)
+            },
+            error => {
+                // Preserve the host's reason (session timeout, read-only,
+                // component page) while naming the page the tool refused to
+                // write into.
+                throw new Error(documentTargetUnavailableMessage(target, error))
+            },
+        )
+
+        if (owner) {
+            const target = binding.getPageFor?.(owner) ?? null
+            const ownerEditor = binding.getEditorFor?.(owner)
+            if (isLiveEditor(ownerEditor)) {
+                return ownerEditor === activeEditor
+                    ? toolProvider.getAllTools()
+                    : buildToolsForEditor(ownerEditor)
+            }
+            if (!target) return toolProvider.getAllTools()
+            if (!requiresEditor) return toolProvider.getAllTools()
+            if (!ensureEditor) {
+                throw new Error(documentTargetUnavailableMessage(target))
+            }
+            return bindTarget(target, ensureEditor(owner, { mutating: options?.mutating }))
+        }
+
+        // Classification calls (`useEditorAgent.needsEditorTool`, legacy hosts)
+        // pass no options: they only need a synchronous record, never an
+        // acquisition. Acquisition is a side effect and must be opt-in.
+        if (!options) return toolProvider.getAllTools()
+
+        const target = binding.getBoundPage?.() ?? null
+        if (!target) {
+            if (requiresEditor && !isLiveEditor(activeEditor)) {
+                throw new Error(noDocumentTargetMessage())
+            }
+            return toolProvider.getAllTools()
+        }
+        if (isSamePage(activePageId, target.pageId)) {
+            return toolProvider.getAllTools()
+        }
+        if (!requiresEditor) return toolProvider.getAllTools()
+        if (!ensureEditor) {
+            // A binding that cannot acquire an editor must not let a document
+            // tool fall through to the visible page: that is the wrong document.
+            throw new Error(documentTargetUnavailableMessage(target))
+        }
+        return bindTarget(target, ensureEditor(null, { mutating: options?.mutating }))
     }, [toolProvider, buildToolsForEditor])
 
     return {

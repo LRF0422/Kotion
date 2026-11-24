@@ -108,6 +108,7 @@
 | `deletePluginProjectFile` | **删除工程里的单个文件**（如遗留的旧组件）。只能删工程内的文件，拒绝 `package.json` 与入口文件；必须先 `readPluginProjectFile` 读过；返回被删正文，误删可粘回 |
 | `pluginProjectLogs` | 构建日志，用于排查编译错误 |
 | `listPluginServices` | **列出已注册的 service 及其提供者**（core=宿主 / 某个已安装插件）；可按 `owner`、`query` 过滤。开发时"要调用谁的能力"先查它 |
+| `listAgentTargets` | **查看宿主的「当前操作对象」provider 与实时解析结果**（页面/文件/表格/图表/选区…，kind 开放）。插件用 `registerAgentOperationTargetProvider` / `useAgentOperationTargetProvider` 注册后，用它确认是否生效、kind/id/operations 是否正确；可传 `includeTargets:false` 只看 provider。agent 侧查询用内置 `getCurrentTarget` |
 | `listPluginIcons` | **查宿主真实存在的图标名**（`@kn/icon` 里的组件），返回 import + 可直接粘的栏位图标代码，以及按用途关键词的 emoji 建议。栏位图标别凭记忆拼名字 |
 | `generatePluginIcon` | **给工程生成图标**：按插件名/关键词选字形配色，离线渲染 SVG 写进 `assets/icon.svg`，把 `knPluginStudio.icon` 指向它，并尽量把源码里那个 emoji 栏位图标换成同一字形 |
 | `listHostGlobals` | 列出宿主通过 `window.__KN__` 暴露的全局模块（写 `externals` 前先查它） |
@@ -548,6 +549,43 @@ ServiceRegistry（App.tsx 绑定） ──getBoundServiceRegistry()──┬─�
 > 边界要说清：开发台现在**只读地**探知能力（服务名与提供者），**不做注册表管理**——
 > 安装/卸载别的插件仍然只能通过插件管理器，`agent.tools` 里没有、也不会有卸载别人插件的工具。
 
+## 当前操作对象（AgentOperationTarget）
+
+agent 的「当前操作对象」不是页面专用，而是一个 **kind 开放**的通用模型：页面、文件、空间、多维表格的行、图表、思维导图节点、正文选区……都可以是当前对象。
+核心只内置一个 `page` provider（当前可见页 / 会话编辑目标）；其他类型由插件自己描述，agent 通过内置工具 `getCurrentTarget` 查询。
+
+插件注册 provider（React surface 用 hook，卸载自动清理）：
+
+```ts
+import { useAgentOperationTargetProvider } from '@kn/common'
+
+useAgentOperationTargetProvider({
+  id: 'my-plugin.current-file',
+  label: '文件管理器当前文件',
+  priority: 90, // 压过可见页(60)/会话编辑目标(80)
+  getTargets: () => selected ? {
+    kind: 'plugin:my-plugin/file',
+    label: '文件',
+    id: selected.id,
+    title: selected.name,
+    summary: '文件管理器中选中的文件',
+    capabilities: ['file.read'],
+    operations: [
+      { tool: 'myPluginReadFile', description: '读取文件内容', args: { fileId: selected.id } },
+    ],
+  } : null,
+})
+```
+
+规则：
+
+- `getTargets(context)` 必须**同步、廉价**，不做 I/O；按 `context.conversationId` 隔离，一个会话的目标不能出现在另一个会话里。
+- `kind` 用命名空间（`plugin:<plugin>/<object>`）；`operations[].tool` 必须是**真实工具名**，可预填 `args`。
+- 同一 `kind:id` 由多个 provider 描述时按 priority 合并，capabilities/operations 取并集。
+- 分栏 `AgentArtifact` 已由 `useAgentArtifactTargetProvider` 自动映射，不需要重复写。
+- 类型在 `@kn/plugin-api` 的 `AgentOperationTarget` / `AgentOperationTargetProvider`；实现与示例见 `@kn/common` 的 `src/ai/agent-operation-target.tsx`。
+- 开发期用 `listAgentTargets` 验证注册；agent 运行时用 `getCurrentTarget` 查询。不要假设当前对象一定是页面，也不要把页面工具套到文件/表格上。
+
 ## 图标：两种，别混
 
 插件有两张图标，用途不同、形态不同，**不能互相替代**：
@@ -631,7 +669,7 @@ pnpm test:plugin-dev:electron
 | `package-install.test.mjs` | 20 | 包名/版本校验、管理器探测、argv 构造、假 spawn 安装 |
 | `tailwind.test.mjs` | 12 | 用宿主配置编译插件工具类、去除 @keyframes、空工程 |
 | `packaged-studio-deps.test.mjs` | 28 | **打包布局回归**：用真实 `afterPack` 钩子物化依赖，然后在**没有源码树**的前提下跑子进程——入口 `.mjs` 与 esbuild 都在 asar 外且可解析、平台二进制可 spawn、tailwind/postcss 与宿主配置就位并**真的编译出插件 CSS**、宿主标准包可读、**manager 从 `Resources/` 解析运行时且解析出的路径不含 `app.asar`** |
-| `studio-tools.test.mjs` | 246 | **agent 工具面**：名称/描述/schema、create→write→run→build→list→stop 的每次能力调用、**模板与 externals 透传和校验**、**删除工程与自卸载**、**删单个文件与「未读不许删」**、**service 发现（提供者归属/过滤/无注册表兜底）**、**产物聚焦（含 focus:false 与坏预览不拖垮构建）**、失败装订、缺能力提示、失败不装旧产物、**只读发现可以、注册表管理不在**、**宿主能力发现（意图搜索/摘要视图/能力目录注入与旧宿主降级、`getDesktopCapability` 的声明内联与 `readMore`）** |
+| `studio-tools.test.mjs` | 253 | **agent 工具面**：名称/描述/schema、create→write→run→build→list→stop 的每次能力调用、**模板与 externals 透传和校验**、**删除工程与自卸载**、**删单个文件与「未读不许删」**、**service 发现（提供者归属/过滤/无注册表兜底）**、**产物聚焦（含 focus:false 与坏预览不拖垮构建）**、失败装订、缺能力提示、失败不装旧产物、**只读发现可以、注册表管理不在**、**宿主能力发现（意图搜索/摘要视图/能力目录注入与旧宿主降级、`getDesktopCapability` 的声明内联与 `readMore`）**、**当前操作对象 provider 的列表/解析/旧宿主降级** |
 | `surface.test.mjs` | 31 | **产物声明**：mapper 与工具面一致、kind 与预览一致、构建/发布/工程/图标的 payload、失败不产生产物、id 稳定（同工程重建/重生成只占一格）、`focusArtifact` 无 payload 路径、垃圾输入不抛 |
 | `files/highlight.test.mjs` | 78 | **文件页签高亮**（包内 `pnpm --filter @kn/plugin-plugin-studio test` 也跑）：扩展名→扫描器映射、行数/正文不丢、TS 关键字/字符串/注释/数字/模板字面量跨行、块注释跨行、未闭合字符串止于行尾、JSX 标签与属性、JSON/YAML/CSS（at-rule、十六进制色、自定义属性）、markup 标签与跨行注释、markdown 标题/列表/行内代码/链接/围栏、shell 变量与关键字、Python 三引号、纯文本、垃圾输入不抛错、2000 行 <400ms |
 | `icon-art.test.mjs` | 53 | **图标**：同插件同图、关键词/显式字形/首字母兜底、配色哈希与显式色、SVG 自包含与转义、栏位片段、只改该改的文件（不动手写图标、兼容 legacy `knPlugin` 块）、清单读取与 mime/可上传判断；**撤销**（读取当前图标、恢复文件+清单指针、首次生成的删除、URL/data 指针、缺 `deleteFile` 的降级、`./assets/icon.svg` / 反斜杠 / 大小写这类非规范指针按同一文件处理（大小写不敏感卷上不会误删）、旧内容读不出时明确上报） |

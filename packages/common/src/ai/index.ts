@@ -36,6 +36,14 @@ export * from "./page-edit-window-bridge"
 export * from "./session-page-binding"
 export * from "./agent-document-bridge"
 
+// Page-scoped visible-editor claims (side pane / floating window / route) and
+// the shared vocabulary for "which page must this document tool act on".
+export * from "./agent-editor-registry"
+export * from "./document-target"
+
+// Kind-agnostic "what is the agent operating on?" model + plugin providers.
+export * from "./agent-operation-target"
+
 // Providers
 export * from "./providers"
 
@@ -47,6 +55,7 @@ export * from "./capabilities"
 
 // Plugin agent contribution contract (kernel capability aggregation, M0)
 export * from "./plugin-agent"
+export * from "./plugin-agent/live-editor"
 
 // Kernel runtime — capability-selective agent surfaces (workspace/space/page)
 export * from "./kernel"

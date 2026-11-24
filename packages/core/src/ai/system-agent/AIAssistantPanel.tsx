@@ -52,6 +52,7 @@ import {
     toolApprovals,
     type AgentChatMessage,
     type EditorAgentApi,
+    type SessionPageBinding,
 } from '@kn/common'
 import { SubAgentTree, buildSubAgentTreeLabels } from './SubAgentTree'
 import { PlanApprovalCard } from './PlanApprovalCard'
@@ -185,8 +186,56 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
     // 白名单则作用在下面的能力目录上（先于 run 输入构建，模型看到的工具就是它）。
     const { selectedAgent } = useCustomAgents()
 
+    // The page the user is looking at, as published by the visible page surface.
+    // Read BEFORE the capability providers: the system agent's binding must be
+    // its own (the visible page), never the focused chat conversation's global
+    // binding. Otherwise a chat tab working on page B could redirect this
+    // panel's document tools while page A is on screen.
+    const currentPage = useCurrentPage()
+    const sessionBinding = useMemo<SessionPageBinding>(() => {
+        const page = currentPage?.pageId === undefined || currentPage.pageId === null
+            ? null
+            : {
+                pageId: String(currentPage.pageId),
+                title: currentPage.title,
+                spaceId: currentPage.spaceId === undefined ? undefined : String(currentPage.spaceId),
+            }
+        const currentEditor = editor ?? null
+        const targetEditor = (pageId?: string): Editor | null => (
+            currentEditor && page && (pageId === undefined || pageId === page.pageId)
+                ? currentEditor
+                : null
+        )
+        return {
+            bindPage: () => { /* this panel follows the visible page */ },
+            getBoundPage: () => page,
+            getEditor: () => currentEditor,
+            editPage: async (next) => {
+                const target = targetEditor(String(next.pageId))
+                if (!target) {
+                    throw new Error('系统助手只能编辑当前打开的页面；请先打开目标页面，或改用页面侧边聊天')
+                }
+                return { ...next, pageId: String(next.pageId), editor: target }
+            },
+            openPageWindow: () => { /* the page is already on screen */ },
+            getPageFor: () => page,
+            getEditorFor: () => currentEditor,
+            getEditorForAsync: async () => currentEditor,
+            getEditorForPage: async (next) => targetEditor(String(next.pageId)),
+            getPageForEditor: (target): { pageId: string; title?: string; spaceId?: string } | null => (
+                target && target === currentEditor && page ? page : null
+            ),
+            editPageFor: async () => {
+                throw new Error('系统助手不支持给委派子 agent 单独切换页面')
+            },
+        }
+    }, [currentPage, editor])
+    const getSessionBinding = useCallback(() => sessionBinding, [sessionBinding])
+
     // 编辑器工具目录 + 技能片段（保留的供应商层）
-    const { getCatalog, resolveTools, isReadOnlyTool } = useCapabilityProviders(editor ?? null)
+    const { getCatalog, resolveTools, isReadOnlyTool } = useCapabilityProviders(editor ?? null, {
+        sessionBinding: getSessionBinding,
+    })
     const { t } = useTranslation()
     const subAgentLabels = useMemo(() => buildSubAgentTreeLabels(t), [t])
     // 自定义 Agent 的「只启用这些技能/工具」是最后一层过滤：不能超出本界面能跑的
@@ -221,12 +270,6 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
         () => buildAgentRunInputs(catalog, { loadedSkills }),
         [catalog, loadedSkills],
     )
-    // The page the user is looking at, as published by the visible page surface
-    // (`PageHost` covers every route, including plugin page types). Subscribing
-    // rather than reading once matters: the panel stays mounted across
-    // navigation, and the agent's target must follow the visible page.
-    const currentPage = useCurrentPage()
-
     // The selected agent's guidance rides in the per-turn context note, never in
     // the backend-owned system prompt.
     const customAgentNote = useMemo(() => buildCustomAgentNote(selectedAgent), [selectedAgent])
@@ -239,6 +282,9 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
         skills,
         deferredTools,
         resolveTools,
+        // THIS panel's binding (the visible page), never the global chat
+        // conversation's target: two surfaces can be open on different pages.
+        sessionBinding: getSessionBinding,
         // Mutating calls take the document's write lease (no per-agent editor
         // target in this panel, so all agents share the conversation document).
         isReadOnlyTool,

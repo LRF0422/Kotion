@@ -12,7 +12,8 @@
   "scripts": {
     "build": "rollup -c",
     "ui:add": "pnpm dlx shadcn@latest add",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "check:math": "rm -rf .tmp-check-math && tsc src/components/ai/markdown-math.ts src/components/ai/markdown-math.check.ts --rootDir src --outDir .tmp-check-math --module commonjs --target ES2020 --lib ES2020 --skipLibCheck && node -e \"require('fs').writeFileSync('.tmp-check-math/package.json', JSON.stringify({type: 'commonjs'}))\" && node .tmp-check-math/components/ai/markdown-math.check.js"
   },
   "devDependencies": {
     "@kn/eslint-config": "workspace:*",
@@ -63,7 +64,9 @@
     "emojibase": "^15.3.1",
     "framer-motion": "^12.4.7",
     "frimousse": "^0.2.0",
+    "hast-util-sanitize": "^5.0.2",
     "jotai": "^2.13.1",
+    "katex": "^0.16.33",
     "lodash.throttle": "^4.1.1",
     "lucide-react": "^0.541.0",
     "motion": "^12.23.12",

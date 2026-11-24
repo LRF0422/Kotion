@@ -729,9 +729,14 @@ export const createPageTools = (editor: Editor): ToolsRecord => ({
  * Obtain an editor bound to `pageId` for a tool-internal cross-page action.
  *
  * When the page is already the active target (or the open page), the tool's own
- * editor is used and nothing is switched. Otherwise the conversation's
- * off-screen edit target is switched through the binding and the returned
- * editor is used directly — the tool's closure editor is stale for that page.
+ * editor is used and nothing is switched. Otherwise this asks the binding for
+ * that page's editor WITHOUT moving the conversation's edit target: inserting a
+ * link into the parent page is not a reason to start writing there. `switched`
+ * only means "not the editor this call was instantiated with", for messaging.
+ *
+ * `editPage` is a FALLBACK for hosts that predate `getEditorForPage`; using it
+ * here was a real target-loss bug (the conversation silently followed whichever
+ * page a cross-page tool touched).
  */
 const resolveEditorForPage = async (
     currentEditor: Editor,
@@ -744,6 +749,23 @@ const resolveEditorForPage = async (
         return { editor: currentEditor, switched: false }
     }
     const resolvedBinding = binding ?? getSessionPageBinding()
+    if (resolvedBinding?.getEditorForPage) {
+        try {
+            const editor = await resolvedBinding.getEditorForPage({ pageId: String(pageId) })
+            if (editor) return { editor: editor as Editor, switched: true }
+            return {
+                editor: null,
+                switched: false,
+                error: `页面 ${pageId} 的编辑器不可用`,
+            }
+        } catch (error) {
+            return {
+                editor: null,
+                switched: false,
+                error: `无法取得页面 ${pageId} 的编辑器: ${error instanceof Error ? error.message : '未知错误'}`,
+            }
+        }
+    }
     if (resolvedBinding?.editPage) {
         try {
             const target = await resolvedBinding.editPage({ pageId: String(pageId) })

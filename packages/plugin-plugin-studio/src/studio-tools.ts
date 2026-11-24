@@ -422,6 +422,46 @@ export interface StudioServiceRegistry {
     getOwner?(name: string): StudioServiceOwner | undefined
 }
 
+/**
+ * Read-only view of the host's generic "current operation target" registry
+ * (`@kn/common`'s `agent-operation-target`).
+ *
+ * Structural, like every injected capability here: the tool layer must not
+ * import `@kn/common` at runtime. A plugin author can use it to verify that the
+ * provider they just wrote is registered and to see the exact object the agent
+ * would receive from `getCurrentTarget`.
+ */
+export interface StudioOperationTargetProviderInfo {
+    id: string
+    label?: string
+    priority?: number
+}
+
+export interface StudioOperationTargetView {
+    kind: string
+    label?: string
+    id: string
+    title?: string
+    summary?: string
+    spaceId?: string
+    canEdit?: boolean
+    capabilities?: string[]
+    operations?: Array<{ tool: string; description: string; args?: unknown; readOnly?: boolean }>
+    selection?: { kind: string; id?: string; text?: string }
+    attributes?: Record<string, unknown>
+    source?: string
+    primary?: boolean
+}
+
+export interface StudioOperationTargets {
+    listProviders(): StudioOperationTargetProviderInfo[]
+    resolve(context: {
+        conversationId?: string | null
+        owner?: string | null
+        sessionBinding?: unknown
+    }): StudioOperationTargetView[]
+}
+
 export interface StudioDevBridge {    start(options: { root: string; watch?: boolean; writeToDisk?: boolean; externals?: string[] }): Promise<StudioSessionStatus>
     build(options: { root: string; writeToDisk?: boolean; watch?: boolean; externals?: string[] }): Promise<StudioSessionStatus>
     stop(options: { root: string }): Promise<boolean>
@@ -588,6 +628,12 @@ export interface StudioToolExecContext {
     owner?: string | null
     /** Conversation the call belongs to: background tasks are scoped to it. */
     conversationId?: string | null
+    /**
+     * The calling conversation's page/edit-target binding, when the host has
+     * one. Passed straight to the operation-target resolver so its page provider
+     * reports the same target the conversation's document tools use.
+     */
+    sessionBinding?: unknown
 }
 
 export interface StudioToolDeps {
@@ -635,6 +681,16 @@ export interface StudioToolDeps {
      * a host that bound no registry.
      */
     getServiceRegistry?: () => StudioServiceRegistry | undefined
+    /**
+     * Read-only view of the generic operation-target registry. Injected so the
+     * studio can show plugin authors (a) which providers are live and (b) the
+     * exact object shape the agent gets from `getCurrentTarget` — without the
+     * tool layer importing `@kn/common`.
+     *
+     * Absent on a host older than the capability: `listAgentTargets` then says
+     * so instead of failing.
+     */
+    getOperationTargets?: () => StudioOperationTargets | undefined
     /**
      * Icon rendering + application (`./icons/icon-art`), plus the host's icon
      * namespace. Absent only on a host that exposes no `@kn/icon`.
@@ -2754,6 +2810,75 @@ export const createStudioTools = (deps: StudioToolDeps) => ({
                     '服务名必须先在 @kn/common 的 src/core/types.ts 的 Services 接口里声明才能带类型使用（插件工程通过宿主注入的 @kn/common 拿到这些类型）；' +
                     '运行时不校验名字，但 typecheck 与补全依赖它。自己对外提供服务用插件 config 的 services 字段（重名会注册失败，不要试图覆盖别人的）。' +
                     '只想看某个插件提供了什么，传 owner=<插件名>。',
+            }
+        },
+    },
+
+    /**
+     * Generic operation-target discovery. A plugin can tell the agent what its
+     * surface is currently operating on (file / table row / chart / selection…)
+     * by registering a provider in @kn/common; this tool shows the live
+     * providers and the resolved object the agent would see. It is the feedback
+     * loop for "did my provider register, and does it describe the right thing?".
+     */
+    listAgentTargets: {
+        description:
+            '列出宿主的「当前操作对象」provider 及其实时解析结果（页面、文件、表格行、图表、选区等；kind 是开放的）。' +
+            '插件作者用 @kn/common 的 registerAgentOperationTargetProvider / useAgentOperationTargetProvider 注册自己的当前对象后，用这个工具确认它已生效、kind/id/operations 是否正确。' +
+            'agent 本身查询当前对象用内置工具 getCurrentTarget；这里只是开发期验证，不改目标。' +
+            '类型在 @kn/plugin-api 的 AgentOperationTarget / AgentOperationTargetProvider，实现与示例读 @kn/common 的 src/ai/agent-operation-target.tsx。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                includeTargets: {
+                    type: 'boolean',
+                    description: '可选。是否解析当前对象，默认 true；只想看已注册的 provider 时传 false。',
+                },
+            },
+        },
+        readOnly: true,
+        execute: async (
+            args: { includeTargets?: boolean },
+            _callId?: string,
+            execCtx?: StudioToolExecContext,
+        ) => {
+            const registry = deps.getOperationTargets?.()
+            if (!registry) {
+                return {
+                    available: false,
+                    providers: [],
+                    targets: [],
+                    count: 0,
+                    message:
+                        '当前宿主没有暴露「当前操作对象」注册表（@kn/common 版本较旧）。' +
+                        '升级 KN 客户端后再用；不影响插件运行时代码，只要插件调用的宿主版本支持即可。',
+                }
+            }
+            const providers = registry.listProviders()
+            if (args?.includeTargets === false) {
+                return {
+                    available: true,
+                    providers,
+                    count: providers.length,
+                    hint: '传 includeTargets: true（默认）可看当前解析出的对象与 operations。',
+                }
+            }
+            const targets = registry.resolve({
+                conversationId: execCtx?.conversationId ?? null,
+                owner: execCtx?.owner ?? null,
+                sessionBinding: execCtx?.sessionBinding,
+            })
+            const primary = targets.find(target => target.primary) ?? targets[0] ?? null
+            return {
+                available: true,
+                providers,
+                count: targets.length,
+                primary,
+                targets: targets.slice(0, 8),
+                hint:
+                    'provider 的 getTargets 必须同步、廉价、按 conversationId 隔离；' +
+                    'operations[].tool 写真实工具名，args 可预填。插件自己的「当前选中」建议 priority ≥ 90，' +
+                    '以压过可见页（60）与会话编辑目标（80）。分栏 artifact 已由 useAgentArtifactTargetProvider 自动映射。',
             }
         },
     },

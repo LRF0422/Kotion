@@ -44,8 +44,9 @@
 | **I7** | **会话切换/清空必须清除 target**（target 属于会话），由 surface 在 `abandonAgent` 中调用 `clearTarget()`。 |
 | **I8** | 插件**不得直接写** target 状态；只能通过 `openAgentArtifact` 或 renderer props 的回调。 |
 | **I9** | 未知 artifact 类型必须**优雅降级**：卡片/分栏缺失时回退到通用展示，shelf 的 kind 标签回退为原始 kind 字符串。 |
-| **I10** | **一个页面同时只有一个 writer。** 当分栏/浮窗等**可见编辑器**展示某页时，它通过 `claimEditor(pageId, editor)` **认领**该页：该页的隐藏离屏会话被**立即销毁**，agent 的文档工具与 conversation target 一律解析到该编辑器。可见编辑器关闭时 `releaseEditor`，下次按需惰性重建离屏会话。 |
+| **I10** | **一个页面同时只有一个 writer。** 当分栏/浮窗等**可见编辑器**展示某页时，它把 `pageId → editor` 注册到应用级认领表 `agent-editor-registry`：该页未持有的隐藏离屏会话被**立即销毁**，仍持有租约的会话 / 工作台目标在收到通知后让位；agent 的文档工具与 conversation target 一律解析到该编辑器。可见编辑器关闭时释放认领，下次按需惰性重建离屏会话。认领**不绑定当前聚焦会话**，因此分栏先打开、`/ai` 工作台、后台标签页都不会丢认领。 |
 | **I11** | 认领是**按页**、**幂等**的；同一页的多个可见编辑器之间由服务端写租约选举，落败方不写（并由 §29 的 reconcile 自愈兜底）。 |
+| **I11b** | **工具绑定按目标页解析。** 文档工具每次调用都解析"确切目标编辑器"：目标页与可见页不同而目标编辑器不可用时，返回可操作错误（先 `createPage`/`editPage`），**绝不**回落到当前可见页。页面管理工具（`createPage`/`editPage`/…）不依赖编辑器，因此目标丢失时仍可恢复。 |
 | **I12** | **能力归属插件（已退役）。** ~~插件把工具/技能声明在自己的 agent 上（`agent.agents[]`）；内核 agent 只看目录。~~ 插件自定义 agent 已移除：工具/技能回到插件贡献级 `agent.tools` / `agent.skills`，由内核 agent 直接调用。 |
 | **I13** | **deferred 通道。** 技能自带的工具以 deferred 注册（可执行、可路由，但首次调用前不进入模型工具表与 schema）。客户端按会话记住 `load_skill` 加载过的技能，在后续 run 里把它们的工具重新放进 deferred（而不是又藏起来），因此同一会话不必反复发现；`tools` 数组保持字节稳定，提示前缀缓存不被打断。 |
 | **I14** | **委派是通用的。** `delegate({ task, tools?, systemPrompt?, maxSteps?, timeoutSec? })` 创建子 run；prompt 与工具子集由调用方显式传入（不再有按 agentId 解析的插件 agent 目录）。 |
@@ -99,6 +100,13 @@ agentTargetKey(target): string | null
 collectAgentArtifacts(invocations, mappers)       // 纯函数，去重、最新在前
 useAgentArtifacts(invocations) → { artifacts, activeKey, open }
 describeAgentTarget(target): string | undefined   // 每轮 contextNote
+
+// 「当前操作对象」是类型开放的（页面只是 kind 之一）
+resolveAgentOperationTargets(context)              // 合并 provider，按优先级去重
+registerAgentOperationTargetProvider(provider)     // 插件注册自己的当前对象
+useAgentOperationTargetProvider(provider)          // React surface 版本
+// agent 侧工具：getCurrentTarget → { primary, targets, operations }
+// 详见 docs/AGENT_OPERATION_TARGET.md
 ```
 
 ### 4.4 宿主桥
@@ -109,7 +117,8 @@ setAgentPaneHostImpl(Component)                   // core 注册一次（拥有 
 <AgentPaneProvider>                               // App 根部，持有 target 状态
 
 // 页面作者权（I10）：可见编辑器认领页面，隐藏会话让位
-claimEditor(pageId, editor) / releaseEditor(pageId, editor)   // SessionPageBinding
+registerAgentEditor({ pageId, editor, role }) / unregisterAgentEditor(...)  // agent-editor-registry（应用级）
+// SessionPageBinding 仍可转发 claimEditor / releaseEditor，供旧宿主使用
 destroyIdle(pageId)                                            // OffscreenEditorBridge
 ```
 

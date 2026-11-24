@@ -17,6 +17,7 @@ import {
     useRouteCacheActive,
     useTranslation,
     useWorkspaceAgent,
+    useAgentArtifactTargetProvider,
     type AgentArtifact,
     type AgentImageData,
     type AgentToolInvocation,
@@ -132,6 +133,24 @@ const KernelConversationActive: React.FC<KernelConversationActiveProps> = ({
     // The conversation's own working target is what the model is told about:
     // a background tab must not describe the artifact the USER is looking at.
     const contextNote = describeAgentTarget(session?.targetArtifact ?? null)
+    // The pane's artifact is a generic operation target (page, file, table, …):
+    // `getCurrentTarget` can report its KIND, not just "a page". The page
+    // provider still supplies document-edit operations for page artifacts.
+    useAgentArtifactTargetProvider(sessionId, session?.targetArtifact ?? null)
+    /**
+     * A page target is also a DOCUMENT target. Without this, the pane showed the
+     * page while the workspace agent kept no edit target (or an old one), and
+     * document tools either had nothing to write to or wrote elsewhere.
+     */
+    const focusedPage = useMemo(() => {
+        const artifact = session?.targetArtifact
+        if (!artifact || artifact.kind !== 'page') return null
+        return {
+            pageId: String(artifact.id),
+            title: artifact.title,
+            spaceId: artifact.spaceId,
+        }
+    }, [session?.targetArtifact])
 
     // A selected custom agent's guidance rides as per-turn context; the agent
     // prompt itself is backend-owned and selected from the `workspace` scope.
@@ -139,6 +158,11 @@ const KernelConversationActive: React.FC<KernelConversationActiveProps> = ({
         conversationId: sessionId,
         mode: chatMode,
         customAgent: selectedAgent,
+        // The page shown in the kernel's side peek is the conversation's
+        // document target, not just a preview. This also covers the refresh
+        // case: the artifact is restored from session metadata before any tool
+        // runs, so the target is re-established without a model round trip.
+        focusedPage,
         // 长任务（background: true 的构建/装依赖/发布）跑完、而 agent 没有在等它时，
         // 把结果作为一条通知推进对话：工作台正是这些长任务发生的地方，不推的话
         // "帮我 build 一下"就没有下文了。回调先于 `send` 定义，触发时它早已就位。

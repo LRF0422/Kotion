@@ -13,6 +13,7 @@ import {
     createLongTaskTools,
     createFormTools,
     createCustomAgentTools,
+    createCurrentTargetTools,
 } from '@kn/common'
 import { createWorkspaceToolImplementations } from './workspace-tools'
 import { createReadTools } from './read-tools'
@@ -82,5 +83,8 @@ export function registerCoreToolFactories(): void {
         // 建一个审稿 Agent" lands in the picker instead of in a paragraph of
         // instructions the user has to retype.
         createCustomAgentTools,
+        // Generic "what is the current operation object?" — page, file, table,
+        // plugin-defined objects. Editor-free, valid in every scope.
+        createCurrentTargetTools,
     ])
 }

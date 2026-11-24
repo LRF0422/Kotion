@@ -1,4 +1,8 @@
 import { Editor } from "@tiptap/core"
+import {
+    getAgentEditor,
+    registerAgentEditor,
+} from "../ai/agent-editor-registry"
 
 /**
  * The editor of the currently active page tab.
@@ -23,12 +27,43 @@ const notify = () => {
 }
 
 /**
+ * The visible route editor is also a page claim for the agent: it is the page's
+ * single writer while it is on screen. Bridging here (rather than in every
+ * PageEditor caller) means the "current editor" that dock panels read and the
+ * "current page's editor" that document tools resolve can never disagree.
+ */
+let visibleClaim: { pageId: string; editor: any; release: () => void } | null = null
+
+const publishVisibleClaim = (editor?: Editor, pageId?: string, spaceId?: string): void => {
+    if (visibleClaim && visibleClaim.editor === editor && visibleClaim.pageId === pageId) {
+        if (!editor || getAgentEditor(pageId)?.editor === editor) return
+    }
+    visibleClaim?.release()
+    visibleClaim = null
+    if (!editor || !pageId) return
+    visibleClaim = {
+        pageId,
+        editor,
+        release: registerAgentEditor({
+            pageId,
+            editor,
+            role: 'visible',
+            spaceId,
+        }),
+    }
+}
+
+/**
  * Publish the active tab's editor. Called by the page editor once its content
  * is ready and whenever it becomes the active tab.
  */
 export const setActiveEditor = (editor: Editor | undefined, meta?: { pageId?: string; spaceId?: string }) => {
-    if (state.editor === editor && state.pageId === meta?.pageId && state.spaceId === meta?.spaceId) return
+    if (state.editor === editor && state.pageId === meta?.pageId && state.spaceId === meta?.spaceId) {
+        publishVisibleClaim(editor, meta?.pageId, meta?.spaceId)
+        return
+    }
     state = { editor, pageId: meta?.pageId, spaceId: meta?.spaceId }
+    publishVisibleClaim(editor, meta?.pageId, meta?.spaceId)
     notify()
 }
 
@@ -47,6 +82,7 @@ export const clearActiveEditor = (pageId?: string, editor?: Editor) => {
     if (editor && state.editor !== editor) return
     if (!state.editor && !state.pageId) return
     state = {}
+    publishVisibleClaim(undefined)
     notify()
 }
 

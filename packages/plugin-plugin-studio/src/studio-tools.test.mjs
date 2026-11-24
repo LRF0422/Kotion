@@ -509,6 +509,7 @@ const EXPECTED = [
     'deletePluginProjectFile',
     'pluginProjectLogs',
     'listPluginServices',
+    'listAgentTargets',
     'listPluginIcons',
     'generatePluginIcon',
     'listHostGlobals',
@@ -540,7 +541,8 @@ check(
         && tools.listHostGlobals.readOnly === true
         && tools.listDesktopCapabilities.readOnly === true
         && tools.getDesktopCapability.readOnly === true
-        && tools.listPluginServices.readOnly === true,
+        && tools.listPluginServices.readOnly === true
+        && tools.listAgentTargets.readOnly === true,
 )
 check(
     'surface: create does not require a directory',
@@ -1544,6 +1546,56 @@ try {
     installMessage = error.message
 }
 check('guard: missing pluginHost reported', /pluginHost/.test(installMessage), installMessage)
+
+/* ------------------------------------------------------------------ *
+ * Operation targets: the studio can verify a plugin's provider
+ * ------------------------------------------------------------------ */
+const targetTools = createStudioTools({
+    getDev: () => dev,
+    getPluginHost: () => pluginHost,
+    getOperationTargets: () => ({
+        listProviders: () => [
+            { id: 'core.page', label: '当前页面', priority: 80 },
+            { id: 'demo.current-file', label: '当前文件', priority: 90 },
+        ],
+        resolve: () => [
+            {
+                kind: 'file',
+                label: '文件',
+                id: 'f1',
+                title: 'budget.xlsx',
+                primary: true,
+                capabilities: ['file.read'],
+                operations: [{ tool: 'readFile', description: '读取文件', args: { fileId: 'f1' } }],
+            },
+        ],
+    }),
+})
+const agentTargets = await targetTools.listAgentTargets.execute({}, 'targets-call', { conversationId: 'c1' })
+check(
+    'agent targets: lists live providers',
+    agentTargets.available === true && agentTargets.providers.length === 2 &&
+        agentTargets.providers.some((provider) => provider.id === 'demo.current-file'),
+    JSON.stringify(agentTargets.providers),
+)
+check(
+    'agent targets: resolves the object the agent would see',
+    agentTargets.count === 1 &&
+        agentTargets.primary?.kind === 'file' &&
+        agentTargets.primary?.operations?.[0]?.tool === 'readFile',
+    JSON.stringify(agentTargets.primary),
+)
+const providersOnly = await targetTools.listAgentTargets.execute({ includeTargets: false })
+check(
+    'agent targets: providers-only mode skips resolution',
+    providersOnly.count === 2 && providersOnly.targets === undefined,
+)
+const legacyTargetHost = createStudioTools({ getDev: () => dev, getPluginHost: () => pluginHost })
+const noTargetRegistry = await legacyTargetHost.listAgentTargets.execute({})
+check(
+    'agent targets: older host degrades instead of throwing',
+    noTargetRegistry.available === false && noTargetRegistry.count === 0,
+)
 
 /*
  * The authoring skill must own every studio tool. An extension that declares

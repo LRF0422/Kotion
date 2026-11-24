@@ -26,12 +26,16 @@ import {
     desktopCapabilityGuards,
     findDesktopCapabilityMeta,
     getBoundServiceRegistry,
+    listAgentOperationTargetProviders,
+    resolveAgentOperationTargets,
+    serializeAgentOperationTargets,
     openAgentArtifact,
     resolveOptionalService,
     searchDesktopCapabilities,
     useTranslation,
     type AgentArtifact,
     type PluginConfig,
+    type SessionPageBinding,
 } from '@kn/common'
 import { Wrench } from '@kn/icon'
 import * as KN_ICONS from '@kn/icon'
@@ -153,6 +157,33 @@ const studioTools = createStudioTools({
         return registry ? (registry as unknown as ReturnType<
             NonNullable<Parameters<typeof createStudioTools>[0]['getServiceRegistry']>
         >) : undefined
+    },
+    /**
+     * The generic operation-target registry. The studio's agent can verify a
+     * provider it just wrote: providers list + the exact object `getCurrentTarget`
+     * would hand the model. Resolved against the CALLING conversation so the
+     * page provider reports that conversation's edit target, not another tab's.
+     */
+    getOperationTargets: () => {
+        // An older host's @kn/common may not export the registry yet: degrade to
+        // "not available" rather than throwing inside the tool.
+        if (typeof listAgentOperationTargetProviders !== 'function'
+            || typeof resolveAgentOperationTargets !== 'function'
+            || typeof serializeAgentOperationTargets !== 'function') {
+            return undefined
+        }
+        return {
+            listProviders: () => listAgentOperationTargetProviders().map(provider => ({
+                id: provider.id,
+                label: provider.label,
+                priority: provider.priority,
+            })),
+            resolve: (context) => serializeAgentOperationTargets(resolveAgentOperationTargets({
+                conversationId: context.conversationId ?? null,
+                owner: context.owner ?? null,
+                sessionBinding: (context.sessionBinding ?? null) as SessionPageBinding | null,
+            })),
+        }
     },
     /** Icon art + the host's icon namespace; see `./icons/icon-art`. */
     getIconToolkit: () => iconToolkit,

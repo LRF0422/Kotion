@@ -74,6 +74,24 @@ export type {
     ToolApprovalRequest,
     /** The host's answer; `allowed: false` must be handled like a refusal. */
     ToolApprovalDecision,
+    // ── Current operation target (what the agent is acting on) ────────────
+    /**
+     * Kind-agnostic description of the object a surface is currently operating
+     * on: a page, a file, a bitable row, a chart, a selection… Register it with
+     * `registerAgentOperationTargetProvider` (or the React hook
+     * `useAgentOperationTargetProvider`) from `@kn/common`; the agent reads it
+     * through the built-in `getCurrentTarget` tool.
+     *
+     * Runtime functions are NOT re-exported here (this package is type-only and
+     * dependency-free): import them from the host-injected `@kn/common`.
+     */
+    AgentOperationTarget,
+    AgentOperationTargetContext,
+    AgentOperationTargetProvider,
+    AgentOperationTargetView,
+    AgentTargetOperation,
+    AgentTargetSelection,
+    ResolvedAgentOperationTarget,
     // ── Artifacts (产物): the result a plugin makes openable ──────────────
     /** What a tool result / `focusArtifact` turns into: a `kind:id` the host can render. */
     AgentArtifact,

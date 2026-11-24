@@ -19,8 +19,12 @@ import {
     useLoadedSkills,
     AgentPaneHost,
     getAgentDocumentBridge,
+    getAgentEditor,
+    findAgentEditor,
+    getOffscreenEditorBridge,
     getPageNavigationBridge,
     resolveAgentPageTarget,
+    subscribeAgentEditors,
     useCurrentPage,
     setSessionPageBinding,
     clearSessionPageBinding,
@@ -34,6 +38,10 @@ import {
     fileToAgentImage,
     buildImageContentParts,
     toImageDataUrl,
+    documentTargetUnavailableMessage,
+    isSamePage,
+    isLiveEditor,
+    useAgentArtifactTargetProvider,
 } from "@kn/common"
 import type {
     ChatMode,
@@ -227,14 +235,12 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
         ownerAcquireRef,
         releaseTarget,
         releaseAllTargets,
-        pageHeldByOwner,
         acquireOwnerTarget,
         getPageFor,
         activateOffscreenTarget,
         resolveSharedEditorForPage,
         releaseOwner,
         releaseAllOwners,
-        claimedEditorsRef,
         claimEditor,
         releaseEditor,
     } = useOffscreenTargets({ editor, boundPageRef })
@@ -244,6 +250,21 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
     const offscreenHandleRef = useRef<OffscreenEditorHandle | null>(null)
     offscreenHandleRef.current = offscreenHandle
     const [acquireAttempt, setAcquireAttempt] = useState(0)
+    /**
+     * Bumped whenever a visible editor claims/releases a page. The target effect
+     * and `agentEditor` read the app-global claim registry, so a pane opened
+     * before this conversation mounted (or by another surface) is honoured
+     * without waiting for a session-binding callback that never comes.
+     */
+    const [claimVersion, setClaimVersion] = useState(0)
+    useEffect(() => subscribeAgentEditors(() => setClaimVersion(version => version + 1)), [])
+    /** Automatic re-acquire after a transient target failure (max 2 retries). */
+    const targetRetryRef = useRef<{ key: string; attempts: number; timer: ReturnType<typeof setTimeout> | null }>({
+        key: '', attempts: 0, timer: null,
+    })
+    useEffect(() => () => {
+        if (targetRetryRef.current.timer) clearTimeout(targetRetryRef.current.timer)
+    }, [])
 
     const targetPageRef = useRef<ChatTargetPage | undefined>(targetPage)
     targetPageRef.current = targetPage
@@ -266,6 +287,33 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
             setTargetStatus('idle')
             return
         }
+        const retry = targetRetryRef.current
+        if (retry.key !== String(targetPageId)) {
+            if (retry.timer) clearTimeout(retry.timer)
+            targetRetryRef.current = { key: String(targetPageId), attempts: 0, timer: null }
+        }
+
+        // A visible editor (the side pane / floating window) is the page's
+        // single writer. This check MUST come before acquiring a hidden session:
+        // otherwise a page that is literally on screen gets a second, hidden
+        // writer and the two fight over the document.
+        if (getAgentEditor(targetPageId)?.editor) {
+            const claimedId = String(targetPageId)
+            releaseTarget(claimedId)
+            for (const [owner, target] of ownerTargetsRef.current) {
+                if (!isSamePage(target.pageId, claimedId)) continue
+                const handle = ownerHandlesRef.current.get(owner)
+                if (!handle) continue
+                ownerHandlesRef.current.delete(owner)
+                try { handle.release() } catch { /* already released */ }
+            }
+            getOffscreenEditorBridge()?.destroyIdle?.(claimedId)
+            offscreenHandleRef.current = null
+            setOffscreenHandle(null)
+            setTargetStatus('current')
+            return
+        }
+
         const currentPageId = getPageNavigationBridge()?.getCurrentPage()?.pageId
         if (currentPageId && String(currentPageId) === String(targetPageId)) {
             // The open page is its own editor — drop any off-screen handle so
@@ -278,7 +326,7 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
         // flashing through 'connecting' and briefly disabling auto-execution.
         const cached = offscreenTargetsRef.current.get(String(targetPageId))
         if (cached) {
-            setOffscreenHandle(cached)
+            if (offscreenHandleRef.current !== cached) setOffscreenHandle(cached)
             setTargetStatus('ready')
             return
         }
@@ -287,15 +335,31 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
         activateOffscreenTarget(requested)
             .then(handle => {
                 if (cancelled) return
+                targetRetryRef.current = { key: String(targetPageId), attempts: 0, timer: null }
                 setOffscreenHandle(handle)
                 setTargetStatus('ready')
             })
             .catch(err => {
                 console.error('Failed to acquire off-screen editor:', err)
-                if (!cancelled) setTargetStatus('error')
+                if (cancelled) return
+                setTargetStatus('error')
+                // The session engine deletes failed records, so a later acquire
+                // really retries. Two bounded retries cover the common transient
+                // causes (room not synced yet, a page row still settling right
+                // after createPage) without hammering a permanently bad page.
+                const state = targetRetryRef.current
+                if (state.key !== String(targetPageId)) return
+                if (state.attempts >= 2) return
+                const attempt = state.attempts
+                state.attempts = attempt + 1
+                if (state.timer) clearTimeout(state.timer)
+                state.timer = setTimeout(() => {
+                    state.timer = null
+                    setAcquireAttempt(n => n + 1)
+                }, 1_500 * (attempt + 1))
             })
         return () => { cancelled = true }
-    }, [targetPageId, acquireAttempt, editor, activateOffscreenTarget])
+    }, [targetPageId, acquireAttempt, editor, activateOffscreenTarget, claimVersion, releaseTarget])
 
     // Off-screen sessions are shared per page and survive target switches; only
     // release them when the conversation closes. The same goes for delegated
@@ -305,7 +369,10 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
         releaseAllTargets()
     }, [releaseAllOwners, releaseAllTargets])
 
-    const handleRetryPage = useCallback(() => setAcquireAttempt(n => n + 1), [])
+    const handleRetryPage = useCallback(() => {
+        targetRetryRef.current = { key: '', attempts: 0, timer: null }
+        setAcquireAttempt(n => n + 1)
+    }, [])
 
     // The page the user is looking at. It is published by the visible page
     // surface (`PageHost`) and *subscribed* to, so the "当前页面" chip and the
@@ -330,6 +397,10 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
     const paneTarget = pane.open ? pane.target : null
     const paneIsPage = paneTarget?.kind === 'page'
     const inlinePaneArtifact = active && paneTarget && !paneIsPage ? paneTarget : null
+    // A non-page side-peek artifact (space, chart, file list, …) is this
+    // conversation's operation target too; page artifacts become the document
+    // target below and are reported by the core page provider.
+    useAgentArtifactTargetProvider(sessionId, inlinePaneArtifact)
 
     useEffect(() => {
         if (!active) return
@@ -357,6 +428,21 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
         setTargetPage(record)
         return record
     }, [setTargetPage])
+
+    // Opening a PAGE artifact as this conversation's preview is an explicit
+    // focus action: bind it as the edit target so the tools and the visible
+    // editor cannot diverge. Runs after `bindTargetPage` exists (effects run
+    // after render; the window effect above only handles presentation).
+    useEffect(() => {
+        if (!active || !paneIsPage || !paneTarget) return
+        const id = String(paneTarget.id)
+        if (isSamePage(boundPageRef.current?.pageId, id)) return
+        bindTargetPage({
+            pageId: id,
+            title: paneTarget.title,
+            spaceId: paneTarget.spaceId,
+        })
+    }, [active, paneIsPage, paneTarget, bindTargetPage])
 
     const switchEditTarget = useCallback(async (page: SessionPageBindingPage): Promise<{ record: ChatTargetPage; handle: OffscreenEditorHandle | null }> => {
         const record: ChatTargetPage = {
@@ -412,7 +498,30 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
         return () => clearInterval(timer)
     }, [pendingReveal, editor])
 
-    const agentEditor = (offscreenHandle?.editor as Editor) ?? editor
+    /**
+     * The ONE editor the conversation's tools may bind to.
+     *
+     * It is resolved by target identity, not by taking whatever editor happens
+     * to be published: a bound page that is not on screen must use its claim or
+     * hidden lease, and if neither exists this is `undefined` (document tools
+     * then report that the target is not ready instead of silently editing the
+     * page the user navigated to).
+     */
+    const agentEditor = useMemo<Editor | undefined>(() => {
+        if (!targetPage) return editor
+        const claimed = getAgentEditor(targetPage.pageId)?.editor as Editor | undefined
+        if (claimed) return claimed
+        const handle = offscreenHandle && isSamePage(offscreenHandle.pageId, targetPage.pageId)
+            ? offscreenHandle
+            : offscreenTargetsRef.current.get(String(targetPage.pageId))
+        if (handle && isLiveEditor(handle.editor)) return handle.editor as Editor
+        const livePageId = getPageNavigationBridge()?.getCurrentPage()?.pageId
+        if (editor && isSamePage(livePageId, targetPage.pageId)) return editor
+        return undefined
+        // claimVersion is the registry's change signal; reading the registry is
+        // not reactive on its own.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [targetPage, editor, offscreenHandle, claimVersion])
     const agentEditorRef = useRef<Editor | undefined>(editor)
     agentEditorRef.current = agentEditor
 
@@ -428,10 +537,11 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
         // (a READ collaboration invitation) even before an editor is bound.
         const pageTarget = resolveAgentPageTarget(boundId ?? null)
         if (pageTarget && pageTarget.canEdit === false) return false
-        const claimed = boundId ? claimedEditorsRef.current.get(String(boundId)) : undefined
-        const target = (claimed ?? offscreenHandleRef.current?.editor ?? editor) as Editor | undefined
+        // Exact binding only: a read-only visible editor for another page must
+        // not veto (or authorize) the target document.
+        const target = agentEditorRef.current as Editor | undefined
         return !target || target.isEditable !== false
-    }, [editor])
+    }, [])
 
     // ─── Change tracking ──────────────────────────────────────────
     const [tracking, setTracking] = useState(false)
@@ -452,7 +562,7 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
     /** Stable getter: the SDK and every tool execution read the LIVE binding. */
     const getSessionBinding = useCallback(() => sessionBindingRef.current, [])
 
-    const { getCatalog, rebindEditor, resolveTools, isReadOnlyTool, needsEditor } = useCapabilityProviders(agentEditor, {
+    const { getCatalog, rebindEditor, resolveTools, isReadOnlyTool, needsEditor } = useCapabilityProviders(agentEditor ?? null, {
         onUserChoiceRequest: handleUserChoiceRequest,
         sessionBinding: getSessionBinding,
     })
@@ -492,45 +602,55 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
     )
 
     useEffect(() => {
+        const livePageId = (): string | undefined => {
+            const id = getPageNavigationBridge()?.getCurrentPage()?.pageId
+            return id === undefined || id === null ? undefined : String(id)
+        }
+        /** The exact editor for a page, if one is already resident. */
+        const readyEditorForPage = (page: SessionPageBindingPage): any | null => {
+            const pageId = String(page.pageId)
+            const claimed = getAgentEditor(pageId)?.editor
+            if (isLiveEditor(claimed)) return claimed
+            if (isSamePage(livePageId(), pageId) && isLiveEditor(editor)) return editor
+            const handle = offscreenTargetsRef.current.get(pageId)
+            if (handle && isLiveEditor(handle.editor)) return handle.editor
+            return null
+        }
+        const recordOf = (page: SessionPageBindingPage): ChatTargetPage => ({
+            pageId: String(page.pageId),
+            title: page.title || '',
+            spaceId: page.spaceId,
+        })
+
         const binding: SessionPageBinding = {
             bindPage: (page) => { bindTargetPage(page) },
             getBoundPage: () => (boundPageRef.current ? { ...boundPageRef.current } : null),
-            // A visible editor claims the page: the hidden session for it was
-            // just destroyed, so the live tool map MUST follow the visible
-            // editor. Otherwise every document tool — including every editor
-            // plugin's tools — keeps pointing at the dead off-screen instance and
-            // silently stops working.
+            // Claims are app-global now (agent-editor-registry); these two remain
+            // for hosts that express the claim through the binding. The pane and
+            // floating window register directly, so a claim is visible even when
+            // this conversation did not exist yet.
             claimEditor: (pageId, claimedEditor) => {
                 claimEditor(pageId, claimedEditor)
-                const boundId = boundPageRef.current?.pageId
-                if (boundId === undefined || String(boundId) !== String(pageId)) return
-                offscreenHandleRef.current = null
-                setOffscreenHandle(null)
-                setTargetStatus('current')
-                rebindEditor(claimedEditor)
             },
-            // The visible editor is gone. If it was the conversation target,
-            // re-acquire a hidden session so the target keeps a live editor for
-            // its own document (falling back to the open page would silently
-            // point the tools at the wrong document).
             releaseEditor: (pageId, releasedEditor) => {
                 releaseEditor(pageId, releasedEditor)
-                const bound = boundPageRef.current
-                if (!bound || String(bound.pageId) !== String(pageId)) return
-                void switchEditTarget(bound).then(({ handle }) => {
-                    if (!handle) return
-                    offscreenHandleRef.current = handle
-                    setOffscreenHandle(handle)
-                    setTargetStatus('ready')
-                    rebindEditor(handle.editor)
-                }).catch(() => { /* fall back to the visible editor */ })
             },
-            openPageWindow: (pageId) => onOpenPageWindow(String(pageId)),
+            openPageWindow: (pageId) => {
+                const id = String(pageId)
+                // Opening a page in the conversation's editor window is a user
+                // act of focusing it: make it the target, otherwise the window
+                // shows one page while the tools keep editing another.
+                if (!isSamePage(boundPageRef.current?.pageId, id)) {
+                    bindTargetPage({ pageId: id })
+                }
+                onOpenPageWindow(id)
+            },
             editPage: async (page) => {
+                const pageId = String(page.pageId)
                 // A visible editor (side pane / floating window) owns this page:
                 // use it directly instead of acquiring a hidden second writer.
-                const claimed = claimedEditorsRef.current.get(String(page.pageId))
-                if (claimed) {
+                const claimed = getAgentEditor(pageId)?.editor
+                if (isLiveEditor(claimed)) {
                     rebindEditor(claimed)
                     offscreenHandleRef.current = null
                     setOffscreenHandle(null)
@@ -538,93 +658,137 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
                     const record = bindTargetPage(page)
                     return { ...record, editor: claimed }
                 }
+                // The page is already on screen: its visible editor is the target.
+                if (isSamePage(livePageId(), pageId)) {
+                    if (!editor || !isLiveEditor(editor)) {
+                        throw new Error(documentTargetUnavailableMessage({ pageId, title: page.title }))
+                    }
+                    rebindEditor(editor)
+                    offscreenHandleRef.current = null
+                    setOffscreenHandle(null)
+                    setTargetStatus('current')
+                    const record = bindTargetPage(page)
+                    return { ...record, editor }
+                }
                 const { record, handle } = await switchEditTarget(page)
-                const targetEditor = (handle?.editor as Editor) ?? editor
+                if (!handle?.editor) {
+                    // `switchEditTarget` only returns no handle for the visible
+                    // page (handled above), so this is an unusable target.
+                    throw new Error(documentTargetUnavailableMessage({ pageId, title: record.title }))
+                }
+                const targetEditor = handle.editor as Editor
                 // Rebind built-in AND plugin tools to the target editor in one
                 // synchronous step so document tools later in the same backend
                 // batch already act on it — no stale-editor window.
                 rebindEditor(targetEditor)
                 offscreenHandleRef.current = handle
-                if (handle) {
-                    setOffscreenHandle(handle)
-                    setTargetStatus('ready')
-                } else {
-                    setOffscreenHandle(null)
-                    setTargetStatus('current')
-                }
+                setOffscreenHandle(handle)
+                setTargetStatus('ready')
                 bindTargetPage(record)
                 return { ...record, editor: targetEditor }
             },
             getEditor: () => {
-                const boundId = boundPageRef.current?.pageId
-                const claimed = boundId ? claimedEditorsRef.current.get(String(boundId)) : undefined
-                return claimed ?? (offscreenHandleRef.current?.editor as Editor) ?? editor
+                const bound = boundPageRef.current
+                if (!bound) {
+                    return isLiveEditor(editor) ? editor : null
+                }
+                // Never fall back to the visible editor when it is a DIFFERENT
+                // page: that is the silent wrong-document write.
+                return readyEditorForPage(bound)
             },
+            // Cross-page actions get an editor without moving the conversation
+            // target (see SessionPageBinding#getEditorForPage).
+            getEditorForPage: async (page) => resolveSharedEditorForPage(recordOf(page)),
             // ─── Per-agent (delegated child) targeting ───────────────
             getPageFor,
             getEditorFor: (owner: string) => {
                 // A forked private document wins: its tools must act on the
                 // agent's own copy, never the shared page.
                 const privateDoc = getAgentDocumentBridge()?.get(owner)?.editor
-                if (privateDoc) return privateDoc
-                const handle = ownerHandlesRef.current.get(owner)
-                if (handle?.editor) return handle.editor
-                const target = ownerTargetsRef.current.get(owner)
-                if (target) {
-                    const claimed = claimedEditorsRef.current.get(String(target.pageId))
-                    if (claimed) return claimed
-                    const currentPageId = getPageNavigationBridge()?.getCurrentPage()?.pageId
-                    if (currentPageId !== undefined && String(currentPageId) === String(target.pageId)) {
-                        return editor
-                    }
-                }
-                // Nothing yet: the async path decides (fork on writes, live page
-                // for reads).
-                return null
-            },
-            // The synchronous lookup above cannot acquire; when a child has a
-            // target but no editor yet (it pointed at the page the user had open
-            // and the user navigated away), wait for its own session instead of
-            // silently letting its tools hit the conversation document.
-            getEditorForAsync: async (owner: string, options?: { mutating?: boolean }) => {
-                const docBridge = getAgentDocumentBridge()
-                const existing = docBridge?.get(owner)?.editor
-                if (existing) return existing
-
+                if (isLiveEditor(privateDoc)) return privateDoc
                 const target = ownerTargetsRef.current.get(owner) ?? boundPageRef.current
                 if (!target) return null
-                // Read-only work reads the live page: no fork, no snapshot cost,
-                // and no staleness for research-style children.
-                if (!options?.mutating || !docBridge) return null
-
-                const source = await resolveSharedEditorForPage(target)
-                if (!source) return null
-                try {
-                    const handle = await docBridge.fork(
-                        owner,
-                        String(target.pageId),
-                        source,
-                        target.title,
-                    )
-                    ownerTargetsRef.current.set(owner, target)
-                    return handle.editor
-                } catch (error) {
-                    // Over the fork cap (or a bad source): degrade to the shared
-                    // document, which the write lease still serializes.
-                    console.warn('[agent] private document unavailable, using the shared document:', error)
-                    return null
+                const claimed = getAgentEditor(target.pageId)?.editor
+                if (isLiveEditor(claimed)) return claimed
+                if (isSamePage(livePageId(), target.pageId) && isLiveEditor(editor)) return editor
+                const handle = ownerHandlesRef.current.get(owner)
+                if (handle && isLiveEditor(handle.editor)) return handle.editor
+                // A child that never retargeted may share the conversation's
+                // lease for the same page (the write lease still serializes).
+                if (isSamePage(boundPageRef.current?.pageId, target.pageId)) {
+                    const shared = offscreenTargetsRef.current.get(String(target.pageId))
+                    if (shared && isLiveEditor(shared.editor)) return shared.editor
                 }
+                // Nothing yet: the async path acquires/forks the exact editor.
+                return null
+            },
+            // Resolve the EXACT editor for a target, acquiring or forking when
+            // needed. Never resolves to another page's editor: a child with a
+            // target but no editor used to receive the parent's document here.
+            getEditorForAsync: async (
+                owner: string | null | undefined,
+                options?: { mutating?: boolean },
+            ) => {
+                if (owner) {
+                    const docBridge = getAgentDocumentBridge()
+                    const existing = docBridge?.get(owner)?.editor
+                    if (isLiveEditor(existing)) return existing
+                    const target = ownerTargetsRef.current.get(owner) ?? boundPageRef.current
+                    if (!target) return null
+                    const ready = readyEditorForPage(target)
+                    if (ready) return ready
+                    const source = await resolveSharedEditorForPage(target)
+                    if (!isLiveEditor(source)) {
+                        throw new Error(documentTargetUnavailableMessage(target))
+                    }
+                    if (options?.mutating && docBridge) {
+                        try {
+                            const handle = await docBridge.fork(
+                                owner,
+                                String(target.pageId),
+                                source,
+                                target.title,
+                            )
+                            ownerTargetsRef.current.set(owner, target)
+                            return handle.editor
+                        } catch (error) {
+                            // Over the fork cap (or a bad source): degrade to the
+                            // shared document for THIS page, which the write lease
+                            // still serializes. Never to the parent's document.
+                            console.warn('[agent] private document unavailable, using the shared document:', error)
+                        }
+                    }
+                    return source
+                }
+
+                const target = boundPageRef.current
+                if (!target) {
+                    // No explicit target: the visible editor is the implicit one.
+                    return isLiveEditor(editor) ? editor : null
+                }
+                const ready = readyEditorForPage(target)
+                if (ready) return ready
+                const { handle } = await switchEditTarget(target)
+                if (!handle || !isLiveEditor(handle.editor)) {
+                    throw new Error(documentTargetUnavailableMessage(target))
+                }
+                // Keep the surface/render state in sync with what the tool batch
+                // is using, even when the acquisition was triggered from a call.
+                offscreenHandleRef.current = handle
+                setOffscreenHandle(handle)
+                setTargetStatus('ready')
+                rebindEditor(handle.editor)
+                return handle.editor
             },
             editPageFor: async (owner: string, page: SessionPageBindingPage) => {
-                const target: ChatTargetPage = {
-                    pageId: String(page.pageId),
-                    title: page.title || '',
-                    spaceId: page.spaceId,
-                }
+                const target = recordOf(page)
                 ownerTargetsRef.current.set(owner, target)
                 const docBridge = getAgentDocumentBridge()
                 const source = await resolveSharedEditorForPage(target)
-                if (docBridge && source) {
+                if (!isLiveEditor(source)) {
+                    throw new Error(documentTargetUnavailableMessage(target))
+                }
+                if (docBridge) {
                     try {
                         const handle = await docBridge.fork(owner, target.pageId, source, target.title)
                         return { ...target, editor: handle.editor }
@@ -632,7 +796,6 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
                         console.warn('[agent] private document unavailable, using the shared document:', error)
                     }
                 }
-                if (!source) throw new Error('离屏编辑器不可用')
                 // Degraded path: the shared editor for that page (+ write lease).
                 return { ...target, editor: source }
             },
@@ -647,20 +810,36 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
                         if (docBridge.get(owner)?.editor === targetEditor) return { ...target }
                     }
                 }
+                // A claimed editor names its page directly, regardless of which
+                // surface mounted it or which conversation is focused.
+                const claim = findAgentEditor(targetEditor)
+                if (claim) {
+                    return { pageId: claim.pageId, title: claim.title, spaceId: claim.spaceId }
+                }
                 for (const [owner, handle] of ownerHandlesRef.current) {
                     if (handle?.editor === targetEditor) {
                         const target = ownerTargetsRef.current.get(owner)
                         if (target) return { ...target }
                     }
                 }
-                // A child bound to the page the user has open uses the visible
-                // editor, which the parent may share: resolving by *page* keeps
-                // both agents on the same (correct) document.
+                for (const [pageId, handle] of offscreenTargetsRef.current) {
+                    if (handle?.editor === targetEditor) {
+                        const target = boundPageRef.current
+                        return {
+                            pageId,
+                            title: isSamePage(target?.pageId, pageId) ? target?.title : undefined,
+                            spaceId: isSamePage(target?.pageId, pageId) ? target?.spaceId : undefined,
+                        }
+                    }
+                }
+                // The route's visible editor: only the CURRENT page describes it.
                 if (targetEditor === editor) {
-                    const currentPageId = getPageNavigationBridge()?.getCurrentPage()?.pageId
-                    if (currentPageId !== undefined) {
-                        for (const target of ownerTargetsRef.current.values()) {
-                            if (String(target.pageId) === String(currentPageId)) return { ...target }
+                    const current = getPageNavigationBridge()?.getCurrentPage()
+                    if (current?.pageId !== undefined && current.pageId !== null) {
+                        return {
+                            pageId: String(current.pageId),
+                            title: current.title,
+                            spaceId: current.spaceId === undefined ? undefined : String(current.spaceId),
                         }
                     }
                 }
@@ -675,16 +854,66 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
         // document's tools.
         setSessionPageBinding(binding)
         return () => clearSessionPageBinding(binding)
-    }, [active, bindTargetPage, switchEditTarget, rebindEditor, editor, getPageFor, acquireOwnerTarget, releaseOwner, claimEditor, releaseEditor, onOpenPageWindow])
+    }, [active, bindTargetPage, switchEditTarget, rebindEditor, editor, getPageFor, releaseOwner, claimEditor, releaseEditor, onOpenPageWindow, resolveSharedEditorForPage])
+
+    /**
+     * A visible editor claimed a page (side pane / floating window). Hand the
+     * page over immediately: drop the conversation's and every delegated
+     * agent's hidden lease for it, and rebind the live tool map to the claimant.
+     *
+     * This is subscription-driven rather than routed through the binding
+     * callback because the pane can mount before this conversation, on another
+     * surface, or while a different tab is focused.
+     */
+    useEffect(() => {
+        if (claimVersion === 0) return
+        const claimed = new Set<string>()
+        for (const pageId of offscreenTargetsRef.current.keys()) {
+            if (getAgentEditor(pageId)?.editor) claimed.add(String(pageId))
+        }
+        for (const target of ownerTargetsRef.current.values()) {
+            if (getAgentEditor(target.pageId)?.editor) claimed.add(String(target.pageId))
+        }
+        if (claimed.size === 0) return
+
+        for (const pageId of claimed) {
+            releaseTarget(pageId)
+            if (isSamePage(offscreenHandleRef.current?.pageId, pageId)) {
+                offscreenHandleRef.current = null
+                setOffscreenHandle(null)
+            }
+            for (const [owner, target] of ownerTargetsRef.current) {
+                if (!isSamePage(target.pageId, pageId)) continue
+                const handle = ownerHandlesRef.current.get(owner)
+                if (!handle) continue
+                ownerHandlesRef.current.delete(owner)
+                try { handle.release() } catch { /* already released */ }
+            }
+            // Destroy only after every holder is gone (destroyIdle refuses held
+            // sessions), so a page that is on screen stops having a hidden writer
+            // at once instead of after the idle timeout.
+            getOffscreenEditorBridge()?.destroyIdle?.(pageId)
+        }
+
+        const bound = boundPageRef.current
+        const claim = bound ? getAgentEditor(bound.pageId)?.editor : null
+        if (claim) {
+            setTargetStatus('current')
+            rebindEditor(claim)
+        }
+    }, [claimVersion, releaseTarget, rebindEditor])
+
     const liveCurrentPageId = getPageNavigationBridge()?.getCurrentPage()?.pageId
     // A conversation without an explicit @-page target rides on the page the
     // user has open, so waiting for that context only makes sense while a
     // document editor is actually published.
     const currentPagePending = !!editor && !currentPage?.pageId
+    const targetClaimed = !!(targetPageId && getAgentEditor(targetPageId)?.editor)
     const targetToolsReady = !targetPageId
         ? !currentPagePending
-        : ((targetStatus === 'current' && String(liveCurrentPageId) === targetPageId)
-            || (targetStatus === 'ready' && offscreenHandle?.pageId === targetPageId))
+        : ((targetStatus === 'current'
+                && (isSamePage(liveCurrentPageId, targetPageId) || targetClaimed))
+            || (targetStatus === 'ready' && isSamePage(offscreenHandle?.pageId, targetPageId)))
 
     // A child bound to the page the user had open must keep its own editor if
     // the user navigates away: promote it to an off-screen session eagerly, so
@@ -729,8 +958,11 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
         // batch watchdog exists to survive, not a reason to wait for it.
         needsEditor,
         // A page switch transiently unbinds the editor; defer a pending tool
-        // batch until the new editor is published instead of failing it.
-        autoExecuteTools: targetToolsReady && !!agentEditor,
+        // batch until the new editor is published instead of failing it. The
+        // 'error' case stays open so recovery tools (editPage / createPage) and
+        // target-resolving document tools run and report a real error instead of
+        // silently parking the run until the watchdog fires.
+        autoExecuteTools: targetToolsReady || targetStatus === 'error',
         spaceId: targetPage?.spaceId ?? currentPage?.spaceId,
         pageId: targetPage?.pageId ?? currentPage?.pageId,
         // THIS conversation's binding — never the module-level singleton, which

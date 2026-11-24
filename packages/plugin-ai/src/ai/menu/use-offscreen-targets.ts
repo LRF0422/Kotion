@@ -2,8 +2,11 @@ import { useCallback, useRef } from "react"
 import type { MutableRefObject } from "react"
 import {
     getAgentDocumentBridge,
+    getAgentEditor,
     getOffscreenEditorBridge,
     getPageNavigationBridge,
+    registerAgentEditor,
+    unregisterAgentEditor,
 } from "@kn/common"
 import type {
     AgentDocumentMergeReport,
@@ -42,13 +45,6 @@ export function useOffscreenTargets({ editor, boundPageRef }: UseOffscreenTarget
     const ownerHandlesRef = useRef<Map<string, OffscreenEditorHandle>>(new Map())
     /** In-flight per-agent acquisitions, so concurrent calls share one lease. */
     const ownerAcquireRef = useRef<Map<string, Promise<{ pageId: string; editor: any }>>>(new Map())
-    /**
-     * Pages claimed by a host-rendered editor (the side pane / the floating
-     * window). While a page is claimed, THAT editor is its single writer: the
-     * hidden off-screen session is destroyed and every agent path resolves to it.
-     */
-    const claimedEditorsRef = useRef<Map<string, any>>(new Map())
-
     const releaseTarget = useCallback((pageId: string) => {
         const handle = offscreenTargetsRef.current.get(pageId)
         if (!handle) return
@@ -56,10 +52,17 @@ export function useOffscreenTargets({ editor, boundPageRef }: UseOffscreenTarget
         try { handle.release() } catch { /* already released */ }
     }, [])
 
-    /** A visible editor claims the page; hand authorship over to it. */
+    /**
+     * A visible editor claims the page; hand authorship over to it.
+     *
+     * The claim itself lives in the app-global `agent-editor-registry` so a
+     * pane opened before this conversation (or on another surface) is visible
+     * too. These methods remain on the binding for callers that express the
+     * claim through it, but the registry is the authority.
+     */
     const claimEditor = useCallback((pageId: string, claimed: any) => {
         const id = String(pageId)
-        claimedEditorsRef.current.set(id, claimed)
+        registerAgentEditor({ pageId: id, editor: claimed, role: 'pane' })
         // Drop the conversation's hidden lease and destroy that session now: the
         // idle timeout would otherwise leave two writers for up to a minute.
         releaseTarget(id)
@@ -68,10 +71,7 @@ export function useOffscreenTargets({ editor, boundPageRef }: UseOffscreenTarget
 
     /** The claim is gone (pane closed / switched page). */
     const releaseEditor = useCallback((pageId: string, claimed: any) => {
-        const id = String(pageId)
-        if (claimedEditorsRef.current.get(id) === claimed) {
-            claimedEditorsRef.current.delete(id)
-        }
+        unregisterAgentEditor(pageId, claimed)
     }, [])
 
     const releaseAllTargets = useCallback(() => {
@@ -112,9 +112,22 @@ export function useOffscreenTargets({ editor, boundPageRef }: UseOffscreenTarget
                 title: page.title || '',
                 spaceId: page.spaceId,
             }
+            ownerTargetsRef.current.set(owner, target)
+
+            // A visible editor (side pane / floating window) is the page's single
+            // writer and wins over any hidden lease, including one this owner
+            // already held before the editor appeared.
+            const claimed = getAgentEditor(pageId)?.editor
+            if (claimed) {
+                const existingClaimed = ownerHandlesRef.current.get(owner)
+                if (existingClaimed) {
+                    ownerHandlesRef.current.delete(owner)
+                    try { existingClaimed.release() } catch { /* already released */ }
+                }
+                return { ...target, editor: claimed }
+            }
             const existing = ownerHandlesRef.current.get(owner)
             if (existing && existing.pageId === pageId) {
-                ownerTargetsRef.current.set(owner, target)
                 return { ...target, editor: existing.editor }
             }
             if (existing) {
@@ -123,17 +136,11 @@ export function useOffscreenTargets({ editor, boundPageRef }: UseOffscreenTarget
                 ownerHandlesRef.current.delete(owner)
                 try { existing.release() } catch { /* already released */ }
             }
-            ownerTargetsRef.current.set(owner, target)
 
             const currentPageId = getPageNavigationBridge()?.getCurrentPage()?.pageId
             if (currentPageId !== undefined && String(currentPageId) === pageId) {
                 // The page the user has open is its own editor.
                 return { ...target, editor }
-            }
-            const claimed = claimedEditorsRef.current.get(pageId)
-            if (claimed) {
-                // A visible editor owns this page: the child shares it (no lease).
-                return { ...target, editor: claimed }
             }
             const bridge = getOffscreenEditorBridge()
             if (!bridge) throw new Error('离屏编辑器不可用')
@@ -191,7 +198,7 @@ export function useOffscreenTargets({ editor, boundPageRef }: UseOffscreenTarget
      */
     const resolveSharedEditorForPage = useCallback(async (page: ChatTargetPage): Promise<any | null> => {
         // A claimed (visible) editor wins over any hidden session.
-        const claimed = claimedEditorsRef.current.get(String(page.pageId))
+        const claimed = getAgentEditor(page.pageId)?.editor
         if (claimed) return claimed
         const currentPageId = getPageNavigationBridge()?.getCurrentPage()?.pageId
         if (currentPageId !== undefined && String(currentPageId) === String(page.pageId)) return editor
@@ -254,7 +261,6 @@ export function useOffscreenTargets({ editor, boundPageRef }: UseOffscreenTarget
         ownerTargetsRef,
         ownerHandlesRef,
         ownerAcquireRef,
-        claimedEditorsRef,
         claimEditor,
         releaseEditor,
         releaseTarget,

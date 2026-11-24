@@ -33,6 +33,10 @@ export const knowledgeBaseSkill = {
 
 你能直接操作知识库的页面与空间。**先查再写**：不要凭记忆编 pageId / spaceId，用下面这些工具拿到真实 id。
 
+## 先确认目标
+- 不确定当前操作对象是什么（页面 / 文件 / 表格 / 选区……）时，先调 \`getCurrentTarget\`。它返回对象的 kind、id、能力与可用工具；**不要假设一定是页面**。
+- 本技能只描述页面这一种对象；文件、表格等插件对象用它们自己 provider 报出的 operations，或调用对应插件的工具。
+
 ## 找
 - \`listSpaces\`：有哪些空间（知识库），以及当前在哪个。不确定往哪写时先看这个。
 - \`getSpacePageTree\`：某个空间的页面层级（父子关系、标题、pageId）。要"放在 XX 下面/旁边"时用它定位参照页面。

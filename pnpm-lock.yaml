@@ -1480,9 +1480,15 @@ importers:
       frimousse:
         specifier: ^0.2.0
         version: 0.2.0(react@19.2.4)
+      hast-util-sanitize:
+        specifier: ^5.0.2
+        version: 5.0.2
       jotai:
         specifier: ^2.13.1
         version: 2.18.0(@babel/core@7.29.0)(@babel/template@7.28.6)(@types/react@18.3.28)(react@19.2.4)
+      katex:
+        specifier: ^0.16.33
+        version: 0.16.33
       lodash.throttle:
         specifier: ^4.1.1
         version: 4.1.1

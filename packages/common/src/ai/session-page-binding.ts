@@ -52,29 +52,65 @@ export interface SessionPageBinding {
      * tools fall back to `bindPage` when it is missing.
      */
     editPage?: (page: SessionPageBindingPage) => Promise<SessionPageEditorTarget>
-    /** The editor backing the conversation's current edit target, if ready. */
+    /**
+     * The editor backing the conversation's current edit target, if ready.
+     *
+     * This is the EXACT target editor, not "whatever the user is looking at":
+     * when the conversation targets page A and the visible editor shows page B,
+     * this must return null (or A's lease) — never B's editor. Consumers that
+     * need a last-resort editor for a non-document tool may use the surface's
+     * own visible editor; document tools must not.
+     */
     getEditor?: () => any | null
     /**
      * The page a given agent edits. `owner` is a delegated sub-run id, or
      * null/undefined for the conversation's default (main agent) target.
      * Used by the client executor to scope the write lease per document.
+     *
+     * Implementations return null when the conversation has no explicit page
+     * target (the visible page is then the implicit target).
      */
     getPageFor?: (owner?: string | null) => SessionPageBindingPage | null
     /**
      * The editor a given agent's document tools must act on. Returns null when
-     * the owner has no dedicated editor — callers then fall back to the
-     * conversation target. A child that never retargeted inherits the parent's.
+     * the owner has no ready editor — callers then resolve it through
+     * {@link getEditorForAsync}. A child that never retargeted inherits the
+     * conversation target.
      */
     getEditorFor?: (owner: string) => any | null
     /**
-     * Async variant used when the owner has a target but no editor yet (it was
-     * pointed at the page the user had open and the user navigated away):
-     * resolves once that agent's own editor is ready. Returning the wrong
-     * document silently is worse than waiting. `mutating` tells the host a
-     * write is coming, which is the signal to fork a private document when the
-     * agent does not have one yet (read-only calls can use the live page).
+     * Async fallback that resolves the EXACT editor for a target page:
+     *
+     * - `owner` = a delegated sub-run id, or null/undefined for the
+     *   conversation's own target.
+     * - `mutating` tells the host a write is coming, which is the signal to
+     *   fork a private document for a delegated agent when it does not have one
+     *   yet (read-only calls can use the shared page).
+     *
+     * `null` means "this binding has no page target at all" (the surface rides
+     * the visible editor). A target page whose editor cannot be materialized
+     * must REJECT with an actionable error — resolving to the parent's or the
+     * visible page's editor silently writes the wrong document, which is the
+     * failure this method exists to stop.
      */
-    getEditorForAsync?: (owner: string, options?: { mutating?: boolean }) => Promise<any | null>
+    getEditorForAsync?: (
+        owner: string | null | undefined,
+        options?: { mutating?: boolean },
+    ) => Promise<any | null>
+    /**
+     * A live editor for an arbitrary page WITHOUT changing the conversation's
+     * edit target.
+     *
+     * Cross-page tool actions (inserting a link into the parent page, editing a
+     * page named by an argument) need an editor, not a target switch. Using
+     * `editPage` for them silently moved the agent's target to whatever page the
+     * tool happened to touch — the "lost target" class of bug. Returns null when
+     * no editor can be obtained; the caller reports that.
+     */
+    getEditorForPage?: (
+        page: SessionPageBindingPage,
+        options?: { mutating?: boolean },
+    ) => Promise<any | null>
     /**
      * Point ONE agent at a page without touching the conversation target: the
      * child gets its own off-screen editor lease and the parent's tools keep

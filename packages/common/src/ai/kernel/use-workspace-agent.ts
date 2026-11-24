@@ -52,6 +52,13 @@ export interface WorkspaceAgentOptions {
      * ships the workspace catalog. Mirrors the editor chat's Ask/Agent toggle.
      */
     mode?: 'ask' | 'agent'
+    /**
+     * The page the conversation's working target names (a page artifact shown
+     * in the side peek). The workspace binds it as the document edit target, so
+     * "open beside" and the agent's tools agree on ONE page. Null/undefined
+     * leaves the current target alone (closing a pane ≠ clearing the target).
+     */
+    focusedPage?: { pageId: string; title?: string; spaceId?: string } | null
     onToolExecution?: OnToolExecution
     /**
      * A background task finished and the agent did not wait for it: the host
@@ -104,7 +111,11 @@ export function useWorkspaceAgent(options: WorkspaceAgentOptions = {}): Workspac
     // The document the agent may work on. Null until it creates or opens a page;
     // `createPage` / `editPage` then acquire that page's hidden editor and this
     // rebinds, which is what makes document and page-scoped plugin tools appear.
-    const target = useWorkspaceDocumentTarget()
+    const target = useWorkspaceDocumentTarget({
+        // Ask mode has no tools, so acquiring a hidden editor for a page just to
+        // answer a question would be a writer nobody asked for.
+        focusedPage: options.mode === 'ask' ? null : options.focusedPage ?? null,
+    })
     const sessionBinding = useMemo(() => () => target.binding, [target.binding])
 
     const providers = useCapabilityProviders(target.editor, {
@@ -112,14 +123,16 @@ export function useWorkspaceAgent(options: WorkspaceAgentOptions = {}): Workspac
         sessionBinding,
     })
 
-    // Workspace scope has no editor, so the frontend's built-in (editor-bound)
-    // tools are excluded: the run is grounded in plugin-declared capabilities
-    // plus the backend's own builtins (web_search, memory, …). Editor tools
-    // arrive through their plugin's declaration instead of failing at call
-    // time. Core-implemented workspace tools declared via `agent.include`
-    // register as plugin tools, so they pass this filter. The rule itself lives
-    // in filter-catalog (and is checked there), because a protocol tool dropped
-    // here is a capability the run was told about but cannot reach.
+    // A workspace run starts with no editor. Non-document, non-plugin tools are
+    // dropped; DOCUMENT tools stay advertised because the run can acquire a
+    // page mid-turn (createPage/editPage) and its tool list is frozen when the
+    // run is created. Execution binds them to the exact target page or fails
+    // with "createPage/editPage first" — a run that starts empty can still write
+    // in the same turn. Core-implemented workspace tools declared via
+    // `agent.include` register as plugin tools and flow through unchanged. The
+    // rule itself lives in filter-catalog (and is checked there), because a
+    // protocol tool dropped here is a capability the run was told about but
+    // cannot reach.
     const hasDocument = target.editor !== null
     const isAvailableTool = useCallback((name: string) => {
         return agentToolAvailableAtScope(providers.toolProvider.getToolMetadata(name), hasDocument)
