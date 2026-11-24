@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Streaming tool-call fragment merging: id-keyed, index-keyed and mixed
@@ -48,5 +50,18 @@ class ToolCallAccumulatorTest {
         assertEquals(2, calls.size());
         assertEquals("{\"task\":\"one\"}", calls.get(0).getArguments());
         assertEquals("{\"task\":\"two\"}", calls.get(1).getArguments());
+    }
+
+    @Test
+    void reportsHalfBuiltCallsSoAResumeCanBeRefused() {
+        ToolCallAccumulator accumulator = new ToolCallAccumulator();
+        assertFalse(accumulator.hasFragments(), "nothing seen yet");
+
+        accumulator.onFragment("call-1", "read_page", "{\"path\":", 0);
+
+        // A fragment is not a complete call, but it IS a reason never to
+        // resume (continue) this stream: its arguments cannot be finished by
+        // asking the model to keep writing.
+        assertTrue(accumulator.hasFragments());
     }
 }

@@ -44,6 +44,11 @@ public class ToolCallAccumulator {
         }
     }
 
+    /** Whether any tool-call fragment has been seen (a call may still be incomplete). */
+    public boolean hasFragments() {
+        return !byIndex.isEmpty() || !byId.isEmpty();
+    }
+
     /** All calls in first-seen order (deduplicated across id/index keys). */
     public List<ToolCallRequest> results() {
         Map<String, ToolCallRequest> seen = new LinkedHashMap<>();

@@ -106,12 +106,12 @@
 - 后果：用户以为只是收起，实际 `cancelRun`；取消瞬间的答案不会再回到会话。
 - 建议：运行中关闭给二次确认，或改成「移到后台」保留 run。
 
-#### P2-5 LLM 首包 120s / 流中空闲 30s → `FAILED/llm_timeout`，有内容后不重试
+#### P2-5 LLM 首包 120s / 流中空闲 30s → `FAILED/llm_timeout`，有内容后不重试（已修复，见第 6 节；以下为修复前行为）
 
 - 证据：`AgentCoreProperties.java:111-113`；`core/llm/LlmGateway.java:88-124`（只在首 chunk 前重试）、`:207-216`（超时异常）；`AgentLoop.java:930-951`（`LlmTimeoutException` → `FAILED`）。
 - 触发：长 reasoning、供应商限流/弱网、共享 provider 饱和。
 - 后果：整轮失败，已生成文本保留但任务不再继续。
-- 建议：对已产生内容的 run 支持「续流」；或把 idle 超时按模型/场景调大（30s 对 reasoning 模型偏紧）。
+- 现状：`LlmGateway` 对「已有内容」的超时改为**续流**重试（见第 6 节），不再整轮判死；idle 超时默认值仍按 provider 特性保留 30s。
 
 #### P2-6 计划审批 / 预算挂起没有 TTL
 
@@ -180,7 +180,7 @@
 
 ---
 
-## 6. 本次修复（2026-11-20）
+## 6. 修复记录（2026-11-20 首轮；2026-11-24 补 P2-5）
 
 > 代码已改，验证见本节末尾。
 
@@ -196,16 +196,17 @@
 | **P2-3** `suspended` 无 runId 时不再永久排队 | 只有 `isActive && runId` 才走 steer；无 runId 时直接 `start()`（或由 P2-1 折叠进正在创建的 run）。 | `ChatConversation.tsx` `submitMessage` |
 | **P1-4** dock 与 `/ai` 共享会话时的双挂载 | 新增 per-conversation surface owner：同一时刻只有一个 surface 驱动（`dock` / `kernel`）。可安全切换的相位（idle / streaming / 终态）主动 `detach()`（只 abort 本地流、释放 RunLock，不取消 run），另一侧 `attach()` 续流；等待工具/审批/计划/预算时保留 owner，另一侧渲染「在另一 surface 运行」提示而不是再挂一个 agent。`/ai` 被路由缓存隐藏时主动让位；dock 在 `/ai` 上让位（且只在 `/ai` 真的挂载了该会话时才让，避免两份 session index 短暂不一致把会话藏起来）。清空/删除也只允许 owner surface 执行，避免在别人的 live run 下删掉引擎 transcript。 | `chat/agent-surface.ts`、`use-session-actions.ts`、`use-editor-agent.ts` `detach`、`ChatConversation.tsx`、`KernelConversation.tsx`、`use-workspace-agent.ts`（persist 改为 true，交接时可接管句柄） |
 | **错误可读性** | 锁冲突文案改为「另一个窗口、标签页或面板」；`classifyError` 对未知错误保留引擎原始 message，不再一律显示「生成失败」。 | `use-editor-agent.ts`、`chat-types.ts` |
+| **P2-5**（2026-11-24）超时不再直接判死，已输出内容可「续流」 | 重试不再只限「首 chunk 之前」：流在已输出内容后超时/断开（首包超时、空闲超时、premature close、429/5xx）时，把已输出文本作为 assistant 消息 + 一条「接着写」的 user 提示再推理一次，只追加新内容、不重放整段回答。次数仍受 `max-attempts` 约束（默认 3），退避沿用 `retry-*-delay-ms`；最终仍失败时错误文案带「已自动重试 N 次」。**收到过 `tool_call` 片段的流不续写**（半截工具调用无法补参数），直接按原逻辑失败。可用 `agent.llm.resume-partial-stream=false` 关闭。 | `LlmGateway.java` `streamInfer` / `withContinuation`、`ToolCallAccumulator.hasFragments`、`AgentCoreProperties.Llm.resumePartialStream`、`application.yml` |
 
 ### 新增/更新的回归检查
 
 - `packages/plugin-ai/src/ai/menu/chat/tab-eviction.check.ts` + `pnpm --filter @kn/plugin-ai check:tabs`：覆盖「不淘汰运行中 tab」「全部在跑时超软上限」「active 不淘汰」。
 - `AgentLoopToolWaitTest.aSpentDeadlineWithoutAnAnswerParksTheRunForResume`：断言超时后是 `SUSPENDED/client_detached`、无 errorCode、pending 仍在。
+- `LlmGatewayTest`：新增「空闲超时后从断点续流，客户端按序收到两段、回答不重复」「有 tool_call 片段时不续流」「关闭开关后不续流」「首包超时用原请求重试而不是加续写提示」「重试次数用尽时错误带已重试次数」「已收到 done 的流不再续写」；原「有内容后不重试」改为「有内容后不重放、只续写」。
 - `packages/plugin-ai/src/ai/menu/chat/agent-surface.check.ts` + `pnpm --filter @kn/plugin-ai check:surface`：覆盖「同一会话只有一个 owner」「非 owner 不能 release」「工具/审批等不安全相位不能交接」「mount 注册/注销」。
 
 ### 本次未改（仍建议排期）
 
-- **P2-5** LLM `idle-timeout-seconds=30`：是否放宽取决于模型/provider，属于配置/产品取舍。
 - **P2-6** 计划审批 / 预算挂起无 TTL：目前仍会一直等待用户；可在产品确认后加 TTL。
 - **P2-7** 事件 2000 条裁剪 / SSE 线程池饱和：属于容量与降级策略。
 - **P2-8** 进程重启 60-75s 空窗 / checkpoint 缺失：需要缩短 reconcile cutoff 或启动即恢复。
@@ -227,8 +228,8 @@ pnpm --filter @kn/plugin-ai build                  # 通过（含 dist 产物）
 JAVA_HOME=../../.toolchain/jdk-17.0.20+8/Contents/Home \
   ../../.toolchain/apache-maven-3.9.9/bin/mvn -o -q \
   -pl knowledge-service/knowledge-agent-skills -am \
-  -Dtest='AgentLoop*Test,DefaultRunSupervisorResumeAckTest' \
-  -Dsurefire.failIfNoSpecifiedTests=false test   # 通过
+  -Dtest='AgentLoop*Test,DefaultRunSupervisorResumeAckTest,LlmGatewayTest' \
+  -Dsurefire.failIfNoSpecifiedTests=false test   # 通过（LlmGatewayTest: 13 tests, 0 failures）
 ```
 
 ---

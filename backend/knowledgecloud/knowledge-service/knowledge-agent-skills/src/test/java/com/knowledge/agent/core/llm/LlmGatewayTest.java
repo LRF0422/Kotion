@@ -1,5 +1,6 @@
 package com.knowledge.agent.core.llm;
 
+import com.knowledge.agent.api.dto.ChatMessage;
 import com.knowledge.agent.core.config.AgentCoreProperties;
 import com.knowledge.agent.llm.LlmClient;
 import com.knowledge.agent.llm.LlmClientFactory;
@@ -7,13 +8,17 @@ import com.knowledge.agent.llm.LlmRequest;
 import com.knowledge.agent.llm.LlmResponse;
 import com.knowledge.agent.llm.StreamChunk;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -68,12 +73,117 @@ class LlmGatewayTest {
     void surfacesIdleTimeoutAsDomainException() {
         AgentCoreProperties properties = new AgentCoreProperties();
         properties.getLlm().setIdleTimeoutSeconds(1);
+        properties.getLlm().setMaxAttempts(1);
         LlmClient client = mock(LlmClient.class);
         when(client.streamChat(any(LlmRequest.class)))
                 .thenReturn(Flux.concat(Flux.just(StreamChunk.content("partial")), Flux.never()));
 
         assertThrows(LlmGateway.LlmTimeoutException.class,
                 () -> gateway(client, properties).streamInfer(request(), null, () -> false));
+    }
+
+    @Test
+    void resumesATimedOutStreamFromTheBreakInsteadOfFailing() {
+        AgentCoreProperties properties = new AgentCoreProperties();
+        properties.getLlm().setIdleTimeoutSeconds(1);
+        properties.getLlm().setRetryBaseDelayMs(0);
+        LlmClient client = mock(LlmClient.class);
+        when(client.streamChat(any(LlmRequest.class))).thenReturn(
+                Flux.concat(Flux.just(StreamChunk.content("Hel")), Flux.never()),
+                Flux.just(StreamChunk.content("lo"), StreamChunk.done("stop")));
+
+        List<String> streamed = new ArrayList<>();
+        LlmResult result = gateway(client, properties).streamInfer(request(),
+                new LlmGateway.Sink() {
+                    @Override
+                    public void onText(String delta) {
+                        streamed.add(delta);
+                    }
+
+                    @Override
+                    public void onReasoning(String delta) {
+                    }
+                }, () -> false);
+
+        // The client saw both halves in order and the answer is not duplicated.
+        assertEquals(Arrays.asList("Hel", "lo"), streamed);
+        assertEquals("Hello", result.getText());
+        assertEquals("stop", result.getFinishReason());
+
+        ArgumentCaptor<LlmRequest> requests = ArgumentCaptor.forClass(LlmRequest.class);
+        verify(client, times(2)).streamChat(requests.capture());
+        List<ChatMessage> messages = requests.getAllValues().get(1).getMessages();
+        ChatMessage partialAnswer = messages.get(messages.size() - 2);
+        assertEquals("assistant", partialAnswer.getRole());
+        assertEquals("Hel", partialAnswer.getContent());
+        ChatMessage nudge = messages.get(messages.size() - 1);
+        assertEquals("user", nudge.getRole());
+        assertTrue(nudge.getContent().contains("继续"), "the continuation must ask the model to keep writing");
+    }
+
+    @Test
+    void neverResumesAStreamWithAHalfBuiltToolCall() {
+        AgentCoreProperties properties = new AgentCoreProperties();
+        properties.getLlm().setIdleTimeoutSeconds(1);
+        properties.getLlm().setRetryBaseDelayMs(0);
+        LlmClient client = mock(LlmClient.class);
+        when(client.streamChat(any(LlmRequest.class))).thenReturn(Flux.concat(
+                Flux.just(StreamChunk.toolCall("call_1", "read_page", "{\"path\":", 0)), Flux.never()));
+
+        assertThrows(LlmGateway.LlmTimeoutException.class,
+                () -> gateway(client, properties).streamInfer(request(), null, () -> false));
+        verify(client, times(1)).streamChat(any(LlmRequest.class));
+    }
+
+    @Test
+    void stopsResumingWhenThePartialStreamResumeIsDisabled() {
+        AgentCoreProperties properties = new AgentCoreProperties();
+        properties.getLlm().setIdleTimeoutSeconds(1);
+        properties.getLlm().setResumePartialStream(false);
+        LlmClient client = mock(LlmClient.class);
+        when(client.streamChat(any(LlmRequest.class)))
+                .thenReturn(Flux.concat(Flux.just(StreamChunk.content("partial")), Flux.never()));
+
+        assertThrows(LlmGateway.LlmTimeoutException.class,
+                () -> gateway(client, properties).streamInfer(request(), null, () -> false));
+        verify(client, times(1)).streamChat(any(LlmRequest.class));
+    }
+
+    @Test
+    void reportsHowManyTimesATimedOutAnswerWasRetried() {
+        AgentCoreProperties properties = new AgentCoreProperties();
+        properties.getLlm().setIdleTimeoutSeconds(1);
+        properties.getLlm().setRetryBaseDelayMs(0);
+        properties.getLlm().setMaxAttempts(2);
+        LlmClient client = mock(LlmClient.class);
+        when(client.streamChat(any(LlmRequest.class)))
+                .thenReturn(Flux.concat(Flux.just(StreamChunk.content("partial")), Flux.never()));
+
+        LlmGateway.LlmTimeoutException error = assertThrows(LlmGateway.LlmTimeoutException.class,
+                () -> gateway(client, properties).streamInfer(request(), null, () -> false));
+        assertTrue(error.getMessage().contains("已自动重试 1 次"), error.getMessage());
+        verify(client, times(2)).streamChat(any(LlmRequest.class));
+    }
+
+    @Test
+    void retriesAFirstTokenTimeoutWithTheOriginalRequest() {
+        AgentCoreProperties properties = new AgentCoreProperties();
+        properties.getLlm().setTimeoutSeconds(1);
+        properties.getLlm().setRetryBaseDelayMs(0);
+        LlmClient client = mock(LlmClient.class);
+        when(client.streamChat(any(LlmRequest.class))).thenReturn(
+                Flux.never(),
+                Flux.just(StreamChunk.content("ok"), StreamChunk.done("stop")));
+
+        LlmResult result = gateway(client, properties).streamInfer(request(), null, () -> false);
+
+        assertEquals("ok", result.getText());
+        ArgumentCaptor<LlmRequest> requests = ArgumentCaptor.forClass(LlmRequest.class);
+        verify(client, times(2)).streamChat(requests.capture());
+        // Nothing was streamed before the timeout, so the retry is the same
+        // request — no "continue" nudge is invented for an empty turn.
+        assertTrue(requests.getAllValues().get(1).getMessages().isEmpty(),
+                "a no-output retry must not append a continuation nudge");
     }
 
     @Test
@@ -92,14 +202,33 @@ class LlmGatewayTest {
     }
 
     @Test
-    void neverRestartsAnInferenceThatAlreadyStreamedContent() {
+    void continuesAPartialAnswerInsteadOfReplayingIt() {
         AgentCoreProperties properties = new AgentCoreProperties();
         properties.getLlm().setRetryBaseDelayMs(0);
         LlmClient client = mock(LlmClient.class);
         // Content is delivered first, the retriable error a moment later — the
         // realistic shape of a stream that dies after it started answering.
+        when(client.streamChat(any(LlmRequest.class))).thenReturn(
+                Flux.concat(
+                        Flux.just(StreamChunk.content("partial")),
+                        Mono.delay(Duration.ofMillis(50)).thenMany(Flux.<StreamChunk>error(tooManyRequests()))),
+                Flux.just(StreamChunk.content(" continued"), StreamChunk.done("stop")));
+
+        LlmResult result = gateway(client, properties).streamInfer(request(), null, () -> false);
+
+        assertEquals("partial continued", result.getText());
+        verify(client, times(2)).streamChat(any(LlmRequest.class));
+    }
+
+    @Test
+    void doesNotContinueAnAnswerThatAlreadyFinished() {
+        AgentCoreProperties properties = new AgentCoreProperties();
+        properties.getLlm().setRetryBaseDelayMs(0);
+        LlmClient client = mock(LlmClient.class);
+        // A trailing transport error after `done` must not trigger a
+        // "continue" turn on an answer that is already complete.
         when(client.streamChat(any(LlmRequest.class))).thenReturn(Flux.concat(
-                Flux.just(StreamChunk.content("partial")),
+                Flux.just(StreamChunk.content("answer"), StreamChunk.done("stop")),
                 Mono.delay(Duration.ofMillis(50)).thenMany(Flux.<StreamChunk>error(tooManyRequests()))));
 
         assertThrows(WebClientResponseException.class,

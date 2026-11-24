@@ -144,6 +144,13 @@ public class AgentCoreProperties {
         /** Base / cap for exponential retry backoff on 429/5xx/network errors (ms). */
         private long retryBaseDelayMs = 500;
         private long retryMaxDelayMs = 10_000;
+        /**
+         * Resume a stream that broke AFTER it started answering by asking the
+         * model to continue from the break, instead of failing the run. The
+         * partial text is never replayed, so the transcript stays continuous.
+         * Disabled automatically for a half-built tool call.
+         */
+        private boolean resumePartialStream = true;
     }
 
     /** Tool execution settings. */

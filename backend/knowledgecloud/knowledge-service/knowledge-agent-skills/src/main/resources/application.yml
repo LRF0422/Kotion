@@ -66,10 +66,16 @@ agent:
     max-concurrent-calls: 12
     provider-max-concurrent: {}
     acquire-timeout-seconds: 180
-    # Retry 429 / 5xx / connect / timeout failures before any content arrived.
+    # Retry 429 / 5xx / connect / timeout failures. Before any content arrived
+    # the request is retried as-is; after content it is continued instead of
+    # replayed (see resume-partial-stream below).
     max-attempts: 3
     retry-base-delay-ms: 500
     retry-max-delay-ms: 10000
+    # 已经输出了一部分内容之后流才断（首包超时、空闲超时、连接被掐）：把已输出内容
+    # 作为 assistant 消息发给模型，让它从断点接着写，而不是把整轮判失败。
+    # 已经收到 tool_call 片段的流不会续写（半截工具调用无法接着补），直接报错。
+    resume-partial-stream: true
   tool:
     timeout-seconds: 180
     max-parallel: 5

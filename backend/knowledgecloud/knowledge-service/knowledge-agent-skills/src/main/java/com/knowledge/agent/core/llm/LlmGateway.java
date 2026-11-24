@@ -1,5 +1,6 @@
 package com.knowledge.agent.core.llm;
 
+import com.knowledge.agent.api.dto.ChatMessage;
 import com.knowledge.agent.llm.LlmClient;
 import com.knowledge.agent.llm.LlmClientFactory;
 import com.knowledge.agent.llm.LlmRequest;
@@ -17,7 +18,10 @@ import java.net.ConnectException;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
+import java.util.List;
 import java.util.concurrent.TimeoutException;
 import java.util.function.BooleanSupplier;
 
@@ -39,14 +43,34 @@ import java.util.function.BooleanSupplier;
  *       (and optionally per provider), so many agents cannot stampede one
  *       provider and turn every call into a timeout;</li>
  *   <li>retriable failures (429 / 5xx / connect / timeout / premature close)
- *       are retried with exponential backoff, honouring {@code Retry-After},
- *       but only before any content has arrived — a half-streamed answer is
- *       never duplicated.</li>
+ *       are retried with exponential backoff, honouring {@code Retry-After};
+ *       a stream that dies after it started answering is <em>resumed</em>
+ *       (partial answer + “continue from the break”) rather than replayed, so
+ *       a stalled first packet or a 30s reasoning silence no longer fails the
+ *       whole run. A half-built tool call is never resumed.</li>
  * </ul>
  */
 @Slf4j
 @Component
 public class LlmGateway {
+
+    /**
+     * Appended as the last user message when a stream breaks mid-answer. The
+     * partial text is already in the transcript (and already streamed to the
+     * client), so the model must continue it instead of starting over.
+     */
+    static final String CONTINUATION_NUDGE =
+            "（系统提示：上一条回复在生成途中因网络中断被截断，只写出了上面这些内容。"
+                    + "请紧接着继续写，不要重复已经写过的内容，也不要重新开头或解释原因。）";
+
+    /**
+     * Continuation prompt when the break happened before any visible text was
+     * produced (only reasoning had streamed). There is no partial answer to
+     * attach, so the model is simply asked to finish the turn.
+     */
+    static final String CONTINUATION_NUDGE_NO_TEXT =
+            "（系统提示：上一次推理在输出思考内容时被网络中断。请继续推理并完成回答，"
+                    + "不要重复已经输出过的内容。）";
 
     private final LlmClientFactory clientFactory;
     private final AgentCoreProperties properties;
@@ -90,37 +114,124 @@ public class LlmGateway {
         if (isCancelled(cancelled)) {
             return cancelledResult();
         }
+        // Output survives a resumed attempt: text/reasoning deltas already
+        // reached the client, so the next attempt continues this answer.
+        LlmResult result = new LlmResult();
+        result.setText("");
+        result.setReasoningText("");
+
         for (int attempt = 1; ; attempt++) {
+            // No output yet (e.g. the very first packet timed out): retry the
+            // original request. A continuation nudge only makes sense once
+            // something was actually streamed.
+            LlmInferRequest attemptRequest = attempt == 1 || !hasOutput(result)
+                    ? request : withContinuation(request, result);
             LlmClient client = clientFactory.getClientForModel(request.getModel());
             LlmConcurrencyGate.Permit permit = acquirePermit(client, cancelled);
             if (permit == null) {
-                return cancelledResult();
+                result.setFinishReason("cancelled");
+                return result;
             }
             try {
-                return streamInferOnce(client, request, sink, cancelled, firstTokenSeconds, idleSeconds);
+                LlmResult attemptResult = streamInferOnce(
+                        client, attemptRequest, sink, cancelled, firstTokenSeconds, idleSeconds);
+                appendOutput(result, attemptResult);
+                result.setFinishReason(attemptResult.getFinishReason());
+                result.setToolCalls(attemptResult.getToolCalls());
+                return result;
             } catch (StreamFailure failure) {
+                appendOutput(result, failure.partial());
                 Throwable cause = failure.getCause() == null ? failure : failure.getCause();
-                boolean canRetry = !failure.anyChunk()
+                boolean canRetry = !isCancelled(cancelled)
                         && attempt < maxAttempts
-                        && !isCancelled(cancelled)
                         && isRetriable(cause);
-                if (!canRetry) {
+                // A break after content cannot be replayed (the client already
+                // rendered it); it can only be continued, and only when no
+                // tool-call fragment was being assembled.
+                boolean partialOutput = failure.anyChunk();
+                boolean canResume = partialOutput
+                        && !failure.anyToolCall()
+                        && !failure.completed()
+                        && properties.getLlm().isResumePartialStream();
+                if (!canRetry || (partialOutput && !canResume)) {
                     RuntimeException runtime = cause instanceof RuntimeException
                             ? (RuntimeException) cause
                             : new IllegalStateException(cause);
                     if (isTimeout(runtime)) {
-                        throw new LlmTimeoutException(timeoutMessage(firstTokenSeconds, idleSeconds), runtime);
+                        throw new LlmTimeoutException(
+                                timeoutMessage(firstTokenSeconds, idleSeconds, attempt), runtime);
                     }
                     throw runtime;
                 }
                 long delay = retryDelayMillis(attempt, cause);
-                log.warn("LLM stream failed before first chunk (attempt {}/{}): {} — retrying in {}ms",
-                        attempt, maxAttempts, cause.getMessage(), delay);
+                if (partialOutput) {
+                    log.warn("LLM stream broke after {} chars of output (attempt {}/{}): {} — "
+                                    + "continuing from the break in {}ms",
+                            length(result.getText()), attempt, maxAttempts,
+                            cause.getMessage(), delay);
+                } else {
+                    log.warn("LLM stream failed before first chunk (attempt {}/{}): {} — retrying in {}ms",
+                            attempt, maxAttempts, cause.getMessage(), delay);
+                }
                 sleepQuietly(delay);
             } finally {
                 permit.close();
             }
         }
+    }
+
+    /**
+     * Turn the original request into a continuation: the partial answer becomes
+     * an assistant message and a short user nudge asks the model to keep going.
+     * Never used when a tool call was half-built (its arguments cannot be
+     * resumed); the caller fails that case instead.
+     */
+    private static LlmInferRequest withContinuation(LlmInferRequest request, LlmResult partial) {
+        List<ChatMessage> messages = new ArrayList<>(
+                request.getMessages() == null ? Collections.<ChatMessage>emptyList() : request.getMessages());
+        boolean hasText = partial.getText() != null && !partial.getText().isEmpty();
+        if (hasText) {
+            messages.add(ChatMessage.builder().role("assistant").content(partial.getText()).build());
+        }
+        messages.add(ChatMessage.builder().role("user")
+                .content(hasText ? CONTINUATION_NUDGE : CONTINUATION_NUDGE_NO_TEXT)
+                .build());
+        return LlmInferRequest.builder()
+                .model(request.getModel())
+                .messages(messages)
+                .toolsJson(request.getToolsJson())
+                .toolChoice(request.getToolChoice())
+                .temperature(request.getTemperature())
+                .maxTokens(request.getMaxTokens())
+                .build();
+    }
+
+    /** Merge one attempt's output (text/reasoning/usage) into the whole answer. */
+    private static void appendOutput(LlmResult target, LlmResult source) {
+        if (source == null) {
+            return;
+        }
+        if (source.getText() != null && !source.getText().isEmpty()) {
+            target.setText((target.getText() == null ? "" : target.getText()) + source.getText());
+        }
+        if (source.getReasoningText() != null && !source.getReasoningText().isEmpty()) {
+            target.setReasoningText((target.getReasoningText() == null ? "" : target.getReasoningText())
+                    + source.getReasoningText());
+        }
+        target.setPromptTokens(target.getPromptTokens() + source.getPromptTokens());
+        target.setCompletionTokens(target.getCompletionTokens() + source.getCompletionTokens());
+        target.setCachedPromptTokens(target.getCachedPromptTokens() + source.getCachedPromptTokens());
+    }
+
+    private static int length(String value) {
+        return value == null ? 0 : value.length();
+    }
+
+    private static boolean hasOutput(LlmResult result) {
+        String text = result.getText();
+        String reasoning = result.getReasoningText();
+        return (text != null && !text.isEmpty())
+                || (reasoning != null && !reasoning.isEmpty());
     }
 
     /** One provider attempt; failures are wrapped so the caller can see partial output. */
@@ -131,6 +242,7 @@ public class LlmGateway {
         LlmResult result = new LlmResult();
         ToolCallAccumulator accumulator = new ToolCallAccumulator();
         boolean anyChunk = false;
+        boolean completed = false;
 
         try {
             Iterator<StreamChunk> iterator = withStreamTimeouts(
@@ -179,6 +291,7 @@ public class LlmGateway {
                 } else if ("done".equals(type)) {
                     if (chunk.getFinishReason() != null) {
                         result.setFinishReason(chunk.getFinishReason());
+                        completed = true;
                     }
                     // Compatibility for clients that still attach usage to done.
                     applyUsage(result, chunk.getUsage());
@@ -187,7 +300,8 @@ public class LlmGateway {
                 }
             }
         } catch (RuntimeException e) {
-            throw new StreamFailure(e, anyChunk);
+            result.setToolCalls(accumulator.results());
+            throw new StreamFailure(e, anyChunk, accumulator.hasFragments(), completed, result);
         }
 
         result.setToolCalls(accumulator.results());
@@ -211,8 +325,9 @@ public class LlmGateway {
                 chunk -> Mono.delay(Duration.ofSeconds(idleSeconds)));
     }
 
-    private static String timeoutMessage(int firstTokenSeconds, int idleSeconds) {
-        return "LLM 流式响应超时：首包 " + firstTokenSeconds + "s、空闲 " + idleSeconds + "s 内无数据";
+    private static String timeoutMessage(int firstTokenSeconds, int idleSeconds, int attempts) {
+        String message = "LLM 流式响应超时：首包 " + firstTokenSeconds + "s、空闲 " + idleSeconds + "s 内无数据";
+        return attempts > 1 ? message + "（已自动重试 " + (attempts - 1) + " 次）" : message;
     }
 
     /** True when the failure (or any cause) is a stream/socket timeout. */
@@ -319,19 +434,40 @@ public class LlmGateway {
     }
 
     /**
-     * A failed attempt. Carries whether any chunk arrived, so the retry loop
-     * never restarts an inference that already streamed output to the client.
+     * A failed attempt. Carries whether any chunk arrived and whether a tool
+     * call was being assembled, so the retry loop can continue a partial answer
+     * but never replays a half-built tool call.
      */
     private static final class StreamFailure extends RuntimeException {
         private final boolean anyChunk;
+        private final boolean anyToolCall;
+        private final boolean completed;
+        private final LlmResult partial;
 
-        private StreamFailure(RuntimeException cause, boolean anyChunk) {
+        private StreamFailure(RuntimeException cause, boolean anyChunk, boolean anyToolCall,
+                              boolean completed, LlmResult partial) {
             super(cause.getMessage(), cause);
             this.anyChunk = anyChunk;
+            this.anyToolCall = anyToolCall;
+            this.completed = completed;
+            this.partial = partial;
         }
 
         private boolean anyChunk() {
             return anyChunk;
+        }
+
+        private boolean anyToolCall() {
+            return anyToolCall;
+        }
+
+        /** A terminal {@code done} chunk already arrived; the answer is complete. */
+        private boolean completed() {
+            return completed;
+        }
+
+        private LlmResult partial() {
+            return partial;
         }
     }
 
