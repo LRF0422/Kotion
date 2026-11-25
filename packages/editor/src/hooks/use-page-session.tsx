@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { isPageInTrashError } from '@kn/common'
 import type { PageSessionState } from '@kn/common'
 import { closeSession, decideHeartbeat, shouldWaitForHost } from './session-rules'
 import { toRev } from './rev'
@@ -131,6 +132,16 @@ export interface UsePageSessionReturn {
    * stays false for the whole lifetime of a guest session.
    */
   sessionEnded: boolean
+  /**
+   * The page lives in the trash: the server refused this client's claim /
+   * heartbeat with PAGE_IN_TRASH.
+   *
+   * Terminal for this editor. A trashed page accepts no write and no lease, so
+   * the heartbeat stops instead of re-asking every tick, and there is no state
+   * of this session left to recover. Restoring the page is a new session (the
+   * surface renders a restore action and remounts the editor).
+   */
+  trashed: boolean
   /** Claim again now, rather than waiting for the next heartbeat. */
   reclaim: () => Promise<void>
   /**
@@ -176,6 +187,10 @@ export function usePageSession(options: UsePageSessionOptions): UsePageSessionRe
   const [hostDisconnected, setHostDisconnected] = useState(false)
   const [sessionEnded, setSessionEnded] = useState(false)
   const [claimFailed, setClaimFailed] = useState(false)
+  const [trashed, setTrashed] = useState(false)
+  // Read from inside the interval, whose cleanup must not keep asking a page
+  // the server has already refused (the release is refused too).
+  const trashedRef = useRef(false)
 
   const onClaimRef = useRef(onClaim)
   onClaimRef.current = onClaim
@@ -231,9 +246,17 @@ export function usePageSession(options: UsePageSessionOptions): UsePageSessionRe
     try {
       apply(await onClaimRef.current(clientId))
     } catch (err) {
-      // A failed claim is not fatal: the next heartbeat answers NONE and the
-      // `claim` decision re-tries (see `decideHeartbeat`). Going read-only on one
-      // dropped request would make a flaky network look like somebody else is
+      // A trashed page is not a dropped request: every retry is refused the same
+      // way, and the surface renders the restore action instead of a session.
+      if (isPageInTrashError(err)) {
+        trashedRef.current = true
+        setTrashed(true)
+        console.warn('[usePageSession] page is in the trash; session stopped')
+        return
+      }
+      // Any other failed claim is not fatal: the next heartbeat answers NONE and
+      // the `claim` decision re-tries (see `decideHeartbeat`). Going read-only on
+      // one dropped request would make a flaky network look like somebody else is
       // holding the page. Flagged so the caller can say "not saved yet" instead
       // of showing a confident "Saved".
       setClaimFailed(true)
@@ -321,6 +344,14 @@ export function usePageSession(options: UsePageSessionOptions): UsePageSessionRe
 
       apply(next)
     } catch (err) {
+      if (isPageInTrashError(err)) {
+        // Not a network blip: the page is gone from the reader's world. Stop
+        // renewing — the lease is meaningless and the request repeats forever.
+        trashedRef.current = true
+        setTrashed(true)
+        console.warn('[usePageSession] page is in the trash; session stopped')
+        return
+      }
       // Swallowed on purpose. A dropped heartbeat must not change our role:
       // the server is the only thing that can demote us, and it needs a
       // whole lease period of silence to do it.
@@ -329,7 +360,7 @@ export function usePageSession(options: UsePageSessionOptions): UsePageSessionRe
   }, [canHost, guest, clientId, apply, claim])
 
   useEffect(() => {
-    if (!enabled || !clientId) return
+    if (!enabled || !clientId || trashed) return
     liveRef.current = true
 
     // Take the lease straight away when allowed — an invited guest included,
@@ -364,11 +395,12 @@ export function usePageSession(options: UsePageSessionOptions): UsePageSessionRe
       liveRef.current = false
       clearInterval(timer)
       window.removeEventListener('pagehide', release)
+      if (trashedRef.current) return
       // Orderly close: hand the lease back so the next person to open the page
       // is not made to wait out the TTL.
       release()
     }
-  }, [enabled, clientId, canHost, heartbeatMs, claim, beat])
+  }, [enabled, clientId, canHost, heartbeatMs, claim, beat, trashed])
 
   // Host departure. Awareness is the fast signal; the server is the verdict.
   //
@@ -408,10 +440,12 @@ export function usePageSession(options: UsePageSessionOptions): UsePageSessionRe
       lastHostSelfRef.current = false
       sessionEndedRef.current = false
       lastHostNameRef.current = null
+      trashedRef.current = false
       setState({ role: 'NONE', alive: false })
       setHostDisconnected(false)
       setSessionEnded(false)
       setClaimFailed(false)
+      setTrashed(false)
     }
   }, [enabled])
 
@@ -424,6 +458,7 @@ export function usePageSession(options: UsePageSessionOptions): UsePageSessionRe
     serverRev: toRev(state.rev),
     hostDisconnected,
     sessionEnded,
+    trashed,
     reclaim: claim,
     refresh: beat,
     claimFailed,

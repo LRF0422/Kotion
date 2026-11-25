@@ -25,6 +25,7 @@ import {
     type BlockStoreRead,
 } from "@kn/editor"
 import {
+    isPageInTrashError,
     useSelector,
     useSpacePageService,
     getAccessToken,
@@ -79,6 +80,11 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
     )
 
     const [page, setPage] = useState<PageRecord | null>(null)
+    // The page was deleted while the agent was working on it. A hidden editor
+    // has no visible surface to explain a refused save, and its write-lease
+    // heartbeat would keep asking the server forever, so the session is failed
+    // here and the editor torn down (which releases the lease).
+    const [trashed, setTrashed] = useState(false)
     const [editorInstance, setEditorInstance] = useState<Editor | null>(null)
     const [contentReady, setContentReady] = useState(false)
     const [synced, setSynced] = useState(false)
@@ -110,6 +116,14 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
             })
             .catch((err: unknown) => {
                 if (cancelled) return
+                if (isPageInTrashError(err)) {
+                    setTrashed(true)
+                    offscreenSessionManager.markError(
+                        pageId,
+                        new Error('The page is in the trash; restore it before editing'),
+                    )
+                    return
+                }
                 offscreenSessionManager.markError(
                     pageId,
                     err instanceof Error ? err : new Error('Failed to load page'),
@@ -117,6 +131,22 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
             })
         return () => { cancelled = true }
     }, [pageId, service, target, canEdit])
+
+    // The delete may happen in this app (change event) or elsewhere (the server
+    // answers PAGE_IN_TRASH on the next read/write/heartbeat). Either way this
+    // hidden session can no longer legitimately edit the page.
+    useEffect(() => {
+        const isThisPage = (id: unknown) => String(id) === String(pageId)
+        const unsubscribers = [
+            service.changes.subscribe('page.trashed', ({ payload }) => {
+                if (isThisPage(payload.pageId)) setTrashed(true)
+            }),
+            service.changes.subscribe('page.deleted', ({ payload }) => {
+                if (isThisPage(payload.pageId)) setTrashed(true)
+            }),
+        ]
+        return () => unsubscribers.forEach((unsubscribe) => unsubscribe())
+    }, [pageId, service])
 
     // ---- Collaboration provider (same room as any visible editor of this page) ----
     useEffect(() => {
@@ -198,8 +228,15 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
                     rev: toRev(document.rev),
                 })
             })
-            .catch(() => {
+            .catch((err: unknown) => {
                 if (cancelled) return
+                if (isPageInTrashError(err)) {
+                    setTrashed(true)
+                    offscreenSessionManager.markError(
+                        pageId,
+                        new Error('The page is in the trash; restore it before editing'),
+                    )
+                }
                 setBlockDoc(null)
             })
         return () => { cancelled = true }
@@ -237,7 +274,10 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
         pageId,
         enabled: !!page && !page.pageType && contentReady && !!seed?.trusted
             // A read-only page must not be edited through the agent.
-            && canEdit,
+            && canEdit
+            // A trashed page refuses the write lease; asking every heartbeat
+            // only produced a permanent failure stream.
+            && !trashed,
         // A room that never synced holds a placeholder, not the page; writing it
         // would reconcile the page down to nothing.
         collaborationSynced: synced,
@@ -249,6 +289,23 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
         reconcileOnly: syncTimedOut && !synced,
         documents,
     })
+
+    // Either signal means the page can no longer be edited: the local change
+    // event, or the server's refusal on the next claim/heartbeat.
+    const pageTrashed = trashed || session.trashed
+
+    // Report it to the manager once. Dropping the session is what unmounts this
+    // hidden editor, releases the page, and fails the agent's pending edit with
+    // a reason instead of leaving it waiting on a page nobody can write.
+    const trashedReportedRef = useRef(false)
+    useEffect(() => {
+        if (!pageTrashed || trashedReportedRef.current) return
+        trashedReportedRef.current = true
+        offscreenSessionManager.markError(
+            pageId,
+            new Error('The page is in the trash; restore it before editing'),
+        )
+    }, [pageTrashed, pageId])
 
     // Declare the session role in awareness (same field/value as the main
     // PageEditor, so the two cannot drift).
@@ -328,7 +385,7 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
         return { name: userInfo?.name || 'Anonymous', color: CURSOR_COLORS[hash % CURSOR_COLORS.length], id: userInfo?.id }
     }, [userInfo?.id, userInfo?.name])
 
-    if (!page || page.pageType || !seed || !(synced || syncTimedOut)) return null
+    if (pageTrashed || !page || page.pageType || !seed || !(synced || syncTimedOut)) return null
 
     return (
         <div style={{ width: 800, height: 600, overflow: 'hidden' }}>

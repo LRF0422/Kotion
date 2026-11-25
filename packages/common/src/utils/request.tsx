@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { getAccessToken } from './auth'
 import { i18n } from '../locales'
+import { PAGE_IN_TRASH_ERROR_CODE } from '../domain/space-page/errors'
 
 // Allow callers to opt out of the global error toast for expected failures
 // (e.g. probing a plugin config that has never been saved yet).
@@ -26,6 +27,21 @@ export { setSessionExpiredHandler, resetSessionExpiredGuard }
 // ---------------------------------------------------------------------------
 // Configurable toast handler (injected by the app to avoid @kn/ui dependency)
 // ---------------------------------------------------------------------------
+
+/**
+ * A page in the trash is a *state* the app renders (the restore card), not a
+ * failure worth announcing. Two reasons it must not toast:
+ *
+ * - the state has its own surface, so the message ("restore it before opening
+ *   it") only repeats what the card already says;
+ * - the write-lease heartbeat of any editor still attached to that page asks
+ *   the server every 10s, and a page trashed elsewhere (another client, or a
+ *   live row under a trashed parent) has no local event to stop it. Toasting
+ *   each refusal turned one trashed page into an endless error stream.
+ *
+ * The rejection still reaches the caller — only the toast is withheld.
+ */
+const isTrashedPageCode = (code: unknown): boolean => code === PAGE_IN_TRASH_ERROR_CODE
 
 type ToastFn = (message: string, options?: { position?: string; duration?: number }) => void
 
@@ -250,7 +266,7 @@ axiosInstance.interceptors.response.use(
             // backend localizes it from Accept-Language, so a non-empty message
             // is never replaced by a generic one.
             const message = msg || statusFallbackMessage(res.status)
-            if (!res.config.silent) {
+            if (!res.config.silent && !isTrashedPageCode(code)) {
                 _toastError(message, { position: 'top-center' })
             }
             if ((ENTITLEMENT_ERROR_CODES as readonly number[]).includes(code)) {
@@ -306,7 +322,7 @@ axiosInstance.interceptors.response.use(
         const backendCode = (response?.data as { code?: unknown } | undefined)?.code
         const code = typeof backendCode === 'number' ? backendCode : httpStatus
 
-        if (!config?.silent) {
+        if (!config?.silent && !isTrashedPageCode(code)) {
             _toastError(message, { position: 'top-right', duration: 2000 })
         }
 

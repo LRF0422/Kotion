@@ -329,6 +329,42 @@ async function main(): Promise<void> {
     const draftPage = await service.pages.getPage("604");
     assert(draftPage.status === "DRAFT", "string page statuses pass through", draftPage.status);
 
+    // ---- a refused page publishes the trash transition exactly once ----
+    // The backend answers PAGE_IN_TRASH(3017) on every page-scoped route once a
+    // page is deleted (or its ancestor is). Only the surface that deleted it
+    // used to know; the page's other editors — a floating window, the hidden
+    // agent editor, a descendant's tab — kept renewing their write lease and
+    // re-reporting the refusal every 10s. The service now turns the refusal into
+    // the change event those surfaces already listen for, once per page.
+    {
+        const refusal = Object.assign(
+            new Error("This page is in the trash. Restore it before opening it."),
+            { code: 3017, status: 400 },
+        );
+        const refusing: SpacePageTransport = {
+            async execute(): Promise<never> { throw refusal; },
+            keepalive() { return Promise.resolve(); },
+        };
+        const refusingService = createSpacePageService(refusing);
+        const trashed: string[] = [];
+        refusingService.changes.subscribe("page.trashed", (change) => trashed.push(String(change.payload.pageId)));
+
+        await refusingService.pages.getPage("701").catch(() => undefined);
+        await refusingService.documents.heartbeatPageSession({ pageId: "701", clientId: "c1" }).catch(() => undefined);
+        assert(trashed.join(",") === "701", "a trashed-page refusal publishes exactly one change", trashed);
+
+        // A different refusal code is not a trash signal.
+        const other = Object.assign(new Error("Page not found"), { code: 3001 });
+        const otherService = createSpacePageService({
+            async execute(): Promise<never> { throw other; },
+            keepalive() { return Promise.resolve(); },
+        } as SpacePageTransport);
+        const otherEvents: string[] = [];
+        otherService.changes.subscribe("page.trashed", (change) => otherEvents.push(String(change.payload.pageId)));
+        await otherService.pages.getPage("702").catch(() => undefined);
+        assert(otherEvents.length === 0, "PAGE_NOT_FOUND is not a trash transition", otherEvents);
+    }
+
     console.log("core space-page service checks passed");
 }
 

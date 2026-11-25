@@ -33,3 +33,9 @@ export const createSpacePageChangeStream = () => {
 export const request = { defaults: { baseURL: "/api" } };
 export const getBearerHeader = (): Record<string, string> => ({});
 export const handleRequest = async (): Promise<never> => { throw new Error("default transport is not used by this check"); };
+
+// Mirrors @kn/common's domain/space-page/errors.ts: the backend's WikiException
+// code for a page (or a live row under a trashed ancestor) that is refused.
+export const PAGE_IN_TRASH_ERROR_CODE = 3017;
+export const isPageInTrashError = (error: unknown): boolean =>
+    !!error && typeof error === "object" && (error as { code?: unknown }).code === PAGE_IN_TRASH_ERROR_CODE;

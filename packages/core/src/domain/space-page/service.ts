@@ -1,5 +1,6 @@
 import {
     createSpacePageChangeStream,
+    isPageInTrashError,
     normalizeId,
     type PageMetadata,
     type SpacePageService,
@@ -88,6 +89,48 @@ export const createSpacePageService = (
         onSuccess();
     };
 
+    /**
+     * Pages the server has told us live in the trash.
+     *
+     * The backend refuses a trashed page — and any live row under a trashed
+     * ancestor — with PAGE_IN_TRASH on every page-scoped route, but it only
+     * names the page in the *request*: the response is a plain business error.
+     * Without this, only the surface that performed the delete knows, so an
+     * editor left open elsewhere (another window, the hidden agent editor, an
+     * invited guest, or a descendant whose parent was trashed) kept renewing its
+     * write lease against a dead page forever.
+     *
+     * Publishing the refusal as the change event every surface already listens
+     * for turns the server's answer into the missing local signal. Deduplicated
+     * because the lease asks every 10s: listeners (tree, tabs, recent list,
+     * editor hosts) need one transition, not one per heartbeat.
+     */
+    const trashedPages = new Set<string>();
+    /** A page answered normally again — restored by this client or by someone else. */
+    const notePageLive = (pageId: string): void => {
+        trashedPages.delete(pageId);
+    };
+    const noteTrashed = (pageId: string, error: unknown): void => {
+        if (!isPageInTrashError(error) || trashedPages.has(pageId)) return;
+        trashedPages.add(pageId);
+        changes.emit("page.trashed", { pageId, spaceId: pageSpaces.get(pageId) });
+    };
+    /**
+     * Run one page-scoped call and publish "this page is in the trash" when the
+     * server refuses it for that reason. The rejection itself is unchanged:
+     * callers keep their own error handling.
+     */
+    const pageScoped = async <T>(pageId: string, run: () => Promise<T>): Promise<T> => {
+        try {
+            const value = await run();
+            notePageLive(pageId);
+            return value;
+        } catch (error) {
+            noteTrashed(pageId, error);
+            throw error;
+        }
+    };
+
     const spaces: SpacePageService["spaces"] = {
         async getSpace(spaceId) {
             return normalizeSpace(await execute(E.spaces.detail, { id: normalizeId(spaceId, "spaceId") }));
@@ -142,10 +185,14 @@ export const createSpacePageService = (
 
     const pages: SpacePageService["pages"] = {
         async getPage(pageId) {
-            return rememberPage(normalizePageRecord(await execute(E.pages.content, { id: normalizeId(pageId, "pageId") })));
+            const p = normalizeId(pageId, "pageId");
+            return pageScoped(p, async () =>
+                rememberPage(normalizePageRecord(await execute(E.pages.content, { id: p }))));
         },
         async getPageMetadata(pageId) {
-            return rememberPage(normalizePageMetadata(await execute(E.pages.content, { id: normalizeId(pageId, "pageId") })));
+            const p = normalizeId(pageId, "pageId");
+            return pageScoped(p, async () =>
+                rememberPage(normalizePageMetadata(await execute(E.pages.content, { id: p }))));
         },
         async getPageTree(request) {
             const { spaceId, ...query } = request;
@@ -226,11 +273,15 @@ export const createSpacePageService = (
         async movePageToTrash(pageId) {
             const id = normalizeId(pageId, "pageId");
             await execute(E.pages.trash, { id });
+            // Marked here too so a lease heartbeat racing the delete cannot
+            // publish the same transition a second time.
+            trashedPages.add(id);
             changes.emit("page.trashed", { pageId: id, spaceId: pageSpaces.get(id) });
         },
         async restorePageFromTrash(pageId) {
             const id = normalizeId(pageId, "pageId");
             await execute(E.pages.restoreFromTrash, { id }, {});
+            notePageLive(id);
             changes.emit("page.restoredFromTrash", { pageId: id, spaceId: pageSpaces.get(id) });
         },
         async favoritePage(pageId) {
@@ -365,23 +416,103 @@ export const createSpacePageService = (
     };
 
     const documents: SpacePageService["documents"] = {
-        async getPageDocument(pageId) { const p = normalizeId(pageId, "pageId"); const document = normalizeDocument(await execute(E.documents.document, { id: p })); return { ...document, pageId: document.pageId ?? p }; },
-        async getPageHistory(request) { const { pageId, ...query } = request; return normalizePagedResult(await execute(E.documents.history, { id: normalizeId(pageId, "pageId"), ...query }), (item: any) => item?.rev == null ? undefined : normalizeHistoryItem(item)); },
-        async getPageHistoryDocument(pageId, rev) { return normalizeDocumentSnapshot(await execute(E.documents.historyDocument, { id: normalizeId(pageId, "pageId"), rev })); },
-        async createPageCheckpoint(pageId, clientId, label) { const p = normalizeId(pageId, "pageId"); const raw = await execute(E.documents.checkpoint, { id: p }, { clientId, ...(label == null ? {} : { label }) }); const history = raw == null ? undefined : normalizeHistoryItem(raw); changes.emit("page.history.changed", { pageId: p, history, rev: history?.rev }); return history; },
-        async restorePageRevision(request) { const p = normalizeId(request.pageId, "pageId"); const result = normalizeOperationResult(await execute(E.documents.restoreRevision, { id: p }, { targetRev: request.targetRev, clientId: request.clientId })); changes.emit("page.history.changed", { pageId: p, rev: result.rev ?? request.targetRev }); changes.emit("page.document.changed", { pageId: p, spaceId: pageSpaces.get(p), scope: "content", result }); return result; },
-        async claimPageSession(request) { const p = normalizeId(request.pageId, "pageId"); const state = normalizeSession(await execute(E.documents.claimSession, { id: p }, { clientId: request.clientId })); changes.emit("page.session.changed", { pageId: p }); return state; },
-        async heartbeatPageSession(request) { const p = normalizeId(request.pageId, "pageId"); return normalizeSession(await execute(E.documents.heartbeatSession, { id: p }, { clientId: request.clientId })); },
-        releasePageSession(request) { const p = normalizeId(request.pageId, "pageId"); return keepalive(transport.keepalive({ endpoint: E.documents.releaseSession, pathParams: { id: p }, body: { clientId: request.clientId } }), () => changes.emit("page.session.changed", { pageId: p })); },
+        async getPageDocument(pageId) {
+            const p = normalizeId(pageId, "pageId");
+            // The block store is the editor's seed. A refusal here is how a page
+            // trashed elsewhere (or under a trashed ancestor) is discovered by a
+            // tab that was already open, so it must publish the transition.
+            const document = await pageScoped(p, async () =>
+                normalizeDocument(await execute(E.documents.document, { id: p })));
+            return { ...document, pageId: document.pageId ?? p };
+        },
+        async getPageHistory(request) {
+            const { pageId, ...query } = request;
+            const p = normalizeId(pageId, "pageId");
+            return pageScoped(p, async () =>
+                normalizePagedResult(
+                    await execute(E.documents.history, { id: p, ...query }),
+                    (item: any) => item?.rev == null ? undefined : normalizeHistoryItem(item),
+                ));
+        },
+        async getPageHistoryDocument(pageId, rev) {
+            const p = normalizeId(pageId, "pageId");
+            return pageScoped(p, async () =>
+                normalizeDocumentSnapshot(await execute(E.documents.historyDocument, { id: p, rev })));
+        },
+        async createPageCheckpoint(pageId, clientId, label) {
+            const p = normalizeId(pageId, "pageId");
+            const raw = await pageScoped(p, async () =>
+                execute(E.documents.checkpoint, { id: p }, { clientId, ...(label == null ? {} : { label }) }));
+            const history = raw == null ? undefined : normalizeHistoryItem(raw);
+            changes.emit("page.history.changed", { pageId: p, history, rev: history?.rev });
+            return history;
+        },
+        async restorePageRevision(request) {
+            const p = normalizeId(request.pageId, "pageId");
+            const result = normalizeOperationResult(await pageScoped(p, async () =>
+                execute(E.documents.restoreRevision, { id: p }, { targetRev: request.targetRev, clientId: request.clientId })));
+            changes.emit("page.history.changed", { pageId: p, rev: result.rev ?? request.targetRev });
+            changes.emit("page.document.changed", { pageId: p, spaceId: pageSpaces.get(p), scope: "content", result });
+            return result;
+        },
+        async claimPageSession(request) {
+            const p = normalizeId(request.pageId, "pageId");
+            const state = normalizeSession(await pageScoped(p, async () =>
+                execute(E.documents.claimSession, { id: p }, { clientId: request.clientId })));
+            changes.emit("page.session.changed", { pageId: p });
+            return state;
+        },
+        async heartbeatPageSession(request) {
+            const p = normalizeId(request.pageId, "pageId");
+            // The heartbeat is the loudest path: every open editor asks again
+            // every 10s, so a page trashed elsewhere used to be re-announced
+            // forever. One rejection is enough to publish the state.
+            return normalizeSession(await pageScoped(p, async () =>
+                execute(E.documents.heartbeatSession, { id: p }, { clientId: request.clientId })));
+        },
+        releasePageSession(request) {
+            const p = normalizeId(request.pageId, "pageId");
+            return keepalive(
+                transport.keepalive({ endpoint: E.documents.releaseSession, pathParams: { id: p }, body: { clientId: request.clientId } }),
+                () => changes.emit("page.session.changed", { pageId: p }),
+            );
+        },
         // Document writes are SILENT: a revision conflict is expected under
         // concurrent editors and is recovered by reconciling, so the global
         // toast would only report a self-healing retry. The editor owns the
-        // save-status UI.
-        async applyPageOperations(pageId, request) { const p = normalizeId(pageId, "pageId"); const result = normalizeOperationResult(await execute(E.documents.applyOperations, { id: p }, request, { silent: true })); changes.emit("page.document.changed", { pageId: p, spaceId: pageSpaces.get(p), scope: "content", result }); return result; },
-        async reconcilePageDocument(pageId, request) { const p = normalizeId(pageId, "pageId"); const result = normalizeOperationResult(await execute(E.documents.reconcile, { id: p }, request, { silent: true })); changes.emit("page.document.changed", { pageId: p, spaceId: pageSpaces.get(p), scope: "content", result }); return result; },
-        flushPageOperations(pageId, request) { const p = normalizeId(pageId, "pageId"); return keepalive(transport.keepalive({ endpoint: E.documents.applyOperations, pathParams: { id: p }, body: request }), () => changes.emit("page.document.changed", { pageId: p, spaceId: pageSpaces.get(p), scope: "content" })); },
-        async claimPageSeed(request) { const p = normalizeId(request.pageId, "pageId"); const raw = await execute(E.documents.claimSeed, { id: p, clientId: request.clientId }, null); return raw === true; },
-        releasePageSeed(request) { const p = normalizeId(request.pageId, "pageId"); return transport.keepalive({ endpoint: E.documents.releaseSeed, pathParams: { id: p }, query: { clientId: request.clientId } }); },
+        // save-status UI. A trashed page still has to be published from here:
+        // the write is the first thing a still-open editor attempts.
+        async applyPageOperations(pageId, request) {
+            const p = normalizeId(pageId, "pageId");
+            const result = normalizeOperationResult(await pageScoped(p, async () =>
+                execute(E.documents.applyOperations, { id: p }, request, { silent: true })));
+            changes.emit("page.document.changed", { pageId: p, spaceId: pageSpaces.get(p), scope: "content", result });
+            return result;
+        },
+        async reconcilePageDocument(pageId, request) {
+            const p = normalizeId(pageId, "pageId");
+            const result = normalizeOperationResult(await pageScoped(p, async () =>
+                execute(E.documents.reconcile, { id: p }, request, { silent: true })));
+            changes.emit("page.document.changed", { pageId: p, spaceId: pageSpaces.get(p), scope: "content", result });
+            return result;
+        },
+        flushPageOperations(pageId, request) {
+            const p = normalizeId(pageId, "pageId");
+            return keepalive(
+                transport.keepalive({ endpoint: E.documents.applyOperations, pathParams: { id: p }, body: request }),
+                () => changes.emit("page.document.changed", { pageId: p, spaceId: pageSpaces.get(p), scope: "content" }),
+            );
+        },
+        async claimPageSeed(request) {
+            const p = normalizeId(request.pageId, "pageId");
+            const raw = await pageScoped(p, async () =>
+                execute(E.documents.claimSeed, { id: p, clientId: request.clientId }, null));
+            return raw === true;
+        },
+        releasePageSeed(request) {
+            const p = normalizeId(request.pageId, "pageId");
+            return transport.keepalive({ endpoint: E.documents.releaseSeed, pathParams: { id: p }, query: { clientId: request.clientId } });
+        },
     };
 
     return { spaces, pages, templates, members, collaboration, shares, comments, tags, activity, relations, documents, changes };

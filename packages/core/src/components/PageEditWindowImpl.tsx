@@ -45,6 +45,7 @@ import {
     type BlockStoreRead,
 } from "@kn/editor";
 import {
+    isPageInTrashError,
     useNavigator,
     useSelector,
     useSpacePageService,
@@ -60,8 +61,8 @@ import {
     type PageEditWindowProps,
     type PageRecord,
 } from "@kn/common";
-import { ArrowUpRight, Check, CloudOff, FileText, LoaderCircle, Maximize2, Minus, Pencil, X } from "@kn/icon";
-import { cn, Button, FlatEmoji } from "@kn/ui";
+import { ArrowUpRight, Check, CloudOff, FileText, LoaderCircle, Maximize2, Minus, Pencil, Trash2, Undo2, X } from "@kn/icon";
+import { cn, Button, FlatEmoji, toast } from "@kn/ui";
 
 /** The page fields this window renders, with a narrowed icon shape for the header. */
 type PageInfoLike = Omit<PageRecord, "icon"> & {
@@ -82,6 +83,12 @@ const MESSAGES = {
         close: 'Close',
         openFullPage: 'Open full page',
         loadPageFailed: 'Failed to load page',
+        inTrash: 'This page is in the trash',
+        inTrashHint: 'Restore it to keep editing.',
+        restorePage: 'Restore page',
+        restoringPage: 'Restoring…',
+        restoreFailed: 'Failed to restore the page',
+        restored: 'Page restored',
         statusSaving: 'Saving',
         statusSaved: 'Saved',
         statusSaveFailed: 'Save failed',
@@ -99,6 +106,12 @@ const MESSAGES = {
         close: '关闭',
         openFullPage: '打开完整页面',
         loadPageFailed: '页面加载失败',
+        inTrash: '此页面在回收站',
+        inTrashHint: '恢复后才能继续编辑。',
+        restorePage: '恢复页面',
+        restoringPage: '正在恢复…',
+        restoreFailed: '恢复页面失败',
+        restored: '页面已恢复',
         statusSaving: '保存中',
         statusSaved: '已保存',
         statusSaveFailed: '保存失败',
@@ -236,6 +249,16 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, em
     const bodyRef = useRef<HTMLDivElement>(null);
     const [page, setPage] = useState<PageInfoLike | null>(null);
     const [loadError, setLoadError] = useState(false);
+    // The page behind this window lives in the trash. It can be discovered two
+    // ways: the delete happened in this app (the `page.trashed` change event),
+    // or the server refused a read/write/heartbeat (PAGE_IN_TRASH — the page was
+    // trashed by another client, or sits under a trashed parent). Either way the
+    // editor must stop: a trashed page accepts no writes, and its write-lease
+    // heartbeat would otherwise keep asking (and failing) every 10 seconds.
+    const [trashed, setTrashed] = useState(false);
+    const [restoring, setRestoring] = useState(false);
+    // Bumped by a restore so the record (and the block store seed) are re-read.
+    const [reloadKey, setReloadKey] = useState(0);
     const [editorInstance, setEditorInstance] = useState<Editor | null>(null);
     const [contentReady, setContentReady] = useState(false);
     const [synced, setSynced] = useState(false);
@@ -428,9 +451,48 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, em
                     });
                 }
             })
-            .catch(() => { if (!cancelled) setLoadError(true); });
+            .catch((error: unknown) => {
+                if (cancelled) return;
+                // The backend refuses a trashed page with its own code; that is
+                // a state with a way out (restore), not a broken load.
+                if (isPageInTrashError(error)) {
+                    setLoadError(false);
+                    setTrashed(true);
+                    return;
+                }
+                setLoadError(true);
+            });
         return () => { cancelled = true; };
-    }, [pageId, service, target, isGuest]);
+    }, [pageId, service, target, isGuest, reloadKey]);
+
+    // Follow the page's lifecycle while this window stays open. Without this a
+    // floating window kept editing — and kept renewing the write lease of — a
+    // page the user had already deleted in the tree.
+    useEffect(() => {
+        const isThisPage = (id: unknown) => String(id) === String(pageId);
+        const unsubscribers = [
+            service.changes.subscribe('page.trashed', ({ payload }) => {
+                if (isThisPage(payload.pageId)) setTrashed(true);
+            }),
+            service.changes.subscribe('page.deleted', ({ payload }) => {
+                if (isThisPage(payload.pageId)) setTrashed(true);
+            }),
+            service.changes.subscribe('page.restoredFromTrash', ({ payload }) => {
+                if (!isThisPage(payload.pageId)) return;
+                setTrashed(false);
+                setReloadKey((key) => key + 1);
+            }),
+        ];
+        return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
+    }, [pageId, service]);
+
+    // Never carry one page's trashed state into the next one: the embedded
+    // window (the AI pane) is reused across pages.
+    useEffect(() => {
+        setTrashed(false);
+        setRestoring(false);
+        setLoadError(false);
+    }, [pageId]);
 
     const metadataRequestRef = useRef(0);
     useEffect(() => {
@@ -562,7 +624,10 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, em
         pageId,
         enabled: !!page && !page.pageType && contentReady && !!seed?.trusted
             // A read-only page must not be edited through the agent.
-            && canEdit,
+            && canEdit
+            // A trashed page refuses every write and heartbeat; keeping the
+            // session on only produced a failure every 10 seconds.
+            && !trashed,
         // Never persist the placeholder an unsynced room leaves behind: the first
         // write of a session is a whole-document reconcile.
         collaborationSynced: synced,
@@ -577,6 +642,10 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, em
             if (titleChanged) void refreshPageMetadata();
         },
     })
+
+    // The change event (this app) and the session's own refusal (trashed by
+    // another client, or under a trashed ancestor) are two views of one state.
+    const pageTrashed = trashed || session.trashed;
 
     // ---- Claim the page for this visible editor ----
     // While this window/pane shows the page, its editor is the page's SINGLE
@@ -661,6 +730,25 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, em
         navigator.go({ to: `/space-detail/${spaceId}/page/edit/${pageId}` });
     }, [target, page?.spaceId, pageId, navigator, flushPending, onClose]);
 
+    /** Restore the page from the trash, then re-read it in place. */
+    const handleRestoreFromTrash = useCallback(async () => {
+        if (restoring) return;
+        setRestoring(true);
+        try {
+            await service.pages.restorePageFromTrash(pageId);
+            // The service emits `page.restoredFromTrash` before it resolves; the
+            // subscription above re-reads the record. Clearing the state here
+            // keeps the button responsive in the same frame.
+            setTrashed(false);
+            toast.success(t('restored'));
+        } catch (error) {
+            console.error('Failed to restore page from trash:', error);
+            toast.error(t('restoreFailed'));
+        } finally {
+            setRestoring(false);
+        }
+    }, [pageId, restoring, service, t]);
+
     // ---- Dragging (header) — mutate style directly, no re-renders ----
     const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
 
@@ -719,7 +807,9 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, em
     const endResize = useCallback(() => { resizeRef.current = null; }, []);
 
     // ---- Save status pill ----
-    const status = saving
+    const status = pageTrashed
+        ? { icon: <Trash2 className="h-3 w-3" />, text: t('inTrash'), className: 'text-destructive' }
+        : saving
         ? { icon: <LoaderCircle className="h-3 w-3 animate-spin" />, text: t('statusSaving'), className: 'text-muted-foreground' }
         : saveError
             ? { icon: <CloudOff className="h-3 w-3" />, text: t('statusSaveFailed'), className: 'text-destructive' }
@@ -844,7 +934,28 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, em
                     minimized ? "opacity-0 duration-150" : "opacity-100 duration-200",
                 )}
             >
-                {loadError ? (
+                {pageTrashed ? (
+                    <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
+                        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                            <Trash2 className="h-5 w-5" />
+                        </span>
+                        <div>
+                            <p className="text-sm font-medium">{t('inTrash')}</p>
+                            <p className="mt-1 text-xs text-muted-foreground">{t('inTrashHint')}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            {!isGuest && (
+                                <Button size="sm" onClick={() => void handleRestoreFromTrash()} disabled={restoring}>
+                                    <Undo2 className="mr-1 h-3.5 w-3.5" />
+                                    {restoring ? t('restoringPage') : t('restorePage')}
+                                </Button>
+                            )}
+                            <Button variant="outline" size="sm" onClick={handleClose}>
+                                {t('close')}
+                            </Button>
+                        </div>
+                    </div>
+                ) : loadError ? (
                     <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
                         <CloudOff className="h-4 w-4" />
                         {t('loadPageFailed')}
