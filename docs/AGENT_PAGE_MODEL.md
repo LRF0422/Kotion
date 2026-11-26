@@ -87,6 +87,17 @@ agent 程序化写入等）。
   `SessionPageBinding.getEditorForPage()` 取得编辑器，不调用 `editPage`。后者只用于"把会话目标切到 X"。
 - **页面管理工具与编辑器解耦**：`createPage` / `editPage` / `searchPages` / `movePage` 等声明
   `requiresEditor: false`，不会因为目标编辑器暂时不可用而被执行门禁卡住——它们正是恢复目标的路径。
+- **页面类型 ≠ 不可编辑**：只有 `renderer.type === 'component'`（整页由插件组件渲染、没有文档正文）
+  的页面才没有编辑器；`editor-component` 类型的页面（例如思维导图页：文档首块是插件的画布节点）就是
+  普通协作文档，可见编辑器照常登记认领，隐藏会话/浮动窗照常挂载。把"声明了 pageType"当成"不是文档"
+  会让这类页面对 agent 彻底不可编辑——`editPage` 只能落到"当前页面没有编辑器"的通用报错上。
+- **没有正文的页面失败关闭且不可重试**：整页组件页面（或 pageType 所属插件未启用）在**获取编辑器之前**
+  就以明确文案拒绝（`componentPageTargetMessage` / `missingPageTypeTargetMessage`），文案说明
+  "这不是暂时状态、重试不会成功"，并指向页面类型插件自己的工具或用户手动编辑；`resolveSharedEditorForPage`
+  不再吞掉原因改为 reject，避免再退化成"请稍后重试"的重试循环。
+- **可见页面上下文携带 pageType**：`CurrentPageContext.pageType` 由页面 surface 发布，`editPage` 的
+  "当前页面"快路径因此能在不做额外元数据请求的前提下判定页面类型；`SessionPageBindingPage.pageType`
+  把这判定传进 surface。
 - **工作台可在同一轮拿到文档能力**：run 的 tools 列表在创建时冻结，所以 workspace 预先广告文档工具；
   执行时再解析确切目标。否则 `createPage` 成功后同一条 run 仍然"写不了"，只能等用户再发一轮。
 - **分栏页面就是目标**：工作台把 `targetArtifact.kind === 'page'` 传入 `useWorkspaceDocumentTarget`，

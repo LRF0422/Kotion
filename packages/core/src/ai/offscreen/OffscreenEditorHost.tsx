@@ -9,7 +9,7 @@
  * collaborative Y.Doc room, persist through the incremental PATCH endpoint.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import React, { useEffect, useMemo, useRef, useState } from "react"
 import {
     CollaborationEditor,
     TiptapCollabProvider,
@@ -25,9 +25,13 @@ import {
     type BlockStoreRead,
 } from "@kn/editor"
 import {
+    isComponentPageType,
+    isDocumentPageType,
     isPageInTrashError,
     useSelector,
     useSpacePageService,
+    usePageType,
+    useTranslation,
     getAccessToken,
     getAppEnv,
     resolveAgentPageTarget,
@@ -54,6 +58,7 @@ const CURSOR_COLORS = [
 
 const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
     const { userInfo } = useSelector((state: GlobalState) => state)
+    const { t } = useTranslation()
     const service = useSpacePageService()
 
     // The agent's single page model: identity, access, document capability,
@@ -80,6 +85,43 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
     )
 
     const [page, setPage] = useState<PageRecord | null>(null)
+    // A declared page type is NOT "not a document". `editor-component` types are
+    // normal collaborative documents (the plugin seeds the doc, or renders one
+    // node inside it) — a mind-map page, for instance — and must be editable
+    // off-screen like any other page. Only a FULL-PAGE component renderer has no
+    // document at all: nothing for an editor to mount, and therefore no editor
+    // for the agent either. That case fails loudly and permanently instead of
+    // being reported as a transient "editor not ready".
+    const pageTypeInfo = usePageType(page?.pageType)
+    const componentPage = Boolean(page?.pageType) && isComponentPageType(pageTypeInfo)
+    const unknownPageType = Boolean(page?.pageType) && !pageTypeInfo
+    // True when the record is a document this engine can host.
+    const documentPage = !page?.pageType || isDocumentPageType(pageTypeInfo)
+    /** Why this page can never be host-mounted here, when that is the case. */
+    const blockedReason = useMemo(() => {
+        if (!page?.pageType) return null
+        if (unknownPageType) {
+            return `页面类型「${page.pageType}」的插件当前未启用，无法打开它的编辑器`
+        }
+        if (componentPage) {
+            // The label is an i18n key for some page types; never surface the
+            // raw key to the agent.
+            const label = pageTypeInfo?.label
+                ? t(pageTypeInfo.label, pageTypeInfo.label)
+                : page.pageType
+            return `这是「${label}」整页组件页面，没有文档正文，文档编辑器无法打开它`
+        }
+        return null
+    }, [page?.pageType, unknownPageType, componentPage, pageTypeInfo?.label, t])
+
+    // Report the permanent condition once; the manager then drops the session
+    // and the agent's pending edit fails with this reason instead of waiting for
+    // an editor that can never be acquired.
+    useEffect(() => {
+        if (!blockedReason) return
+        offscreenSessionManager.markError(pageId, new Error(blockedReason))
+    }, [blockedReason, pageId])
+
     // The page was deleted while the agent was working on it. A hidden editor
     // has no visible surface to explain a refused save, and its write-lease
     // heartbeat would keep asking the server forever, so the session is failed
@@ -102,12 +144,11 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
             .then((record) => {
                 if (cancelled) return
                 setPage(record)
-                if (record.pageType) {
-                    offscreenSessionManager.markError(
-                        pageId,
-                        new Error('Component-backed pages cannot be edited through the document editor'),
-                    )
-                } else if (!canEdit) {
+                // A declared page type is classified on the next render (the
+                // registry lookup needs `page.pageType`); only a read-only
+                // invitation is decidable here. The component/unknown-type
+                // failure is reported by the `blockedReason` effect above.
+                if (!canEdit) {
                     offscreenSessionManager.markError(
                         pageId,
                         new Error('This collaboration invitation is read-only; the page cannot be edited'),
@@ -150,7 +191,7 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
 
     // ---- Collaboration provider (same room as any visible editor of this page) ----
     useEffect(() => {
-        if (!page || page.pageType) {
+        if (!page || !documentPage) {
             setProvider(undefined)
             return
         }
@@ -184,10 +225,10 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
             collabProvider.disconnect()
             collabProvider.destroy()
         }
-    }, [pageId, page?.id, page?.pageType, getCollabToken])
+    }, [pageId, page?.id, page?.pageType, documentPage, getCollabToken])
 
     useEffect(() => {
-        if (page?.pageType) return
+        if (page && !documentPage) return
         // Seed from the provider's own flag: `onSynced` can fire before this
         // effect runs, and clearing that would leave the writer off for a room
         // that is synced. Reset on `provider` as well as `pageId` — the provider
@@ -198,7 +239,7 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
         setSyncTimedOut(false)
         const timer = setTimeout(() => setSyncTimedOut(true), 8000)
         return () => clearTimeout(timer)
-    }, [pageId, page?.pageType, provider])
+    }, [pageId, page?.pageType, documentPage, provider])
 
     // ---- Legacy fallback pre-processing ----
     const legacyContent = useMemo(() => {
@@ -218,7 +259,7 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
 
     useEffect(() => {
         setBlockDoc(undefined)
-        if (!page || page.pageType) return
+        if (!page || !documentPage) return
         let cancelled = false
         documents.getPageDocument(pageId)
             .then((document) => {
@@ -240,7 +281,7 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
                 setBlockDoc(null)
             })
         return () => { cancelled = true }
-    }, [pageId, page?.id, page?.pageType, documents])
+    }, [pageId, page?.id, page?.pageType, documentPage, documents])
 
     const seed = useMemo(
         () => (page ? chooseSeed(blockDoc, legacyContent) : null),
@@ -272,7 +313,7 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
     const { session, flushNow } = usePageSave({
         editor: editorInstance,
         pageId,
-        enabled: !!page && !page.pageType && contentReady && !!seed?.trusted
+        enabled: !!page && documentPage && contentReady && !!seed?.trusted
             // A read-only page must not be edited through the agent.
             && canEdit
             // A trashed page refuses the write lease; asking every heartbeat
@@ -385,7 +426,7 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
         return { name: userInfo?.name || 'Anonymous', color: CURSOR_COLORS[hash % CURSOR_COLORS.length], id: userInfo?.id }
     }, [userInfo?.id, userInfo?.name])
 
-    if (pageTrashed || !page || page.pageType || !seed || !(synced || syncTimedOut)) return null
+    if (pageTrashed || !page || !documentPage || !seed || !(synced || syncTimedOut)) return null
 
     return (
         <div style={{ width: 800, height: 600, overflow: 'hidden' }}>

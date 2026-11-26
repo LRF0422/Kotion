@@ -285,6 +285,10 @@ export const PageHost: React.FC<PageHostProps> = ({ pageId, spaceId: explicitSpa
                 spaceId: explicitSpaceId ?? page?.spaceId,
                 title: page?.title,
                 parentId: page?.parentId,
+                // Published so document tools can tell a plain document from a
+                // full-page plugin component (which has no editor at all)
+                // before they acquire one.
+                pageType: page?.pageType,
             }
             : null,
         active !== false && !trashed,

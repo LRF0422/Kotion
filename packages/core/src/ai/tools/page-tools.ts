@@ -104,6 +104,11 @@ const readMetadata = async (pageId: string) => {
             spaceId: current.spaceId,
             parentId: current.parentId,
             title: current.title ?? '',
+            // The page surface publishes its declared page type, so a target
+            // that has no document body is known synchronously. Without this
+            // the "page the user has open" fast path looked like a plain
+            // document and editPage failed late with a generic message.
+            pageType: current.pageType,
         } as Awaited<ReturnType<SpacePageService['pages']['getPageMetadata']>>
     }
     const target = resolveAgentPageTarget(pageId)
@@ -579,7 +584,7 @@ export const createPageTools = (editor: Editor): ToolsRecord => ({
     },
 
     editPage: {
-        description: '把本会话的离屏编辑目标切换到指定页面：不离开用户当前页面，即可用文档工具（getDocumentStructure/applyEdits/replaceBlockById 等）读取和编辑该页面。要编辑任何不是当前目标的页面前，必须先调用它。切换后所有文档工具都作用于该页面，直到再次调用 editPage',
+        description: '把本会话的离屏编辑目标切换到指定页面：不离开用户当前页面，即可用文档工具（getDocumentStructure/applyEdits/replaceBlockById 等）读取和编辑该页面。要编辑任何不是当前目标的页面前，必须先调用它。切换后所有文档工具都作用于该页面，直到再次调用 editPage。只有文档页面可编辑：整页由插件组件渲染的页面（画布/看板之类）没有文档正文，调用会返回明确错误，此时不要重试',
         inputSchema: z.object({
             pageId: z.string().describe("要离屏编辑的页面 id（可用 getSpacePageTree/searchPages 获取）")
         }),
@@ -593,10 +598,15 @@ export const createPageTools = (editor: Editor): ToolsRecord => ({
 
             let title: string | undefined
             let spaceId: string | undefined
+            let pageType: string | undefined
             try {
                 const meta = await readMetadata(id)
                 title = meta.title
                 spaceId = meta.spaceId == null ? undefined : String(meta.spaceId)
+                // Passed to the surface so it can refuse a page that has no
+                // document body (a full-page plugin component) with the real
+                // reason, before trying to acquire an editor that never comes.
+                pageType = meta.pageType
             } catch (error) {
                 return { error: `无法读取页面 ${id}: ${error instanceof Error ? error.message : '未知错误'}` }
             }
@@ -608,7 +618,7 @@ export const createPageTools = (editor: Editor): ToolsRecord => ({
             // its own document, so parallel agents stop fighting over one target.
             if (owner && binding?.editPageFor) {
                 try {
-                    const target = await binding.editPageFor(owner, { pageId: id, title, spaceId })
+                    const target = await binding.editPageFor(owner, { pageId: id, title, spaceId, pageType })
                     return {
                         success: true,
                         pageId: id,
@@ -623,7 +633,7 @@ export const createPageTools = (editor: Editor): ToolsRecord => ({
 
             if (binding?.editPage) {
                 try {
-                    const target = await binding.editPage({ pageId: id, title, spaceId })
+                    const target = await binding.editPage({ pageId: id, title, spaceId, pageType })
                     return {
                         success: true,
                         pageId: id,
@@ -639,7 +649,7 @@ export const createPageTools = (editor: Editor): ToolsRecord => ({
             // Fallback for hosts without the off-screen bridge: at least bind the
             // page so createPage/openPage keep steering the conversation.
             if (binding) {
-                binding.bindPage({ pageId: id, title, spaceId })
+                binding.bindPage({ pageId: id, title, spaceId, pageType })
                 return {
                     success: true,
                     pageId: id,

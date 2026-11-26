@@ -39,9 +39,13 @@ import {
     buildImageContentParts,
     toImageDataUrl,
     documentTargetUnavailableMessage,
+    componentPageTargetMessage,
+    missingPageTypeTargetMessage,
+    isComponentPageType,
     isSamePage,
     isLiveEditor,
     useAgentArtifactTargetProvider,
+    usePageTypes,
 } from "@kn/common"
 import type {
     ChatMode,
@@ -569,6 +573,14 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
     // 自定义 Agent 的技能/工具白名单：作用在本界面能跑的能力目录之上（最后一层
     // 过滤）。必须先拿到它再构建 run 输入，否则模型仍会看到被关掉的工具。
     const { selectedAgent } = useCustomAgents()
+    // Page types decide whether a target can be edited at all: a full-page
+    // component (`renderer.type === 'component'`) has no document body, so no
+    // editor will ever appear for it. Held in a ref because the session binding
+    // below is a long-lived object and must read the live (hot-reloadable)
+    // registry instead of the snapshot from its creation render.
+    const pageTypes = usePageTypes()
+    const pageTypesRef = useRef(pageTypes)
+    pageTypesRef.current = pageTypes
     const catalog = useMemo(
         () => filterCatalogForCustomAgent(getCatalog(), selectedAgent),
         [getCatalog, selectedAgent],
@@ -622,6 +634,35 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
             spaceId: page.spaceId,
         })
 
+        /**
+         * Refuse a target that has no document body BEFORE acquiring anything.
+         *
+         * A full-page plugin component (a canvas, a board) never has an editor,
+         * so acquisition is guaranteed to fail — and the generic "请稍后重试"
+         * error then sent the model into a retry loop on an impossible target.
+         * The refusal is permanent and names the only working routes instead.
+         * An unknown page type (its plugin is not active) is the same dead end.
+         */
+        const documentUnavailableFor = (
+            page: SessionPageBindingPage,
+            pageId: string,
+        ): Error | null => {
+            const pageTypeId = page.pageType?.trim()
+            if (!pageTypeId) return null
+            const target = { pageId, title: page.title }
+            const resolved = pageTypesRef.current.find(type => type.id === pageTypeId)
+            if (!resolved) return new Error(missingPageTypeTargetMessage(target, pageTypeId))
+            if (isComponentPageType(resolved)) {
+                return new Error(componentPageTargetMessage(target, {
+                    // Labels are i18n keys for some page types; never show a
+                    // raw key to the model when a translation exists.
+                    pageTypeLabel: t(resolved.label, resolved.label),
+                    pageTypeId,
+                }))
+            }
+            return null
+        }
+
         const binding: SessionPageBinding = {
             bindPage: (page) => { bindTargetPage(page) },
             getBoundPage: () => (boundPageRef.current ? { ...boundPageRef.current } : null),
@@ -647,6 +688,8 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
             },
             editPage: async (page) => {
                 const pageId = String(page.pageId)
+                const blocked = documentUnavailableFor(page, pageId)
+                if (blocked) throw blocked
                 // A visible editor (side pane / floating window) owns this page:
                 // use it directly instead of acquiring a hidden second writer.
                 const claimed = getAgentEditor(pageId)?.editor
@@ -661,7 +704,13 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
                 // The page is already on screen: its visible editor is the target.
                 if (isSamePage(livePageId(), pageId)) {
                     if (!editor || !isLiveEditor(editor)) {
-                        throw new Error(documentTargetUnavailableMessage({ pageId, title: page.title }))
+                        // The page is on screen but its editor has not been
+                        // published yet (still loading / syncing). Say why —
+                        // the bare "no editor" message read like a broken tool.
+                        throw new Error(documentTargetUnavailableMessage(
+                            { pageId, title: page.title },
+                            '页面还在加载，可用的文档编辑器尚未就绪',
+                        ))
                     }
                     rebindEditor(editor)
                     offscreenHandleRef.current = null
@@ -737,10 +786,9 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
                     if (!target) return null
                     const ready = readyEditorForPage(target)
                     if (ready) return ready
+                    // Rejects with the host's reason when no editor can be
+                    // obtained; the caller names the page around it.
                     const source = await resolveSharedEditorForPage(target)
-                    if (!isLiveEditor(source)) {
-                        throw new Error(documentTargetUnavailableMessage(target))
-                    }
                     if (options?.mutating && docBridge) {
                         try {
                             const handle = await docBridge.fork(
@@ -768,9 +816,12 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
                 }
                 const ready = readyEditorForPage(target)
                 if (ready) return ready
+                // Rejects with the acquisition reason ("this page type has no
+                // document", "room did not sync", …): the caller adds the page
+                // identity around it.
                 const { handle } = await switchEditTarget(target)
                 if (!handle || !isLiveEditor(handle.editor)) {
-                    throw new Error(documentTargetUnavailableMessage(target))
+                    throw new Error('编辑目标没有返回可用的编辑器')
                 }
                 // Keep the surface/render state in sync with what the tool batch
                 // is using, even when the acquisition was triggered from a call.
@@ -781,10 +832,20 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
                 return handle.editor
             },
             editPageFor: async (owner: string, page: SessionPageBindingPage) => {
+                const blocked = documentUnavailableFor(page, String(page.pageId))
+                if (blocked) throw blocked
                 const target = recordOf(page)
                 ownerTargetsRef.current.set(owner, target)
                 const docBridge = getAgentDocumentBridge()
-                const source = await resolveSharedEditorForPage(target)
+                let source: any
+                try {
+                    source = await resolveSharedEditorForPage(target)
+                } catch (error) {
+                    // Keep the host's reason (page type, read-only invitation,
+                    // room not synced) while naming the page we refused to
+                    // write into.
+                    throw new Error(documentTargetUnavailableMessage(target, error))
+                }
                 if (!isLiveEditor(source)) {
                     throw new Error(documentTargetUnavailableMessage(target))
                 }
@@ -854,7 +915,10 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
         // document's tools.
         setSessionPageBinding(binding)
         return () => clearSessionPageBinding(binding)
-    }, [active, bindTargetPage, switchEditTarget, rebindEditor, editor, getPageFor, releaseOwner, claimEditor, releaseEditor, onOpenPageWindow, resolveSharedEditorForPage])
+        // `t` names a page type in the refusal message; the registry itself is
+        // read through a ref so a hot-reloaded plugin does not rebuild the
+        // binding (and drop in-flight run state) on every change.
+    }, [active, bindTargetPage, switchEditTarget, rebindEditor, editor, getPageFor, releaseOwner, claimEditor, releaseEditor, onOpenPageWindow, resolveSharedEditorForPage, t])
 
     /**
      * A visible editor claimed a page (side pane / floating window). Hand the

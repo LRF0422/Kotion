@@ -131,6 +131,9 @@ export function useWorkspaceDocumentTarget(
             pageId: id,
             title: page.title,
             spaceId: page.spaceId,
+            // Keep the declared page type on the target: tools that later ask
+            // "can this page be edited at all?" must not have to re-read it.
+            pageType: page.pageType,
         }
         boundRef.current = record
         setPageId(id)

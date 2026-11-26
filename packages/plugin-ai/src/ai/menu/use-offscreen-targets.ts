@@ -5,6 +5,7 @@ import {
     getAgentEditor,
     getOffscreenEditorBridge,
     getPageNavigationBridge,
+    isLiveEditor,
     registerAgentEditor,
     unregisterAgentEditor,
 } from "@kn/common"
@@ -195,20 +196,29 @@ export function useOffscreenTargets({ editor, boundPageRef }: UseOffscreenTarget
      * The shared (live) editor for a page: the visible editor when the page is
      * open, otherwise its off-screen session. Used both to fork a private
      * document and as the merge target when an agent finishes.
+     *
+     * REJECTS with the host's reason when no editor can be obtained. Returning
+     * null here used to erase it (component page, read-only invitation, room
+     * not synced) and the caller then fell back to a generic "请稍后重试" — the
+     * reason the model kept retrying an impossible target.
      */
-    const resolveSharedEditorForPage = useCallback(async (page: ChatTargetPage): Promise<any | null> => {
+    const resolveSharedEditorForPage = useCallback(async (page: ChatTargetPage): Promise<any> => {
         // A claimed (visible) editor wins over any hidden session.
         const claimed = getAgentEditor(page.pageId)?.editor
-        if (claimed) return claimed
+        if (isLiveEditor(claimed)) return claimed
         const currentPageId = getPageNavigationBridge()?.getCurrentPage()?.pageId
-        if (currentPageId !== undefined && String(currentPageId) === String(page.pageId)) return editor
-        try {
-            const handle = await activateOffscreenTarget(page)
-            return handle?.editor ?? null
-        } catch (error) {
-            console.error('Failed to acquire the shared editor for the page:', error)
-            return null
+        if (currentPageId !== undefined && String(currentPageId) === String(page.pageId)) {
+            // The page is on screen; its editor is the page's single writer.
+            if (!isLiveEditor(editor)) {
+                throw new Error('页面还在加载，可用的文档编辑器尚未就绪')
+            }
+            return editor
         }
+        const handle = await activateOffscreenTarget(page)
+        if (!isLiveEditor(handle?.editor)) {
+            throw new Error('离屏编辑器没有返回可用的编辑器')
+        }
+        return handle.editor
     }, [editor, activateOffscreenTarget])
 
     /**
@@ -225,13 +235,13 @@ export function useOffscreenTargets({ editor, boundPageRef }: UseOffscreenTarget
         const shouldCommit = options?.commit !== false
 
         if (shouldCommit && docBridge?.get(owner) && page) {
-            const liveEditor = await resolveSharedEditorForPage(page)
-            if (liveEditor) {
-                try {
-                    report = await docBridge.commit(owner, liveEditor)
-                } catch (error) {
-                    console.error('Failed to merge the agent document:', error)
-                }
+            try {
+                const liveEditor = await resolveSharedEditorForPage(page)
+                report = await docBridge.commit(owner, liveEditor)
+            } catch (error) {
+                // Best effort: the child's document stays unmerged rather than
+                // failing the release, but the reason is worth a log line.
+                console.error('Failed to merge the agent document:', error)
             }
         }
         if (docBridge?.get(owner)) docBridge.release(owner)

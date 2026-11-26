@@ -73,3 +73,29 @@ export interface ResolvedPageType extends PageTypeConfig {
     source: "plugin" | "core"
     owner: string
 }
+
+/** The shape both `PageTypeConfig` and `ResolvedPageType` satisfy. */
+type PageTypeRendererLike = { renderer?: { type?: string } } | null | undefined
+
+/**
+ * A page type whose whole surface is a plugin React component.
+ *
+ * Such a page has a title — and whatever the component draws — but **no
+ * document body**: there is no editor for a document tool to bind to, and the
+ * off-screen editing engine cannot mount one. Consumers that need a document
+ * (agent document tools, the off-screen engine, the floating editor) must say
+ * so instead of waiting for an editor that will never appear.
+ */
+export const isComponentPageType = (pageType: PageTypeRendererLike): boolean =>
+    pageType?.renderer?.type === "component"
+
+/**
+ * A page type that IS a normal collaborative document: the plugin only seeds
+ * the document (`createInitialDocument`) or renders one node inside it, so
+ * `pageType` being set does not make the page non-editable.
+ *
+ * `undefined` (no page type) is the plain-document case and is *not* covered
+ * here — callers decide that themselves.
+ */
+export const isDocumentPageType = (pageType: PageTypeRendererLike): boolean =>
+    pageType?.renderer?.type === "editor-component"

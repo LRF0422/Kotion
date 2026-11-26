@@ -45,8 +45,11 @@ import {
     type BlockStoreRead,
 } from "@kn/editor";
 import {
+    isComponentPageType,
+    isDocumentPageType,
     isPageInTrashError,
     useNavigator,
+    usePageType,
     useSelector,
     useSpacePageService,
     useTranslation,
@@ -513,9 +516,19 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, em
         }
     }, [pageId, service, target, isGuest]);
 
+    // A declared page type is not the same as "not a document": an
+    // `editor-component` page type (a mind-map page, for instance) is a normal
+    // collaborative document and belongs in this window. Only a full-page plugin
+    // component has no document to host — that one keeps its "open full page"
+    // notice.
+    const pageTypeInfo = usePageType(page?.pageType);
+    const documentPage = !page?.pageType || isDocumentPageType(pageTypeInfo);
+    const fullPageComponent = Boolean(page?.pageType)
+        && (isComponentPageType(pageTypeInfo) || !pageTypeInfo);
+
     // ---- Collaboration provider (same room as the main editor for this page) ----
     useEffect(() => {
-        if (!page || page.pageType) {
+        if (!page || !documentPage) {
             setProvider(undefined);
             return;
         }
@@ -551,10 +564,10 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, em
             collabProvider.disconnect();
             collabProvider.destroy();
         };
-    }, [pageId, page?.id, page?.pageType, getCollabToken]);
+    }, [pageId, page?.id, page?.pageType, documentPage, getCollabToken]);
 
     useEffect(() => {
-        if (page?.pageType) return;
+        if (page && !documentPage) return;
         // Reset on `provider` as well as `pageId`: the provider is recreated when
         // the guest capability (and its room auth envelope) appears, and the old
         // room's success must not make the new, unsynced one writable. Seed from
@@ -563,7 +576,7 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, em
         setSyncTimedOut(false);
         const timer = setTimeout(() => setSyncTimedOut(true), 8000);
         return () => clearTimeout(timer);
-    }, [pageId, page?.pageType, provider]);
+    }, [pageId, page?.pageType, documentPage, provider]);
 
     // ---- Legacy fallback pre-processing ----
     // PageRecord carries the old page-row content only as a migration fallback;
@@ -585,7 +598,7 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, em
 
     useEffect(() => {
         setBlockDoc(undefined)
-        if (!page || page.pageType) return
+        if (!page || !documentPage) return
         let cancelled = false
         documents.getPageDocument(pageId)
             .then((document) => {
@@ -600,7 +613,7 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, em
                 setBlockDoc(null)
             })
         return () => { cancelled = true }
-    }, [pageId, page?.id, page?.pageType, documents])
+    }, [pageId, page?.id, page?.pageType, documentPage, documents])
 
     // `null` means "not decided yet", holding the editor back from mounting so
     // the first reconcile cannot persist an unseeded document (see the main
@@ -622,7 +635,7 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, em
     const { saving, dirty, error: saveError, session, flushNow } = usePageSave({
         editor: editorInstance,
         pageId,
-        enabled: !!page && !page.pageType && contentReady && !!seed?.trusted
+        enabled: !!page && documentPage && contentReady && !!seed?.trusted
             // A read-only page must not be edited through the agent.
             && canEdit
             // A trashed page refuses every write and heartbeat; keeping the
@@ -960,7 +973,7 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, em
                         <CloudOff className="h-4 w-4" />
                         {t('loadPageFailed')}
                     </div>
-                ) : page?.pageType ? (
+                ) : fullPageComponent ? (
                     <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
                         <FileText className="h-8 w-8 text-muted-foreground" />
                         <p className="max-w-sm text-sm text-muted-foreground">{t('componentPage')}</p>

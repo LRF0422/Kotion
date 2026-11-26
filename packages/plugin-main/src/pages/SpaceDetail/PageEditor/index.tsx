@@ -480,12 +480,19 @@ const PageEditorSession: React.FC<PageEditorProps> = (props) => {
     }), [pageId, refreshFavoriteState, service])
 
     // Publish this tab's editor for views living outside the editor subtree —
-    // dock panels such as the outline. The *page* the user is looking at is
-    // published one level up by `PageHost` (it also covers plugin page types and
-    // pages with no editor); this effect only contributes the live editor
-    // instance, and only for the active, visible tab.
+    // dock panels such as the outline, and the agent's document tools. The
+    // *page* the user is looking at is published one level up by `PageHost` (it
+    // also covers pages with no editor at all); this effect only contributes the
+    // live editor instance, and only for the active, visible tab.
+    //
+    // `componentPresentation` is a page whose type declares an
+    // `editor-component` renderer (a mind-map page seeds the document with its
+    // canvas node). That page IS a document — the flag only hides the editor
+    // chrome — so withholding its editor here left the agent with no editor at
+    // all: editPage reported "无法取得编辑目标…的编辑器" on the page the user was
+    // literally looking at. Publish it like any other document.
     useEffect(() => {
-        if (!routeCacheActive || componentPresentation || props.active === false || !pageId || !editorContentReady) return
+        if (!routeCacheActive || props.active === false || !pageId || !editorContentReady) return
         const instance = editor.current
         if (!instance) return
 
@@ -493,7 +500,7 @@ const PageEditorSession: React.FC<PageEditorProps> = (props) => {
         // Pass the instance too: the same page may also be open in a standalone
         // view, and its cleanup must not clear this publication.
         return () => clearActiveEditor(String(pageId), instance)
-    }, [routeCacheActive, componentPresentation, pageId, spaceId, props.active, editorContentReady])
+    }, [routeCacheActive, pageId, spaceId, props.active, editorContentReady])
 
     const toggleFavorite = useCallback(async () => {
         if (!pageId || favoriteToggling) return

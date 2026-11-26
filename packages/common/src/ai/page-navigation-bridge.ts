@@ -28,6 +28,16 @@ export interface CurrentPageContext {
     spaceId?: SpaceId;
     title?: string;
     parentId?: PageId;
+    /**
+     * Declared page type (`acme:canvas`, `mindmap:page`, …), when the page has
+     * one.
+     *
+     * The page surface publishes it so agent tools can tell a document page
+     * from a page whose whole surface is a plugin component *without* another
+     * metadata round-trip. `editPage` on the page the user has open used to
+     * fail late (and generically) because only the id/title were known here.
+     */
+    pageType?: string;
 }
 
 export interface PageNavigationBridge {

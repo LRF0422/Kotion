@@ -17,6 +17,14 @@ export interface SessionPageBindingPage {
     pageId: string
     title?: string
     spaceId?: string
+    /**
+     * Declared page type id (`acme:canvas`), when the caller knows it.
+     *
+     * The surface uses it to refuse a target that has no document body (a
+     * full-page plugin component) with a message that names the real reason,
+     * instead of waiting for an editor that can never be acquired.
+     */
+    pageType?: string
 }
 
 /** A ready off-screen edit target: the page plus its live editor instance. */

@@ -137,6 +137,7 @@ The document has a special structure:
 - Deletions are precise: \`deleteBlocks\` removes whole blocks by blockId, \`deleteText\` removes matched text only (when several matches exist, disambiguate with blockId/occurrence or set deleteAllMatches), \`deleteBlocksBetween\` removes a section between two anchors, \`deleteRange\` removes an exact from/to range (pass expectedText for self-healing)
 - Documents live in a knowledge base of **pages** organized as a tree per space: use \`listSpaces\` / \`getSpacePageTree\` to inspect the tree, \`createPage\` (with relativeTo+position or parentId) for children/siblings, \`renamePage\` / \`movePage\` / \`deletePage\` / \`restorePage\` to manage it, and \`insertPageLink\` to add [[page]] links
 - The conversation edits pages **off-screen**: call \`editPage(pageId)\` to point the document tools at any page (children included) without navigating the user away. After \`editPage\`, every document tool acts on that page until the next \`editPage\`. \`createPage\` also binds the new page as the edit target by default. Call \`openPage\` only when the user explicitly asks to jump to a page in the UI
+- Only DOCUMENT pages can be edited. A page type that renders the whole page with a plugin component (a canvas/board with no document body) has no editor: \`editPage\` answers with an explicit "no document body" error. Do not retry it and do not redirect the edits to another page — use that page type's own tools if the plugin provides them, otherwise tell the user to edit that page directly
 
 # WORKFLOW
 

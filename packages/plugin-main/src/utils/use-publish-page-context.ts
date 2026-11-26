@@ -13,6 +13,14 @@ export interface PageContextInput {
     title?: string
     parentId?: string | number | null
     /**
+     * Declared page type (`mindmap:page`, …), when the page has one.
+     *
+     * Published so an agent that targets the page the user has open can tell a
+     * document from a full-page plugin component *synchronously* — otherwise
+     * `editPage` had to either guess or wait for an editor that never appears.
+     */
+    pageType?: string
+    /**
      * Surface-specific navigation for `openPage`.
      *
      * Most pages live in the workspace route, which the default implementation
@@ -52,6 +60,9 @@ export const usePublishPageContext = (page: PageContextInput | null, active = tr
     const spaceId = page?.spaceId == null ? undefined : String(page.spaceId)
     const title = page?.title
     const parentId = page?.parentId == null ? undefined : String(page.parentId)
+    // Empty is the plain-document case; keep it `undefined` so consumers can
+    // treat "no declared type" and "declared type" as distinct states.
+    const pageType = page?.pageType || undefined
     const openPageOverride = page?.openPage
     const openSpaceOverride = page?.openSpace
 
@@ -59,7 +70,7 @@ export const usePublishPageContext = (page: PageContextInput | null, active = tr
         if (!active || !routeCacheActive || !pageId) return
 
         const bridge: PageNavigationBridge = {
-            getCurrentPage: () => ({ pageId, spaceId, title, parentId }),
+            getCurrentPage: () => ({ pageId, spaceId, title, parentId, pageType }),
             openPage: (targetPageId, targetSpaceId) => {
                 if (openPageOverride) {
                     openPageOverride(String(targetPageId), targetSpaceId == null ? undefined : String(targetSpaceId))
@@ -80,5 +91,5 @@ export const usePublishPageContext = (page: PageContextInput | null, active = tr
 
         setPageNavigationBridge(bridge)
         return () => clearPageNavigationBridge(bridge)
-    }, [active, routeCacheActive, pageId, spaceId, title, parentId, navigator, openPageOverride, openSpaceOverride])
+    }, [active, routeCacheActive, pageId, spaceId, title, parentId, pageType, navigator, openPageOverride, openSpaceOverride])
 }

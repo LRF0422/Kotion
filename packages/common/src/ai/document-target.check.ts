@@ -18,7 +18,13 @@ import {
     subscribeAgentEditors,
     unregisterAgentEditor,
 } from './agent-editor-registry'
-import { isSamePage, noDocumentTargetMessage, documentTargetUnavailableMessage } from './document-target'
+import {
+    componentPageTargetMessage,
+    isSamePage,
+    missingPageTypeTargetMessage,
+    noDocumentTargetMessage,
+    documentTargetUnavailableMessage,
+} from './document-target'
 import { agentToolAvailableAtScope, isDocumentToolCategory } from './kernel/filter-catalog'
 import { getBuiltinToolMetadata, metadataNeedsEditor } from './discovery/tool-metadata'
 import { isLiveEditor } from './plugin-agent/live-editor'
@@ -33,6 +39,7 @@ import {
     clearPageNavigationBridge,
     setPageNavigationBridge,
 } from './page-navigation-bridge'
+import { isComponentPageType, isDocumentPageType } from '../core/page-type'
 import { createCurrentTargetTools } from './tools/target-tools'
 import { clearActiveEditor, setActiveEditor } from '../core/active-editor'
 
@@ -107,6 +114,44 @@ check('missing-target error names the recovery tools',
 const unavailable = documentTargetUnavailableMessage({ pageId: 'p9', title: 'Report' }, new Error('not synced'))
 check('unavailable error names the page', unavailable.includes('Report') && unavailable.includes('not synced'))
 check('unavailable error refuses a silent fallback', unavailable.includes('不要改用当前页面'))
+
+// A component-backed page is a permanent condition: the message must name the
+// page type, explain there is no document, and NOT send the model into the
+// retry loop the old generic error caused.
+const componentPage = componentPageTargetMessage(
+    { pageId: 'p10', title: '未命名思维导图' },
+    { pageTypeLabel: '思维导图', pageTypeId: 'mindmap:page' },
+)
+check('component-page error names the page and its type',
+    componentPage.includes('未命名思维导图') && componentPage.includes('思维导图'))
+check('component-page error explains there is no document',
+    componentPage.includes('没有可编辑的文档正文'))
+check('component-page error does not invite a retry',
+    !componentPage.includes('请稍后重试') && !componentPage.includes('请重试'))
+check('component-page error points at the plugin tools',
+    componentPage.includes('插件提供的工具'))
+// No label/id → still a complete sentence, never an empty 「」 pair.
+const componentPageBare = componentPageTargetMessage({ pageId: 'p11' })
+check('component-page error works without page metadata',
+    componentPageBare.includes('p11') && !componentPageBare.includes('「」'))
+
+const missingType = missingPageTypeTargetMessage({ pageId: 'p12', title: 'Board' }, 'gone:board')
+check('missing-page-type error names the type and the page',
+    missingType.includes('gone:board') && missingType.includes('Board'))
+check('missing-page-type error does not invite a retry',
+    !missingType.includes('请稍后重试') && missingType.includes('不会成功'))
+
+// ── Page-type classification ───────────────────────────────────────
+// A declared page type is NOT the same thing as "not a document": a mind-map
+// page type that seeds a document node is a normal editable page, and treating
+// it as a component page is what made editPage refuse it.
+check('a full-page component type is not a document',
+    isComponentPageType({ renderer: { type: 'component' } })
+    && !isDocumentPageType({ renderer: { type: 'component' } }))
+check('an editor-component type IS a document',
+    isDocumentPageType({ renderer: { type: 'editor-component' } })
+    && !isComponentPageType({ renderer: { type: 'editor-component' } }))
+check('an unknown type is neither', !isComponentPageType(undefined) && !isDocumentPageType(undefined))
 
 // ── Workspace scope advertises document tools before a target exists ─
 const applyEdits = getBuiltinToolMetadata('applyEdits')
