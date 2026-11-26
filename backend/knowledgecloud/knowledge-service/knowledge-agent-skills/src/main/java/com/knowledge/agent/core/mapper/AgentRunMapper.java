@@ -41,6 +41,9 @@ public interface AgentRunMapper extends BaseMapper<AgentRunEntity> {
             "update_time = VALUES(update_time)")
     void upsertByRunId(AgentRunEntity entity);
 
+    @Select("SELECT * FROM agent_run WHERE run_id = #{runId}")
+    AgentRunEntity selectByRunId(@Param("runId") String runId);
+
     /** Active (non-terminal) run count for a tenant — concurrency quota signal. */
     @Select("SELECT COUNT(*) FROM agent_run WHERE tenant_id = #{tenantId} " +
             "AND status IN ('QUEUED','RUNNING','SUSPENDED','WAITING_TOOLS')")
@@ -80,6 +83,14 @@ public interface AgentRunMapper extends BaseMapper<AgentRunEntity> {
             @Param("userId") Long userId,
             @Param("tenantId") Long tenantId,
             @Param("limit") int limit);
+
+    /** Active runs across all conversations for one owner (boot discovery). */
+    @Select("SELECT * FROM agent_run WHERE user_id = #{userId} AND tenant_id = #{tenantId} "
+            + "AND status IN ('QUEUED','RUNNING','WAITING_TOOLS','SUSPENDED') "
+            + "ORDER BY update_time DESC LIMIT #{limit}")
+    List<AgentRunEntity> selectActiveByOwner(@Param("userId") Long userId,
+                                             @Param("tenantId") Long tenantId,
+                                             @Param("limit") int limit);
 
     /** Child runs of a parent run (sub-agent delegation tree). */
     @Select("SELECT * FROM agent_run WHERE parent_run_id = #{parentRunId} ORDER BY create_time ASC")
