@@ -10,7 +10,9 @@
  * offered inline and what it must discover (see `buildAgentRunInputs`). This hook owns:
  *  - a {@link ToolProvider} (built-in + plugin tools, executable locally)
  *  - a {@link SkillProvider} (built-in + installed + plugin skills)
- *  - the skill-registry subscription and plugin (PLUGIN_CHANGED) wiring
+ *  - the skill-registry subscription and the **plugin-registry** subscription
+ *    (`pluginManager.onChange`, via `useRegistryVersion` — never the global
+ *    `PLUGIN_CHANGED`, which a plugin studio dev build deliberately omits)
  *  - a cached {@link CapabilityCatalog} and a `resolveTool` executor lookup
  *
  * Editor retargeting: the ToolProvider is created ONCE and rebound to whichever
@@ -27,12 +29,13 @@
 import { AppContext } from "../core/AppContext"
 import type { Editor } from "@tiptap/core"
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
-import { event, PLUGIN_CHANGED } from "../event"
 
 import type { OnToolExecution, OnUserChoiceRequest, ToolsRecord, ToolDefinition } from "./types"
 import { ToolProvider } from "./providers/ToolProvider"
 import type { ResolvedPluginToolGroup } from "../core/PluginManager"
 import { SkillProvider } from "./providers/SkillProvider"
+import { syncPluginSkills } from "./providers/plugin-skill-sync"
+import { useRegistryVersion } from "../hooks/use-plugin-state"
 import { collectCapabilityCatalog, isReadOnlyTool, type CapabilityCatalog } from "./capabilities"
 import {
     builtinSkills,
@@ -248,17 +251,40 @@ export function useCapabilityProviders(
     const perEditorToolsRef = useRef<WeakMap<object, ToolsRecord>>(new WeakMap())
 
     /**
-     * Plugin skills (`agent.skills`) are editor-independent, so register them
-     * whenever they change.
+     * Names this hook last registered from the plugin registry. The registry is
+     * authoritative: a name missing from the next resolution has to leave the
+     * provider, or a renamed skill keeps answering next to its replacement.
      */
-    const registerPluginSkills = useCallback(() => {
+    const pluginSkillNamesRef = useRef<ReadonlySet<string>>(new Set())
+
+    /**
+     * Plugin skills (top-level `skills`, plus the auto-generated `<plugin>-default`
+     * ones) are editor-independent, so sync them whenever the registry changes.
+     *
+     * The sync — not a plain `registerSkills` — is what makes a hot reload's
+     * *removed/renamed* skills disappear; see providers/plugin-skill-sync.
+     */
+    const syncPluginSkillCatalog = useCallback(() => {
         if (!pluginManager) return
-        const pluginSkills = pluginManager.resolveSkills?.() || []
-        if (pluginSkills.length > 0) {
-            console.log('[Agent] Registering plugin skills:', pluginSkills.map(s => s.name))
-            skillProvider.registerSkills(pluginSkills)
+        const result = syncPluginSkills({
+            provider: skillProvider,
+            next: pluginManager.resolveSkills?.() ?? [],
+            previous: pluginSkillNamesRef.current,
+            // Only read when a plugin drops a name: a user-installed skill it
+            // shadowed must come back, not vanish.
+            fallback: () => skillRegistry.toSkillFormat(),
+        })
+        pluginSkillNamesRef.current = result.names
+        if (result.added.length > 0) {
+            console.log('[Agent] Registering plugin skills:', result.added)
         }
-    }, [pluginManager, skillProvider])
+        if (result.updated.length > 0) {
+            console.log('[Agent] Updated plugin skills:', result.updated)
+        }
+        if (result.removed.length > 0) {
+            console.log('[Agent] Removed plugin skills:', result.removed)
+        }
+    }, [pluginManager, skillProvider, skillRegistry])
 
     /**
      * Plugin tools grouped by the plugin that contributes them.
@@ -295,7 +321,7 @@ export function useCapabilityProviders(
     const rebindEditor = useCallback((nextEditor: Editor | null): ToolsRecord => {
         const target = resolveBoundEditor(nextEditor)
         toolProvider.updateEditor(target)
-        registerPluginSkills()
+        syncPluginSkillCatalog()
         // A rebind may pick up different plugin tools; per-editor builds cached
         // for delegated agents must not keep serving the previous instances.
         perEditorToolsRef.current = new WeakMap()
@@ -312,7 +338,7 @@ export function useCapabilityProviders(
         // no-longer-resolvable plugin stopped contributing.
         toolProvider.syncPluginTools(groups)
         return toolProvider.getAllTools()
-    }, [toolProvider, pluginManager, registerPluginSkills, collectPluginToolsByPlugin, resolveBoundEditor])
+    }, [toolProvider, pluginManager, syncPluginSkillCatalog, collectPluginToolsByPlugin, resolveBoundEditor])
 
     /**
      * Build (or reuse) the tool record bound to an arbitrary editor: the same
@@ -372,16 +398,16 @@ export function useCapabilityProviders(
         pluginManager.setAgentBindingResolver(() => sessionBindingRef.current())
         return () => pluginManager.setAgentBindingResolver(undefined)
     }, [pluginManager, options?.passive])
-    // Register plugin skills + tools when plugins are loaded/changed, against
-    // the editor that is active at that moment.
+    // The plugin registry is the change stream for skills and tools: install,
+    // uninstall, re-init AND the plugin studio's in-place hot reload (which
+    // deliberately emits no `PLUGIN_CHANGED` — that would rebuild the router and
+    // remount the window on every save). Subscribing through
+    // `useSyncExternalStore` also closes the render→effect window, so a build
+    // that lands while this hook is mounting cannot be missed.
+    const registryVersion = useRegistryVersion(pluginManager)
     useEffect(() => {
-        const onPluginChanged = () => { rebindEditor(editorRef.current) }
-        registerPluginSkills()
-        event.on(PLUGIN_CHANGED, onPluginChanged)
-        return () => {
-            event.off(PLUGIN_CHANGED, onPluginChanged)
-        }
-    }, [rebindEditor, registerPluginSkills])
+        rebindEditor(editorRef.current)
+    }, [rebindEditor, registryVersion])
 
     // Initialize skill registry and load installed skills.
     useEffect(() => {

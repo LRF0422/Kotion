@@ -23,6 +23,7 @@ import { KPlugin, PluginManager } from './PluginManager'
 import { liftLegacySkills, liftLegacyTools } from '../ai/plugin-agent'
 import { ToolProvider } from '../ai/providers/ToolProvider'
 import { SkillProvider } from '../ai/providers/SkillProvider'
+import { syncPluginSkills } from '../ai/providers/plugin-skill-sync'
 import { collectCapabilityCatalog } from '../ai/capabilities/CapabilityCatalog'
 import { filterAgentCatalog } from '../ai/kernel/filter-catalog'
 import { BUILTIN_TOOL_METADATA } from '../ai/discovery/tool-metadata'
@@ -807,6 +808,96 @@ function checkDisabledPluginToolsAreDropped(): void {
         'and its own metadata with it')
 }
 
+/**
+ * Skills had no counterpart to `syncPluginTools`, and that asymmetry was the bug
+ * users reported as "after refreshing the plugin, the agent still cannot get the
+ * new skill": the provider only ever *added* skills, so a renamed or deleted one
+ * stayed in the catalog next to — or instead of — the build that replaced it.
+ *
+ * The contract, exercised against the real provider:
+ *
+ *  - a changed definition refreshes in place;
+ *  - a name the new build no longer contributes leaves the catalog;
+ *  - an unchanged sync is a no-op (it must not invalidate the catalog, which is
+ *    part of every request's cached prompt prefix);
+ *  - a user-installed skill a plugin was shadowing comes back when the plugin
+ *    drops the name, instead of being deleted along with it.
+ */
+function checkPluginSkillsFollowTheRegistry(): void {
+    const pluginSkill = (name: string, fragment: string, tools = [`${name}-tool`]) => ({
+        name,
+        description: `${name} skill`,
+        requiredTools: tools,
+        systemPromptFragment: fragment,
+        source: 'plugin' as const,
+        pluginName: 'Diagram',
+    })
+
+    const provider = new SkillProvider({})
+    let previous: ReadonlySet<string> = new Set()
+    const apply = (next: ReturnType<typeof pluginSkill>[]) => {
+        const result = syncPluginSkills({ provider, next, previous })
+        previous = result.names
+        return result
+    }
+
+    const first = apply([pluginSkill('chart-ops', 'v1')])
+    assert.equal(first.added.join(','), 'chart-ops', 'the first sync registers the build\'s skills')
+    assert.equal(provider.getSkill('chart-ops')?.systemPromptFragment, 'v1',
+        'and the definition is the one the plugin declared')
+
+    // A hot reload edits the fragment: same name, new content.
+    const edited = apply([pluginSkill('chart-ops', 'v2', ['chart-ops-tool', 'deleteChart'])])
+    assert.equal(edited.updated.join(','), 'chart-ops', 'a changed definition is reported as an update')
+    assert.equal(provider.getSkill('chart-ops')?.systemPromptFragment, 'v2',
+        'the new build\'s fragment must replace the old one')
+    assert(provider.getAllSkills().length === 1, 'updating a skill must not duplicate it')
+
+    // A rename: the old name must leave, or the model can still load a
+    // capability the current build no longer has.
+    const renamed = apply([pluginSkill('diagram-ops', 'v2')])
+    assert.equal(renamed.removed.join(','), 'chart-ops', 'the dropped name is reported as removed')
+    assert(!provider.getSkill('chart-ops'), 'a renamed skill must not linger under its old name')
+    assert(!!provider.getSkill('diagram-ops'), 'the substituted name arrives in the same sync')
+
+    // An unchanged resolution must not bump the version: that would invalidate
+    // the cached catalog on every registry event for no reason.
+    const versionBefore = provider.getVersion()
+    const noop = apply([pluginSkill('diagram-ops', 'v2')])
+    assert.equal(provider.getVersion(), versionBefore,
+        'an unchanged plugin-skill set must not invalidate the capability catalog')
+    assert(noop.added.length === 0 && noop.updated.length === 0 && noop.removed.length === 0,
+        `nothing changed, so nothing may be reported: ${JSON.stringify(noop)}`)
+
+    // A user-installed skill shadowed by the plugin has to come back.
+    const userSkill = {
+        name: 'diagram-ops',
+        description: 'user-installed',
+        requiredTools: [],
+        source: 'plugin' as const,
+        pluginName: 'user:diagram',
+    }
+    const shadowing = new SkillProvider({})
+    shadowing.registerSkill(userSkill)
+    let shadowPrevious: ReadonlySet<string> = new Set()
+    const shadowApply = (next: ReturnType<typeof pluginSkill>[]) => {
+        const result = syncPluginSkills({
+            provider: shadowing,
+            next,
+            previous: shadowPrevious,
+            fallback: () => [userSkill],
+        })
+        shadowPrevious = result.names
+        return result
+    }
+    shadowApply([pluginSkill('diagram-ops', 'v1')])
+    assert.equal(shadowing.getSkill('diagram-ops')?.pluginName, 'Diagram',
+        'the plugin build wins the name while it declares it')
+    shadowApply([])
+    assert.equal(shadowing.getSkill('diagram-ops')?.pluginName, 'user:diagram',
+        'when the plugin drops the name, the user skill it shadowed must be restored, not deleted')
+}
+
 async function main(): Promise<void> {
     checkSchemasAreWithheldButNamed()
     checkRequiresEditorFollowsDeclaredScope()
@@ -814,6 +905,7 @@ async function main(): Promise<void> {
     await checkAgentToolContextKeepsAResidentEditor()
     checkPluginToolsSurviveAnEditorSwap()
     checkDisabledPluginToolsAreDropped()
+    checkPluginSkillsFollowTheRegistry()
     checkDiscoveryCanBeTurnedOff()
     checkDefaultSkillToolsStayAdvertised()
     checkEntryPointsStayCallableWhenAClaimedByASkill()

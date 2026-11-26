@@ -1170,6 +1170,49 @@ const appWiringChecks = (): void => {
   }
 };
 
+/* ------------------------------------------------------------------ *
+ * 12. Agent skills/tools follow the registry, not `PLUGIN_CHANGED`
+ *
+ * The same one-event-miss that cost the shell its sidebar/settings/locales also
+ * hit the agent: `useCapabilityProviders` re-registered plugin skills and tools
+ * only on `PLUGIN_CHANGED` (plus an editor rebind). A plugin studio build emits
+ * neither, so after a hot reload the model kept the skills of the build that was
+ * running when the chat panel mounted — and "ask again" worked only if you
+ * happened to navigate, which rebinds the editor.
+ *
+ * Two things have to stay true, and both are one-word omissions:
+ *   - the hook reads the manager's **registry version** (a complete change
+ *     stream, see §9), not the global event;
+ *   - its plugin-skill bookkeeping is a sync (removal included), never a plain
+ *     append — see plugin-tools.check `checkPluginSkillsFollowTheRegistry`.
+ *
+ * The React behaviour itself cannot run in this Node harness, so this is a
+ * structural guard on the wiring, like §11.
+ * ------------------------------------------------------------------ */
+const agentCapabilityWiringChecks = (): void => {
+  const hookPath = join(
+    __dirname, "..", "..", "..", "src", "ai", "use-capability-providers.tsx",
+  );
+  const source = readFileSync(hookPath, "utf8");
+  const code = source
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "");
+
+  assert(
+    /useRegistryVersion\(pluginManager\)/.test(code),
+    "the capability hook must subscribe to the plugin registry (a dev build never emits PLUGIN_CHANGED)",
+  );
+  assert(
+    !/\bevent\.on\s*\(\s*PLUGIN_CHANGED/.test(code),
+    "the capability hook must not rely on PLUGIN_CHANGED for plugin contributions",
+  );
+  assert(
+    /syncPluginSkills\(/.test(code),
+    "plugin skills must be SYNCED on every registry change: an append leaves a renamed "
+    + "skill answering next to its replacement",
+  );
+};
+
 const run = async (): Promise<void> => {
   registryChecks();
   hookOwnershipChecks();
@@ -1183,6 +1226,7 @@ const run = async (): Promise<void> => {
   await cssChecks();
   await routeChecks();
   appWiringChecks();
+  agentCapabilityWiringChecks();
   logger.info(`plugin hot-swap checks passed (${checks} assertions)`);
 };
 

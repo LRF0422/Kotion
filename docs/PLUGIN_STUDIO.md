@@ -316,6 +316,11 @@ export const jenkins = new KPlugin({
 - **热更即刷新**：`usePluginState` 在每次插件变更时重渲染，所以 agent 改代码 → watcher 重建 →
   开发台热更 → 预览自动换成新组件。**真正的面板**（不是这个预览）也走同一条路，
   且换的是实现、不是组件身份——见下一节。
+- **agent 的能力目录也走这条路**：`useCapabilityProviders` 订阅 `pluginManager` 的 registry
+  version，**不是** `PLUGIN_CHANGED`（dev 构建故意不发它，否则每次保存都要重建路由/重挂窗口）。
+  所以热更后插件新加/改过的 `tools`、`skills` 会在**下一轮**对话进入 capability catalog；被改名或
+  删掉的 skill 同轮从 catalog 移除（`ai/providers/plugin-skill-sync`，不会再和替代者一起出现）。
+  不需要重启应用，也不需要"切一下页面"来触发重绑。
 
 关键取舍：
 
