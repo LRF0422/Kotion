@@ -86,6 +86,7 @@ public class AgentCoreProperties {
     private Skill skill = new Skill();
     private Profile profile = new Profile();
     private SessionTasks sessionTasks = new SessionTasks();
+    private BgTask bgTask = new BgTask();
 
     /** Run loop / task lifecycle settings. */
     @Data
@@ -429,5 +430,41 @@ public class AgentCoreProperties {
         private int backfillLimit = 500;
         /** Rows read per batch; bounds one query's payload. */
         private int backfillBatchSize = 50;
+    }
+
+    /**
+     * Background tasks (client executes, server stores).
+     *
+     * <p>See {@code docs/AGENT_TASK_SERVER.md}. The switch defaults to off so a
+     * deployment can ship the code before running V47; turn it on after the
+     * migration. Reads stay available when disabled so the UI can still show
+     * historical rows.
+     */
+    @Data
+    public static class BgTask {
+        private boolean enabled = false;
+        /** Heartbeat when the client does not specify one. */
+        private int defaultHeartbeatMs = 15000;
+        private int minHeartbeatMs = 5000;
+        private int maxHeartbeatMs = 300000;
+        /** lease TTL = heartbeat * leaseMultiplier. */
+        private int leaseMultiplier = 3;
+        /** How long a cancelling task may wait for the client to acknowledge. */
+        private long cancelGraceMs = 60000;
+        /** Tasks in running/cancelling per owner (0 = unlimited). */
+        private int maxActivePerUser = 50;
+        /** All retained tasks per owner (0 = unlimited). */
+        private int maxRetainedPerUser = 500;
+        private int maxResultBytes = 16 * 1024;
+        private int maxMetaBytes = 32 * 1024;
+        private int maxCheckpointBytes = 32 * 1024;
+        private int maxProgressBytes = 8 * 1024;
+        private int maxErrorChars = 4000;
+        private int maxLogsPerBatch = 200;
+        private int maxLogLineChars = 2000;
+        private int maxLogLinesPerTask = 5000;
+        private int maxListLimit = 200;
+        /** Rows examined per sweep tick (bounds one scheduler run). */
+        private int sweepLimit = 100;
     }
 }

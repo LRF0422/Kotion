@@ -1,5 +1,14 @@
 # 插件长任务工具集（`task.*` + `@kn/common` SDK）
 
+> **新设计（设计稿）**：面向 Plugin Studio 作者的 `defineTaskTool` / `runAsTask`、
+> `job`/`watch` 两种形态、以及"有更新就告诉 agent"的更新订阅，见
+> [PLUGIN_TASKS.md](PLUGIN_TASKS.md)。本文是底层 `task.*` 与现有 SDK 的参考手册；
+> 新 API 落地后，作者只需要看 PLUGIN_TASKS.md。
+>
+> **目标架构是存算分离**：客户端执行、服务端持久化（表/API/调度见
+> [AGENT_TASK_SERVER.md](AGENT_TASK_SERVER.md)）。本文的 `task.*` 主进程注册表
+> 保留为 legacy/offline 通道，不再是新插件的默认存储。
+>
 > **适用**：插件里任何"要跑一会儿"的活——同步、转码、下载、批量处理、装依赖、导出、索引重建……
 > 需要向用户/agent 展示**状态、进度、增量日志**，并且能被**协作式取消**。
 >
