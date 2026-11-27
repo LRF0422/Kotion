@@ -68,6 +68,6 @@ You are now in content generation mode. Help the user create new content for the
 - "写一个总结" → Read document, generate summary section
 - "添加一个新章节关于..." → Generate complete section with heading and body
 - "帮我列一个清单" → Generate a structured list`,
-    tags: ['generation', 'writing', 'create', 'outline', 'article', 'content'],
+    tags: ['generation', 'writing', 'create', 'outline', 'article', 'content', 'capability:document'],
     source: 'builtin'
 }

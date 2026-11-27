@@ -32,12 +32,15 @@ export const createUserChoiceTool = (onUserChoiceRequest?: OnUserChoiceRequest):
             }
 
             if (!onUserChoiceRequest) {
+                // Never pick an option on the user's behalf: the previous
+                // fallback silently returned options[0], which turned "ask
+                // where the content should go" into "create a page". There is
+                // no choice UI on this surface, so the model has to ask in
+                // plain text and end the turn.
                 return {
-                    success: true,
-                    selectedOption: options[0].id,
-                    selectedLabel: options[0].label,
-                    isDefault: true,
-                    message: 'User choice callback not available, using default option'
+                    error: '当前界面没有可用的交互式选项通道（askUserChoice 无法弹出选择卡）。'
+                        + '请直接在回复里向用户提出这个问题，并结束本回合等待回答；'
+                        + '不要替用户选择任何选项，也不要改用默认动作继续执行。'
                 }
             }
 

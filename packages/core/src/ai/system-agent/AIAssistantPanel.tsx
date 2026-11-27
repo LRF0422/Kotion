@@ -1,9 +1,11 @@
 /**
- * AI Assistant Panel — AgentCore 版（editor 为主要服务对象）
+ * AI Assistant Panel — AgentCore 版（通用助手；doc 为可选绑定）
  *
  * 内部全部基于新 SDK：useEditorAgent 驱动 run 生命周期（创建/断点恢复/
- * 工具自动执行/计划审批/预算续跑），useCapabilityProviders 提供编辑器工具
- * 目录与技能片段。导出名保持兼容（AIAssistantPanel / AIAssistantTrigger /
+ * 工具自动执行/计划审批/预算续跑），useCapabilityProviders 提供工具目录与
+ * 技能片段。编辑器是可选的：没有页面时它仍然是一个可以对话、检索、建页的
+ * 通用助手；文档编辑规范只在真正绑定了文档时才展开（capability pack）。
+ * 导出名保持兼容（AIAssistantPanel / AIAssistantTrigger /
  * useAIAssistantShortcut）。
  */
 
@@ -265,10 +267,16 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
     // 所有可执行工具都带完整 schema 下发；skills[] 只补提示词片段与各自拥有的工具名。
     // 仅超出 provider 工具上限的部分回落到 deferredTools —— 外加**本会话已通过
     // `load_skill` 加载过的技能**：它们的工具保持可调用，不需要再发现一次。
+    // 文档编辑是按需能力包：只有真的绑定了文档（editor）时才展开它的规范；
+    // 没有文档时 agent 是一个通用助手，文档能力等用户需要时再 load_skill。
     const loadedSkills = useLoadedSkills(conversationId)
+    const documentCapabilityActive = !!editor
     const { tools: toolSpecs, skills, deferredTools } = useMemo(
-        () => buildAgentRunInputs(catalog, { loadedSkills }),
-        [catalog, loadedSkills],
+        () => buildAgentRunInputs(catalog, {
+            loadedSkills,
+            activeCapabilities: documentCapabilityActive ? ['document'] : [],
+        }),
+        [catalog, loadedSkills, documentCapabilityActive],
     )
     // The selected agent's guidance rides in the per-turn context note, never in
     // the backend-owned system prompt.
@@ -347,12 +355,13 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
     )
 
     // 断点恢复：面板打开且空闲时自动续接未过期的 run（防重入）。
+    // 不再要求“必须先有页面”：没有文档时也是一个可以对话、检索、建页的通用助手。
     useEffect(() => {
-        if (open && currentPage?.pageId && agent.state.phase === 'idle' && !agent.state.runId) {
+        if (open && agent.state.phase === 'idle' && !agent.state.runId) {
             void agent.attach()
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [open, currentPage?.pageId])
+    }, [open])
 
     // run 终态 → 快照进消息历史，重置 agent 状态迎接下一轮。
     const lastPhaseRef = useRef(agent.state.phase)
@@ -389,7 +398,8 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
 
     const handleSubmit = useCallback(async () => {
         const trimmed = input.trim()
-        if (!trimmed || !currentPage?.pageId || agent.state.phase !== 'idle') return
+        // 没有页面也能发：agent 是通用助手，文档编辑只是它需要时才用的能力。
+        if (!trimmed || agent.state.phase !== 'idle') return
         const userMessage: Message = {
             id: 'user-' + Date.now().toString(36),
             role: 'user',
@@ -404,7 +414,7 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
             // A selected custom agent's guidance is per-turn context.
             contextNote: customAgentNote,
         }).catch(() => undefined)
-    }, [input, agent, mode, currentPage?.pageId, customAgentNote])
+    }, [input, agent, mode, customAgentNote])
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
         // Let the IME confirm its candidate: Enter is not a send while composing.
@@ -449,9 +459,9 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
                             <Sparkles className="h-3.5 w-3.5 text-white" />
                         </div>
                         <div>
-                            <div className="text-sm font-semibold">Editor Agent</div>
+                            <div className="text-sm font-semibold">AI 助手</div>
                             <div className="text-[10px] text-muted-foreground">
-                                {editor ? '已连接编辑器' : '未绑定编辑器'} · {agent.state.runId ? '可断点恢复' : '空闲'}
+                                {editor ? '已连接当前文档' : '未绑定文档 · 对话/检索/建页'} · {agent.state.runId ? '可断点恢复' : '空闲'}
                             </div>
                         </div>
                     </div>
@@ -657,7 +667,7 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
                                 value={input}
                                 onChange={e => setInput(e.target.value)}
                                 onKeyDown={handleKeyDown}
-                                placeholder={mode === 'plan' ? '描述目标，Agent 先调研并提交计划…' : '让 AI 编辑这篇文档…'}
+                                placeholder={mode === 'plan' ? '描述目标，Agent 先调研并提交计划…' : '问点什么，或让 AI 帮你完成一项任务…'}
                                 disabled={agent.state.phase !== 'idle'}
                                 rows={1}
                                 className={cn(

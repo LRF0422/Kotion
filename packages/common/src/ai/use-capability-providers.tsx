@@ -529,26 +529,52 @@ export function useCapabilityProviders(
         const requiresEditor = options?.requiresEditor !== false
         const ensureEditor = binding.getEditorForAsync
 
-        /** Resolve the exact target editor, then choose the matching tool map. */
-        const bindTarget = (
+        /**
+         * Resolve the exact target editor, then choose the matching tool map.
+         *
+         * The hidden-session lease can outlive its editor (HMR/remount/session
+         * teardown): the host resolves a handle, but the Tiptap instance behind
+         * it is already destroyed. Treating that as a hard failure made the
+         * model re-run `editPage` over and over for a session the host could
+         * have rebuilt itself. One transparent retry after a dead resolution
+         * is enough: the acquisition layer drops the stale lease and mounts a
+         * fresh generation, so the second attempt sees a live editor.
+         *
+         * A thrown acquisition error is NOT retried here — it carries the
+         * host's reason (component page, trash, read-only, sync failure) and
+         * most of those are permanent.
+         */
+        const bindTarget = async (
             target: { pageId: string; title?: string; spaceId?: string },
-            promise: Promise<any | null>,
-        ): Promise<ToolsRecord> => promise.then(
-            editor => {
-                if (!isLiveEditor(editor)) {
-                    throw new Error(documentTargetUnavailableMessage(target))
+            acquire: () => Promise<any | null>,
+        ): Promise<ToolsRecord> => {
+            let lastError: unknown = new Error('编辑会话已失效（编辑器被关闭或页面正在切换）')
+            for (let attempt = 0; attempt < 2; attempt += 1) {
+                try {
+                    const editor = await acquire()
+                    if (isLiveEditor(editor)) {
+                        return editor === activeEditor
+                            ? toolProvider.getAllTools()
+                            : buildToolsForEditor(editor)
+                    }
+                    lastError = new Error('编辑会话已失效（编辑器被关闭或页面正在切换）')
+                    console.warn('[agent] target editor is gone; re-acquiring', {
+                        pageId: target.pageId,
+                        attempt,
+                        tool: options?.toolName,
+                    })
+                } catch (error) {
+                    lastError = error
+                    break
                 }
-                return editor === activeEditor
-                    ? toolProvider.getAllTools()
-                    : buildToolsForEditor(editor)
-            },
-            error => {
-                // Preserve the host's reason (session timeout, read-only,
-                // component page) while naming the page the tool refused to
-                // write into.
-                throw new Error(documentTargetUnavailableMessage(target, error))
-            },
-        )
+                if (attempt === 0) {
+                    await new Promise<void>(resolve => setTimeout(resolve, 200))
+                }
+            }
+            // Preserve the host's reason (session timeout, read-only, component
+            // page) while naming the page the tool refused to write into.
+            throw new Error(documentTargetUnavailableMessage(target, lastError))
+        }
 
         if (owner) {
             const target = binding.getPageFor?.(owner) ?? null
@@ -561,9 +587,12 @@ export function useCapabilityProviders(
             if (!target) return toolProvider.getAllTools()
             if (!requiresEditor) return toolProvider.getAllTools()
             if (!ensureEditor) {
-                throw new Error(documentTargetUnavailableMessage(target))
+                throw new Error(documentTargetUnavailableMessage(
+                    target,
+                    new Error('该界面没有提供编辑目标获取通道'),
+                ))
             }
-            return bindTarget(target, ensureEditor(owner, { mutating: options?.mutating }))
+            return bindTarget(target, () => ensureEditor(owner, { mutating: options?.mutating }))
         }
 
         // Classification calls (`useEditorAgent.needsEditorTool`, legacy hosts)
@@ -585,9 +614,12 @@ export function useCapabilityProviders(
         if (!ensureEditor) {
             // A binding that cannot acquire an editor must not let a document
             // tool fall through to the visible page: that is the wrong document.
-            throw new Error(documentTargetUnavailableMessage(target))
+            throw new Error(documentTargetUnavailableMessage(
+                target,
+                new Error('该界面没有提供编辑目标获取通道'),
+            ))
         }
-        return bindTarget(target, ensureEditor(null, { mutating: options?.mutating }))
+        return bindTarget(target, () => ensureEditor(null, { mutating: options?.mutating }))
     }, [toolProvider, buildToolsForEditor])
 
     return {

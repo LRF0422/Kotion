@@ -20,6 +20,6 @@ export const documentFormatSkill: Skill = {
         'outdentListItem'
     ],
     systemPromptFragment: 'You have access to document formatting tools: apply inline formats (bold/italic/underline/strikethrough/code), format text by precise position range, set block text alignment (left/center/right/justify), set code block programming language, and indent/outdent list items.',
-    tags: ['format', 'style', 'alignment', 'document'],
+    tags: ['format', 'style', 'alignment', 'document', 'capability:document'],
     source: 'builtin'
 }

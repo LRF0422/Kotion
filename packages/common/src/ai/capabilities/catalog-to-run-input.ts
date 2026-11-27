@@ -156,6 +156,22 @@ export interface BuildAgentRunInputsOptions {
      * nothing.
      */
     loadedSkills?: Iterable<string>
+    /**
+     * Capability packs the run currently has IN PLAY (see
+     * {@link CAPABILITY_TAG_PREFIX}).
+     *
+     * A skill may belong to a pack (`capability:document`). Its prose is eager
+     * only while that pack is active — a live document target, an open editor,
+     * whatever the surface knows it is doing. With the pack inactive the skill
+     * still travels (its one-line purpose and tool names form the index entry)
+     * and `load_skill` delivers the full instructions when the task actually
+     * needs them.
+     *
+     * This is what keeps a general run from being framed as a document editor:
+     * the document policy is a capability, not an ambient persona. Omit it when
+     * the surface has no capability in play; the packs are then on demand.
+     */
+    activeCapabilities?: Iterable<string>
 }
 
 /**
@@ -165,11 +181,18 @@ export interface BuildAgentRunInputsOptions {
  * part of what a run ships. Only the skills that must be in force BEFORE the
  * model picks a tool stay eager:
  *
- *  - `builtin` — the editor's domain policy and the discovery mechanism
- *    description. They frame the run; deferring them would make page editing
- *    depend on a discovery round trip.
+ *  - `builtin` — the agent's identity, the editor's domain policy and the
+ *    discovery mechanism description. They frame the run; deferring them would
+ *    make even the capability index depend on a discovery round trip.
  *  - the {@link EAGER_SKILL_TAG} tag — a host's explicit "always in force"
  *    marker for a skill it ships itself.
+ *
+ * A skill that belongs to a CAPABILITY PACK (`capability:document`) is the one
+ * exception: its prose is eager only while that pack is in play (see
+ * {@link BuildAgentRunInputsOptions.activeCapabilities}). With the pack inactive
+ * the skill travels as an index entry, so a run that has no document is not
+ * framed by document rules — and `load_skill` still delivers them the moment
+ * the task needs a document.
  *
  * Everything else (plugin skills, installed/marketplace skills) travels as a
  * one-line description in the 【技能索引】 and its fragment arrives through
@@ -180,8 +203,39 @@ const EAGER_SKILL_SOURCES = new Set<SkillPayload['source']>(['builtin'])
 /** Tag a skill with this to keep its prompt fragment eager (see above). */
 export const EAGER_SKILL_TAG = 'essential'
 
-/** Whether this skill's prompt fragment ships with the request instead of on demand. */
-export function skillFragmentIsEager(skill: Pick<SkillPayload, 'source' | 'tags'>): boolean {
+/**
+ * Tag prefix that puts a skill in a capability pack: `capability:document`.
+ *
+ * The pack id is open (`document`, `file`, `plugin:bitable`, …). Adding one is a
+ * tag on the skill plus an `activeCapabilities` value from the surface that has
+ * that capability in play; no central registry is needed.
+ */
+export const CAPABILITY_TAG_PREFIX = 'capability:'
+
+/** The capability pack a skill belongs to, if any. */
+export function skillCapability(skill: Pick<SkillPayload, 'tags'>): string | null {
+    for (const tag of skill.tags ?? []) {
+        if (!tag.startsWith(CAPABILITY_TAG_PREFIX)) continue
+        const id = tag.slice(CAPABILITY_TAG_PREFIX.length).trim()
+        if (id) return id
+    }
+    return null
+}
+
+/**
+ * Whether this skill's prompt fragment ships with the request instead of on demand.
+ *
+ * `activeCapabilities` is the set of capability packs currently in play. A pack
+ * skill whose capability is not listed is deferred even though it is built-in:
+ * that is how "document editing is a capability" becomes true at the prompt
+ * level rather than only in the docs.
+ */
+export function skillFragmentIsEager(
+    skill: Pick<SkillPayload, 'source' | 'tags'>,
+    activeCapabilities?: ReadonlySet<string>,
+): boolean {
+    const capability = skillCapability(skill)
+    if (capability && !activeCapabilities?.has(capability)) return false
     return EAGER_SKILL_SOURCES.has(skill.source) || (skill.tags ?? []).includes(EAGER_SKILL_TAG)
 }
 
@@ -229,6 +283,9 @@ export function buildAgentRunInputs(
     // even when discovery is switched off.
     const described = describedNames(catalog.skills)
     const discoverable = catalog.skillDiscovery === false ? new Set<string>() : described
+    // Packs in play for THIS run. Empty (the default) means every capability
+    // pack is on demand, which is what keeps a general run general.
+    const activeCapabilities = new Set(options.activeCapabilities ?? [])
 
     // What progressive discovery withholds on this catalogue: a discoverable
     // non-core tool that is not part of the editor baseline.
@@ -281,7 +338,7 @@ export function buildAgentRunInputs(
         skills: catalog.skills.map(skill => {
             const requiredTools = uniqueNames(skill.requiredTools)
             const optionalTools = uniqueNames(skill.optionalTools)
-            const eager = skillFragmentIsEager(skill)
+            const eager = skillFragmentIsEager(skill, activeCapabilities)
             const hasFragment = !!(skill.systemPromptFragment ?? '').trim()
             const input: AgentSkillInput = { name: skill.name }
             // The one-line purpose travels for every skill whose INSTRUCTIONS were

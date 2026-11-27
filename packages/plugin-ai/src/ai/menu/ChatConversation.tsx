@@ -26,6 +26,7 @@ import {
     resolveAgentPageTarget,
     subscribeAgentEditors,
     useCurrentPage,
+    waitForAgentEditor,
     setSessionPageBinding,
     clearSessionPageBinding,
     revealBlockById,
@@ -328,12 +329,16 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
         }
         // Already acquired (e.g. through the editPage tool) → reuse it without
         // flashing through 'connecting' and briefly disabling auto-execution.
+        // A lease whose editor was destroyed (HMR/remount/session teardown)
+        // must be dropped: reusing it made every document tool fail with
+        // "无法取得编辑目标…的编辑器" until the conversation was reopened.
         const cached = offscreenTargetsRef.current.get(String(targetPageId))
-        if (cached) {
+        if (cached && isLiveEditor(cached.editor)) {
             if (offscreenHandleRef.current !== cached) setOffscreenHandle(cached)
             setTargetStatus('ready')
             return
         }
+        if (cached) releaseTarget(String(targetPageId))
         let cancelled = false
         setTargetStatus('connecting')
         activateOffscreenTarget(requested)
@@ -603,14 +608,19 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
         (name: string) => !allowedToolNames || allowedToolNames.has(name),
         [allowedToolNames],
     )
-    // Every callable tool rides in tools[] with its schema; skills[] adds the
-    // prompt fragments and the tool names each skill owns. Only what the
-    // provider's tool ceiling cannot fit comes back as deferredTools — plus the
-    // skills THIS conversation already loaded through `load_skill`.
+    // Document editing is a CAPABILITY PACK, not this conversation's identity:
+    // its policy prose is eager only while the conversation actually has a
+    // document in play (a bound target, or the visible editor it acts on).
+    // With no target the same skill travels as an index entry and is delivered
+    // by `load_skill` when the user asks for document work.
+    const documentCapabilityActive = !!(targetPage || agentEditor)
     const loadedSkills = useLoadedSkills(sessionId)
     const { tools: toolSpecs, skills, deferredTools } = useMemo(
-        () => buildAgentRunInputs(catalog, { loadedSkills }),
-        [catalog, loadedSkills],
+        () => buildAgentRunInputs(catalog, {
+            loadedSkills,
+            activeCapabilities: documentCapabilityActive ? ['document'] : [],
+        }),
+        [catalog, loadedSkills, documentCapabilityActive],
     )
 
     useEffect(() => {
@@ -702,28 +712,37 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
                     return { ...record, editor: claimed }
                 }
                 // The page is already on screen: its visible editor is the target.
+                // The editor is published one render after the page surface
+                // mounts, so a target right after navigation used to fail with
+                // "editor not ready" even though it was about to be claimed.
+                // Wait briefly for the claim instead of mounting a hidden writer.
                 if (isSamePage(livePageId(), pageId)) {
-                    if (!editor || !isLiveEditor(editor)) {
-                        // The page is on screen but its editor has not been
-                        // published yet (still loading / syncing). Say why —
-                        // the bare "no editor" message read like a broken tool.
+                    const visible = isLiveEditor(editor)
+                        ? editor
+                        : await waitForAgentEditor(pageId)
+                    if (!isLiveEditor(visible)) {
+                        // The page is on screen but no editor ever appeared:
+                        // this is now a real failure, with the reason named.
                         throw new Error(documentTargetUnavailableMessage(
                             { pageId, title: page.title },
                             '页面还在加载，可用的文档编辑器尚未就绪',
                         ))
                     }
-                    rebindEditor(editor)
+                    rebindEditor(visible)
                     offscreenHandleRef.current = null
                     setOffscreenHandle(null)
                     setTargetStatus('current')
                     const record = bindTargetPage(page)
-                    return { ...record, editor }
+                    return { ...record, editor: visible }
                 }
                 const { record, handle } = await switchEditTarget(page)
                 if (!handle?.editor) {
                     // `switchEditTarget` only returns no handle for the visible
                     // page (handled above), so this is an unusable target.
-                    throw new Error(documentTargetUnavailableMessage({ pageId, title: record.title }))
+                    throw new Error(documentTargetUnavailableMessage(
+                        { pageId, title: record.title },
+                        new Error('目标页面没有返回可用的编辑器'),
+                    ))
                 }
                 const targetEditor = handle.editor as Editor
                 // Rebind built-in AND plugin tools to the target editor in one
@@ -816,6 +835,20 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
                 }
                 const ready = readyEditorForPage(target)
                 if (ready) return ready
+                // The target is the page on screen: give its visible editor a
+                // short window to publish its claim before falling back to a
+                // hidden session (which would be a second writer for the page
+                // the user is looking at).
+                if (isSamePage(livePageId(), target.pageId)) {
+                    const claimed = await waitForAgentEditor(String(target.pageId))
+                    if (isLiveEditor(claimed)) {
+                        rebindEditor(claimed)
+                        offscreenHandleRef.current = null
+                        setOffscreenHandle(null)
+                        setTargetStatus('current')
+                        return claimed
+                    }
+                }
                 // Rejects with the acquisition reason ("this page type has no
                 // document", "room did not sync", …): the caller adds the page
                 // identity around it.

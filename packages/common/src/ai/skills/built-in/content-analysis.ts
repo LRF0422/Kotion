@@ -70,6 +70,6 @@ When presenting analysis, use structured formats:
 - "检查内容的完整性" → Identify gaps and missing sections
 - "评估文档结构" → Analyze organization and suggest improvements
 - "提取关键词" → List main themes and terminology`,
-    tags: ['analysis', 'summary', 'review', 'insight', 'quality', 'assessment'],
+    tags: ['analysis', 'summary', 'review', 'insight', 'quality', 'assessment', 'capability:document'],
     source: 'builtin'
 }

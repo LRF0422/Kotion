@@ -56,6 +56,6 @@ You are now in translation mode. Help the user translate document content accura
 - "Translate to Chinese" → Translate entire document to Chinese
 - "翻译选中的内容" → Translate only the selected/specified section
 - "中英对照" → Create bilingual version with both languages`,
-    tags: ['translation', 'translate', 'language', 'i18n', 'localization'],
+    tags: ['translation', 'translate', 'language', 'i18n', 'localization', 'capability:document'],
     source: 'builtin'
 }

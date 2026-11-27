@@ -14,6 +14,6 @@ export const documentTableSkill: Skill = {
     description: 'Create and edit tables in the document.',
     requiredTools: ['insertTable', 'listTable', 'getTableInfo', 'editTable', 'editTableCell'],
     systemPromptFragment: 'You have access to table tools: insert new tables (with configurable rows/columns/header), list all tables with overview info, get detailed table structure and cell content, perform structural table operations (add/remove rows and columns, merge/split cells), and edit individual cell content.',
-    tags: ['table', 'document'],
+    tags: ['table', 'document', 'capability:document'],
     source: 'builtin'
 }

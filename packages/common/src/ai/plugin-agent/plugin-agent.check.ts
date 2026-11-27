@@ -27,11 +27,13 @@ import {
     type AgentContribution,
     type AgentToolContext,
 } from './index'
-import { filterAgentCatalog } from '../kernel/filter-catalog'
+import { agentToolAvailableAtScope, filterAgentCatalog } from '../kernel/filter-catalog'
 import { collectCapabilityCatalog } from '../capabilities/CapabilityCatalog'
 import { builtinSkills } from '../skills/built-in'
+import { DOCUMENT_CAPABILITY } from '../skills/built-in/document-editing'
+import { workspaceHomeSkill } from '../kernel/surface-skills'
 import { BUILTIN_TOOL_METADATA } from '../discovery/tool-metadata'
-import { buildAgentRunInputs } from '../capabilities/catalog-to-run-input'
+import { buildAgentRunInputs, skillFragmentIsEager } from '../capabilities/catalog-to-run-input'
 import { agentArtifactKey, collectAgentArtifacts } from '../kernel/agent-artifact-collect'
 
 function ctx(editor?: any, scope: AgentToolContext['scope'] = 'workspace'): AgentToolContext {
@@ -598,6 +600,118 @@ function checkBuiltinSkillToolNamesExist(): void {
         'the editor prompt must keep the whole-page layout guidance')
 }
 
+/**
+ * Document editing is a capability pack, not the agent's identity.
+ *
+ * The failure this pins: the document policy used to be an eager `builtin`
+ * skill whose fragment opened with "You are an intelligent document editing
+ * assistant". Every run — including a workbench run with no document at all —
+ * was therefore framed as a document editor, and the model answered questions by
+ * creating a page to "land" the answer. The policy is now tagged
+ * `capability:document` and is eager only while that capability is in play.
+ */
+function checkDocumentCapabilityIsOnDemand(): void {
+    const policy = builtinSkills.find(skill => skill.name === 'document-editing')
+    assert.ok(policy, 'the document capability skill must be registered')
+    const fragment = policy!.systemPromptFragment ?? ''
+
+    // It is a capability, not an identity. The old persona line must not come
+    // back; the policy still has to be complete when it IS loaded.
+    assert.ok(!fragment.includes('You are an intelligent document editing assistant'),
+        'document editing must not introduce itself as the agent identity')
+    assert.ok(fragment.includes('# DOCUMENT EDITING（按需能力）'),
+        'the policy must say it is a load-on-demand capability')
+    assert.ok(fragment.includes('先按通用规则问清'),
+        'the policy must keep the "ask where before writing" rule')
+
+    // Eager only with the capability in play.
+    assert.equal(skillFragmentIsEager(policy!, new Set<string>()), false,
+        'a document run with no target must not ship the document policy')
+    assert.equal(skillFragmentIsEager(policy!, new Set<string>([DOCUMENT_CAPABILITY])), true,
+        'a live document target must ship the policy eagerly')
+
+    // The whole document family is tagged, not just the umbrella policy: every
+    // one of those fragments talks about editing a document ("You are now in
+    // content generation mode… for their document"), so a general run must not
+    // carry any of them as ambient framing.
+    const documentSkills = builtinSkills.filter(skill =>
+        skill.name !== 'general-assistant' && skill.name !== 'capability-discovery')
+    assert.ok(documentSkills.length >= 17, 'the document capability family is registered')
+    for (const skill of documentSkills) {
+        assert.equal(skillFragmentIsEager(skill, new Set<string>()), false,
+            `${skill.name} must be on demand without a document`)
+        assert.equal(skillFragmentIsEager(skill, new Set<string>([DOCUMENT_CAPABILITY])), true,
+            `${skill.name} must be eager with a document target`)
+    }
+
+    // The identity itself is always on, and it owns the "ask where" decision.
+    const identity = builtinSkills.find(skill => skill.name === 'general-assistant')
+    assert.ok(identity, 'the general-assistant identity must be registered')
+    assert.equal(skillFragmentIsEager(identity!, new Set<string>()), true)
+    const identityText = identity!.systemPromptFragment ?? ''
+    for (const needle of ['通用 Agent', 'askUserChoice', '不要为了让回答“落地”而创建页面']) {
+        assert.ok(identityText.includes(needle),
+            `the identity must state: ${needle}`)
+    }
+
+    // The workbench framing follows the same rule: no page is the normal state,
+    // and content placement is a question, never a silent createPage.
+    const surface = workspaceHomeSkill.systemPromptFragment ?? ''
+    assert.ok(surface.includes('先确认位置'), 'the workbench must ask where content goes')
+    assert.ok(!surface.includes('需要落地成果时，写进页面'),
+        'the workbench must not default every answer into a page')
+
+    // "Ask where" only works if the ask tool survives the workspace scope filter.
+    // It was previously a plain interaction tool (no scope), so a run with no
+    // document silently lost it.
+    const ask = BUILTIN_TOOL_METADATA.find(meta => meta.name === 'askUserChoice')
+    assert.ok(ask, 'askUserChoice metadata must exist')
+    assert.equal(ask!.scope, 'any', 'askUserChoice must be valid in every scope')
+    assert.equal(ask!.requiresEditor, false, 'asking a question needs no editor')
+    assert.equal(agentToolAvailableAtScope(ask, false), true,
+        'a workspace run with no document must still be able to ask the user')
+
+    // End to end over the run-input builder: cold = index entry only, hot =
+    // labelled fragment. The skill survives either way, which is what makes it
+    // reachable through `load_skill` in the same run.
+    const catalog: any = {
+        version: 'cap',
+        tools: [],
+        skills: [
+            {
+                name: 'document-editing',
+                description: '文档编辑能力',
+                source: 'builtin',
+                requiredTools: [],
+                tags: [`capability:${DOCUMENT_CAPABILITY}`],
+                systemPromptFragment: '# DOCUMENT EDITING（按需能力）\nbody',
+            },
+            {
+                name: 'general-assistant',
+                description: '通用助手',
+                source: 'builtin',
+                requiredTools: [],
+                tags: ['identity', 'essential'],
+                systemPromptFragment: '# IDENTITY\nbody',
+            },
+        ],
+    }
+    const cold = buildAgentRunInputs(catalog)
+    const coldDoc = cold.skills.find(skill => skill.name === 'document-editing')!
+    assert.equal(coldDoc.systemPromptFragment, undefined,
+        'with no capability in play the policy travels as an index entry')
+    assert.equal(coldDoc.description, '文档编辑能力',
+        'the index entry is how the model learns the capability exists')
+    assert.ok(cold.skills.find(skill => skill.name === 'general-assistant')!.systemPromptFragment,
+        'the identity is eager in every run')
+
+    const hot = buildAgentRunInputs(catalog, { activeCapabilities: [DOCUMENT_CAPABILITY] })
+    assert.ok(
+        hot.skills.find(skill => skill.name === 'document-editing')!.systemPromptFragment
+            ?.startsWith('【技能名】document-editing'),
+        'with a target in play the policy ships labelled and eager')
+}
+
 function checkContextWhitelist(): void {
     // Deny by default: declaring a provider is not authorizing it.
     clearAgentContextWhitelist()
@@ -632,6 +746,7 @@ function main(): void {
     checkEditingBaselineIsNeverWithheld()
     checkToolBudgetOverflow()
     checkBuiltinSkillToolNamesExist()
+    checkDocumentCapabilityIsOnDemand()
     checkArtifactCollection()
     checkContextWhitelist()
     console.log('plugin-agent checks passed')

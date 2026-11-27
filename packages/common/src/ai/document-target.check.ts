@@ -114,6 +114,18 @@ check('missing-target error names the recovery tools',
 const unavailable = documentTargetUnavailableMessage({ pageId: 'p9', title: 'Report' }, new Error('not synced'))
 check('unavailable error names the page', unavailable.includes('Report') && unavailable.includes('not synced'))
 check('unavailable error refuses a silent fallback', unavailable.includes('不要改用当前页面'))
+check('a transient failure invites one transparent retry',
+    unavailable.includes('重建编辑会话') && unavailable.includes('直接重试'))
+// Permanent reasons must not send the model back into editPage; the host has
+// already tried rebuilding and retrying cannot fix a component/read-only page.
+const unavailablePermanent = documentTargetUnavailableMessage(
+    { pageId: 'p9b', title: 'Report' },
+    new Error('这是「看板」整页组件页面，没有文档正文'),
+)
+check('a permanent failure is marked as non-retryable',
+    unavailablePermanent.includes('重试不会成功') && !unavailablePermanent.includes('直接重试'))
+check('a permanent failure still refuses a silent fallback',
+    unavailablePermanent.includes('不要改用当前页面'))
 
 // A component-backed page is a permanent condition: the message must name the
 // page type, explain there is no document, and NOT send the model into the

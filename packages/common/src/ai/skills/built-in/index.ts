@@ -3,6 +3,7 @@
  */
 
 export { capabilityDiscoverySkill } from './capability-discovery'
+export { generalAssistantSkill } from './general-assistant'
 export { documentEditingSkill } from './document-editing'
 export { documentRefactorSkill } from './document-refactor'
 export { contentAnalysisSkill } from './content-analysis'
@@ -22,6 +23,7 @@ export { documentColorSkill } from './document-color'
 export { documentInteractionSkill } from './document-interaction'
 
 import { capabilityDiscoverySkill } from './capability-discovery'
+import { generalAssistantSkill } from './general-assistant'
 import { documentEditingSkill } from './document-editing'
 import { documentRefactorSkill } from './document-refactor'
 import { contentAnalysisSkill } from './content-analysis'
@@ -47,8 +49,13 @@ import type { Skill } from '../../types'
 export const builtinSkills: Skill[] = [
     // Client-owned mechanism description: how the model reaches a skill's tools.
     capabilityDiscoverySkill,
-    // Domain policy for this editor: shipped by the client because the backend
-    // agent is domain-blind (see the backend's AgentPrompts).
+    // The agent's identity. The backend persona is deliberately domain-blind,
+    // so the client owns "who you are" too — and the answer is "a general
+    // assistant", not "a document editor".
+    generalAssistantSkill,
+    // Document editing is a CAPABILITY (tagged `capability:document`), not the
+    // identity: its prose is eager only while a document target is in play and
+    // otherwise arrives through `load_skill` when the task actually needs it.
     documentEditingSkill,
     documentRefactorSkill,
     contentAnalysisSkill,

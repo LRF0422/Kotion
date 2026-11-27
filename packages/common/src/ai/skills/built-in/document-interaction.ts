@@ -13,6 +13,6 @@ export const documentInteractionSkill: Skill = {
     description: 'Interact with the user for choices, highlight document elements, and cite document blocks as clickable references.',
     requiredTools: ['askUserChoice', 'highlight', 'referenceBlocks'],
     systemPromptFragment: 'You have access to interaction tools: ask the user a question and get their choice/confirmation, highlight text ranges visually in the document for feedback, and call referenceBlocks with blockIds (from getDocumentStructure/searchInDocument) so the chat renders clickable citation chips that jump to the referenced blocks — use it whenever your answer points at specific places in the document.',
-    tags: ['interaction', 'user-choice', 'highlight', 'reference', 'document'],
+    tags: ['interaction', 'user-choice', 'highlight', 'reference', 'document', 'capability:document'],
     source: 'builtin'
 }

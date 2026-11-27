@@ -62,6 +62,6 @@ You are now in document refactoring mode. Follow these guidelines:
 - "改进文档的可读性" → Analyze readability issues, fix heading levels, add transitions
 - "调整标题层级" → Map current levels, propose new hierarchy, apply
 - "拆分大段落" → Identify long paragraphs, split at logical boundaries`,
-    tags: ['refactor', 'structure', 'organize', 'document', 'restructure', 'hierarchy'],
+    tags: ['refactor', 'structure', 'organize', 'document', 'restructure', 'hierarchy', 'capability:document'],
     source: 'builtin'
 }

@@ -24,6 +24,6 @@ export const documentWriteSkill: Skill = {
         'moveBlock'
     ],
     systemPromptFragment: 'You have access to document writing tools: update title, write content, insert near matching text, find-and-replace content, insert/remove links, replace text ranges precisely, insert horizontal rules, insert collapsible details blocks, convert block types, and move blocks by blockId.',
-    tags: ['write', 'edit', 'content', 'document'],
+    tags: ['write', 'edit', 'content', 'document', 'capability:document'],
     source: 'builtin'
 }

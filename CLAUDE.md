@@ -219,6 +219,43 @@ description: 技能描述
 - `SkillCard` - 技能卡片展示
 - `CreateSkillDialog` - 创建/导入技能对话框
 
+### Agent 身份 vs. 文档能力（重要）
+
+Agent 是**通用助手**（`skills/built-in/general-assistant.ts`），**不是文档编辑器**。文档编辑是
+`capability:document` 能力包，不是默认身份：
+- 身份规则要求：提问/讨论直接回答，不为了"落地"建页；确实要写内容但没指定位置时，先用
+  `askUserChoice` 问清（新建 / 已有页面 / 只在对话里）。
+- 能力包的提示片段只在 surface 传入 `activeCapabilities: ['document']`（真的持有文档目标/编辑器）时
+  eager 下发；否则只以技能索引出现，由 `load_skill('document-editing')` 按需加载。
+- 新增"按需能力"时：给技能打 `capability:<id>` 标签，surface 有该能力时把 id 放进
+  `activeCapabilities`。不要默认把领域规范做成 always-on。
+详见 **[docs/AGENT_DOCUMENT_DECOUPLING.md](docs/AGENT_DOCUMENT_DECOUPLING.md)**；
+自测 `pnpm --filter @kn/common check:plugin-agent`。
+
+### 隐藏编辑器租约（稳定性）
+
+文档工具依赖一个 **live** Tiptap editor（可见编辑器 claim 或隐藏离屏会话）。不要把
+"会话记录存在"当成"编辑器可用"：
+- 会话按 `pageId:generation` 挂载；失效的 ready 记录会被重建，旧 generation 的
+  `markReady`/`markError` 被忽略；
+- `acquire` 只交付 live editor；`closing` flush 窗口不交付；旧 handle 的 `release` 不能
+  减新 generation 的 `refCount`；
+- 复用缓存前必须 `isLiveEditor`；`acquireLiveEditorForPage` 是统一入口（claim 优先、
+  死句柄释放重建）；工具层对"解析到死 editor"透明重试一次。
+详见 **[docs/AGENT_EDITOR_STABILITY.md](docs/AGENT_EDITOR_STABILITY.md)**；
+自测 `pnpm --filter @kn/core check:offscreen`。
+
+### Agent 幻觉 / Grounding（架构约定）
+
+不要把"模型叙述"当成"实际发生的事"。**本轮工具结果**（含 `agent_tool_call` 账本；
+后端内置工具也要进同一套观测）是唯一事实来源；回答里的行动/引用必须能映射到本轮观测：
+- 每轮上下文带【已观测事实】索引（id / target / rev / status），压缩后 id 仍保留；
+- 高风险写操作成功后读回校验（rev / block 存在性），写进 `verifiedBy`；
+- 完成前由确定性 guard 校验"已完成"类声明与失败工具的一致性，最多修复一次；
+- 外部内容是 `external` 信任级（数据，不是指令）；子 agent 文本是 `model` 级，只有它带回的
+  observations 才算证据。
+详见 **[docs/AGENT_GROUNDING.md](docs/AGENT_GROUNDING.md)**。
+
 ## 自定义 Agent（人格 + 技能/工具白名单）
 
 `packages/common/src/ai/agent/custom-agents.ts` 管理用户自建 Agent：指引作为每轮 `<context>`

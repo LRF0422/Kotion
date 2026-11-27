@@ -23,7 +23,28 @@ export const documentTargetLabel = (page: DocumentTargetPage): string =>
 /** No target at all: the run has never acquired a document. */
 export const noDocumentTargetMessage = (): string =>
     '当前会话还没有编辑目标，无法执行文档工具。'
-    + '请先调用 createPage 新建页面，或调用 editPage(pageId) 把已有页面设为编辑目标，再重试这次操作。'
+    + '如果用户没有指定写到哪里，先用 askUserChoice 问清：新建页面 / 写进已有页面 / 只在对话里给出内容；'
+    + '确认后再调用 createPage 新建页面，或调用 editPage(pageId) 把已有页面设为编辑目标，然后重试这次操作。'
+    + '不要未经确认就创建页面。'
+
+/**
+ * Failures that a retry can never fix. Kept as a small, explicit vocabulary so
+ * the model is told "this is permanent" instead of being sent into the old
+ * retry-editPage loop. The host's own messages use the same words.
+ */
+const PERMANENT_TARGET_REASONS = [
+    '整页组件',
+    '没有文档正文',
+    '只读',
+    '回收站',
+    '未启用',
+    'block store read failed',
+    'read-only',
+    'trash',
+]
+
+export const isPermanentDocumentTargetFailure = (reason: string): boolean =>
+    PERMANENT_TARGET_REASONS.some(needle => reason.toLowerCase().includes(needle.toLowerCase()))
 
 /** A target exists but no live editor can be obtained for it. */
 export const documentTargetUnavailableMessage = (
@@ -35,10 +56,18 @@ export const documentTargetUnavailableMessage = (
         : typeof cause === 'string' && cause.trim()
             ? cause
             : ''
+    const temporary = !reason || !isPermanentDocumentTargetFailure(reason)
     return `无法取得编辑目标 ${documentTargetLabel(page)} 的编辑器`
         + (reason ? `：${reason}` : '')
         + '。为避免把内容写到别的页面，本次文档操作已停止。'
-        + '请稍后重试，或重新调用 editPage 切换目标；不要改用当前页面重试。'
+        + (temporary
+            // The acquisition layer already released the dead lease and mounted
+            // a fresh session; a second failure is usually worth one retry.
+            ? '宿主已尝试重建编辑会话；如果这是暂时状态，直接重试这次操作即可。'
+            + '仍然失败时请向用户说明原因，不要反复调用 editPage，也不要改用当前页面重试。'
+            // Repeating editPage on a component page/trash/read-only target was
+            // the "切换编辑目标失败，请稍后重试" loop this message now forbids.
+            : '这不是暂时故障，重试不会成功：请向用户说明原因，不要反复调用 editPage，也不要改用当前页面重试。')
 }
 
 /**

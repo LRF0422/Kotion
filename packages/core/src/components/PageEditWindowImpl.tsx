@@ -977,7 +977,7 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, em
                     <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
                         <FileText className="h-8 w-8 text-muted-foreground" />
                         <p className="max-w-sm text-sm text-muted-foreground">{t('componentPage')}</p>
-                        <Button variant="outline" size="sm" onClick={handleOpenFullPage} disabled={!page.spaceId}>
+                        <Button variant="outline" size="sm" onClick={handleOpenFullPage} disabled={!page?.spaceId}>
                             <ArrowUpRight className="mr-1 h-3.5 w-3.5" />
                             {t('openFullPage')}
                         </Button>

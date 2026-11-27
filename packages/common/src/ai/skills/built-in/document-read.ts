@@ -19,6 +19,6 @@ export const documentReadSkill: Skill = {
     systemPromptFragment: 'You have access to document reading tools: get document structure, read content chunks, search within the document, '
         + 'look at an image embedded in the document (readImage — it hands the image to your own vision, so use it instead of guessing what a picture shows), '
         + 'get current selection, and undo changes.',
-    tags: ['always-on', 'read', 'document'],
+    tags: ['read', 'document', 'capability:document'],
     source: 'builtin'
 }

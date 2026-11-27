@@ -9,6 +9,12 @@
 
 export { collectCapabilityCatalog, isReadOnlyTool } from './CapabilityCatalog'
 export type { CapabilityCatalog, CollectCapabilityCatalogOptions } from './CapabilityCatalog'
-export { buildAgentRunInputs, DEFAULT_TOOL_BUDGET } from './catalog-to-run-input'
+export {
+    buildAgentRunInputs,
+    DEFAULT_TOOL_BUDGET,
+    CAPABILITY_TAG_PREFIX,
+    skillCapability,
+    skillFragmentIsEager,
+} from './catalog-to-run-input'
 export type { AgentRunInputs } from './catalog-to-run-input'
 export type { AgentCapabilityCatalog, SkillPayload, ToolPayload } from './payload-types'

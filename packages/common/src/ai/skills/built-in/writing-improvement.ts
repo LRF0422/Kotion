@@ -58,6 +58,6 @@ You are now in writing improvement mode. Help the user enhance their document's 
 - "让文章更简洁" → Find redundancies, propose cuts, confirm and apply
 - "检查语法" → Scan for grammar issues, fix them
 - "统一文章风格" → Analyze tone, identify inconsistencies, harmonize`,
-    tags: ['writing', 'grammar', 'style', 'clarity', 'improvement', 'editing'],
+    tags: ['writing', 'grammar', 'style', 'clarity', 'improvement', 'editing', 'capability:document'],
     source: 'builtin'
 }

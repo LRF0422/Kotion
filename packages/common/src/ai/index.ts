@@ -28,6 +28,7 @@ export * from "./agent-page-target"
 
 // Offscreen editor bridge — off-screen page editing sessions (engine in core)
 export * from "./offscreen-editor-bridge"
+export * from "./editor-acquisition"
 
 // Page edit window — floating page editor (implementation registered by core)
 export * from "./page-edit-window-bridge"

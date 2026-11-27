@@ -502,7 +502,13 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
         priority: 10,
         tags: ['user', 'choice', 'confirm', 'essential'],
         loaded: false,
-        source: 'builtin'
+        source: 'builtin',
+        // The general assistant must be able to ask "where should this go?"
+        // before it has any document — a workspace run with no target would
+        // otherwise filter this out and be left guessing (or silently creating
+        // a page). It touches no editor.
+        scope: 'any',
+        requiresEditor: false
     },
     {
         name: 'highlight',

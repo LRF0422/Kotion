@@ -330,7 +330,7 @@ export const createPageTools = (editor: Editor): ToolsRecord => ({
     },
 
     createPage: {
-        description: '创建新页面，可指定空间与位置：作为某个页面(relativeTo)的子页面(position=child)、同级页面(position=sibling)，或直接用 parentId 指定父页面（parentId=null 表示空间根层级）。默认创建在当前空间。创建后可选择把新页面设为离屏编辑目标(bindToSession，默认 true)并/或在锚点页面插入链接(linkInDocument)',
+        description: '创建新页面，可指定空间与位置：作为某个页面(relativeTo)的子页面(position=child)、同级页面(position=sibling)，或直接用 parentId 指定父页面（parentId=null 表示空间根层级）。默认创建在当前空间。创建后可选择把新页面设为离屏编辑目标(bindToSession，默认 true)并/或在锚点页面插入链接(linkInDocument)。只在用户确认要新建页面后调用：用户只是提问、或没有指定写到哪里时，先用 askUserChoice 问清，不要为了“落地”而建页',
         inputSchema: z.object({
             title: z.string().describe("新页面的标题"),
             spaceId: z.string().optional().describe("目标空间 id，不填则使用当前空间"),
@@ -584,7 +584,7 @@ export const createPageTools = (editor: Editor): ToolsRecord => ({
     },
 
     editPage: {
-        description: '把本会话的离屏编辑目标切换到指定页面：不离开用户当前页面，即可用文档工具（getDocumentStructure/applyEdits/replaceBlockById 等）读取和编辑该页面。要编辑任何不是当前目标的页面前，必须先调用它。切换后所有文档工具都作用于该页面，直到再次调用 editPage。只有文档页面可编辑：整页由插件组件渲染的页面（画布/看板之类）没有文档正文，调用会返回明确错误，此时不要重试',
+        description: '把本会话的离屏编辑目标切换到指定页面：不离开用户当前页面，即可用文档工具（getDocumentStructure/applyEdits/replaceBlockById 等）读取和编辑该页面。要编辑任何不是当前目标的页面前，必须先调用它。切换后所有文档工具都作用于该页面，直到再次调用 editPage。只在用户确认“写进这个已有页面”后调用；没有目标时先问清写到哪里。只有文档页面可编辑：整页由插件组件渲染的页面（画布/看板之类）没有文档正文，调用会返回明确错误，此时不要重试',
         inputSchema: z.object({
             pageId: z.string().describe("要离屏编辑的页面 id（可用 getSpacePageTree/searchPages 获取）")
         }),

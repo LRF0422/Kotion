@@ -32,6 +32,8 @@ import {
     getOffscreenEditorBridge,
     type OffscreenEditorHandle,
 } from '../offscreen-editor-bridge'
+import { acquireLiveEditorForPage, waitForAgentEditor } from '../editor-acquisition'
+import { getPageNavigationBridge } from '../page-navigation-bridge'
 import type {
     SessionPageBinding,
     SessionPageBindingPage,
@@ -181,8 +183,19 @@ export function useWorkspaceDocumentTarget(
             setEditor(null)
         }
 
-        const bridge = getOffscreenEditorBridge()
-        if (!bridge) {
+        // The page may be on screen with its editor still loading/claiming. Give
+        // the visible writer a short window before mounting a hidden second one.
+        const visiblePageId = getPageNavigationBridge()?.getCurrentPage()?.pageId
+        if (isSamePage(visiblePageId, id)) {
+            const claimed = await waitForAgentEditor(id, 600)
+            if (isLiveEditor(claimed)) {
+                dropHandle()
+                setEditor(claimed)
+                return claimed
+            }
+        }
+
+        if (!getOffscreenEditorBridge()) {
             // No off-screen engine in this host: keep the binding page-only so
             // tools that need only a page id still work. Document tools will
             // report the missing editor rather than write somewhere else.
@@ -190,27 +203,31 @@ export function useWorkspaceDocumentTarget(
             throw new Error(documentTargetUnavailableMessage(record, '当前环境不支持离屏编辑器'))
         }
 
-        const run = bridge.acquire(id).then(handle => {
+        // `acquireLiveEditorForPage` validates liveness and retries a dead
+        // hidden handle with a fresh session; a raw `bridge.acquire` used to
+        // return destroyed editors from a stale "ready" record.
+        const run = acquireLiveEditorForPage(id).then(acquired => {
             if (!isSamePage(boundRef.current?.pageId, id)) {
                 // The user/agent retargeted while this acquisition was in flight.
-                try { handle.release() } catch { /* already released */ }
+                acquired.release()
                 throw new Error(`页面 ${id} 的编辑器已就绪，但编辑目标已经切换`)
             }
             // A visible pane claimed the page while we were acquiring: it is the
             // single writer, so drop the hidden session we just obtained.
-            const claim = getAgentEditor(id)?.editor
-            if (isLiveEditor(claim)) {
-                try { handle.release() } catch { /* already released */ }
-                setEditor(claim)
-                return claim
+            if (acquired.source === 'claim') {
+                dropHandle()
+                setEditor(acquired.editor)
+                return acquired.editor
             }
-            handleRef.current = handle
-            setEditor(handle.editor)
-            return handle.editor
+            handleRef.current = acquired.handle
+            setEditor(acquired.editor)
+            return acquired.editor
         }).catch(error => {
             handleRef.current = null
             setEditor(null)
-            throw new Error(documentTargetUnavailableMessage(record, error))
+            throw error instanceof Error && error.message.startsWith('无法取得编辑目标')
+                ? error
+                : new Error(documentTargetUnavailableMessage(record, error))
         }).finally(() => {
             if (acquireRef.current === run) acquireRef.current = null
         })
@@ -330,17 +347,13 @@ export function useWorkspaceDocumentTarget(
                 if (isLiveEditor(claimed)) return claimed
                 const aux = auxHandlesRef.current.get(id)
                 if (aux && isLiveEditor(aux.editor)) return aux.editor
-                const bridge = getOffscreenEditorBridge()
-                if (!bridge) return null
                 try {
-                    const handle = await bridge.acquire(id)
-                    const claim = getAgentEditor(id)?.editor
-                    if (isLiveEditor(claim)) {
-                        try { handle.release() } catch { /* already released */ }
-                        return claim
+                    const acquired = await acquireLiveEditorForPage(id)
+                    if (acquired.source === 'claim') {
+                        return acquired.editor
                     }
-                    auxHandlesRef.current.set(id, handle)
-                    return handle.editor
+                    auxHandlesRef.current.set(id, acquired.handle!)
+                    return acquired.editor
                 } catch (error) {
                     console.warn('[agent] could not acquire a cross-page editor:', error)
                     return null

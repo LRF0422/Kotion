@@ -107,6 +107,11 @@ registerAgentOperationTargetProvider(provider)     // 插件注册自己的当�
 useAgentOperationTargetProvider(provider)          // React surface 版本
 // agent 侧工具：getCurrentTarget → { primary, targets, operations }
 // 详见 docs/AGENT_OPERATION_TARGET.md
+
+// 能力包：身份与「按需能力」分离。文档编辑不是 agent 的默认身份，
+// 只是 capability:document 这个包；surface 只有在真的持有文档目标时才激活它。
+buildAgentRunInputs(catalog, { activeCapabilities })  // 未激活 → 包只进技能索引，load_skill 取用
+// 详见 docs/AGENT_DOCUMENT_DECOUPLING.md
 ```
 
 ### 4.4 宿主桥
@@ -169,3 +174,5 @@ destroyIdle(pageId)                                            // OffscreenEdito
 - **pane 是 side peek**：不做浮层；需要浮动编辑用 `PageEditWindow`。
 - **dock 尚未接 `<AgentPaneHost/>`**：provider 在根部，能力已具备；接入后规范自动适用。
 - **不做自动切换**：target 只由显式动作设置，避免 agent 静默改变用户视野。
+- **Grounding 是独立层**：工具账本 → 观测 → 回答校验。内核不实现它，但每轮的 target/rev 与
+  工具结果必须带够证据元数据；见 [AGENT_GROUNDING.md](AGENT_GROUNDING.md)。

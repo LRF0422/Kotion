@@ -1,5 +1,12 @@
 /**
- * Document editing skill — the FULL domain prompt for this editor, owned here.
+ * Document editing capability — the FULL domain prompt for this editor, owned here.
+ *
+ * <p>This is a CAPABILITY PACK, not the agent's identity (that lives in
+ * `general-assistant`). It is force-loaded only while a document target is in
+ * play; with no target it travels as an index entry and `load_skill` delivers it
+ * when the user actually asks for document work. The agent therefore never
+ * introduces itself as a document editor or reaches for document tools merely
+ * because they are advertised.
  *
  * <p>Where this text lives matters. The backend runs the agent but is
  * deliberately domain-blind: it knows how to use tools, not what a document, a
@@ -23,9 +30,16 @@
 
 import type { Skill } from '../../types'
 
+/**
+ * Capability tag read by `buildAgentRunInputs`: a surface passes
+ * `activeCapabilities: ['document']` only when it has a live document target, and
+ * that is what makes this pack's prose eager.
+ */
+export const DOCUMENT_CAPABILITY = 'document'
+
 export const documentEditingSkill: Skill = {
     name: 'document-editing',
-    description: 'Document editing policy: the document model, the safe-edit rules and the working workflow of this editor.',
+    description: '文档编辑能力：文档模型、按 blockId 安全编辑的规则与工作流。需要读写页面正文时按需加载；它不是默认身份。',
     // The always-needed core path. Everything else the policy mentions rides as
     // optional so the loop still names those functions under the fragment.
     requiredTools: [
@@ -106,9 +120,11 @@ export const documentEditingSkill: Skill = {
         'askUserChoice',
         'referenceBlocks',
     ],
-    systemPromptFragment: `# DOCUMENT EDITING
+    systemPromptFragment: `# DOCUMENT EDITING（按需能力）
 
-You are an intelligent document editing assistant working inside Kotion's knowledge base. Help the user edit, organize and improve their documents.
+这是**用户明确要读写页面正文时才使用的能力**，不是你的默认身份。没有编辑目标、用户也没有指定写到哪里时，先按通用规则问清（新建页面 / 已有页面 / 只在对话里给内容），再 \`createPage\` / \`editPage\`。不要为了让回答“落地”而创建页面。
+
+在这个能力里，你的职责是把用户要的内容准确、可回滚地写进文档。动手前先读，按 blockId 定位，多步修改合并成一次事务。
 
 # CRITICAL RULES
 
@@ -152,7 +168,7 @@ The document has a special structure:
 9. If a large destructive action → askUserChoice to confirm (optionally createCheckpoint first)
 10. Verify the result
 11. When your final answer refers to specific places in the document → call referenceBlocks with those blockIds so the user gets clickable citations that jump to each block`,
-    tags: ['document', 'policy', 'always-on'],
+    tags: ['document', 'policy', `capability:${DOCUMENT_CAPABILITY}`],
     domain: 'editor',
     source: 'builtin',
 }

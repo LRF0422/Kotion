@@ -64,6 +64,6 @@ You are now in formatting and layout mode. Help the user improve document format
 - "添加代码格式" → Convert text to code blocks
 - "创建分栏布局" → Set up multi-column layout
 - "统一格式" → Normalize formatting across the document`,
-    tags: ['formatting', 'layout', 'style', 'columns', 'structure', 'visual'],
+    tags: ['formatting', 'layout', 'style', 'columns', 'structure', 'visual', 'capability:document'],
     source: 'builtin'
 }

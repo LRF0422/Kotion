@@ -5,6 +5,8 @@ import {
     getAgentEditor,
     getOffscreenEditorBridge,
     getPageNavigationBridge,
+    acquireLiveEditorForPage,
+    waitForAgentEditor,
     isLiveEditor,
     registerAgentEditor,
     unregisterAgentEditor,
@@ -119,7 +121,7 @@ export function useOffscreenTargets({ editor, boundPageRef }: UseOffscreenTarget
             // writer and wins over any hidden lease, including one this owner
             // already held before the editor appeared.
             const claimed = getAgentEditor(pageId)?.editor
-            if (claimed) {
+            if (isLiveEditor(claimed)) {
                 const existingClaimed = ownerHandlesRef.current.get(owner)
                 if (existingClaimed) {
                     ownerHandlesRef.current.delete(owner)
@@ -128,7 +130,7 @@ export function useOffscreenTargets({ editor, boundPageRef }: UseOffscreenTarget
                 return { ...target, editor: claimed }
             }
             const existing = ownerHandlesRef.current.get(owner)
-            if (existing && existing.pageId === pageId) {
+            if (existing && existing.pageId === pageId && isLiveEditor(existing.editor)) {
                 return { ...target, editor: existing.editor }
             }
             if (existing) {
@@ -140,14 +142,18 @@ export function useOffscreenTargets({ editor, boundPageRef }: UseOffscreenTarget
 
             const currentPageId = getPageNavigationBridge()?.getCurrentPage()?.pageId
             if (currentPageId !== undefined && String(currentPageId) === pageId) {
-                // The page the user has open is its own editor.
+                // The page the user has open is its own editor. If that editor is
+                // not live yet, acquiring a hidden second writer for it is worse
+                // than asking the caller to retry.
+                if (!isLiveEditor(editor)) {
+                    throw new Error('页面还在加载，可用的文档编辑器尚未就绪')
+                }
                 return { ...target, editor }
             }
-            const bridge = getOffscreenEditorBridge()
-            if (!bridge) throw new Error('离屏编辑器不可用')
-            const handle = await bridge.acquire(pageId)
-            ownerHandlesRef.current.set(owner, handle)
-            return { ...target, editor: handle.editor }
+            const acquired = await acquireLiveEditorForPage(pageId)
+            if (acquired.source === 'claim') return { ...target, editor: acquired.editor }
+            ownerHandlesRef.current.set(owner, acquired.handle!)
+            return { ...target, editor: acquired.editor }
         })()
 
         ownerAcquireRef.current.set(owner, run)
@@ -171,14 +177,18 @@ export function useOffscreenTargets({ editor, boundPageRef }: UseOffscreenTarget
     const activateOffscreenTarget = useCallback(async (page: ChatTargetPage): Promise<OffscreenEditorHandle> => {
         const pageId = String(page.pageId)
         const cached = offscreenTargetsRef.current.get(pageId)
-        if (cached) {
+        if (cached && isLiveEditor(cached.editor)) {
             // Refresh recency so eviction drops the least-recently *used* target.
             offscreenTargetsRef.current.delete(pageId)
             offscreenTargetsRef.current.set(pageId, cached)
             return cached
         }
-        const bridge = getOffscreenEditorBridge()
-        if (!bridge) throw new Error('离屏编辑器不可用')
+        if (cached) {
+            // The cached lease outlived its editor (HMR/remount/session error).
+            // Keep it would fail every later tool call with the same error.
+            releaseTarget(pageId)
+        }
+        if (!getOffscreenEditorBridge()) throw new Error('离屏编辑器不可用')
         // Never exceed the engine's session cap: drop the oldest other target
         // before acquiring so the engine's own LRU can reclaim it. A page a
         // delegated agent is still editing is never dropped.
@@ -187,7 +197,20 @@ export function useOffscreenTargets({ editor, boundPageRef }: UseOffscreenTarget
                 .find(id => id !== pageId && !pageHeldByOwner(id))
             if (oldest) releaseTarget(oldest)
         }
-        const handle = await bridge.acquire(pageId)
+        const acquired = await acquireLiveEditorForPage(pageId)
+        // A visible editor claimed the page mid-flight: wrap it so callers keep
+        // one return shape, but do NOT take a hidden lease or cache it. The
+        // claim registry owns that editor; caching it here would keep using it
+        // after the pane closes.
+        if (acquired.source === 'claim') {
+            return {
+                pageId,
+                editor: acquired.editor,
+                flush: async () => { /* the visible editor owns persistence */ },
+                release: () => { /* the surface owns the claim */ },
+            }
+        }
+        const handle = acquired.handle!
         offscreenTargetsRef.current.set(pageId, handle)
         return handle
     }, [releaseTarget, pageHeldByOwner])
@@ -209,10 +232,15 @@ export function useOffscreenTargets({ editor, boundPageRef }: UseOffscreenTarget
         const currentPageId = getPageNavigationBridge()?.getCurrentPage()?.pageId
         if (currentPageId !== undefined && String(currentPageId) === String(page.pageId)) {
             // The page is on screen; its editor is the page's single writer.
-            if (!isLiveEditor(editor)) {
+            // Its claim can land a render later (right after navigation), so
+            // wait briefly instead of failing a tool on a timing race.
+            const visible = isLiveEditor(editor)
+                ? editor
+                : await waitForAgentEditor(String(page.pageId))
+            if (!isLiveEditor(visible)) {
                 throw new Error('页面还在加载，可用的文档编辑器尚未就绪')
             }
-            return editor
+            return visible
         }
         const handle = await activateOffscreenTarget(page)
         if (!isLiveEditor(handle?.editor)) {

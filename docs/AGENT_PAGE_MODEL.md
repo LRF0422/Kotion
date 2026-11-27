@@ -3,6 +3,12 @@
 > 「当前操作对象」是类型开放的，页面只是其中一种。通用模型、插件 provider 与 `getCurrentTarget`
 > 工具见 **[AGENT_OPERATION_TARGET.md](AGENT_OPERATION_TARGET.md)**；本文只描述页面这一种对象的
 > 身份、权限、文档能力与写权归属。
+>
+> 页面/文档编辑不是 agent 的默认身份：它是 `capability:document` 能力包，只在 surface 真正持有文档
+> 目标时激活，否则由 `load_skill` 按需加载。见 **[AGENT_DOCUMENT_DECOUPLING.md](AGENT_DOCUMENT_DECOUPLING.md)**。
+>
+> 隐藏编辑器的租约生命周期（generation、liveness、自愈、透明重试）见
+> **[AGENT_EDITOR_STABILITY.md](AGENT_EDITOR_STABILITY.md)**。
 
 本文记录"agent 操作页面"的唯一模型，以及各 surface 如何向它提供数据、各消费方如何只依赖它。
 此前 agent 触达页面有四条互相独立、细节不同的路径（可见编辑器 / 隐藏离屏编辑器 / 浮动编辑窗 /

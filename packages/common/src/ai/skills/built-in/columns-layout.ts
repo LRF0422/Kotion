@@ -170,6 +170,6 @@ You are now in columns layout mode. Help the user create, modify, and manage mul
 - Column count: 2–8 top-level; 2–4 nested.
 - If \`widths\` is provided, ignore the \`layout\` preset.
 - \`background\` must be a safe CSS color string; unsafe values are silently dropped.`,
-    tags: ['columns', 'layout', 'multi-column', '分栏', '排版', 'structure', 'buildLayout'],
+    tags: ['columns', 'layout', 'multi-column', '分栏', '排版', 'structure', 'buildLayout', 'capability:document'],
     source: 'builtin'
 }

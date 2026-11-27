@@ -8,9 +8,12 @@
  * ({@link useWorkspaceDocumentTarget}) and rebinds to it, which brings in the whole
  * document tool set plus every page-scoped plugin tool (charts, bitables, …).
  *
- * That growth is the point: the workbench's own starter prompts ask for pages to be
- * written, so a permanently editor-less run could not fulfil them — let alone
- * "做一份可视化报表".
+ * That growth is the point: the workbench's own starter prompts may ask for pages
+ * to be written, so a permanently editor-less run could not fulfil them — let
+ * alone "做一份可视化报表". Growth is not identity, though: with no document the
+ * run is a GENERAL assistant and the document policy is an on-demand capability
+ * (see `docs/AGENT_DOCUMENT_DECOUPLING.md`). Writing is one outcome the user can
+ * ask for, not the default way to answer.
  */
 
 import { useCallback, useMemo } from 'react'
@@ -20,7 +23,7 @@ import { useLoadedSkills } from '../skills/use-loaded-skills'
 import { agentToolAvailableAtScope, filterAgentCatalog } from './filter-catalog'
 import { useEditorAgent, type EditorAgentApi } from '../agent/use-editor-agent'
 import type { AgentChatMessage } from '../agent/types'
-import type { OnToolExecution } from '../types'
+import type { OnToolExecution, OnUserChoiceRequest } from '../types'
 import type { CustomAgent } from '../agent/custom-agents'
 import type { BackgroundTaskView } from '../agent/background-tasks'
 import type { FormRequestView } from '../agent/form-requests'
@@ -60,6 +63,16 @@ export interface WorkspaceAgentOptions {
      */
     focusedPage?: { pageId: string; title?: string; spaceId?: string } | null
     onToolExecution?: OnToolExecution
+    /**
+     * How `askUserChoice` reaches the user.
+     *
+     * The workbench's default flow depends on it: "帮我写一份报告" with no
+     * document must ASK where the content goes (new page / existing page / only
+     * in chat) instead of silently creating a page. A surface that omits it
+     * renders no choice UI, and the tool falls back to telling the model to ask
+     * in plain text — never to picking an option on the user's behalf.
+     */
+    onUserChoiceRequest?: OnUserChoiceRequest
     /**
      * A background task finished and the agent did not wait for it: the host
      * injects the note as a new turn. The workbench is where long builds happen,
@@ -120,6 +133,7 @@ export function useWorkspaceAgent(options: WorkspaceAgentOptions = {}): Workspac
 
     const providers = useCapabilityProviders(target.editor, {
         onToolExecution: options.onToolExecution,
+        onUserChoiceRequest: options.onUserChoiceRequest,
         sessionBinding,
     })
 
@@ -185,8 +199,17 @@ export function useWorkspaceAgent(options: WorkspaceAgentOptions = {}): Workspac
     // round trip (see skills/loaded-skill-cache).
     const loadedSkills = useLoadedSkills(conversationId)
     const { tools, skills, deferredTools } = useMemo(
-        () => buildAgentRunInputs(catalog, { loadedSkills }),
-        [catalog, loadedSkills],
+        () => buildAgentRunInputs(catalog, {
+            loadedSkills,
+            // No target yet = the workbench is a general run: the document
+            // policy stays in the index and is loaded on demand, so the model
+            // is not framed as a document editor while it answers, searches or
+            // runs a build. Acquiring a page mid-run brings the pack in for the
+            // NEXT turn; the `general-assistant` rule covers the current one by
+            // asking `load_skill` before the first document write.
+            activeCapabilities: hasDocument ? ['document'] : [],
+        }),
+        [catalog, loadedSkills, hasDocument],
     )
 
     // Ask mode ships no tools — a pure-text answer over whatever the model can

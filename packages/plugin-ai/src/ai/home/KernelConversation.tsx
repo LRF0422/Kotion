@@ -28,6 +28,8 @@ import {
 import { ChatComposer } from "../menu/chat/ChatComposer"
 import { ChatEmptyState } from "../menu/chat/ChatEmptyState"
 import { FormRequestCard } from "../menu/chat/FormRequestCard"
+import { UserChoiceCard } from "../menu/chat/UserChoiceCard"
+import { useUserChoiceBridge } from "../menu/use-user-choice-bridge"
 import { useModelVisionSupport } from "../components/model-catalog"
 import type { ExecutionStep, Message } from "../menu/chat-types"
 import { MessageBubble } from "../menu/MessageBubble"
@@ -120,6 +122,20 @@ const KernelConversationActive: React.FC<KernelConversationActiveProps> = ({
     // the inline card so the user does not have to open it.
     const pendingForms = usePendingFormRequests(sessionId)
 
+    // `askUserChoice` bridge. The workbench NEEDS it: with no document open, the
+    // general assistant's default move for "帮我写一份报告" is to ask WHERE the
+    // content goes (new page / existing page / only in chat). Without a UI here
+    // the tool would have no way to reach the user from this surface.
+    const {
+        pendingChoice,
+        customInput,
+        setCustomInput,
+        handleUserChoiceRequest,
+        handleOptionSelect,
+        handleCustomSubmit,
+        handleCancelChoice,
+    } = useUserChoiceBridge()
+
     // Every SETTLED transcript change reaches the container: it needs the size
     // for the clear affordance, derives the auto title and bumps the recency of
     // the conversation. The load itself is held back (`loadingTranscript`) so
@@ -163,6 +179,9 @@ const KernelConversationActive: React.FC<KernelConversationActiveProps> = ({
         // case: the artifact is restored from session metadata before any tool
         // runs, so the target is re-established without a model round trip.
         focusedPage,
+        // "Where should this go?" reaches the user as an inline card instead of
+        // the model guessing (or the tool picking an option for them).
+        onUserChoiceRequest: handleUserChoiceRequest,
         // 长任务（background: true 的构建/装依赖/发布）跑完、而 agent 没有在等它时，
         // 把结果作为一条通知推进对话：工作台正是这些长任务发生的地方，不推的话
         // "帮我 build 一下"就没有下文了。回调先于 `send` 定义，触发时它早已就位。
@@ -305,7 +324,11 @@ const KernelConversationActive: React.FC<KernelConversationActiveProps> = ({
     }, [onArtifacts, sessionId, shelfArtifacts])
 
     // ─── Tab status reporting ─────────────────────────────────────
-    const liveChoice = state.phase === 'waiting-approval' || state.phase === 'suspended'
+    // A pending choice needs the user just as much as an approval does: the run is
+    // parked on the tool call, so the tab must advertise attention.
+    const liveChoice = !!pendingChoice
+        || state.phase === 'waiting-approval'
+        || state.phase === 'suspended'
     const reportedStatusRef = useRef<ChatTabStatus>('idle')
     useEffect(() => {
         const phase = state.phase
@@ -547,6 +570,17 @@ const KernelConversationActive: React.FC<KernelConversationActiveProps> = ({
                                 <FormRequestCard request={request} />
                             </div>
                         ))}
+
+                        {pendingChoice && (
+                            <UserChoiceCard
+                                choice={pendingChoice}
+                                customInput={customInput}
+                                onCustomInputChange={setCustomInput}
+                                onSelect={handleOptionSelect}
+                                onCustomSubmit={handleCustomSubmit}
+                                onCancel={handleCancelChoice}
+                            />
+                        )}
 
                         {(sessionError || (state.error && state.phase !== 'failed')) && (
                             <div className="mx-2 my-1.5 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-[11px] text-amber-700 dark:text-amber-300">

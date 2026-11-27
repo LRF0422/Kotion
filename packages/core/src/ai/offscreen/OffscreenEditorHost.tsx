@@ -9,7 +9,7 @@
  * collaborative Y.Doc room, persist through the incremental PATCH endpoint.
  */
 
-import React, { useEffect, useMemo, useRef, useState } from "react"
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
     CollaborationEditor,
     TiptapCollabProvider,
@@ -56,10 +56,22 @@ const CURSOR_COLORS = [
     '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1',
 ]
 
-const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
+const OffscreenSession: React.FC<{ pageId: string; generation: number }> = ({ pageId, generation }) => {
     const { userInfo } = useSelector((state: GlobalState) => state)
     const { t } = useTranslation()
     const service = useSpacePageService()
+
+    /**
+     * Reports are pinned to THIS mount. A stale mount's late error must not
+     * kill the replacement editor the manager just mounted for the same page.
+     */
+    const sessionApi = useMemo(() => ({
+        markError: (id: string, error: Error) => offscreenSessionManager.markError(id, error, generation),
+        markReady: (
+            id: string,
+            ready: { editor: any; title?: string; flush: () => Promise<void> },
+        ) => offscreenSessionManager.markReady(id, ready, generation),
+    }), [generation])
 
     // The agent's single page model: identity, access, document capability,
     // room auth and reads for this page — a normal tenant page or an invited
@@ -119,7 +131,7 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
     // an editor that can never be acquired.
     useEffect(() => {
         if (!blockedReason) return
-        offscreenSessionManager.markError(pageId, new Error(blockedReason))
+        sessionApi.markError(pageId, new Error(blockedReason))
     }, [blockedReason, pageId])
 
     // The page was deleted while the agent was working on it. A hidden editor
@@ -129,6 +141,22 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
     const [trashed, setTrashed] = useState(false)
     const [editorInstance, setEditorInstance] = useState<Editor | null>(null)
     const [contentReady, setContentReady] = useState(false)
+    /**
+     * A replacement editor instance starts with NO content ready signal. Keep
+     * the previous instance's `contentReady` and the manager would be told the
+     * new (still-empty) editor is ready, so a document tool could read an empty
+     * page. Stable ref callback so React's null/re-set churn cannot loop.
+     */
+    const editorInstanceRef = useRef<Editor | null>(null)
+    const handleEditorRef = useCallback((editor: Editor | null) => {
+        const previous = editorInstanceRef.current
+        editorInstanceRef.current = editor
+        // Unmount (null) and replacement both invalidate "content ready": the
+        // next instance must report its own `onContentReady` before we hand it
+        // to the manager.
+        if (!editor || (previous && editor !== previous)) setContentReady(false)
+        setEditorInstance(editor)
+    }, [])
     const [synced, setSynced] = useState(false)
     // Render anyway if the collab server never syncs (offline / WS
     // unreachable), mirroring PageEditWindow's fallback.
@@ -149,7 +177,7 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
                 // invitation is decidable here. The component/unknown-type
                 // failure is reported by the `blockedReason` effect above.
                 if (!canEdit) {
-                    offscreenSessionManager.markError(
+                    sessionApi.markError(
                         pageId,
                         new Error('This collaboration invitation is read-only; the page cannot be edited'),
                     )
@@ -159,13 +187,13 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
                 if (cancelled) return
                 if (isPageInTrashError(err)) {
                     setTrashed(true)
-                    offscreenSessionManager.markError(
+                    sessionApi.markError(
                         pageId,
                         new Error('The page is in the trash; restore it before editing'),
                     )
                     return
                 }
-                offscreenSessionManager.markError(
+                sessionApi.markError(
                     pageId,
                     err instanceof Error ? err : new Error('Failed to load page'),
                 )
@@ -273,7 +301,7 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
                 if (cancelled) return
                 if (isPageInTrashError(err)) {
                     setTrashed(true)
-                    offscreenSessionManager.markError(
+                    sessionApi.markError(
                         pageId,
                         new Error('The page is in the trash; restore it before editing'),
                     )
@@ -295,7 +323,7 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
     useEffect(() => {
         if (!seed || seed.trusted || seedErrorReportedRef.current) return
         seedErrorReportedRef.current = true
-        offscreenSessionManager.markError(
+        sessionApi.markError(
             pageId,
             new Error('Page content unavailable: block store read failed'),
         )
@@ -342,7 +370,7 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
     useEffect(() => {
         if (!pageTrashed || trashedReportedRef.current) return
         trashedReportedRef.current = true
-        offscreenSessionManager.markError(
+        sessionApi.markError(
             pageId,
             new Error('The page is in the trash; restore it before editing'),
         )
@@ -375,41 +403,45 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
     const flushNowRef = useRef(flushNow)
     flushNowRef.current = flushNow
 
-    // ---- Report readiness to the manager (once) ----
-    const readyReportedRef = useRef(false)
+    // ---- Report readiness to the manager ----
+    //
+    // NOT once per mount: React/HMR can replace the editor instance under the
+    // same hidden session (and the old instance is destroyed). Reporting only
+    // the first one left the manager holding a dead editor forever — every
+    // document tool then failed with "无法取得编辑目标…的编辑器". Re-reporting
+    // whenever a NEW live instance is ready updates the record in place; the
+    // manager validates liveness and pins the report to this mount's
+    // generation.
+    const reportedEditorRef = useRef<any>(null)
+    const readinessErrorReportedRef = useRef(false)
     useEffect(() => {
-        if (readyReportedRef.current) return
-        if (editorInstance && contentReady && seed && (synced || syncTimedOut)) {
-            readyReportedRef.current = true
-            if (!canEdit) {
-                // Read-only invitation: fail the session instead of letting the
-                // agent edit a document the backend will refuse to save.
-                offscreenSessionManager.markError(
-                    pageId,
-                    new Error('This collaboration invitation is read-only; the page cannot be edited'),
-                )
-                return
-            }
-            if (!synced) {
-                // The room never delivered the document. The writer is gated off
-                // (see `collaborationSynced`), so anything the agent "edits" here
-                // would only live in this in-memory placeholder and vanish with
-                // the session. Fail loudly instead of reporting success.
-                offscreenSessionManager.markError(
-                    pageId,
-                    new Error('Collaboration room did not sync; refusing to edit the page offline'),
-                )
-                return
-            }
-            offscreenSessionManager.markReady(pageId, {
-                editor: editorInstance,
-                title: page?.title,
-                flush: async () => {
-                    await flushNowRef.current?.()
-                },
-            })
+        if (!editorInstance || !contentReady || !seed || !(synced || syncTimedOut)) return
+        if (!canEdit || !synced) {
+            if (readinessErrorReportedRef.current) return
+            readinessErrorReportedRef.current = true
+            sessionApi.markError(
+                pageId,
+                new Error(canEdit
+                    // Read-only invitation: fail the session instead of letting
+                    // the agent edit a document the backend will refuse to save.
+                    ? 'This collaboration invitation is read-only; the page cannot be edited'
+                    // The room never delivered the document. The writer is gated
+                    // off (see `collaborationSynced`), so anything the agent
+                    // "edits" here would only live in an in-memory placeholder.
+                    : 'Collaboration room did not sync; refusing to edit the page offline'),
+            )
+            return
         }
-    }, [editorInstance, contentReady, seed, synced, syncTimedOut, pageId, page?.title, canEdit])
+        if (reportedEditorRef.current === editorInstance) return
+        reportedEditorRef.current = editorInstance
+        sessionApi.markReady(pageId, {
+            editor: editorInstance,
+            title: page?.title,
+            flush: async () => {
+                await flushNowRef.current?.()
+            },
+        })
+    }, [editorInstance, contentReady, seed, synced, syncTimedOut, pageId, page?.title, canEdit, sessionApi])
 
     // Unmount safety net: the manager flushes before dropping a session, but
     // an eviction/teardown race could still leave unsaved ops behind. The
@@ -441,7 +473,7 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
                     createTime: page.createTime == null ? undefined : String(page.createTime),
                     updateTime: page.updateTime == null ? undefined : String(page.updateTime),
                 }}
-                ref={(ed: Editor | null) => setEditorInstance(ed)}
+                ref={handleEditorRef}
                 synced={synced}
                 provider={provider}
                 pageDocuments={documents}
@@ -464,17 +496,19 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
  * (flushing pending edits) when the shell unmounts.
  */
 export const OffscreenEditorHost: React.FC = () => {
-    const [sessionIds, setSessionIds] = useState<string[]>(() => offscreenSessionManager.getSessionIds())
+    // Keyed by pageId + generation: a session reset (dead editor) must remount
+    // a fresh editor, not reuse the destroyed instance under the same key.
+    const [sessions, setSessions] = useState(() => offscreenSessionManager.getSessions())
 
     useEffect(() => {
         return offscreenSessionManager.subscribe(() => {
-            setSessionIds(offscreenSessionManager.getSessionIds())
+            setSessions(offscreenSessionManager.getSessions())
         })
     }, [])
 
     useEffect(() => () => { void offscreenSessionManager.destroyAll() }, [])
 
-    if (sessionIds.length === 0) return null
+    if (sessions.length === 0) return null
 
     return (
         <div
@@ -489,8 +523,8 @@ export const OffscreenEditorHost: React.FC = () => {
                 pointerEvents: 'none',
             }}
         >
-            {sessionIds.map(id => (
-                <OffscreenSession key={id} pageId={id} />
+            {sessions.map(({ pageId, generation }) => (
+                <OffscreenSession key={`${pageId}:${generation}`} pageId={pageId} generation={generation} />
             ))}
         </div>
     )
