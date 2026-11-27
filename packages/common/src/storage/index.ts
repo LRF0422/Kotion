@@ -9,9 +9,15 @@
  * The desktop implementation lives in the main process
  * (`apps/desktop/src/main/storage/`) and is reached through the `storage.*`
  * desktop capabilities; `@kn/core` exposes it as the `storage` service.
+ *
+ * `resilient-storage.ts` is the desktop degradation wrapper (SQLite → session
+ * memory, never `localStorage`); `plugin-storage.ts` is the namespace-bound
+ * view third-party plugins should use.
  */
 
 export * from './types';
 export * from './kv-engine';
 export * from './memory-storage';
 export * from './local-storage';
+export * from './resilient-storage';
+export * from './plugin-storage';

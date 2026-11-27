@@ -1,20 +1,26 @@
 /**
  * Desktop storage capabilities.
  *
- * Owns the SQLite database — the single writer for it — and exposes it to the
+ * Owns the per-owner SQLite databases (see `./manager`) and exposes them to the
  * renderer as the `storage.*` capability group. Handlers never throw: they
  * answer with a discriminated envelope so the failure *code* survives the IPC
  * boundary (Electron would flatten a thrown Error into a string), letting the
  * renderer rethrow a proper `StorageError` and degrade deliberately.
  *
- * When the database cannot be opened at all, the app still starts: every
- * capability answers `STORAGE_UNAVAILABLE` and the renderer falls back to
- * `localStorage`. A broken disk must not brick the app.
+ * Layout: `<userData>/storage/v2/app.db` + `.../v2/plugins/<pluginKey>.db`.
+ * The pre-v2 `storage/kotion.db` is ignored; a newer/corrupt file is discarded
+ * and recreated inside its owner (local data is a cache).
+ *
+ * When the directory cannot be opened at all, the app still starts: every
+ * capability answers `STORAGE_UNAVAILABLE`, and the renderer's storage service
+ * degrades to session memory (`durable: false`). Desktop never falls back to
+ * `localStorage` — plugin data must not silently move to an evictable store.
  */
 
 import { app, ipcMain } from 'electron';
-import { join } from 'node:path';
-import { SqliteKvStore, openStorageDatabase } from './sqlite-store';
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { StorageManager } from './manager';
 import { StorageError, type StorageErrorCode } from './types';
 
 /** What a capability resolves with: a value, or a coded failure. */
@@ -23,71 +29,73 @@ export type StorageEnvelope<T> =
     | { ok: false; code: StorageErrorCode; message: string };
 
 export interface StorageRuntime {
-    /** The live store, or `null` when the database could not be opened. */
-    readonly store: SqliteKvStore | null;
-    /** Absolute path of the database file (or `':memory:'`). */
+    /** The live manager, or `null` when its directory could not be created. */
+    readonly store: StorageManager | null;
+    /** Absolute storage root (or `':memory:'`). */
     readonly location: string;
     /** Why `store` is null; absent on success. */
     readonly failure?: string;
-    /** Close the database; safe to call twice. */
+    /** Close every database; safe to call twice. */
     dispose(): void;
 }
 
 export interface SetupStorageOptions {
-    /** Override the database path (diagnostics/tests). */
-    filePath?: string;
+    /** Override the storage root (diagnostics/tests). */
+    rootDir?: string;
     log?: (message: string) => void;
 }
 
-/** `<userData>/storage/kotion.db`, unless overridden by `KN_STORAGE_DB`. */
-export function resolveStoragePath(): string {
-    const override = process.env.KN_STORAGE_DB;
+/** `<userData>/storage/v2`, unless overridden by `KN_STORAGE_DIR`. */
+export function resolveStorageRoot(): string {
+    const override = process.env.KN_STORAGE_DIR;
     if (override && override.trim()) return override.trim();
-    return join(app.getPath('userData'), 'storage', 'kotion.db');
+    return join(app.getPath('userData'), 'storage', 'v2');
 }
 
-/** Open the database and prune expired rows. Never throws. */
+/** Create the manager and prune expired rows. Never throws. */
 export function createStorageRuntime(options: SetupStorageOptions = {}): StorageRuntime {
     const log = options.log ?? ((message: string) => console.log(message));
-    const location = options.filePath ?? resolveStoragePath();
+    const location = options.rootDir ?? resolveStorageRoot();
 
-    let db;
-    let recoveredFrom: string | undefined;
+    let created: StorageManager | null = null;
     try {
-        const opened = openStorageDatabase(location, log);
-        db = opened.db;
-        recoveredFrom = opened.recoveredFrom;
-        if (recoveredFrom) log(`[storage] previous database preserved at ${recoveredFrom}`);
+        created = new StorageManager({ root: location, log });
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         console.error('[storage] unavailable:', message);
-        return {
-            store: null,
-            location,
-            failure: message,
-            dispose: () => {},
-        };
+        return { store: null, location, failure: message, dispose: () => {} };
     }
+    const manager = created;
 
-    const store = new SqliteKvStore(db, { location });
     try {
-        const pruned = store.pruneExpired();
+        const pruned = manager.pruneExpired();
         if (pruned > 0) log(`[storage] pruned ${pruned} expired entries`);
     } catch (error) {
-        // Pruning is opportunistic; a failure here must not block startup.
-        console.warn('[storage] prune failed:', error);
+        // The app database could not be opened: report the whole channel as
+        // unavailable so the renderer degrades to session memory with a reason.
+        const message = error instanceof Error ? error.message : String(error);
+        console.error('[storage] unavailable:', message);
+        manager.close();
+        return { store: null, location, failure: message, dispose: () => {} };
     }
-    log(`[storage] sqlite ready at ${location}`);
+
+    if (location !== ':memory:') {
+        const legacy = join(dirname(location), 'kotion.db');
+        if (existsSync(legacy)) {
+            log(`[storage] legacy database at ${legacy} is ignored by the per-owner layout; it can be deleted`);
+        }
+    }
+    log(`[storage] sqlite ready at ${location} (app.db + plugins/*.db)`);
 
     return {
-        store,
+        store: manager,
         location,
-        dispose: () => store.close(),
+        dispose: () => manager.close(),
     };
 }
 
-/** Wrap a store call into the success/failure envelope. */
-function run<T>(runtime: StorageRuntime, operation: string, fn: (store: SqliteKvStore) => T): StorageEnvelope<T> {
+/** Wrap a manager call into the success/failure envelope. */
+function run<T>(runtime: StorageRuntime, operation: string, fn: (store: StorageManager) => T): StorageEnvelope<T> {
     if (!runtime.store) {
         return {
             ok: false,

@@ -23,7 +23,10 @@ import {
     createLocalStorageService,
     type WebStorageLike,
 } from './local-storage'
-import { createMemoryStorage } from './memory-storage'
+import { createMemoryBackend, createMemoryStorage } from './memory-storage'
+import { createKvStorage, type StorageBackend } from './kv-engine'
+import { createResilientStorage } from './resilient-storage'
+import { createPluginStorage } from './plugin-storage'
 import type { StorageService } from './types'
 
 let pass = 0
@@ -268,6 +271,94 @@ async function main(): Promise<void> {
         () => localStorageService.info(),
         'STORAGE_CORRUPT',
     )
+
+    console.log('\nResilient fallback (desktop degradation)')
+    const unavailablePrimary = (): StorageService => {
+        const fail = (): never => {
+            throw new StorageError('STORAGE_UNAVAILABLE', 'database could not be opened')
+        }
+        const backend: StorageBackend = {
+            schemaVersion: 1,
+            read: fail,
+            apply: fail,
+            scan: fail,
+            count: fail,
+            purge: fail,
+            namespaces: fail,
+            stats: fail,
+        }
+        return createKvStorage(backend, { engine: 'sqlite', durable: true, location: '/tmp/kotion.db' })
+    }
+
+    let degradeCount = 0
+    const resilient = createResilientStorage(unavailablePrimary(), createMemoryStorage(), {
+        onDegrade: () => {
+            degradeCount += 1
+        },
+    })
+    checkEqual('starts on the primary engine', resilient.engine, 'sqlite')
+    checkEqual('starts durable', resilient.durable, true)
+    const degradedWrite = await resilient.set('app.plugin', 'k', { a: 1 })
+    checkEqual('an unavailable primary retries on the fallback', degradedWrite.rev, 1)
+    checkEqual('the retried write landed in the fallback', (await resilient.get('app.plugin', 'k'))?.value, { a: 1 })
+    checkEqual('engine flips to the fallback', resilient.engine, 'memory')
+    checkEqual('durable turns false', resilient.durable, false)
+    checkEqual('the failure is reported once', degradeCount, 1)
+    check(
+        'the failure reason is exposed',
+        (resilient.degradedReason ?? '').includes('could not be opened'),
+        resilient.degradedReason,
+    )
+    checkEqual('info() answers from the fallback', (await resilient.info()).engine, 'memory')
+
+    const degradedScope = resilient.scope('app.plugin')
+    await degradedScope.set('k2', 2)
+    checkEqual('scopes bind through the wrapper after degradation', (await degradedScope.get('k2'))?.value, 2)
+
+    // Only STORAGE_UNAVAILABLE means "the backend is gone". A revision conflict
+    // is the caller's problem, and moving data elsewhere would hide it.
+    let falseDegrades = 0
+    const healthyPrimary = createKvStorage(createMemoryBackend(), { engine: 'sqlite', durable: true })
+    const guarded = createResilientStorage(healthyPrimary, createMemoryStorage(), {
+        onDegrade: () => {
+            falseDegrades += 1
+        },
+    })
+    await healthyPrimary.set('app.cas', 'k', 1)
+    await checkCode(
+        'a CAS conflict is not a degradation',
+        () => guarded.set('app.cas', 'k', 2, { ifRev: 9 }),
+        'STORAGE_REV_CONFLICT',
+    )
+    checkEqual(
+        'a CAS conflict leaves the primary in place',
+        [guarded.engine, guarded.durable, falseDegrades],
+        ['sqlite', true, 0],
+    )
+
+    console.log('\nPlugin-scoped storage')
+    const pluginHost = createMemoryStorage()
+    const pluginStore = createPluginStorage(pluginHost, 'My Plugin')
+    checkEqual('the namespace is derived from the plugin key', pluginStore?.namespace, 'plugin.my-plugin')
+    await pluginStore?.set(storageKey('settings'), { theme: 'dark' })
+    checkEqual(
+        'writes land in the plugin namespace',
+        (await pluginHost.get('plugin.my-plugin', 'settings'))?.value,
+        { theme: 'dark' },
+    )
+    await pluginHost.set('app.private', 'secret', 1)
+    checkEqual('a plugin scope only enumerates its own namespace', await pluginStore?.keys(), ['settings'])
+    checkEqual('no host storage means no scope', createPluginStorage(undefined, 'x'), undefined)
+    checkEqual('an empty plugin key has no scope', createPluginStorage(pluginHost, '  '), undefined)
+    try {
+        createPluginStorage(pluginHost, '@@@')
+        check('a slugless plugin key is rejected (resolved instead)', false)
+    } catch (error) {
+        check(
+            'a slugless plugin key is rejected',
+            StorageError.is(error) && error.code === 'STORAGE_INVALID_NAMESPACE',
+        )
+    }
 
     console.log('\n' + pass + ' passed, ' + fail + ' failed')
     if (fail > 0) process.exit(1)

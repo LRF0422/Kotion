@@ -205,9 +205,9 @@ export function setupIpcHandlers() {
   // ==================== durable storage (SQLite) ====================
   // The main process is the database's only writer; the renderer reaches it
   // through the `storage.*` capability group (see ./storage). Opening here (and
-  // never throwing) means a corrupt, locked or read-only file degrades to
-  // `STORAGE_UNAVAILABLE` — the renderer falls back to localStorage — instead of
-  // taking the window down with it.
+  // never throwing) means a corrupt, locked or read-only file answers
+  // `STORAGE_UNAVAILABLE` — the renderer service then degrades to session
+  // memory, never to localStorage — instead of taking the window down with it.
   const storageRuntime = setupStorageHandlers();
   app.on('will-quit', () => storageRuntime.dispose());
 

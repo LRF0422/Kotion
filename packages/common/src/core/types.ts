@@ -337,9 +337,10 @@ export interface Services {
     pluginMarketplace?: PluginMarketplaceService;
     /**
      * Durable key-value storage. Registered by the host application on every
-     * platform: SQLite via the desktop capability bridge on Electron,
-     * `localStorage` on the web, memory as the last resort. Plugins must stay
-     * inside their own `plugin.<key>` namespace — use `useStorageScope`.
+     * platform: SQLite via the desktop capability bridge on Electron (session
+     * memory if the database is unavailable — desktop never uses `localStorage`),
+     * `localStorage` on the web. Plugins should use `usePluginStorage(pluginKey)`,
+     * which binds their own `plugin.<key>` namespace.
      */
     storage?: StorageService;
     /**

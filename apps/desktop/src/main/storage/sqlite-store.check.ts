@@ -10,13 +10,18 @@
  *
  * The store needs the `better-sqlite3` binary built for the *running* Node
  * (pnpm builds it that way); after `rebuild:native` it is built for Electron
- * instead, and this check reports a skip so the Electron smoke can cover it.
+ * instead. In that case this check re-runs itself under Electron's Node
+ * (`ELECTRON_RUN_AS_NODE`), which uses the Electron ABI, so the same cases
+ * still run instead of being skipped.
  */
 
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import Database from 'better-sqlite3';
 import { SCHEMA_VERSION, readSchemaVersion } from './schema';
+import { StorageManager } from './manager';
 import { SqliteKvStore, openStorageDatabase } from './sqlite-store';
 import { StorageError } from './types';
 
@@ -183,6 +188,100 @@ async function main(): Promise<void> {
         rmSync(dir, { recursive: true, force: true });
     }
 
+    console.log('\nNewer schema reset (no compatibility)');
+    const resetDir = mkdtempSync(join(tmpdir(), 'kn-storage-reset-'));
+    try {
+        const file = join(resetDir, 'app.db');
+        const before = openStorageDatabase(file);
+        const beforeStore = new SqliteKvStore(before.db, { location: file });
+        beforeStore.set('app.reset', 'k', 'old');
+        before.db.close();
+        // A newer build/worktree wrote this file. Its layout is not ours to read.
+        const raw = new Database(file);
+        raw.pragma('user_version = 4');
+        raw.close();
+
+        const after = openStorageDatabase(file);
+        checkEqual('the newer version is reported', after.discardedVersion, 4);
+        checkEqual('the fresh file is at the current schema', after.schemaVersion, SCHEMA_VERSION);
+        check('the old file is kept for forensics', typeof after.recoveredFrom === 'string', after.recoveredFrom);
+        check('the kept file exists on disk', Boolean(after.recoveredFrom && existsSync(after.recoveredFrom)));
+        checkEqual('data from the newer layout is gone', new SqliteKvStore(after.db, { location: file }).get('app.reset', 'k'), null);
+        new SqliteKvStore(after.db, { location: file }).set('app.reset', 'k', 'new');
+        checkEqual(
+            'the recreated file is writable',
+            new SqliteKvStore(after.db, { location: file }).get('app.reset', 'k')?.value,
+            'new',
+        );
+        after.db.close();
+    } finally {
+        rmSync(resetDir, { recursive: true, force: true });
+    }
+
+    console.log('\nPer-owner routing (StorageManager)');
+    const root = mkdtempSync(join(tmpdir(), 'kn-storage-manager-'));
+    try {
+        const manager = new StorageManager({ root });
+        manager.set('app.test', 'k', 'app');
+        manager.set('plugin.alpha', 'k', 'alpha');
+        manager.set('plugin.beta', 'k', 'beta');
+
+        check('app.db exists', existsSync(join(root, 'app.db')));
+        check('plugin.alpha has its own file', existsSync(join(root, 'plugins', 'alpha.db')));
+        check('plugin.beta has its own file', existsSync(join(root, 'plugins', 'beta.db')));
+        checkEqual('namespaces aggregate across owners', manager.namespaces(), [
+            'app.test',
+            'plugin.alpha',
+            'plugin.beta',
+        ]);
+        checkEqual('reads route to the owner', manager.get<string>('plugin.alpha', 'k')?.value, 'alpha');
+        checkEqual('plugins are isolated', manager.get<string>('plugin.beta', 'k')?.value, 'beta');
+        checkEqual('clear only touches its owner', manager.clear('plugin.alpha'), 1);
+        checkEqual('the other plugin is untouched', manager.get<string>('plugin.beta', 'k')?.value, 'beta');
+        checkEqual('the app is untouched', manager.get<string>('app.test', 'k')?.value, 'app');
+        checkCode(
+            'namespaces outside app/plugin are rejected',
+            () => manager.set('other.ns', 'k', 1),
+            'STORAGE_INVALID_NAMESPACE',
+        );
+        checkCode(
+            'a batch cannot span owners',
+            () =>
+                manager.batch([
+                    { type: 'set', namespace: 'app.test', key: 'x', value: 1 },
+                    { type: 'set', namespace: 'plugin.beta', key: 'x', value: 2 },
+                ]),
+            'STORAGE_INVALID_VALUE',
+        );
+        checkEqual(
+            'a batch inside one owner applies',
+            manager.batch([
+                { type: 'set', namespace: 'plugin.beta', key: 'x', value: 1 },
+                { type: 'set', namespace: 'plugin.beta', key: 'y', value: 2 },
+            ]),
+            { written: 2, deleted: 0 },
+        );
+        const managerInfo = manager.info();
+        checkEqual('info reports the root', managerInfo.location, root);
+        check('info aggregates entries', managerInfo.entries === 4, managerInfo.entries);
+        check('info aggregates namespaces', managerInfo.namespaces === 2, managerInfo.namespaces);
+
+        // Resetting one database must not touch the others.
+        manager.close();
+        const appRaw = new Database(join(root, 'app.db'));
+        appRaw.pragma('user_version = 9');
+        appRaw.close();
+        const reopened = new StorageManager({ root });
+        checkEqual('the app database was reset', reopened.get('app.test', 'k'), null);
+        checkEqual('the plugin database survived the app reset', reopened.get<string>('plugin.beta', 'k')?.value, 'beta');
+        check('the reset kept a discard copy', readdirSync(root).some((name) => name.startsWith('app.db.discard-')));
+        reopened.close();
+        reopened.close();
+        check('close() is idempotent', true);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+
     console.log('\nLifecycle');
     const store2 = new SqliteKvStore(opened.db, { location: ':memory:' });
     store2.close();
@@ -195,9 +294,11 @@ async function main(): Promise<void> {
 
 main().catch((error) => {
     if (isNativeAbiMismatch(error)) {
+        const status = rerunUnderElectronAbi();
+        if (status !== null) process.exit(status);
         console.log(
             '\nSKIP: better-sqlite3 is built for a different runtime than this Node ' +
-                `(${process.version}). Run the Electron smoke instead:\n` +
+                `(${process.version}) and no Electron binary is available. Run the Electron smoke instead:\n` +
                 '    apps/desktop/node_modules/.bin/electron apps/desktop/src/main/storage/electron.smoke.cjs --no-sandbox\n' +
                 'Reinstalling for Node: pnpm --filter @kn/desktop rebuild:native:node',
         );
@@ -213,4 +314,41 @@ function isNativeAbiMismatch(error: unknown): boolean {
     return /NODE_MODULE_VERSION|was compiled against a different Node\.js version|invalid ELF header|mach-o/i.test(
         message,
     );
+}
+
+/**
+ * Re-run this script under Electron's Node when `better-sqlite3` was built for
+ * Electron (the normal `pnpm desktop:dev` / packaging setup).
+ *
+ * `better-sqlite3@12` is a classic V8 addon, so the binary installed for
+ * Electron cannot load in the system Node. Reporting SKIP used to hide SQL
+ * regressions in exactly the configuration the app ships; Electron's
+ * `ELECTRON_RUN_AS_NODE` mode uses the Electron ABI, so the same cases run.
+ *
+ * Returns the child's exit code, or `null` when there is no Electron binary
+ * (then the caller reports the old SKIP).
+ */
+function rerunUnderElectronAbi(): number | null {
+    if (process.env.KN_STORAGE_CHECK_ELECTRON === '1') return null;
+    let electronPath: unknown;
+    try {
+        // In plain Node the `electron` package resolves to the binary path.
+        electronPath = require('electron');
+    } catch {
+        return null;
+    }
+    if (typeof electronPath !== 'string' || !electronPath) return null;
+    console.log(
+        `\nbetter-sqlite3 is built for Electron, not Node ${process.version}; ` +
+            "re-running under Electron's Node…",
+    );
+    const result = spawnSync(electronPath, [__filename], {
+        stdio: 'inherit',
+        env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', KN_STORAGE_CHECK_ELECTRON: '1' },
+    });
+    if (result.error) {
+        console.log(`Could not start Electron (${result.error.message}); falling back to SKIP.`);
+        return null;
+    }
+    return result.status ?? 1;
 }

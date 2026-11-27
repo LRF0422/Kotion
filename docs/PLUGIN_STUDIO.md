@@ -70,6 +70,7 @@
   - 整轮 120s 超时；失败按原因分类给出可执行提示（未登录 / 断网 / 超时 / 服务错误 / 模型输出不合法），并提供**「改用离线生成」**按钮，确定性生成器始终可离线兜底。
   - 写入后结果卡提供「查看文件」（跳到「文件」页签打开 `assets/icon.svg`）和「撤销」（把上一张图标文件与清单指针恢复回去；首次生成、上一张是 URL/data、或上一张是另一个工程内文件时，会删掉本次生成的 `assets/icon.svg`（非规范拼写如 `./assets/icon.svg` 视为同一个文件）；若上一张文件读不出来，会明确提示“指针已恢复、内容无法写回”）。写入失败会自动回滚到快照，不会出现“文件被覆盖但清单没更新”的半成品。
 - 页面显示当前工程的构建状态与日志；下方**「文件」页签**可直接浏览工程源码与静态资源（含生成的 `assets/icon.svg`）——目录树 + 带回行号、**带语法高亮**的只读查看器（`dev.files` 枚举、`dev.readFile` 读取，跳过 node_modules/dist）。高亮走包内自带的轻量 tokenizer（`src/files/highlight.ts`：TS/TSX、JSON、CSS、HTML/SVG、Markdown、YAML、shell、Python；其余按纯文本），不引第三方高亮库；配色按亮/暗主题取两套固定色板（`src/files/CodeView.tsx` 内联样式），不依赖宿主 Tailwind 产物。
+- 下方**「数据」页签**：列出当前工程 `plugin.<pluginKey>` 命名空间里的键（大小 / rev / 更新时间），展开看 JSON，可删单键或清空整个命名空间；标题栏显示后端（`sqlite`，或数据库不可用时的 `memory · session`）。插件侧统一用 `@kn/common` 的 `usePluginStorage(pluginKey)` 写入，调试时不用再自己写导出逻辑。
 
 ### 人：工程模板
 

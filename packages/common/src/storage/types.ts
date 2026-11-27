@@ -242,7 +242,13 @@ export interface StorageService {
     count(namespace: string, prefix?: string): Promise<number>;
     /** Delete every entry matching `prefix`; resolves the number removed. */
     clear(namespace: string, prefix?: string): Promise<number>;
-    /** Apply writes and deletes as one unit where the backend supports it. */
+    /**
+     * Apply writes and deletes as one unit where the backend supports it.
+     *
+     * Desktop keeps one database per storage owner (`app.*`, `plugin.<key>.*`),
+     * so a batch spanning owners is rejected with `STORAGE_INVALID_VALUE`
+     * instead of pretending to be atomic across files.
+     */
     batch(operations: StorageBatchOperation[]): Promise<StorageBatchResult>;
     /** Every namespace holding at least one live entry. */
     namespaces(): Promise<string[]>;

@@ -70,20 +70,14 @@ export function createStorageBridge(
     ): Promise<DesktopCapabilityContract[C]['result']> =>
         host.invoke(capability, params) as Promise<DesktopCapabilityContract[C]['result']>
 
-    // `info()` is the only call whose result is cached: it is what a settings
-    // panel polls, it opens the database, and it cannot be made stale in a way
-    // that matters (the descriptor does not change while the app runs).
-    let cachedInfo: StorageInfo | undefined
-
     const service: StorageService = {
         engine: 'sqlite',
         durable: true,
 
         async info(): Promise<StorageInfo> {
-            if (cachedInfo) return cachedInfo
-            const info = unwrap(await invoke('storage.info'), 'storage.info')
-            cachedInfo = info
-            return info
+            // Never cached: entry/byte totals change as plugins write, and the
+            // desktop now has several databases to aggregate.
+            return unwrap(await invoke('storage.info'), 'storage.info')
         },
 
         async get<T>(namespace: string, key: string): Promise<StorageEntry<T> | null> {

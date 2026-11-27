@@ -5,8 +5,9 @@
  *
  * 本项目的 electron-builder `files` 只包含 `out` 目录、并显式排除 `node_modules`，
  * 而 `better-sqlite3` 是**主进程运行时真实 require 的原生模块**（含 `*.node` 二进制），
- * 不能被打进 bundle。缺了它，打包后的「本地存储」在启动时就打不开数据库 —— 应用会
- * 降级到 localStorage（`storage.info` 报告 `STORAGE_UNAVAILABLE`），用户数据落不进 SQLite。
+ * 不能被打进 bundle。缺了它，打包后的「本地存储」在启动时就打不开数据库 —— 应用仍能启动，
+ * 但存储降级为**会话内存**（`storage.info` 报告 `STORAGE_UNAVAILABLE`，`durable: false`），
+ * 用户数据落不进 SQLite，重启即丢。桌面端不会退回 localStorage。
  *
  * ## 落盘位置
  *
@@ -148,7 +149,8 @@ module.exports = async function prepareStorageDependencies(context) {
         )
     }
 
-    // 原生二进制必须真的落盘：缺了它打包产物会静默降级到 localStorage。
+    // 原生二进制必须真的落盘：缺了它打包产物的存储会静默降级为会话内存（重启即丢），
+    // 且不会有任何持久化提示——所以这里宁可直接失败。
     // 先找 prebuilds（v13 的 N-API 形态），再找 node-gyp 的 build/Release（v12 在
     // 用 @electron/rebuild 时把为 Electron 编译的二进制放在这里）。
     const sqliteDir = placed.get('better-sqlite3')

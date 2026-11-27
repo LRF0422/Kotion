@@ -56,6 +56,7 @@ import {
     usePluginMenus,
     usePluginRoutes,
     usePluginState,
+    usePluginStorage,
     useTranslation,
 } from '@kn/common'
 import {
@@ -70,6 +71,7 @@ import {
     formatBytes,
 } from './studio-service'
 import { usePublishProject } from './StudioMarketplacePanel'
+import { StudioStoragePanel } from './StoragePanel'
 import { CodeView } from './files/CodeView'
 import { svgDataUrl } from './artifacts/cards'
 import {
@@ -239,8 +241,8 @@ export const StudioPage: React.FC = () => {
     selectedRootRef.current = selectedRoot
     aiIconOpenRef.current = aiIconOpen
     aiIconCandidateRef.current = aiIconCandidate
-    /** Bottom pane tab — build output first, the file browser on demand. */
-    const [activeTab, setActiveTab] = useState<'logs' | 'files'>('logs')
+    /** Bottom pane tab — build output first, the file browser / plugin data on demand. */
+    const [activeTab, setActiveTab] = useState<'logs' | 'files' | 'storage'>('logs')
     /** Project-relative source files of the selected project (flat, sorted). */
     const [files, setFiles] = useState<string[]>([])
     const [filesTruncated, setFilesTruncated] = useState(false)
@@ -282,6 +284,17 @@ export const StudioPage: React.FC = () => {
         () => rows.find((row) => row.root === selectedRoot),
         [rows, selectedRoot],
     )
+
+    /**
+     * The storage the selected project owns.
+     *
+     * The registry key the *build* declares wins (`status.plugin.pluginKey`),
+     * because that is the identity the running plugin writes under; the project
+     * row is the fallback before the first build. `usePluginStorage` binds the
+     * namespace, so the pane can never inspect `app.*` or another plugin's keys.
+     */
+    const storagePluginKey = status?.plugin?.pluginKey ?? selected?.pluginKey
+    const pluginStorage = usePluginStorage(storagePluginKey)
 
     /**
      * What the selected project contributes to the shell **right now**.
@@ -1440,11 +1453,12 @@ export const StudioPage: React.FC = () => {
                             </div>
 
                             <div className="flex min-h-0 flex-1 flex-col">
-                                {/* One strip for the bottom pane: build output, or the
-                                    project's source files with a read-only viewer. */}
+                                {/* One strip for the bottom pane: build output, the
+                                    project's source files with a read-only viewer, or the
+                                    selected plugin's stored data. */}
                                 <div className="flex shrink-0 items-center justify-between gap-2 border-b px-2 py-1">
                                     <div className="flex items-center gap-0.5">
-                                        {(['logs', 'files'] as const).map((tab) => (
+                                        {(['logs', 'files', 'storage'] as const).map((tab) => (
                                             <button
                                                 key={tab}
                                                 type="button"
@@ -1458,22 +1472,26 @@ export const StudioPage: React.FC = () => {
                                             >
                                                 {tab === 'logs'
                                                     ? t('pluginStudio.buildLogs')
-                                                    : t('pluginStudio.files')}
+                                                    : tab === 'files'
+                                                        ? t('pluginStudio.files')
+                                                        : t('pluginStudio.data')}
                                             </button>
                                         ))}
                                     </div>
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-5 gap-1 px-1.5 text-[10px] text-muted-foreground"
-                                        onClick={() => {
-                                            if (activeTab === 'logs') void refreshStatus()
-                                            else refreshFilePane()
-                                        }}
-                                    >
-                                        <RefreshCw className="h-3 w-3" />
-                                        {t('pluginStudio.refresh')}
-                                    </Button>
+                                    {activeTab !== 'storage' ? (
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-5 gap-1 px-1.5 text-[10px] text-muted-foreground"
+                                            onClick={() => {
+                                                if (activeTab === 'logs') void refreshStatus()
+                                                else refreshFilePane()
+                                            }}
+                                        >
+                                            <RefreshCw className="h-3 w-3" />
+                                            {t('pluginStudio.refresh')}
+                                        </Button>
+                                    ) : null}
                                 </div>
                                 {activeTab === 'logs' ? (
                                     <ScrollArea className="min-h-0 flex-1">
@@ -1495,6 +1513,8 @@ export const StudioPage: React.FC = () => {
                                             )}
                                         </div>
                                     </ScrollArea>
+                                ) : activeTab === 'storage' ? (
+                                    <StudioStoragePanel pluginKey={storagePluginKey} storage={pluginStorage} />
                                 ) : (
                                     <div className="flex min-h-0 flex-1">
                                         <div className="flex w-60 shrink-0 flex-col border-r">

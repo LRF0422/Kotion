@@ -1,19 +1,21 @@
 /**
- * SQLite-backed key-value store for the desktop main process.
+ * One SQLite key-value database file for the desktop main process.
  *
- * Implements the storage contract's semantics natively in SQL — revision
- * arithmetic, compare-and-set, TTL filtering, ordered prefix scans and atomic
- * batches — rather than loading rows into JavaScript. The renderer-side
- * reference implementation lives in `@kn/common` (`storage/kv-engine.ts`);
- * `sqlite-store.test.mjs` and `packages/common/src/storage/storage.check.ts`
- * assert the same behaviours on both sides.
+ * `StorageManager` (`./manager`) gives the shell and each plugin their own file;
+ * this module is the store for one of them. It implements the contract's
+ * semantics natively in SQL — revision arithmetic, compare-and-set, TTL
+ * filtering, ordered prefix scans and atomic batches — rather than loading rows
+ * into JavaScript. The renderer-side reference implementation lives in
+ * `@kn/common` (`storage/kv-engine.ts`); `sqlite-store.check.ts` and
+ * `packages/common/src/storage/storage.check.ts` pin the same behaviours on both
+ * sides.
  *
  * Every entry point re-validates namespace/key/value: the renderer is a trusted
  * app shell, but IPC input is still input.
  */
 
 import Database from 'better-sqlite3';
-import { mkdirSync, renameSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, renameSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { SCHEMA_VERSION, readSchemaVersion, runMigrations } from './schema';
 import {
@@ -98,19 +100,45 @@ function clampLimit(limit: number | undefined): number {
 
 export interface OpenStorageDatabaseResult {
     db: Database.Database;
-    /** Path of the previous file when a corrupt database was moved aside. */
+    /**
+     * Where the previous file was kept when it could not be used (a corrupt
+     * file, or one written by a newer schema). Its sidecar `-wal`/`-shm`/
+     * `-journal` files were moved with it.
+     */
     recoveredFrom?: string;
+    /** The newer schema version that was discarded, when that was the reason. */
+    discardedVersion?: number;
+    /** `PRAGMA user_version` after opening; always {@link SCHEMA_VERSION} on success. */
+    schemaVersion: number;
     /** Non-fatal notes worth logging (migration steps, recovery). */
     notes: string[];
 }
 
+/** Move `filePath` and its sidecars to a timestamped sibling. */
+function moveDatabaseAside(filePath: string): string {
+    const target = `${filePath}.discard-${Date.now()}`;
+    for (const suffix of ['', '-wal', '-shm', '-journal']) {
+        const from = `${filePath}${suffix}`;
+        if (!existsSync(from)) continue;
+        renameSync(from, `${target}${suffix}`);
+    }
+    return target;
+}
+
 /**
- * Open (or create) the storage database and bring it to the current schema.
+ * Open one key-value database file at the current schema.
  *
- * A file that exists but is not a database — a truncated write after a crash, a
- * failed sync, a restored backup — is moved aside and recreated instead of
- * blocking app startup: losing local cache beats refusing to launch. The stale
- * file is kept next to the database so it can be inspected or salvaged.
+ * A file this build cannot use is **discarded and recreated**, not refused:
+ *  - a newer `user_version` came from another build/worktree sharing the same
+ *    data directory; its layout is not ours to interpret,
+ *  - a file that is not a SQLite database (truncated write, failed sync),
+ *  - a migration that reports corruption.
+ *
+ * The old file (and its `-wal`/`-shm`/`-journal`) is kept as
+ * `<name>.discard-<timestamp>` for forensics, and a fresh database is created.
+ * Local storage is a cache; losing one owner's data must not take the whole
+ * storage channel down. The caller (`StorageManager`) scopes this to one
+ * database, so a reset never touches another plugin's data.
  */
 export function openStorageDatabase(
     filePath: string,
@@ -122,6 +150,16 @@ export function openStorageDatabase(
 
     const openOnce = (): Database.Database => {
         const db = new Database(filePath);
+        // Plugin data can be sensitive (tokens should use storage.secret, but
+        // people put what they put). Keep the file owner-only on platforms that
+        // honour it; a no-op on Windows.
+        if (!inMemory) {
+            try {
+                chmodSync(filePath, 0o600);
+            } catch {
+                // read-only filesystem / unsupported platform
+            }
+        }
         // WAL keeps readers from blocking the single writer and survives crashes;
         // NORMAL is the documented durability/fast pairing for WAL.
         if (!inMemory) db.pragma('journal_mode = WAL');
@@ -131,55 +169,99 @@ export function openStorageDatabase(
         return db;
     };
 
-    let db: Database.Database;
+    const migrate = (target: Database.Database): void => {
+        const result = runMigrations(target, undefined, (message) => {
+            notes.push(message);
+            log(message);
+        });
+        if (result.applied.length) notes.push(`[storage] schema v${result.from} -> v${result.to}`);
+    };
+
+    let db: Database.Database | undefined;
     let recoveredFrom: string | undefined;
+    let discardedVersion: number | undefined;
+
+    const discardAndRecreate = (reason: string): Database.Database => {
+        if (inMemory) throw new StorageError('STORAGE_CORRUPT', reason);
+        // Close first: Windows cannot rename a file that is still open.
+        try {
+            db?.close();
+        } catch {
+            // already closed / never opened
+        }
+        db = undefined;
+        let target: string;
+        try {
+            target = moveDatabaseAside(filePath);
+        } catch (error) {
+            throw new StorageError(
+                'STORAGE_UNAVAILABLE',
+                `${reason}; the database could not be moved aside`,
+                error instanceof Error ? error.message : String(error),
+            );
+        }
+        recoveredFrom = target;
+        const note = `[storage] ${reason}; moved to ${target} and created a fresh database`;
+        notes.push(note);
+        log(note);
+        const fresh = openOnce();
+        migrate(fresh);
+        return fresh;
+    };
+
     try {
         db = openOnce();
-        try {
-            const result = runMigrations(db, undefined, (message) => {
-                notes.push(message);
-                log(message);
-            });
-            if (result.applied.length) notes.push(`[storage] schema v${result.from} -> v${result.to}`);
-        } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            // A version from the future is a deliberate refusal, not corruption.
-            if (/newer than this build/.test(message)) {
-                db.close();
-                throw new StorageError('STORAGE_UNAVAILABLE', message);
+        const onDisk = readSchemaVersion(db);
+        if (onDisk > SCHEMA_VERSION) {
+            discardedVersion = onDisk;
+            // No compatibility mode: a newer layout is another build's data.
+            db = discardAndRecreate(
+                `database schema v${onDisk} is newer than this build (v${SCHEMA_VERSION})`,
+            );
+        } else {
+            try {
+                migrate(db);
+            } catch (error) {
+                const mapped = mapSqliteError(error, 'storage migrate');
+                if (mapped.code !== 'STORAGE_CORRUPT') throw mapped;
+                db = discardAndRecreate(`database is unreadable (${mapped.message})`);
             }
-            throw error;
         }
     } catch (error) {
         const mapped = mapSqliteError(error, 'storage open');
-        if (mapped.code !== 'STORAGE_CORRUPT' || inMemory) throw mapped;
-        recoveredFrom = `${filePath}.corrupt-${Date.now()}`;
-        try {
-            renameSync(filePath, recoveredFrom);
-        } catch (renameError) {
-            throw new StorageError(
-                'STORAGE_CORRUPT',
-                'storage database is unreadable and could not be moved aside',
-                renameError instanceof Error ? renameError.message : undefined,
-            );
+        // A second discard in the same call would mean the fresh database is
+        // also unreadable; that is a disk problem, not a stale file.
+        if (mapped.code !== 'STORAGE_CORRUPT' || inMemory || recoveredFrom) {
+            try {
+                db?.close();
+            } catch {
+                // ignore
+            }
+            throw mapped;
         }
-        const note = `[storage] database was unreadable; moved to ${recoveredFrom} and recreated`;
-        notes.push(note);
-        log(note);
-        db = openOnce();
-        runMigrations(db, undefined, log);
+        db = discardAndRecreate(`database is unreadable (${mapped.message})`);
     }
 
-    const version = readSchemaVersion(db);
+    const opened = db;
+    if (!opened) {
+        throw new StorageError('STORAGE_UNAVAILABLE', 'storage database could not be opened');
+    }
+    const version = readSchemaVersion(opened);
     if (version !== SCHEMA_VERSION) {
-        db.close();
+        opened.close();
         throw new StorageError(
             'STORAGE_UNAVAILABLE',
             `storage schema is v${version}, expected v${SCHEMA_VERSION}`,
         );
     }
 
-    return { db, ...(recoveredFrom ? { recoveredFrom } : {}), notes };
+    return {
+        db: opened,
+        ...(recoveredFrom ? { recoveredFrom } : {}),
+        ...(discardedVersion !== undefined ? { discardedVersion } : {}),
+        schemaVersion: version,
+        notes,
+    };
 }
 
 /** Key-value store over an open {@link Database.Database}. */

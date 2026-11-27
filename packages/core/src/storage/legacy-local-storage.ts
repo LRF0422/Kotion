@@ -13,8 +13,9 @@
  *    so the import happens once per database.
  *  - **Never overwrites.** A key that already exists in storage wins — storage
  *    is newer by definition.
- *  - **Desktop only.** On the web the storage service *is* `localStorage`;
- *    copying it onto itself is pointless (see {@link shouldImportLegacyData}).
+ *  - **SQLite only.** On the web the storage service *is* `localStorage`, and
+ *    on a desktop whose database is unavailable the service is session memory;
+ *    importing into either copy is pointless (see {@link shouldImportLegacyData}).
  *
  * Deliberate exclusions, and why:
  *  - auth tokens (`knowledge-access-token`, …) — a session, not user data.
@@ -153,9 +154,9 @@ export interface LegacyImportReport {
     alreadyRan: boolean
 }
 
-/** True when the backend is a different store than `localStorage`. */
+/** True only for the SQLite backend — the one store a desktop import targets. */
 export function shouldImportLegacyData(storage: StorageService): boolean {
-    return storage.engine !== 'local-storage'
+    return storage.engine === 'sqlite' && storage.durable
 }
 
 /**

@@ -96,10 +96,12 @@ async function run() {
     })
 
     const storageModule = require(join(workDir, 'storage.cjs'))
-    const dbPath = join(workDir, 'storage', 'kotion.db')
-    const runtime = storageModule.setupStorageHandlers({ filePath: dbPath, log: () => {} })
+    const storageRoot = join(workDir, 'storage')
+    const appDbPath = join(storageRoot, 'app.db')
+    const pluginDbPath = join(storageRoot, 'plugins', 'smoke.db')
+    const runtime = storageModule.setupStorageHandlers({ rootDir: storageRoot, log: () => {} })
     check('main: sqlite runtime opened', runtime.store !== null, runtime.failure || '')
-    check('main: database file created', existsSync(dbPath), dbPath)
+    check('main: app database created', existsSync(appDbPath), appDbPath)
 
     const win = new BrowserWindow({
         show: false,
@@ -128,6 +130,7 @@ async function run() {
     const info = await call('storage.info')
     check('info: reports sqlite', info && info.ok === true && info.value.engine === 'sqlite', JSON.stringify(info))
     check('info: reports durability', Boolean(info && info.value.durable === true))
+    check('info: reports the storage root', info && info.value.location === storageRoot, info && info.value.location)
 
     const written = await call('storage.set', {
         namespace: 'app.smoke',
@@ -185,6 +188,30 @@ async function run() {
     })
     check('batch: writes both keys', batch && batch.ok === true && batch.value.written === 2, JSON.stringify(batch))
 
+    const crossOwner = await call('storage.batch', {
+        operations: [
+            { type: 'set', namespace: 'app.smoke', key: 'cross', value: 1 },
+            { type: 'set', namespace: 'plugin.smoke', key: 'cross', value: 2 },
+        ],
+    })
+    check(
+        'batch: cross-owner batches are refused',
+        crossOwner && crossOwner.ok === false && crossOwner.code === 'STORAGE_INVALID_VALUE',
+        JSON.stringify(crossOwner),
+    )
+
+    const pluginWrite = await call('storage.set', {
+        namespace: 'plugin.smoke',
+        key: 'token',
+        value: { ok: true },
+    })
+    check(
+        'plugin: a plugin namespace is accepted',
+        pluginWrite && pluginWrite.ok === true && pluginWrite.value.rev === 1,
+        JSON.stringify(pluginWrite),
+    )
+    check('plugin: it gets its own database file', existsSync(pluginDbPath), pluginDbPath)
+
     const list = await call('storage.list', { namespace: 'app.smoke', limit: 10 })
     const keys = list && list.value ? list.value.entries.map((entry) => entry.key).join(',') : ''
     check('list: returns ordered entries', list && list.ok === true && keys === 'a,b,round-trip', keys)
@@ -201,9 +228,9 @@ async function run() {
     check('preload: unknown capabilities are rejected', gated)
 
     console.log('\nPersistence')
-    const db = new Database(dbPath, { readonly: true })
+    const db = new Database(appDbPath, { readonly: true })
     const journalMode = db.pragma('journal_mode', { simple: true })
-    check('database uses WAL', journalMode === 'wal', String(journalMode))
+    check('app database uses WAL', journalMode === 'wal', String(journalMode))
     const rows = db.prepare('SELECT key FROM kv ORDER BY key').all()
     check(
         'rows are on disk',
@@ -211,7 +238,14 @@ async function run() {
         rows.map((row) => row.key).join(','),
     )
     check('schema version recorded', db.pragma('user_version', { simple: true }) >= 1)
+    const appPluginRows = db.prepare("SELECT key FROM kv WHERE namespace = 'plugin.smoke'").all()
+    check('the app file holds no plugin rows', appPluginRows.length === 0, JSON.stringify(appPluginRows))
     db.close()
+
+    const pluginDb = new Database(pluginDbPath, { readonly: true })
+    const pluginRows = pluginDb.prepare('SELECT key FROM kv ORDER BY key').all()
+    check('plugin rows live in the plugin file', pluginRows.some((row) => row.key === 'token'), JSON.stringify(pluginRows))
+    pluginDb.close()
 
     win.destroy()
     runtime.dispose()

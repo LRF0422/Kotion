@@ -42,9 +42,9 @@ export interface DesktopBridge {
     readonly dev?: DevBridge
     /**
      * Durable storage, backed by SQLite in the main process. Present on desktop
-     * builds that expose the `storage.*` capabilities; `@kn/core` registers a
-     * `StorageService` either way, so prefer `useStorage()` over reaching for
-     * this field.
+     * builds that expose the `storage.*` capabilities; `@kn/core` wraps it so an
+     * unavailable database degrades to session memory (never `localStorage`).
+     * Prefer `usePluginStorage()` / `useStorage()` over reaching for this field.
      */
     readonly storage?: StorageService
     /**

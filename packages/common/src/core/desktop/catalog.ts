@@ -245,7 +245,7 @@ export const DESKTOP_CAPABILITY_GROUPS: readonly DesktopCapabilityGroupMeta[] = 
     {
         id: 'storage',
         title: '持久化 KV',
-        summary: '透明持久化（桌面 SQLite / Web localStorage）。必须留在自己的 plugin.<pluginKey> 命名空间。',
+        summary: '透明持久化：桌面走 SQLite（数据库不可用时降级为会话内存，不写 localStorage），Web 走 localStorage。插件用 usePluginStorage(pluginKey) 绑定自己的 plugin.<pluginKey>。',
         typesAt: 'packages/common/src/storage/types.ts',
     },
     {
@@ -596,7 +596,7 @@ export const DESKTOP_CAPABILITY_CATALOG = [
         group: 'storage',
         summary: '存储后端诊断信息（引擎、是否持久化、路径等）。',
         access: { via: 'bridge', bridge: 'storage', method: 'info' },
-        notes: '插件里优先用 @kn/common 的 useStorage()/resolveStorage()，不要直接调 desktop.storage；命名空间用 pluginStorageNamespace(pluginKey)。',
+        notes: '插件里用 @kn/common 的 usePluginStorage(pluginKey) / resolvePluginStorage(pluginKey)，不要直接调 desktop.storage，也不要自己拼命名空间。durable=false 表示当前是会话内存（重启即丢）。',
     },
     {
         name: 'storage.get',
