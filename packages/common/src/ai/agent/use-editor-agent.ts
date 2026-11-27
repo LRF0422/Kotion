@@ -334,13 +334,37 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
             // pending card; the registry settles the tool's promise and scopes
             // cancellation to this conversation.
             requestApproval: (callId, request) => {
-                const settled = toolApprovals.request(callId, request, { scope: conversationId })
+                // Capture the run at request time: a later turn must not receive
+                // this call's approval decision.
+                const approvalRunId = stateRef.current.runId
+                const settled = toolApprovals.request(callId, request, {
+                    scope: conversationId,
+                    // Persist the decision so a restart does not ask twice and a
+                    // late/duplicate click cannot flip it.
+                    onDecision: decision => {
+                        if (!approvalRunId) return
+                        void client.decideToolApproval(approvalRunId, callId, {
+                            allowed: decision.allowed === true,
+                            note: decision.allowed === true ? decision.note : decision.reason,
+                        }).catch((error: any) => {
+                            console.warn('[agent] tool approval decision not persisted:', error?.message ?? error)
+                        })
+                    },
+                })
                 // Only a genuinely PENDING request gets a card. `level: 'block'`
                 // (and a replayed callId that was already decided) resolves
                 // immediately in the registry and must never flash a pending
                 // card in the state machine.
                 if (toolApprovals.get(callId)) {
                     dispatch({ type: 'tool-approval-requested', callId, request })
+                    if (approvalRunId && request.level !== 'block') {
+                        void client.requestToolApproval(approvalRunId, callId, {
+                            request,
+                            timeoutMs: request.timeoutMs,
+                        }).catch((error: any) => {
+                            console.warn('[agent] tool approval request not persisted:', error?.message ?? error)
+                        })
+                    }
                 }
                 return settled.then(decision => {
                     dispatch({ type: 'tool-approval-resolved', callId, decision })
@@ -348,7 +372,7 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
                 })
             },
         }),
-        [resolveTools, needsEditorTool, isReadOnlyTool, canMutate, resolveDocumentId, onToolExecution, getSessionBinding, conversationId, dispatch]
+        [resolveTools, needsEditorTool, isReadOnlyTool, canMutate, resolveDocumentId, onToolExecution, getSessionBinding, conversationId, dispatch, client]
     )
 
     /**
@@ -545,6 +569,9 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
         attachReplayThroughRef,
         autoExecuteTools,
         needsEditor: needsEditorTool,
+        // Read-only tools are safe to replay after a crash; side-effecting ones
+        // surface TOOL_EXECUTION_UNCERTAIN instead.
+        isToolSafeToRetry: (toolName: string) => Boolean(isReadOnlyTool?.(toolName)),
     })
 
     // ─── No-progress watchdog ─────────────────────────────────────
@@ -615,8 +642,18 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
             if (!saved) {
                 try {
                     const activeRunId = (await client.getThread(conversationId, true))?.activeRunId
-                    if (!mountedRef.current || requestGeneration !== generationRef.current || !activeRunId) return false
-                    saved = { runId: activeRunId, lastSeq: 0 }
+                    if (!mountedRef.current || requestGeneration !== generationRef.current || !activeRunId) {
+                        // The thread pointer can be missing after a crash/restart
+                        // even though a suspended run is still waiting for tools.
+                        // Ask the server for non-terminal runs before giving up.
+                        const active = await client.listActiveRuns(conversationId, 5)
+                        if (!mountedRef.current || requestGeneration !== generationRef.current) return false
+                        const latest = active[0]
+                        if (!latest?.runId) return false
+                        saved = { runId: latest.runId, lastSeq: 0 }
+                    } else {
+                        saved = { runId: activeRunId, lastSeq: 0 }
+                    }
                 } catch (error: any) {
                     if ((error?.message ?? '').includes('会话不存在')) return false
                     scheduleAttachRetry(runId, requestGeneration, error)

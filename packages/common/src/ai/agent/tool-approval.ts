@@ -52,6 +52,11 @@ export interface PendingToolApproval {
 export interface ToolApprovalRequestOptions {
     /** Owner scope (conversation id) for scoped cancellation. */
     scope?: string | null
+    /**
+     * Optional sink for a durable decision (server ledger). Called exactly once
+     * per request when it settles (human decision, timeout or cancellation).
+     */
+    onDecision?: (decision: ToolApprovalDecision) => void
 }
 
 export type ToolApprovalListener = () => void
@@ -61,6 +66,7 @@ interface PendingEntry {
     promise: Promise<ToolApprovalDecision>
     resolve: (decision: ToolApprovalDecision) => void
     timer: ReturnType<typeof setTimeout> | null
+    onDecision?: (decision: ToolApprovalDecision) => void
 }
 
 function normalizeTimeout(timeoutMs: number | undefined): number {
@@ -121,6 +127,7 @@ export class ToolApprovalRegistry {
             promise,
             resolve,
             timer: null,
+            onDecision: options.onDecision,
         }
         entry.timer = setTimeout(() => {
             this.settle(callId, {
@@ -223,6 +230,11 @@ export class ToolApprovalRegistry {
         // Resolve BEFORE notifying: the awaiting tool can resume while the UI
         // re-renders the resolved state in the same tick.
         entry.resolve(decision)
+        try {
+            entry.onDecision?.(decision)
+        } catch (error) {
+            console.warn('[agent] tool approval decision sink failed:', error)
+        }
         this.notify()
     }
 

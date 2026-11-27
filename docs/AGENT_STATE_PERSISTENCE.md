@@ -439,3 +439,31 @@ S1/S2 是后端，S3/S4 是前端；可以并行。每一步都要有 kill/resta
 
 **部署**：先执行 V48；这些接口是新增的，没有开关，旧客户端不会调用。等 S3 客户端接入时，
 再按 `agent.state.*` 配置做灰度。
+
+### 13. 客户端进展（S3/S4a，2026-11-26）
+
+已接入：
+
+- `AgentClient` 新增运行时状态方法：活动 run 发现、tool-call `started/completed/uncertain`、
+  approval request/decision、form create/list/answer/cancel/ack。
+- `use-pending-tools` 在副作用前写服务端 `started`，完成后写 `completed`；本地 journal 仍是
+  快速缓存。重启时先读服务端账本：
+  - `completed` → 直接重提交结果，不重复执行；
+  - `started/uncertain` → 只有 `readOnly`/可幂等工具自动重试，其余抛
+    `TOOL_EXECUTION_UNCERTAIN`（确认 UI 还没做）；
+  - 结果被服务端截断 → 不当成完整结果重提交。
+- 工具审批：`ToolApprovalRegistry` 增加 `onDecision` sink；`use-editor-agent` 把审批请求和
+  决策写入服务端（`approval-request` / `approval-decision`）。
+- 启动 attach：`thread.activeRunId` 缺失时改问 `GET /runs?conversationId=`，不再因为本地
+  localStorage 句柄过期而找不到正在等工具的 run。
+- 本地 `RunStore` TTL 从 30 分钟改为 7 天（服务端才是权威，本地只是加速）。
+
+新增检查：`pnpm --filter @kn/common check:tool-ledger`（13 个决策用例）。
+
+仍未做：
+
+- 服务端表单收件箱与 UI `FormRequestRegistry` 的读写接线（表单仍可能刷新丢失）。
+- 审批卡从服务端 `awaiting_approval` 行恢复（当前重启会落到 uncertain）。
+- `AgentStateStore`（SQLite/IndexedDB）与草稿/路由/面板/待发队列。
+- `unsafe + started` 的“确认后重试”UI。
+- 主进程 dev/SSH/timer 描述与启动对账。

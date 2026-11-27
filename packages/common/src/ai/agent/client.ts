@@ -46,6 +46,17 @@ import type {
     ThreadView,
 } from './types'
 import { TERMINAL_EVENT_TYPES } from './types'
+import type {
+    AgentActiveRunView,
+    AgentFormAnswerInput,
+    AgentFormCreateInput,
+    AgentFormRequestView,
+    AgentToolApprovalInput,
+    AgentToolCallCompleteInput,
+    AgentToolCallStartInput,
+    AgentToolCallView,
+    AgentToolDecisionInput,
+} from './runtime-state'
 
 const MAX_RECONNECTS = 5
 const RECONNECT_BASE_DELAY_MS = 500
@@ -192,6 +203,118 @@ export class AgentClient {
 
     async cancelRun(runId: string): Promise<void> {
         await this.request('/runs/' + encodeURIComponent(runId) + '/cancel', { method: 'POST' })
+    }
+
+    // ==================== runtime state (V48) ====================
+
+    /** Non-terminal runs for boot recovery (optionally scoped to one conversation). */
+    async listActiveRuns(conversationId?: string | null, limit = 20): Promise<AgentActiveRunView[]> {
+        const query = new URLSearchParams()
+        if (conversationId) query.set('conversationId', conversationId)
+        query.set('limit', String(limit))
+        const data = await this.request<{ runs?: AgentActiveRunView[] }>('/runs?' + query.toString())
+        return data && Array.isArray(data.runs) ? data.runs : []
+    }
+
+    /** Write execution intent before a frontend tool touches the world. */
+    async startToolCall(runId: string, callId: string, input: AgentToolCallStartInput): Promise<AgentToolCallView> {
+        return await this.request<AgentToolCallView>(
+            '/runs/' + encodeURIComponent(runId) + '/tool-calls/' + encodeURIComponent(callId) + '/started',
+            { method: 'POST', body: JSON.stringify(input) },
+        )
+    }
+
+    async completeToolCall(
+        runId: string,
+        callId: string,
+        input: AgentToolCallCompleteInput,
+    ): Promise<AgentToolCallView> {
+        return await this.request<AgentToolCallView>(
+            '/runs/' + encodeURIComponent(runId) + '/tool-calls/' + encodeURIComponent(callId) + '/completed',
+            { method: 'POST', body: JSON.stringify(input) },
+        )
+    }
+
+    async markToolCallUncertain(runId: string, callId: string): Promise<AgentToolCallView> {
+        return await this.request<AgentToolCallView>(
+            '/runs/' + encodeURIComponent(runId) + '/tool-calls/' + encodeURIComponent(callId) + '/uncertain',
+            { method: 'POST' },
+        )
+    }
+
+    async getToolCall(runId: string, callId: string): Promise<AgentToolCallView> {
+        return await this.request<AgentToolCallView>(
+            '/runs/' + encodeURIComponent(runId) + '/tool-calls/' + encodeURIComponent(callId),
+        )
+    }
+
+    async listToolCalls(runId: string, status?: string): Promise<AgentToolCallView[]> {
+        const query = status ? '?status=' + encodeURIComponent(status) : ''
+        const data = await this.request<{ calls?: AgentToolCallView[] }>(
+            '/runs/' + encodeURIComponent(runId) + '/tool-calls' + query,
+        )
+        return data && Array.isArray(data.calls) ? data.calls : []
+    }
+
+    async requestToolApproval(
+        runId: string,
+        callId: string,
+        input: AgentToolApprovalInput,
+    ): Promise<AgentToolCallView> {
+        return await this.request<AgentToolCallView>(
+            '/runs/' + encodeURIComponent(runId) + '/tool-calls/' + encodeURIComponent(callId) + '/approval-request',
+            { method: 'POST', body: JSON.stringify(input) },
+        )
+    }
+
+    async decideToolApproval(
+        runId: string,
+        callId: string,
+        input: AgentToolDecisionInput,
+    ): Promise<AgentToolCallView> {
+        return await this.request<AgentToolCallView>(
+            '/runs/' + encodeURIComponent(runId) + '/tool-calls/' + encodeURIComponent(callId) + '/approval-decision',
+            { method: 'POST', body: JSON.stringify(input) },
+        )
+    }
+
+    async createForm(input: AgentFormCreateInput): Promise<AgentFormRequestView> {
+        return await this.request<AgentFormRequestView>('/forms', {
+            method: 'POST',
+            body: JSON.stringify(input),
+        })
+    }
+
+    async listPendingForms(conversationId?: string | null, status = 'pending'): Promise<AgentFormRequestView[]> {
+        const query = new URLSearchParams()
+        if (conversationId) query.set('conversationId', conversationId)
+        query.set('status', status)
+        const data = await this.request<{ forms?: AgentFormRequestView[] }>('/forms/pending?' + query.toString())
+        return data && Array.isArray(data.forms) ? data.forms : []
+    }
+
+    async getForm(formId: string): Promise<AgentFormRequestView> {
+        return await this.request<AgentFormRequestView>('/forms/' + encodeURIComponent(formId))
+    }
+
+    async answerForm(formId: string, input: AgentFormAnswerInput): Promise<AgentFormRequestView> {
+        return await this.request<AgentFormRequestView>('/forms/' + encodeURIComponent(formId) + '/answer', {
+            method: 'POST',
+            body: JSON.stringify(input),
+        })
+    }
+
+    async cancelForm(formId: string, reason?: string): Promise<AgentFormRequestView> {
+        return await this.request<AgentFormRequestView>('/forms/' + encodeURIComponent(formId) + '/cancel', {
+            method: 'POST',
+            body: JSON.stringify({ reason }),
+        })
+    }
+
+    async ackForm(formId: string): Promise<AgentFormRequestView> {
+        return await this.request<AgentFormRequestView>('/forms/' + encodeURIComponent(formId) + '/ack', {
+            method: 'POST',
+        })
     }
 
     /**

@@ -48,7 +48,11 @@ export interface BrowserAgentTabLock {
 
 export interface RunStoreOptions {
     storage?: Storage
-    /** Default TTL after which a saved handle is considered stale (ms). */
+    /**
+     * Default TTL after which a saved handle/results are considered stale (ms).
+     * Server state is authoritative now; the local copy is a cache for the
+     * attach path, so it survives app restarts for a week instead of 30 minutes.
+     */
     ttlMs?: number
 }
 
@@ -66,7 +70,7 @@ export class RunStore implements BrowserAgentRunStore {
 
     constructor(options: RunStoreOptions = {}) {
         this.storage = options.storage ?? (typeof localStorage !== 'undefined' ? localStorage : undefined as any)
-        this.ttlMs = options.ttlMs ?? 30 * 60 * 1000
+        this.ttlMs = options.ttlMs ?? 7 * 24 * 60 * 60 * 1000
     }
 
     private key(conversationId: string): string {

@@ -11,6 +11,8 @@ import type { AgentClient } from './client'
 import { AgentControlError } from './events'
 import type { EditorToolExecutor, ToolExecutionResult } from './tool-executor'
 import type { AgentRunStore } from './persistence'
+import type { AgentToolCallView } from './runtime-state'
+import { decideToolExecution } from './tool-ledger'
 import {
     createPendingToolBatch,
     decidePendingAck,
@@ -55,6 +57,8 @@ export interface UsePendingToolExecutionOptions {
      * tools. Unknown tools count as editor-bound.
      */
     needsEditor?: (toolName: string) => boolean
+    /** Read-only / explicitly idempotent tools may be retried after a crash. */
+    isToolSafeToRetry?: (toolName: string) => boolean
 }
 
 export interface UsePendingToolExecutionApi {
@@ -73,6 +77,7 @@ export function usePendingToolExecution(
     const {
         client, store, executor, resumeWith, dispatch, state, stateRef,
         generationRef, mountedRef, attachReplayThroughRef, autoExecuteTools, needsEditor,
+        isToolSafeToRetry,
     } = options
 
     const toolBatchRef = useRef<PendingToolBatch | null>(null)
@@ -194,14 +199,42 @@ export function usePendingToolExecution(
                     throw new Error('前端工具调用记录已丢失: ' + callId)
                 }
                 const savedOutcome = store.loadToolResult(current.runId, callId)
-                if (savedOutcome?.status === 'started') {
+                let ledger: AgentToolCallView | null = null
+                if (current.runId) {
+                    try {
+                        ledger = await client.getToolCall(current.runId, callId)
+                    } catch {
+                        // Old backend / offline: fall back to the local journal.
+                        ledger = null
+                    }
+                }
+                if (!mountedRef.current || generation !== generationRef.current) return
+                const decision = decideToolExecution({
+                    ledger,
+                    saved: savedOutcome,
+                    safeToRetry: isToolSafeToRetry?.(record.tool) ?? false,
+                })
+                if (decision.action === 'uncertain') {
+                    if (current.runId) {
+                        void client.markToolCallUncertain(current.runId, callId).catch(() => undefined)
+                    }
                     throw new AgentControlError(
                         'TOOL_EXECUTION_UNCERTAIN',
                         '上次工具执行在完成前中断，为避免重复修改已停止自动重试'
                     )
                 }
-                let outcome: ToolExecutionResult | null = savedOutcome
-                if (!outcome) {
+
+                let outcome: ToolExecutionResult | null =
+                    decision.action === 'resume' ? decision.outcome : null
+                if (outcome) {
+                    // Re-hydrate the local journal from the server result so the
+                    // next attach does not ask again.
+                    store.saveToolResult(current.runId, callId, {
+                        ok: outcome.ok,
+                        result: outcome.result,
+                        error: outcome.error,
+                    })
+                } else {
                     // Write an intent marker before the side effect. A crash after
                     // mutation but before result persistence will then fail closed
                     // instead of executing the same callId again after reload.
@@ -211,7 +244,32 @@ export function usePendingToolExecution(
                             '无法持久化工具执行状态，已在修改文档前停止'
                         )
                     }
+                    if (current.runId) {
+                        try {
+                            await client.startToolCall(current.runId, callId, {
+                                toolName: record.tool,
+                                args: record.args,
+                            })
+                        } catch (error: any) {
+                            // The local journal still prevents a blind replay. The
+                            // server ledger is the stronger guarantee; do not fail
+                            // the whole turn on a transient ledger write.
+                            console.warn('[agent] tool ledger start failed:', error?.message ?? error)
+                        }
+                    }
+                    if (!mountedRef.current || generation !== generationRef.current) return
                     outcome = await executor.execute(callId, record.tool, record.args, record.subRunId ?? null)
+                    if (current.runId) {
+                        try {
+                            await client.completeToolCall(current.runId, callId, {
+                                ok: outcome.ok,
+                                result: outcome.result,
+                                error: outcome.error,
+                            })
+                        } catch (error: any) {
+                            console.warn('[agent] tool ledger complete failed:', error?.message ?? error)
+                        }
+                    }
                     if (!store.saveToolResult(current.runId, callId, outcome)) {
                         // Persistence only backs crash recovery. The intent marker
                         // written before the side effect still makes a re-attach
